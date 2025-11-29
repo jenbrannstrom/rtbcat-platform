@@ -48,6 +48,7 @@ class Creative:
         name: Full resource name (bidders/{account}/creatives/{id}).
         format: Creative format (HTML, VIDEO, NATIVE, UNKNOWN).
         account_id: Bidder account ID.
+        buyer_id: Buyer seat ID (for multi-seat accounts).
         approval_status: Network policy compliance status.
         width: Creative width in pixels (for HTML/native image).
         height: Creative height in pixels (for HTML/native image).
@@ -72,6 +73,7 @@ class Creative:
     name: str
     format: str
     account_id: Optional[str] = None
+    buyer_id: Optional[str] = None
     approval_status: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
@@ -117,6 +119,29 @@ class Cluster:
     created_at: Optional[datetime] = None
 
 
+@dataclass
+class BuyerSeat:
+    """Buyer seat record for multi-seat account support.
+
+    Attributes:
+        buyer_id: Unique buyer account ID (e.g., "456" from buyers/456).
+        bidder_id: Parent bidder account ID.
+        display_name: Human-readable name for the buyer seat.
+        active: Whether the seat is active for syncing.
+        creative_count: Number of creatives associated with this seat.
+        last_synced: Timestamp of last successful sync.
+        created_at: Record creation timestamp.
+    """
+
+    buyer_id: str
+    bidder_id: str
+    display_name: Optional[str] = None
+    active: bool = True
+    creative_count: int = 0
+    last_synced: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+
 class SQLiteStore:
     """Async SQLite storage for creative intelligence data.
 
@@ -133,6 +158,7 @@ class SQLiteStore:
         name TEXT,
         format TEXT,
         account_id TEXT,
+        buyer_id TEXT,
         approval_status TEXT,
         width INTEGER,
         height INTEGER,
@@ -152,7 +178,8 @@ class SQLiteStore:
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (campaign_id) REFERENCES campaigns(id),
-        FOREIGN KEY (cluster_id) REFERENCES clusters(id)
+        FOREIGN KEY (cluster_id) REFERENCES clusters(id),
+        FOREIGN KEY (buyer_id) REFERENCES buyer_seats(buyer_id)
     );
 
     CREATE TABLE IF NOT EXISTS campaigns (
@@ -174,6 +201,17 @@ class SQLiteStore:
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS buyer_seats (
+        buyer_id TEXT PRIMARY KEY,
+        bidder_id TEXT NOT NULL,
+        display_name TEXT,
+        active INTEGER DEFAULT 1,
+        creative_count INTEGER DEFAULT 0,
+        last_synced TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(bidder_id, buyer_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_creatives_campaign ON creatives(campaign_id);
     CREATE INDEX IF NOT EXISTS idx_creatives_cluster ON creatives(cluster_id);
     CREATE INDEX IF NOT EXISTS idx_creatives_format ON creatives(format);
@@ -182,6 +220,8 @@ class SQLiteStore:
     CREATE INDEX IF NOT EXISTS idx_creatives_approval ON creatives(approval_status);
     CREATE INDEX IF NOT EXISTS idx_creatives_canonical_size ON creatives(canonical_size);
     CREATE INDEX IF NOT EXISTS idx_creatives_size_category ON creatives(size_category);
+    CREATE INDEX IF NOT EXISTS idx_creatives_buyer ON creatives(buyer_id);
+    CREATE INDEX IF NOT EXISTS idx_buyer_seats_bidder ON buyer_seats(bidder_id);
     """
 
     # Migration for existing databases to add new columns
@@ -191,10 +231,23 @@ class SQLiteStore:
         "ALTER TABLE creatives ADD COLUMN advertiser_name TEXT",
         "ALTER TABLE creatives ADD COLUMN canonical_size TEXT",
         "ALTER TABLE creatives ADD COLUMN size_category TEXT",
+        "ALTER TABLE creatives ADD COLUMN buyer_id TEXT",
         "CREATE INDEX IF NOT EXISTS idx_creatives_account ON creatives(account_id)",
         "CREATE INDEX IF NOT EXISTS idx_creatives_approval ON creatives(approval_status)",
         "CREATE INDEX IF NOT EXISTS idx_creatives_canonical_size ON creatives(canonical_size)",
         "CREATE INDEX IF NOT EXISTS idx_creatives_size_category ON creatives(size_category)",
+        "CREATE INDEX IF NOT EXISTS idx_creatives_buyer ON creatives(buyer_id)",
+        """CREATE TABLE IF NOT EXISTS buyer_seats (
+            buyer_id TEXT PRIMARY KEY,
+            bidder_id TEXT NOT NULL,
+            display_name TEXT,
+            active INTEGER DEFAULT 1,
+            creative_count INTEGER DEFAULT 0,
+            last_synced TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(bidder_id, buyer_id)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_buyer_seats_bidder ON buyer_seats(bidder_id)",
     ]
 
     def __init__(self, db_path: str | Path = "~/.rtbcat/rtbcat.db") -> None:
@@ -281,20 +334,21 @@ class SQLiteStore:
                 lambda: conn.execute(
                     """
                     INSERT OR REPLACE INTO creatives (
-                        id, name, format, account_id, approval_status,
+                        id, name, format, account_id, buyer_id, approval_status,
                         width, height, canonical_size, size_category,
                         final_url, display_url,
                         utm_source, utm_medium, utm_campaign,
                         utm_content, utm_term, advertiser_name,
                         campaign_id, cluster_id, raw_data,
                         updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
                     (
                         creative.id,
                         creative.name,
                         creative.format,
                         creative.account_id,
+                        creative.buyer_id,
                         creative.approval_status,
                         creative.width,
                         creative.height,
@@ -339,7 +393,7 @@ class SQLiteStore:
 
             data = [
                 (
-                    c.id, c.name, c.format, c.account_id, c.approval_status,
+                    c.id, c.name, c.format, c.account_id, c.buyer_id, c.approval_status,
                     c.width, c.height,
                     *_compute_size_fields(c),
                     c.final_url, c.display_url,
@@ -355,14 +409,14 @@ class SQLiteStore:
                 lambda: conn.executemany(
                     """
                     INSERT OR REPLACE INTO creatives (
-                        id, name, format, account_id, approval_status,
+                        id, name, format, account_id, buyer_id, approval_status,
                         width, height, canonical_size, size_category,
                         final_url, display_url,
                         utm_source, utm_medium, utm_campaign,
                         utm_content, utm_term, advertiser_name,
                         campaign_id, cluster_id, raw_data,
                         updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
                     data,
                 ),
@@ -465,6 +519,7 @@ class SQLiteStore:
             name=row_dict["name"],
             format=row_dict["format"],
             account_id=row_dict.get("account_id"),
+            buyer_id=row_dict.get("buyer_id"),
             approval_status=row_dict.get("approval_status"),
             width=width,
             height=height,
@@ -487,6 +542,7 @@ class SQLiteStore:
 
     async def list_creatives(
         self,
+        buyer_id: Optional[str] = None,
         campaign_id: Optional[str] = None,
         cluster_id: Optional[str] = None,
         format: Optional[str] = None,
@@ -498,6 +554,7 @@ class SQLiteStore:
         """List creatives with optional filtering.
 
         Args:
+            buyer_id: Filter by buyer seat ID.
             campaign_id: Filter by campaign ID.
             cluster_id: Filter by cluster ID.
             format: Filter by creative format.
@@ -512,6 +569,9 @@ class SQLiteStore:
         conditions = []
         params = []
 
+        if buyer_id:
+            conditions.append("buyer_id = ?")
+            params.append(buyer_id)
         if campaign_id:
             conditions.append("campaign_id = ?")
             params.append(campaign_id)
@@ -928,3 +988,263 @@ class SQLiteStore:
         total = len(updates) + len(updates_with_dims)
         logger.info(f"Migrated canonical sizes for {total} creatives ({len(updates_with_dims)} from VAST XML)")
         return total
+
+    async def migrate_add_buyer_seats(self) -> int:
+        """Migrate existing creatives to populate buyer_id from resource name.
+
+        This method:
+        1. Creates the buyer_seats table if it doesn't exist
+        2. Adds buyer_id column to creatives if it doesn't exist
+        3. Extracts buyer_id from the creative name field (format: bidders/{}/creatives/{})
+        4. Populates buyer_id for all existing creatives
+
+        Returns:
+            Number of creatives updated with buyer_id.
+
+        Example:
+            >>> store = SQLiteStore()
+            >>> await store.initialize()
+            >>> updated = await store.migrate_add_buyer_seats()
+            >>> print(f"Migrated {updated} creatives with buyer_id")
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            # Run migrations (will skip if already done)
+            for migration in self.MIGRATIONS:
+                try:
+                    await loop.run_in_executor(
+                        None,
+                        lambda m=migration: conn.execute(m),
+                    )
+                    await loop.run_in_executor(None, conn.commit)
+                except sqlite3.OperationalError:
+                    pass  # Already exists
+
+            # Extract buyer_id from creatives.name field
+            # Name format: bidders/{bidder_id}/creatives/{creative_id}
+            # We need to extract buyer_id from account_id field or infer from data
+            def _get_creatives_needing_buyer_id():
+                cursor = conn.execute(
+                    """
+                    SELECT id, name, account_id FROM creatives
+                    WHERE buyer_id IS NULL
+                    """
+                )
+                return cursor.fetchall()
+
+            rows = await loop.run_in_executor(None, _get_creatives_needing_buyer_id)
+
+            if not rows:
+                logger.info("No creatives need buyer_id migration")
+                return 0
+
+            # For now, use account_id as buyer_id since they're often the same
+            # In a real multi-seat setup, buyer_id would come from API response
+            updates = []
+            for row in rows:
+                creative_id, name, account_id = row
+                # Use account_id as buyer_id if available
+                buyer_id = account_id
+                if buyer_id:
+                    updates.append((buyer_id, creative_id))
+
+            if updates:
+                await loop.run_in_executor(
+                    None,
+                    lambda: conn.executemany(
+                        """
+                        UPDATE creatives
+                        SET buyer_id = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                        """,
+                        updates,
+                    ),
+                )
+                await loop.run_in_executor(None, conn.commit)
+
+            logger.info(f"Migrated buyer_id for {len(updates)} creatives")
+            return len(updates)
+
+    # ==================== Buyer Seat Methods ====================
+
+    async def save_buyer_seat(self, seat: BuyerSeat) -> None:
+        """Insert or update a buyer seat.
+
+        Args:
+            seat: The BuyerSeat to save.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: conn.execute(
+                    """
+                    INSERT OR REPLACE INTO buyer_seats (
+                        buyer_id, bidder_id, display_name, active,
+                        creative_count, last_synced, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, COALESCE(
+                        (SELECT created_at FROM buyer_seats WHERE buyer_id = ?),
+                        CURRENT_TIMESTAMP
+                    ))
+                    """,
+                    (
+                        seat.buyer_id,
+                        seat.bidder_id,
+                        seat.display_name,
+                        1 if seat.active else 0,
+                        seat.creative_count,
+                        seat.last_synced,
+                        seat.buyer_id,
+                    ),
+                ),
+            )
+            await loop.run_in_executor(None, conn.commit)
+
+    async def get_buyer_seats(
+        self,
+        bidder_id: Optional[str] = None,
+        active_only: bool = False,
+    ) -> list[BuyerSeat]:
+        """Get all buyer seats, optionally filtered by bidder_id.
+
+        Args:
+            bidder_id: Optional filter by bidder account.
+            active_only: If True, only return active seats.
+
+        Returns:
+            List of BuyerSeat objects.
+        """
+        conditions = []
+        params = []
+
+        if bidder_id:
+            conditions.append("bidder_id = ?")
+            params.append(bidder_id)
+        if active_only:
+            conditions.append("active = 1")
+
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _query():
+                cursor = conn.execute(
+                    f"""
+                    SELECT buyer_id, bidder_id, display_name, active,
+                           creative_count, last_synced, created_at
+                    FROM buyer_seats
+                    WHERE {where_clause}
+                    ORDER BY display_name, buyer_id
+                    """,
+                    params,
+                )
+                return cursor.fetchall()
+
+            rows = await loop.run_in_executor(None, _query)
+
+        return [
+            BuyerSeat(
+                buyer_id=row[0],
+                bidder_id=row[1],
+                display_name=row[2],
+                active=bool(row[3]),
+                creative_count=row[4] or 0,
+                last_synced=row[5],
+                created_at=row[6],
+            )
+            for row in rows
+        ]
+
+    async def get_buyer_seat(self, buyer_id: str) -> Optional[BuyerSeat]:
+        """Get a specific buyer seat.
+
+        Args:
+            buyer_id: The buyer ID.
+
+        Returns:
+            BuyerSeat object or None if not found.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _query():
+                cursor = conn.execute(
+                    """
+                    SELECT buyer_id, bidder_id, display_name, active,
+                           creative_count, last_synced, created_at
+                    FROM buyer_seats
+                    WHERE buyer_id = ?
+                    """,
+                    (buyer_id,),
+                )
+                return cursor.fetchone()
+
+            row = await loop.run_in_executor(None, _query)
+
+            if row:
+                return BuyerSeat(
+                    buyer_id=row[0],
+                    bidder_id=row[1],
+                    display_name=row[2],
+                    active=bool(row[3]),
+                    creative_count=row[4] or 0,
+                    last_synced=row[5],
+                    created_at=row[6],
+                )
+            return None
+
+    async def update_seat_creative_count(self, buyer_id: str) -> int:
+        """Update the creative_count for a buyer seat by counting creatives.
+
+        Args:
+            buyer_id: The buyer ID to update.
+
+        Returns:
+            The updated creative count.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _count_and_update():
+                cursor = conn.execute(
+                    "SELECT COUNT(*) FROM creatives WHERE buyer_id = ?",
+                    (buyer_id,),
+                )
+                count = cursor.fetchone()[0]
+
+                conn.execute(
+                    """
+                    UPDATE buyer_seats
+                    SET creative_count = ?
+                    WHERE buyer_id = ?
+                    """,
+                    (count, buyer_id),
+                )
+                conn.commit()
+                return count
+
+            count = await loop.run_in_executor(None, _count_and_update)
+            return count
+
+    async def update_seat_sync_time(self, buyer_id: str) -> None:
+        """Update last_synced timestamp for a buyer seat.
+
+        Args:
+            buyer_id: The buyer ID to update.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: conn.execute(
+                    """
+                    UPDATE buyer_seats
+                    SET last_synced = CURRENT_TIMESTAMP
+                    WHERE buyer_id = ?
+                    """,
+                    (buyer_id,),
+                ),
+            )
+            await loop.run_in_executor(None, conn.commit)

@@ -21,10 +21,20 @@ A Python-based system for collecting Google Authorized Buyers creatives and orga
 - **Creative Collection**: Fetch all creatives from Google Authorized Buyers API with pagination
 - **Metadata Extraction**: Parse UTM parameters, dimensions, approval status, advertiser names
 - **Multiple Formats**: Support for HTML, VIDEO, and NATIVE creative types
+- **Multi-Seat Support**: Manage multiple buyer accounts under a single bidder
 - **REST API**: FastAPI-based API with Swagger documentation
 - **Encrypted Config**: Secure credential storage with Fernet encryption
 - **Docker Support**: Multi-stage Docker build with non-root user
 - **Dashboard**: Next.js frontend for visual exploration (optional)
+
+### Multi-Seat Buyer Accounts
+
+Enterprise customers often have multiple buyer accounts (seats) under one bidder. RTBcat supports:
+
+- **Seat Discovery**: Enumerate all buyer accounts via `bidders.buyers.list()` API
+- **Seat-Specific Sync**: Collect creatives for individual buyer seats
+- **Filtering**: Query creatives by `buyer_id` to isolate seat-specific inventory
+- **Tracking**: Monitor creative counts and last sync time per seat
 
 ## Quick Start
 
@@ -187,11 +197,16 @@ docker run --rm -v rtbcat-creative-intel_rtbcat-config:/config alpine chown -R 9
 | GET | `/campaigns/{id}` | Get campaign details |
 | POST | `/collect` | Start background collection |
 | POST | `/collect/sync` | Synchronous collection |
+| GET | `/seats` | List all buyer seats |
+| GET | `/seats/{buyer_id}` | Get specific seat details |
+| POST | `/seats/discover` | Discover seats from Google API |
+| POST | `/seats/{buyer_id}/sync` | Sync creatives for a specific seat |
 
 ### Query Parameters for `/creatives`
 
 - `campaign_id` - Filter by campaign
 - `cluster_id` - Filter by cluster
+- `buyer_id` - Filter by buyer seat
 - `format` - Filter by format (HTML, VIDEO, NATIVE)
 - `limit` - Max results (default: 100, max: 1000)
 - `offset` - Pagination offset
@@ -221,6 +236,37 @@ docker run --rm -v rtbcat-creative-intel_rtbcat-config:/config alpine chown -R 9
   "filter_query": null,
   "message": "Successfully collected 652 creatives.",
   "creatives_collected": 652
+}
+```
+
+**POST /seats/discover**
+```bash
+curl -X POST http://localhost:8000/seats/discover \
+  -H "Content-Type: application/json" \
+  -d '{"bidder_id": "299038253"}'
+```
+```json
+{
+  "status": "completed",
+  "bidder_id": "299038253",
+  "seats_discovered": 3,
+  "seats": [
+    {"buyer_id": "456", "bidder_id": "299038253", "display_name": "Brand A", "active": true},
+    {"buyer_id": "789", "bidder_id": "299038253", "display_name": "Brand B", "active": true}
+  ]
+}
+```
+
+**POST /seats/{buyer_id}/sync**
+```bash
+curl -X POST http://localhost:8000/seats/456/sync
+```
+```json
+{
+  "status": "completed",
+  "buyer_id": "456",
+  "creatives_synced": 150,
+  "message": "Successfully synced 150 creatives for buyer 456."
 }
 ```
 
@@ -268,6 +314,54 @@ async def main():
 asyncio.run(main())
 ```
 
+### Multi-Seat Usage
+
+```python
+import asyncio
+from collectors import BuyerSeatsClient, CreativesClient
+from storage import SQLiteStore, creative_dicts_to_storage
+
+async def sync_all_seats():
+    bidder_id = "299038253"
+    credentials = "/path/to/service-account.json"
+
+    # Discover buyer seats
+    seats_client = BuyerSeatsClient(
+        credentials_path=credentials,
+        account_id=bidder_id
+    )
+    seats = await seats_client.discover_buyer_seats()
+    print(f"Found {len(seats)} buyer seats")
+
+    # Initialize storage
+    store = SQLiteStore()
+    await store.initialize()
+
+    # Save seats and sync creatives for each
+    for seat in seats:
+        await store.save_buyer_seat(seat)
+
+        # Fetch creatives for this seat
+        creatives_client = CreativesClient(
+            credentials_path=credentials,
+            account_id=bidder_id
+        )
+        api_creatives = await creatives_client.fetch_all_creatives(
+            buyer_id=seat.buyer_id
+        )
+
+        # Save with buyer_id association
+        storage_creatives = creative_dicts_to_storage(api_creatives)
+        count = await store.save_creatives(storage_creatives)
+
+        # Update seat metadata
+        await store.update_seat_creative_count(seat.buyer_id)
+        await store.update_seat_sync_time(seat.buyer_id)
+        print(f"Synced {count} creatives for {seat.display_name}")
+
+asyncio.run(sync_all_seats())
+```
+
 ## Project Structure
 
 ```
@@ -276,13 +370,14 @@ rtbcat-creative-intel/
 │   ├── __init__.py
 │   └── main.py                  # FastAPI application
 ├── collectors/
-│   ├── __init__.py              # Exports CreativesClient, PretargetingClient
+│   ├── __init__.py              # Exports CreativesClient, PretargetingClient, BuyerSeatsClient
 │   ├── base.py                  # Base client with auth and retry logic
 │   ├── csv_reports.py           # Gmail CSV report fetcher
+│   ├── seats.py                 # BuyerSeatsClient - multi-seat discovery
 │   ├── creatives/
 │   │   ├── __init__.py
 │   │   ├── client.py            # CreativesClient - main collector
-│   │   ├── schemas.py           # TypedDict schemas
+│   │   ├── schemas.py           # TypedDict schemas (includes buyerId)
 │   │   └── parsers.py           # API response parsers
 │   └── pretargeting/
 │       ├── __init__.py
@@ -294,15 +389,13 @@ rtbcat-creative-intel/
 │   └── config_manager.py        # Encrypted credential storage
 ├── storage/
 │   ├── __init__.py
-│   ├── sqlite_store.py          # SQLite database backend
+│   ├── sqlite_store.py          # SQLite backend (Creative, Campaign, BuyerSeat)
 │   ├── s3_writer.py             # S3 backup (optional)
 │   └── adapters.py              # API → Storage type conversion
 ├── tests/
-│   ├── conftest.py              # Shared pytest fixtures
-│   ├── api/                     # API endpoint tests
-│   ├── collectors/              # Collector tests with fixtures
-│   ├── config/                  # Configuration tests
-│   └── storage/                 # Storage tests
+│   ├── __init__.py
+│   ├── test_multi_seat.py       # Multi-seat functionality tests (23 tests)
+│   └── ...                      # Additional test modules
 ├── dashboard/                   # Next.js frontend
 │   ├── src/
 │   │   ├── app/                 # Pages (creatives, campaigns, settings)
@@ -450,6 +543,40 @@ docker compose logs api --tail 50
 | Cloud Server (t3.medium) | $30-50/month | Production, 24/7 uptime |
 | Customer's AWS | ~$35/month | Privacy, zero egress costs |
 
+## Database Schema
+
+### Tables
+
+| Table | Description |
+|-------|-------------|
+| `creatives` | Creative metadata with `buyer_id` for multi-seat support |
+| `campaigns` | Campaign clusters (manual or AI-generated) |
+| `buyer_seats` | Buyer accounts under a bidder |
+
+### buyer_seats Table
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `buyer_id` | TEXT PK | Buyer account ID |
+| `bidder_id` | TEXT | Parent bidder account |
+| `display_name` | TEXT | Human-readable name |
+| `active` | INTEGER | 1=active, 0=suspended |
+| `creative_count` | INTEGER | Cached count of creatives |
+| `last_synced` | TIMESTAMP | Last successful sync |
+| `created_at` | TIMESTAMP | First discovery time |
+
+### Migration
+
+Existing databases are automatically migrated on startup. To manually trigger:
+
+```python
+from storage import SQLiteStore
+
+store = SQLiteStore()
+await store.initialize()
+await store.migrate_add_buyer_seats()
+```
+
 ## Roadmap
 
 ### v0.1 (Current)
@@ -459,11 +586,13 @@ docker compose logs api --tail 50
 - [x] REST API with FastAPI
 - [x] Encrypted credential management
 - [x] Docker deployment
+- [x] Multi-seat buyer account support
 
 ### v0.2 (In Progress)
 - [x] Next.js dashboard structure
 - [ ] Campaign clustering UI
 - [ ] Performance metrics charts
+- [ ] Seat management UI
 
 ### v0.3 (Planned)
 - [ ] AI-based creative clustering

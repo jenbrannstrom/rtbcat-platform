@@ -220,7 +220,9 @@ def _get_dest_url(
 
 
 def parse_creative_response(
-    creative_data: dict, default_account_id: str = ""
+    creative_data: dict,
+    default_account_id: str = "",
+    buyer_id: Optional[str] = None,
 ) -> CreativeDict:
     """Convert an API response to normalized CreativeDict schema.
 
@@ -233,15 +235,18 @@ def parse_creative_response(
     Args:
         creative_data: A creative resource from the API response.
         default_account_id: Fallback account ID if not in response.
+        buyer_id: Optional buyer seat ID for multi-seat accounts.
 
     Returns:
         CreativeDict with normalized and extracted data.
 
     Example:
         >>> raw = {"name": "bidders/123/creatives/abc", "html": {...}}
-        >>> creative = parse_creative_response(raw, "123")
+        >>> creative = parse_creative_response(raw, "123", buyer_id="456")
         >>> creative["format"]
         'HTML'
+        >>> creative["buyerId"]
+        '456'
     """
     # Extract resource name components
     name = creative_data.get("name", "")
@@ -264,6 +269,7 @@ def parse_creative_response(
         "creativeId": creative_id,
         "creativeName": name,
         "accountId": account_id,
+        "buyerId": buyer_id,
         "format": creative_format,
         "destUrl": dest_url,
         "utmParams": utm_params,

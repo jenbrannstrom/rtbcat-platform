@@ -104,6 +104,7 @@ class CreativeDict(TypedDict, total=False):
         creativeId: Unique creative identifier.
         creativeName: Full resource name (bidders/{account}/creatives/{id}).
         accountId: Bidder account ID.
+        buyerId: Buyer seat ID (for multi-seat accounts).
         format: Creative format (HTML, VIDEO, NATIVE, UNKNOWN).
         destUrl: Primary destination URL.
         utmParams: Extracted UTM tracking parameters.
@@ -123,6 +124,7 @@ class CreativeDict(TypedDict, total=False):
     creativeId: str
     creativeName: str
     accountId: str
+    buyerId: Optional[str]
     format: CreativeFormat
     destUrl: Optional[str]
     utmParams: UtmParams

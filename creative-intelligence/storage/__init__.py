@@ -20,7 +20,7 @@ Example:
 
 from .adapters import creative_dict_to_storage, creative_dicts_to_storage
 from .s3_writer import S3Writer
-from .sqlite_store import Campaign, Creative, SQLiteStore
+from .sqlite_store import BuyerSeat, Campaign, Creative, SQLiteStore
 
 __all__ = [
     # Storage backends
@@ -29,6 +29,7 @@ __all__ = [
     # Models
     "Creative",
     "Campaign",
+    "BuyerSeat",
     # Adapters
     "creative_dict_to_storage",
     "creative_dicts_to_storage",

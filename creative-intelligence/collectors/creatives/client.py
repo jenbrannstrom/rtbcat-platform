@@ -39,6 +39,7 @@ class CreativesClient(BaseAuthorizedBuyersClient):
         self,
         filter_query: Optional[str] = None,
         view: str = "FULL",
+        buyer_id: Optional[str] = None,
     ) -> AsyncIterator[CreativeDict]:
         """Fetch creatives with pagination support.
 
@@ -49,6 +50,7 @@ class CreativesClient(BaseAuthorizedBuyersClient):
             filter_query: Optional filter string for the API.
                 Example: 'creativeServingDecision.networkPolicyCompliance.status=APPROVED'
             view: View type - 'FULL' for all fields or 'SERVING_DECISION_ONLY'.
+            buyer_id: Optional buyer seat ID to associate with creatives.
 
         Yields:
             CreativeDict for each creative found.
@@ -57,8 +59,8 @@ class CreativesClient(BaseAuthorizedBuyersClient):
             HttpError: If the API request fails after retries.
 
         Example:
-            >>> async for creative in client.fetch_creatives():
-            ...     print(f"{creative['creativeId']}: {creative['format']}")
+            >>> async for creative in client.fetch_creatives(buyer_id="456"):
+            ...     print(f"{creative['creativeId']}: {creative['buyerId']}")
         """
         service = self._get_service()
         page_token: Optional[str] = None
@@ -84,7 +86,9 @@ class CreativesClient(BaseAuthorizedBuyersClient):
 
                 creatives = response.get("creatives", [])
                 for creative_data in creatives:
-                    yield parse_creative_response(creative_data, self.account_id)
+                    yield parse_creative_response(
+                        creative_data, self.account_id, buyer_id=buyer_id
+                    )
 
                 page_token = response.get("nextPageToken")
                 if not page_token:
@@ -99,6 +103,7 @@ class CreativesClient(BaseAuthorizedBuyersClient):
     async def fetch_all_creatives(
         self,
         filter_query: Optional[str] = None,
+        buyer_id: Optional[str] = None,
     ) -> list[CreativeDict]:
         """Fetch all creatives as a list.
 
@@ -107,49 +112,70 @@ class CreativesClient(BaseAuthorizedBuyersClient):
 
         Args:
             filter_query: Optional filter string for the API.
+            buyer_id: Optional buyer seat ID to associate with creatives.
 
         Returns:
             List of all CreativeDict objects matching the filter.
 
         Example:
-            >>> creatives = await client.fetch_all_creatives()
-            >>> print(f"Found {len(creatives)} creatives")
+            >>> creatives = await client.fetch_all_creatives(buyer_id="456")
+            >>> print(f"Found {len(creatives)} creatives for buyer 456")
         """
         creatives: list[CreativeDict] = []
-        async for creative in self.fetch_creatives(filter_query):
+        async for creative in self.fetch_creatives(filter_query, buyer_id=buyer_id):
             creatives.append(creative)
         return creatives
 
-    async def get_creative_by_id(self, creative_id: str) -> Optional[CreativeDict]:
+    async def get_creative_by_id(
+        self,
+        creative_id: str,
+        view: str = "FULL",
+        buyer_id: Optional[str] = None,
+    ) -> Optional[CreativeDict]:
         """Fetch a single creative by ID.
+
+        Uses the list API with a filter since bidders.creatives doesn't
+        have a direct get method (only buyers.creatives does).
 
         Args:
             creative_id: The creative ID to fetch (not the full resource name).
+            view: View type - 'FULL' for all fields or 'SERVING_DECISION_ONLY'.
+            buyer_id: Optional buyer seat ID to associate with the creative.
 
         Returns:
             CreativeDict if found, None if the creative doesn't exist.
 
         Raises:
-            HttpError: If the API request fails (except 404).
+            HttpError: If the API request fails.
 
         Example:
-            >>> creative = await client.get_creative_by_id("abc123xyz")
+            >>> creative = await client.get_creative_by_id("abc123xyz", buyer_id="456")
             >>> if creative:
-            ...     print(f"Found: {creative['format']} creative")
+            ...     print(f"Found: {creative['format']} creative for buyer {creative['buyerId']}")
         """
         service = self._get_service()
-        name = f"{self.parent}/creatives/{creative_id}"
 
         try:
+            # Use list with filter since bidders.creatives has no get method
+            filter_str = f'creativeId="{creative_id}"'
+            params = {
+                "parent": self.parent,
+                "pageSize": 1,
+                "view": view,
+                "filter": filter_str,
+            }
             response = await self._execute_with_retry(
-                lambda: service.bidders().creatives().get(name=name)
+                lambda p=params: service.bidders().creatives().list(**p)
             )
-            return parse_creative_response(response, self.account_id)
+
+            creatives = response.get("creatives", [])
+            if creatives:
+                return parse_creative_response(
+                    creatives[0], self.account_id, buyer_id=buyer_id
+                )
+            return None
 
         except HttpError as ex:
-            if ex.resp.status == 404:
-                logger.debug(f"Creative {creative_id} not found")
-                return None
             logger.error(
                 f"Failed to fetch creative {creative_id}: "
                 f"{ex.resp.status} - {ex.reason}"
