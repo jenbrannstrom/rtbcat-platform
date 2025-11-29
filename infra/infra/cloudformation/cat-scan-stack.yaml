@@ -1,0 +1,403 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Cat Scan - RTB Analytics Stack (ECS Fargate)'
+
+# TODO: Complete and test this template
+# This is an OUTLINE for the full CloudFormation deployment
+
+Parameters:
+  # Input log configuration
+  LogBucketName:
+    Type: String
+    Description: 'S3 bucket name where RTB logs are stored (must already exist)'
+    MinLength: 3
+
+  LogPrefix:
+    Type: String
+    Description: 'S3 prefix for log files (e.g., rtb-logs/)'
+    Default: ''
+
+  # Report output configuration
+  ReportBucketName:
+    Type: String
+    Description: 'S3 bucket name for Cat Scan reports (will be created if it does not exist)'
+    MinLength: 3
+
+  # Schedule configuration
+  ScheduleExpression:
+    Type: String
+    Description: 'How often to run Cat Scan analysis (e.g., rate(15 minutes), cron(0 * * * ? *))'
+    Default: 'rate(1 hour)'
+
+  # VPC configuration (optional, for fake_bidder service)
+  VpcId:
+    Type: String
+    Description: 'VPC ID for ECS tasks (leave empty to create a new VPC)'
+    Default: ''
+
+  SubnetIds:
+    Type: CommaDelimitedList
+    Description: 'Subnet IDs for ECS tasks (leave empty to create new subnets)'
+    Default: ''
+
+Conditions:
+  CreateVPC: !Equals [!Ref VpcId, '']
+  CreateReportBucket: !Not [!Equals [!Ref ReportBucketName, !Ref LogBucketName]]
+
+Resources:
+  # ============================================================================
+  # S3 Buckets
+  # ============================================================================
+
+  ReportBucket:
+    Type: AWS::S3::Bucket
+    Condition: CreateReportBucket
+    Properties:
+      BucketName: !Ref ReportBucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      WebsiteConfiguration:
+        IndexDocument: report.html
+        ErrorDocument: error.html
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldReports
+            Status: Enabled
+            ExpirationInDays: 30
+      Tags:
+        - Key: Project
+          Value: CatScan
+
+  # ============================================================================
+  # ECR Repositories
+  # ============================================================================
+
+  FakeBidderRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: cat-scan/fake-bidder
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 5 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+
+  FakeSspRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: cat-scan/fake-ssp
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 5 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+
+  CatScanRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: cat-scan/cat-scan
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 5 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+
+  # ============================================================================
+  # IAM Roles
+  # ============================================================================
+
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-ecsTaskExecutionRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Tags:
+        - Key: Project
+          Value: CatScan
+
+  CatScanTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-catScanTaskRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ReadLogBucket
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::${LogBucketName}'
+                  - !Sub 'arn:aws:s3:::${LogBucketName}/*'
+        - PolicyName: WriteReportBucket
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                Resource:
+                  - !Sub 'arn:aws:s3:::${ReportBucketName}/*'
+      Tags:
+        - Key: Project
+          Value: CatScan
+
+  # ============================================================================
+  # ECS Cluster
+  # ============================================================================
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub '${AWS::StackName}-cluster'
+      CapacityProviders:
+        - FARGATE
+        - FARGATE_SPOT
+      DefaultCapacityProviderStrategy:
+        - CapacityProvider: FARGATE_SPOT
+          Weight: 1
+      Tags:
+        - Key: Project
+          Value: CatScan
+
+  # ============================================================================
+  # ECS Task Definitions
+  # ============================================================================
+
+  CatScanTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${AWS::StackName}-cat-scan'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: '512'
+      Memory: '1024'
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt CatScanTaskRole.Arn
+      ContainerDefinitions:
+        - Name: cat-scan
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${CatScanRepository}:latest'
+          Essential: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref CatScanLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: cat-scan
+          # Override command at runtime via EventBridge target input
+          # Example: ["s3://bucket/prefix/logs.jsonl", "--out", "/reports"]
+
+  FakeBidderTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${AWS::StackName}-fake-bidder'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: '256'
+      Memory: '512'
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: fake-bidder
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FakeBidderRepository}:latest'
+          Essential: true
+          PortMappings:
+            - ContainerPort: 3000
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref FakeBidderLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: fake-bidder
+
+  # ============================================================================
+  # CloudWatch Log Groups
+  # ============================================================================
+
+  CatScanLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${AWS::StackName}/cat-scan'
+      RetentionInDays: 7
+
+  FakeBidderLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${AWS::StackName}/fake-bidder'
+      RetentionInDays: 7
+
+  # ============================================================================
+  # EventBridge Rule for Scheduled Cat Scan Runs
+  # ============================================================================
+
+  CatScanScheduledRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${AWS::StackName}-cat-scan-schedule'
+      Description: 'Runs Cat Scan analysis on a schedule'
+      ScheduleExpression: !Ref ScheduleExpression
+      State: ENABLED
+      Targets:
+        - Id: CatScanTask
+          Arn: !GetAtt ECSCluster.Arn
+          RoleArn: !GetAtt EventBridgeECSRole.Arn
+          EcsParameters:
+            TaskDefinitionArn: !Ref CatScanTaskDefinition
+            TaskCount: 1
+            LaunchType: FARGATE
+            PlatformVersion: LATEST
+            NetworkConfiguration:
+              AwsVpcConfiguration:
+                AssignPublicIp: ENABLED
+                Subnets: !Ref SubnetIds
+                # SecurityGroups: TODO
+          Input: !Sub |
+            {
+              "containerOverrides": [
+                {
+                  "name": "cat-scan",
+                  "command": [
+                    "s3://${LogBucketName}/${LogPrefix}logs.jsonl",
+                    "--out",
+                    "/reports",
+                    "--segment-stats"
+                  ]
+                }
+              ]
+            }
+
+  EventBridgeECSRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-eventBridgeECSRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: RunECSTasks
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:RunTask
+                Resource: !Ref CatScanTaskDefinition
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  - !GetAtt ECSTaskExecutionRole.Arn
+                  - !GetAtt CatScanTaskRole.Arn
+
+# ============================================================================
+# Outputs
+# ============================================================================
+
+Outputs:
+  ECSClusterName:
+    Description: 'ECS Cluster name'
+    Value: !Ref ECSCluster
+    Export:
+      Name: !Sub '${AWS::StackName}-ECSCluster'
+
+  CatScanECRRepository:
+    Description: 'Cat Scan ECR repository URI'
+    Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${CatScanRepository}'
+    Export:
+      Name: !Sub '${AWS::StackName}-CatScanECR'
+
+  FakeBidderECRRepository:
+    Description: 'Fake Bidder ECR repository URI'
+    Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FakeBidderRepository}'
+    Export:
+      Name: !Sub '${AWS::StackName}-FakeBidderECR'
+
+  FakeSspECRRepository:
+    Description: 'Fake SSP ECR repository URI'
+    Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FakeSspRepository}'
+    Export:
+      Name: !Sub '${AWS::StackName}-FakeSspECR'
+
+  ReportBucketName:
+    Description: 'S3 bucket for Cat Scan reports'
+    Value: !Ref ReportBucketName
+    Export:
+      Name: !Sub '${AWS::StackName}-ReportBucket'
+
+  ReportBucketWebsiteURL:
+    Description: 'S3 static website URL for reports'
+    Condition: CreateReportBucket
+    Value: !GetAtt ReportBucket.WebsiteURL
+    Export:
+      Name: !Sub '${AWS::StackName}-ReportWebsite'

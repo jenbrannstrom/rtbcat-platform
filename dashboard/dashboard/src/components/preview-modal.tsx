@@ -1,0 +1,413 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import { X, Play, ExternalLink, Copy, Check } from "lucide-react";
+import type { Creative } from "@/types/api";
+import { cn, getFormatColor, getStatusColor } from "@/lib/utils";
+import { useState } from "react";
+
+interface PreviewModalProps {
+  creative: Creative;
+  onClose: () => void;
+}
+
+function extractVideoUrlFromVast(vastXml: string): string | null {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(vastXml, "text/xml");
+  const mediaFile = doc.querySelector("MediaFile");
+  if (mediaFile) {
+    return mediaFile.textContent?.trim() || null;
+  }
+  return null;
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="p-1 text-gray-400 hover:text-gray-600 rounded"
+      title="Copy"
+    >
+      {copied ? (
+        <Check className="h-3.5 w-3.5 text-green-500" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" />
+      )}
+    </button>
+  );
+}
+
+function LabeledField({
+  label,
+  value,
+  isLink = false,
+  copyable = false,
+}: {
+  label: string;
+  value: string | null | undefined;
+  isLink?: boolean;
+  copyable?: boolean;
+}) {
+  if (!value) return null;
+
+  return (
+    <div className="py-2">
+      <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+        {label}
+      </dt>
+      <dd className="mt-1 flex items-center gap-2">
+        {isLink ? (
+          <a
+            href={value.startsWith("http") ? value : `https://${value}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-primary-600 hover:text-primary-700 truncate max-w-md"
+          >
+            {value}
+            <ExternalLink className="inline ml-1 h-3 w-3" />
+          </a>
+        ) : (
+          <span className="text-sm text-gray-900 truncate max-w-md">{value}</span>
+        )}
+        {copyable && <CopyButton text={value} />}
+      </dd>
+    </div>
+  );
+}
+
+function VideoPreviewPlayer({ creative }: { creative: Creative }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  let videoUrl = creative.video?.video_url;
+  if (!videoUrl && creative.video?.vast_xml) {
+    videoUrl = extractVideoUrlFromVast(creative.video.vast_xml);
+  }
+
+  if (!videoUrl) {
+    return (
+      <div className="flex items-center justify-center h-48 bg-gray-900 text-gray-400">
+        <div className="text-center">
+          <Play className="h-10 w-10 mx-auto mb-2 opacity-50" />
+          <p>No video URL available</p>
+          {creative.video?.vast_xml && (
+            <p className="text-xs mt-2">VAST XML present but no MediaFile found</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-black flex items-center justify-center">
+      <video
+        ref={videoRef}
+        src={videoUrl}
+        controls
+        className="max-w-full max-h-[300px] w-auto h-auto"
+        poster=""
+      >
+        Your browser does not support the video tag.
+      </video>
+    </div>
+  );
+}
+
+function HtmlPreviewFrame({ creative }: { creative: Creative }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    if (iframeRef.current && creative.html?.snippet) {
+      const doc = iframeRef.current.contentDocument;
+      if (doc) {
+        doc.open();
+        doc.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <style>
+              body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100%; background: #f3f4f6; }
+            </style>
+          </head>
+          <body>${creative.html.snippet}</body>
+          </html>
+        `);
+        doc.close();
+      }
+    }
+  }, [creative.html?.snippet]);
+
+  if (!creative.html?.snippet) {
+    return (
+      <div className="flex items-center justify-center h-48 bg-gray-100 text-gray-400">
+        No HTML snippet available
+      </div>
+    );
+  }
+
+  const width = Math.min(creative.html.width || creative.width || 300, 600);
+  const height = Math.min(creative.html.height || creative.height || 250, 300);
+
+  return (
+    <div className="flex justify-center p-4 bg-gray-100">
+      <iframe
+        ref={iframeRef}
+        title={`Creative ${creative.id}`}
+        width={width}
+        height={height}
+        className="border border-gray-300 bg-white"
+        sandbox="allow-scripts allow-same-origin"
+      />
+    </div>
+  );
+}
+
+function NativePreviewCard({ creative }: { creative: Creative }) {
+  const native = creative.native;
+
+  if (!native) {
+    return (
+      <div className="flex items-center justify-center h-48 bg-gray-100 text-gray-400">
+        No native content available
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden max-w-sm mx-auto">
+      {native.image?.url && (
+        <img
+          src={native.image.url}
+          alt={native.headline || "Native ad"}
+          className="w-full h-40 object-cover"
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = "none";
+          }}
+        />
+      )}
+      <div className="p-3">
+        <div className="flex items-start gap-2">
+          {native.logo?.url && (
+            <img
+              src={native.logo.url}
+              alt="Logo"
+              className="w-8 h-8 rounded object-cover flex-shrink-0"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
+            />
+          )}
+          <div className="flex-1">
+            {native.headline && (
+              <h3 className="font-semibold text-gray-900 text-sm line-clamp-2">
+                {native.headline}
+              </h3>
+            )}
+            {native.body && (
+              <p className="mt-1 text-xs text-gray-600 line-clamp-2">
+                {native.body}
+              </p>
+            )}
+          </div>
+        </div>
+        {native.call_to_action && (
+          <button className="mt-3 w-full py-1.5 px-3 bg-blue-600 text-white rounded text-xs font-medium">
+            {native.call_to_action}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function PreviewModal({ creative, onClose }: PreviewModalProps) {
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [onClose]);
+
+  // Extract rejection reason from raw_data if present
+  const rawData = (creative as unknown as { raw_data?: Record<string, unknown> }).raw_data;
+  const rejectionReason = rawData?.rejectionReason as string | undefined;
+  const declaredUrls = rawData?.declaredClickThroughUrls as string[] | undefined;
+  const appStoreUrl = rawData?.appStoreUrl as string | undefined;
+  const appName = rawData?.appName as string | undefined;
+  const bundleId = rawData?.bundleId as string | undefined;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/60"
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-semibold text-gray-900 truncate">
+              {creative.name || creative.id}
+            </h2>
+            <p className="text-xs text-gray-500 truncate">{creative.id}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="ml-4 p-2 hover:bg-gray-100 rounded-full flex-shrink-0"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="overflow-y-auto flex-1">
+          {/* Preview - Top section */}
+          <div className="bg-gray-50">
+            {creative.format === "VIDEO" && (
+              <VideoPreviewPlayer creative={creative} />
+            )}
+            {creative.format === "HTML" && (
+              <HtmlPreviewFrame creative={creative} />
+            )}
+            {creative.format === "NATIVE" && (
+              <div className="p-4">
+                <NativePreviewCard creative={creative} />
+              </div>
+            )}
+            {!["VIDEO", "HTML", "NATIVE"].includes(creative.format) && (
+              <div className="flex items-center justify-center h-48 bg-gray-100 text-gray-400">
+                Preview not available for {creative.format} format
+              </div>
+            )}
+          </div>
+
+          {/* Labeled Fields - Card below preview */}
+          <div className="p-4">
+            {/* Status badges */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              <span className={cn("badge", getFormatColor(creative.format))}>
+                {creative.format}
+              </span>
+              {creative.approval_status && (
+                <span className={cn("badge", getStatusColor(creative.approval_status))}>
+                  {creative.approval_status.replace(/_/g, " ")}
+                </span>
+              )}
+              {creative.width && creative.height && (
+                <span className="badge bg-gray-100 text-gray-700">
+                  {creative.width}x{creative.height}
+                </span>
+              )}
+            </div>
+
+            {/* Fields grid */}
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 divide-y sm:divide-y-0">
+              <div className="sm:border-r sm:border-gray-100 sm:pr-6">
+                <LabeledField label="Type" value={creative.format} />
+                <LabeledField label="Status" value={creative.approval_status?.replace(/_/g, " ")} />
+                <LabeledField label="Rejection Reason" value={rejectionReason} />
+                <LabeledField label="Advertiser" value={creative.advertiser_name} />
+                <LabeledField label="Account ID" value={creative.account_id} copyable />
+              </div>
+              <div className="sm:pl-6">
+                <LabeledField label="Destination URL" value={creative.final_url} isLink copyable />
+                <LabeledField
+                  label="Declared URL"
+                  value={declaredUrls?.length ? declaredUrls[0] : null}
+                  isLink
+                  copyable
+                />
+                <LabeledField label="App Store URL" value={appStoreUrl} isLink copyable />
+                <LabeledField label="App Name" value={appName} />
+                <LabeledField label="Bundle ID" value={bundleId} copyable />
+              </div>
+            </dl>
+
+            {/* UTM Parameters section */}
+            {(creative.utm_campaign || creative.utm_source || creative.utm_medium) && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">
+                  UTM Parameters
+                </h3>
+                <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {creative.utm_source && (
+                    <div>
+                      <dt className="text-xs text-gray-500">Source</dt>
+                      <dd className="text-sm text-gray-900">{creative.utm_source}</dd>
+                    </div>
+                  )}
+                  {creative.utm_medium && (
+                    <div>
+                      <dt className="text-xs text-gray-500">Medium</dt>
+                      <dd className="text-sm text-gray-900">{creative.utm_medium}</dd>
+                    </div>
+                  )}
+                  {creative.utm_campaign && (
+                    <div>
+                      <dt className="text-xs text-gray-500">Campaign</dt>
+                      <dd className="text-sm text-gray-900">{creative.utm_campaign}</dd>
+                    </div>
+                  )}
+                  {creative.utm_content && (
+                    <div>
+                      <dt className="text-xs text-gray-500">Content</dt>
+                      <dd className="text-sm text-gray-900">{creative.utm_content}</dd>
+                    </div>
+                  )}
+                  {creative.utm_term && (
+                    <div>
+                      <dt className="text-xs text-gray-500">Term</dt>
+                      <dd className="text-sm text-gray-900">{creative.utm_term}</dd>
+                    </div>
+                  )}
+                </dl>
+              </div>
+            )}
+
+            {/* Video metadata */}
+            {creative.format === "VIDEO" && creative.video?.duration && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">
+                  Video Details
+                </h3>
+                <dl className="grid grid-cols-2 gap-3">
+                  <div>
+                    <dt className="text-xs text-gray-500">Duration</dt>
+                    <dd className="text-sm text-gray-900">{creative.video.duration}</dd>
+                  </div>
+                  {creative.video.video_url && (
+                    <div>
+                      <dt className="text-xs text-gray-500">Video URL</dt>
+                      <dd className="text-sm text-gray-900 truncate">
+                        <a
+                          href={creative.video.video_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary-600 hover:text-primary-700"
+                        >
+                          View source
+                          <ExternalLink className="inline ml-1 h-3 w-3" />
+                        </a>
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

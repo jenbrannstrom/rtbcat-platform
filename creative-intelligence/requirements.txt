@@ -1,0 +1,42 @@
+# RTBcat Creative Intelligence - Python Dependencies
+
+# Google Authorized Buyers RTB API
+google-api-python-client>=2.100.0
+google-auth>=2.23.0
+google-auth-oauthlib>=1.1.0
+
+# Web Framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+python-multipart>=0.0.6
+
+# Cloud Storage
+boto3>=1.29.0
+botocore>=1.32.0
+
+# Security & Encryption
+cryptography>=41.0.0
+
+# Configuration
+pyyaml>=6.0.1
+python-dotenv>=1.0.0
+
+# Database
+# SQLite is built into Python, no additional package needed
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+httpx>=0.25.0  # For testing FastAPI
+
+# Development
+black>=23.11.0
+isort>=5.12.0
+mypy>=1.7.0
+ruff>=0.1.6
+
+# Type stubs
+types-pyyaml>=6.0.0
+boto3-stubs[s3]>=1.29.0

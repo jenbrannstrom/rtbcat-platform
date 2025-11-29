@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # Creative Intelligence API (Python)
+  creative-api:
+    build:
+      context: ./creative-intelligence
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ~/.rtb-cat/credentials:/credentials:ro
+      - rtbcat-data:/home/rtbcat/.rtbcat
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/credentials/google-credentials.json
+      - ACCOUNT_ID=299038253
+    networks:
+      - rtbcat-network
+
+  # CAT_SCAN (Rust - RTB analyzer)
+  cat-scan:
+    build:
+      context: ./cat-scan
+      dockerfile: cat_scan/Dockerfile
+    ports:
+      - "8080:8080"  # SSP requests
+      - "9090:9090"  # Metrics API
+    environment:
+      - CREATIVE_API_URL=http://creative-api:8000
+      - BIDDER_URL=http://fake-bidder:8081
+    depends_on:
+      - creative-api
+    networks:
+      - rtbcat-network
+
+  # Fake SSP (for testing)
+  fake-ssp:
+    build:
+      context: ./cat-scan
+      dockerfile: fake_ssp/Dockerfile
+    ports:
+      - "7070:7070"
+    environment:
+      - CAT_SCAN_URL=http://cat-scan:8080
+    networks:
+      - rtbcat-network
+
+  # Fake Bidder (for testing)
+  fake-bidder:
+    build:
+      context: ./cat-scan
+      dockerfile: fake_bidder/Dockerfile
+    ports:
+      - "8081:8081"
+    networks:
+      - rtbcat-network
+
+  # Dashboard (Next.js)
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://creative-api:8000
+      - NEXT_PUBLIC_CAT_SCAN_URL=http://cat-scan:9090
+    depends_on:
+      - creative-api
+      - cat-scan
+    networks:
+      - rtbcat-network
+
+networks:
+  rtbcat-network:
+    driver: bridge
+
+volumes:
+  rtbcat-data:

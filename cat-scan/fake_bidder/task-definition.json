@@ -1,0 +1,30 @@
+{
+  "family": "fake-bidder",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::328614522524:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "fake-bidder",
+      "image": "328614522524.dkr.ecr.eu-west-1.amazonaws.com/cat-scan/fake-bidder:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/fake-bidder",
+          "awslogs-region": "eu-west-1",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}
