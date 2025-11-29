@@ -25,7 +25,7 @@ The dashboard provides a unified interface for:
 
 ### Development
 ```bash
-cd dashboard/dashboard
+cd dashboard
 
 # Install dependencies
 npm install

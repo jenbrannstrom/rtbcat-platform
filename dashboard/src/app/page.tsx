@@ -106,6 +106,15 @@ export default function DashboardPage() {
           </h2>
           <div className="space-y-3">
             <a
+              href="/waste-analysis"
+              className="block p-4 rounded-lg border border-orange-200 bg-orange-50 hover:border-orange-300 hover:bg-orange-100 transition-colors"
+            >
+              <h3 className="font-medium text-orange-900">Waste Analysis</h3>
+              <p className="mt-1 text-sm text-orange-700">
+                Identify bandwidth waste and optimize RTB traffic
+              </p>
+            </a>
+            <a
               href="/collect"
               className="block p-4 rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition-colors"
             >

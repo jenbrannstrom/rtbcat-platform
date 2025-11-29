@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, ChevronDown, ChevronUp } from "lucide-react";
 import { getCreatives, deleteCreative, getSizes } from "@/lib/api";
 import { CreativeCard } from "@/components/creative-card";
 import { PreviewModal } from "@/components/preview-modal";
+import { SeatSelector } from "@/components/seat-selector";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
 import type { Creative } from "@/types/api";
@@ -13,7 +15,14 @@ import { cn } from "@/lib/utils";
 
 const FORMATS = ["VIDEO", "HTML", "NATIVE", "IMAGE"];
 
-export default function CreativesPage() {
+function CreativesContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Get buyer_id from URL params
+  const urlBuyerId = searchParams.get("buyer_id");
+  const [selectedSeatId, setSelectedSeatId] = useState<string | null>(urlBuyerId);
+
   const [selectedFormats, setSelectedFormats] = useState<Set<string>>(new Set());
   const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
@@ -21,14 +30,31 @@ export default function CreativesPage() {
   const [showFilters, setShowFilters] = useState(true);
   const queryClient = useQueryClient();
 
+  // Sync URL with selected seat
+  const handleSeatChange = useCallback((seatId: string | null) => {
+    setSelectedSeatId(seatId);
+    const params = new URLSearchParams(searchParams.toString());
+    if (seatId) {
+      params.set("buyer_id", seatId);
+    } else {
+      params.delete("buyer_id");
+    }
+    router.push(`/creatives${params.toString() ? `?${params.toString()}` : ""}`);
+  }, [router, searchParams]);
+
+  // Update state if URL changes externally
+  useEffect(() => {
+    setSelectedSeatId(urlBuyerId);
+  }, [urlBuyerId]);
+
   const {
     data: creatives,
     isLoading,
     error,
     refetch,
   } = useQuery({
-    queryKey: ["creatives"],
-    queryFn: () => getCreatives({ limit: 1000 }),
+    queryKey: ["creatives", selectedSeatId],
+    queryFn: () => getCreatives({ limit: 1000, buyer_id: selectedSeatId ?? undefined }),
   });
 
   const { data: availableSizes } = useQuery({
@@ -117,11 +143,19 @@ export default function CreativesPage() {
 
   return (
     <div className="p-8">
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Creatives</h1>
         <p className="mt-1 text-sm text-gray-500">
           Browse and manage your creative inventory
         </p>
+      </div>
+
+      {/* Seat Selector */}
+      <div className="mb-6">
+        <SeatSelector
+          selectedSeatId={selectedSeatId}
+          onSeatChange={handleSeatChange}
+        />
       </div>
 
       {/* Filter Section */}
@@ -255,12 +289,21 @@ export default function CreativesPage() {
       ) : (
         <div className="text-center py-12">
           <p className="text-gray-500">
-            {hasActiveFilters ? "No creatives match your filters" : "No creatives found"}
+            {hasActiveFilters
+              ? "No creatives match your filters"
+              : selectedSeatId
+              ? "No creatives found for this seat"
+              : "No creatives found"}
           </p>
-          {!hasActiveFilters && (
+          {!hasActiveFilters && !selectedSeatId && (
             <a href="/collect" className="btn-primary mt-4 inline-flex">
               Collect Creatives
             </a>
+          )}
+          {!hasActiveFilters && selectedSeatId && (
+            <p className="mt-2 text-sm text-gray-400">
+              Try syncing this seat or select a different one
+            </p>
           )}
         </div>
       )}
@@ -277,5 +320,13 @@ export default function CreativesPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function CreativesPage() {
+  return (
+    <Suspense fallback={<LoadingPage />}>
+      <CreativesContent />
+    </Suspense>
   );
 }

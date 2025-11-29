@@ -9,11 +9,13 @@ import {
   Download,
   Settings,
   ExternalLink,
+  TrendingDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
+  { name: "Waste Analysis", href: "/waste-analysis", icon: TrendingDown },
   { name: "Creatives", href: "/creatives", icon: Image },
   { name: "Campaigns", href: "/campaigns", icon: FolderKanban },
   { name: "Collect", href: "/collect", icon: Download },

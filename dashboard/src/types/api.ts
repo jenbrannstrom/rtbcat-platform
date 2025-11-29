@@ -30,6 +30,7 @@ export interface Creative {
   name: string;
   format: string;
   account_id: string | null;
+  buyer_id: string | null;
   approval_status: string | null;
   width: number | null;
   height: number | null;
@@ -86,4 +87,81 @@ export interface CollectResponse {
 
 export interface SizesResponse {
   sizes: string[];
+}
+
+export interface BuyerSeat {
+  buyer_id: string;
+  bidder_id: string;
+  display_name: string | null;
+  active: boolean;
+  creative_count: number;
+  last_synced: string | null;
+  created_at: string | null;
+}
+
+export interface DiscoverSeatsRequest {
+  bidder_id: string;
+}
+
+export interface DiscoverSeatsResponse {
+  status: string;
+  bidder_id: string;
+  seats_discovered: number;
+  seats: BuyerSeat[];
+}
+
+export interface SyncSeatResponse {
+  status: string;
+  buyer_id: string;
+  creatives_synced: number;
+  message: string;
+}
+
+// Waste Analysis Types
+
+export interface SizeGap {
+  canonical_size: string;
+  request_count: number;
+  creative_count: number;
+  estimated_qps: number;
+  estimated_waste_pct: number;
+  recommendation: string;
+  recommendation_detail: string;
+  potential_savings_usd: number | null;
+  closest_iab_size: string | null;
+}
+
+export interface SizeCoverage {
+  canonical_size: string;
+  creative_count: number;
+  request_count: number;
+  coverage_status: "good" | "low" | "none" | "excess" | "unknown";
+  formats: Record<string, number>;
+}
+
+export interface WasteReport {
+  buyer_id: string | null;
+  total_requests: number;
+  total_waste_requests: number;
+  waste_percentage: number;
+  size_gaps: SizeGap[];
+  size_coverage: SizeCoverage[];
+  potential_savings_qps: number;
+  potential_savings_usd: number | null;
+  analysis_period_days: number;
+  generated_at: string;
+  recommendations_summary: {
+    block: number;
+    add_creative: number;
+    use_flexible: number;
+    monitor: number;
+    top_savings_size: string | null;
+    top_savings_qps: number;
+  };
+}
+
+export interface ImportTrafficResponse {
+  status: string;
+  records_imported: number;
+  message: string;
 }
