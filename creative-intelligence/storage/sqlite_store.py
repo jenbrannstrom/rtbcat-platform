@@ -333,7 +333,7 @@ class SQLiteStore:
         loop = asyncio.get_event_loop()
         conn = await loop.run_in_executor(
             None,
-            lambda: sqlite3.connect(self.db_path),
+            lambda: sqlite3.connect(self.db_path, check_same_thread=False),
         )
         conn.row_factory = sqlite3.Row
 
@@ -803,6 +803,32 @@ class SQLiteStore:
                     WHERE id = ?
                     """,
                     (cluster_id, creative_id),
+                ),
+            )
+            await loop.run_in_executor(None, conn.commit)
+
+    async def update_creative_campaign(
+        self,
+        creative_id: str,
+        campaign_id: Optional[str],
+    ) -> None:
+        """Update the campaign assignment for a creative.
+
+        Args:
+            creative_id: The creative ID.
+            campaign_id: The new campaign ID (or None to remove from campaign).
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: conn.execute(
+                    """
+                    UPDATE creatives
+                    SET campaign_id = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (campaign_id, creative_id),
                 ),
             )
             await loop.run_in_executor(None, conn.commit)
