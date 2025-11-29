@@ -4,9 +4,11 @@ This module provides conversion functions between the TypedDict schemas
 returned by API collectors and the dataclass models used for storage.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Tuple
 
 from storage.sqlite_store import Creative
+from utils.size_normalization import canonical_size as compute_canonical_size
+from utils.size_normalization import get_size_category
 
 if TYPE_CHECKING:
     from collectors.creatives.schemas import CreativeDict
@@ -55,6 +57,13 @@ def creative_dict_to_storage(data: "CreativeDict") -> Creative:
             width = image.get("width")
             height = image.get("height")
 
+    # Compute canonical size from dimensions
+    canonical_size_str: Optional[str] = None
+    size_category_str: Optional[str] = None
+    if width is not None and height is not None:
+        canonical_size_str = compute_canonical_size(width, height)
+        size_category_str = get_size_category(canonical_size_str)
+
     return Creative(
         id=data.get("creativeId", ""),
         name=data.get("creativeName", ""),
@@ -63,6 +72,8 @@ def creative_dict_to_storage(data: "CreativeDict") -> Creative:
         approval_status=data.get("approvalStatus"),
         width=width,
         height=height,
+        canonical_size=canonical_size_str,
+        size_category=size_category_str,
         final_url=data.get("destUrl"),
         display_url=data.get("destUrl"),  # Same as final_url for now
         utm_source=utm_params.get("utm_source"),

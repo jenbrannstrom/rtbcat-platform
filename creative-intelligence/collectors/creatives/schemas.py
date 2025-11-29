@@ -116,6 +116,8 @@ class CreativeDict(TypedDict, total=False):
         apiUpdateTime: Last API update timestamp.
         collectedAt: Timestamp when this data was collected.
         source: Data source identifier (always 'authorized_buyers_api').
+        canonical_size: Normalized IAB standard size (e.g., "300x250 (Medium Rectangle)").
+        size_category: Size category ("IAB Standard", "Video", "Adaptive", "Non-Standard").
     """
 
     creativeId: str
@@ -133,3 +135,5 @@ class CreativeDict(TypedDict, total=False):
     apiUpdateTime: Optional[str]
     collectedAt: str
     source: Literal["authorized_buyers_api"]
+    canonical_size: str
+    size_category: str
