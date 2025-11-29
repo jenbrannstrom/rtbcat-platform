@@ -9,13 +9,17 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
+import csv
+import io
+
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from collectors import BuyerSeatsClient, CreativesClient
 from config import ConfigManager
 from storage import SQLiteStore, creative_dicts_to_storage
+from analytics import WasteAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +171,57 @@ class SyncSeatResponse(BaseModel):
     status: str
     buyer_id: str
     creatives_synced: int
+    message: str
+
+
+# Waste Analysis response models
+
+
+class SizeGapResponse(BaseModel):
+    """Response model for a size gap in waste analysis."""
+
+    canonical_size: str
+    request_count: int
+    creative_count: int
+    estimated_qps: float
+    estimated_waste_pct: float
+    recommendation: str
+    recommendation_detail: str
+    potential_savings_usd: Optional[float] = None
+    closest_iab_size: Optional[str] = None
+
+
+class SizeCoverageResponse(BaseModel):
+    """Response model for size coverage data."""
+
+    canonical_size: str
+    creative_count: int
+    request_count: int
+    coverage_status: str
+    formats: dict = Field(default_factory=dict)
+
+
+class WasteReportResponse(BaseModel):
+    """Response model for waste analysis report."""
+
+    buyer_id: Optional[str]
+    total_requests: int
+    total_waste_requests: int
+    waste_percentage: float
+    size_gaps: list[SizeGapResponse]
+    size_coverage: list[SizeCoverageResponse]
+    potential_savings_qps: float
+    potential_savings_usd: Optional[float]
+    analysis_period_days: int
+    generated_at: str
+    recommendations_summary: dict = Field(default_factory=dict)
+
+
+class ImportTrafficResponse(BaseModel):
+    """Response model for traffic import operation."""
+
+    status: str
+    records_imported: int
     message: str
 
 
@@ -757,6 +812,252 @@ async def sync_seat_creatives(
     except Exception as e:
         logger.error(f"Seat sync failed for {buyer_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Seat sync failed: {str(e)}")
+
+
+# Waste Analysis endpoints
+
+
+@app.get("/analytics/waste", response_model=WasteReportResponse, tags=["Analytics"])
+async def get_waste_report(
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    days: int = Query(7, ge=1, le=90, description="Days of traffic to analyze"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get waste analysis report comparing bid requests vs creative inventory.
+
+    Analyzes RTB traffic data to identify size gaps - ad sizes that receive
+    bid requests but have no matching creatives in inventory. This helps
+    identify bandwidth waste and optimization opportunities.
+
+    Returns recommendations for each gap:
+    - **Block**: High volume non-standard sizes to block in pretargeting
+    - **Add Creative**: Consider adding creative for this size
+    - **Use Flexible**: Near-IAB sizes that can use flexible HTML5 creatives
+    - **Monitor**: Low volume sizes to watch for growth
+    """
+    try:
+        analyzer = WasteAnalyzer(store)
+        report = await analyzer.analyze_waste(buyer_id=buyer_id, days=days)
+
+        return WasteReportResponse(
+            buyer_id=report.buyer_id,
+            total_requests=report.total_requests,
+            total_waste_requests=report.total_waste_requests,
+            waste_percentage=round(report.waste_percentage, 2),
+            size_gaps=[
+                SizeGapResponse(
+                    canonical_size=g.canonical_size,
+                    request_count=g.request_count,
+                    creative_count=g.creative_count,
+                    estimated_qps=round(g.estimated_qps, 2),
+                    estimated_waste_pct=round(g.estimated_waste_pct, 2),
+                    recommendation=g.recommendation,
+                    recommendation_detail=g.recommendation_detail,
+                    potential_savings_usd=g.potential_savings_usd,
+                    closest_iab_size=g.closest_iab_size,
+                )
+                for g in report.size_gaps
+            ],
+            size_coverage=[
+                SizeCoverageResponse(
+                    canonical_size=c.canonical_size,
+                    creative_count=c.creative_count,
+                    request_count=c.request_count,
+                    coverage_status=c.coverage_status,
+                    formats=c.formats,
+                )
+                for c in report.size_coverage
+            ],
+            potential_savings_qps=round(report.potential_savings_qps, 2),
+            potential_savings_usd=report.potential_savings_usd,
+            analysis_period_days=report.analysis_period_days,
+            generated_at=report.generated_at,
+            recommendations_summary=report.recommendations_summary,
+        )
+
+    except Exception as e:
+        logger.error(f"Waste analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Waste analysis failed: {str(e)}")
+
+
+@app.get(
+    "/analytics/size-coverage",
+    response_model=dict[str, SizeCoverageResponse],
+    tags=["Analytics"],
+)
+async def get_size_coverage(
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get creative coverage by size with traffic correlation.
+
+    Returns a dictionary mapping each canonical size to its coverage data,
+    including creative count, request count, and coverage status.
+
+    Coverage statuses:
+    - **good**: Adequate creative coverage for traffic volume
+    - **low**: Some creatives but may need more for volume
+    - **none**: No creatives (represents waste)
+    - **excess**: Have creatives but no traffic
+    """
+    try:
+        analyzer = WasteAnalyzer(store)
+        coverage = await analyzer.get_size_coverage(buyer_id=buyer_id)
+
+        return {
+            size: SizeCoverageResponse(
+                canonical_size=size,
+                creative_count=data["creatives"],
+                request_count=data["requests"],
+                coverage_status=data["coverage"],
+                formats=data.get("formats", {}),
+            )
+            for size, data in coverage.items()
+        }
+
+    except Exception as e:
+        logger.error(f"Size coverage lookup failed: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Size coverage lookup failed: {str(e)}"
+        )
+
+
+@app.post("/analytics/import-traffic", response_model=ImportTrafficResponse, tags=["Analytics"])
+async def import_traffic_data(
+    file: UploadFile = File(..., description="CSV file with traffic data"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Import RTB traffic data from CSV file.
+
+    The CSV file should have the following columns:
+    - **canonical_size**: Normalized size category (e.g., "300x250 (Medium Rectangle)")
+    - **raw_size**: Original requested size (e.g., "300x250")
+    - **request_count**: Number of bid requests
+    - **date**: Date in YYYY-MM-DD format
+    - **buyer_id** (optional): Buyer seat ID
+
+    Example CSV:
+    ```
+    canonical_size,raw_size,request_count,date,buyer_id
+    "300x250 (Medium Rectangle)",300x250,50000,2024-01-15,456
+    "Non-Standard (320x481)",320x481,12000,2024-01-15,456
+    ```
+    """
+    if not file.filename or not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+
+    try:
+        # Read and parse CSV
+        contents = await file.read()
+        text = contents.decode("utf-8")
+        reader = csv.DictReader(io.StringIO(text))
+
+        # Validate required columns
+        required_columns = {"canonical_size", "raw_size", "request_count", "date"}
+        if reader.fieldnames is None:
+            raise HTTPException(status_code=400, detail="CSV file is empty or malformed")
+
+        missing = required_columns - set(reader.fieldnames)
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"CSV missing required columns: {', '.join(missing)}",
+            )
+
+        # Parse records
+        records = []
+        for row in reader:
+            try:
+                records.append(
+                    {
+                        "canonical_size": row["canonical_size"],
+                        "raw_size": row["raw_size"],
+                        "request_count": int(row["request_count"]),
+                        "date": row["date"],
+                        "buyer_id": row.get("buyer_id") or None,
+                    }
+                )
+            except (ValueError, KeyError) as e:
+                logger.warning(f"Skipping invalid row: {row}, error: {e}")
+                continue
+
+        if not records:
+            raise HTTPException(status_code=400, detail="No valid records found in CSV")
+
+        # Store traffic data
+        count = await store.store_traffic_data(records)
+
+        return ImportTrafficResponse(
+            status="completed",
+            records_imported=count,
+            message=f"Successfully imported {count} traffic records.",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Traffic import failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Traffic import failed: {str(e)}")
+
+
+@app.post("/analytics/generate-mock-traffic", response_model=ImportTrafficResponse, tags=["Analytics"])
+async def generate_mock_traffic_endpoint(
+    days: int = Query(7, ge=1, le=30, description="Days of traffic to generate"),
+    buyer_id: Optional[str] = Query(None, description="Buyer ID to associate"),
+    base_daily_requests: int = Query(100000, ge=1000, le=1000000, description="Base daily request volume"),
+    waste_bias: float = Query(0.3, ge=0.0, le=1.0, description="Bias towards waste traffic (0-1)"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Generate mock RTB traffic data for testing and demos.
+
+    Creates synthetic bid request data with realistic distributions including:
+    - IAB standard sizes (high volume)
+    - Non-standard sizes (configurable waste)
+    - Video sizes
+    - Day-over-day variance
+
+    Use `waste_bias` to control how much non-standard (waste) traffic is generated:
+    - 0.0 = minimal waste, mostly standard sizes
+    - 0.5 = balanced mix
+    - 1.0 = heavy waste traffic
+    """
+    from analytics import generate_mock_traffic
+
+    try:
+        # Generate mock traffic
+        traffic_records = generate_mock_traffic(
+            days=days,
+            buyer_id=buyer_id,
+            base_daily_requests=base_daily_requests,
+            waste_bias=waste_bias,
+        )
+
+        # Convert to dict format for storage
+        records = [
+            {
+                "canonical_size": r.canonical_size,
+                "raw_size": r.raw_size,
+                "request_count": r.request_count,
+                "date": r.date,
+                "buyer_id": r.buyer_id,
+            }
+            for r in traffic_records
+        ]
+
+        # Store traffic data
+        count = await store.store_traffic_data(records)
+
+        return ImportTrafficResponse(
+            status="completed",
+            records_imported=count,
+            message=f"Generated and stored {count} mock traffic records for {days} days.",
+        )
+
+    except Exception as e:
+        logger.error(f"Mock traffic generation failed: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Mock traffic generation failed: {str(e)}"
+        )
 
 
 if __name__ == "__main__":
