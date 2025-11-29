@@ -22,12 +22,16 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import sqlite3
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
+
+from utils.size_normalization import canonical_size as compute_canonical_size
+from utils.size_normalization import get_size_category
 
 if TYPE_CHECKING:
     from collectors.creatives.schemas import CreativeDict
@@ -47,6 +51,8 @@ class Creative:
         approval_status: Network policy compliance status.
         width: Creative width in pixels (for HTML/native image).
         height: Creative height in pixels (for HTML/native image).
+        canonical_size: Normalized IAB standard size (e.g., "300x250 (Medium Rectangle)").
+        size_category: Size category ("IAB Standard", "Video", "Adaptive", "Non-Standard").
         final_url: Primary destination URL.
         display_url: Display URL (may differ from final_url).
         utm_source: UTM source parameter.
@@ -69,6 +75,8 @@ class Creative:
     approval_status: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
+    canonical_size: Optional[str] = None
+    size_category: Optional[str] = None
     final_url: Optional[str] = None
     display_url: Optional[str] = None
     utm_source: Optional[str] = None
@@ -128,6 +136,8 @@ class SQLiteStore:
         approval_status TEXT,
         width INTEGER,
         height INTEGER,
+        canonical_size TEXT,
+        size_category TEXT,
         final_url TEXT,
         display_url TEXT,
         utm_source TEXT,
@@ -170,6 +180,8 @@ class SQLiteStore:
     CREATE INDEX IF NOT EXISTS idx_creatives_utm_campaign ON creatives(utm_campaign);
     CREATE INDEX IF NOT EXISTS idx_creatives_account ON creatives(account_id);
     CREATE INDEX IF NOT EXISTS idx_creatives_approval ON creatives(approval_status);
+    CREATE INDEX IF NOT EXISTS idx_creatives_canonical_size ON creatives(canonical_size);
+    CREATE INDEX IF NOT EXISTS idx_creatives_size_category ON creatives(size_category);
     """
 
     # Migration for existing databases to add new columns
@@ -177,8 +189,12 @@ class SQLiteStore:
         "ALTER TABLE creatives ADD COLUMN account_id TEXT",
         "ALTER TABLE creatives ADD COLUMN approval_status TEXT",
         "ALTER TABLE creatives ADD COLUMN advertiser_name TEXT",
+        "ALTER TABLE creatives ADD COLUMN canonical_size TEXT",
+        "ALTER TABLE creatives ADD COLUMN size_category TEXT",
         "CREATE INDEX IF NOT EXISTS idx_creatives_account ON creatives(account_id)",
         "CREATE INDEX IF NOT EXISTS idx_creatives_approval ON creatives(approval_status)",
+        "CREATE INDEX IF NOT EXISTS idx_creatives_canonical_size ON creatives(canonical_size)",
+        "CREATE INDEX IF NOT EXISTS idx_creatives_size_category ON creatives(size_category)",
     ]
 
     def __init__(self, db_path: str | Path = "~/.rtbcat/rtbcat.db") -> None:
@@ -251,6 +267,13 @@ class SQLiteStore:
         Args:
             creative: The Creative to save.
         """
+        # Compute canonical size if not already set
+        canonical = creative.canonical_size
+        category = creative.size_category
+        if canonical is None and creative.width is not None and creative.height is not None:
+            canonical = compute_canonical_size(creative.width, creative.height)
+            category = get_size_category(canonical)
+
         async with self._connection() as conn:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
@@ -259,12 +282,13 @@ class SQLiteStore:
                     """
                     INSERT OR REPLACE INTO creatives (
                         id, name, format, account_id, approval_status,
-                        width, height, final_url, display_url,
+                        width, height, canonical_size, size_category,
+                        final_url, display_url,
                         utm_source, utm_medium, utm_campaign,
                         utm_content, utm_term, advertiser_name,
                         campaign_id, cluster_id, raw_data,
                         updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
                     (
                         creative.id,
@@ -274,6 +298,8 @@ class SQLiteStore:
                         creative.approval_status,
                         creative.width,
                         creative.height,
+                        canonical,
+                        category,
                         creative.final_url,
                         creative.display_url,
                         creative.utm_source,
@@ -302,10 +328,21 @@ class SQLiteStore:
         async with self._connection() as conn:
             loop = asyncio.get_event_loop()
 
+            def _compute_size_fields(c: Creative) -> tuple:
+                """Compute canonical size fields for a creative."""
+                canonical = c.canonical_size
+                category = c.size_category
+                if canonical is None and c.width is not None and c.height is not None:
+                    canonical = compute_canonical_size(c.width, c.height)
+                    category = get_size_category(canonical)
+                return canonical, category
+
             data = [
                 (
                     c.id, c.name, c.format, c.account_id, c.approval_status,
-                    c.width, c.height, c.final_url, c.display_url,
+                    c.width, c.height,
+                    *_compute_size_fields(c),
+                    c.final_url, c.display_url,
                     c.utm_source, c.utm_medium, c.utm_campaign,
                     c.utm_content, c.utm_term, c.advertiser_name,
                     c.campaign_id, c.cluster_id, json.dumps(c.raw_data),
@@ -319,12 +356,13 @@ class SQLiteStore:
                     """
                     INSERT OR REPLACE INTO creatives (
                         id, name, format, account_id, approval_status,
-                        width, height, final_url, display_url,
+                        width, height, canonical_size, size_category,
+                        final_url, display_url,
                         utm_source, utm_medium, utm_campaign,
                         utm_content, utm_term, advertiser_name,
                         campaign_id, cluster_id, raw_data,
                         updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
                     data,
                 ),
@@ -358,10 +396,69 @@ class SQLiteStore:
                 return self._row_to_creative(row)
             return None
 
+    def _parse_video_dimensions(self, raw_data: dict) -> tuple[Optional[int], Optional[int]]:
+        """Extract width and height from video VAST XML.
+
+        Parses the MediaFile tag in VAST XML to extract video dimensions.
+
+        Args:
+            raw_data: The raw_data dict containing video information.
+
+        Returns:
+            Tuple of (width, height) or (None, None) if not found.
+        """
+        video_data = raw_data.get("video")
+        if not video_data:
+            return None, None
+
+        vast_xml = video_data.get("vastXml")
+        if not vast_xml:
+            return None, None
+
+        # Parse MediaFile tag: <MediaFile width="720" height="1280" ...>
+        match = re.search(
+            r'<MediaFile[^>]*\s+width=["\'](\d+)["\'][^>]*\s+height=["\'](\d+)["\']',
+            vast_xml,
+        )
+        if match:
+            return int(match.group(1)), int(match.group(2))
+
+        # Try alternate attribute order: height before width
+        match = re.search(
+            r'<MediaFile[^>]*\s+height=["\'](\d+)["\'][^>]*\s+width=["\'](\d+)["\']',
+            vast_xml,
+        )
+        if match:
+            return int(match.group(2)), int(match.group(1))
+
+        return None, None
+
     def _row_to_creative(self, row: sqlite3.Row) -> Creative:
         """Convert a database row to a Creative object."""
         # Handle columns that may not exist in older databases
         row_dict = dict(row)
+
+        # Parse raw_data first - needed for video dimension extraction
+        raw_data = json.loads(row_dict["raw_data"]) if row_dict.get("raw_data") else {}
+
+        # Get dimensions from database
+        width = row_dict.get("width")
+        height = row_dict.get("height")
+
+        # For VIDEO format, try to extract dimensions from VAST XML if not set
+        creative_format = row_dict.get("format")
+        if creative_format == "VIDEO" and (width is None or height is None):
+            video_width, video_height = self._parse_video_dimensions(raw_data)
+            if video_width is not None and video_height is not None:
+                width = video_width
+                height = video_height
+
+        # Compute canonical size on-the-fly if not stored (migration support)
+        canonical = row_dict.get("canonical_size")
+        category = row_dict.get("size_category")
+        if canonical is None and width is not None and height is not None:
+            canonical = compute_canonical_size(width, height)
+            category = get_size_category(canonical)
 
         return Creative(
             id=row_dict["id"],
@@ -369,8 +466,10 @@ class SQLiteStore:
             format=row_dict["format"],
             account_id=row_dict.get("account_id"),
             approval_status=row_dict.get("approval_status"),
-            width=row_dict.get("width"),
-            height=row_dict.get("height"),
+            width=width,
+            height=height,
+            canonical_size=canonical,
+            size_category=category,
             final_url=row_dict.get("final_url"),
             display_url=row_dict.get("display_url"),
             utm_source=row_dict.get("utm_source"),
@@ -381,7 +480,7 @@ class SQLiteStore:
             advertiser_name=row_dict.get("advertiser_name"),
             campaign_id=row_dict.get("campaign_id"),
             cluster_id=row_dict.get("cluster_id"),
-            raw_data=json.loads(row_dict["raw_data"]) if row_dict.get("raw_data") else {},
+            raw_data=raw_data,
             created_at=row_dict.get("created_at"),
             updated_at=row_dict.get("updated_at"),
         )
@@ -391,6 +490,8 @@ class SQLiteStore:
         campaign_id: Optional[str] = None,
         cluster_id: Optional[str] = None,
         format: Optional[str] = None,
+        canonical_size: Optional[str] = None,
+        size_category: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[Creative]:
@@ -400,6 +501,8 @@ class SQLiteStore:
             campaign_id: Filter by campaign ID.
             cluster_id: Filter by cluster ID.
             format: Filter by creative format.
+            canonical_size: Filter by canonical size (e.g., "300x250 (Medium Rectangle)").
+            size_category: Filter by size category ("IAB Standard", "Video", etc.).
             limit: Maximum number of results.
             offset: Number of results to skip.
 
@@ -418,6 +521,12 @@ class SQLiteStore:
         if format:
             conditions.append("format = ?")
             params.append(format)
+        if canonical_size:
+            conditions.append("canonical_size = ?")
+            params.append(canonical_size)
+        if size_category:
+            conditions.append("size_category = ?")
+            params.append(size_category)
 
         where_clause = " AND ".join(conditions) if conditions else "1=1"
         params.extend([limit, offset])
@@ -641,11 +750,30 @@ class SQLiteStore:
                 ).fetchall(),
             )
 
+            size_category_counts = await loop.run_in_executor(
+                None,
+                lambda: conn.execute(
+                    "SELECT size_category, COUNT(*) as count FROM creatives "
+                    "WHERE size_category IS NOT NULL GROUP BY size_category"
+                ).fetchall(),
+            )
+
+            canonical_size_counts = await loop.run_in_executor(
+                None,
+                lambda: conn.execute(
+                    "SELECT canonical_size, COUNT(*) as count FROM creatives "
+                    "WHERE canonical_size IS NOT NULL GROUP BY canonical_size "
+                    "ORDER BY count DESC"
+                ).fetchall(),
+            )
+
         return {
             "creative_count": creative_count,
             "campaign_count": campaign_count,
             "cluster_count": cluster_count,
             "formats": {row[0]: row[1] for row in format_counts},
+            "size_categories": {row[0]: row[1] for row in size_category_counts},
+            "canonical_sizes": {row[0]: row[1] for row in canonical_size_counts},
             "db_path": str(self.db_path),
         }
 
@@ -692,3 +820,111 @@ class SQLiteStore:
             rows = await loop.run_in_executor(None, _query)
 
         return [f"{row[0]}x{row[1]}" for row in rows]
+
+    async def migrate_canonical_sizes(self) -> int:
+        """Migrate existing creatives to populate canonical_size fields.
+
+        This method updates all creatives that have width/height but no
+        canonical_size, computing the normalized size values. For VIDEO
+        creatives, it also parses VAST XML to extract dimensions.
+
+        Returns:
+            Number of creatives updated.
+
+        Example:
+            >>> store = SQLiteStore()
+            >>> await store.initialize()
+            >>> updated = await store.migrate_canonical_sizes()
+            >>> print(f"Migrated {updated} creatives")
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            # Get all creatives that need migration (have dimensions)
+            def _get_unmigrated_with_dims():
+                cursor = conn.execute(
+                    """
+                    SELECT id, width, height FROM creatives
+                    WHERE width IS NOT NULL
+                      AND height IS NOT NULL
+                      AND canonical_size IS NULL
+                    """
+                )
+                return cursor.fetchall()
+
+            # Get VIDEO creatives without dimensions (need VAST parsing)
+            def _get_unmigrated_videos():
+                cursor = conn.execute(
+                    """
+                    SELECT id, raw_data FROM creatives
+                    WHERE format = 'VIDEO'
+                      AND (width IS NULL OR height IS NULL)
+                      AND canonical_size IS NULL
+                    """
+                )
+                return cursor.fetchall()
+
+            rows_with_dims = await loop.run_in_executor(None, _get_unmigrated_with_dims)
+            rows_videos = await loop.run_in_executor(None, _get_unmigrated_videos)
+
+            updates = []
+            updates_with_dims = []
+
+            # Process creatives with existing dimensions
+            for row in rows_with_dims:
+                creative_id, width, height = row
+                canonical = compute_canonical_size(width, height)
+                category = get_size_category(canonical)
+                updates.append((canonical, category, creative_id))
+
+            # Process VIDEO creatives - parse VAST XML for dimensions
+            for row in rows_videos:
+                creative_id, raw_data_str = row
+                if not raw_data_str:
+                    continue
+
+                raw_data = json.loads(raw_data_str)
+                width, height = self._parse_video_dimensions(raw_data)
+
+                if width is not None and height is not None:
+                    canonical = compute_canonical_size(width, height)
+                    category = get_size_category(canonical)
+                    updates_with_dims.append((canonical, category, width, height, creative_id))
+
+            if not updates and not updates_with_dims:
+                return 0
+
+            # Batch update creatives with existing dimensions
+            if updates:
+                await loop.run_in_executor(
+                    None,
+                    lambda: conn.executemany(
+                        """
+                        UPDATE creatives
+                        SET canonical_size = ?, size_category = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                        """,
+                        updates,
+                    ),
+                )
+
+            # Batch update VIDEO creatives (also set width/height)
+            if updates_with_dims:
+                await loop.run_in_executor(
+                    None,
+                    lambda: conn.executemany(
+                        """
+                        UPDATE creatives
+                        SET canonical_size = ?, size_category = ?, width = ?, height = ?,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                        """,
+                        updates_with_dims,
+                    ),
+                )
+
+            await loop.run_in_executor(None, conn.commit)
+
+        total = len(updates) + len(updates_with_dims)
+        logger.info(f"Migrated canonical sizes for {total} creatives ({len(updates_with_dims)} from VAST XML)")
+        return total
