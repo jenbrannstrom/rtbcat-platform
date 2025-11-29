@@ -69,6 +69,7 @@ def creative_dict_to_storage(data: "CreativeDict") -> Creative:
         name=data.get("creativeName", ""),
         format=data.get("format", "UNKNOWN"),
         account_id=data.get("accountId"),
+        buyer_id=data.get("buyerId"),  # For multi-seat support
         approval_status=data.get("approvalStatus"),
         width=width,
         height=height,

@@ -27,11 +27,13 @@ from collectors.creatives.schemas import CreativeDict
 from collectors.csv_reports import GmailCSVFetcher
 from collectors.pretargeting.client import PretargetingClient
 from collectors.pretargeting.schemas import PretargetingConfigDict
+from collectors.seats import BuyerSeatsClient
 
 __all__ = [
     # Clients
     "CreativesClient",
     "PretargetingClient",
+    "BuyerSeatsClient",
     "BaseAuthorizedBuyersClient",
     "GmailCSVFetcher",
     # Schemas

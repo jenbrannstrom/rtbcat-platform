@@ -4,7 +4,12 @@
       "Bash(tree:*)",
       "Bash(mkdir:*)",
       "Bash(python:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(pip3 install:*)",
+      "Bash(python3:*)",
+      "Bash(source venv/bin/activate:*)",
+      "Bash(pip install:*)",
+      "Bash(python -m pytest:*)"
     ],
     "deny": [],
     "ask": []

@@ -13,7 +13,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from collectors import CreativesClient
+from collectors import BuyerSeatsClient, CreativesClient
 from config import ConfigManager
 from storage import SQLiteStore, creative_dicts_to_storage
 
@@ -66,6 +66,7 @@ class CreativeResponse(BaseModel):
     name: str
     format: str
     account_id: Optional[str] = None
+    buyer_id: Optional[str] = None
     approval_status: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
@@ -131,6 +132,42 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     configured: bool
+
+
+class BuyerSeatResponse(BaseModel):
+    """Response model for buyer seat data."""
+
+    buyer_id: str
+    bidder_id: str
+    display_name: Optional[str] = None
+    active: bool = True
+    creative_count: int = 0
+    last_synced: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class DiscoverSeatsRequest(BaseModel):
+    """Request model for discovering buyer seats."""
+
+    bidder_id: str
+
+
+class DiscoverSeatsResponse(BaseModel):
+    """Response model for seat discovery."""
+
+    status: str
+    bidder_id: str
+    seats_discovered: int
+    seats: list[BuyerSeatResponse]
+
+
+class SyncSeatResponse(BaseModel):
+    """Response model for seat sync operation."""
+
+    status: str
+    buyer_id: str
+    creatives_synced: int
+    message: str
 
 
 @asynccontextmanager
@@ -261,6 +298,7 @@ def _extract_preview_data(creative) -> dict:
 async def list_creatives(
     campaign_id: Optional[str] = Query(None, description="Filter by campaign ID"),
     cluster_id: Optional[str] = Query(None, description="Filter by cluster ID"),
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     format: Optional[str] = Query(None, description="Filter by creative format"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Results offset"),
@@ -270,6 +308,7 @@ async def list_creatives(
     creatives = await store.list_creatives(
         campaign_id=campaign_id,
         cluster_id=cluster_id,
+        buyer_id=buyer_id,
         format=format,
         limit=limit,
         offset=offset,
@@ -280,6 +319,7 @@ async def list_creatives(
             name=c.name,
             format=c.format,
             account_id=c.account_id,
+            buyer_id=c.buyer_id,
             approval_status=c.approval_status,
             width=c.width,
             height=c.height,
@@ -314,6 +354,7 @@ async def get_creative(
         name=creative.name,
         format=creative.format,
         account_id=creative.account_id,
+        buyer_id=creative.buyer_id,
         approval_status=creative.approval_status,
         width=creative.width,
         height=creative.height,
@@ -541,6 +582,181 @@ async def collect_sync(
     except Exception as e:
         logger.error(f"Collection failed: {e}")
         raise HTTPException(status_code=500, detail=f"Collection failed: {str(e)}")
+
+
+# Buyer Seats endpoints
+
+
+@app.get("/seats", response_model=list[BuyerSeatResponse], tags=["Buyer Seats"])
+async def list_seats(
+    bidder_id: Optional[str] = Query(None, description="Filter by bidder ID"),
+    active_only: bool = Query(True, description="Only return active seats"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """List all known buyer seats.
+
+    Returns buyer seats that have been discovered via the /seats/discover endpoint.
+    """
+    seats = await store.get_buyer_seats(bidder_id=bidder_id, active_only=active_only)
+    return [
+        BuyerSeatResponse(
+            buyer_id=s.buyer_id,
+            bidder_id=s.bidder_id,
+            display_name=s.display_name,
+            active=s.active,
+            creative_count=s.creative_count,
+            last_synced=s.last_synced.isoformat() if s.last_synced else None,
+            created_at=s.created_at.isoformat() if s.created_at else None,
+        )
+        for s in seats
+    ]
+
+
+@app.get("/seats/{buyer_id}", response_model=BuyerSeatResponse, tags=["Buyer Seats"])
+async def get_seat(
+    buyer_id: str,
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get a specific buyer seat by ID."""
+    seat = await store.get_buyer_seat(buyer_id)
+    if not seat:
+        raise HTTPException(status_code=404, detail="Buyer seat not found")
+
+    return BuyerSeatResponse(
+        buyer_id=seat.buyer_id,
+        bidder_id=seat.bidder_id,
+        display_name=seat.display_name,
+        active=seat.active,
+        creative_count=seat.creative_count,
+        last_synced=seat.last_synced.isoformat() if seat.last_synced else None,
+        created_at=seat.created_at.isoformat() if seat.created_at else None,
+    )
+
+
+@app.post("/seats/discover", response_model=DiscoverSeatsResponse, tags=["Buyer Seats"])
+async def discover_seats(
+    request: DiscoverSeatsRequest,
+    config: ConfigManager = Depends(get_config),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Discover buyer seats under a bidder account.
+
+    Queries the Authorized Buyers API to enumerate all buyer accounts
+    associated with the specified bidder and saves them to the database.
+    """
+    if not config.is_configured():
+        raise HTTPException(
+            status_code=400,
+            detail="API not configured. Run 'rtbcat configure' first.",
+        )
+
+    try:
+        credentials_path = str(config.get_service_account_path())
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Service account credentials not configured.",
+        )
+
+    try:
+        client = BuyerSeatsClient(
+            credentials_path=credentials_path,
+            account_id=request.bidder_id,
+        )
+
+        # Discover seats from API
+        seats = await client.discover_buyer_seats()
+        logger.info(f"Discovered {len(seats)} buyer seats for bidder {request.bidder_id}")
+
+        # Save to database
+        for seat in seats:
+            await store.save_buyer_seat(seat)
+
+        return DiscoverSeatsResponse(
+            status="completed",
+            bidder_id=request.bidder_id,
+            seats_discovered=len(seats),
+            seats=[
+                BuyerSeatResponse(
+                    buyer_id=s.buyer_id,
+                    bidder_id=s.bidder_id,
+                    display_name=s.display_name,
+                    active=s.active,
+                    creative_count=s.creative_count,
+                    last_synced=s.last_synced.isoformat() if s.last_synced else None,
+                    created_at=s.created_at.isoformat() if s.created_at else None,
+                )
+                for s in seats
+            ],
+        )
+
+    except Exception as e:
+        logger.error(f"Seat discovery failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Seat discovery failed: {str(e)}")
+
+
+@app.post("/seats/{buyer_id}/sync", response_model=SyncSeatResponse, tags=["Buyer Seats"])
+async def sync_seat_creatives(
+    buyer_id: str,
+    filter_query: Optional[str] = Query(None, description="Optional API filter"),
+    config: ConfigManager = Depends(get_config),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Sync creatives for a specific buyer seat.
+
+    Fetches all creatives associated with the buyer seat and stores them
+    in the database with the buyer_id field populated.
+    """
+    # Verify seat exists
+    seat = await store.get_buyer_seat(buyer_id)
+    if not seat:
+        raise HTTPException(status_code=404, detail="Buyer seat not found")
+
+    if not config.is_configured():
+        raise HTTPException(
+            status_code=400,
+            detail="API not configured. Run 'rtbcat configure' first.",
+        )
+
+    try:
+        credentials_path = str(config.get_service_account_path())
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Service account credentials not configured.",
+        )
+
+    try:
+        # Use the bidder_id as account_id for API access
+        client = CreativesClient(
+            credentials_path=credentials_path,
+            account_id=seat.bidder_id,
+        )
+
+        # Fetch creatives with buyer_id association
+        api_creatives = await client.fetch_all_creatives(
+            filter_query=filter_query,
+            buyer_id=buyer_id,
+        )
+
+        # Convert and save
+        storage_creatives = creative_dicts_to_storage(api_creatives)
+        count = await store.save_creatives(storage_creatives)
+
+        # Update seat metadata
+        await store.update_seat_creative_count(buyer_id)
+        await store.update_seat_sync_time(buyer_id)
+
+        return SyncSeatResponse(
+            status="completed",
+            buyer_id=buyer_id,
+            creatives_synced=count,
+            message=f"Successfully synced {count} creatives for buyer {buyer_id}.",
+        )
+
+    except Exception as e:
+        logger.error(f"Seat sync failed for {buyer_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Seat sync failed: {str(e)}")
 
 
 if __name__ == "__main__":
