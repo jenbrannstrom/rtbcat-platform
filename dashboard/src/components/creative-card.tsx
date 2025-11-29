@@ -1,12 +1,11 @@
 "use client";
 
-import { ExternalLink, Trash2, Play, Eye, Image, FileCode } from "lucide-react";
+import { ExternalLink, Play, Eye, Image, FileCode } from "lucide-react";
 import type { Creative } from "@/types/api";
 import { cn, getFormatColor, getStatusColor, truncate } from "@/lib/utils";
 
 interface CreativeCardProps {
   creative: Creative;
-  onDelete?: (id: string) => void;
   onPreview?: (creative: Creative) => void;
 }
 
@@ -31,7 +30,7 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
               src={videoUrl}
               className="w-full h-full object-cover"
               muted
-              preload="metadata"
+              preload="none"
             />
             <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
               <Play className="h-10 w-10 text-white" />
@@ -96,7 +95,7 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
   );
 }
 
-export function CreativeCard({ creative, onDelete, onPreview }: CreativeCardProps) {
+export function CreativeCard({ creative, onPreview }: CreativeCardProps) {
   const hasPreview = creative.video || creative.html || creative.native;
 
   return (
@@ -130,15 +129,6 @@ export function CreativeCard({ creative, onDelete, onPreview }: CreativeCardProp
                 title="Preview"
               >
                 <Eye className="h-4 w-4" />
-              </button>
-            )}
-            {onDelete && (
-              <button
-                onClick={() => onDelete(creative.id)}
-                className="p-1 text-gray-400 hover:text-red-600 rounded"
-                title="Delete"
-              >
-                <Trash2 className="h-4 w-4" />
               </button>
             )}
           </div>

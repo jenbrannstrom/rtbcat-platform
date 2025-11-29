@@ -78,6 +78,10 @@ export async function deleteCreative(id: string): Promise<void> {
   await fetchApi(`/creatives/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+export async function removeCreativeFromCampaign(id: string): Promise<void> {
+  await fetchApi(`/creatives/${encodeURIComponent(id)}/campaign`, { method: "DELETE" });
+}
+
 export async function getCampaigns(params?: {
   source?: string;
   limit?: number;

@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
+import { FixedSizeGrid } from "react-window";
+import AutoSizer from "react-virtualized-auto-sizer";
 import { Search, ChevronDown, ChevronUp } from "lucide-react";
-import { getCreatives, deleteCreative, getSizes } from "@/lib/api";
+import { getCreatives, getSizes } from "@/lib/api";
 import { CreativeCard } from "@/components/creative-card";
 import { PreviewModal } from "@/components/preview-modal";
 import { SeatSelector } from "@/components/seat-selector";
@@ -12,6 +14,11 @@ import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
 import type { Creative } from "@/types/api";
 import { cn } from "@/lib/utils";
+
+// Virtual scrolling constants
+const CARD_WIDTH = 280;
+const CARD_HEIGHT = 360;
+const GAP = 16;
 
 const FORMATS = ["VIDEO", "HTML", "NATIVE", "IMAGE"];
 
@@ -28,7 +35,6 @@ function CreativesContent() {
   const [search, setSearch] = useState("");
   const [previewCreative, setPreviewCreative] = useState<Creative | null>(null);
   const [showFilters, setShowFilters] = useState(true);
-  const queryClient = useQueryClient();
 
   // Sync URL with selected seat
   const handleSeatChange = useCallback((seatId: string | null) => {
@@ -60,14 +66,6 @@ function CreativesContent() {
   const { data: availableSizes } = useQuery({
     queryKey: ["sizes"],
     queryFn: getSizes,
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: deleteCreative,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["creatives"] });
-      queryClient.invalidateQueries({ queryKey: ["stats"] });
-    },
   });
 
   const toggleFormat = (format: string) => {
@@ -271,20 +269,46 @@ function CreativesContent() {
         )}
       </div>
 
+      <div className="mb-4 text-sm text-gray-500">
+        Showing {filteredCreatives?.length ?? 0} of {creatives?.length ?? 0} creatives
+      </div>
+
       {filteredCreatives && filteredCreatives.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filteredCreatives.map((creative) => (
-            <CreativeCard
-              key={creative.id}
-              creative={creative}
-              onPreview={setPreviewCreative}
-              onDelete={(id) => {
-                if (confirm("Delete this creative?")) {
-                  deleteMutation.mutate(id);
-                }
-              }}
-            />
-          ))}
+        <div className="h-[calc(100vh-400px)] min-h-[400px]">
+          <AutoSizer>
+            {({ height, width }) => {
+              const columnCount = Math.max(1, Math.floor(width / (CARD_WIDTH + GAP)));
+              const rowCount = Math.ceil(filteredCreatives.length / columnCount);
+
+              return (
+                <FixedSizeGrid
+                  columnCount={columnCount}
+                  columnWidth={CARD_WIDTH + GAP}
+                  height={height}
+                  rowCount={rowCount}
+                  rowHeight={CARD_HEIGHT + GAP}
+                  width={width}
+                  className="scrollbar-thin"
+                >
+                  {({ columnIndex, rowIndex, style }) => {
+                    const index = rowIndex * columnCount + columnIndex;
+                    const creative = filteredCreatives[index];
+
+                    if (!creative) return null;
+
+                    return (
+                      <div style={style} className="p-2">
+                        <CreativeCard
+                          creative={creative}
+                          onPreview={setPreviewCreative}
+                        />
+                      </div>
+                    );
+                  }}
+                </FixedSizeGrid>
+              );
+            }}
+          </AutoSizer>
         </div>
       ) : (
         <div className="text-center py-12">
@@ -307,10 +331,6 @@ function CreativesContent() {
           )}
         </div>
       )}
-
-      <div className="mt-6 text-sm text-gray-500">
-        Showing {filteredCreatives?.length ?? 0} of {creatives?.length ?? 0} creatives
-      </div>
 
       {/* Preview Modal */}
       {previewCreative && (

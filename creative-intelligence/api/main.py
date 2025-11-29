@@ -309,17 +309,36 @@ async def get_sizes(store: SQLiteStore = Depends(get_store)):
     return SizesResponse(sizes=sizes)
 
 
-def _extract_preview_data(creative) -> dict:
-    """Extract preview data from creative raw_data based on format."""
+def _extract_video_url_from_vast(vast_xml: str) -> str | None:
+    """Extract video URL from VAST XML."""
+    if not vast_xml:
+        return None
+    import re
+    match = re.search(r'<MediaFile[^>]*>(?:<!\[CDATA\[)?(https?://[^\]<]+)', vast_xml)
+    return match.group(1).strip() if match else None
+
+
+def _extract_preview_data(creative, slim: bool = False) -> dict:
+    """Extract preview data from creative raw_data based on format.
+
+    Args:
+        creative: The creative object
+        slim: If True, exclude large fields (vast_xml, html snippet) for list views
+    """
     raw_data = creative.raw_data or {}
     result = {"video": None, "html": None, "native": None}
 
     if creative.format == "VIDEO":
         video_data = raw_data.get("video")
         if video_data:
+            vast_xml = video_data.get("vastXml")
+            video_url = video_data.get("videoUrl")
+            # Pre-extract video URL from VAST if not already present
+            if not video_url and vast_xml:
+                video_url = _extract_video_url_from_vast(vast_xml)
             result["video"] = VideoPreview(
-                video_url=video_data.get("videoUrl"),
-                vast_xml=video_data.get("vastXml"),
+                video_url=video_url,
+                vast_xml=None if slim else vast_xml,  # Exclude in slim mode
                 duration=video_data.get("duration"),
             )
 
@@ -327,7 +346,7 @@ def _extract_preview_data(creative) -> dict:
         html_data = raw_data.get("html")
         if html_data:
             result["html"] = HtmlPreview(
-                snippet=html_data.get("snippet"),
+                snippet=None if slim else html_data.get("snippet"),  # Exclude in slim mode
                 width=html_data.get("width"),
                 height=html_data.get("height"),
             )
@@ -357,9 +376,14 @@ async def list_creatives(
     format: Optional[str] = Query(None, description="Filter by creative format"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Results offset"),
+    slim: bool = Query(True, description="Exclude large fields (vast_xml, html snippets) for faster loading"),
     store: SQLiteStore = Depends(get_store),
 ):
-    """List creatives with optional filtering."""
+    """List creatives with optional filtering.
+
+    By default, slim=True excludes large fields like vast_xml and html snippets
+    to reduce payload size. Set slim=False for full data.
+    """
     creatives = await store.list_creatives(
         campaign_id=campaign_id,
         cluster_id=cluster_id,
@@ -388,7 +412,7 @@ async def list_creatives(
             advertiser_name=c.advertiser_name,
             campaign_id=c.campaign_id,
             cluster_id=c.cluster_id,
-            **_extract_preview_data(c),
+            **_extract_preview_data(c, slim=slim),
         )
         for c in creatives
     ]
@@ -450,6 +474,20 @@ async def assign_cluster(
         assignment.cluster_id,
     )
     return {"status": "updated", "creative_id": assignment.creative_id}
+
+
+@app.delete("/creatives/{creative_id}/campaign", tags=["Creatives"])
+async def remove_from_campaign(
+    creative_id: str,
+    store: SQLiteStore = Depends(get_store),
+):
+    """Remove a creative from its campaign."""
+    creative = await store.get_creative(creative_id)
+    if not creative:
+        raise HTTPException(status_code=404, detail="Creative not found")
+
+    await store.update_creative_campaign(creative_id, None)
+    return {"status": "removed", "creative_id": creative_id}
 
 
 @app.get("/campaigns", response_model=list[CampaignResponse], tags=["Campaigns"])

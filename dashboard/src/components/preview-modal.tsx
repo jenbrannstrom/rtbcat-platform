@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { X, Play, ExternalLink, Copy, Check } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { X, Play, ExternalLink, Copy, Check, Loader2 } from "lucide-react";
 import type { Creative } from "@/types/api";
 import { cn, getFormatColor, getStatusColor } from "@/lib/utils";
-import { useState } from "react";
+import { getCreative } from "@/lib/api";
 
 interface PreviewModalProps {
   creative: Creative;
@@ -227,7 +227,10 @@ function NativePreviewCard({ creative }: { creative: Creative }) {
   );
 }
 
-export function PreviewModal({ creative, onClose }: PreviewModalProps) {
+export function PreviewModal({ creative: initialCreative, onClose }: PreviewModalProps) {
+  const [creative, setCreative] = useState<Creative>(initialCreative);
+  const [isLoadingFull, setIsLoadingFull] = useState(false);
+
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -235,6 +238,23 @@ export function PreviewModal({ creative, onClose }: PreviewModalProps) {
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
   }, [onClose]);
+
+  // Fetch full creative data for HTML format (slim mode excludes html_snippet)
+  useEffect(() => {
+    if (initialCreative.format === "HTML" && !initialCreative.html?.snippet) {
+      setIsLoadingFull(true);
+      getCreative(initialCreative.id)
+        .then((fullCreative) => {
+          setCreative(fullCreative);
+        })
+        .catch((err) => {
+          console.error("Failed to fetch full creative:", err);
+        })
+        .finally(() => {
+          setIsLoadingFull(false);
+        });
+    }
+  }, [initialCreative.id, initialCreative.format, initialCreative.html?.snippet]);
 
   // Extract rejection reason from raw_data if present
   const rawData = (creative as unknown as { raw_data?: Record<string, unknown> }).raw_data;
@@ -257,10 +277,13 @@ export function PreviewModal({ creative, onClose }: PreviewModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
           <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-semibold text-gray-900 truncate">
-              {creative.name || creative.id}
-            </h2>
-            <p className="text-xs text-gray-500 truncate">{creative.id}</p>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-gray-900">
+                {creative.id}
+              </h2>
+              <CopyButton text={creative.id} />
+            </div>
+            <p className="text-xs text-gray-500 truncate">{creative.name}</p>
           </div>
           <button
             onClick={onClose}
@@ -278,7 +301,14 @@ export function PreviewModal({ creative, onClose }: PreviewModalProps) {
               <VideoPreviewPlayer creative={creative} />
             )}
             {creative.format === "HTML" && (
-              <HtmlPreviewFrame creative={creative} />
+              isLoadingFull ? (
+                <div className="flex items-center justify-center h-48 bg-gray-100 text-gray-500">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                  Loading HTML preview...
+                </div>
+              ) : (
+                <HtmlPreviewFrame creative={creative} />
+              )
             )}
             {creative.format === "NATIVE" && (
               <div className="p-4">

@@ -25,7 +25,21 @@
       "Bash(npm install:*)",
       "Bash(timeout 15 npm run dev:*)",
       "Bash(timeout 20 npm run dev:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(/home/jen/Documents/rtbcat-platform/creative-intelligence/venv/bin/pip list:*)",
+      "Bash(/home/jen/Documents/rtbcat-platform/creative-intelligence/venv/bin/python3:*)",
+      "Bash(/home/jen/Documents/rtbcat-platform/creative-intelligence/venv/bin/python:*)",
+      "Bash(curl:*)",
+      "Bash(lsof:*)",
+      "Bash(ss:*)",
+      "Bash(pkill:*)",
+      "Bash(systemctl list-units:*)",
+      "Bash(docker inspect:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker build:*)",
+      "Bash(docker start:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker run:*)"
     ],
     "deny": [],
     "ask": []
