@@ -1,0 +1,198 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Cat Scan - Compute Module (ECS Cluster, Task Definitions, IAM Roles)'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: 'Environment name for resource naming'
+    Default: 'cat-scan'
+
+  LogBucketName:
+    Type: String
+    Description: 'S3 bucket name where RTB logs are stored'
+    MinLength: 3
+
+  ReportBucketName:
+    Type: String
+    Description: 'S3 bucket name for Cat Scan reports'
+    MinLength: 3
+
+  CatScanRepositoryUri:
+    Type: String
+    Description: 'ECR repository URI for Cat Scan image'
+
+  FakeBidderRepositoryUri:
+    Type: String
+    Description: 'ECR repository URI for Fake Bidder image'
+
+  SubnetIds:
+    Type: CommaDelimitedList
+    Description: 'Subnet IDs for ECS tasks'
+
+  SecurityGroupId:
+    Type: String
+    Description: 'Security group ID for ECS tasks'
+
+Resources:
+  # ==========================================================================
+  # CloudWatch Log Groups
+  # ==========================================================================
+  CatScanLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${EnvironmentName}/cat-scan'
+      RetentionInDays: 7
+
+  FakeBidderLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${EnvironmentName}/fake-bidder'
+      RetentionInDays: 7
+
+  # ==========================================================================
+  # IAM Roles
+  # ==========================================================================
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${EnvironmentName}-ecsTaskExecutionRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Tags:
+        - Key: Project
+          Value: CatScan
+
+  CatScanTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${EnvironmentName}-catScanTaskRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ReadLogBucket
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::${LogBucketName}'
+                  - !Sub 'arn:aws:s3:::${LogBucketName}/*'
+        - PolicyName: WriteReportBucket
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                Resource:
+                  - !Sub 'arn:aws:s3:::${ReportBucketName}/*'
+      Tags:
+        - Key: Project
+          Value: CatScan
+
+  # ==========================================================================
+  # ECS Cluster
+  # ==========================================================================
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub '${EnvironmentName}-cluster'
+      CapacityProviders:
+        - FARGATE
+        - FARGATE_SPOT
+      DefaultCapacityProviderStrategy:
+        - CapacityProvider: FARGATE_SPOT
+          Weight: 1
+      Tags:
+        - Key: Project
+          Value: CatScan
+
+  # ==========================================================================
+  # ECS Task Definitions
+  # ==========================================================================
+  CatScanTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${EnvironmentName}-cat-scan'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: '512'
+      Memory: '1024'
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt CatScanTaskRole.Arn
+      ContainerDefinitions:
+        - Name: cat-scan
+          Image: !Sub '${CatScanRepositoryUri}:latest'
+          Essential: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref CatScanLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: cat-scan
+
+  FakeBidderTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${EnvironmentName}-fake-bidder'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: '256'
+      Memory: '512'
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: fake-bidder
+          Image: !Sub '${FakeBidderRepositoryUri}:latest'
+          Essential: true
+          PortMappings:
+            - ContainerPort: 3000
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref FakeBidderLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: fake-bidder
+
+Outputs:
+  ECSClusterName:
+    Description: 'ECS Cluster name'
+    Value: !Ref ECSCluster
+
+  ECSClusterArn:
+    Description: 'ECS Cluster ARN'
+    Value: !GetAtt ECSCluster.Arn
+
+  CatScanTaskDefinitionArn:
+    Description: 'Cat Scan Task Definition ARN'
+    Value: !Ref CatScanTaskDefinition
+
+  FakeBidderTaskDefinitionArn:
+    Description: 'Fake Bidder Task Definition ARN'
+    Value: !Ref FakeBidderTaskDefinition
+
+  ECSTaskExecutionRoleArn:
+    Description: 'ECS Task Execution Role ARN'
+    Value: !GetAtt ECSTaskExecutionRole.Arn
+
+  CatScanTaskRoleArn:
+    Description: 'Cat Scan Task Role ARN'
+    Value: !GetAtt CatScanTaskRole.Arn

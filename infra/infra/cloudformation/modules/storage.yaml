@@ -1,0 +1,162 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Cat Scan - Storage Module (ECR Repositories, S3 Buckets)'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: 'Environment name for resource naming'
+    Default: 'cat-scan'
+
+  ReportBucketName:
+    Type: String
+    Description: 'S3 bucket name for Cat Scan reports'
+    MinLength: 3
+
+  CreateReportBucket:
+    Type: String
+    Description: 'Whether to create the report bucket'
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  ReportRetentionDays:
+    Type: Number
+    Description: 'Days to retain reports before deletion'
+    Default: 30
+
+Conditions:
+  ShouldCreateReportBucket: !Equals [!Ref CreateReportBucket, 'true']
+
+Resources:
+  # ==========================================================================
+  # S3 Buckets
+  # ==========================================================================
+  ReportBucket:
+    Type: AWS::S3::Bucket
+    Condition: ShouldCreateReportBucket
+    Properties:
+      BucketName: !Ref ReportBucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      WebsiteConfiguration:
+        IndexDocument: report.html
+        ErrorDocument: error.html
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldReports
+            Status: Enabled
+            ExpirationInDays: !Ref ReportRetentionDays
+      Tags:
+        - Key: Project
+          Value: CatScan
+
+  # ==========================================================================
+  # ECR Repositories
+  # ==========================================================================
+  FakeBidderRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${EnvironmentName}/fake-bidder'
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 5 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Project
+          Value: CatScan
+
+  FakeSspRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${EnvironmentName}/fake-ssp'
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 5 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Project
+          Value: CatScan
+
+  CatScanRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${EnvironmentName}/cat-scan'
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 5 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Project
+          Value: CatScan
+
+Outputs:
+  ReportBucketName:
+    Description: 'S3 bucket for Cat Scan reports'
+    Value: !Ref ReportBucketName
+
+  ReportBucketWebsiteURL:
+    Description: 'S3 static website URL for reports'
+    Condition: ShouldCreateReportBucket
+    Value: !GetAtt ReportBucket.WebsiteURL
+
+  CatScanRepositoryUri:
+    Description: 'Cat Scan ECR repository URI'
+    Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${CatScanRepository}'
+
+  FakeBidderRepositoryUri:
+    Description: 'Fake Bidder ECR repository URI'
+    Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FakeBidderRepository}'
+
+  FakeSspRepositoryUri:
+    Description: 'Fake SSP ECR repository URI'
+    Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FakeSspRepository}'

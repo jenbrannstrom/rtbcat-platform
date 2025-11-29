@@ -1,0 +1,11 @@
+# Publishers
+type,id,ssp,requests,bids,bid_rate,avg_bid_price
+publisher,pub-news,,67,17,0.2537,0.6000
+publisher,pub-sports,,67,17,0.2537,0.6000
+publisher,pub-tech,,66,16,0.2424,0.6000
+
+# Segments
+segment,automotive,,50,50,1.0000,0.6000
+segment,entertainment,,50,0,0.0000,0.0000
+segment,finance,,50,0,0.0000,0.0000
+segment,travel,,50,0,0.0000,0.0000

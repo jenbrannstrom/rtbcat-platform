@@ -1,0 +1,219 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Cat Scan - Main Stack Orchestrator'
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: 'Log Configuration'
+        Parameters:
+          - LogBucketName
+          - LogPrefix
+      - Label:
+          default: 'Report Configuration'
+        Parameters:
+          - ReportBucketName
+          - CreateReportBucket
+      - Label:
+          default: 'Schedule Configuration'
+        Parameters:
+          - ScheduleExpression
+      - Label:
+          default: 'Network Configuration'
+        Parameters:
+          - CreateVPC
+          - ExistingVpcId
+          - ExistingSubnetIds
+          - ExistingSecurityGroupId
+      - Label:
+          default: 'Template Location'
+        Parameters:
+          - TemplatesBucketName
+          - TemplatesPrefix
+
+Parameters:
+  # Log configuration
+  LogBucketName:
+    Type: String
+    Description: 'S3 bucket name where RTB logs are stored (must already exist)'
+    MinLength: 3
+
+  LogPrefix:
+    Type: String
+    Description: 'S3 prefix for log files (e.g., rtb-logs/)'
+    Default: ''
+
+  # Report configuration
+  ReportBucketName:
+    Type: String
+    Description: 'S3 bucket name for Cat Scan reports'
+    MinLength: 3
+
+  CreateReportBucket:
+    Type: String
+    Description: 'Create a new report bucket (set to false if bucket already exists)'
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  # Schedule configuration
+  ScheduleExpression:
+    Type: String
+    Description: 'How often to run Cat Scan analysis'
+    Default: 'rate(1 hour)'
+
+  # Network configuration
+  CreateVPC:
+    Type: String
+    Description: 'Create a new VPC or use existing'
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  ExistingVpcId:
+    Type: String
+    Description: 'Existing VPC ID (only if CreateVPC is false)'
+    Default: ''
+
+  ExistingSubnetIds:
+    Type: CommaDelimitedList
+    Description: 'Existing Subnet IDs (only if CreateVPC is false)'
+    Default: ''
+
+  ExistingSecurityGroupId:
+    Type: String
+    Description: 'Existing Security Group ID (only if CreateVPC is false)'
+    Default: ''
+
+  # Template location
+  TemplatesBucketName:
+    Type: String
+    Description: 'S3 bucket containing nested stack templates'
+
+  TemplatesPrefix:
+    Type: String
+    Description: 'S3 prefix for templates (e.g., cloudformation/modules/)'
+    Default: 'cloudformation/modules/'
+
+Conditions:
+  ShouldCreateVPC: !Equals [!Ref CreateVPC, 'true']
+  UseExistingVPC: !Not [!Equals [!Ref CreateVPC, 'true']]
+
+Resources:
+  # ==========================================================================
+  # Network Stack (conditional)
+  # ==========================================================================
+  NetworkStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: ShouldCreateVPC
+    Properties:
+      TemplateURL: !Sub 'https://${TemplatesBucketName}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}network.yaml'
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+      Tags:
+        - Key: Project
+          Value: CatScan
+
+  # ==========================================================================
+  # Storage Stack
+  # ==========================================================================
+  StorageStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 'https://${TemplatesBucketName}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}storage.yaml'
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+        ReportBucketName: !Ref ReportBucketName
+        CreateReportBucket: !Ref CreateReportBucket
+      Tags:
+        - Key: Project
+          Value: CatScan
+
+  # ==========================================================================
+  # Compute Stack
+  # ==========================================================================
+  ComputeStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - StorageStack
+    Properties:
+      TemplateURL: !Sub 'https://${TemplatesBucketName}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}compute.yaml'
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+        LogBucketName: !Ref LogBucketName
+        ReportBucketName: !Ref ReportBucketName
+        CatScanRepositoryUri: !GetAtt StorageStack.Outputs.CatScanRepositoryUri
+        FakeBidderRepositoryUri: !GetAtt StorageStack.Outputs.FakeBidderRepositoryUri
+        SubnetIds: !If
+          - ShouldCreateVPC
+          - !GetAtt NetworkStack.Outputs.SubnetIds
+          - !Join [',', !Ref ExistingSubnetIds]
+        SecurityGroupId: !If
+          - ShouldCreateVPC
+          - !GetAtt NetworkStack.Outputs.ECSSecurityGroupId
+          - !Ref ExistingSecurityGroupId
+      Tags:
+        - Key: Project
+          Value: CatScan
+
+  # ==========================================================================
+  # Scheduling Stack
+  # ==========================================================================
+  SchedulingStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - ComputeStack
+    Properties:
+      TemplateURL: !Sub 'https://${TemplatesBucketName}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}scheduling.yaml'
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+        ScheduleExpression: !Ref ScheduleExpression
+        LogBucketName: !Ref LogBucketName
+        LogPrefix: !Ref LogPrefix
+        ECSClusterArn: !GetAtt ComputeStack.Outputs.ECSClusterArn
+        CatScanTaskDefinitionArn: !GetAtt ComputeStack.Outputs.CatScanTaskDefinitionArn
+        SubnetIds: !If
+          - ShouldCreateVPC
+          - !GetAtt NetworkStack.Outputs.SubnetIds
+          - !Join [',', !Ref ExistingSubnetIds]
+        SecurityGroupId: !If
+          - ShouldCreateVPC
+          - !GetAtt NetworkStack.Outputs.ECSSecurityGroupId
+          - !Ref ExistingSecurityGroupId
+        ECSTaskExecutionRoleArn: !GetAtt ComputeStack.Outputs.ECSTaskExecutionRoleArn
+        CatScanTaskRoleArn: !GetAtt ComputeStack.Outputs.CatScanTaskRoleArn
+      Tags:
+        - Key: Project
+          Value: CatScan
+
+Outputs:
+  # Network outputs
+  VpcId:
+    Description: 'VPC ID'
+    Condition: ShouldCreateVPC
+    Value: !GetAtt NetworkStack.Outputs.VpcId
+
+  # Storage outputs
+  ReportBucketName:
+    Description: 'S3 bucket for Cat Scan reports'
+    Value: !GetAtt StorageStack.Outputs.ReportBucketName
+
+  CatScanECRRepository:
+    Description: 'Cat Scan ECR repository URI'
+    Value: !GetAtt StorageStack.Outputs.CatScanRepositoryUri
+
+  FakeBidderECRRepository:
+    Description: 'Fake Bidder ECR repository URI'
+    Value: !GetAtt StorageStack.Outputs.FakeBidderRepositoryUri
+
+  FakeSspECRRepository:
+    Description: 'Fake SSP ECR repository URI'
+    Value: !GetAtt StorageStack.Outputs.FakeSspRepositoryUri
+
+  # Compute outputs
+  ECSClusterName:
+    Description: 'ECS Cluster name'
+    Value: !GetAtt ComputeStack.Outputs.ECSClusterName
+
+  # Scheduling outputs
+  ScheduleRuleName:
+    Description: 'EventBridge Schedule Rule Name'
+    Value: !GetAtt SchedulingStack.Outputs.ScheduleRuleName

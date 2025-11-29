@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Cat Scan - Scheduling Module (EventBridge Rules)'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: 'Environment name for resource naming'
+    Default: 'cat-scan'
+
+  ScheduleExpression:
+    Type: String
+    Description: 'How often to run Cat Scan analysis'
+    Default: 'rate(1 hour)'
+
+  LogBucketName:
+    Type: String
+    Description: 'S3 bucket name where RTB logs are stored'
+
+  LogPrefix:
+    Type: String
+    Description: 'S3 prefix for log files'
+    Default: ''
+
+  ECSClusterArn:
+    Type: String
+    Description: 'ECS Cluster ARN'
+
+  CatScanTaskDefinitionArn:
+    Type: String
+    Description: 'Cat Scan Task Definition ARN'
+
+  SubnetIds:
+    Type: CommaDelimitedList
+    Description: 'Subnet IDs for ECS tasks'
+
+  SecurityGroupId:
+    Type: String
+    Description: 'Security group ID for ECS tasks'
+
+  ECSTaskExecutionRoleArn:
+    Type: String
+    Description: 'ECS Task Execution Role ARN'
+
+  CatScanTaskRoleArn:
+    Type: String
+    Description: 'Cat Scan Task Role ARN'
+
+Resources:
+  # ==========================================================================
+  # EventBridge IAM Role
+  # ==========================================================================
+  EventBridgeECSRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${EnvironmentName}-eventBridgeECSRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: RunECSTasks
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:RunTask
+                Resource: !Ref CatScanTaskDefinitionArn
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  - !Ref ECSTaskExecutionRoleArn
+                  - !Ref CatScanTaskRoleArn
+      Tags:
+        - Key: Project
+          Value: CatScan
+
+  # ==========================================================================
+  # EventBridge Rule
+  # ==========================================================================
+  CatScanScheduledRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${EnvironmentName}-schedule'
+      Description: 'Runs Cat Scan analysis on a schedule'
+      ScheduleExpression: !Ref ScheduleExpression
+      State: ENABLED
+      Targets:
+        - Id: CatScanTask
+          Arn: !Ref ECSClusterArn
+          RoleArn: !GetAtt EventBridgeECSRole.Arn
+          EcsParameters:
+            TaskDefinitionArn: !Ref CatScanTaskDefinitionArn
+            TaskCount: 1
+            LaunchType: FARGATE
+            PlatformVersion: LATEST
+            NetworkConfiguration:
+              AwsVpcConfiguration:
+                AssignPublicIp: ENABLED
+                Subnets: !Ref SubnetIds
+                SecurityGroups:
+                  - !Ref SecurityGroupId
+          Input: !Sub |
+            {
+              "containerOverrides": [
+                {
+                  "name": "cat-scan",
+                  "command": [
+                    "s3://${LogBucketName}/${LogPrefix}logs.jsonl",
+                    "--out",
+                    "/reports",
+                    "--segment-stats"
+                  ]
+                }
+              ]
+            }
+
+Outputs:
+  ScheduleRuleName:
+    Description: 'EventBridge Schedule Rule Name'
+    Value: !Ref CatScanScheduledRule
+
+  ScheduleRuleArn:
+    Description: 'EventBridge Schedule Rule ARN'
+    Value: !GetAtt CatScanScheduledRule.Arn
+
+  EventBridgeRoleArn:
+    Description: 'EventBridge ECS Role ARN'
+    Value: !GetAtt EventBridgeECSRole.Arn

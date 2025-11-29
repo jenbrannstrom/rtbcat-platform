@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # Fake bidder - receives bid requests and responds
+  fake_bidder:
+    build:
+      context: .
+      dockerfile: fake_bidder/Dockerfile
+    container_name: cat-scan-fake-bidder
+    ports:
+      - "3000:3000"
+    networks:
+      - cat-scan-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # Fake SSP - generates traffic and logs requests/responses
+  fake_ssp:
+    build:
+      context: .
+      dockerfile: fake_ssp/Dockerfile
+    container_name: cat-scan-fake-ssp
+    depends_on:
+      fake_bidder:
+        condition: service_started
+    environment:
+      - BIDDER_ENDPOINT=http://fake_bidder:3000/bid
+      - LOG_FILE=/logs/fake_ssp_logs.jsonl
+    volumes:
+      # Mount logs directory so we can access logs from host
+      - ./logs:/logs
+    networks:
+      - cat-scan-network
+
+  # Cat Scan - analyzes logs and generates reports
+  # Run this manually after fake_ssp generates logs
+  # Example: docker-compose run cat_scan /logs/fake_ssp_logs.jsonl --out /reports
+  cat_scan:
+    build:
+      context: .
+      dockerfile: cat_scan/Dockerfile
+    container_name: cat-scan-analyzer
+    volumes:
+      - ./logs:/logs
+      - ./reports:/reports
+    networks:
+      - cat-scan-network
+    profiles:
+      # Don't start automatically - run on demand
+      - tools
+    # Override command at runtime:
+    # docker-compose run cat_scan /logs/fake_ssp_logs.jsonl --out /reports
+
+networks:
+  cat-scan-network:
+    driver: bridge
