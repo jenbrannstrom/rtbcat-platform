@@ -198,6 +198,32 @@ export function extractAppStoreId(url: string): string | undefined {
 }
 
 /**
+ * Extract app package ID from AppsFlyer URL path (e.g., app.appsflyer.com/com.drop.frenzy.bubbly)
+ */
+export function extractAppsFlyerPackageId(url: string): string | undefined {
+  try {
+    const urlObj = new URL(url);
+    // Path is like /com.drop.frenzy.bubbly
+    const pathMatch = urlObj.pathname.match(/^\/([a-z][a-z0-9_.]+)/i);
+    if (pathMatch && pathMatch[1].includes(".")) {
+      return pathMatch[1];
+    }
+  } catch {
+    // Fallback regex
+    const match = url.match(/app\.appsflyer\.com\/([a-z][a-z0-9_.]+)/i);
+    return match ? match[1] : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Generate Play Store URL from package ID
+ */
+export function getPlayStoreUrl(packageId: string): string {
+  return `https://play.google.com/store/apps/details?id=${packageId}`;
+}
+
+/**
  * Categorize a single URL
  */
 export function categorizeUrl(url: string): Omit<ParsedUrl, "isPrimary"> {
@@ -218,6 +244,9 @@ export function categorizeUrl(url: string): Omit<ParsedUrl, "isPrimary"> {
         result.packageId = extractAppPackageId(url);
       } else if (type === "app_store") {
         result.packageId = extractAppStoreId(url);
+      } else if (type === "appsflyer") {
+        // Extract package ID from AppsFlyer URL path
+        result.packageId = extractAppsFlyerPackageId(url);
       }
 
       return result;
@@ -286,8 +315,48 @@ export function parseDestinationUrls(rawUrl: string | null | undefined): ParsedU
   // Categorize each URL
   let categorized = extractedUrls.map((url) => categorizeUrl(url));
 
-  // Filter out tracking pixels from display (but keep them accessible)
-  const displayUrls = categorized.filter((u) => u.type !== "tracking_pixel");
+  // Filter out tracking pixels and simple domain landing pages if we have better URLs
+  let displayUrls = categorized.filter((u) => u.type !== "tracking_pixel");
+
+  // Check if we have an AppsFlyer link with a package ID but no Play Store URL
+  const hasPlayStore = displayUrls.some((u) => u.type === "play_store");
+  if (!hasPlayStore) {
+    const appsFlyerWithPackage = displayUrls.find(
+      (u) => u.type === "appsflyer" && u.packageId
+    );
+    if (appsFlyerWithPackage?.packageId) {
+      // Generate a Play Store URL and add it as the first item
+      const playStoreUrl = getPlayStoreUrl(appsFlyerWithPackage.packageId);
+      displayUrls.unshift({
+        url: playStoreUrl,
+        type: "play_store",
+        label: "Google Play Store",
+        domain: "play.google.com",
+        packageId: appsFlyerWithPackage.packageId,
+        tooltip: "Final destination where user installs the app.",
+      });
+    }
+  }
+
+  // Filter out bare domain landing pages if we have attribution/store links
+  const hasAttributionOrStore = displayUrls.some(
+    (u) => ["play_store", "app_store", "appsflyer", "adjust", "branch", "kochava"].includes(u.type)
+  );
+  if (hasAttributionOrStore) {
+    displayUrls = displayUrls.filter((u) => {
+      // Keep everything except bare domain landing pages
+      if (u.type === "landing_page") {
+        // Check if it's just a domain without path
+        try {
+          const urlObj = new URL(u.url);
+          return urlObj.pathname !== "/" || urlObj.search !== "";
+        } catch {
+          return false;
+        }
+      }
+      return true;
+    });
+  }
 
   if (displayUrls.length === 0) {
     // If only tracking pixels, show them anyway

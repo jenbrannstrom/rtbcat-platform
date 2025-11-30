@@ -13,6 +13,8 @@ import type {
   WasteReport,
   SizeCoverage,
   ImportTrafficResponse,
+  BatchPerformanceResponse,
+  PerformancePeriod,
 } from "@/types/api";
 
 const API_BASE = "/api";
@@ -208,4 +210,19 @@ export async function generateMockTraffic(params?: {
     `/analytics/generate-mock-traffic${query ? `?${query}` : ""}`,
     { method: "POST" }
   );
+}
+
+// Performance Metrics API
+
+export async function getBatchPerformance(
+  creativeIds: string[],
+  period: PerformancePeriod = "7d"
+): Promise<BatchPerformanceResponse> {
+  return fetchApi<BatchPerformanceResponse>("/performance/metrics/batch", {
+    method: "POST",
+    body: JSON.stringify({
+      creative_ids: creativeIds,
+      period,
+    }),
+  });
 }

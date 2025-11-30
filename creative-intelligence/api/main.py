@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from collectors import BuyerSeatsClient, CreativesClient
 from config import ConfigManager
-from storage import SQLiteStore, creative_dicts_to_storage
+from storage import SQLiteStore, PerformanceMetric, creative_dicts_to_storage
 from analytics import WasteAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -223,6 +223,97 @@ class ImportTrafficResponse(BaseModel):
     status: str
     records_imported: int
     message: str
+
+
+# Performance Metrics models
+
+
+class PerformanceMetricInput(BaseModel):
+    """Input model for importing a single performance metric."""
+
+    creative_id: str
+    metric_date: str  # YYYY-MM-DD
+    impressions: int = 0
+    clicks: int = 0
+    spend_micros: int = 0  # USD micros (1M = $1.00)
+    campaign_id: Optional[str] = None
+    geography: Optional[str] = None  # ISO 3166-1 alpha-2
+    device_type: Optional[str] = None  # DESKTOP, MOBILE, TABLET, CTV
+    placement: Optional[str] = None
+
+
+class PerformanceMetricResponse(BaseModel):
+    """Response model for a performance metric record."""
+
+    id: Optional[int] = None
+    creative_id: str
+    campaign_id: Optional[str] = None
+    metric_date: str
+    impressions: int
+    clicks: int
+    spend_micros: int
+    cpm_micros: Optional[int] = None
+    cpc_micros: Optional[int] = None
+    geography: Optional[str] = None
+    device_type: Optional[str] = None
+    placement: Optional[str] = None
+
+
+class PerformanceSummaryResponse(BaseModel):
+    """Response model for aggregated performance summary."""
+
+    total_impressions: Optional[int] = None
+    total_clicks: Optional[int] = None
+    total_spend_micros: Optional[int] = None
+    avg_cpm_micros: Optional[int] = None
+    avg_cpc_micros: Optional[int] = None
+    ctr_percent: Optional[float] = None
+    days_with_data: Optional[int] = None
+    earliest_date: Optional[str] = None
+    latest_date: Optional[str] = None
+
+
+class ImportPerformanceRequest(BaseModel):
+    """Request model for bulk performance import."""
+
+    metrics: list[PerformanceMetricInput]
+
+
+class ImportPerformanceResponse(BaseModel):
+    """Response model for performance import operation."""
+
+    status: str
+    records_imported: int
+    message: str
+
+
+class BatchPerformanceRequest(BaseModel):
+    """Request model for batch performance lookup."""
+
+    creative_ids: list[str]
+    period: str = "7d"  # yesterday, 7d, 30d, all_time
+
+
+class CreativePerformanceSummary(BaseModel):
+    """Performance summary for a single creative (used in batch response)."""
+
+    creative_id: str
+    total_impressions: int = 0
+    total_clicks: int = 0
+    total_spend_micros: int = 0
+    avg_cpm_micros: Optional[int] = None
+    avg_cpc_micros: Optional[int] = None
+    ctr_percent: Optional[float] = None
+    days_with_data: int = 0
+    has_data: bool = False
+
+
+class BatchPerformanceResponse(BaseModel):
+    """Response model for batch performance lookup."""
+
+    performance: dict[str, CreativePerformanceSummary]
+    period: str
+    count: int
 
 
 @asynccontextmanager
@@ -1096,6 +1187,445 @@ async def generate_mock_traffic_endpoint(
         raise HTTPException(
             status_code=500, detail=f"Mock traffic generation failed: {str(e)}"
         )
+
+
+# Performance Metrics endpoints
+
+
+@app.post("/performance/import", response_model=ImportPerformanceResponse, tags=["Performance"])
+async def import_performance_metrics(
+    request: ImportPerformanceRequest,
+    store: SQLiteStore = Depends(get_store),
+):
+    """Import performance metrics in bulk.
+
+    Accepts an array of performance metrics and stores them using UPSERT semantics.
+    If a record with the same (creative_id, metric_date, geography, device_type, placement)
+    already exists, it will be updated.
+
+    Currency values are in USD micros (1,000,000 = $1.00). CPM and CPC are computed
+    automatically if not provided.
+
+    Example request body:
+    ```json
+    {
+      "metrics": [
+        {
+          "creative_id": "12345",
+          "metric_date": "2025-11-29",
+          "impressions": 10000,
+          "clicks": 150,
+          "spend_micros": 5000000,
+          "geography": "US",
+          "device_type": "MOBILE"
+        }
+      ]
+    }
+    ```
+    """
+    try:
+        # Convert to PerformanceMetric objects
+        metrics = [
+            PerformanceMetric(
+                creative_id=m.creative_id,
+                metric_date=m.metric_date,
+                impressions=m.impressions,
+                clicks=m.clicks,
+                spend_micros=m.spend_micros,
+                campaign_id=m.campaign_id,
+                geography=m.geography,
+                device_type=m.device_type,
+                placement=m.placement,
+            )
+            for m in request.metrics
+        ]
+
+        count = await store.save_performance_metrics(metrics)
+
+        return ImportPerformanceResponse(
+            status="completed",
+            records_imported=count,
+            message=f"Successfully imported {count} performance metrics.",
+        )
+
+    except Exception as e:
+        logger.error(f"Performance import failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Performance import failed: {str(e)}")
+
+
+@app.get(
+    "/performance/creative/{creative_id}",
+    response_model=PerformanceSummaryResponse,
+    tags=["Performance"],
+)
+async def get_creative_performance(
+    creative_id: str,
+    days: int = Query(30, ge=1, le=365, description="Days to aggregate"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get aggregated performance summary for a creative.
+
+    Returns total impressions, clicks, spend, and computed metrics (CPM, CPC, CTR)
+    for the specified time period.
+
+    Currency values are in USD micros (1,000,000 = $1.00).
+    CTR is returned as a percentage (e.g., 1.5 = 1.5%).
+    """
+    try:
+        summary = await store.get_creative_performance_summary(creative_id, days=days)
+
+        return PerformanceSummaryResponse(
+            total_impressions=summary.get("total_impressions"),
+            total_clicks=summary.get("total_clicks"),
+            total_spend_micros=summary.get("total_spend_micros"),
+            avg_cpm_micros=summary.get("avg_cpm_micros"),
+            avg_cpc_micros=summary.get("avg_cpc_micros"),
+            ctr_percent=round(summary.get("ctr_percent"), 2) if summary.get("ctr_percent") else None,
+            days_with_data=summary.get("days_with_data"),
+            earliest_date=summary.get("earliest_date"),
+            latest_date=summary.get("latest_date"),
+        )
+
+    except Exception as e:
+        logger.error(f"Performance lookup failed for {creative_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Performance lookup failed: {str(e)}")
+
+
+@app.get(
+    "/performance/metrics",
+    response_model=list[PerformanceMetricResponse],
+    tags=["Performance"],
+)
+async def list_performance_metrics(
+    creative_id: Optional[str] = Query(None, description="Filter by creative ID"),
+    campaign_id: Optional[str] = Query(None, description="Filter by campaign ID"),
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    geography: Optional[str] = Query(None, description="Filter by country code"),
+    device_type: Optional[str] = Query(None, description="Filter by device type"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum results"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """List performance metrics with optional filtering.
+
+    Returns individual daily performance records matching the specified filters.
+    Use the creative/{id} endpoint for aggregated summaries.
+    """
+    try:
+        metrics = await store.get_performance_metrics(
+            creative_id=creative_id,
+            campaign_id=campaign_id,
+            start_date=start_date,
+            end_date=end_date,
+            geography=geography,
+            device_type=device_type,
+            limit=limit,
+        )
+
+        return [
+            PerformanceMetricResponse(
+                id=m.id,
+                creative_id=m.creative_id,
+                campaign_id=m.campaign_id,
+                metric_date=m.metric_date,
+                impressions=m.impressions,
+                clicks=m.clicks,
+                spend_micros=m.spend_micros,
+                cpm_micros=m.cpm_micros,
+                cpc_micros=m.cpc_micros,
+                geography=m.geography,
+                device_type=m.device_type,
+                placement=m.placement,
+            )
+            for m in metrics
+        ]
+
+    except Exception as e:
+        logger.error(f"Performance metrics query failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Performance query failed: {str(e)}")
+
+
+@app.post("/performance/campaign/{campaign_id}/refresh-cache", tags=["Performance"])
+async def refresh_campaign_performance_cache(
+    campaign_id: str,
+    store: SQLiteStore = Depends(get_store),
+):
+    """Refresh cached performance aggregates for a campaign.
+
+    Computes and stores spend_7d, spend_30d, total_impressions, total_clicks,
+    avg_cpm, and avg_cpc on the campaigns table for faster lookups.
+
+    Call this after importing new performance data for a campaign.
+    """
+    try:
+        # Verify campaign exists
+        campaign = await store.get_campaign(campaign_id)
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+
+        await store.update_campaign_performance_cache(campaign_id)
+
+        return {"status": "completed", "campaign_id": campaign_id, "message": "Cache refreshed"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Cache refresh failed for {campaign_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Cache refresh failed: {str(e)}")
+
+
+@app.delete("/performance/cleanup", tags=["Performance"])
+async def cleanup_old_performance_data(
+    days_to_keep: int = Query(90, ge=7, le=365, description="Days of data to retain"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Delete performance data older than the retention period.
+
+    Use this to manage database size by removing old historical data.
+    Default retention is 90 days.
+    """
+    try:
+        deleted = await store.clear_old_performance_data(days_to_keep=days_to_keep)
+
+        return {
+            "status": "completed",
+            "records_deleted": deleted,
+            "message": f"Deleted {deleted} records older than {days_to_keep} days.",
+        }
+
+    except Exception as e:
+        logger.error(f"Performance cleanup failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
+
+
+class CSVImportResult(BaseModel):
+    """Result of CSV import operation."""
+
+    status: str
+    imported: int
+    skipped: int
+    errors: list[dict] = []
+
+
+@app.post("/performance/import-csv", response_model=CSVImportResult, tags=["Performance"])
+async def import_performance_csv(
+    file: UploadFile = File(..., description="CSV file with performance data"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Import performance data from CSV file.
+
+    CSV Format (columns):
+    - **creative_id** (required): Creative ID, must exist in database
+    - **date** (required): Date in YYYY-MM-DD format
+    - **impressions** (required): Integer >= 0
+    - **clicks** (required): Integer >= 0 and <= impressions
+    - **spend** (required): Decimal >= 0 (in USD, will be converted to micros)
+    - **geography** (optional): ISO country code (US, BR, IE, etc.)
+    - **device_type** (optional): MOBILE, DESKTOP, TABLET, CTV
+    - **hour** (optional): 0-23 for hourly data
+    - **placement** (optional): Site/app placement identifier
+    - **campaign_id** (optional): Campaign ID
+
+    Example CSV:
+    ```
+    creative_id,date,impressions,clicks,spend,geography,device_type
+    79783,2025-11-29,10000,250,125.50,BR,MOBILE
+    79783,2025-11-28,8500,200,100.00,BR,DESKTOP
+    144634,2025-11-29,50000,800,200.00,US,MOBILE
+    ```
+
+    Duplicates are handled with UPSERT - existing records are updated.
+    """
+    if not file.filename or not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+
+    try:
+        from datetime import datetime
+
+        # Read and parse CSV
+        contents = await file.read()
+        text = contents.decode("utf-8")
+        reader = csv.DictReader(io.StringIO(text))
+
+        # Validate required columns
+        required_columns = {"creative_id", "date", "impressions", "clicks", "spend"}
+        if reader.fieldnames is None:
+            raise HTTPException(status_code=400, detail="CSV file is empty or malformed")
+
+        missing = required_columns - set(reader.fieldnames)
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"CSV missing required columns: {', '.join(missing)}",
+            )
+
+        # Parse records
+        metrics = []
+        errors = []
+        skipped = 0
+
+        for row_num, row in enumerate(reader, start=2):  # Start at 2 (after header)
+            try:
+                # Parse date
+                try:
+                    metric_date = datetime.strptime(row["date"], "%Y-%m-%d").strftime("%Y-%m-%d")
+                except ValueError:
+                    raise ValueError(f"Invalid date format: {row['date']} (expected YYYY-MM-DD)")
+
+                # Parse numeric values
+                impressions = int(row.get("impressions", 0))
+                clicks = int(row.get("clicks", 0))
+                spend_usd = float(row.get("spend", 0))
+
+                # Validate
+                if impressions < 0:
+                    raise ValueError(f"Impressions cannot be negative: {impressions}")
+                if clicks < 0:
+                    raise ValueError(f"Clicks cannot be negative: {clicks}")
+                if clicks > impressions:
+                    raise ValueError(f"Clicks ({clicks}) cannot exceed impressions ({impressions})")
+                if spend_usd < 0:
+                    raise ValueError(f"Spend cannot be negative: {spend_usd}")
+
+                # Convert spend to micros (USD * 1,000,000)
+                spend_micros = int(spend_usd * 1_000_000)
+
+                # Parse optional fields
+                geography = row.get("geography", "").strip().upper() or None
+                device_type = row.get("device_type", "").strip().upper() or None
+                placement = row.get("placement", "").strip() or None
+                campaign_id = row.get("campaign_id", "").strip() or None
+
+                # Validate geography (2-letter ISO code)
+                if geography and len(geography) != 2:
+                    raise ValueError(f"Invalid geography code: {geography} (expected 2-letter ISO code)")
+
+                # Validate device_type
+                valid_device_types = {"MOBILE", "DESKTOP", "TABLET", "CTV", "UNKNOWN"}
+                if device_type and device_type not in valid_device_types:
+                    raise ValueError(f"Invalid device_type: {device_type} (expected one of {valid_device_types})")
+
+                # Parse hour if present
+                hour = None
+                if row.get("hour"):
+                    hour = int(row["hour"])
+                    if hour < 0 or hour > 23:
+                        raise ValueError(f"Hour must be 0-23, got: {hour}")
+
+                metrics.append(
+                    PerformanceMetric(
+                        creative_id=row["creative_id"],
+                        metric_date=metric_date,
+                        impressions=impressions,
+                        clicks=clicks,
+                        spend_micros=spend_micros,
+                        campaign_id=campaign_id,
+                        geography=geography,
+                        device_type=device_type,
+                        placement=placement,
+                    )
+                )
+
+            except (ValueError, KeyError) as e:
+                errors.append({
+                    "row": row_num,
+                    "error": str(e),
+                    "data": dict(row),
+                })
+                skipped += 1
+                continue
+
+        if not metrics and not errors:
+            raise HTTPException(status_code=400, detail="No valid records found in CSV")
+
+        # Import metrics
+        imported = await store.save_performance_metrics(metrics)
+
+        return CSVImportResult(
+            status="completed",
+            imported=imported,
+            skipped=skipped,
+            errors=errors[:50],  # Limit to first 50 errors
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"CSV import failed: {e}")
+        raise HTTPException(status_code=500, detail=f"CSV import failed: {str(e)}")
+
+
+@app.post(
+    "/performance/metrics/batch",
+    response_model=BatchPerformanceResponse,
+    tags=["Performance"],
+)
+async def get_batch_performance(
+    request: BatchPerformanceRequest,
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get performance summaries for multiple creatives in a single request.
+
+    This is optimized for the dashboard view where performance data for all
+    visible creatives needs to be fetched at once.
+
+    Period options:
+    - `yesterday`: Last 1 day
+    - `7d`: Last 7 days
+    - `30d`: Last 30 days
+    - `all_time`: All available data (up to 365 days)
+
+    Returns a dict mapping creative_id to performance summary.
+    """
+    try:
+        # Map period to days
+        period_days = {
+            "yesterday": 1,
+            "7d": 7,
+            "30d": 30,
+            "all_time": 365,
+        }
+        days = period_days.get(request.period, 7)
+
+        # Fetch performance for each creative
+        results: dict[str, CreativePerformanceSummary] = {}
+
+        for creative_id in request.creative_ids:
+            try:
+                summary = await store.get_creative_performance_summary(
+                    creative_id, days=days
+                )
+
+                has_data = summary.get("total_impressions", 0) > 0 or summary.get("total_spend_micros", 0) > 0
+
+                results[creative_id] = CreativePerformanceSummary(
+                    creative_id=creative_id,
+                    total_impressions=summary.get("total_impressions") or 0,
+                    total_clicks=summary.get("total_clicks") or 0,
+                    total_spend_micros=summary.get("total_spend_micros") or 0,
+                    avg_cpm_micros=summary.get("avg_cpm_micros"),
+                    avg_cpc_micros=summary.get("avg_cpc_micros"),
+                    ctr_percent=round(summary.get("ctr_percent"), 2) if summary.get("ctr_percent") else None,
+                    days_with_data=summary.get("days_with_data") or 0,
+                    has_data=has_data,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to get performance for {creative_id}: {e}")
+                # Return empty summary on error
+                results[creative_id] = CreativePerformanceSummary(
+                    creative_id=creative_id,
+                    has_data=False,
+                )
+
+        return BatchPerformanceResponse(
+            performance=results,
+            period=request.period,
+            count=len(results),
+        )
+
+    except Exception as e:
+        logger.error(f"Batch performance lookup failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Batch lookup failed: {str(e)}")
 
 
 if __name__ == "__main__":

@@ -1,615 +1,704 @@
-# RTB.cat Platform
+# RTB.cat Creative Intelligence Platform
 
-**Privacy-first, self-hosted RTB Creative Intelligence & Waste Analysis**
+**Privacy-First Campaign Performance Intelligence for DSPs**
 
-> 🔒 **All data stays in YOUR infrastructure** - Open source modules you install and run yourself.
+> 🔒 **Your data. Your infrastructure. Provably private.**
 
-**Status:** Phase 5 Complete | Phase 6-8 In Progress
+**Status:** Phase 6 Complete | Phase 8 In Progress (Performance Data Foundation)
 
 ---
 
 ## 🎯 What is RTB.cat?
 
-RTB.cat is a **modular platform** for DSPs and performance bidders to:
-1. Manage creatives from Google Authorized Buyers (and other SSPs)
-2. Analyze RTB waste and bandwidth optimization opportunities
-3. Cluster campaigns intelligently with AI
-4. Run everything **privately in your own AWS/infrastructure**
+RTB.cat is a **privacy-first platform** for DSPs and performance bidders to:
 
-### 🔐 Privacy-First Architecture
+1. **Manage creatives** from Google Authorized Buyers (and other SSPs)
+2. **Track performance** (spend, clicks, impressions, CPM, CPC)
+3. **Classify campaigns** using AI clustering
+4. **Find opportunities** (undervalued geos, high-CPC low-spend, profit pockets)
+5. **Eliminate waste** (cut 20-40% of unprofitable QPS)
+6. **Run everything privately** in your own infrastructure
 
-Unlike SaaS platforms, RTB.cat runs **entirely in your infrastructure:**
+---
+
+## 🏗️ Architecture
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │              YOUR AWS ACCOUNT / PRIVATE VPC              │
 ├─────────────────────────────────────────────────────────┤
 │                                                          │
 │  ┌────────────────────────────────────────┐             │
-│  │   RTBcat Creative Intel Module         │             │
-│  │   (Python Package - Open Source)       │             │
-│  │   • pip install rtbcat-creative-intel  │             │
-│  │   • Runs locally on your EC2/ECS       │             │
-│  │   • Stores data in YOUR database       │             │
+│  │   RTBcat Creative Intel Backend        │             │
+│  │   (Python FastAPI)                     │             │
+│  │   • Fetch creatives from Google API    │             │
+│  │   • Import performance data            │             │
+│  │   • AI campaign clustering             │             │
+│  │   • Opportunity detection              │             │
 │  └────────────────────────────────────────┘             │
 │                      ▲                                   │
 │                      │                                   │
 │  ┌────────────────────────────────────────┐             │
-│  │   Web Dashboard (Static Export)        │             │
-│  │   • Upload to YOUR S3 bucket            │             │
-│  │   • Serve from YOUR CloudFront          │             │
-│  │   • 100% client-side, zero external     │             │
-│  │     calls except to YOUR local API      │             │
+│  │   Web Dashboard (Next.js)              │             │
+│  │   • Creative browser (sort by spend)   │             │
+│  │   • Waste analysis                     │             │
+│  │   • Opportunity grid                   │             │
+│  │   • Campaign performance               │             │
 │  └────────────────────────────────────────┘             │
 │                                                          │
 │  ┌────────────────────────────────────────┐             │
-│  │   YOUR Database (RDS/SQLite)            │             │
-│  │   • All creative data stays here        │             │
-│  │   • NEVER transmitted to RTB.cat        │             │
+│  │   YOUR Database (PostgreSQL/SQLite)    │             │
+│  │   • Creatives (652+)                   │             │
+│  │   • Performance metrics (millions)     │             │
+│  │   • Campaigns (AI-clustered)           │             │
+│  │   • Opportunities (AI-detected)        │             │
 │  └────────────────────────────────────────┘             │
 │                                                          │
 └─────────────────────────────────────────────────────────┘
                           │
-                          │ (Your API calls only)
+                          │ (Your API calls)
                           ▼
               ┌──────────────────────────┐
               │  Google Authorized       │
               │  Buyers API              │
               └──────────────────────────┘
-
-┌─────────────────────────────────────────────────────────┐
-│              RTB.CAT (Company)                           │
-│         ZERO ACCESS TO YOUR DATA                         │
-├─────────────────────────────────────────────────────────┤
-│  • Distributes open-source modules (GitHub)              │
-│  • Distributes web UI static builds                      │
-│  • Provides documentation & support                      │
-│  • NO data collection                                    │
-│  • NO telemetry or tracking                              │
-│  • NO SaaS backend                                       │
-└─────────────────────────────────────────────────────────┘
 ```
-
-**Why this matters:**
-✅ You control the data  
-✅ Auditable open source code  
-✅ Air-gap capable (works offline except Google API)  
-✅ Compliance-ready (GDPR, SOC2, your policies)  
-✅ No vendor lock-in  
-✅ Network analysis proves zero data exfiltration  
 
 ---
 
-## 📦 Components
+## 💡 Core Value Proposition
 
-### 1. Creative Intelligence Module (`/creative-intelligence`)
-**Python package - Open Source (MIT License)**
+### **The Problem**
+Traditional AdTech SaaS platforms:
+- Store YOUR creative and performance data on THEIR servers
+- Give you generic waste analysis
+- Miss profit opportunities (undervalued geos, neglected high-performers)
+- Charge $500-5000/month
+- Vendor lock-in
 
-Self-hosted creative management and waste analysis engine.
+### **The Solution**
+RTBcat runs in YOUR infrastructure:
+- ✅ Your data never leaves your AWS/VPC
+- ✅ AI finds opportunities (not just waste)
+- ✅ Sort creatives by spend (see what's actually working)
+- ✅ Geographic intelligence ("Works in Brazil, fails in Ireland")
+- ✅ Open source core (free) + proprietary features (paid)
+- ✅ From $2,499/year or FREE
 
-**Install:**
-```bash
-pip install rtbcat-creative-intel
-```
+---
+
+## 📋 Roadmap & Features
+
+### ✅ **Phase 1-5: Foundation (Complete)**
+
+| Phase | Feature | Status |
+|-------|---------|--------|
+| 1 | Creative Management | ✅ Complete |
+| 2 | Size Normalization (2000+ → 18 IAB) | ✅ Complete |
+| 3 | Multi-Seat Support | ✅ Complete |
+| 4 | Waste Analysis Engine | ✅ Complete |
+| 5 | Dashboard UI | ✅ Complete |
+| 5.5 | Performance Optimization (26x faster) | ✅ Complete |
+
+**What's Working:**
+- Fetch 652+ creatives from Google Authorized Buyers API
+- Normalize sizes to IAB standards
+- Multi-buyer account support
+- Identify RTB waste (what you CAN'T bid on vs what you're ASKED for)
+- Beautiful dashboard with waste visualization
+- Virtual scrolling for smooth UX
+
+---
+
+### ✅ **Phase 6: Smart URL Intelligence (Complete)**
+
+| Task | Status |
+|------|--------|
+| Google Auth Buyers links | ✅ Complete |
+| Destination URL parsing | ✅ Complete |
+| Attribution platform detection | ✅ Complete |
+| App store metadata | ✅ Complete |
 
 **Features:**
-- Fetch creatives from Google Authorized Buyers API
-- SQLite or PostgreSQL storage
-- Multi-seat (buyer account) support
-- RTB waste analysis engine
-- Size normalization (2000+ sizes → ~18 IAB standards)
-- VAST XML parsing for video dimensions
-- REST API for programmatic access
-- CLI interface for all operations
+- Parse complex destination URLs (AppsFlyer → DoubleClick → App Store)
+- Intelligent categorization (attribution links, trackers, final destinations)
+- Tooltips explaining each link type
+- Direct links to Google Authorized Buyers UI
 
-**Key Capabilities:**
-- 🔍 Analyze what sizes/formats you CAN bid on vs what you're ASKED for
-- 💰 Calculate QPS savings from blocking wasted traffic
-- 🤖 AI-powered campaign clustering (Claude, Gemini, or rule-based)
-- 📊 Actionable recommendations (block in pretargeting, add creatives, etc.)
+---
 
-**Data Storage:**
-- Default: SQLite (single file, portable)
-- Production: PostgreSQL/RDS (your instance)
-- ALL data stays in YOUR infrastructure
+### 🔄 **Phase 8: Performance Data Foundation (CURRENT PRIORITY)**
 
-### 2. CAT_SCAN (`/cat-scan`)
-**Rust RTB analyzer - Open Source**
+**Status:** In Development  
+**ETA:** Week 1-2
 
-High-performance RTB request analyzer.
+This is the **critical foundation** for all advanced features (AI clustering, opportunity detection, geographic insights).
 
-- Sits between SSP and Bidder
-- Logs and analyzes bid requests in real-time
-- Detects waste patterns
-- Generates format/segment reports
-- <50ms latency impact
+#### **8.1: Database Schema Extension** 📋 Next Build
 
-### 3. Web Dashboard (`/dashboard`)
-**Next.js static export - Open Source**
+**New Tables:**
 
-Beautiful UI that you upload to YOUR S3 bucket.
+```sql
+-- Performance metrics (granular data)
+CREATE TABLE performance_metrics (
+    id SERIAL PRIMARY KEY,
+    creative_id INTEGER REFERENCES creatives(id),
+    date DATE NOT NULL,
+    hour INTEGER,  -- 0-23 for hourly data
+    impressions BIGINT DEFAULT 0,
+    clicks BIGINT DEFAULT 0,
+    spend DECIMAL(12,2) DEFAULT 0,
+    cpm DECIMAL(8,4),  -- Calculated or imported
+    cpc DECIMAL(8,4),  -- Calculated or imported
+    geography VARCHAR(2),  -- ISO country code (BR, IE, US)
+    device_type VARCHAR(20),  -- mobile, desktop, tablet
+    placement VARCHAR(100),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    
+    UNIQUE(creative_id, date, hour, geography, device_type)
+);
 
-**Deploy:**
-```bash
-npm run build
-aws s3 sync out/ s3://your-bucket/dashboard/
+-- Indexes for fast querying
+CREATE INDEX idx_perf_creative_date ON performance_metrics(creative_id, date);
+CREATE INDEX idx_perf_geo_date ON performance_metrics(geography, date);
+CREATE INDEX idx_perf_spend ON performance_metrics(spend DESC);
+CREATE INDEX idx_perf_cpc ON performance_metrics(cpc ASC);
+
+-- Campaign performance aggregation (cached for speed)
+ALTER TABLE campaigns ADD COLUMN total_spend_7d DECIMAL(12,2);
+ALTER TABLE campaigns ADD COLUMN total_spend_30d DECIMAL(12,2);
+ALTER TABLE campaigns ADD COLUMN total_spend_all_time DECIMAL(12,2);
+ALTER TABLE campaigns ADD COLUMN avg_cpc_7d DECIMAL(8,4);
+ALTER TABLE campaigns ADD COLUMN avg_cpm_7d DECIMAL(8,4);
+ALTER TABLE campaigns ADD COLUMN top_geography VARCHAR(2);
+ALTER TABLE campaigns ADD COLUMN last_performance_update TIMESTAMP;
 ```
 
-**Pages:**
-- `/` - Home with quick actions
-- `/creatives` - Creative browser with filters & virtual scrolling
-- `/waste-analysis` - RTB waste visualization
-- `/campaigns` - AI-clustered campaign management
-- `/settings` - Configuration
+**Why This Matters:**
+- Enables "Sort by spend" on creatives page
+- Foundation for opportunity detection
+- Enables geographic performance analysis
+- Supports AI clustering based on performance
 
-**Privacy Features:**
-- Pure static HTML/CSS/JS files
-- NO external API calls except to YOUR backend
-- NO tracking scripts or analytics
-- NO CDN dependencies (everything bundled)
-- Client-side only (no server-side rendering)
+---
+
+#### **8.2: Data Import System** 📋 Next
+
+**Multiple Import Methods:**
+
+1. **CSV Upload (Manual)**
+   - Web UI upload form
+   - Drag-and-drop CSV file
+   - Validate and import in batches
+   - Show progress bar
+
+2. **JSON API (Programmatic)**
+   - POST /api/performance/import
+   - Batch import (1000 rows at a time)
+   - Duplicate detection
+   - Return import summary
+
+3. **S3 Bucket Sync (Automated)**
+   - Customer drops CSV/JSON files in S3
+   - Lambda function triggers import
+   - Schedule daily/hourly imports
+   - Error logging to CloudWatch
+
+4. **Google API Integration (Partial)**
+   - Fetch available metrics from Authorized Buyers API
+   - Limited data (not all fields available)
+   - Supplement with customer's own data
+
+5. **BigQuery Connector (Enterprise)**
+   - Direct connection to customer's BigQuery
+   - Scheduled queries
+   - Real-time or batch sync
+
+**CSV Format Example:**
+```csv
+creative_id,date,impressions,clicks,spend,geography,device_type
+79783,2025-11-29,10000,250,125.50,BR,mobile
+79783,2025-11-29,5000,100,80.00,BR,desktop
+79783,2025-11-29,2000,15,30.00,IE,mobile
+144634,2025-11-29,50000,800,200.00,US,mobile
+```
+
+**Data Validation:**
+- Required fields: creative_id, date, impressions, clicks, spend
+- Validations:
+  - spend >= 0
+  - clicks >= 0 and clicks <= impressions
+  - date not in future
+  - geography is valid ISO code (optional)
+  - creative_id exists in database
+- Duplicate detection (unique constraint)
+- Error reporting (which rows failed)
+
+---
+
+#### **8.3: Creatives Page Enhancement** 📋 Week 2
+
+**Current State:**
+- Cards sorted by creative_id (not useful)
+- No performance data shown
+
+**New Features:**
+
+1. **Sort by Spend**
+   - Dropdown: [Yesterday | Last 7 Days | Last 30 Days | All Time]
+   - Default: Last 7 Days
+   - Highest spend first
+
+2. **Performance Badges on Cards**
+   ```
+   ┌─────────────────────────────────┐
+   │  [Creative Thumbnail]           │
+   │                                 │
+   │  79783                          │  ← Creative ID (large)
+   │  buyers/299.../creatives/79783  │  ← Google link
+   │                                 │
+   │  💰 Spend (7d): $1,234          │  ← NEW
+   │  📊 CPC: $0.45  CPM: $2.20      │  ← NEW
+   │  🌍 Top Geo: Brazil             │  ← NEW
+   │  📈 +15% vs last week           │  ← NEW (trend)
+   │                                 │
+   │  [View Details]                 │
+   └─────────────────────────────────┘
+   ```
+
+3. **Filters**
+   - Existing: Format (Video, Native, Banner, HTML5)
+   - Existing: Size (300x250, 728x90, etc.)
+   - NEW: Geography (Brazil, Ireland, US, etc.)
+   - NEW: Performance tier (High spend, Medium, Low, Zero)
+
+4. **Quick Stats Bar**
+   ```
+   Total Creatives: 652
+   With Performance Data: 487
+   Total Spend (7d): $45,678
+   Avg CPC: $0.52
+   Top Geo: Brazil (40% of spend)
+   ```
+
+---
+
+#### **8.4: Campaign Performance Aggregation** 📋 Week 2
+
+**Aggregate performance to campaign level:**
+
+```python
+# Example aggregation
+Campaign: "Mobile Game - Puzzle - Brazil Portuguese"
+  Creatives: 15
+  
+  Performance (7d):
+    Total Spend: $2,500
+    Total Impressions: 5M
+    Total Clicks: 5,000
+    Avg CPC: $0.50
+    Avg CPM: $0.50
+    
+  Geographic Breakdown:
+    Brazil: $2,000 (80%), CPC $0.45
+    Portugal: $300 (12%), CPC $0.55
+    Angola: $200 (8%), CPC $0.30  ← Opportunity!
+    
+  Size Breakdown:
+    300x250: $1,500 (60%)
+    728x90: $800 (32%)
+    320x50: $200 (8%)
+    
+  Top Creative: #79783 ($800, CPC $0.40)
+```
+
+**Use Cases:**
+- Compare campaign performance
+- Find best/worst performers
+- Identify opportunities at campaign level
+- Roll up creatives for executive reporting
+
+---
+
+### 💰 **Phase 9: AI Campaign Clustering (Pro Feature)**
+
+**Status:** Designed, Ready After Phase 8  
+**ETA:** Week 3-4
+
+**Features:**
+- AI groups 652+ creatives into 15-20 campaigns
+- Based on: visual similarity, language, product, geography
+- Multi-provider: Claude, Gemini, rule-based fallback
+- Campaign naming (AI-generated)
+- Performance attribution (which creatives drive campaign success)
+
+**Example:**
+```
+Campaign: "Mobile Game - Puzzle - Brazil Portuguese"
+  - Creative 101 (300x250, pt_br)
+  - Creative 205 (728x90, pt_br)
+  - Creative 387 (320x50, pt_br)
+  
+  Performance: $2,500/week, CPC $0.50
+```
+
+**Pricing:** Pro tier ($2,499/year)
+
+---
+
+### 💰 **Phase 10: Opportunity Intelligence (Pro Feature)**
+
+**Status:** Designed, Depends on Phase 8  
+**ETA:** Week 5-6
+
+**The Magic Feature: Find Profit Pockets**
+
+**Algorithm detects:**
+
+1. **Undervalued Geographies**
+   - Geography with >20% better CPC than average
+   - But represents <5% of total spend
+   - Example: Angola has CPC $0.30 (40% better) but only $200/week spend
+   - Recommendation: Scale Angola spend to $1,000/week
+   - Potential savings: $400/week
+
+2. **High-CPC Low-Spend Campaigns**
+   - Campaign with top-quartile CPC (efficient)
+   - But bottom-quartile spend (neglected by bidder)
+   - Example: Finance campaign has CPC $0.20 (best) but only $500/week
+   - Recommendation: Scale to $5,000/week
+   - Potential profit: +$4,500 weekly spend at superior CPC
+
+3. **Size/Format Gaps**
+   - Campaign missing a size that performs well in similar campaigns
+   - Example: Only uses 300x250, but 728x90 has 30% lower CPC elsewhere
+   - Recommendation: Create 728x90 creative
+   - Potential savings: $270/week
+
+4. **Neglected Creatives**
+   - Creative with excellent CPC but minimal impressions
+   - Blocked by pretargeting or low bid
+   - Recommendation: Check pretargeting config
+
+**Opportunity Dashboard (New Page):**
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                    OPPORTUNITY DASHBOARD                        │
+├────────────────────────────────────────────────────────────────┤
+│  Sort: [Potential Savings ▼]  Filter: [All Types ▼]           │
+├────────────────────────────────────────────────────────────────┤
+│ Campaign      │ Insight              │ Current │ Potential │   │
+│ (thumbnail)   │                      │ CPC     │ Savings   │   │
+├───────────────┼──────────────────────┼─────────┼───────────┼───┤
+│ [img] Puzzle  │ Undervalued Geo:     │ $0.30   │ $400/wk   │[→]│
+│ Game Brazil   │ Angola 40% better    │         │           │   │
+├───────────────┼──────────────────────┼─────────┼───────────┼───┤
+│ [img] Finance │ High-CPC Low-Spend:  │ $0.20   │ $900/wk   │[→]│
+│ Vertical Vid  │ Best CPC, neglected  │         │           │   │
+├───────────────┼──────────────────────┼─────────┼───────────┼───┤
+│ [img] Fashion │ Size Gap: 728x90     │ $0.42   │ $270/wk   │[+]│
+│ E-commerce    │ 30% lower CPC        │ (est.)  │           │   │
+└───────────────┴──────────────────────┴─────────┴───────────┴───┘
+```
+
+**Export to CSV** for manual execution or integration with bidder.
+
+**Pricing:** Pro tier ($2,499/year)
+
+---
+
+### 💰💰 **Phase 11: Geographic Intelligence (Enterprise)**
+
+**Status:** Advanced R&D  
+**ETA:** Quarter 2 2026
+
+**Cross-Campaign Pattern Detection:**
+
+AI analyzes ALL campaigns to find patterns:
+- "Puzzle games work well in Brazil (CPC $0.30), poorly in Ireland (CPC $1.20)"
+- "Video format works in APAC, display works in EU"
+- "Finance creatives underperform on weekends"
+
+**Segment Performance Matrix:**
+```
+           │ Brazil │ Ireland │ India │ USA
+───────────┼────────┼─────────┼───────┼─────
+Puzzle     │ $0.30  │ $1.20   │ $0.40 │ $0.80
+Strategy   │ $0.50  │ $0.45   │ $0.60 │ $0.55
+Casino     │ $0.20  │ $0.95   │ $0.25 │ $0.70
+
+Insight: Puzzle genre performs 4x better in Brazil vs Ireland
+Recommendation: Shift budget from Ireland to Brazil
+Potential savings: $500/week
+```
+
+**Predictive Analytics:**
+- "This campaign will likely perform well in Brazil based on similar campaigns"
+- "This creative style historically underperforms on mobile"
+- "This vertical sees 30% higher CPC on weekends"
+
+**Custom AI Prompts:**
+- Customer defines custom queries
+- "Find campaigns where iOS CPC > Android CPC by >50%"
+- "Show creatives with >2% CTR in Tier 3 countries"
+
+**Pricing:** Enterprise tier ($15k-50k/year)
+
+---
+
+### 💰💰 **Phase 12: Real-Time & Automation (Enterprise)**
+
+**Status:** Future  
+**ETA:** Quarter 3 2026
+
+**12.1: Live Data Connectors**
+- BigQuery streaming
+- Snowflake connector
+- Kafka/Kinesis integration
+- Hourly performance updates
+
+**12.2: Alerting & Monitoring**
+- Alert when campaign CPC increases >20%
+- Alert when spend drops >50%
+- Alert when new opportunity detected
+- Slack/Email/Webhook notifications
+
+**12.3: Pretargeting Automation (⚠️ High Liability)**
+- Auto-apply recommendations (with safeguards)
+- Dry-run mode (default)
+- One-click rollback
+- QPS monitoring
+- Auto-rollback if QPS drops >50%
+- Gradual rollout (10% → 50% → 100%)
+
+**Liability Protection:**
+- Backup of current pretargeting config
+- Emergency stop button
+- Customer liability waiver
+- Optional insurance ($10k/year covers up to $100k lost revenue)
+
+**Pricing:** Enterprise tier + optional insurance
+
+---
+
+### 🔄 **Phase 7: Privacy Modularization (DEFERRED)**
+
+**Status:** Designed, Build Later  
+**Reason:** Need to develop and use all features locally first
+
+**Will include:**
+- Pip-installable module (`pip install rtbcat-creative-intel`)
+- CLI interface (`rtbcat serve`, `rtbcat sync`, etc.)
+- Static UI export (upload to customer's S3)
+- Open source release (MIT license)
+- Network monitoring guide (prove zero data exfiltration)
+
+**Deferred until:** After Phase 8-10 are working and tested
+
+---
+
+## 💰 Pricing & Features Matrix
+
+| Feature | Community (FREE) | Pro ($2,499/yr) | Enterprise (Custom) |
+|---------|------------------|-----------------|---------------------|
+| **Creative Management** |
+| Fetch from Google API | ✓ | ✓ | ✓ |
+| Size normalization | ✓ | ✓ | ✓ |
+| Multi-seat support | ✓ | ✓ | ✓ |
+| Basic waste analysis | ✓ | ✓ | ✓ |
+| **Performance Tracking** |
+| CSV import | ✗ | ✓ | ✓ |
+| Sort by spend | ✗ | ✓ | ✓ |
+| Performance badges | ✗ | ✓ | ✓ |
+| Date range filters | ✗ | ✓ | ✓ |
+| **AI Features** |
+| Campaign clustering | ✗ | ✓ | ✓ |
+| Opportunity detection | ✗ | ✓ | ✓ |
+| Geographic insights | ✗ | ✗ | ✓ |
+| Predictive analytics | ✗ | ✗ | ✓ |
+| Custom AI prompts | ✗ | ✗ | ✓ |
+| **Data Integration** |
+| Manual CSV upload | ✗ | ✓ | ✓ |
+| S3 bucket sync | ✗ | ✓ | ✓ |
+| BigQuery connector | ✗ | ✗ | ✓ |
+| Real-time streaming | ✗ | ✗ | ✓ |
+| **Support** |
+| GitHub issues | ✓ | ✗ | ✗ |
+| Email support | ✗ | ✓ (48h) | ✓ (4h) |
+| Slack support | ✗ | ✓ | ✓ |
+| Phone support | ✗ | ✗ | ✓ |
+| Dedicated engineer | ✗ | ✗ | ✓ |
 
 ---
 
 ## 🚀 Quick Start
 
-### Option 1: Local Development (Laptop)
+### **Development (Current)**
+
 ```bash
-# 1. Install Creative Intelligence module
+# Backend
 cd creative-intelligence
-pip install -e .
+source venv/bin/activate
+python -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
-# 2. Initialize database and config
-rtbcat init --database sqlite --path ~/.rtbcat/creatives.db
-
-# 3. Configure Google credentials
-rtbcat configure --google-creds /path/to/service-account.json
-
-# 4. Start API server
-rtbcat serve --host 0.0.0.0 --port 8000
-
-# 5. Start Dashboard (separate terminal)
+# Frontend
 cd dashboard
 npm install
 npm run dev
 
-# Access:
-# - Dashboard: http://localhost:3000
-# - API Docs: http://localhost:8000/docs
+# Access
+Dashboard: http://localhost:3000
+API Docs: http://localhost:8000/docs
 ```
 
-### Option 2: AWS Deployment (Production)
+### **Production Deployment (Future - Phase 7)**
+
 ```bash
-# 1. Use Terraform/CDK to deploy to your AWS
-terraform apply -var="vpc_id=vpc-12345" -var="google_creds_secret=arn:..."
+# One-command deployment to customer's AWS
+terraform apply
 
-# 2. Upload Web UI to your S3
+# Upload UI to customer's S3
 npm run build
-aws s3 sync out/ s3://your-company-creative-intel/ --acl private
-
-# 3. Access via your CloudFront distribution
-https://creative-intel.your-domain.com
+aws s3 sync out/ s3://customer-bucket/
 ```
 
 ---
 
-## 📋 Platform Progress & Roadmap
+## 📊 Database Schema
 
-### ✅ Completed Phases (Production Ready)
+### **Existing Tables**
 
-| Phase | Description | Status | Details |
-|-------|-------------|--------|---------|
-| **1** | Creative Management | ✅ Complete | Google API integration, parsing, storage |
-| **2** | Size Normalization | ✅ Complete | 2000+ sizes → 18 IAB standards |
-| **3** | Multi-Seat Support | ✅ Complete | Multiple buyer accounts under one bidder |
-| **4** | Waste Analysis Engine | ✅ Complete | Gap detection, QPS savings calculation |
-| **5** | Dashboard UI | ✅ Complete | React 19, Tailwind, responsive design |
-| **5.5** | Performance Optimization | ✅ Complete | Virtual scrolling, slim mode (26x faster) |
+```sql
+-- Creatives (652+)
+creatives (
+    id, buyer_id, creative_id, format,
+    width, height, canonical_size, size_category,
+    declared_click_urls, destination_urls_parsed,
+    html_snippet, vast_xml, creative_attributes
+)
 
-### 🔄 Current Phase (In Development)
+-- Campaigns (AI-clustered)
+campaigns (
+    id, campaign_name, creative_ids[],
+    confidence_score, ai_provider
+)
 
-| Phase | Description | Status | ETA |
-|-------|-------------|--------|-----|
-| **6** | **Smart Link Intelligence** | 🔄 In Progress | Week 1 |
-| **6.1** | Google Auth Buyers links | 🔄 Active | |
-| **6.2** | Destination URL parsing | 🔄 Active | |
-| **6.3** | App store enrichment (background) | 📋 Planned | |
-| **6.4** | Attribution platform detection | 📋 Planned | |
+-- Buyer seats (multi-account)
+buyer_seats (
+    buyer_id, display_name, bidder_account_id,
+    creative_count, last_sync
+)
 
-**Phase 6 Features:**
-- Parse complex destination URL chains (AppsFlyer → DoubleClick → App Store)
-- Intelligent categorization (attribution links, trackers, final destinations)
-- Tooltips explaining each link type
-- Background job to fetch app store titles (non-blocking)
-- Database schema update for enriched metadata
-
-### 🎯 Upcoming Phases (Privacy-First Refactor)
-
-| Phase | Description | Status | ETA |
-|-------|-------------|--------|-----|
-| **7** | **Modularization & Privacy** | 📋 Ready | Week 2 |
-| **7.1** | Extract backend into pip package | 📋 Planned | |
-| **7.2** | CLI interface (rtbcat commands) | 📋 Planned | |
-| **7.3** | Static web UI export (no server) | 📋 Planned | |
-| **7.4** | Terraform/CDK deployment modules | 📋 Planned | |
-| **7.5** | Network audit documentation | 📋 Planned | |
-
-**Phase 7 Goals:**
-- Make entire platform pip-installable: `pip install rtbcat-creative-intel`
-- Zero dependency on RTB.cat servers (provable via network monitoring)
-- One-command AWS deployment to client's account
-- Open source all components (MIT license)
-- Air-gap capable (works offline except Google API)
-
-| Phase | Description | Status | ETA |
-|-------|-------------|--------|-----|
-| **8** | **AI Campaign Clustering** | 📋 Designed | Week 3 |
-| **8.1** | Multi-provider AI (Claude, Gemini, rule-based) | 📋 Planned | |
-| **8.2** | Campaign clustering endpoint | 📋 Planned | |
-| **8.3** | Frontend "Cluster" button | 📋 Planned | |
-| **8.4** | Campaign editing & management | 📋 Planned | |
-
-**Phase 8 Features:**
-- Automatically group 652+ creatives into 10-20 campaigns
-- Separate by language (en_us ≠ pt_br)
-- Use AI for intelligent grouping (or rule-based fallback)
-- Cost-effective (Gemini free tier or Claude $0.35/run)
-
-### 🔮 Future Phases
-
-| Phase | Description | Priority |
-|-------|-------------|----------|
-| **9** | Real Traffic Integration | High |
-| | • CAT_SCAN live data feed | |
-| | • BigQuery/S3 traffic import | |
-| | • Real-time waste detection | |
-| **10** | Pretargeting Automation | Medium |
-| | • One-click blocking in Google API | |
-| | • Auto-update pretargeting configs | |
-| | • A/B testing for changes | |
-| **11** | Historical Analytics | Medium |
-| | • Trend analysis over time | |
-| | • Waste reduction tracking | |
-| | • ROI calculation | |
-| **12** | Advanced Features | Low |
-| | • Alerting & notifications | |
-| | • Slack/email integration | |
-| | • Multi-user access control | |
-
----
-
-## 🏗️ Technical Architecture
-
-### Full System Diagram
-```
-┌─────────────────────────────────────────────────────────┐
-│                  CLIENT'S INFRASTRUCTURE                 │
-│               (Everything runs here)                     │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌──────────────┐     ┌──────────────┐                  │
-│  │  Fake SSP    │────▶│  CAT_SCAN    │                  │
-│  │  (Testing)   │     │  (Rust)      │                  │
-│  └──────────────┘     └──────┬───────┘                  │
-│                              │                           │
-│                              ▼                           │
-│                       ┌──────────────┐                   │
-│                       │  Creative    │                   │
-│                       │  Intelligence│◀─────────┐        │
-│                       │  Module      │          │        │
-│                       │  (Python)    │          │        │
-│                       └──────┬───────┘          │        │
-│                              │                  │        │
-│                              ▼                  │        │
-│                       ┌──────────────┐          │        │
-│                       │  PostgreSQL  │          │        │
-│                       │  or SQLite   │          │        │
-│                       └──────────────┘          │        │
-│                              ▲                  │        │
-│                              │                  │        │
-│                              │                  │        │
-│                       ┌──────────────┐          │        │
-│                       │  Dashboard   │──────────┘        │
-│                       │  (Static UI) │                   │
-│                       │  on S3       │                   │
-│                       └──────────────┘                   │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
-                              │
-                              │ Client's API Key
-                              ▼
-                   ┌────────────────────┐
-                   │  Google Authorized │
-                   │  Buyers API        │
-                   └────────────────────┘
+-- RTB traffic (waste analysis)
+rtb_traffic (
+    timestamp, size, format, geo,
+    device_type, qps
+)
 ```
 
----
+### **Phase 8 New Tables**
 
-## 🔌 API Endpoints
+```sql
+-- Performance metrics (granular)
+performance_metrics (
+    creative_id, date, hour,
+    impressions, clicks, spend, cpm, cpc,
+    geography, device_type, placement
+)
 
-### Creative Intelligence API (port 8000)
-
-**System:**
-- `GET /health` - Health check
-- `GET /stats` - Aggregate statistics
-- `GET /sizes` - Available creative sizes
-
-**Creatives:**
-- `GET /creatives?slim=true` - List creatives (slim mode, 26x faster)
-- `GET /creatives/{id}` - Get single creative with full details
-- `GET /creatives/cluster` - Get AI-clustered campaign suggestions
-
-**Campaigns:**
-- `GET /campaigns` - List campaigns
-- `GET /campaigns/{id}` - Get campaign details
-- `POST /campaigns/cluster` - Trigger AI clustering
-
-**Buyer Seats:**
-- `GET /seats` - List buyer accounts
-- `GET /seats/{buyer_id}` - Get specific seat
-- `POST /seats/discover` - Discover seats from Google API
-- `POST /seats/{buyer_id}/sync` - Sync creatives for seat
-
-**Analytics:**
-- `GET /analytics/waste` - Waste analysis report
-- `GET /analytics/size-coverage` - Size coverage data
-- `POST /analytics/import-traffic` - Import RTB traffic data
-- `POST /analytics/generate-mock-traffic` - Generate test data
-
-**Collection:**
-- `POST /collect` - Fetch creatives from Google API
-- `POST /collect/sync` - Sync and update existing creatives
-
----
-
-## 💾 Database Schema
-
-**Tables:**
-- `creatives` - Creative metadata, dimensions, format, buyer_id, **enriched URLs**
-- `campaigns` - AI-clustered campaign groups
-- `buyer_seats` - Multi-seat buyer account tracking
-- `rtb_traffic` - RTB request logs for waste analysis
-- `clusters` - Campaign clustering results
-
-**New in Phase 6:**
-- `creatives.destination_urls_parsed` - JSON field with smart URL breakdown
-- `creatives.app_store_title` - Enriched app name (background job)
-- `creatives.google_buyers_url` - Direct link to Google UI
-- `creatives.primary_destination` - Final landing page/app store
+-- Opportunities (AI-detected)
+opportunities (
+    campaign_id, insight_type,
+    current_metric, potential_savings,
+    recommendation, confidence_score
+)
+```
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Component | Technology | License |
-|-----------|------------|---------|
-| Backend Module | Python 3.12, FastAPI | MIT |
-| CLI Interface | Typer, Rich | MIT |
-| Database | SQLite / PostgreSQL | - |
-| Web Dashboard | Next.js 16, React 19 | MIT |
-| Styling | Tailwind CSS | MIT |
-| RTB Analyzer | Rust | MIT |
-| Charts | Recharts | MIT |
-| Data Fetching | TanStack React Query | MIT |
-| Virtual Scrolling | @tanstack/react-virtual | MIT |
-
-**All open source. Zero proprietary components.**
+| Component | Technology |
+|-----------|------------|
+| Backend | Python 3.12, FastAPI |
+| Database | PostgreSQL / SQLite |
+| Frontend | Next.js 16, React 19, Tailwind CSS |
+| AI | Claude (Anthropic), Gemini (Google) |
+| Charts | Recharts |
+| Data Fetching | TanStack React Query |
+| Virtual Scrolling | @tanstack/react-virtual |
+| RTB Analyzer | Rust (CAT_SCAN module) |
 
 ---
 
-## 📊 Size Normalization
+## 📈 Success Metrics
 
-Reduces 2000+ creative sizes to ~18 IAB standard categories:
+### **Phase 8 Goals**
+- ✓ Import 1M+ performance records
+- ✓ Sort 652 creatives by spend in <100ms
+- ✓ Display performance data on all creative cards
+- ✓ Support CSV, JSON, S3 import methods
+- ✓ Handle duplicates gracefully
+- ✓ Geographic breakdown for all creatives
 
-**IAB Standards:**
-- 300x250 (Medium Rectangle)
-- 728x90 (Leaderboard)
-- 320x50 (Mobile Banner)
-- 160x600 (Wide Skyscraper)
-- 300x600 (Half Page)
-- 970x250 (Billboard)
-- 468x60 (Banner)
-- 234x60 (Half Banner)
-- 120x600 (Skyscraper)
-- 336x280 (Large Rectangle)
-- 180x150 (Rectangle)
-- 300x1050 (Portrait)
-- 970x90 (Super Leaderboard)
-- 88x31 (Micro Bar)
-- 120x90 (Button 1)
-- 120x60 (Button 2)
-- 125x125 (Square Button)
-- 250x250 (Square)
+### **Phase 9 Goals**
+- ✓ Cluster 652 creatives into 15-20 campaigns
+- ✓ AI clustering completes in <60 seconds
+- ✓ >80% customer agreement with AI groupings
+- ✓ Campaign names are descriptive and accurate
 
-**Video Formats (by aspect ratio):**
-- Video 16:9 (Horizontal)
-- Video 9:16 (Vertical)
-- Video 1:1 (Square)
-- Video 4:5 (Portrait)
-
-**Special Cases:**
-- Adaptive/Fluid (0 dimension)
-- Adaptive/Responsive (1x1)
-
----
-
-## 🔐 Privacy & Security
-
-### Prove Your Data Stays Private
-
-**1. Code Audit:**
-```bash
-# Search for any external calls
-git clone https://github.com/rtbcat/creative-intel
-grep -r "rtb.cat" .      # Result: Zero hits
-grep -r "telemetry" .    # Result: Zero hits
-grep -r "analytics" .    # Result: Zero hits
-```
-
-**2. Network Monitoring:**
-```bash
-# Monitor all outbound connections
-tcpdump -i any -w traffic.pcap
-
-# Run the module
-rtbcat serve
-
-# Analyze traffic
-wireshark traffic.pcap
-
-# You'll see ONLY:
-# ✓ googleapis.com (your Google API calls)
-# ✓ localhost:8000 (your browser to your API)
-# ✗ NO traffic to rtb.cat servers
-```
-
-**3. Air-Gap Test:**
-```bash
-# Download module offline
-pip download rtbcat-creative-intel -d ./packages
-
-# Transfer to air-gapped server
-# Install without internet
-pip install --no-index --find-links=./packages rtbcat-creative-intel
-
-# Works 100% offline (except Google API which YOU control)
-```
-
-### Compliance-Ready
-
-- ✅ **GDPR** - All data in your EU region
-- ✅ **SOC2** - Runs in your audited infrastructure
-- ✅ **CCPA** - No third-party data sharing
-- ✅ **Data Residency** - You choose the AWS region
-- ✅ **Audit Logs** - All in your CloudWatch
-- ✅ **Encryption** - Your KMS keys
-
----
-
-## 📚 Documentation
-
-- [Creative Intelligence Handover v5](docs/RTBcat_Platform_Handover_v5.md)
-- [CAT_SCAN Handover](docs/CAT_SCAN_HANDOVER.md)
-- [Privacy Architecture](docs/PRIVACY.md) *(coming in Phase 7)*
-- [Deployment Guide](docs/DEPLOYMENT.md) *(coming in Phase 7)*
-- [Network Audit Guide](docs/NETWORK_AUDIT.md) *(coming in Phase 7)*
-
-### Component READMEs:
-- [Creative Intelligence Module](creative-intelligence/README.md)
-- [CAT_SCAN](cat-scan/README.md)
-- [Dashboard](dashboard/README.md)
-
----
-
-## 💰 Pricing Model
-
-| Edition | Price | What's Included |
-|---------|-------|-----------------|
-| **Community** | **FREE** | Full features, MIT license, community support (GitHub issues) |
-| **Professional** | **$2,499/year** | Priority email/Slack support, installation assistance |
-| **Enterprise** | **Custom** | Custom features, SLA, phone support, training, dedicated engineer |
-
-**Support Contracts (Optional):**
-- Basic: $500/month (email support, 48h response)
-- Premium: $2,000/month (Slack + phone support, 4h response)
-- Enterprise: $5,000/month (dedicated Slack channel, 1h response, custom features)
-
-**Professional Services:**
-- Setup & deployment: $5,000-15,000
-- Custom integrations: $10,000-50,000
-- Training: $2,000/day
-- Module bundles (Creative Intel + FCFS Gateway + RTB Fabric): Custom pricing
-
-**No per-seat fees. No usage limits. No data lock-in.**
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! This is open source (MIT License).
-
-**Ways to contribute:**
-- Report bugs (GitHub issues)
-- Submit feature requests
-- Contribute code (pull requests)
-- Improve documentation
-- Share usage examples
-
-**Development setup:**
-```bash
-git clone https://github.com/rtbcat/creative-intel
-cd creative-intel
-pip install -e ".[dev]"
-pytest tests/
-```
+### **Phase 10 Goals**
+- ✓ Detect 10+ opportunities per customer
+- ✓ Opportunities show $500+ weekly potential savings
+- ✓ Statistical significance >90% for all insights
+- ✓ Customer acts on >50% of recommendations
 
 ---
 
 ## 📞 Support & Community
 
-**Free Support:**
-- GitHub Issues: https://github.com/rtbcat/creative-intel/issues
+**Current (Development):**
+- Developer: Jen (jen@rtb.cat)
+- Repository: /home/jen/Documents/rtbcat-platform/
+- Documentation: This README + handover docs
+
+**Future (Production):**
+- GitHub: https://github.com/rtbcat/creative-intel
 - Documentation: https://docs.rtb.cat
-- Community Discord: https://discord.gg/rtbcat
-
-**Paid Support:**
-- Email: support@rtb.cat
-- Enterprise: enterprise@rtb.cat
-
-**Developer:** Jen (jen@rtb.cat)  
-**Website:** https://rtb.cat  
-**Status Page:** https://status.rtb.cat
+- Support: support@rtb.cat
+- Community: Discord (TBD)
 
 ---
 
 ## 📜 License
 
-**MIT License** - Use freely, modify, distribute, even commercially.
-
-See [LICENSE](LICENSE) file for details.
+**Current:** Proprietary (in development)  
+**Future (Phase 7):** Open source core (MIT) + proprietary features
 
 ---
 
-## 🎉 Get Started
+## 🎉 Current Status
 
-### Quick Start (5 minutes):
-```bash
-# Install
-pip install rtbcat-creative-intel
+**Phase 6: Complete ✅**
+- 652 creatives collected
+- Smart URL parsing working
+- Waste analysis operational
+- Dashboard polished and performant
 
-# Initialize
-rtbcat init
-
-# Configure Google API
-rtbcat configure --google-creds creds.json
-
-# Start API
-rtbcat serve
-
-# Access dashboard
-open http://localhost:8000/docs
-```
-
-### Production Deployment (30 minutes):
-```bash
-# Clone repo
-git clone https://github.com/rtbcat/creative-intel
-
-# Use Terraform
-cd terraform/
-terraform init
-terraform apply
-
-# Upload UI to your S3
-cd ../dashboard
-npm run build
-aws s3 sync out/ s3://your-bucket/
-```
-
-**Your data. Your infrastructure. Your control.** 🔒
+**Phase 8: Starting Now 🚀**
+- Database schema design ready
+- Next build: Performance metrics table
+- Then: CSV import system
+- Then: Sort by spend on creatives page
 
 ---
 
 **Last Updated:** November 30, 2025  
-**Version:** 6.0 (Phase 6 in progress)  
-**Status:** Production-ready core + Privacy refactor planned
+**Version:** 6.0 → 8.0 (skipping Phase 7 for now)  
+**Next Milestone:** Performance data foundation complete
+
+---
+
+**End of README**
