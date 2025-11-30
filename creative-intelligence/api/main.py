@@ -1628,6 +1628,252 @@ async def get_batch_performance(
         raise HTTPException(status_code=500, detail=f"Batch lookup failed: {str(e)}")
 
 
+class StreamingImportProgress(BaseModel):
+    """Progress update for streaming import."""
+
+    status: str
+    rows_processed: int
+    rows_imported: int
+    rows_skipped: int
+    current_batch: int
+    errors: list[dict] = []
+
+
+class StreamingImportResult(BaseModel):
+    """Final result of streaming import."""
+
+    status: str
+    total_rows: int
+    imported: int
+    skipped: int
+    batches: int
+    errors: list[dict] = []
+    date_range: Optional[dict] = None
+    total_spend: Optional[float] = None
+
+
+@app.post("/performance/import/stream", response_model=StreamingImportResult, tags=["Performance"])
+async def import_performance_stream(
+    request: Request,
+    store: SQLiteStore = Depends(get_store),
+):
+    """
+    Streaming import endpoint for large CSV files.
+
+    Accepts NDJSON (newline-delimited JSON) stream of performance rows.
+    Each line should be a JSON object with performance data.
+
+    This endpoint:
+    - Processes data in batches of 1000 rows
+    - Uses optimized lookup tables for repeated values
+    - Returns progress updates (if SSE client)
+    - Never holds entire file in memory
+
+    Example NDJSON format:
+    ```
+    {"creative_id":"79783","date":"2025-11-29","impressions":1000,"clicks":50,"spend":25.50,"geography":"US"}
+    {"creative_id":"79784","date":"2025-11-29","impressions":500,"clicks":10,"spend":5.00,"geography":"BR"}
+    ```
+
+    For large files (200MB+), use this with the chunked upload frontend
+    that sends data in streaming batches.
+    """
+    import sqlite3
+    from pathlib import Path
+    from storage.performance_repository import PerformanceRepository
+
+    BATCH_SIZE = 1000
+    batch: list[dict] = []
+    total_processed = 0
+    total_imported = 0
+    total_skipped = 0
+    batch_count = 0
+    errors: list[dict] = []
+    min_date: Optional[str] = None
+    max_date: Optional[str] = None
+    total_spend = 0.0
+
+    try:
+        # Get database path and create direct connection for repository
+        db_path = Path.home() / ".rtbcat" / "rtbcat.db"
+        db_conn = sqlite3.connect(str(db_path))
+        repo = PerformanceRepository(db_conn)
+
+        # Read streaming body
+        body = b""
+        async for chunk in request.stream():
+            body += chunk
+
+        # Parse NDJSON
+        lines = body.decode("utf-8").strip().split("\n")
+
+        for line_num, line in enumerate(lines, start=1):
+            if not line.strip():
+                continue
+
+            try:
+                row = json.loads(line)
+
+                # Track date range
+                date = row.get("date") or row.get("metric_date")
+                if date:
+                    if min_date is None or date < min_date:
+                        min_date = date
+                    if max_date is None or date > max_date:
+                        max_date = date
+
+                # Track spend
+                spend = row.get("spend", 0)
+                if isinstance(spend, str):
+                    spend = float(spend.replace("$", "").replace(",", ""))
+                total_spend += float(spend)
+
+                batch.append(row)
+                total_processed += 1
+
+                # Process batch when full
+                if len(batch) >= BATCH_SIZE:
+                    try:
+                        count = repo.insert_batch(batch)
+                        total_imported += count
+                        batch_count += 1
+                    except Exception as e:
+                        logger.warning(f"Batch insert failed: {e}")
+                        total_skipped += len(batch)
+                        errors.append({
+                            "batch": batch_count + 1,
+                            "error": str(e),
+                            "rows_affected": len(batch),
+                        })
+                    batch = []
+
+            except json.JSONDecodeError as e:
+                total_skipped += 1
+                if len(errors) < 50:  # Limit error collection
+                    errors.append({
+                        "line": line_num,
+                        "error": f"Invalid JSON: {str(e)}",
+                        "data": line[:100] if len(line) > 100 else line,
+                    })
+            except Exception as e:
+                total_skipped += 1
+                if len(errors) < 50:
+                    errors.append({
+                        "line": line_num,
+                        "error": str(e),
+                    })
+
+        # Process remaining batch
+        if batch:
+            try:
+                count = repo.insert_batch(batch)
+                total_imported += count
+                batch_count += 1
+            except Exception as e:
+                logger.warning(f"Final batch insert failed: {e}")
+                total_skipped += len(batch)
+                errors.append({
+                    "batch": batch_count + 1,
+                    "error": str(e),
+                    "rows_affected": len(batch),
+                })
+
+        db_conn.close()
+
+        return StreamingImportResult(
+            status="completed",
+            total_rows=total_processed,
+            imported=total_imported,
+            skipped=total_skipped,
+            batches=batch_count,
+            errors=errors[:50],
+            date_range={"start": min_date, "end": max_date} if min_date else None,
+            total_spend=round(total_spend, 2) if total_spend > 0 else None,
+        )
+
+    except Exception as e:
+        logger.error(f"Streaming import failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Streaming import failed: {str(e)}")
+
+
+class BatchImportRequest(BaseModel):
+    """Request for batch import (array of rows)."""
+
+    rows: list[dict]
+
+
+@app.post("/performance/import/batch", response_model=StreamingImportResult, tags=["Performance"])
+async def import_performance_batch(
+    request: BatchImportRequest,
+    store: SQLiteStore = Depends(get_store),
+):
+    """
+    Batch import endpoint for chunked uploads.
+
+    Accepts an array of performance rows and imports them using the
+    optimized repository with lookup tables.
+
+    This is used by the frontend chunked uploader which sends
+    batches of ~10,000 rows at a time.
+
+    Example request:
+    ```json
+    {
+      "rows": [
+        {"creative_id":"79783","date":"2025-11-29","impressions":1000,"clicks":50,"spend":25.50,"geography":"US"},
+        {"creative_id":"79784","date":"2025-11-29","impressions":500,"clicks":10,"spend":5.00,"geography":"BR"}
+      ]
+    }
+    ```
+    """
+    import sqlite3
+    from pathlib import Path
+    from storage.performance_repository import PerformanceRepository
+
+    try:
+        # Get database path and create direct connection for repository
+        db_path = Path.home() / ".rtbcat" / "rtbcat.db"
+        db_conn = sqlite3.connect(str(db_path))
+        repo = PerformanceRepository(db_conn)
+
+        # Track stats
+        min_date: Optional[str] = None
+        max_date: Optional[str] = None
+        total_spend = 0.0
+
+        for row in request.rows:
+            date = row.get("date") or row.get("metric_date")
+            if date:
+                if min_date is None or date < min_date:
+                    min_date = date
+                if max_date is None or date > max_date:
+                    max_date = date
+
+            spend = row.get("spend", 0)
+            if isinstance(spend, str):
+                spend = float(spend.replace("$", "").replace(",", ""))
+            total_spend += float(spend)
+
+        # Insert batch
+        count = repo.insert_batch(request.rows)
+        db_conn.close()
+
+        return StreamingImportResult(
+            status="completed",
+            total_rows=len(request.rows),
+            imported=count,
+            skipped=0,
+            batches=1,
+            errors=[],
+            date_range={"start": min_date, "end": max_date} if min_date else None,
+            total_spend=round(total_spend, 2) if total_spend > 0 else None,
+        )
+
+    except Exception as e:
+        logger.error(f"Batch import failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Batch import failed: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
 

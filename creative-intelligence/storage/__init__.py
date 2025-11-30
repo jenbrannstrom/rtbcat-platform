@@ -21,16 +21,23 @@ Example:
 from .adapters import creative_dict_to_storage, creative_dicts_to_storage
 from .s3_writer import S3Writer
 from .sqlite_store import BuyerSeat, Campaign, Creative, PerformanceMetric, SQLiteStore
+from .performance_repository import PerformanceRepository
+from .seat_repository import Seat, SeatRepository
+from .retention_manager import RetentionManager
 
 __all__ = [
     # Storage backends
     "SQLiteStore",
     "S3Writer",
+    "PerformanceRepository",
+    "SeatRepository",
+    "RetentionManager",
     # Models
     "Creative",
     "Campaign",
     "BuyerSeat",
     "PerformanceMetric",
+    "Seat",
     # Adapters
     "creative_dict_to_storage",
     "creative_dicts_to_storage",

@@ -366,6 +366,84 @@ class SQLiteStore:
         "ALTER TABLE campaigns ADD COLUMN avg_cpm_micros INTEGER",
         "ALTER TABLE campaigns ADD COLUMN avg_cpc_micros INTEGER",
         "ALTER TABLE campaigns ADD COLUMN perf_updated_at TIMESTAMP",
+        # Phase 8.4: Seats table (for CSV import seat extraction)
+        """CREATE TABLE IF NOT EXISTS seats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            billing_id TEXT UNIQUE NOT NULL,
+            account_name TEXT,
+            account_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_seats_billing ON seats(billing_id)",
+        # Phase 8.4: Video metrics table (separate from performance for funnel data)
+        """CREATE TABLE IF NOT EXISTS video_metrics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            performance_id INTEGER UNIQUE REFERENCES performance_metrics(id) ON DELETE CASCADE,
+            video_starts INTEGER DEFAULT 0,
+            video_q1 INTEGER DEFAULT 0,
+            video_q2 INTEGER DEFAULT 0,
+            video_q3 INTEGER DEFAULT 0,
+            video_completions INTEGER DEFAULT 0,
+            vast_errors INTEGER DEFAULT 0,
+            engaged_views INTEGER DEFAULT 0
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_video_perf ON video_metrics(performance_id)",
+        # Phase 8.4: Daily creative summary (for fast queries after aggregation)
+        """CREATE TABLE IF NOT EXISTS daily_creative_summary (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            seat_id INTEGER,
+            creative_id TEXT NOT NULL,
+            date DATE NOT NULL,
+            total_queries INTEGER DEFAULT 0,
+            total_impressions INTEGER DEFAULT 0,
+            total_clicks INTEGER DEFAULT 0,
+            total_spend REAL DEFAULT 0,
+            total_video_starts INTEGER,
+            total_video_completions INTEGER,
+            win_rate REAL,
+            ctr REAL,
+            cpm REAL,
+            completion_rate REAL,
+            unique_geos INTEGER,
+            unique_apps INTEGER,
+            UNIQUE(seat_id, creative_id, date)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_summary_seat_date ON daily_creative_summary(seat_id, date)",
+        "CREATE INDEX IF NOT EXISTS idx_summary_creative ON daily_creative_summary(creative_id)",
+        # Phase 8.4: Retention config table
+        """CREATE TABLE IF NOT EXISTS retention_config (
+            id INTEGER PRIMARY KEY,
+            seat_id INTEGER REFERENCES seats(id),
+            raw_retention_days INTEGER DEFAULT 90,
+            summary_retention_days INTEGER DEFAULT 365,
+            auto_aggregate_after_days INTEGER DEFAULT 30,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        # Phase 8.4: Add seat_id and reached_queries to performance_metrics
+        "ALTER TABLE performance_metrics ADD COLUMN seat_id INTEGER",
+        "ALTER TABLE performance_metrics ADD COLUMN reached_queries INTEGER DEFAULT 0",
+        "CREATE INDEX IF NOT EXISTS idx_perf_seat_date ON performance_metrics(seat_id, metric_date)",
+        # Phase 8.4: Update apps table with quality fields
+        "ALTER TABLE apps ADD COLUMN fraud_score REAL DEFAULT 0",
+        "ALTER TABLE apps ADD COLUMN quality_tier TEXT DEFAULT 'unknown'",
+        # Phase 8.4: Create apps table if not exists (from earlier migration)
+        """CREATE TABLE IF NOT EXISTS apps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            app_id TEXT UNIQUE,
+            app_name TEXT,
+            platform TEXT,
+            first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            fraud_score REAL DEFAULT 0,
+            quality_tier TEXT DEFAULT 'unknown'
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_apps_name ON apps(app_name)",
+        # Phase 8.4: Create publishers table if not exists
+        """CREATE TABLE IF NOT EXISTS publishers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            publisher_id TEXT UNIQUE,
+            publisher_name TEXT,
+            first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
     ]
 
     def __init__(self, db_path: str | Path = "~/.rtbcat/rtbcat.db") -> None:
