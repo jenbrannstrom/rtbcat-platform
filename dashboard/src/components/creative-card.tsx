@@ -1,13 +1,42 @@
 "use client";
 
-import { ExternalLink, Play, Eye, Image, FileCode } from "lucide-react";
-import type { Creative } from "@/types/api";
+import { ExternalLink, Play, Eye, Image, FileCode, DollarSign, TrendingUp, MousePointer } from "lucide-react";
+import type { Creative, CreativePerformanceSummary } from "@/types/api";
 import { cn, getFormatColor, getStatusColor, truncate } from "@/lib/utils";
 import { getGoogleAuthBuyersUrl, extractBuyerIdFromName } from "@/lib/url-utils";
 
 interface CreativeCardProps {
   creative: Creative;
   onPreview?: (creative: Creative) => void;
+  performance?: CreativePerformanceSummary;
+}
+
+// Format micros to USD string
+function formatUSD(micros: number): string {
+  const dollars = micros / 1_000_000;
+  if (dollars >= 1000) {
+    return `$${(dollars / 1000).toFixed(1)}K`;
+  } else if (dollars >= 1) {
+    return `$${dollars.toFixed(2)}`;
+  } else {
+    return `$${dollars.toFixed(4)}`;
+  }
+}
+
+// Format CPM/CPC in micros to USD
+function formatCostMetric(micros: number | null): string {
+  if (micros === null) return "-";
+  const dollars = micros / 1_000_000;
+  return `$${dollars.toFixed(2)}`;
+}
+
+// Get CPC color based on thresholds: green <$0.30, yellow $0.30-$0.60, red >$0.60
+function getCpcColor(cpcMicros: number | null): string {
+  if (cpcMicros === null) return "text-gray-500";
+  const dollars = cpcMicros / 1_000_000;
+  if (dollars < 0.30) return "text-green-600";
+  if (dollars <= 0.60) return "text-yellow-600";
+  return "text-red-600";
 }
 
 function extractVideoUrlFromVast(vastXml: string): string | null {
@@ -96,7 +125,7 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
   );
 }
 
-export function CreativeCard({ creative, onPreview }: CreativeCardProps) {
+export function CreativeCard({ creative, onPreview, performance }: CreativeCardProps) {
   const hasPreview = creative.video || creative.html || creative.native;
 
   return (
@@ -153,6 +182,47 @@ export function CreativeCard({ creative, onPreview }: CreativeCardProps) {
             </span>
           )}
         </div>
+
+        {/* Performance Metrics */}
+        {performance?.has_data && (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {/* Spend - bold when >$1,000 */}
+              <div className="flex items-center gap-1 text-green-600">
+                <DollarSign className="h-3 w-3" />
+                <span className={cn(
+                  "font-medium",
+                  performance.total_spend_micros > 1_000_000_000 && "font-bold"
+                )}>
+                  {formatUSD(performance.total_spend_micros)}
+                </span>
+              </div>
+              {/* CTR */}
+              {performance.ctr_percent !== null && (
+                <div className="flex items-center gap-1 text-blue-600">
+                  <MousePointer className="h-3 w-3" />
+                  <span className="font-medium">{performance.ctr_percent.toFixed(2)}% CTR</span>
+                </div>
+              )}
+              {/* CPM */}
+              {performance.avg_cpm_micros !== null && (
+                <div className="text-gray-500">
+                  CPM: {formatCostMetric(performance.avg_cpm_micros)}
+                </div>
+              )}
+              {/* CPC - color coded */}
+              {performance.avg_cpc_micros !== null && (
+                <div className={getCpcColor(performance.avg_cpc_micros)}>
+                  CPC: {formatCostMetric(performance.avg_cpc_micros)}
+                </div>
+              )}
+            </div>
+            {/* Impressions & Clicks Summary */}
+            <div className="mt-1 text-xs text-gray-400">
+              {performance.total_impressions.toLocaleString()} imps · {performance.total_clicks.toLocaleString()} clicks
+            </div>
+          </div>
+        )}
 
         {creative.advertiser_name && (
           <p className="mt-3 text-sm text-gray-600">

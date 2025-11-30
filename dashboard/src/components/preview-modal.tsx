@@ -133,10 +133,14 @@ function DestinationUrlsSection({ creative }: { creative: Creative }) {
   const rawData = (creative as unknown as { raw_data?: Record<string, unknown> }).raw_data;
   const declaredUrls = rawData?.declaredClickThroughUrls as string[] | undefined;
 
-  // Parse URLs from final_url and declared URLs
+  // For HTML creatives, the real URLs are often embedded in the HTML snippet
+  const htmlSnippet = creative.html?.snippet || "";
+
+  // Parse URLs from final_url, declared URLs, and HTML snippet
   const allRawUrls = [
     creative.final_url,
     ...(declaredUrls || []),
+    htmlSnippet, // This may contain embedded URLs
   ].filter(Boolean).join(" ");
 
   const parsedUrls = parseDestinationUrls(allRawUrls);

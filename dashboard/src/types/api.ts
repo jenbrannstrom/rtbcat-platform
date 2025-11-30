@@ -165,3 +165,25 @@ export interface ImportTrafficResponse {
   records_imported: number;
   message: string;
 }
+
+// Performance Metrics Types
+
+export interface CreativePerformanceSummary {
+  creative_id: string;
+  total_impressions: number;
+  total_clicks: number;
+  total_spend_micros: number;
+  avg_cpm_micros: number | null;
+  avg_cpc_micros: number | null;
+  ctr_percent: number | null;
+  days_with_data: number;
+  has_data: boolean;
+}
+
+export interface BatchPerformanceResponse {
+  performance: Record<string, CreativePerformanceSummary>;
+  period: string;
+  count: number;
+}
+
+export type PerformancePeriod = "yesterday" | "7d" | "30d" | "all_time";

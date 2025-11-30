@@ -142,6 +142,43 @@ class BuyerSeat:
     created_at: Optional[datetime] = None
 
 
+@dataclass
+class PerformanceMetric:
+    """Performance metrics record for daily creative/campaign data.
+
+    Attributes:
+        id: Auto-increment primary key.
+        creative_id: Foreign key to creatives table.
+        campaign_id: Optional campaign association.
+        metric_date: Date of the metrics (daily granularity).
+        impressions: Number of ad impressions.
+        clicks: Number of clicks (must be <= impressions).
+        spend_micros: Spend in USD micros (1,000,000 = $1.00).
+        cpm_micros: Cost per mille in micros.
+        cpc_micros: Cost per click in micros.
+        geography: ISO 3166-1 alpha-2 country code.
+        device_type: Device category (DESKTOP, MOBILE, TABLET, CTV).
+        placement: Publisher domain or app bundle.
+        created_at: Record creation timestamp.
+        updated_at: Last update timestamp.
+    """
+
+    creative_id: str
+    metric_date: str  # YYYY-MM-DD format
+    impressions: int = 0
+    clicks: int = 0
+    spend_micros: int = 0
+    cpm_micros: Optional[int] = None
+    cpc_micros: Optional[int] = None
+    campaign_id: Optional[str] = None
+    geography: Optional[str] = None
+    device_type: Optional[str] = None
+    placement: Optional[str] = None
+    id: Optional[int] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
 class SQLiteStore:
     """Async SQLite storage for creative intelligence data.
 
@@ -237,6 +274,29 @@ class SQLiteStore:
     CREATE INDEX IF NOT EXISTS idx_rtb_traffic_buyer ON rtb_traffic(buyer_id);
     CREATE INDEX IF NOT EXISTS idx_rtb_traffic_size ON rtb_traffic(canonical_size);
     CREATE INDEX IF NOT EXISTS idx_rtb_traffic_date ON rtb_traffic(date);
+
+    CREATE TABLE IF NOT EXISTS performance_metrics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        creative_id TEXT NOT NULL,
+        campaign_id TEXT,
+        metric_date DATE NOT NULL,
+        impressions INTEGER NOT NULL DEFAULT 0,
+        clicks INTEGER NOT NULL DEFAULT 0,
+        spend_micros INTEGER NOT NULL DEFAULT 0,
+        cpm_micros INTEGER,
+        cpc_micros INTEGER,
+        geography TEXT,
+        device_type TEXT,
+        placement TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (creative_id) REFERENCES creatives(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_perf_creative_date ON performance_metrics(creative_id, metric_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_perf_campaign_date ON performance_metrics(campaign_id, metric_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_perf_date_geo ON performance_metrics(metric_date, geography);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_perf_unique_daily ON performance_metrics(creative_id, metric_date, geography, device_type, placement);
     """
 
     # Migration for existing databases to add new columns
@@ -276,6 +336,36 @@ class SQLiteStore:
         "CREATE INDEX IF NOT EXISTS idx_rtb_traffic_buyer ON rtb_traffic(buyer_id)",
         "CREATE INDEX IF NOT EXISTS idx_rtb_traffic_size ON rtb_traffic(canonical_size)",
         "CREATE INDEX IF NOT EXISTS idx_rtb_traffic_date ON rtb_traffic(date)",
+        # Phase 8.1: Performance metrics table
+        """CREATE TABLE IF NOT EXISTS performance_metrics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            creative_id TEXT NOT NULL,
+            campaign_id TEXT,
+            metric_date DATE NOT NULL,
+            impressions INTEGER NOT NULL DEFAULT 0,
+            clicks INTEGER NOT NULL DEFAULT 0,
+            spend_micros INTEGER NOT NULL DEFAULT 0,
+            cpm_micros INTEGER,
+            cpc_micros INTEGER,
+            geography TEXT,
+            device_type TEXT,
+            placement TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (creative_id) REFERENCES creatives(id) ON DELETE CASCADE
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_perf_creative_date ON performance_metrics(creative_id, metric_date DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_perf_campaign_date ON performance_metrics(campaign_id, metric_date DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_perf_date_geo ON performance_metrics(metric_date, geography)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_perf_unique_daily ON performance_metrics(creative_id, metric_date, geography, device_type, placement)",
+        # Phase 8.1: Campaign performance cache columns
+        "ALTER TABLE campaigns ADD COLUMN spend_7d_micros INTEGER DEFAULT 0",
+        "ALTER TABLE campaigns ADD COLUMN spend_30d_micros INTEGER DEFAULT 0",
+        "ALTER TABLE campaigns ADD COLUMN total_impressions INTEGER DEFAULT 0",
+        "ALTER TABLE campaigns ADD COLUMN total_clicks INTEGER DEFAULT 0",
+        "ALTER TABLE campaigns ADD COLUMN avg_cpm_micros INTEGER",
+        "ALTER TABLE campaigns ADD COLUMN avg_cpc_micros INTEGER",
+        "ALTER TABLE campaigns ADD COLUMN perf_updated_at TIMESTAMP",
     ]
 
     def __init__(self, db_path: str | Path = "~/.rtbcat/rtbcat.db") -> None:
@@ -1487,3 +1577,331 @@ class SQLiteStore:
                 return cursor.rowcount
 
             return await loop.run_in_executor(None, _clear_traffic)
+
+    # ==================== Performance Metrics Methods ====================
+
+    async def save_performance_metrics(
+        self,
+        metrics: list[PerformanceMetric],
+    ) -> int:
+        """Batch save performance metrics with UPSERT semantics.
+
+        Uses INSERT OR REPLACE based on the unique constraint
+        (creative_id, metric_date, geography, device_type, placement).
+
+        Args:
+            metrics: List of PerformanceMetric objects to save.
+
+        Returns:
+            Number of records saved.
+
+        Example:
+            >>> metrics = [
+            ...     PerformanceMetric(
+            ...         creative_id="12345",
+            ...         metric_date="2025-11-29",
+            ...         impressions=10000,
+            ...         clicks=150,
+            ...         spend_micros=5000000,  # $5.00
+            ...         geography="US",
+            ...         device_type="MOBILE",
+            ...     )
+            ... ]
+            >>> count = await store.save_performance_metrics(metrics)
+        """
+        if not metrics:
+            return 0
+
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _insert_metrics():
+                count = 0
+                for m in metrics:
+                    # Compute CPM/CPC if not provided
+                    cpm = m.cpm_micros
+                    cpc = m.cpc_micros
+                    if cpm is None and m.impressions > 0:
+                        cpm = int((m.spend_micros / m.impressions) * 1000)
+                    if cpc is None and m.clicks > 0:
+                        cpc = int(m.spend_micros / m.clicks)
+
+                    try:
+                        conn.execute(
+                            """
+                            INSERT OR REPLACE INTO performance_metrics (
+                                creative_id, campaign_id, metric_date,
+                                impressions, clicks, spend_micros,
+                                cpm_micros, cpc_micros,
+                                geography, device_type, placement,
+                                updated_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                            """,
+                            (
+                                m.creative_id,
+                                m.campaign_id,
+                                m.metric_date,
+                                m.impressions,
+                                m.clicks,
+                                m.spend_micros,
+                                cpm,
+                                cpc,
+                                m.geography,
+                                m.device_type,
+                                m.placement,
+                            ),
+                        )
+                        count += 1
+                    except sqlite3.Error as e:
+                        logger.warning(f"Failed to insert metric for {m.creative_id}: {e}")
+                conn.commit()
+                return count
+
+            return await loop.run_in_executor(None, _insert_metrics)
+
+    async def get_performance_metrics(
+        self,
+        creative_id: Optional[str] = None,
+        campaign_id: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        geography: Optional[str] = None,
+        device_type: Optional[str] = None,
+        limit: int = 1000,
+    ) -> list[PerformanceMetric]:
+        """Query performance metrics with filters.
+
+        Args:
+            creative_id: Filter by creative ID.
+            campaign_id: Filter by campaign ID.
+            start_date: Filter by start date (inclusive, YYYY-MM-DD).
+            end_date: Filter by end date (inclusive, YYYY-MM-DD).
+            geography: Filter by country code.
+            device_type: Filter by device type.
+            limit: Maximum number of results.
+
+        Returns:
+            List of PerformanceMetric objects.
+        """
+        conditions = []
+        params: list = []
+
+        if creative_id:
+            conditions.append("creative_id = ?")
+            params.append(creative_id)
+        if campaign_id:
+            conditions.append("campaign_id = ?")
+            params.append(campaign_id)
+        if start_date:
+            conditions.append("metric_date >= ?")
+            params.append(start_date)
+        if end_date:
+            conditions.append("metric_date <= ?")
+            params.append(end_date)
+        if geography:
+            conditions.append("geography = ?")
+            params.append(geography)
+        if device_type:
+            conditions.append("device_type = ?")
+            params.append(device_type)
+
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        params.append(limit)
+
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _query():
+                cursor = conn.execute(
+                    f"""
+                    SELECT * FROM performance_metrics
+                    WHERE {where_clause}
+                    ORDER BY metric_date DESC, creative_id
+                    LIMIT ?
+                    """,
+                    params,
+                )
+                return cursor.fetchall()
+
+            rows = await loop.run_in_executor(None, _query)
+
+        return [
+            PerformanceMetric(
+                id=row["id"],
+                creative_id=row["creative_id"],
+                campaign_id=row["campaign_id"],
+                metric_date=row["metric_date"],
+                impressions=row["impressions"],
+                clicks=row["clicks"],
+                spend_micros=row["spend_micros"],
+                cpm_micros=row["cpm_micros"],
+                cpc_micros=row["cpc_micros"],
+                geography=row["geography"],
+                device_type=row["device_type"],
+                placement=row["placement"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+            )
+            for row in rows
+        ]
+
+    async def get_creative_performance_summary(
+        self,
+        creative_id: str,
+        days: int = 30,
+    ) -> dict:
+        """Get aggregated performance summary for a creative.
+
+        Args:
+            creative_id: The creative ID.
+            days: Number of days to aggregate.
+
+        Returns:
+            Dictionary with aggregated metrics.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _query():
+                cursor = conn.execute(
+                    """
+                    SELECT
+                        SUM(impressions) as total_impressions,
+                        SUM(clicks) as total_clicks,
+                        SUM(spend_micros) as total_spend_micros,
+                        CASE WHEN SUM(impressions) > 0
+                             THEN CAST(SUM(spend_micros) * 1000.0 / SUM(impressions) AS INTEGER)
+                             ELSE NULL END as avg_cpm_micros,
+                        CASE WHEN SUM(clicks) > 0
+                             THEN CAST(SUM(spend_micros) * 1.0 / SUM(clicks) AS INTEGER)
+                             ELSE NULL END as avg_cpc_micros,
+                        CASE WHEN SUM(impressions) > 0
+                             THEN CAST(SUM(clicks) * 100.0 / SUM(impressions) AS REAL)
+                             ELSE NULL END as ctr_percent,
+                        COUNT(DISTINCT metric_date) as days_with_data,
+                        MIN(metric_date) as earliest_date,
+                        MAX(metric_date) as latest_date
+                    FROM performance_metrics
+                    WHERE creative_id = ?
+                      AND metric_date >= date('now', ?)
+                    """,
+                    (creative_id, f"-{days} days"),
+                )
+                row = cursor.fetchone()
+                if row:
+                    return dict(row)
+                return {}
+
+            result = await loop.run_in_executor(None, _query)
+            return result or {}
+
+    async def update_campaign_performance_cache(
+        self,
+        campaign_id: str,
+    ) -> None:
+        """Update cached performance aggregates for a campaign.
+
+        Computes and stores spend_7d, spend_30d, total_impressions,
+        total_clicks, avg_cpm, and avg_cpc on the campaigns table.
+
+        Args:
+            campaign_id: The campaign ID to update.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _update_cache():
+                # Get 7-day spend
+                cursor = conn.execute(
+                    """
+                    SELECT SUM(spend_micros) as spend
+                    FROM performance_metrics
+                    WHERE campaign_id = ?
+                      AND metric_date >= date('now', '-7 days')
+                    """,
+                    (campaign_id,),
+                )
+                spend_7d = cursor.fetchone()["spend"] or 0
+
+                # Get 30-day spend
+                cursor = conn.execute(
+                    """
+                    SELECT SUM(spend_micros) as spend
+                    FROM performance_metrics
+                    WHERE campaign_id = ?
+                      AND metric_date >= date('now', '-30 days')
+                    """,
+                    (campaign_id,),
+                )
+                spend_30d = cursor.fetchone()["spend"] or 0
+
+                # Get totals and averages
+                cursor = conn.execute(
+                    """
+                    SELECT
+                        SUM(impressions) as total_impressions,
+                        SUM(clicks) as total_clicks,
+                        CASE WHEN SUM(impressions) > 0
+                             THEN CAST(SUM(spend_micros) * 1000.0 / SUM(impressions) AS INTEGER)
+                             ELSE NULL END as avg_cpm_micros,
+                        CASE WHEN SUM(clicks) > 0
+                             THEN CAST(SUM(spend_micros) * 1.0 / SUM(clicks) AS INTEGER)
+                             ELSE NULL END as avg_cpc_micros
+                    FROM performance_metrics
+                    WHERE campaign_id = ?
+                    """,
+                    (campaign_id,),
+                )
+                row = cursor.fetchone()
+
+                # Update campaign record
+                conn.execute(
+                    """
+                    UPDATE campaigns SET
+                        spend_7d_micros = ?,
+                        spend_30d_micros = ?,
+                        total_impressions = ?,
+                        total_clicks = ?,
+                        avg_cpm_micros = ?,
+                        avg_cpc_micros = ?,
+                        perf_updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (
+                        spend_7d,
+                        spend_30d,
+                        row["total_impressions"] or 0,
+                        row["total_clicks"] or 0,
+                        row["avg_cpm_micros"],
+                        row["avg_cpc_micros"],
+                        campaign_id,
+                    ),
+                )
+                conn.commit()
+
+            await loop.run_in_executor(None, _update_cache)
+
+    async def clear_old_performance_data(
+        self,
+        days_to_keep: int = 90,
+    ) -> int:
+        """Clear old performance data beyond retention period.
+
+        Args:
+            days_to_keep: Number of days of data to retain.
+
+        Returns:
+            Number of records deleted.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _clear_old():
+                cursor = conn.execute(
+                    "DELETE FROM performance_metrics WHERE metric_date < date('now', ?)",
+                    (f"-{days_to_keep} days",),
+                )
+                conn.commit()
+                return cursor.rowcount
+
+            return await loop.run_in_executor(None, _clear_old)
