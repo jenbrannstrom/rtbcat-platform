@@ -3,6 +3,7 @@
 import { ExternalLink, Play, Eye, Image, FileCode } from "lucide-react";
 import type { Creative } from "@/types/api";
 import { cn, getFormatColor, getStatusColor, truncate } from "@/lib/utils";
+import { getGoogleAuthBuyersUrl, extractBuyerIdFromName } from "@/lib/url-utils";
 
 interface CreativeCardProps {
   creative: Creative;
@@ -113,13 +114,16 @@ export function CreativeCard({ creative, onPreview }: CreativeCardProps) {
           <div className="flex-1 min-w-0">
             <button
               onClick={() => onPreview?.(creative)}
-              className="text-sm font-medium text-gray-900 hover:text-primary-600 truncate block text-left w-full"
+              className="text-sm font-medium text-gray-900 hover:text-primary-600 truncate block text-left w-full font-mono"
+              title={creative.id}
             >
-              {creative.name || creative.id}
-            </button>
-            <p className="mt-1 text-xs text-gray-500 truncate">
               {creative.id}
-            </p>
+            </button>
+            {creative.name && (
+              <p className="mt-1 text-xs text-gray-500 truncate" title={creative.name}>
+                {creative.name}
+              </p>
+            )}
           </div>
           <div className="flex gap-1 ml-2">
             {hasPreview && (
@@ -156,19 +160,23 @@ export function CreativeCard({ creative, onPreview }: CreativeCardProps) {
           </p>
         )}
 
-        {creative.final_url && (
-          <a
-            href={creative.final_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-3 inline-flex items-center text-xs text-primary-600 hover:text-primary-700"
-          >
-            <span className="truncate max-w-[200px]">
-              {truncate(creative.final_url, 40)}
-            </span>
-            <ExternalLink className="ml-1 h-3 w-3 flex-shrink-0" />
-          </a>
-        )}
+        {/* Google Auth Buyers Link */}
+        {(() => {
+          const buyerId = creative.buyer_id || extractBuyerIdFromName(creative.name);
+          if (!buyerId) return null;
+          return (
+            <a
+              href={getGoogleAuthBuyersUrl(buyerId, creative.id)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex items-center text-xs text-primary-600 hover:text-primary-700"
+              title="View in Google Authorized Buyers"
+            >
+              <span>Google Auth. Buyers</span>
+              <ExternalLink className="ml-1 h-3 w-3 flex-shrink-0" />
+            </a>
+          );
+        })()}
 
         {(creative.utm_campaign || creative.utm_source) && (
           <div className="mt-3 pt-3 border-t border-gray-100">

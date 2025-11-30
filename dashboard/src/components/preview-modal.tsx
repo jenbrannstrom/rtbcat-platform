@@ -1,10 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { X, Play, ExternalLink, Copy, Check, Loader2 } from "lucide-react";
+import { X, Play, ExternalLink, Copy, Check, Loader2, Info, ChevronDown, ChevronUp } from "lucide-react";
 import type { Creative } from "@/types/api";
 import { cn, getFormatColor, getStatusColor } from "@/lib/utils";
 import { getCreative } from "@/lib/api";
+import {
+  parseDestinationUrls,
+  getGoogleAuthBuyersUrl,
+  extractBuyerIdFromName,
+  isValidUrl,
+  getUrlDisplayText,
+  type ParsedUrl,
+} from "@/lib/url-utils";
 
 interface PreviewModalProps {
   creative: Creative;
@@ -21,10 +29,12 @@ function extractVideoUrlFromVast(vastXml: string): string | null {
   return null;
 }
 
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text, className }: { text: string; className?: string }) {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = async () => {
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
     await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -33,7 +43,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="p-1 text-gray-400 hover:text-gray-600 rounded"
+      className={cn("p-1 text-gray-400 hover:text-gray-600 rounded", className)}
       title="Copy"
     >
       {copied ? (
@@ -42,6 +52,168 @@ function CopyButton({ text }: { text: string }) {
         <Copy className="h-3.5 w-3.5" />
       )}
     </button>
+  );
+}
+
+function Tooltip({ content, children }: { content: string; children: React.ReactNode }) {
+  const [show, setShow] = useState(false);
+
+  return (
+    <div className="relative inline-flex">
+      <div
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+      >
+        {children}
+      </div>
+      {show && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-900 rounded shadow-lg whitespace-nowrap max-w-xs">
+          {content}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UrlRow({ parsedUrl }: { parsedUrl: ParsedUrl }) {
+  const [showCopy, setShowCopy] = useState(false);
+
+  if (!isValidUrl(parsedUrl.url)) {
+    return (
+      <div className="flex items-center gap-2 py-1.5 px-2 text-sm text-red-600">
+        <span className="text-gray-400">→</span>
+        <span>Invalid URL</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-gray-50 group"
+      onMouseEnter={() => setShowCopy(true)}
+      onMouseLeave={() => setShowCopy(false)}
+    >
+      <span className="text-gray-400 flex-shrink-0">→</span>
+      <a
+        href={parsedUrl.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex-1 min-w-0 flex items-center gap-2 text-sm hover:text-primary-600"
+      >
+        <span className="text-gray-700 font-medium">{parsedUrl.label}:</span>
+        <span className="font-mono text-gray-600 truncate">
+          {getUrlDisplayText(parsedUrl)}
+        </span>
+        {parsedUrl.isPrimary && (
+          <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium bg-green-100 text-green-700 rounded">
+            PRIMARY
+          </span>
+        )}
+        <ExternalLink className="h-3 w-3 text-gray-400 flex-shrink-0" />
+      </a>
+      {parsedUrl.tooltip && (
+        <Tooltip content={parsedUrl.tooltip}>
+          <Info className="h-3.5 w-3.5 text-gray-400 hover:text-gray-600 cursor-help flex-shrink-0" />
+        </Tooltip>
+      )}
+      <CopyButton
+        text={parsedUrl.url}
+        className={cn("flex-shrink-0 transition-opacity", showCopy ? "opacity-100" : "opacity-0")}
+      />
+    </div>
+  );
+}
+
+function DestinationUrlsSection({ creative }: { creative: Creative }) {
+  const [showAll, setShowAll] = useState(false);
+  const MAX_VISIBLE = 5;
+
+  // Combine all possible URL sources
+  const rawData = (creative as unknown as { raw_data?: Record<string, unknown> }).raw_data;
+  const declaredUrls = rawData?.declaredClickThroughUrls as string[] | undefined;
+
+  // Parse URLs from final_url and declared URLs
+  const allRawUrls = [
+    creative.final_url,
+    ...(declaredUrls || []),
+  ].filter(Boolean).join(" ");
+
+  const parsedUrls = parseDestinationUrls(allRawUrls);
+
+  if (parsedUrls.length === 0) {
+    return (
+      <div className="py-2">
+        <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+          Destination URLs
+        </dt>
+        <dd className="mt-1 text-sm text-gray-500 italic">
+          No destination URL specified
+        </dd>
+      </div>
+    );
+  }
+
+  const visibleUrls = showAll ? parsedUrls : parsedUrls.slice(0, MAX_VISIBLE);
+  const hiddenCount = parsedUrls.length - MAX_VISIBLE;
+
+  return (
+    <div className="py-2">
+      <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+        Destination URLs
+      </dt>
+      <dd className="bg-gray-50 rounded-lg border border-gray-100 py-1">
+        {visibleUrls.map((url, index) => (
+          <UrlRow key={`${url.url}-${index}`} parsedUrl={url} />
+        ))}
+        {hiddenCount > 0 && !showAll && (
+          <button
+            onClick={() => setShowAll(true)}
+            className="w-full flex items-center justify-center gap-1 py-1.5 px-2 text-xs text-primary-600 hover:text-primary-700 hover:bg-gray-100"
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+            Show {hiddenCount} more URL{hiddenCount > 1 ? "s" : ""}
+          </button>
+        )}
+        {showAll && parsedUrls.length > MAX_VISIBLE && (
+          <button
+            onClick={() => setShowAll(false)}
+            className="w-full flex items-center justify-center gap-1 py-1.5 px-2 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+          >
+            <ChevronUp className="h-3.5 w-3.5" />
+            Show less
+          </button>
+        )}
+      </dd>
+    </div>
+  );
+}
+
+function GoogleAuthBuyersLink({ creative }: { creative: Creative }) {
+  // Try buyer_id first, fallback to extracting from name
+  const buyerId = creative.buyer_id || extractBuyerIdFromName(creative.name);
+
+  if (!buyerId) return null;
+
+  const url = getGoogleAuthBuyersUrl(buyerId, creative.id);
+
+  return (
+    <div className="py-2">
+      <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+        Google Console
+      </dt>
+      <dd className="mt-1">
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700"
+        >
+          <span>Google Auth. Buyers</span>
+          <ExternalLink className="h-3.5 w-3.5" />
+        </a>
+      </dd>
+    </div>
   );
 }
 
@@ -349,16 +521,11 @@ export function PreviewModal({ creative: initialCreative, onClose }: PreviewModa
                 <LabeledField label="Rejection Reason" value={rejectionReason} />
                 <LabeledField label="Advertiser" value={creative.advertiser_name} />
                 <LabeledField label="Account ID" value={creative.account_id} copyable />
+                <LabeledField label="Buyer ID" value={creative.buyer_id} copyable />
+                <GoogleAuthBuyersLink creative={creative} />
               </div>
               <div className="sm:pl-6">
-                <LabeledField label="Destination URL" value={creative.final_url} isLink copyable />
-                <LabeledField
-                  label="Declared URL"
-                  value={declaredUrls?.length ? declaredUrls[0] : null}
-                  isLink
-                  copyable
-                />
-                <LabeledField label="App Store URL" value={appStoreUrl} isLink copyable />
+                <DestinationUrlsSection creative={creative} />
                 <LabeledField label="App Name" value={appName} />
                 <LabeledField label="Bundle ID" value={bundleId} copyable />
               </div>

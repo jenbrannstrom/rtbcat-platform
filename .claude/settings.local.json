@@ -39,7 +39,9 @@
       "Bash(docker build:*)",
       "Bash(docker start:*)",
       "Bash(docker logs:*)",
-      "Bash(docker run:*)"
+      "Bash(docker run:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(npm run dev:*)"
     ],
     "deny": [],
     "ask": []
