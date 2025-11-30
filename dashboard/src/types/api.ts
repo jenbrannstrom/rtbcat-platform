@@ -44,6 +44,7 @@ export interface Creative {
   advertiser_name: string | null;
   campaign_id: string | null;
   cluster_id: string | null;
+  seat_name: string | null;
   // Preview data
   video: VideoPreview | null;
   html: HtmlPreview | null;

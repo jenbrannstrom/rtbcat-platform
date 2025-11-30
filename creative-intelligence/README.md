@@ -579,7 +579,7 @@ await store.migrate_add_buyer_seats()
 
 ## Roadmap
 
-### v0.1 (Current)
+### v0.1 (Completed)
 - [x] Google Authorized Buyers API integration
 - [x] Creative collection with pagination
 - [x] SQLite storage backend
@@ -588,16 +588,134 @@ await store.migrate_add_buyer_seats()
 - [x] Docker deployment
 - [x] Multi-seat buyer account support
 
-### v0.2 (In Progress)
+### v0.2 (Completed - November 2025)
 - [x] Next.js dashboard structure
-- [ ] Campaign clustering UI
-- [ ] Performance metrics charts
-- [ ] Seat management UI
+- [x] Campaign clustering UI
+- [x] Performance metrics import (CSV upload)
+- [x] Seat management UI (`/settings/seats`)
+- [x] Waste Analysis dashboard (`/waste-analysis`)
+- [x] Performance data visualization on creative cards
 
-### v0.3 (Planned)
-- [ ] AI-based creative clustering
+### v0.3 (Completed - November 2025)
+- [x] AI-based creative clustering (`/ai-campaigns/auto-cluster`)
+- [x] Size-based campaign grouping
+- [x] Seat hierarchy cleanup (Phase 8.5)
+- [x] Seat display names on creative cards
+
+### v0.4 (Planned)
 - [ ] Visual similarity detection
 - [ ] Pretargeting recommendations
+- [ ] Real-time bidding metrics integration
+- [ ] Multi-tenant support
+
+## Recent Changes (November 2025)
+
+### Phase 5: Waste Analysis Dashboard
+- Added `/waste-analysis` page with size gap analysis
+- Traffic pattern visualization (daily QPS charts)
+- Size coverage heatmap
+- Actionable recommendations (block, add creative, use flexible)
+
+### Phase 7: Performance Data Import
+- CSV performance data import (`/import` page)
+- Support for impressions, clicks, spend metrics
+- Performance metrics displayed on creative cards (spend, CTR, CPM, CPC)
+- Color-coded CPC indicators
+
+### Phase 8.5: Seat Hierarchy Cleanup
+- Fixed sidebar seat dropdown showing "0 creatives"
+- Seat display names instead of raw IDs on creative cards
+- Seat management page (`/settings/seats`) for renaming
+- Auto-populate buyer_seats from existing creatives on startup
+
+### Phase 9: AI Campaign Clustering
+- Auto-cluster creatives by size, format, and advertiser
+- AI campaign management (`/campaigns` page)
+- Campaign performance aggregation
+- Daily trend charts per campaign
+
+## Known Issues & Bugs
+
+### Critical
+1. **API Service Port Conflict**: If the systemd service fails with "Address already in use", kill old processes:
+   ```bash
+   sudo lsof -ti:8000 | xargs -r sudo kill -9
+   sudo systemctl restart rtbcat-api
+   ```
+
+### Medium
+2. **Date Serialization**: SQLite returns dates as strings; API handles both string and datetime formats
+3. **Seat Names Not Showing**: After restart, run `/seats/populate` to populate buyer_seats table
+
+### Low
+4. **Dashboard Hot Reload**: Sometimes requires `npm run build` after backend changes
+5. **Empty Seats on First Load**: Seats are auto-populated on API startup; refresh if empty
+
+## Systemd Service
+
+The API runs as a systemd service:
+
+```bash
+# Service file location
+/etc/systemd/system/rtbcat-api.service
+
+# Common commands
+sudo systemctl status rtbcat-api
+sudo systemctl restart rtbcat-api
+sudo journalctl -u rtbcat-api -f
+
+# If service fails to start (port in use)
+sudo lsof -ti:8000 | xargs -r sudo kill -9
+sudo systemctl restart rtbcat-api
+```
+
+### Service Configuration
+```ini
+[Unit]
+Description=RTB.cat Creative Intelligence API
+After=network.target
+
+[Service]
+Type=simple
+User=dnsmasq
+WorkingDirectory=/home/jen/Documents/rtbcat-platform/creative-intelligence
+ExecStart=/home/jen/Documents/rtbcat-platform/creative-intelligence/venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+## Dashboard Service
+
+The Next.js dashboard also runs as a systemd service:
+
+```bash
+# Service file
+/etc/systemd/system/rtbcat-dashboard.service
+
+# Commands
+sudo systemctl status rtbcat-dashboard
+sudo systemctl restart rtbcat-dashboard
+```
+
+## API Endpoints (Updated)
+
+### New Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/analytics/waste` | Get waste analysis report |
+| GET | `/analytics/size-coverage` | Get size coverage data |
+| POST | `/analytics/generate-mock-traffic` | Generate test traffic data |
+| POST | `/performance/import-csv` | Import performance CSV |
+| GET | `/performance/metrics/batch` | Get batch performance metrics |
+| GET | `/ai-campaigns` | List AI-generated campaigns |
+| POST | `/ai-campaigns/auto-cluster` | Auto-cluster creatives |
+| GET | `/ai-campaigns/{id}/performance` | Get campaign performance |
+| PATCH | `/seats/{buyer_id}` | Update seat display name |
+| POST | `/seats/populate` | Populate seats from creatives |
 
 ## API Data
 

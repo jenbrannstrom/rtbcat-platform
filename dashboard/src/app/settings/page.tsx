@@ -1,7 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Settings, CheckCircle, XCircle, Database, Server } from "lucide-react";
+import Link from "next/link";
+import { Settings, CheckCircle, XCircle, Database, Server, Users, Clock, ChevronRight } from "lucide-react";
 import { getHealth, getStats } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
@@ -151,6 +152,47 @@ export default function SettingsPage() {
             This will launch an interactive wizard to set up your Google
             Authorized Buyers credentials and other settings.
           </p>
+        </div>
+
+        <div className="card p-6">
+          <div className="flex items-center mb-4">
+            <Users className="h-5 w-5 text-gray-400 mr-2" />
+            <h2 className="text-lg font-medium text-gray-900">Manage</h2>
+          </div>
+
+          <div className="space-y-2">
+            <Link
+              href="/settings/seats"
+              className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 border border-gray-200"
+            >
+              <div className="flex items-center">
+                <Users className="h-5 w-5 text-primary-600 mr-3" />
+                <div>
+                  <div className="font-medium text-gray-900">Buyer Seats</div>
+                  <div className="text-sm text-gray-500">
+                    Manage seat display names and view creative counts
+                  </div>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-gray-400" />
+            </Link>
+
+            <Link
+              href="/settings/retention"
+              className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 border border-gray-200"
+            >
+              <div className="flex items-center">
+                <Clock className="h-5 w-5 text-primary-600 mr-3" />
+                <div>
+                  <div className="font-medium text-gray-900">Data Retention</div>
+                  <div className="text-sm text-gray-500">
+                    Configure retention periods and cleanup schedules
+                  </div>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-gray-400" />
+            </Link>
+          </div>
         </div>
       </div>
     </div>

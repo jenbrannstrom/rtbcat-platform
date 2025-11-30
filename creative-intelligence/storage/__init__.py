@@ -24,6 +24,7 @@ from .sqlite_store import BuyerSeat, Campaign, Creative, PerformanceMetric, SQLi
 from .performance_repository import PerformanceRepository
 from .seat_repository import Seat, SeatRepository
 from .retention_manager import RetentionManager
+from .campaign_repository import AICampaign, CampaignRepository
 
 __all__ = [
     # Storage backends
@@ -32,9 +33,11 @@ __all__ = [
     "PerformanceRepository",
     "SeatRepository",
     "RetentionManager",
+    "CampaignRepository",
     # Models
     "Creative",
     "Campaign",
+    "AICampaign",
     "BuyerSeat",
     "PerformanceMetric",
     "Seat",

@@ -9,7 +9,14 @@ import { ImportProgress } from "@/components/import-progress";
 import { ValidationErrors } from "@/components/validation-errors";
 import { CsvTypeSelector, type CsvType } from "@/components/csv-type-selector";
 import { ImportInstructions } from "@/components/import-instructions";
-import { validatePerformanceCSV, type ExtendedValidationResult } from "@/lib/csv-validator";
+import {
+  validatePerformanceCSV,
+  type ExtendedValidationResult,
+  groupAnomaliesByType,
+  getTopAnomalyApps,
+  formatAnomalyType,
+} from "@/lib/csv-validator";
+import type { AnomalyType } from "@/lib/types/import";
 import { parseCSV, type ParseResult } from "@/lib/csv-parser";
 import { importPerformanceData } from "@/lib/api";
 import {
@@ -76,6 +83,8 @@ export default function ImportPage() {
               .join(", ") || "none"}`,
             value: null,
           }],
+          warnings: [],
+          anomalies: [],
           rowCount: preview.estimatedRowCount,
           data: [],
           detectedColumns: preview.columnMappings,
@@ -99,6 +108,8 @@ export default function ImportPage() {
             value: null,
           },
         ],
+        warnings: [],
+        anomalies: [],
         rowCount: 0,
         data: [],
       });
@@ -386,9 +397,71 @@ export default function ImportPage() {
             </div>
           )}
 
-          {/* Validation Errors */}
-          {!validationResult.valid && (
+          {/* Fatal Errors (only shown if file is unparseable) */}
+          {!validationResult.valid && validationResult.errors.length > 0 && (
             <ValidationErrors errors={validationResult.errors} />
+          )}
+
+          {/* Anomalies - Interesting fraud signals, not blocking */}
+          {validationResult.valid && validationResult.anomalies && validationResult.anomalies.length > 0 && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <h3 className="font-semibold text-yellow-800 mb-2 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" />
+                {validationResult.anomalies.length} Anomalies Detected
+              </h3>
+              <p className="text-sm text-yellow-700 mb-3">
+                These patterns may indicate fraud or tracking issues.
+                Data will be imported and flagged for analysis.
+              </p>
+
+              {/* Group anomalies by type */}
+              <div className="space-y-1 text-sm">
+                {Object.entries(groupAnomaliesByType(validationResult.anomalies)).map(([type, items]) => (
+                  <div key={type} className="flex justify-between py-1 border-b border-yellow-200 last:border-0">
+                    <span className="text-yellow-800">{formatAnomalyType(type as AnomalyType)}</span>
+                    <span className="font-medium text-yellow-900">{items.length} rows</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Expand to see affected apps */}
+              {getTopAnomalyApps(validationResult.anomalies, 5).length > 0 && (
+                <details className="mt-3">
+                  <summary className="text-sm text-yellow-600 cursor-pointer hover:text-yellow-800">
+                    View affected apps
+                  </summary>
+                  <ul className="mt-2 text-xs space-y-1 text-yellow-700">
+                    {getTopAnomalyApps(validationResult.anomalies, 5).map((app, i) => (
+                      <li key={i} className="flex justify-between">
+                        <span>{app.app_name || "Unknown app"}</span>
+                        <span className="font-medium">{app.count} anomalies</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+
+          {/* Warnings - Informational (collapsible) */}
+          {validationResult.valid && validationResult.warnings && validationResult.warnings.length > 0 && (
+            <details className="bg-gray-50 border rounded-lg p-4">
+              <summary className="text-sm text-gray-600 cursor-pointer hover:text-gray-800">
+                {validationResult.warnings.length} warnings (click to expand)
+              </summary>
+              <ul className="mt-3 text-xs text-gray-600 max-h-40 overflow-y-auto space-y-1">
+                {validationResult.warnings.slice(0, 50).map((w, i) => (
+                  <li key={i} className={w.severity === "warning" ? "text-yellow-700" : "text-gray-500"}>
+                    Row {w.row}: {w.message}
+                  </li>
+                ))}
+                {validationResult.warnings.length > 50 && (
+                  <li className="text-gray-500 italic">
+                    ... and {validationResult.warnings.length - 50} more
+                  </li>
+                )}
+              </ul>
+            </details>
           )}
 
           {/* Preview */}
@@ -457,7 +530,12 @@ export default function ImportPage() {
               disabled={!validationResult.valid}
               className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Import {isLargeFile ? `~${validationResult.rowCount.toLocaleString()}` : validationResult.rowCount.toLocaleString()} Rows
+              Import {isLargeFile ? `~${validationResult.rowCount.toLocaleString()}` : validationResult.data.length.toLocaleString()} Rows
+              {validationResult.anomalies && validationResult.anomalies.length > 0 && (
+                <span className="ml-1 text-yellow-200">
+                  ({validationResult.anomalies.length} flagged)
+                </span>
+              )}
               <ArrowRight className="ml-1 h-4 w-4" />
             </button>
           </div>

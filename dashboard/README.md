@@ -82,6 +82,14 @@ Overview dashboard with key metrics:
 - Format distribution chart
 - Recent activity
 
+### Waste Analysis (`/waste-analysis`)
+RTB waste analysis dashboard:
+- Size gap analysis with recommendations
+- Traffic pattern visualization (daily QPS)
+- Size coverage heatmap
+- Actionable recommendations (block, add creative, use flexible)
+- Potential savings calculations
+
 ### Creatives (`/creatives`)
 Browse and filter creatives:
 - Filter by format (HTML, VIDEO, NATIVE)
@@ -89,33 +97,66 @@ Browse and filter creatives:
 - Filter by canonical size (300x250, 728x90, etc.)
 - Search by advertiser name
 - Preview creative content
+- Performance metrics on cards (spend, CTR, CPM, CPC)
+- Seat name display (instead of raw IDs)
 
 ### Campaigns (`/campaigns`)
 View grouped creatives by campaign:
 - UTM-based campaign grouping
-- AI-powered clustering
+- AI-powered clustering with auto-cluster button
 - Performance metrics per campaign
+- Daily trend charts
+- Campaign management (rename, delete)
 
 ### Collect (`/collect`)
 Trigger data collection:
 - Manual sync from Authorized Buyers API
 - View collection status
-- Schedule automatic syncs
+- Per-seat sync option
+
+### Import (`/import`)
+Import performance data:
+- CSV file upload for performance metrics
+- Support for impressions, clicks, spend
+- Progress indicator during import
+- Validation and error reporting
 
 ### Settings (`/settings`)
 Configure dashboard:
-- API credentials
-- Refresh intervals
-- Display preferences
+- API status and health check
+- Database statistics
+- Links to sub-settings pages
+
+### Settings > Seats (`/settings/seats`)
+Manage buyer seats:
+- View all buyer seats with creative counts
+- Rename seats with inline editing
+- Last synced timestamps
+- Link to view creatives per seat
+- Populate from existing creatives button
+
+### Settings > Retention (`/settings/retention`)
+Data retention configuration:
+- Configure retention periods
+- Cleanup schedules
 
 ## Components
 
+### Sidebar
+Left navigation with:
+- Collapsible design (persisted to localStorage)
+- Seat selector dropdown with creative counts
+- Quick sync button for selected seat
+- Navigation links (Dashboard, Waste Analysis, Creatives, Campaigns, Collect, Import, Settings)
+
 ### CreativeCard
 Displays a single creative with:
-- Thumbnail preview
-- Size information
-- Format badge
-- Quick actions
+- Thumbnail preview (video, native image, HTML placeholder)
+- Size information and format badge
+- Performance metrics (spend, CTR, CPM, CPC) when available
+- Seat name display (instead of raw account IDs)
+- Google Authorized Buyers link
+- Preview button
 
 ### FormatChart
 Pie/bar chart showing:
@@ -124,15 +165,54 @@ Pie/bar chart showing:
 
 ### PreviewModal
 Full creative preview:
-- HTML rendering (sandboxed)
-- Video playback
-- Native ad components
+- HTML rendering (sandboxed iframe)
+- Video playback with VAST XML support
+- Native ad components (headline, body, image, logo)
+- Copy creative ID button
 
 ### StatsCard
 Metric display with:
 - Current value
 - Trend indicator
 - Comparison to previous period
+
+### SeatSelector
+Dropdown for selecting buyer seats:
+- Shows all available seats
+- Creative count per seat
+- Last synced timestamp
+- "All Seats" option
+
+## Known Issues
+
+1. **Seat dropdown shows 0 creatives**: Run `/seats/populate` API endpoint after importing creatives
+2. **Hot reload not updating**: Sometimes requires `npm run build` after backend changes
+3. **Performance metrics not showing**: Import CSV performance data via `/import` page first
+4. **HTML/Video card thumbnails**: Currently show placeholder icons; full preview available in modal
+
+## Roadmap
+
+### Phase 10: Thumbnail Generation (Planned)
+
+Generate offline thumbnails for faster card previews:
+
+**HTML Creatives:**
+- Use Playwright/Puppeteer to render HTML and screenshot
+- Store thumbnails locally or in S3
+
+**Video Creatives:**
+- Use ffmpeg to extract frame at 1 second
+- Generate poster image for video cards
+
+**Database Changes:**
+```sql
+ALTER TABLE creatives ADD COLUMN thumbnail_url TEXT;
+```
+
+**Implementation:**
+- Background job on creative sync/import
+- Queue system (Celery or cron-based)
+- Thumbnail storage: `~/.rtbcat/thumbnails/` or S3
 
 ## API Integration
 
