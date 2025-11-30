@@ -89,6 +89,7 @@ class Creative:
     advertiser_name: Optional[str] = None
     campaign_id: Optional[str] = None
     cluster_id: Optional[str] = None
+    seat_name: Optional[str] = None
     raw_data: dict = field(default_factory=dict)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -444,6 +445,71 @@ class SQLiteStore:
             publisher_name TEXT,
             first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""",
+        # Phase 9: AI Campaign Clustering tables
+        """CREATE TABLE IF NOT EXISTS ai_campaigns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            seat_id INTEGER REFERENCES seats(id),
+            name TEXT NOT NULL,
+            description TEXT,
+            ai_generated BOOLEAN DEFAULT TRUE,
+            ai_confidence REAL,
+            clustering_method TEXT,
+            status TEXT DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_ai_campaigns_seat ON ai_campaigns(seat_id)",
+        "CREATE INDEX IF NOT EXISTS idx_ai_campaigns_status ON ai_campaigns(status)",
+        # Phase 9: Creative-Campaign mapping
+        """CREATE TABLE IF NOT EXISTS creative_campaigns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            creative_id TEXT NOT NULL REFERENCES creatives(id),
+            campaign_id INTEGER NOT NULL REFERENCES ai_campaigns(id),
+            manually_assigned BOOLEAN DEFAULT FALSE,
+            assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            assigned_by TEXT,
+            UNIQUE(creative_id)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_cc_campaign ON creative_campaigns(campaign_id)",
+        "CREATE INDEX IF NOT EXISTS idx_cc_creative ON creative_campaigns(creative_id)",
+        # Phase 9: Campaign daily summary for aggregated performance
+        """CREATE TABLE IF NOT EXISTS campaign_daily_summary (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id INTEGER NOT NULL REFERENCES ai_campaigns(id),
+            date DATE NOT NULL,
+            total_creatives INTEGER DEFAULT 0,
+            active_creatives INTEGER DEFAULT 0,
+            total_queries INTEGER DEFAULT 0,
+            total_impressions INTEGER DEFAULT 0,
+            total_clicks INTEGER DEFAULT 0,
+            total_spend REAL DEFAULT 0,
+            total_video_starts INTEGER,
+            total_video_completions INTEGER,
+            avg_win_rate REAL,
+            avg_ctr REAL,
+            avg_cpm REAL,
+            unique_geos INTEGER,
+            top_geo_id INTEGER,
+            top_geo_spend REAL,
+            UNIQUE(campaign_id, date)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_cds_campaign_date ON campaign_daily_summary(campaign_id, date DESC)",
+        # Import anomalies table for fraud detection
+        """CREATE TABLE IF NOT EXISTS import_anomalies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            import_id TEXT,
+            row_number INTEGER,
+            anomaly_type TEXT NOT NULL,
+            creative_id TEXT,
+            app_id TEXT,
+            app_name TEXT,
+            details TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_anomalies_type ON import_anomalies(anomaly_type)",
+        "CREATE INDEX IF NOT EXISTS idx_anomalies_app ON import_anomalies(app_id)",
+        "CREATE INDEX IF NOT EXISTS idx_anomalies_creative ON import_anomalies(creative_id)",
+        "CREATE INDEX IF NOT EXISTS idx_anomalies_import ON import_anomalies(import_id)",
     ]
 
     def __init__(self, db_path: str | Path = "~/.rtbcat/rtbcat.db") -> None:
@@ -635,7 +701,12 @@ class SQLiteStore:
 
             def _query():
                 cursor = conn.execute(
-                    "SELECT * FROM creatives WHERE id = ?",
+                    """
+                    SELECT c.*, bs.display_name as seat_name
+                    FROM creatives c
+                    LEFT JOIN buyer_seats bs ON c.account_id = bs.buyer_id
+                    WHERE c.id = ?
+                    """,
                     (creative_id,),
                 )
                 return cursor.fetchone()
@@ -731,6 +802,7 @@ class SQLiteStore:
             advertiser_name=row_dict.get("advertiser_name"),
             campaign_id=row_dict.get("campaign_id"),
             cluster_id=row_dict.get("cluster_id"),
+            seat_name=row_dict.get("seat_name"),
             raw_data=raw_data,
             created_at=row_dict.get("created_at"),
             updated_at=row_dict.get("updated_at"),
@@ -766,22 +838,22 @@ class SQLiteStore:
         params = []
 
         if buyer_id:
-            conditions.append("buyer_id = ?")
+            conditions.append("c.account_id = ?")
             params.append(buyer_id)
         if campaign_id:
-            conditions.append("campaign_id = ?")
+            conditions.append("c.campaign_id = ?")
             params.append(campaign_id)
         if cluster_id:
-            conditions.append("cluster_id = ?")
+            conditions.append("c.cluster_id = ?")
             params.append(cluster_id)
         if format:
-            conditions.append("format = ?")
+            conditions.append("c.format = ?")
             params.append(format)
         if canonical_size:
-            conditions.append("canonical_size = ?")
+            conditions.append("c.canonical_size = ?")
             params.append(canonical_size)
         if size_category:
-            conditions.append("size_category = ?")
+            conditions.append("c.size_category = ?")
             params.append(size_category)
 
         where_clause = " AND ".join(conditions) if conditions else "1=1"
@@ -793,9 +865,11 @@ class SQLiteStore:
             def _query():
                 cursor = conn.execute(
                     f"""
-                    SELECT * FROM creatives
+                    SELECT c.*, bs.display_name as seat_name
+                    FROM creatives c
+                    LEFT JOIN buyer_seats bs ON c.account_id = bs.buyer_id
                     WHERE {where_clause}
-                    ORDER BY updated_at DESC
+                    ORDER BY c.updated_at DESC
                     LIMIT ? OFFSET ?
                     """,
                     params,
@@ -1341,10 +1415,10 @@ class SQLiteStore:
         params = []
 
         if bidder_id:
-            conditions.append("bidder_id = ?")
+            conditions.append("bs.bidder_id = ?")
             params.append(bidder_id)
         if active_only:
-            conditions.append("active = 1")
+            conditions.append("bs.active = 1")
 
         where_clause = " AND ".join(conditions) if conditions else "1=1"
 
@@ -1352,13 +1426,20 @@ class SQLiteStore:
             loop = asyncio.get_event_loop()
 
             def _query():
+                # Use LEFT JOIN to get dynamic creative count from creatives.account_id
                 cursor = conn.execute(
                     f"""
-                    SELECT buyer_id, bidder_id, display_name, active,
-                           creative_count, last_synced, created_at
-                    FROM buyer_seats
+                    SELECT bs.buyer_id, bs.bidder_id, bs.display_name, bs.active,
+                           COALESCE(c.cnt, 0) as creative_count,
+                           bs.last_synced, bs.created_at
+                    FROM buyer_seats bs
+                    LEFT JOIN (
+                        SELECT account_id, COUNT(*) as cnt
+                        FROM creatives
+                        GROUP BY account_id
+                    ) c ON c.account_id = bs.buyer_id
                     WHERE {where_clause}
-                    ORDER BY display_name, buyer_id
+                    ORDER BY bs.display_name, bs.buyer_id
                     """,
                     params,
                 )
@@ -1470,6 +1551,76 @@ class SQLiteStore:
                 ),
             )
             await loop.run_in_executor(None, conn.commit)
+
+    async def populate_buyer_seats_from_creatives(self) -> int:
+        """Populate buyer_seats table from existing creatives.
+
+        Creates buyer_seat records for each unique account_id found in creatives
+        that doesn't already exist in buyer_seats.
+
+        Returns:
+            Number of buyer seats created.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _populate():
+                # Get unique account_ids from creatives that aren't already in buyer_seats
+                cursor = conn.execute("""
+                    SELECT DISTINCT c.account_id, c.advertiser_name
+                    FROM creatives c
+                    WHERE c.account_id IS NOT NULL
+                    AND c.account_id NOT IN (SELECT buyer_id FROM buyer_seats)
+                """)
+                accounts = cursor.fetchall()
+
+                created = 0
+                for account_id, advertiser_name in accounts:
+                    # Use advertiser_name as display_name if available
+                    display_name = advertiser_name or f"Account {account_id}"
+                    conn.execute(
+                        """
+                        INSERT OR IGNORE INTO buyer_seats
+                        (buyer_id, bidder_id, display_name, active, creative_count, created_at)
+                        VALUES (?, ?, ?, 1, 0, CURRENT_TIMESTAMP)
+                        """,
+                        (account_id, account_id, display_name),
+                    )
+                    created += 1
+
+                conn.commit()
+                return created
+
+            return await loop.run_in_executor(None, _populate)
+
+    async def update_buyer_seat_display_name(
+        self, buyer_id: str, display_name: str
+    ) -> bool:
+        """Update the display name for a buyer seat.
+
+        Args:
+            buyer_id: The buyer ID to update.
+            display_name: The new display name.
+
+        Returns:
+            True if updated, False if not found.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _update():
+                cursor = conn.execute(
+                    """
+                    UPDATE buyer_seats
+                    SET display_name = ?
+                    WHERE buyer_id = ?
+                    """,
+                    (display_name, buyer_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+
+            return await loop.run_in_executor(None, _update)
 
     # RTB Traffic Data Methods
 
@@ -1704,6 +1855,12 @@ class SQLiteStore:
                     if cpc is None and m.clicks > 0:
                         cpc = int(m.spend_micros / m.clicks)
 
+                    # IMPORTANT: Convert NULLs to 'UNKNOWN' for unique constraint columns
+                    # SQLite treats NULL != NULL, so NULLs cause duplicate rows
+                    geography = m.geography or "UNKNOWN"
+                    device_type = m.device_type or "UNKNOWN"
+                    placement = m.placement or "UNKNOWN"
+
                     try:
                         conn.execute(
                             """
@@ -1724,9 +1881,9 @@ class SQLiteStore:
                                 m.spend_micros,
                                 cpm,
                                 cpc,
-                                m.geography,
-                                m.device_type,
-                                m.placement,
+                                geography,
+                                device_type,
+                                placement,
                             ),
                         )
                         count += 1
@@ -1822,6 +1979,126 @@ class SQLiteStore:
             )
             for row in rows
         ]
+
+    async def save_import_anomalies(
+        self,
+        import_id: str,
+        anomalies: list[dict],
+    ) -> int:
+        """Store anomalies from import for later analysis.
+
+        Args:
+            import_id: Unique identifier for the import batch.
+            anomalies: List of anomaly dictionaries with type, row, details.
+
+        Returns:
+            Number of anomalies saved.
+        """
+        if not anomalies:
+            return 0
+
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _insert_anomalies():
+                count = 0
+                for a in anomalies:
+                    try:
+                        details = a.get("details", {})
+                        conn.execute(
+                            """
+                            INSERT INTO import_anomalies
+                            (import_id, row_number, anomaly_type, creative_id, app_id, app_name, details)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                import_id,
+                                a.get("row"),
+                                a.get("type"),
+                                str(details.get("creative_id")) if details.get("creative_id") else None,
+                                details.get("app_id"),
+                                details.get("app_name"),
+                                json.dumps(details),
+                            ),
+                        )
+                        count += 1
+                    except sqlite3.Error as e:
+                        logger.warning(f"Failed to insert anomaly: {e}")
+                conn.commit()
+                return count
+
+            return await loop.run_in_executor(None, _insert_anomalies)
+
+    async def get_fraud_apps(self, limit: int = 50) -> list[dict]:
+        """Get apps with most fraud signals.
+
+        Args:
+            limit: Maximum number of apps to return.
+
+        Returns:
+            List of app dictionaries with anomaly counts.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _query():
+                cursor = conn.execute(
+                    """
+                    SELECT
+                        app_id,
+                        app_name,
+                        COUNT(*) as anomaly_count,
+                        COUNT(DISTINCT anomaly_type) as anomaly_types,
+                        GROUP_CONCAT(DISTINCT anomaly_type) as types_list
+                    FROM import_anomalies
+                    WHERE anomaly_type IN ('clicks_exceed_impressions', 'extremely_high_ctr', 'zero_impressions_with_spend')
+                    AND app_id IS NOT NULL
+                    GROUP BY app_id
+                    ORDER BY anomaly_count DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                )
+                return cursor.fetchall()
+
+            rows = await loop.run_in_executor(None, _query)
+
+        return [
+            {
+                "app_id": row["app_id"],
+                "app_name": row["app_name"],
+                "anomaly_count": row["anomaly_count"],
+                "anomaly_types": row["anomaly_types"],
+                "types_list": row["types_list"].split(",") if row["types_list"] else [],
+            }
+            for row in rows
+        ]
+
+    async def get_anomaly_summary(self) -> dict:
+        """Get summary of all import anomalies.
+
+        Returns:
+            Dictionary with anomaly type counts.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _query():
+                cursor = conn.execute(
+                    """
+                    SELECT
+                        anomaly_type,
+                        COUNT(*) as count
+                    FROM import_anomalies
+                    GROUP BY anomaly_type
+                    ORDER BY count DESC
+                    """
+                )
+                return cursor.fetchall()
+
+            rows = await loop.run_in_executor(None, _query)
+
+        return {row["anomaly_type"]: row["count"] for row in rows}
 
     async def get_creative_performance_summary(
         self,

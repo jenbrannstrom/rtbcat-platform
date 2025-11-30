@@ -9,6 +9,7 @@ import {
   Image,
   FolderKanban,
   Download,
+  Upload,
   Settings,
   ExternalLink,
   TrendingDown,
@@ -30,6 +31,7 @@ const navigation = [
   { name: "Creatives", href: "/creatives", icon: Image },
   { name: "Campaigns", href: "/campaigns", icon: FolderKanban },
   { name: "Collect", href: "/collect", icon: Download },
+  { name: "Import", href: "/import", icon: Upload },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 

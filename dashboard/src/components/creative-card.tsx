@@ -224,9 +224,9 @@ export function CreativeCard({ creative, onPreview, performance }: CreativeCardP
           </div>
         )}
 
-        {creative.advertiser_name && (
+        {(creative.seat_name || creative.advertiser_name) && (
           <p className="mt-3 text-sm text-gray-600">
-            {creative.advertiser_name}
+            {creative.seat_name || creative.advertiser_name}
           </p>
         )}
 

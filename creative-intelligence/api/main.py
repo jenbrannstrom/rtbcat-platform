@@ -12,7 +12,7 @@ from typing import Optional
 import csv
 import io
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, UploadFile, File
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -20,6 +20,7 @@ from collectors import BuyerSeatsClient, CreativesClient
 from config import ConfigManager
 from storage import SQLiteStore, PerformanceMetric, creative_dicts_to_storage
 from analytics import WasteAnalyzer
+from api.campaigns_router import router as campaigns_router
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,7 @@ class CreativeResponse(BaseModel):
     advertiser_name: Optional[str] = None
     campaign_id: Optional[str] = None
     cluster_id: Optional[str] = None
+    seat_name: Optional[str] = None
     # Preview data based on format
     video: Optional[VideoPreview] = None
     html: Optional[HtmlPreview] = None
@@ -326,6 +328,14 @@ async def lifespan(app: FastAPI):
     _store = SQLiteStore()
     await _store.initialize()
 
+    # Auto-populate buyer_seats from existing creatives if needed
+    try:
+        seats_created = await _store.populate_buyer_seats_from_creatives()
+        if seats_created > 0:
+            logger.info(f"Auto-populated {seats_created} buyer seats from existing creatives")
+    except Exception as e:
+        logger.warning(f"Failed to auto-populate buyer seats: {e}")
+
     logger.info("RTBcat API started")
 
     yield
@@ -360,6 +370,9 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+# Include routers
+app.include_router(campaigns_router)
 
 
 def get_store() -> SQLiteStore:
@@ -503,6 +516,7 @@ async def list_creatives(
             advertiser_name=c.advertiser_name,
             campaign_id=c.campaign_id,
             cluster_id=c.cluster_id,
+            seat_name=c.seat_name,
             **_extract_preview_data(c, slim=slim),
         )
         for c in creatives
@@ -538,6 +552,7 @@ async def get_creative(
         advertiser_name=creative.advertiser_name,
         campaign_id=creative.campaign_id,
         cluster_id=creative.cluster_id,
+        seat_name=creative.seat_name,
         **_extract_preview_data(creative),
     )
 
@@ -789,8 +804,8 @@ async def list_seats(
             display_name=s.display_name,
             active=s.active,
             creative_count=s.creative_count,
-            last_synced=s.last_synced.isoformat() if s.last_synced else None,
-            created_at=s.created_at.isoformat() if s.created_at else None,
+            last_synced=s.last_synced if isinstance(s.last_synced, str) else (s.last_synced.isoformat() if s.last_synced else None),
+            created_at=s.created_at if isinstance(s.created_at, str) else (s.created_at.isoformat() if s.created_at else None),
         )
         for s in seats
     ]
@@ -812,8 +827,8 @@ async def get_seat(
         display_name=seat.display_name,
         active=seat.active,
         creative_count=seat.creative_count,
-        last_synced=seat.last_synced.isoformat() if seat.last_synced else None,
-        created_at=seat.created_at.isoformat() if seat.created_at else None,
+        last_synced=seat.last_synced if isinstance(seat.last_synced, str) else (seat.last_synced.isoformat() if seat.last_synced else None),
+        created_at=seat.created_at if isinstance(seat.created_at, str) else (seat.created_at.isoformat() if seat.created_at else None),
     )
 
 
@@ -867,8 +882,8 @@ async def discover_seats(
                     display_name=s.display_name,
                     active=s.active,
                     creative_count=s.creative_count,
-                    last_synced=s.last_synced.isoformat() if s.last_synced else None,
-                    created_at=s.created_at.isoformat() if s.created_at else None,
+                    last_synced=s.last_synced if isinstance(s.last_synced, str) else (s.last_synced.isoformat() if s.last_synced else None),
+                    created_at=s.created_at if isinstance(s.created_at, str) else (s.created_at.isoformat() if s.created_at else None),
                 )
                 for s in seats
             ],
@@ -941,6 +956,56 @@ async def sync_seat_creatives(
     except Exception as e:
         logger.error(f"Seat sync failed for {buyer_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Seat sync failed: {str(e)}")
+
+
+class UpdateSeatRequest(BaseModel):
+    """Request model for updating a buyer seat."""
+
+    display_name: Optional[str] = None
+
+
+@app.patch("/seats/{buyer_id}", response_model=BuyerSeatResponse, tags=["Buyer Seats"])
+async def update_seat(
+    buyer_id: str,
+    request: UpdateSeatRequest,
+    store: SQLiteStore = Depends(get_store),
+):
+    """Update a buyer seat's display name."""
+    if request.display_name:
+        success = await store.update_buyer_seat_display_name(buyer_id, request.display_name)
+        if not success:
+            raise HTTPException(status_code=404, detail="Buyer seat not found")
+
+    seat = await store.get_buyer_seat(buyer_id)
+    if not seat:
+        raise HTTPException(status_code=404, detail="Buyer seat not found")
+
+    return BuyerSeatResponse(
+        buyer_id=seat.buyer_id,
+        bidder_id=seat.bidder_id,
+        display_name=seat.display_name,
+        active=seat.active,
+        creative_count=seat.creative_count,
+        last_synced=seat.last_synced if isinstance(seat.last_synced, str) else (seat.last_synced.isoformat() if seat.last_synced else None),
+        created_at=seat.created_at if isinstance(seat.created_at, str) else (seat.created_at.isoformat() if seat.created_at else None),
+    )
+
+
+@app.post("/seats/populate", tags=["Buyer Seats"])
+async def populate_seats_from_creatives(
+    store: SQLiteStore = Depends(get_store),
+):
+    """Populate buyer_seats table from existing creatives.
+
+    Creates seat records for each unique account_id found in creatives.
+    This is useful for migrating data after the initial import.
+    """
+    try:
+        count = await store.populate_buyer_seats_from_creatives()
+        return {"status": "completed", "seats_created": count}
+    except Exception as e:
+        logger.error(f"Seat population failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Seat population failed: {str(e)}")
 
 
 # Waste Analysis endpoints
@@ -1445,72 +1510,166 @@ async def import_performance_csv(
         # Read and parse CSV
         contents = await file.read()
         text = contents.decode("utf-8")
-        reader = csv.DictReader(io.StringIO(text))
 
-        # Validate required columns
-        required_columns = {"creative_id", "date", "impressions", "clicks", "spend"}
-        if reader.fieldnames is None:
+        # Column name aliases for flexible matching (same as frontend)
+        COLUMN_ALIASES = {
+            'creative_id': ['creative_id', 'creativeid', '#creative id', '#creative_id', 'creative id', '#creativeid'],
+            'date': ['date', 'day', '#day', 'metric_date', '#date'],
+            'impressions': ['impressions', 'imps', '#impressions'],
+            'clicks': ['clicks', '#clicks'],
+            'spend': ['spend', 'spend (buyer currency)', 'spend_buyer_currency', 'cost', '#spend', 'spend (usd)', 'revenue'],
+            'geography': ['geography', 'country', 'geo', 'region', '#country'],
+            'device_type': ['device_type', 'device', 'platform', 'device type'],
+            'placement': ['placement', 'ad_slot', 'inventory'],
+            'campaign_id': ['campaign_id', 'campaign', 'line_item'],
+            'hour': ['hour', '#hour'],
+        }
+
+        def normalize_column_name(col: str) -> str:
+            """Convert any column name variant to standard name."""
+            col_lower = col.lower().strip()
+
+            for standard_name, aliases in COLUMN_ALIASES.items():
+                if col_lower in [a.lower() for a in aliases]:
+                    return standard_name
+
+            # Clean up common patterns
+            col_clean = col_lower.replace(' ', '_').replace('(', '').replace(')', '').replace('#', '')
+            for standard_name, aliases in COLUMN_ALIASES.items():
+                if col_clean in [a.lower().replace(' ', '_').replace('(', '').replace(')', '').replace('#', '') for a in aliases]:
+                    return standard_name
+
+            return col_lower  # Return as-is if no match
+
+        # Read CSV and normalize column names
+        raw_reader = csv.DictReader(io.StringIO(text))
+        if raw_reader.fieldnames is None:
             raise HTTPException(status_code=400, detail="CSV file is empty or malformed")
 
-        missing = required_columns - set(reader.fieldnames)
+        # Create column mapping
+        column_map = {col: normalize_column_name(col) for col in raw_reader.fieldnames}
+        logger.info(f"Column mapping: {column_map}")
+
+        # Re-read with normalized column names
+        def normalize_row(row: dict) -> dict:
+            return {column_map.get(k, k): v for k, v in row.items()}
+
+        reader = csv.DictReader(io.StringIO(text))
+        normalized_rows = [normalize_row(row) for row in reader]
+
+        # Validate required columns (using normalized names)
+        required_columns = {"creative_id", "date", "impressions", "clicks", "spend"}
+        found_columns = set(column_map.values())
+
+        missing = required_columns - found_columns
         if missing:
             raise HTTPException(
                 status_code=400,
-                detail=f"CSV missing required columns: {', '.join(missing)}",
+                detail=f"CSV missing required columns: {', '.join(missing)}. Found: {', '.join(sorted(found_columns))}",
             )
 
-        # Parse records
+        # Parse records (using normalized rows)
         metrics = []
         errors = []
         skipped = 0
+        anomaly_count = 0
 
-        for row_num, row in enumerate(reader, start=2):  # Start at 2 (after header)
+        for row_num, row in enumerate(normalized_rows, start=2):  # Start at 2 (after header)
             try:
-                # Parse date
-                try:
-                    metric_date = datetime.strptime(row["date"], "%Y-%m-%d").strftime("%Y-%m-%d")
-                except ValueError:
-                    raise ValueError(f"Invalid date format: {row['date']} (expected YYYY-MM-DD)")
+                # Parse date - try multiple formats
+                date_str = row.get("date", "").strip()
+                metric_date = None
+                for fmt in ["%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%d/%m/%Y"]:
+                    try:
+                        metric_date = datetime.strptime(date_str, fmt).strftime("%Y-%m-%d")
+                        break
+                    except ValueError:
+                        continue
+                if metric_date is None:
+                    raise ValueError(f"Invalid date format: {date_str}")
 
-                # Parse numeric values
-                impressions = int(row.get("impressions", 0))
-                clicks = int(row.get("clicks", 0))
-                spend_usd = float(row.get("spend", 0))
+                # Parse numeric values - handle various formats
+                def parse_number(val, default=0):
+                    if not val:
+                        return default
+                    # Remove currency symbols, commas, whitespace
+                    cleaned = str(val).replace('$', '').replace(',', '').replace(' ', '').strip()
+                    try:
+                        return float(cleaned) if '.' in cleaned else int(cleaned)
+                    except ValueError:
+                        return default
 
-                # Validate
+                impressions = int(parse_number(row.get("impressions", 0)))
+                clicks = int(parse_number(row.get("clicks", 0)))
+                spend_usd = float(parse_number(row.get("spend", 0)))
+
+                # Forgiving validation - fix negatives, don't reject clicks > impressions
                 if impressions < 0:
-                    raise ValueError(f"Impressions cannot be negative: {impressions}")
+                    impressions = 0  # Auto-fix
                 if clicks < 0:
-                    raise ValueError(f"Clicks cannot be negative: {clicks}")
-                if clicks > impressions:
-                    raise ValueError(f"Clicks ({clicks}) cannot exceed impressions ({impressions})")
+                    clicks = 0  # Auto-fix
                 if spend_usd < 0:
-                    raise ValueError(f"Spend cannot be negative: {spend_usd}")
+                    spend_usd = 0  # Auto-fix
+
+                # Track anomalies but DON'T reject (forgiving validator philosophy)
+                if clicks > impressions:
+                    anomaly_count += 1  # Just count, don't raise error
 
                 # Convert spend to micros (USD * 1,000,000)
                 spend_micros = int(spend_usd * 1_000_000)
 
                 # Parse optional fields
-                geography = row.get("geography", "").strip().upper() or None
+                geography_raw = row.get("geography", "").strip().upper() or None
                 device_type = row.get("device_type", "").strip().upper() or None
                 placement = row.get("placement", "").strip() or None
                 campaign_id = row.get("campaign_id", "").strip() or None
 
-                # Validate geography (2-letter ISO code)
-                if geography and len(geography) != 2:
-                    raise ValueError(f"Invalid geography code: {geography} (expected 2-letter ISO code)")
+                # Normalize geography - accept both ISO codes and full country names
+                # Common country name to ISO code mapping
+                COUNTRY_TO_ISO = {
+                    'INDIA': 'IN', 'UNITED STATES': 'US', 'USA': 'US', 'GERMANY': 'DE',
+                    'UNITED KINGDOM': 'GB', 'UK': 'GB', 'FRANCE': 'FR', 'SPAIN': 'ES',
+                    'ITALY': 'IT', 'CANADA': 'CA', 'AUSTRALIA': 'AU', 'BRAZIL': 'BR',
+                    'MEXICO': 'MX', 'JAPAN': 'JP', 'CHINA': 'CN', 'SOUTH KOREA': 'KR',
+                    'KOREA': 'KR', 'RUSSIA': 'RU', 'NETHERLANDS': 'NL', 'POLAND': 'PL',
+                    'TURKEY': 'TR', 'INDONESIA': 'ID', 'THAILAND': 'TH', 'VIETNAM': 'VN',
+                    'PHILIPPINES': 'PH', 'MALAYSIA': 'MY', 'SINGAPORE': 'SG', 'TAIWAN': 'TW',
+                    'HONG KONG': 'HK', 'PAKISTAN': 'PK', 'BANGLADESH': 'BD', 'EGYPT': 'EG',
+                    'SOUTH AFRICA': 'ZA', 'NIGERIA': 'NG', 'KENYA': 'KE', 'ARGENTINA': 'AR',
+                    'COLOMBIA': 'CO', 'CHILE': 'CL', 'PERU': 'PE', 'SAUDI ARABIA': 'SA',
+                    'UAE': 'AE', 'UNITED ARAB EMIRATES': 'AE', 'ISRAEL': 'IL', 'SWEDEN': 'SE',
+                    'NORWAY': 'NO', 'DENMARK': 'DK', 'FINLAND': 'FI', 'BELGIUM': 'BE',
+                    'AUSTRIA': 'AT', 'SWITZERLAND': 'CH', 'PORTUGAL': 'PT', 'GREECE': 'GR',
+                    'CZECH REPUBLIC': 'CZ', 'ROMANIA': 'RO', 'HUNGARY': 'HU', 'IRELAND': 'IE',
+                    'NEW ZEALAND': 'NZ', 'UKRAINE': 'UA',
+                }
 
-                # Validate device_type
+                geography = None
+                if geography_raw:
+                    if len(geography_raw) == 2:
+                        # Already an ISO code
+                        geography = geography_raw
+                    elif geography_raw in COUNTRY_TO_ISO:
+                        # Convert full name to ISO
+                        geography = COUNTRY_TO_ISO[geography_raw]
+                    else:
+                        # Unknown country - accept as-is (forgiving), truncate if needed
+                        geography = geography_raw[:50] if len(geography_raw) > 50 else geography_raw
+
+                # Normalize device_type (forgiving - map unknown values to UNKNOWN)
                 valid_device_types = {"MOBILE", "DESKTOP", "TABLET", "CTV", "UNKNOWN"}
                 if device_type and device_type not in valid_device_types:
-                    raise ValueError(f"Invalid device_type: {device_type} (expected one of {valid_device_types})")
+                    device_type = "UNKNOWN"  # Accept but normalize to UNKNOWN
 
-                # Parse hour if present
+                # Parse hour if present (forgiving - ignore invalid values)
                 hour = None
                 if row.get("hour"):
-                    hour = int(row["hour"])
-                    if hour < 0 or hour > 23:
-                        raise ValueError(f"Hour must be 0-23, got: {hour}")
+                    try:
+                        hour = int(row["hour"])
+                        if hour < 0 or hour > 23:
+                            hour = None  # Ignore out-of-range values
+                    except (ValueError, TypeError):
+                        hour = None  # Ignore unparseable values
 
                 metrics.append(
                     PerformanceMetric(

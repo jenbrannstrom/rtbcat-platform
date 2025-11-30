@@ -41,7 +41,10 @@
       "Bash(docker logs:*)",
       "Bash(docker run:*)",
       "Bash(npm uninstall:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(systemctl status rtbcat-api)",
+      "Bash(systemctl status:*)",
+      "Bash(sudo systemctl restart:*)"
     ],
     "deny": [],
     "ask": []

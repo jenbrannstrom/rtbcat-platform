@@ -328,8 +328,15 @@ function HtmlPreviewFrame({ creative }: { creative: Creative }) {
     );
   }
 
-  const width = Math.min(creative.html.width || creative.width || 300, 600);
-  const height = Math.min(creative.html.height || creative.height || 250, 300);
+  // Use actual creative dimensions, capped to fit within modal
+  const creativeWidth = creative.html.width || creative.width || 300;
+  const creativeHeight = creative.html.height || creative.height || 250;
+  // For very large creatives, scale down proportionally to fit max-w-2xl (672px) modal
+  const maxWidth = 640;
+  const maxHeight = 500;
+  const scale = Math.min(1, maxWidth / creativeWidth, maxHeight / creativeHeight);
+  const width = Math.round(creativeWidth * scale);
+  const height = Math.round(creativeHeight * scale);
 
   return (
     <div className="flex justify-center p-4 bg-gray-100">

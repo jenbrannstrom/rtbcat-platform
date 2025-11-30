@@ -1,23 +1,24 @@
-# RTB.cat Creative Intelligence Platform
+# Cat-Scan: a QPS optimizer & Creative Intelligence Platform
 
-**Privacy-First Campaign Performance Intelligence for DSPs**
+**Privacy-First Campaign Performance Intelligence for bidders & DSPs**
 
 > 🔒 **Your data. Your infrastructure. Provably private.**
 
-**Status:** Phase 6 Complete | Phase 8 In Progress (Performance Data Foundation)
+**Status:** Phase 9 Complete | Phase 10 Planned (Thumbnail Generation)
 
 ---
 
 ## 🎯 What is RTB.cat?
 
-RTB.cat is a **privacy-first platform** for DSPs and performance bidders to:
+Cat is a **privacy-first platform** for DSPs and performance bidders to:
 
-1. **Manage creatives** from Google Authorized Buyers (and other SSPs)
-2. **Track performance** (spend, clicks, impressions, CPM, CPC)
-3. **Classify campaigns** using AI clustering
-4. **Find opportunities** (undervalued geos, high-CPC low-spend, profit pockets)
-5. **Eliminate waste** (cut 20-40% of unprofitable QPS)
-6. **Run everything privately** in your own infrastructure
+1. **Eliminate waste**d QPS (cut 20-40% of unprofitable QPS)
+2. Plug in your Agent (Claude, ChatGPT, Grok, Gemini, ...)
+3. **Classify creatives** from Google Authorized Buyers (and other SSPs soon)
+4. **Agentic Investigation of performance** (spend, clicks, impressions, CPM, CPC)
+5. **Agentic Classification of campaigns** collect creatives using AI clustering
+6. **Agentic  opportunities finder** (under- or over-valued geos/bundleID's/placements, high-CPC low-spend, profit pockets)
+7.  **Run everything privately** in your own infrastructure
 
 ---
 
@@ -29,7 +30,7 @@ RTB.cat is a **privacy-first platform** for DSPs and performance bidders to:
 ├─────────────────────────────────────────────────────────┤
 │                                                          │
 │  ┌────────────────────────────────────────┐             │
-│  │   RTBcat Creative Intel Backend        │             │
+│  │   Cat-Scan Creative Intel Backend        │             │
 │  │   (Python FastAPI)                     │             │
 │  │   • Fetch creatives from Google API    │             │
 │  │   • Import performance data            │             │
@@ -127,14 +128,13 @@ RTBcat runs in YOUR infrastructure:
 
 ---
 
-### 🔄 **Phase 8: Performance Data Foundation (CURRENT PRIORITY)**
+### ✅ **Phase 8: Performance Data Foundation (Complete)**
 
-**Status:** In Development  
-**ETA:** Week 1-2
+**Status:** Complete
 
 This is the **critical foundation** for all advanced features (AI clustering, opportunity detection, geographic insights).
 
-#### **8.1: Database Schema Extension** 📋 Next Build
+#### **8.1: Database Schema Extension** ✅ Complete
 
 **New Tables:**
 
@@ -183,7 +183,7 @@ ALTER TABLE campaigns ADD COLUMN last_performance_update TIMESTAMP;
 
 ---
 
-#### **8.2: Data Import System** 📋 Next
+#### **8.2: Data Import System** ✅ Complete
 
 **Multiple Import Methods:**
 
@@ -237,7 +237,7 @@ creative_id,date,impressions,clicks,spend,geography,device_type
 
 ---
 
-#### **8.3: Creatives Page Enhancement** 📋 Week 2
+#### **8.3: Creatives Page Enhancement** ✅ Complete
 
 **Current State:**
 - Cards sorted by creative_id (not useful)
@@ -284,7 +284,7 @@ creative_id,date,impressions,clicks,spend,geography,device_type
 
 ---
 
-#### **8.4: Campaign Performance Aggregation** 📋 Week 2
+#### **8.4: Campaign Performance Aggregation** ✅ Complete
 
 **Aggregate performance to campaign level:**
 
@@ -321,10 +321,9 @@ Campaign: "Mobile Game - Puzzle - Brazil Portuguese"
 
 ---
 
-### 💰 **Phase 9: AI Campaign Clustering (Pro Feature)**
+### ✅ **Phase 9: AI Campaign Clustering (Pro Feature) - Complete**
 
-**Status:** Designed, Ready After Phase 8  
-**ETA:** Week 3-4
+**Status:** Complete
 
 **Features:**
 - AI groups 652+ creatives into 15-20 campaigns
@@ -347,10 +346,35 @@ Campaign: "Mobile Game - Puzzle - Brazil Portuguese"
 
 ---
 
-### 💰 **Phase 10: Opportunity Intelligence (Pro Feature)**
+### 🔄 **Phase 10: Thumbnail Generation (CURRENT)**
 
-**Status:** Designed, Depends on Phase 8  
-**ETA:** Week 5-6
+**Status:** Planned
+
+Generate offline thumbnails for faster card previews:
+
+**HTML Creatives:**
+- Use Playwright/Puppeteer to render HTML and screenshot
+- Store thumbnails locally or in S3
+
+**Video Creatives:**
+- Use ffmpeg to extract frame at 1 second
+- Generate poster image for video cards
+
+**Database Changes:**
+```sql
+ALTER TABLE creatives ADD COLUMN thumbnail_url TEXT;
+```
+
+**Implementation:**
+- Background job on creative sync/import
+- Queue system (Celery or cron-based)
+- Thumbnail storage: `~/.rtbcat/thumbnails/` or S3
+
+---
+
+### 💰 **Phase 11: Opportunity Intelligence (Pro Feature)**
+
+**Status:** Designed
 
 **The Magic Feature: Find Profit Pockets**
 
@@ -409,7 +433,7 @@ Campaign: "Mobile Game - Puzzle - Brazil Portuguese"
 
 ---
 
-### 💰💰 **Phase 11: Geographic Intelligence (Enterprise)**
+### 💰💰 **Phase 12: Geographic Intelligence (Enterprise)**
 
 **Status:** Advanced R&D  
 **ETA:** Quarter 2 2026
@@ -448,7 +472,7 @@ Potential savings: $500/week
 
 ---
 
-### 💰💰 **Phase 12: Real-Time & Automation (Enterprise)**
+### 💰💰 **Phase 13: Real-Time & Automation (Enterprise)**
 
 **Status:** Future  
 **ETA:** Quarter 3 2026
@@ -598,7 +622,7 @@ rtb_traffic (
 )
 ```
 
-### **Phase 8 New Tables**
+### **Phase 8 Tables (Complete)**
 
 ```sql
 -- Performance metrics (granular)
@@ -681,23 +705,34 @@ opportunities (
 
 ## 🎉 Current Status
 
-**Phase 6: Complete ✅**
+**Phase 1-6: Complete ✅**
 - 652 creatives collected
 - Smart URL parsing working
 - Waste analysis operational
 - Dashboard polished and performant
 
-**Phase 8: Starting Now 🚀**
-- Database schema design ready
-- Next build: Performance metrics table
-- Then: CSV import system
-- Then: Sort by spend on creatives page
+**Phase 8: Complete ✅**
+- Performance metrics database schema
+- CSV import system working
+- Sort by spend on creatives page
+- Performance badges on cards (spend, CTR, CPM, CPC)
+- Seat name display in creatives
+
+**Phase 9: Complete ✅**
+- AI campaign clustering functional
+- Auto-cluster button in campaigns page
+- Campaign management (rename, delete)
+
+**Phase 10: Planned 🚀**
+- Thumbnail generation for HTML/Video creatives
+- Playwright/Puppeteer for HTML screenshots
+- ffmpeg for video poster frames
 
 ---
 
-**Last Updated:** November 30, 2025  
-**Version:** 6.0 → 8.0 (skipping Phase 7 for now)  
-**Next Milestone:** Performance data foundation complete
+**Last Updated:** November 30, 2025
+**Version:** 9.0 (Phase 9 Complete)
+**Next Milestone:** Thumbnail generation (Phase 10)
 
 ---
 
