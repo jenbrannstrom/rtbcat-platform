@@ -16,6 +16,7 @@ import type {
   BatchPerformanceResponse,
   PerformancePeriod,
 } from "@/types/api";
+import type { ImportResponse } from "@/lib/types/import";
 
 const API_BASE = "/api";
 
@@ -225,4 +226,32 @@ export async function getBatchPerformance(
       period,
     }),
   });
+}
+
+// Performance Data Import API
+
+export async function importPerformanceData(
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<ImportResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`${API_BASE}/performance/import-csv`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || error.error || "Import failed");
+  }
+
+  const result: ImportResponse = await response.json();
+
+  if (onProgress) {
+    onProgress(100);
+  }
+
+  return result;
 }
