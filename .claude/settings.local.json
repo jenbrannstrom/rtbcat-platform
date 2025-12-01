@@ -44,7 +44,9 @@
       "Bash(npm run dev:*)",
       "Bash(systemctl status rtbcat-api)",
       "Bash(systemctl status:*)",
-      "Bash(sudo systemctl restart:*)"
+      "Bash(sudo systemctl restart:*)",
+      "Bash(env)",
+      "Bash(gcloud:*)"
     ],
     "deny": [],
     "ask": []

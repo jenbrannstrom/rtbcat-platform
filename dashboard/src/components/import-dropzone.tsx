@@ -10,7 +10,7 @@ interface ImportDropzoneProps {
 
 export function ImportDropzone({
   onFileSelect,
-  maxSizeMB = 10,
+  maxSizeMB = 500,
 }: ImportDropzoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
