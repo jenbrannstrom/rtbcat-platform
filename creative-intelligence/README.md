@@ -111,6 +111,83 @@ curl http://localhost:8000/stats
    - Look at your Authorized Buyers URL: `https://admanager.google.com/12345#...`
    - The `12345` is your account ID
 
+## Google API Configuration
+
+### Current Setup (Tuky Data Research Ltd.)
+
+| Configuration | Value |
+|--------------|-------|
+| **Credentials Path** | `~/.rtb-cat/credentials/google-credentials.json` |
+| **Service Account** | `rtb-cat-collector@creative-intel-api.iam.gserviceaccount.com` |
+| **Google Cloud Project** | `creative-intel-api` |
+| **Bidder Account ID** | `299038253` |
+| **Account Name** | Tuky Data Research Ltd. |
+
+### APIs Used
+
+| API | Service Name | Version | Scope |
+|-----|-------------|---------|-------|
+| **Real-time Bidding API** | `realtimebidding` | `v1` | `https://www.googleapis.com/auth/realtime-bidding` |
+
+### API Endpoints Implemented
+
+| Endpoint | Description | Client Class |
+|----------|-------------|--------------|
+| `bidders.creatives.list` | Fetch all creatives | `CreativesClient` |
+| `bidders.creatives.get` | Get specific creative | `CreativesClient` |
+| `bidders.buyers.list` | Discover buyer seats | `BuyerSeatsClient` |
+| `buyers.get` | Get buyer details | `BuyerSeatsClient` |
+| `bidders.pretargetingConfigs.list` | List pretargeting configs | `PretargetingClient` |
+| `bidders.pretargetingConfigs.get` | Get specific config | `PretargetingClient` |
+
+### Testing API Access
+
+```bash
+# Activate virtual environment
+cd /home/jen/Documents/rtbcat-platform/creative-intelligence
+source venv/bin/activate
+
+# Run API test script
+python scripts/test_api_access.py
+
+# Expected output:
+# [PASS] Found 652 creatives
+# [PASS] Found 1 buyer seats
+# [PASS] Found X pretargeting configs
+```
+
+### RTB Troubleshooting API (Not Yet Implemented)
+
+The **Ad Exchange Buyer II API** (`adexchangebuyer2` v2beta1) provides RTB troubleshooting metrics:
+
+- **Bid metrics**: QPS, bids submitted, impressions won
+- **Filtered bid reasons**: Why bids were rejected
+- **Callout metrics**: How bid requests reached your bidder
+
+**Scope required**: `https://www.googleapis.com/auth/adexchange.buyer`
+
+This API is NOT yet integrated into RTBcat. To add support:
+
+1. Create `collectors/troubleshooting/client.py`
+2. Use `build('adexchangebuyer2', 'v2beta1', credentials=credentials)`
+3. Implement filter set creation and metrics retrieval
+
+### Troubleshooting
+
+**"PERMISSION_DENIED" errors:**
+1. Verify service account is authorized in Authorized Buyers UI
+   - Settings → API Access → Add service account email
+2. Check Real-time Bidding API is enabled in Google Cloud Console
+3. Verify account ID is correct
+
+**"Rate limit exceeded" (HTTP 429):**
+- The clients implement automatic exponential backoff (max 5 retries)
+- For bulk operations, use pagination (pageSize=100 by default)
+
+**"Credentials not found":**
+- Ensure `~/.rtb-cat/credentials/google-credentials.json` exists
+- Check file permissions: `chmod 644 ~/.rtb-cat/credentials/google-credentials.json`
+
 ## Installation Options
 
 ### Option A: Docker (Recommended)

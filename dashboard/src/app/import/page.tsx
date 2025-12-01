@@ -250,7 +250,7 @@ export default function ImportPage() {
           {/* Instructions based on CSV type */}
           <ImportInstructions csvType={csvType} />
 
-          <ImportDropzone onFileSelect={handleFileSelect} />
+          <ImportDropzone onFileSelect={handleFileSelect} maxSizeMB={500} />
 
           <div className="bg-gray-50 rounded-lg p-6">
             <h3 className="font-semibold text-gray-900 mb-3">
