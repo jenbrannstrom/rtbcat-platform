@@ -1,203 +1,24 @@
-# RTBcat: QPS Optimizer & Creative Intelligence Platform
+# Cat-Scan: QPS Optimizer & Creative Intelligence Platform
 
 **Privacy-First Campaign Performance Intelligence for Bidders & DSPs**
 
-> Your data. Your infrastructure. Provably private.
+> Your data stays on your infrastructure. Always.
 
-**Status:** Phase 8.4 ✅ Complete | Phase 9-10 📋 Designed & Ready to Implement
-
----
-
-## What is RTBcat?
-
-RTBcat is a **privacy-first platform** for DSPs and performance bidders to:
-
-1. **Optimize QPS** - Eliminate 20-40% of unprofitable bid requests
-2. **Analyze creatives** - Fetch and classify creatives from Google Authorized Buyers
-3. **Track performance** - Import spend, clicks, impressions by creative/geo/device
-4. **Detect fraud signals** - Flag suspicious traffic patterns for human review
-5. **Find opportunities** - Discover undervalued geos, neglected campaigns, size gaps
-6. **Run privately** - Everything runs in YOUR infrastructure
+**Status:** Phase 9.6 ✅ Unified Data Architecture Complete  
+**Version:** 10.2  
+**Last Updated:** December 1, 2025
 
 ---
 
-## Current State
+## What is Cat-Scan?
 
-### ✅ Implemented & Working
+Cat-Scan is a **free, professional-grade tool** for DSPs and performance bidders to:
 
-| Component | Status | Details |
-|-----------|--------|---------|
-| Creative Collection | ✅ Working | 653 creatives synced from Google API |
-| Performance Import | ✅ Working | CSV import with forgiving validation |
-| Dashboard UI | ✅ Working | Next.js 14, creative browser, import page |
-| Backend API | ✅ Working | FastAPI, systemd service |
-| Google API Integration | ✅ Working | Creatives API, Pretargeting API |
-| Database | ✅ Working | SQLite, 653 creatives stored |
-
-### 📋 Designed & Ready to Implement
-
-| Component | Status | Prompt Ready |
-|-----------|--------|--------------|
-| QPS Optimization Analyzer | 📋 Designed | `CLAUDE_CLI_QPS_Optimization_Analyzer_v2.md` |
-| AI Campaign Clustering | 📋 Designed | `CODEX_PROMPT_Phase9_AI_Clustering.md` |
-| Seat Hierarchy Fix | 📋 Designed | `CODEX_PROMPT_Phase8.5_Seat_Hierarchy.md` |
-
-### 🐛 Known Issues
-
-| Bug | Status |
-|-----|--------|
-| Seat dropdown shows 0 creatives | Open |
-| Buyer Seats API AttributeError | Open |
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    YOUR INFRASTRUCTURE                           │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │   Creative Intelligence Backend (Python FastAPI)         │    │
-│  │   • Google Authorized Buyers API integration            │    │
-│  │   • Performance data import (CSV)                       │    │
-│  │   • QPS optimization analysis (designed, not impl.)     │    │
-│  │   • Fraud signal detection (designed, not impl.)        │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                           │                                      │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │   Web Dashboard (Next.js 14)                             │    │
-│  │   • Creative browser with performance metrics           │    │
-│  │   • CSV import with drag/drop                           │    │
-│  │   • Performance data visualization                      │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                           │                                      │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │   Database (SQLite)                                      │    │
-│  │   • 653 creatives                                       │    │
-│  │   • Performance metrics                                 │    │
-│  │   • 10 pretargeting configs documented                  │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-                ┌──────────────────────────┐
-                │  Google Authorized       │
-                │  Buyers RTB API v1       │
-                └──────────────────────────┘
-```
-
----
-
-## QPS Optimization System (DESIGNED - NOT YET IMPLEMENTED)
-
-> **Note:** This system is fully designed with Claude CLI prompts ready. Run `CLAUDE_CLI_QPS_Optimization_Analyzer_v2.md` to implement.
-
-### The Problem
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    THE PROFIT FUNNEL                             │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  REACHED QUERIES (QPS from Google)                              │
-│         │                                                        │
-│         ▼                                                        │
-│  ┌─────────────┐     ┌────────────────────────────────────┐     │
-│  │ CAN YOU BID?│────►│ NO: Wrong size, no creative        │     │
-│  └──────┬──────┘     │     = TRUE WASTE (block these!)    │     │
-│         │ YES        └────────────────────────────────────┘     │
-│         ▼                                                        │
-│  ┌─────────────┐     ┌────────────────────────────────────┐     │
-│  │ AUCTION WON?│────►│ NO: Outbid = normal competition    │     │
-│  └──────┬──────┘     └────────────────────────────────────┘     │
-│         │ YES                                                    │
-│         ▼                                                        │
-│  ┌─────────────┐                                                │
-│  │ IMPRESSION  │──► Delivered, may or may not convert           │
-│  └─────────────┘                                                │
-│                                                                  │
-│  KEY INSIGHT: Only size mismatch is TRUE waste.                 │
-│  Everything else is competition or cost of business.            │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Critical Domain Knowledge
-
-#### Pretargeting Size Filtering (IMPORTANT!)
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    SIZE FILTERING RULES                          │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ⚠️  SIZE FILTERING IS INCLUDE-ONLY                             │
-│                                                                  │
-│  • Leave size list BLANK = Accept ALL sizes                     │
-│  • Add ONE size = ONLY that size (all others EXCLUDED)          │
-│  • Add MULTIPLE sizes = Those sizes accepted (OR within list)   │
-│                                                                  │
-│  There is NO "exclude" option!                                  │
-│                                                                  │
-│  PRETARGETING LOGIC:                                            │
-│  • All settings use AND with each other                         │
-│  • Exception: Web/App use OR with each other                    │
-│  • Exception: Sizes within a list use OR with each other        │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-#### Fraud Detection Limitations
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    FRAUD DETECTION REALITY                       │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  What RTBcat CAN detect:                                        │
-│  • Statistical anomalies over time                              │
-│  • Apps with suspicious CTR patterns                            │
-│  • Clicks exceeding impressions repeatedly                      │
-│                                                                  │
-│  What RTBcat CANNOT reliably detect:                            │
-│  • Geographic anomalies (VPNs are everywhere)                   │
-│  • Smart fraud (mixes 70-80% real with 20-30% fake)            │
-│  • Single-occurrence oddities (need patterns)                   │
-│                                                                  │
-│  RTBcat's job: FLAG patterns for human review                   │
-│  NOT: Definitively identify fraud                               │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Your 10 Pretargeting Configs
-
-| # | Billing ID | Name | Geos | QPS Cap |
-|---|------------|------|------|---------|
-| 1 | 72245759413 | Africa/Asia | BF,BR,CI,CM,EG,NG,SA,SE,IN,PH,KZ | 50K |
-| 2 | 83435423204 | ID/BR Android | ID,BR,IN,US,KR,ZA,AR | 50K |
-| 3 | 104602012074 | MENA iOS&AND | SA,AE,EG,PH,IT,ES,BF,KZ,FR,PE,ZA,HU,SK | 50K |
-| 4 | 137175951277 | SEA Whitelist | BR,ID,MY,TH,VN | 30K |
-| 5 | 151274651962 | USEast CA/MX | CA,MX | 5K |
-| 6 | 153322387893 | Brazil AND | BR | 30K |
-| 7 | 155546863666 | Asia BL2003 | ID,IN,TH,CN,KR,TR,VN,BD,PH,MY | 50K |
-| 8 | 156494841242 | Nova WL | ? | 30K |
-| 9 | 157331516553 | US/Global | US,PH,AU,KR,EG,PK,BD,UZ,SA,JP,PE,ZA,HU,SK,AR,KW | 50K |
-| 10 | 158323666240 | BR/PH Spotify | BR,PH | 30K |
-
-**Total Pretargeting QPS Cap:** 375K  
-**Actual Endpoint Limit:** 90K (this is the real bottleneck)
-
-### Endpoint Configuration
-
-| Location | URL | QPS Limit |
-|----------|-----|-----------|
-| US West | bidder.novabeyond.com | 10,000 |
-| Asia | bidder-sg.novabeyond.com | 30,000 |
-| US East | bidder-us.novabeyond.com | 50,000 |
+1. **Optimize QPS** - Eliminate 20-40% of wasted bid requests
+2. **Analyze creatives** - Sync and track creatives via Google RTB API
+3. **Track performance** - Import CSV data with strict validation
+4. **Detect fraud signals** - Flag suspicious patterns for human review
+5. **Run privately** - Everything runs on YOUR infrastructure
 
 ---
 
@@ -209,195 +30,483 @@ RTBcat is a **privacy-first platform** for DSPs and performance bidders to:
 - Node.js 18+
 - Google Service Account with Authorized Buyers API access
 
-### Backend Setup
+### Starting Services
 
 ```bash
-cd creative-intelligence
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+# 1. Check API is running (systemd service)
+sudo systemctl status catscan-api
+curl http://localhost:8000/health
 
-# Start API server
-python -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-### Frontend Setup
-
-```bash
+# 2. Start dashboard (manual)
 cd dashboard
-npm install
 npm run dev
+# Dashboard at http://localhost:3000
 ```
 
-### Access Points
+### Import Data
 
-- **Dashboard:** http://localhost:3000
-- **API Docs:** http://localhost:8000/docs
-- **API Health:** http://localhost:8000/health
-
-### Systemd Service (Production)
-
-```bash
-# Status
-sudo systemctl status rtbcat-api
-
-# Restart after code changes
-sudo systemctl restart rtbcat-api
-
-# Logs
-sudo journalctl -u rtbcat-api -f
-```
-
----
-
-## API Endpoints (Currently Implemented)
-
-### Creatives
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/creatives` | List all creatives with filters |
-| GET | `/creatives/{id}` | Get creative details |
-| POST | `/collect/sync` | Sync creatives from Google API |
-
-### Performance
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/performance/import` | Import performance metrics (JSON) |
-| POST | `/performance/import-csv` | Import performance CSV |
-| GET | `/performance/metrics/batch` | Get batch metrics |
-
-### Seats
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/seats` | List buyer seats |
-| POST | `/seats/discover` | Discover seats from Google API |
-| POST | `/seats/{buyer_id}/sync` | Sync creatives for seat |
-
-### Health
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | API health check |
-
-> **Note:** QPS optimization endpoints (`/qps/*`) are designed but not yet implemented. See Claude CLI prompts.
-
----
-
-## Google API Configuration
-
-### Current Setup
-
-| Configuration | Value |
-|--------------|-------|
-| Credentials Path | `~/.rtb-cat/credentials/google-credentials.json` |
-| Service Account | `rtb-cat-collector@creative-intel-api.iam.gserviceaccount.com` |
-| Google Cloud Project | `creative-intel-api` |
-| Bidder Account ID | `299038253` |
-| Account Name | Tuky Data Research Ltd. |
-
-### APIs Status
-
-| API | Status |
-|-----|--------|
-| Real-time Bidding API v1 | ✅ Working |
-| Creatives API | ✅ Working (653 creatives) |
-| Pretargeting API | ✅ Working (10 configs) |
-| Buyer Seats API | ❌ Error (AttributeError) |
-
-### Testing API Access
-
+**Option 1: CLI (recommended for large files)**
 ```bash
 cd creative-intelligence
 source venv/bin/activate
-python scripts/test_api_access.py
+
+python cli/qps_analyzer.py validate /path/to/export.csv
+python cli/qps_analyzer.py import /path/to/export.csv
+python cli/qps_analyzer.py full-report --days 7
+```
+
+**Option 2: Dashboard UI**
+1. Go to http://localhost:3000/import
+2. Drag and drop your CSV
+3. Supports chunked uploads for large files (100MB+)
+
+---
+
+## CSV Export Requirements
+
+Cat-Scan requires specific columns from your Authorized Buyers export. The importer will **reject** files missing required columns and show exactly how to fix it.
+
+### Required Columns
+
+| Column | Why Required |
+|--------|--------------|
+| **Day** | Time dimension for analysis |
+| **Creative ID** | Links to your creative inventory |
+| **Billing ID** | Identifies pretargeting config |
+| **Creative size** | QPS coverage analysis |
+| **Reached queries** | THE critical waste metric |
+| **Impressions** | Basic performance |
+
+### How to Configure Your Export
+
+```
+In Authorized Buyers:
+
+1. Go to Reports → Create Report
+
+2. Under DIMENSIONS, add:
+   • Day (under Time dimensions)
+   • Creative ID (under Demand dimensions)
+   • Billing ID (under Demand dimensions)
+   • Creative size (under Demand dimensions)
+   
+   Optional but recommended:
+   • Country
+   • Mobile app ID / Mobile app name
+   • Platform
+   • Environment (App/Web)
+
+3. Under METRICS, add:
+   • Reached queries (CRITICAL!)
+   • Impressions
+   • Clicks
+   • Spend (buyer currency)
+   
+   Optional:
+   • Video starts, Video completions
+   • Active view measurable/viewable
+   • VAST error count
+
+4. Click "Run Report" → Download as CSV
+
+5. Import via CLI or dashboard
+```
+
+### What Happens If Columns Are Missing
+
+```
+❌ VALIDATION FAILED
+
+Error: Missing required columns: reached_queries, billing_id
+
+============================================================
+HOW TO FIX YOUR CSV EXPORT
+============================================================
+
+In Authorized Buyers, go to Reports → Create Report
+
+1. Under DIMENSIONS, add:
+   • Billing ID
+
+2. Under METRICS, add:
+   • Reached queries
+
+3. Click 'Run Report' and download as CSV
+============================================================
+```
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    YOUR INFRASTRUCTURE                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │   QPS Optimization Module (Python)                      ││
+│  │   • CSV Validator (strict requirements)                 ││
+│  │   • Raw data storage (no aggregation at import)         ││
+│  │   • Size coverage analysis                              ││
+│  │   • Config performance tracking                         ││
+│  │   • Fraud signal detection                              ││
+│  └─────────────────────────────────────────────────────────┘│
+│                           │                                  │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │   Backend API (FastAPI, port 8000)                      ││
+│  │   • /qps/* endpoints for reports                        ││
+│  │   • /creatives/* for creative data                      ││
+│  │   • /performance/import-csv for uploads                 ││
+│  │   • Systemd service                                     ││
+│  └─────────────────────────────────────────────────────────┘│
+│                           │                                  │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │   Dashboard (Next.js, port 3000)                        ││
+│  │   • Creative browser                                    ││
+│  │   • CSV import interface (chunked upload support)       ││
+│  │   • Performance visualization                           ││
+│  └─────────────────────────────────────────────────────────┘│
+│                           │                                  │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │   Database (SQLite)                                     ││
+│  │   • performance_data (raw CSV rows)                     ││
+│  │   • creatives (synced from API)                         ││
+│  │   • fraud_signals, import_history                       ││
+│  └─────────────────────────────────────────────────────────┘│
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Database Schema
 
-### Current Tables (Implemented)
+### Main Table: `performance_data`
+
+Stores raw CSV data. One CSV row = one database row. No aggregation at import.
 
 ```sql
--- Creatives (653 rows)
-creatives (
-    id TEXT PRIMARY KEY,  -- Note: TEXT not INTEGER
-    name, format, account_id, buyer_id,
-    width, height, canonical_size, size_category,
-    approval_status, final_url, advertiser_name
-)
+-- Identity (all optional except date)
+metric_date DATE NOT NULL
+creative_id TEXT           -- Links to creatives.id
+billing_id TEXT            -- Pretargeting config
 
--- Performance metrics
-performance_metrics (
-    creative_id, metric_date, impressions, clicks,
-    spend_micros, geography, device_type, placement,
-    billing_account_id
-)
+-- Dimensions
+creative_size TEXT         -- "300x250", "Interstitial", "Video 9:16"
+creative_format TEXT       -- "Video", "Display"
+country TEXT               -- "Brazil", "India"
+platform TEXT              -- "High-end mobile devices"
+environment TEXT           -- "App", "Web"
+app_id TEXT                -- Package name: "com.spotify.music"
+app_name TEXT              -- "Spotify"
+publisher_id TEXT
+publisher_name TEXT
+publisher_domain TEXT
+deal_id TEXT
+deal_name TEXT
+transaction_type TEXT      -- "Open auction", "Private auction"
+advertiser TEXT
+buyer_account_id TEXT
+buyer_account_name TEXT
 
--- Import anomalies (fraud signals)
-import_anomalies (
-    id, creative_id, anomaly_type, severity,
-    message, raw_data, detected_at
-)
+-- Metrics
+reached_queries INTEGER    -- THE critical waste metric
+impressions INTEGER
+clicks INTEGER
+spend_micros INTEGER       -- 1,000,000 = $1.00
+video_starts INTEGER
+video_completions INTEGER
+vast_errors INTEGER
+active_view_measurable INTEGER
+active_view_viewable INTEGER
 
--- Geographies (51 pre-populated)
-geographies (code, name, region, is_active)
-
--- Apps, Publishers
-apps, publishers
+-- Deduplication & Tracking
+row_hash TEXT UNIQUE       -- Prevents duplicate rows
+import_batch_id TEXT
+imported_at TIMESTAMP
 ```
 
-### Tables To Be Created (After Running Prompts)
+### Supporting Tables
 
 ```sql
--- Pretargeting configs (after QPS prompt)
-pretargeting_configs (billing_id, name, geos, budget_daily, qps_limit)
+-- Your creative inventory (synced from Google RTB API)
+creatives (id, name, format, width, height, status, ...)
 
--- Size metrics daily (after QPS prompt)
-size_metrics_daily (metric_date, billing_id, creative_size, reached_queries, ...)
+-- Detected fraud patterns for human review
+fraud_signals (entity_type, entity_id, signal_type, signal_strength, evidence, status)
 
--- Fraud signals (after QPS prompt)
-fraud_signals (app_id, signal_type, signal_strength, evidence, status)
-
--- AI campaigns (after Phase 9 prompt)
-ai_campaigns (id, name, description, creative_ids, confidence_score)
+-- Track imports
+import_history (batch_id, filename, rows_imported, date_range, columns_found, ...)
 ```
+
+---
+
+## CLI Commands
+
+```bash
+cd creative-intelligence
+source venv/bin/activate
+
+# Validate CSV (check before importing)
+python cli/qps_analyzer.py validate ~/exports/bigquery.csv
+
+# Import CSV (validates first, then imports)
+python cli/qps_analyzer.py import ~/exports/bigquery.csv
+
+# View data summary
+python cli/qps_analyzer.py summary
+
+# Size coverage analysis
+python cli/qps_analyzer.py coverage --days 7
+
+# Config performance tracking
+python cli/qps_analyzer.py configs --days 7
+
+# Fraud signal detection
+python cli/qps_analyzer.py fraud --days 14
+
+# Get pretargeting include list
+python cli/qps_analyzer.py include-list
+
+# Full combined report
+python cli/qps_analyzer.py full-report --days 7 > qps_report.txt
+```
+
+---
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/qps/summary` | GET | Data summary statistics |
+| `/qps/size-coverage?days=N` | GET | Size coverage report |
+| `/qps/config-performance?days=N` | GET | Config performance report |
+| `/qps/fraud-signals?days=N` | GET | Fraud signals report |
+| `/qps/report?days=N` | GET | Full combined report |
+| `/qps/include-list` | GET | Pretargeting size list |
+| `/creatives` | GET | List all creatives |
+| `/creatives/{id}` | GET | Single creative details |
+| `/performance/import-csv` | POST | Import CSV (small files) |
+| `/performance/import/batch` | POST | Import CSV (chunked, large files) |
+
+### Example
+
+```bash
+curl http://localhost:8000/qps/summary | python -m json.tool
+curl "http://localhost:8000/qps/size-coverage?days=7"
+```
+
+---
+
+## Critical Domain Knowledge
+
+### Size Filtering is INCLUDE-ONLY
+
+```
+⚠️  IMPORTANT: Adding ONE size EXCLUDES ALL OTHERS!
+
+• Empty size list = Accept ALL sizes
+• Add "300x250" = ONLY 300x250 (all others EXCLUDED)
+• Add multiple sizes = Those sizes only (OR within list)
+
+There is NO "exclude" option!
+
+This is why we generate an INCLUDE list of sizes you CAN serve.
+Apply carefully and monitor for 24-48 hours.
+```
+
+### Google's 114 Available Sizes
+
+Only these sizes can be filtered in pretargeting. Sizes not in this list cannot be filtered. See `qps/constants.py` for the complete list.
+
+Common sizes: `300x250`, `320x50`, `728x90`, `160x600`, `300x600`  
+Special labels: `Interstitial`, `Video 9:16`, `Native`, `Rewarded`
+
+### Pretargeting Logic
+
+```
+All settings use AND with each other
+EXCEPT:
+  • Web/App targets use OR with each other
+  • Sizes within a list use OR with each other
+```
+
+---
+
+## Fraud & Anomaly Detection
+
+### Key Principle: Context Matters
+
+A single anomaly isn't proof of fraud. **Patterns over time** are what matter.
+
+```
+Single occurrence:  Could be timing, tracking glitch, edge case
+Repeated pattern:   Likely systematic issue (fraud, bots, bad inventory)
+```
+
+### Click Fraud Signals
+
+#### Clicks > Impressions
+
+| Frequency | Interpretation | Confidence |
+|-----------|----------------|------------|
+| Once | Timing issue - click registered after daily cutoff | Low |
+| Occasionally | Tracking discrepancy between systems | Low |
+| Frequently (same app) | Click injection / click fraud | High 🚨 |
+| Always (specific app) | Definitely fraudulent app | Very High 🚨 |
+
+**Why it happens legitimately:**
+- Impression counted at 11:59 PM, click at 12:01 AM → different days
+- Different tracking pixels with different latencies
+- Viewability filtering removed impression but click still counted
+
+**Why it indicates fraud:**
+- App injects fake clicks without ever showing the ad
+- Malware clicking in background
+- Click farms
+
+#### Abnormal CTR
+
+| CTR Range | Interpretation |
+|-----------|----------------|
+| < 1% | Normal for most display/video |
+| 1-3% | Good performance |
+| Very high | Investigate - could be excellent targeting OR fraud |
+
+**Note:** CTR thresholds vary by campaign, creative type, and targeting. Don't apply rigid rules without sufficient data. What's suspicious for one campaign may be normal for another.
+
+**Industry rough benchmarks (for reference only):**
+- Display ads: 0.1% - 0.5% typical
+- Video ads: 0.5% - 2% typical
+- Native ads: 0.5% - 1.5% typical
+- Retargeting: Can be higher
+
+### Bot Traffic Signals
+
+#### High Impressions, Zero Clicks (Over Time)
+
+| Timeframe | 0 Clicks | Interpretation |
+|-----------|----------|----------------|
+| 1 day | Normal | Users might not engage that day |
+| 3 days | Watch | Could be bad creative or placement |
+| 7+ days | Suspicious | Likely bot traffic 🚨 |
+| 30+ days, thousands of imps | Definite bots | 99% bot farm 🚨 |
+
+**Why it indicates bots:**
+- Bots "view" ads to generate impression revenue for publishers
+- Bots don't click (clicking would be too obvious/traceable)
+- Real humans occasionally click, even on bad ads
+
+#### Perfect Metrics (Too Consistent)
+
+Real traffic has variance. Bot traffic is often suspiciously consistent.
+
+| Signal | Why It's Suspicious |
+|--------|---------------------|
+| Exactly same impressions every hour | Bots running on schedule |
+| CTR exactly 1.00% or 2.00% | Configured bot behavior |
+| No weekend/weekday variance | Real users have patterns |
+| Same impressions across all geos | Real traffic varies by region |
+
+### Video-Specific Fraud Signals
+
+#### High Starts, Zero Completions
+
+| Start/Complete Ratio | Interpretation |
+|---------------------|----------------|
+| 30-50% completion | Normal for skippable video |
+| 70-90% completion | Normal for non-skippable |
+| < 10% completion | Suspicious - auto-skip or hidden player 🚨 |
+| 0% completion (many starts) | Fraud - video never plays 🚨 |
+
+#### High VAST Errors
+
+| VAST Error Rate | Interpretation |
+|-----------------|----------------|
+| < 5% | Normal |
+| 5-15% | Technical issues |
+| > 15% | Suspicious inventory 🚨 |
+| > 30% | Likely fraud 🚨 |
+
+### App Quality Tiers
+
+Based on fraud score and performance:
+
+| Tier | Action |
+|------|--------|
+| **Premium** | Bid higher, good inventory |
+| **Standard** | Normal bidding |
+| **Watch** | Monitor closely |
+| **Suspicious** | Reduce bids or pause |
+| **Fraud** | Block from bidding |
+
+### Key Takeaways
+
+1. **One anomaly ≠ fraud** - Look for patterns over time
+2. **Context matters** - What's fraud for one campaign might be normal for another
+3. **Both extremes are signals** - Too many clicks AND too few clicks can indicate fraud
+4. **Real traffic has variance** - Perfect consistency is suspicious
+5. **Campaign-specific analysis** - Always analyze within campaign context
+
+---
+
+## Endpoint Configuration
+
+Configure your bidder endpoints in `qps/constants.py`:
+
+```python
+ENDPOINTS = [
+    {"name": "Region 1", "url": "your-bidder-url-1", "qps_limit": 10000},
+    {"name": "Region 2", "url": "your-bidder-url-2", "qps_limit": 30000},
+    {"name": "Region 3", "url": "your-bidder-url-3", "qps_limit": 50000},
+]
+```
+
+**Note:** Your pretargeting QPS caps may exceed your actual endpoint capacity. The endpoint limit is typically the real bottleneck.
 
 ---
 
 ## Project Structure
 
 ```
-rtbcat-platform/
+catscan-platform/
 ├── creative-intelligence/          # Python backend
-│   ├── api/                        # FastAPI application
-│   │   ├── main.py                 # API endpoints
-│   │   └── performance.py          # Performance endpoints
+│   ├── qps/                        # QPS Optimization Module
+│   │   ├── __init__.py             # Exports all components
+│   │   ├── constants.py            # Google sizes, billing IDs, endpoints
+│   │   ├── models.py               # Data classes
+│   │   ├── importer.py             # CSV validator + importer
+│   │   ├── size_analyzer.py        # Size coverage analysis
+│   │   ├── config_tracker.py       # Config performance tracking
+│   │   └── fraud_detector.py       # Fraud signal detection
+│   ├── cli/
+│   │   └── qps_analyzer.py         # CLI tool
+│   ├── api/
+│   │   └── main.py                 # FastAPI endpoints
 │   ├── collectors/                 # Google API clients
 │   │   ├── base.py                 # Base client with auth
 │   │   ├── creatives/              # Creatives client
-│   │   ├── pretargeting/           # Pretargeting client
-│   │   └── seats.py                # Buyer seats client
-│   ├── storage/                    # Database layer
-│   │   └── sqlite_store.py         # SQLite backend
-│   ├── scripts/                    # CLI tools
-│   │   └── test_api_access.py      # API verification
-│   └── config/                     # Configuration
-│       └── config_manager.py       # Encrypted config
+│   │   └── pretargeting/           # Pretargeting client
+│   ├── storage/
+│   │   ├── sqlite_store.py         # SQLite backend
+│   │   └── migrations/             # SQL migrations
+│   ├── scripts/
+│   │   └── reset_database.py       # Database reset utility
+│   └── config/
+│       └── settings.py             # Configuration
 │
-├── dashboard/                      # Next.js 14 frontend
+├── dashboard/                      # Next.js frontend
 │   ├── src/
-│   │   ├── app/                    # Pages (import, creatives, etc.)
+│   │   ├── app/                    # Pages
+│   │   │   ├── import/             # CSV import
+│   │   │   └── creatives/          # Creative browser
 │   │   ├── components/             # React components
 │   │   └── lib/                    # API client, validators
 │   └── package.json
 │
 └── docs/                           # Documentation
-    ├── RTBcat_Handover_v9.md       # Full handover doc
-    └── CLAUDE_CLI_*.md             # Implementation prompts
 ```
 
 ---
@@ -411,8 +520,49 @@ rtbcat-platform/
 | Frontend | Next.js 14, React, Tailwind CSS |
 | AI (planned) | Claude (Anthropic) |
 | Charts | Recharts |
-| Data Fetching | TanStack React Query |
-| Google APIs | google-api-python-client, google-auth |
+| Google APIs | google-api-python-client |
+
+---
+
+## Troubleshooting
+
+### API Not Running
+
+```bash
+sudo systemctl status catscan-api
+sudo systemctl restart catscan-api
+journalctl -u catscan-api -f  # View logs
+```
+
+### Port Already in Use
+
+```bash
+sudo lsof -ti:8000 | xargs -r sudo kill -9
+sudo systemctl restart catscan-api
+```
+
+### Database Issues
+
+```bash
+# Check database
+sqlite3 ~/.catscan/catscan.db "SELECT COUNT(*) FROM creatives;"
+sqlite3 ~/.catscan/catscan.db "SELECT COUNT(*) FROM performance_data;"
+
+# Reset if needed (backup first!)
+python scripts/reset_database.py
+```
+
+### CSV Import Fails
+
+```bash
+# Validate first to see what's wrong
+python cli/qps_analyzer.py validate /path/to/file.csv
+
+# Common issues:
+# - Missing required columns → Follow fix instructions shown
+# - Wrong date format → Should be MM/DD/YYYY or MM/DD/YY
+# - Empty Creative ID → Filter these out of your export
+```
 
 ---
 
@@ -423,94 +573,32 @@ rtbcat-platform/
 | Phase | Feature |
 |-------|---------|
 | 1-6 | Creative Management, Dashboard, Smart URLs |
-| 8.1 | Backend Performance API |
-| 8.2 | Performance UI (sort, badges, tier filter) |
-| 8.3 | CSV Import UI (drag/drop, preview, validation) |
-| 8.4 | Large Files & Schema Fix (UPSERT, normalization) |
+| 8.1-8.4 | Performance API, Import UI, Large Files |
+| 9.5 | QPS Optimization (CLI + API) |
+| 9.6 | Unified Data Architecture |
 
 ### Ready to Implement 📋
 
-| Phase | Feature | Prompt File |
-|-------|---------|-------------|
+| Phase | Feature | Prompt |
+|-------|---------|--------|
 | 8.5 | Seat Hierarchy Fix | `CODEX_PROMPT_Phase8.5_Seat_Hierarchy.md` |
-| 9 | AI Campaign Clustering | `CODEX_PROMPT_Phase9_AI_Clustering.md` |
-| 9.5 | QPS Optimization | `CLAUDE_CLI_QPS_Optimization_Analyzer_v2.md` |
+| 9.0 | AI Campaign Clustering | `CODEX_PROMPT_Phase9_AI_Clustering.md` |
 
-### Planned 📝
+### Known Issues
 
-| Phase | Feature |
-|-------|---------|
-| 10 | Thumbnail Generation |
-| 11 | Opportunity Intelligence |
-
----
-
-## CSV Import Format
-
-### Performance Metrics (BigQuery Export)
-
-The importer handles Google's BigQuery CSV format with 46 columns including:
-
-| Column | Description |
-|--------|-------------|
-| `#Day` | Date (MM/DD/YYYY) |
-| `Creative ID` | Maps to creative_id |
-| `Billing ID` | Maps to pretargeting config |
-| `Creative size` | e.g., "300x250", "Video 9:16" |
-| `Reached queries` | QPS that matched pretargeting |
-| `Impressions` | Successful deliveries |
-| `Clicks` | User clicks |
-| `Spend _buyer currency_` | Spend in dollars |
-
----
-
-## Troubleshooting
-
-### "PERMISSION_DENIED" from Google API
-
-1. Verify service account is authorized in Authorized Buyers UI
-2. Check Real-time Bidding API is enabled in Google Cloud Console
-3. Verify account ID is correct
-
-### Port 8000 already in use
-
-```bash
-sudo lsof -ti:8000 | xargs -r sudo kill -9
-sudo systemctl restart rtbcat-api
-```
-
-### Database errors
-
-```bash
-# Check database exists
-ls -la ~/.rtbcat/rtbcat.db
-
-# Quick verification
-sqlite3 ~/.rtbcat/rtbcat.db "SELECT COUNT(*) FROM creatives;"
-# Expected: 653
-```
-
----
-
-## Next Steps for New Engineer
-
-1. **Read the handover doc:** `RTBcat_Handover_v9.md`
-2. **Implement QPS Optimization:** Run `CLAUDE_CLI_QPS_Optimization_Analyzer_v2.md`
-3. **Import real CSV data** and generate first reports
-4. **Fix seat dropdown:** Run `CODEX_PROMPT_Phase8.5_Seat_Hierarchy.md`
-5. **Implement AI clustering:** Run `CODEX_PROMPT_Phase9_AI_Clustering.md`
+| Issue | Status |
+|-------|--------|
+| Seat dropdown shows 0 creatives | Open |
 
 ---
 
 ## Support
 
-- **Developer:** Jen (jen@rtb.cat)
-- **Repository:** `/home/jen/Documents/rtbcat-platform/`
-- **Database:** `~/.rtbcat/rtbcat.db`
 - **API Docs:** http://localhost:8000/docs
 
 ---
 
-**Last Updated:** December 1, 2025  
-**Version:** 9.0 (QPS Optimization Designed)  
-**Next Milestone:** Implement QPS Optimization Analyzer
+**Next Steps:**
+1. Import your BigQuery CSV (CLI or dashboard)
+2. Generate QPS report
+3. Review recommendations with AdOps
