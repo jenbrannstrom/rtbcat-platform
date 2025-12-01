@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RTBcat QPS Analyzer CLI - Unified Data Architecture
+"""Cat-Scan QPS Analyzer CLI - Unified Data Architecture
 
 Command-line tool for QPS optimization analysis:
 - Validate and import BigQuery CSV exports
@@ -213,7 +213,7 @@ def cmd_full_report(args):
 
     print()
     print("=" * 80)
-    print("RTBcat QPS OPTIMIZATION FULL REPORT")
+    print("Cat-Scan QPS OPTIMIZATION FULL REPORT")
     print("=" * 80)
     print()
     print(f"Account: {ACCOUNT_NAME} (ID: {ACCOUNT_ID})")
@@ -299,7 +299,7 @@ def cmd_help(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="RTBcat QPS Optimization Analyzer",
+        description="Cat-Scan QPS Optimization Analyzer",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

@@ -26,7 +26,7 @@ from qps.models import CreativeSizeInfo, SizeCoverageResult
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.expanduser("~/.rtbcat/rtbcat.db")
+DB_PATH = os.path.expanduser("~/.catscan/catscan.db")
 
 
 @dataclass

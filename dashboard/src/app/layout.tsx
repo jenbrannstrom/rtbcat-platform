@@ -8,7 +8,7 @@ import { Sidebar } from "@/components/sidebar";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "RTBcat Dashboard",
+  title: "Cat-Scan Dashboard",
   description: "Creative Intelligence for Authorized Buyers",
 };
 

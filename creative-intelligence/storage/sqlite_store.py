@@ -6,7 +6,7 @@ campaigns, and clustering results.
 Example:
     >>> from storage import SQLiteStore
     >>>
-    >>> store = SQLiteStore(db_path="~/.rtbcat/rtbcat.db")
+    >>> store = SQLiteStore(db_path="~/.catscan/catscan.db")
     >>> await store.initialize()
     >>>
     >>> # Save creatives
@@ -512,7 +512,7 @@ class SQLiteStore:
         "CREATE INDEX IF NOT EXISTS idx_anomalies_import ON import_anomalies(import_id)",
     ]
 
-    def __init__(self, db_path: str | Path = "~/.rtbcat/rtbcat.db") -> None:
+    def __init__(self, db_path: str | Path = "~/.catscan/catscan.db") -> None:
         """Initialize the SQLite store.
 
         Args:

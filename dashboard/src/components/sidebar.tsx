@@ -120,27 +120,69 @@ export function Sidebar() {
       <div className="flex items-center h-16 px-4 border-b border-gray-200">
         <img
           src="/cat-scanning-stats.webp"
-          alt="RTBcat"
+          alt="Cat-Scan"
           className="h-10 w-10 rounded-lg flex-shrink-0"
         />
         {!collapsed && (
-          <span className="ml-3 text-xl font-bold text-primary-600">RTBcat</span>
+          <span className="ml-3 text-xl font-bold text-primary-600">Cat-Scan</span>
         )}
       </div>
 
-      {/* Seat Selector */}
+      {/* Seat Selector - Conditional based on seat count */}
       <div className={cn("border-b border-gray-200", collapsed ? "px-2 py-2" : "px-4 py-3")}>
         {collapsed ? (
-          <button
-            onClick={() => !collapsed && setSeatDropdownOpen(!seatDropdownOpen)}
-            className="w-full p-2 rounded-md hover:bg-gray-50"
-            title={selectedSeat?.display_name || "All Seats"}
+          /* Collapsed view - show icon */
+          <div
+            className="w-full p-2 rounded-md"
+            title={seats?.length === 1 ? seats[0].display_name || `Buyer ${seats[0].buyer_id}` : "Seats"}
           >
             <div className="h-6 w-6 mx-auto rounded-full bg-primary-100 flex items-center justify-center text-xs font-medium text-primary-700">
-              {selectedSeat ? selectedSeat.display_name?.charAt(0) || "S" : "A"}
+              {seats?.length === 1 ? (seats[0].display_name?.charAt(0) || "S") : (seats?.length || 0)}
             </div>
-          </button>
+          </div>
+        ) : !seats || seats.length === 0 ? (
+          /* No seats - show connect message */
+          <div className="text-sm text-gray-500 text-center py-2">
+            <p className="font-medium text-gray-700">No seats connected</p>
+            <p className="text-xs mt-1">Go to Settings to connect</p>
+          </div>
+        ) : seats.length === 1 ? (
+          /* Single seat - show as title with sync button */
+          <div>
+            <div className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-sm text-gray-700 truncate">
+                  {seats[0].display_name || `Buyer ${seats[0].buyer_id}`}
+                </div>
+                <div className="text-xs text-gray-500">
+                  {seats[0].creative_count} creatives
+                </div>
+              </div>
+              <button
+                onClick={() => syncMutation.mutate(seats[0].buyer_id)}
+                disabled={syncMutation.isPending}
+                className={cn(
+                  "p-1.5 rounded-md text-gray-500 hover:text-primary-600 hover:bg-primary-50",
+                  "disabled:opacity-50 flex-shrink-0"
+                )}
+                title="Sync creatives"
+              >
+                <RefreshCw className={cn("h-4 w-4", syncMutation.isPending && "animate-spin")} />
+              </button>
+            </div>
+
+            {syncMessage && (
+              <div className={cn(
+                "mt-2 px-2 py-1 rounded text-xs flex items-center gap-1",
+                syncMessage.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+              )}>
+                {syncMessage.type === "success" ? <Check className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                {syncMessage.text}
+              </div>
+            )}
+          </div>
         ) : (
+          /* Multiple seats - show dropdown */
           <div className="relative">
             <button
               onClick={() => setSeatDropdownOpen(!seatDropdownOpen)}
