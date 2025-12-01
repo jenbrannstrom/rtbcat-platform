@@ -1,0 +1,136 @@
+
+================================================================================
+RTBcat QPS OPTIMIZATION REPORT
+================================================================================
+
+Account: Tuky Data Research Ltd. (ID: 299038253)
+Generated: 2025-12-01T13:37:15.015158+00:00
+
+================================================================================
+SIZE COVERAGE REPORT
+================================================================================
+
+Generated: 2025-12-01T13:37:15.056439+00:00
+
+YOUR CREATIVE INVENTORY:
+  Total creatives: 639
+  Unique sizes: 12
+
+  Sizes you have creatives for:
+    Video 9:16 (Vertical): 505 creatives (VIDEO:505)
+    Adaptive/Fluid: 37 creatives (NATIVE:37)
+    Non-Standard (320x480): 32 creatives (VIDEO:32)
+    Non-Standard (360x730): 20 creatives (VIDEO:20)
+    Non-Standard (412x828): 17 creatives (VIDEO:17)
+    300x250 (Medium Rectangle): 9 creatives (VIDEO:9)
+    320x50 (Mobile Banner): 6 creatives (HTML:6)
+    Video 4:5 (Portrait): 5 creatives (VIDEO:5)
+    Non-Standard (630x920): 3 creatives (VIDEO:3)
+    Non-Standard (320x140): 2 creatives (VIDEO:2)
+    Non-Standard (480x320): 2 creatives (VIDEO:2)
+    Non-Standard (1200x627): 1 creatives (VIDEO:1)
+
+TRAFFIC DATA: Not available
+  To get traffic data, import CSV or enable RTB Troubleshooting API
+
+RECOMMENDED PRETARGETING SIZE LIST:
+  (Add these to your pretargeting config to reduce waste)
+
+    Video 9:16 (Vertical)
+    Non-Standard (320x480)
+    Non-Standard (360x730)
+    Non-Standard (412x828)
+    320x50 (Mobile Banner)
+    Non-Standard (320x140)
+    300x250 (Medium Rectangle)
+    Non-Standard (480x320)
+    Non-Standard (1200x627)
+    Adaptive/Fluid
+    Non-Standard (630x920)
+    Video 4:5 (Portrait)
+
+  WARNING: Once you add ANY size, all other sizes are EXCLUDED
+
+================================================================================
+
+================================================================================
+CONFIG PERFORMANCE REPORT (last 7 days)
+================================================================================
+
+Generated: 2025-12-01T13:37:15.056924+00:00
+
+Total Reached Queries: 0
+Total Impressions: 0
+Total Spend: $0.00
+Average Efficiency: 0.0%
+
+--------------------------------------------------------------------------------
+Billing ID      Name                 Reached      Impr         Eff%     Issues
+--------------------------------------------------------------------------------
+72245759413     Africa/Asia          0            0            0.0      No data
+83435423204     ID/BR Android        0            0            0.0      No data
+104602012074    MENA iOS&AND         0            0            0.0      No data
+137175951277    SEA Whitelist        0            0            0.0      No data
+151274651962    USEast CA/MX         0            0            0.0      No data
+153322387893    Brazil AND           0            0            0.0      No data
+155546863666    Asia BL2003          0            0            0.0      No data
+156494841242    Nova WL              0            0            0.0      No data
+157331516553    US/Global            0            0            0.0      No data
+158323666240    BR/PH Spotify        0            0            0.0      No data
+
+INVESTIGATION NEEDED:
+  Config 72245759413 (Africa/Asia)
+    - Efficiency: 0.0% (below 60% threshold)
+    - Possible causes: size mismatch, poor inventory, pretargeting too broad
+  Config 83435423204 (ID/BR Android)
+    - Efficiency: 0.0% (below 60% threshold)
+    - Possible causes: size mismatch, poor inventory, pretargeting too broad
+  Config 104602012074 (MENA iOS&AND)
+    - Efficiency: 0.0% (below 60% threshold)
+    - Possible causes: size mismatch, poor inventory, pretargeting too broad
+  Config 137175951277 (SEA Whitelist)
+    - Efficiency: 0.0% (below 60% threshold)
+    - Possible causes: size mismatch, poor inventory, pretargeting too broad
+  Config 151274651962 (USEast CA/MX)
+    - Efficiency: 0.0% (below 60% threshold)
+    - Possible causes: size mismatch, poor inventory, pretargeting too broad
+  Config 153322387893 (Brazil AND)
+    - Efficiency: 0.0% (below 60% threshold)
+    - Possible causes: size mismatch, poor inventory, pretargeting too broad
+  Config 155546863666 (Asia BL2003)
+    - Efficiency: 0.0% (below 60% threshold)
+    - Possible causes: size mismatch, poor inventory, pretargeting too broad
+  Config 156494841242 (Nova WL)
+    - Efficiency: 0.0% (below 60% threshold)
+    - Possible causes: size mismatch, poor inventory, pretargeting too broad
+  Config 157331516553 (US/Global)
+    - Efficiency: 0.0% (below 60% threshold)
+    - Possible causes: size mismatch, poor inventory, pretargeting too broad
+  Config 158323666240 (BR/PH Spotify)
+    - Efficiency: 0.0% (below 60% threshold)
+    - Possible causes: size mismatch, poor inventory, pretargeting too broad
+
+================================================================================
+
+================================================================================
+FRAUD SIGNALS (requires human review)
+================================================================================
+
+Generated: 2025-12-01T13:37:15.066688+00:00
+
+NOTE: These are patterns, not proof. Smart fraud mixes 70-80% real traffic
+with 20-30% fake. Single signals are not conclusive.
+
+Found 1 suspicious patterns:
+
+  APP: UNKNOWN
+    Signal: clicks_exceed_impressions
+    Strength: LOW
+    Detail: Clicks exceeded impressions on 2 of 14 days
+    Recommendation: Flag for review, possible click injection attack
+
+================================================================================
+
+================================================================================
+END OF REPORT
+================================================================================

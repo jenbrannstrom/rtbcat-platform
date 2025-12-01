@@ -1,0 +1,18 @@
+================================================================================
+FRAUD SIGNALS (requires human review)
+================================================================================
+
+Generated: 2025-12-01T13:37:15.104226+00:00
+
+NOTE: These are patterns, not proof. Smart fraud mixes 70-80% real traffic
+with 20-30% fake. Single signals are not conclusive.
+
+Found 1 suspicious patterns:
+
+  APP: UNKNOWN
+    Signal: clicks_exceed_impressions
+    Strength: LOW
+    Detail: Clicks exceeded impressions on 2 of 14 days
+    Recommendation: Flag for review, possible click injection attack
+
+================================================================================
