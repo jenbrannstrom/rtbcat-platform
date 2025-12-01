@@ -11,8 +11,12 @@ from typing import Optional
 
 import csv
 import io
+import tempfile
+import os
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, UploadFile, File
+
+from qps.importer import validate_csv, import_csv
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -1254,211 +1258,262 @@ async def generate_mock_traffic_endpoint(
         )
 
 
-# QPS Optimization endpoints
+# ============================================================================
+# QPS Optimization Endpoints (using new qps module)
+# ============================================================================
+
+from datetime import datetime, timezone
+from qps import (
+    import_bigquery_csv,
+    get_import_summary,
+    SizeCoverageAnalyzer,
+    ConfigPerformanceTracker,
+    FraudSignalDetector,
+    ACCOUNT_ID,
+    ACCOUNT_NAME,
+)
+
+
+class QPSImportResponse(BaseModel):
+    """Response for QPS CSV import."""
+
+    status: str
+    rows_read: int
+    rows_imported: int
+    rows_skipped: int
+    date_range_start: Optional[str] = None
+    date_range_end: Optional[str] = None
+    sizes_found: int
+    billing_ids_found: list[str]
+    total_reached_queries: int
+    total_spend_usd: float
+    errors: list[str] = []
+
+
+class QPSSummaryResponse(BaseModel):
+    """Response for QPS data summary."""
+
+    total_rows: int
+    unique_dates: int
+    unique_billing_ids: int
+    unique_sizes: int
+    date_range: dict
+    total_reached_queries: int
+    total_impressions: int
+    total_spend_usd: float
 
 
 class QPSReportResponse(BaseModel):
-    """Response model for full QPS optimization report."""
+    """Response for QPS report (plain text)."""
 
-    report_text: str
+    report: str
     generated_at: str
+    analysis_days: int
 
 
-class SizeCoverageReportResponse(BaseModel):
-    """Response model for size coverage analysis."""
+@app.get("/qps/summary", response_model=QPSSummaryResponse, tags=["QPS Optimization"])
+async def get_qps_summary():
+    """
+    Get summary of imported QPS data.
 
-    total_creatives: int
-    total_sizes_with_creatives: int
-    total_sizes_in_traffic: int
-    overall_match_rate: float
-    sizes_we_can_serve: list[str]
-    sizes_we_cannot_serve: list[str]
-    recommended_include_list: list[str]
-    opportunity_sizes: list[dict]
-    report_text: str
-    generated_at: str
-
-
-class ConfigPerformanceResponse(BaseModel):
-    """Response model for config performance analysis."""
-
-    total_reached: int
-    total_impressions: int
-    total_spend: float
-    average_efficiency: float
-    configs: list[dict]
-    report_text: str
-    generated_at: str
+    Returns counts of rows, dates, sizes, and totals from size_metrics_daily.
+    """
+    try:
+        summary = get_import_summary()
+        return QPSSummaryResponse(
+            total_rows=summary["total_rows"],
+            unique_dates=summary["unique_dates"],
+            unique_billing_ids=summary["unique_billing_ids"],
+            unique_sizes=summary["unique_sizes"],
+            date_range=summary["date_range"],
+            total_reached_queries=summary["total_reached_queries"],
+            total_impressions=summary["total_impressions"],
+            total_spend_usd=summary["total_spend_usd"],
+        )
+    except Exception as e:
+        logger.error(f"Failed to get QPS summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-class FraudSignalResponse(BaseModel):
-    """Response model for fraud signal detection."""
+@app.get("/qps/size-coverage", response_model=QPSReportResponse, tags=["QPS Optimization"])
+async def get_size_coverage_report(days: int = Query(7, ge=1, le=90)):
+    """
+    Get size coverage analysis report.
 
-    total_suspicious_apps: int
-    total_suspicious_publishers: int
-    signals: list[dict]
-    report_text: str
-    generated_at: str
+    Compares your creative inventory against received traffic to identify:
+    - Sizes you can serve
+    - Sizes you cannot serve (waste)
+    - Recommended pretargeting include list
+
+    Args:
+        days: Number of days to analyze (default: 7)
+    """
+    try:
+        analyzer = SizeCoverageAnalyzer()
+        report_text = analyzer.generate_report(days)
+
+        return QPSReportResponse(
+            report=report_text,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            analysis_days=days,
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate size coverage: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/qps/config-performance", response_model=QPSReportResponse, tags=["QPS Optimization"])
+async def get_config_performance_report(days: int = Query(7, ge=1, le=90)):
+    """
+    Get pretargeting config performance report.
+
+    Compares efficiency across your 10 pretargeting configs to identify
+    configs needing investigation.
+
+    Args:
+        days: Number of days to analyze (default: 7)
+    """
+    try:
+        tracker = ConfigPerformanceTracker()
+        report_text = tracker.generate_report(days)
+
+        return QPSReportResponse(
+            report=report_text,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            analysis_days=days,
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate config performance: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/qps/fraud-signals", response_model=QPSReportResponse, tags=["QPS Optimization"])
+async def get_fraud_signals_report(days: int = Query(14, ge=1, le=90)):
+    """
+    Get fraud signals report.
+
+    Detects suspicious patterns for human review:
+    - Unusually high CTR
+    - Clicks exceeding impressions
+
+    These are PATTERNS, not proof of fraud. All signals require human review.
+
+    Args:
+        days: Number of days to analyze (default: 14)
+    """
+    try:
+        detector = FraudSignalDetector()
+        report_text = detector.generate_report(days)
+
+        return QPSReportResponse(
+            report=report_text,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            analysis_days=days,
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate fraud signals: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/qps/report", response_model=QPSReportResponse, tags=["QPS Optimization"])
-async def get_qps_report(
-    store: SQLiteStore = Depends(get_store),
-):
-    """Get full QPS optimization report as human-readable text.
-
-    Generates a comprehensive report combining:
-    - Size Coverage Analysis (Module 1)
-    - Config Performance Tracking (Module 2)
-    - Fraud Signal Detection (Module 3)
-
-    The report is designed to be printed or shared with AdOps teams.
+async def get_full_qps_report(days: int = Query(7, ge=1, le=90)):
     """
-    from analytics import QPSOptimizer
+    Get comprehensive QPS optimization report.
 
+    Combines all analysis modules:
+    1. Size Coverage Analysis
+    2. Config Performance Tracking
+    3. Fraud Signal Detection
+
+    Args:
+        days: Number of days to analyze (default: 7)
+    """
     try:
-        optimizer = QPSOptimizer(store)
-        report_text = await optimizer.generate_full_report()
+        lines = []
+        lines.append("")
+        lines.append("=" * 80)
+        lines.append("RTBcat QPS OPTIMIZATION FULL REPORT")
+        lines.append("=" * 80)
+        lines.append("")
+        lines.append(f"Account: {ACCOUNT_NAME} (ID: {ACCOUNT_ID})")
+        lines.append(f"Generated: {datetime.now(timezone.utc).isoformat()}")
+        lines.append(f"Analysis Period: {days} days")
+        lines.append("")
 
-        from datetime import datetime, timezone
+        # Size Coverage
+        try:
+            analyzer = SizeCoverageAnalyzer()
+            lines.append(analyzer.generate_report(days))
+            lines.append("")
+        except Exception as e:
+            lines.append(f"Size Coverage: Error - {e}")
+            lines.append("")
+
+        # Config Performance
+        try:
+            tracker = ConfigPerformanceTracker()
+            lines.append(tracker.generate_report(days))
+            lines.append("")
+        except Exception as e:
+            lines.append(f"Config Performance: Error - {e}")
+            lines.append("")
+
+        # Fraud Signals
+        try:
+            detector = FraudSignalDetector()
+            lines.append(detector.generate_report(days * 2))
+            lines.append("")
+        except Exception as e:
+            lines.append(f"Fraud Signals: Error - {e}")
+            lines.append("")
+
+        lines.append("=" * 80)
+        lines.append("END OF FULL REPORT")
+        lines.append("=" * 80)
+
+        report_text = "\n".join(lines)
+
         return QPSReportResponse(
-            report_text=report_text,
+            report=report_text,
             generated_at=datetime.now(timezone.utc).isoformat(),
+            analysis_days=days,
         )
-
     except Exception as e:
-        logger.error(f"QPS report generation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"QPS report generation failed: {str(e)}")
+        logger.error(f"Failed to generate full report: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/qps/size-coverage", response_model=SizeCoverageReportResponse, tags=["QPS Optimization"])
-async def get_qps_size_coverage(
-    store: SQLiteStore = Depends(get_store),
-):
-    """Get size coverage analysis report.
-
-    Module 1 from QPS Optimization Strategy - analyzes:
-    - What sizes you have creatives for
-    - What sizes you're receiving traffic for (if data available)
-    - Match rate (% of traffic you can serve)
-    - Recommended pretargeting include list
-    - Opportunity sizes worth creating creatives for
+@app.get("/qps/include-list", tags=["QPS Optimization"])
+async def get_include_list():
     """
-    from analytics import QPSOptimizer
+    Get recommended pretargeting include list.
 
-    try:
-        optimizer = QPSOptimizer(store)
-        report = await optimizer.generate_size_coverage_report()
+    Returns sizes that:
+    1. You have creatives for
+    2. Are in Google's 114-size pretargeting list
 
-        return SizeCoverageReportResponse(
-            total_creatives=report.total_creatives,
-            total_sizes_with_creatives=report.total_sizes_with_creatives,
-            total_sizes_in_traffic=report.total_sizes_in_traffic,
-            overall_match_rate=report.overall_match_rate,
-            sizes_we_can_serve=report.sizes_we_can_serve,
-            sizes_we_cannot_serve=report.sizes_we_cannot_serve,
-            recommended_include_list=report.recommended_include_list,
-            opportunity_sizes=report.opportunity_sizes,
-            report_text=report.to_printout(),
-            generated_at=report.generated_at,
-        )
-
-    except Exception as e:
-        logger.error(f"Size coverage analysis failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Size coverage analysis failed: {str(e)}")
-
-
-@app.get("/qps/config-performance", response_model=ConfigPerformanceResponse, tags=["QPS Optimization"])
-async def get_qps_config_performance(
-    store: SQLiteStore = Depends(get_store),
-):
-    """Get pretargeting config performance report.
-
-    Module 2 from QPS Optimization Strategy - analyzes:
-    - Performance by billing_id (pretargeting config)
-    - Reached queries, impressions, clicks, spend per config
-    - Efficiency (impression rate)
-    - Issues and investigation recommendations
-
-    Note: Requires performance metrics with billing_account_id populated.
+    WARNING: Adding these to pretargeting will EXCLUDE all other sizes!
     """
-    from analytics import QPSOptimizer
-
     try:
-        optimizer = QPSOptimizer(store)
-        report = await optimizer.generate_config_performance_report()
+        analyzer = SizeCoverageAnalyzer()
+        report = analyzer.analyze_coverage(days=7)
 
-        return ConfigPerformanceResponse(
-            total_reached=report.total_reached,
-            total_impressions=report.total_impressions,
-            total_spend=report.total_spend,
-            average_efficiency=report.average_efficiency,
-            configs=[
-                {
-                    "billing_id": c.billing_id,
-                    "display_name": c.display_name,
-                    "reached_queries": c.reached_queries,
-                    "impressions": c.impressions,
-                    "clicks": c.clicks,
-                    "spend": c.spend,
-                    "efficiency": c.efficiency,
-                    "issues": c.issues,
-                }
-                for c in report.configs
+        return {
+            "include_list": report.include_list,
+            "count": len(report.include_list),
+            "warning": "Adding these sizes will EXCLUDE all other sizes!",
+            "instructions": [
+                "Go to Authorized Buyers UI",
+                "Navigate to Bidder Settings -> Pretargeting",
+                "Edit the config you want to modify",
+                "Under 'Creative dimensions', add these sizes",
+                "Click Save",
+                "Monitor traffic for 24-48 hours",
             ],
-            report_text=report.to_printout(),
-            generated_at=report.generated_at,
-        )
-
+        }
     except Exception as e:
-        logger.error(f"Config performance analysis failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Config performance analysis failed: {str(e)}")
-
-
-@app.get("/qps/fraud-signals", response_model=FraudSignalResponse, tags=["QPS Optimization"])
-async def get_qps_fraud_signals(
-    days: int = Query(14, ge=1, le=90, description="Days of data to analyze"),
-    store: SQLiteStore = Depends(get_store),
-):
-    """Get fraud signal detection report.
-
-    Module 3 from QPS Optimization Strategy - detects suspicious patterns:
-    - Unusually high CTR (>3% when average is 0.5-1%)
-    - Clicks exceeding impressions (possible click injection)
-    - High impressions with zero conversions
-
-    These are patterns, not proof. Smart fraud mixes 70-80% real traffic
-    with 20-30% fake. Single signals are not conclusive.
-    """
-    from analytics import QPSOptimizer
-
-    try:
-        optimizer = QPSOptimizer(store)
-        report = await optimizer.generate_fraud_signal_report(days=days)
-
-        return FraudSignalResponse(
-            total_suspicious_apps=report.total_suspicious_apps,
-            total_suspicious_publishers=report.total_suspicious_publishers,
-            signals=[
-                {
-                    "entity_type": s.entity_type,
-                    "entity_id": s.entity_id,
-                    "entity_name": s.entity_name,
-                    "signal_type": s.signal_type,
-                    "signal_strength": s.signal_strength,
-                    "metrics": s.metrics,
-                    "recommendation": s.recommendation,
-                    "detail": s.detail,
-                }
-                for s in report.signals
-            ],
-            report_text=report.to_printout(),
-            generated_at=report.generated_at,
-        )
-
-    except Exception as e:
-        logger.error(f"Fraud signal detection failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Fraud signal detection failed: {str(e)}")
+        logger.error(f"Failed to get include list: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Performance Metrics endpoints
@@ -1673,252 +1728,109 @@ async def cleanup_old_performance_data(
 class CSVImportResult(BaseModel):
     """Result of CSV import operation."""
 
-    status: str
-    imported: int
-    skipped: int
-    errors: list[dict] = []
+    success: bool
+    batch_id: Optional[str] = None
+    rows_read: Optional[int] = None
+    rows_imported: Optional[int] = None
+    rows_duplicate: Optional[int] = None
+    rows_skipped: Optional[int] = None
+    date_range: Optional[dict] = None
+    unique_creatives: Optional[int] = None
+    unique_sizes: Optional[int] = None
+    unique_countries: Optional[int] = None
+    billing_ids: Optional[list[str]] = None
+    total_reached: Optional[int] = None
+    total_impressions: Optional[int] = None
+    total_spend_usd: Optional[float] = None
+    columns_imported: Optional[list[str]] = None
+    error: Optional[str] = None
+    fix_instructions: Optional[str] = None
+    columns_found: Optional[list[str]] = None
+    columns_mapped: Optional[dict] = None
+    required_missing: Optional[list[str]] = None
+    errors: Optional[list[str]] = None
 
 
 @app.post("/performance/import-csv", response_model=CSVImportResult, tags=["Performance"])
 async def import_performance_csv(
     file: UploadFile = File(..., description="CSV file with performance data"),
-    store: SQLiteStore = Depends(get_store),
 ):
-    """Import performance data from CSV file.
+    """Import performance data from Authorized Buyers CSV export.
 
-    CSV Format (columns):
-    - **creative_id** (required): Creative ID, must exist in database
-    - **date** (required): Date in YYYY-MM-DD format
-    - **impressions** (required): Integer >= 0
-    - **clicks** (required): Integer >= 0 and <= impressions
-    - **spend** (required): Decimal >= 0 (in USD, will be converted to micros)
-    - **geography** (optional): ISO country code (US, BR, IE, etc.)
-    - **device_type** (optional): MOBILE, DESKTOP, TABLET, CTV
-    - **hour** (optional): 0-23 for hourly data
-    - **placement** (optional): Site/app placement identifier
-    - **campaign_id** (optional): Campaign ID
+    Uses the unified importer which:
+    - Validates required columns (Day, Creative ID, Billing ID, Creative size, Reached queries, Impressions)
+    - Stores raw data in performance_data table
+    - Returns detailed import statistics
 
-    Example CSV:
-    ```
-    creative_id,date,impressions,clicks,spend,geography,device_type
-    79783,2025-11-29,10000,250,125.50,BR,MOBILE
-    79783,2025-11-28,8500,200,100.00,BR,DESKTOP
-    144634,2025-11-29,50000,800,200.00,US,MOBILE
-    ```
-
-    Duplicates are handled with UPSERT - existing records are updated.
+    If validation fails, returns fix instructions for BigQuery export configuration.
     """
     if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
 
+    tmp_path = None
     try:
-        from datetime import datetime
+        # Save uploaded file temporarily
+        with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp:
+            content = await file.read()
+            tmp.write(content)
+            tmp_path = tmp.name
 
-        # Read and parse CSV
-        contents = await file.read()
-        text = contents.decode("utf-8")
+        # Validate first
+        validation = validate_csv(tmp_path)
 
-        # Column name aliases for flexible matching (same as frontend)
-        COLUMN_ALIASES = {
-            'creative_id': ['creative_id', 'creativeid', '#creative id', '#creative_id', 'creative id', '#creativeid'],
-            'date': ['date', 'day', '#day', 'metric_date', '#date'],
-            'impressions': ['impressions', 'imps', '#impressions'],
-            'clicks': ['clicks', '#clicks'],
-            'spend': ['spend', 'spend (buyer currency)', 'spend_buyer_currency', 'cost', '#spend', 'spend (usd)', 'revenue'],
-            'geography': ['geography', 'country', 'geo', 'region', '#country'],
-            'device_type': ['device_type', 'device', 'platform', 'device type'],
-            'placement': ['placement', 'ad_slot', 'inventory'],
-            'campaign_id': ['campaign_id', 'campaign', 'line_item'],
-            'hour': ['hour', '#hour'],
-        }
-
-        def normalize_column_name(col: str) -> str:
-            """Convert any column name variant to standard name."""
-            col_lower = col.lower().strip()
-
-            for standard_name, aliases in COLUMN_ALIASES.items():
-                if col_lower in [a.lower() for a in aliases]:
-                    return standard_name
-
-            # Clean up common patterns
-            col_clean = col_lower.replace(' ', '_').replace('(', '').replace(')', '').replace('#', '')
-            for standard_name, aliases in COLUMN_ALIASES.items():
-                if col_clean in [a.lower().replace(' ', '_').replace('(', '').replace(')', '').replace('#', '') for a in aliases]:
-                    return standard_name
-
-            return col_lower  # Return as-is if no match
-
-        # Read CSV and normalize column names
-        raw_reader = csv.DictReader(io.StringIO(text))
-        if raw_reader.fieldnames is None:
-            raise HTTPException(status_code=400, detail="CSV file is empty or malformed")
-
-        # Create column mapping
-        column_map = {col: normalize_column_name(col) for col in raw_reader.fieldnames}
-        logger.info(f"Column mapping: {column_map}")
-
-        # Re-read with normalized column names
-        def normalize_row(row: dict) -> dict:
-            return {column_map.get(k, k): v for k, v in row.items()}
-
-        reader = csv.DictReader(io.StringIO(text))
-        normalized_rows = [normalize_row(row) for row in reader]
-
-        # Validate required columns (using normalized names)
-        required_columns = {"creative_id", "date", "impressions", "clicks", "spend"}
-        found_columns = set(column_map.values())
-
-        missing = required_columns - found_columns
-        if missing:
-            raise HTTPException(
-                status_code=400,
-                detail=f"CSV missing required columns: {', '.join(missing)}. Found: {', '.join(sorted(found_columns))}",
+        if not validation.is_valid:
+            # Return validation error with fix instructions
+            return CSVImportResult(
+                success=False,
+                error=validation.error_message,
+                fix_instructions=validation.get_fix_instructions(),
+                columns_found=validation.columns_found,
+                columns_mapped=validation.columns_mapped,
+                required_missing=validation.required_missing,
             )
 
-        # Parse records (using normalized rows)
-        metrics = []
-        errors = []
-        skipped = 0
-        anomaly_count = 0
+        # Import
+        result = import_csv(tmp_path)
 
-        for row_num, row in enumerate(normalized_rows, start=2):  # Start at 2 (after header)
-            try:
-                # Parse date - try multiple formats
-                date_str = row.get("date", "").strip()
-                metric_date = None
-                for fmt in ["%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%d/%m/%Y"]:
-                    try:
-                        metric_date = datetime.strptime(date_str, fmt).strftime("%Y-%m-%d")
-                        break
-                    except ValueError:
-                        continue
-                if metric_date is None:
-                    raise ValueError(f"Invalid date format: {date_str}")
-
-                # Parse numeric values - handle various formats
-                def parse_number(val, default=0):
-                    if not val:
-                        return default
-                    # Remove currency symbols, commas, whitespace
-                    cleaned = str(val).replace('$', '').replace(',', '').replace(' ', '').strip()
-                    try:
-                        return float(cleaned) if '.' in cleaned else int(cleaned)
-                    except ValueError:
-                        return default
-
-                impressions = int(parse_number(row.get("impressions", 0)))
-                clicks = int(parse_number(row.get("clicks", 0)))
-                spend_usd = float(parse_number(row.get("spend", 0)))
-
-                # Forgiving validation - fix negatives, don't reject clicks > impressions
-                if impressions < 0:
-                    impressions = 0  # Auto-fix
-                if clicks < 0:
-                    clicks = 0  # Auto-fix
-                if spend_usd < 0:
-                    spend_usd = 0  # Auto-fix
-
-                # Track anomalies but DON'T reject (forgiving validator philosophy)
-                if clicks > impressions:
-                    anomaly_count += 1  # Just count, don't raise error
-
-                # Convert spend to micros (USD * 1,000,000)
-                spend_micros = int(spend_usd * 1_000_000)
-
-                # Parse optional fields
-                geography_raw = row.get("geography", "").strip().upper() or None
-                device_type = row.get("device_type", "").strip().upper() or None
-                placement = row.get("placement", "").strip() or None
-                campaign_id = row.get("campaign_id", "").strip() or None
-
-                # Normalize geography - accept both ISO codes and full country names
-                # Common country name to ISO code mapping
-                COUNTRY_TO_ISO = {
-                    'INDIA': 'IN', 'UNITED STATES': 'US', 'USA': 'US', 'GERMANY': 'DE',
-                    'UNITED KINGDOM': 'GB', 'UK': 'GB', 'FRANCE': 'FR', 'SPAIN': 'ES',
-                    'ITALY': 'IT', 'CANADA': 'CA', 'AUSTRALIA': 'AU', 'BRAZIL': 'BR',
-                    'MEXICO': 'MX', 'JAPAN': 'JP', 'CHINA': 'CN', 'SOUTH KOREA': 'KR',
-                    'KOREA': 'KR', 'RUSSIA': 'RU', 'NETHERLANDS': 'NL', 'POLAND': 'PL',
-                    'TURKEY': 'TR', 'INDONESIA': 'ID', 'THAILAND': 'TH', 'VIETNAM': 'VN',
-                    'PHILIPPINES': 'PH', 'MALAYSIA': 'MY', 'SINGAPORE': 'SG', 'TAIWAN': 'TW',
-                    'HONG KONG': 'HK', 'PAKISTAN': 'PK', 'BANGLADESH': 'BD', 'EGYPT': 'EG',
-                    'SOUTH AFRICA': 'ZA', 'NIGERIA': 'NG', 'KENYA': 'KE', 'ARGENTINA': 'AR',
-                    'COLOMBIA': 'CO', 'CHILE': 'CL', 'PERU': 'PE', 'SAUDI ARABIA': 'SA',
-                    'UAE': 'AE', 'UNITED ARAB EMIRATES': 'AE', 'ISRAEL': 'IL', 'SWEDEN': 'SE',
-                    'NORWAY': 'NO', 'DENMARK': 'DK', 'FINLAND': 'FI', 'BELGIUM': 'BE',
-                    'AUSTRIA': 'AT', 'SWITZERLAND': 'CH', 'PORTUGAL': 'PT', 'GREECE': 'GR',
-                    'CZECH REPUBLIC': 'CZ', 'ROMANIA': 'RO', 'HUNGARY': 'HU', 'IRELAND': 'IE',
-                    'NEW ZEALAND': 'NZ', 'UKRAINE': 'UA',
-                }
-
-                geography = None
-                if geography_raw:
-                    if len(geography_raw) == 2:
-                        # Already an ISO code
-                        geography = geography_raw
-                    elif geography_raw in COUNTRY_TO_ISO:
-                        # Convert full name to ISO
-                        geography = COUNTRY_TO_ISO[geography_raw]
-                    else:
-                        # Unknown country - accept as-is (forgiving), truncate if needed
-                        geography = geography_raw[:50] if len(geography_raw) > 50 else geography_raw
-
-                # Normalize device_type (forgiving - map unknown values to UNKNOWN)
-                valid_device_types = {"MOBILE", "DESKTOP", "TABLET", "CTV", "UNKNOWN"}
-                if device_type and device_type not in valid_device_types:
-                    device_type = "UNKNOWN"  # Accept but normalize to UNKNOWN
-
-                # Parse hour if present (forgiving - ignore invalid values)
-                hour = None
-                if row.get("hour"):
-                    try:
-                        hour = int(row["hour"])
-                        if hour < 0 or hour > 23:
-                            hour = None  # Ignore out-of-range values
-                    except (ValueError, TypeError):
-                        hour = None  # Ignore unparseable values
-
-                metrics.append(
-                    PerformanceMetric(
-                        creative_id=row["creative_id"],
-                        metric_date=metric_date,
-                        impressions=impressions,
-                        clicks=clicks,
-                        spend_micros=spend_micros,
-                        campaign_id=campaign_id,
-                        geography=geography,
-                        device_type=device_type,
-                        placement=placement,
-                    )
-                )
-
-            except (ValueError, KeyError) as e:
-                errors.append({
-                    "row": row_num,
-                    "error": str(e),
-                    "data": dict(row),
-                })
-                skipped += 1
-                continue
-
-        if not metrics and not errors:
-            raise HTTPException(status_code=400, detail="No valid records found in CSV")
-
-        # Import metrics
-        imported = await store.save_performance_metrics(metrics)
+        if not result.success:
+            return CSVImportResult(
+                success=False,
+                error=result.error_message,
+                errors=result.errors,
+            )
 
         return CSVImportResult(
-            status="completed",
-            imported=imported,
-            skipped=skipped,
-            errors=errors[:50],  # Limit to first 50 errors
+            success=True,
+            batch_id=result.batch_id,
+            rows_read=result.rows_read,
+            rows_imported=result.rows_imported,
+            rows_duplicate=result.rows_duplicate,
+            rows_skipped=result.rows_skipped,
+            date_range={
+                "start": result.date_range_start,
+                "end": result.date_range_end,
+            },
+            unique_creatives=result.unique_creatives,
+            unique_sizes=len(result.unique_sizes),
+            unique_countries=len(result.unique_countries),
+            billing_ids=result.unique_billing_ids,
+            total_reached=result.total_reached,
+            total_impressions=result.total_impressions,
+            total_spend_usd=result.total_spend_usd,
+            columns_imported=result.columns_imported,
         )
 
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"CSV import failed: {e}")
-        raise HTTPException(status_code=500, detail=f"CSV import failed: {str(e)}")
+        logger.error(f"Import failed: {e}")
+        return CSVImportResult(
+            success=False,
+            error=str(e),
+        )
+
+    finally:
+        # Clean up temp file
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 @app.post(
@@ -2171,13 +2083,11 @@ class BatchImportRequest(BaseModel):
 @app.post("/performance/import/batch", response_model=StreamingImportResult, tags=["Performance"])
 async def import_performance_batch(
     request: BatchImportRequest,
-    store: SQLiteStore = Depends(get_store),
 ):
     """
     Batch import endpoint for chunked uploads.
 
-    Accepts an array of performance rows and imports them using the
-    optimized repository with lookup tables.
+    Writes directly to the unified performance_data table.
 
     This is used by the frontend chunked uploader which sends
     batches of ~10,000 rows at a time.
@@ -2193,42 +2103,92 @@ async def import_performance_batch(
     ```
     """
     import sqlite3
+    import hashlib
     from pathlib import Path
-    from storage.performance_repository import PerformanceRepository
 
     try:
-        # Get database path and create direct connection for repository
         db_path = Path.home() / ".rtbcat" / "rtbcat.db"
-        db_conn = sqlite3.connect(str(db_path))
-        repo = PerformanceRepository(db_conn)
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
 
         # Track stats
         min_date: Optional[str] = None
         max_date: Optional[str] = None
         total_spend = 0.0
+        imported = 0
+        skipped = 0
 
         for row in request.rows:
-            date = row.get("date") or row.get("metric_date")
-            if date:
+            try:
+                # Parse date
+                date = row.get("date") or row.get("metric_date")
+                if not date:
+                    skipped += 1
+                    continue
+
                 if min_date is None or date < min_date:
                     min_date = date
                 if max_date is None or date > max_date:
                     max_date = date
 
-            spend = row.get("spend", 0)
-            if isinstance(spend, str):
-                spend = float(spend.replace("$", "").replace(",", ""))
-            total_spend += float(spend)
+                # Parse spend
+                spend = row.get("spend", 0)
+                if isinstance(spend, str):
+                    spend = float(spend.replace("$", "").replace(",", ""))
+                spend_micros = int(float(spend) * 1_000_000)
+                total_spend += float(spend)
 
-        # Insert batch
-        count = repo.insert_batch(request.rows)
-        db_conn.close()
+                # Parse integers
+                impressions = int(row.get("impressions", 0) or 0)
+                clicks = int(row.get("clicks", 0) or 0)
+                reached = int(row.get("reached_queries", 0) or 0)
+
+                # Create row hash for deduplication
+                hash_data = f"{date}|{row.get('creative_id', '')}|{row.get('billing_id', '')}|{row.get('geography', '')}|{impressions}|{clicks}"
+                row_hash = hashlib.md5(hash_data.encode()).hexdigest()
+
+                # Insert into performance_data
+                cursor.execute("""
+                    INSERT OR IGNORE INTO performance_data (
+                        metric_date, creative_id, billing_id, creative_size,
+                        country, platform, app_id, app_name,
+                        reached_queries, impressions, clicks, spend_micros,
+                        row_hash
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    date,
+                    row.get("creative_id"),
+                    row.get("billing_id"),
+                    row.get("creative_size"),
+                    row.get("geography") or row.get("country"),
+                    row.get("platform") or row.get("device_type"),
+                    row.get("app_id"),
+                    row.get("app_name"),
+                    reached,
+                    impressions,
+                    clicks,
+                    spend_micros,
+                    row_hash,
+                ))
+
+                if cursor.rowcount > 0:
+                    imported += 1
+                else:
+                    skipped += 1  # Duplicate
+
+            except Exception as row_err:
+                logger.warning(f"Row error: {row_err}")
+                skipped += 1
+                continue
+
+        conn.commit()
+        conn.close()
 
         return StreamingImportResult(
             status="completed",
             total_rows=len(request.rows),
-            imported=count,
-            skipped=0,
+            imported=imported,
+            skipped=skipped,
             batches=1,
             errors=[],
             date_range={"start": min_date, "end": max_date} if min_date else None,

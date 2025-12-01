@@ -5,6 +5,9 @@ Generate QPS Optimization Report.
 This script generates a comprehensive QPS optimization report as described in
 RTBcat_QPS_Optimization_Strategy_v2.md.
 
+Note: For more options, use the CLI tool instead:
+    python cli/qps_analyzer.py full-report --days 7
+
 Usage:
     cd /home/jen/Documents/rtbcat-platform/creative-intelligence
     source venv/bin/activate
@@ -17,7 +20,6 @@ Output files:
     - fraud_signals.txt (Module 3)
 """
 
-import asyncio
 import os
 import sys
 from datetime import datetime
@@ -25,11 +27,16 @@ from datetime import datetime
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from analytics.qps_optimizer import QPSOptimizer
-from storage import SQLiteStore
+from qps import (
+    SizeCoverageAnalyzer,
+    ConfigPerformanceTracker,
+    FraudSignalDetector,
+    ACCOUNT_NAME,
+    ACCOUNT_ID,
+)
 
 
-async def main():
+def main():
     """Generate all QPS optimization reports."""
 
     print("=" * 60)
@@ -37,64 +44,94 @@ async def main():
     print("=" * 60)
     print()
 
-    # Initialize storage
-    store = SQLiteStore()
-    await store.initialize()
-
-    # Initialize optimizer
-    optimizer = QPSOptimizer(store)
-
     # Output directory
     output_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    days = 7
 
     # Generate full report
     print("Generating full QPS report...")
-    full_report = await optimizer.generate_full_report()
+
+    lines = []
+    lines.append("")
+    lines.append("=" * 80)
+    lines.append("RTBcat QPS OPTIMIZATION FULL REPORT")
+    lines.append("=" * 80)
+    lines.append("")
+    lines.append(f"Account: {ACCOUNT_NAME} (ID: {ACCOUNT_ID})")
+    lines.append(f"Generated: {datetime.now().isoformat()}")
+    lines.append(f"Analysis Period: {days} days")
+    lines.append("")
+
+    # Module 1: Size Coverage
+    print("  Generating Size Coverage report...")
+    try:
+        analyzer = SizeCoverageAnalyzer()
+        size_report = analyzer.generate_report(days)
+        lines.append(size_report)
+        lines.append("")
+
+        # Save individual report
+        size_path = os.path.join(output_dir, "size_coverage.txt")
+        with open(size_path, "w") as f:
+            f.write(size_report)
+        print(f"    Saved to: {size_path}")
+    except Exception as e:
+        lines.append(f"Size Coverage: Error - {e}")
+        lines.append("")
+        print(f"    Error: {e}")
+
+    # Module 2: Config Performance
+    print("  Generating Config Performance report...")
+    try:
+        tracker = ConfigPerformanceTracker()
+        config_report = tracker.generate_report(days)
+        lines.append(config_report)
+        lines.append("")
+
+        # Save individual report
+        config_path = os.path.join(output_dir, "config_performance.txt")
+        with open(config_path, "w") as f:
+            f.write(config_report)
+        print(f"    Saved to: {config_path}")
+    except Exception as e:
+        lines.append(f"Config Performance: Error - {e}")
+        lines.append("")
+        print(f"    Error: {e}")
+
+    # Module 3: Fraud Signals
+    print("  Generating Fraud Signals report...")
+    try:
+        detector = FraudSignalDetector()
+        fraud_report = detector.generate_report(days * 2)  # 14 days for fraud
+        lines.append(fraud_report)
+        lines.append("")
+
+        # Save individual report
+        fraud_path = os.path.join(output_dir, "fraud_signals.txt")
+        with open(fraud_path, "w") as f:
+            f.write(fraud_report)
+        print(f"    Saved to: {fraud_path}")
+    except Exception as e:
+        lines.append(f"Fraud Signals: Error - {e}")
+        lines.append("")
+        print(f"    Error: {e}")
+
+    lines.append("=" * 80)
+    lines.append("END OF FULL REPORT")
+    lines.append("=" * 80)
+
+    full_report = "\n".join(lines)
 
     # Print to console
     print()
     print(full_report)
     print()
 
-    # Save to file
+    # Save full report
     report_path = os.path.join(output_dir, "qps_report.txt")
     with open(report_path, "w") as f:
         f.write(full_report)
     print(f"Full report saved to: {report_path}")
-
-    # Generate individual reports
-    print()
-    print("Generating individual module reports...")
-
-    # Module 1: Size Coverage
-    try:
-        size_report = await optimizer.generate_size_coverage_report()
-        size_path = os.path.join(output_dir, "size_coverage.txt")
-        with open(size_path, "w") as f:
-            f.write(size_report.to_printout())
-        print(f"  Size Coverage saved to: {size_path}")
-    except Exception as e:
-        print(f"  Size Coverage: Error - {e}")
-
-    # Module 2: Config Performance
-    try:
-        config_report = await optimizer.generate_config_performance_report()
-        config_path = os.path.join(output_dir, "config_performance.txt")
-        with open(config_path, "w") as f:
-            f.write(config_report.to_printout())
-        print(f"  Config Performance saved to: {config_path}")
-    except Exception as e:
-        print(f"  Config Performance: Error - {e}")
-
-    # Module 3: Fraud Signals
-    try:
-        fraud_report = await optimizer.generate_fraud_signal_report()
-        fraud_path = os.path.join(output_dir, "fraud_signals.txt")
-        with open(fraud_path, "w") as f:
-            f.write(fraud_report.to_printout())
-        print(f"  Fraud Signals saved to: {fraud_path}")
-    except Exception as e:
-        print(f"  Fraud Signals: Error - {e}")
 
     print()
     print("=" * 60)
@@ -103,4 +140,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
