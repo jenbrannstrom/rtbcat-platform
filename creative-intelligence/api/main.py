@@ -1,4 +1,4 @@
-"""FastAPI application for RTBcat Creative Intelligence.
+"""FastAPI application for Cat-Scan Creative Intelligence.
 
 This module provides REST API endpoints for managing creatives,
 campaigns, and clusters with support for data collection and analysis
@@ -340,12 +340,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Failed to auto-populate buyer seats: {e}")
 
-    logger.info("RTBcat API started")
+    logger.info("Cat-Scan API started")
 
     yield
 
     # Cleanup on shutdown
-    logger.info("RTBcat API shutting down")
+    logger.info("Cat-Scan API shutting down")
 
 
 def create_app() -> FastAPI:
@@ -355,7 +355,7 @@ def create_app() -> FastAPI:
         Configured FastAPI application instance.
     """
     application = FastAPI(
-        title="RTBcat Creative Intelligence",
+        title="Cat-Scan Creative Intelligence",
         description="API for collecting and analyzing Authorized Buyers creative data",
         version="0.1.0",
         lifespan=lifespan,
@@ -1432,7 +1432,7 @@ async def get_full_qps_report(days: int = Query(7, ge=1, le=90)):
         lines = []
         lines.append("")
         lines.append("=" * 80)
-        lines.append("RTBcat QPS OPTIMIZATION FULL REPORT")
+        lines.append("Cat-Scan QPS OPTIMIZATION FULL REPORT")
         lines.append("=" * 80)
         lines.append("")
         lines.append(f"Account: {ACCOUNT_NAME} (ID: {ACCOUNT_ID})")

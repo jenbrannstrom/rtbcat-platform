@@ -2,7 +2,7 @@
 
 This module provides secure storage and retrieval of credentials
 using Fernet symmetric encryption. Configuration is stored in
-~/.rtbcat/ directory.
+~/.catscan/ directory.
 """
 
 import json
@@ -44,7 +44,7 @@ class S3Config(BaseModel):
 class DatabaseConfig(BaseModel):
     """Database configuration."""
 
-    path: str = Field(default="~/.rtbcat/rtbcat.db")
+    path: str = Field(default="~/.catscan/catscan.db")
     echo: bool = False
 
 
@@ -62,14 +62,14 @@ class AppConfig(BaseModel):
 class ConfigManager:
     """Manages encrypted configuration storage.
 
-    Configuration is stored in ~/.rtbcat/ with encryption keys
+    Configuration is stored in ~/.catscan/ with encryption keys
     managed separately for security.
 
     Attributes:
         config_dir: Path to the configuration directory.
     """
 
-    DEFAULT_CONFIG_DIR = Path.home() / ".rtbcat"
+    DEFAULT_CONFIG_DIR = Path.home() / ".catscan"
     CONFIG_FILE = "config.enc"
     KEY_FILE = ".key"
 
@@ -210,7 +210,7 @@ class ConfigManager:
         if not self.config_path.exists():
             raise ConfigError(
                 f"Configuration not found at {self.config_path}. "
-                "Run 'rtbcat configure' to set up."
+                "Run 'catscan configure' to set up."
             )
 
         try:

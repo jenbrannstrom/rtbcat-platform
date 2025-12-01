@@ -47,7 +47,8 @@
       "Bash(sudo systemctl restart:*)",
       "Bash(env)",
       "Bash(gcloud:*)",
-      "Bash(sudo systemctl status:*)"
+      "Bash(sudo systemctl status:*)",
+      "Bash(xargs sed:*)"
     ],
     "deny": [],
     "ask": []

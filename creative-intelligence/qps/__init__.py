@@ -1,4 +1,4 @@
-"""QPS Optimization Module for RTBcat.
+"""QPS Optimization Module for Cat-Scan.
 
 This module provides tools for analyzing and optimizing QPS (Queries Per Second)
 in RTB campaigns by:

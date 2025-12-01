@@ -1,4 +1,4 @@
-# RTBcat Creative Intelligence
+# Cat-Scan Creative Intelligence
 
 A Python-based system for collecting Google Authorized Buyers creatives and organizing them for analysis. This tool helps RTB bidders understand what they're actually bidding on by fetching and organizing creatives that Google leaves as opaque IDs.
 
@@ -9,7 +9,7 @@ A Python-based system for collecting Google Authorized Buyers creatives and orga
 - What the actual creative looks like (especially for native ads)
 - Which creatives are wasting your budget
 
-**The Solution:** RTBcat automatically:
+**The Solution:** Cat-Scan automatically:
 1. Fetches all your creatives from Authorized Buyers API
 2. Extracts metadata, UTM parameters, and destination URLs
 3. Stores them in a queryable SQLite database
@@ -29,7 +29,7 @@ A Python-based system for collecting Google Authorized Buyers creatives and orga
 
 ### Multi-Seat Buyer Accounts
 
-Enterprise customers often have multiple buyer accounts (seats) under one bidder. RTBcat supports:
+Enterprise customers often have multiple buyer accounts (seats) under one bidder. Cat-Scan supports:
 
 - **Seat Discovery**: Enumerate all buyer accounts via `bidders.buyers.list()` API
 - **Seat-Specific Sync**: Collect creatives for individual buyer seats
@@ -61,7 +61,7 @@ docker compose build api
 docker compose up -d api
 
 # 4. Configure credentials in the container
-docker exec rtbcat-api python -c "
+docker exec catscan-api python -c "
 from config import ConfigManager
 from config.config_manager import AppConfig, AuthorizedBuyersConfig
 
@@ -166,7 +166,7 @@ The **Ad Exchange Buyer II API** (`adexchangebuyer2` v2beta1) provides RTB troub
 
 **Scope required**: `https://www.googleapis.com/auth/adexchange.buyer`
 
-This API is NOT yet integrated into RTBcat. To add support:
+This API is NOT yet integrated into Cat-Scan. To add support:
 
 1. Create `collectors/troubleshooting/client.py`
 2. Use `build('adexchangebuyer2', 'v2beta1', credentials=credentials)`
@@ -559,7 +559,7 @@ pre-commit run --all-files
 The API config hasn't been initialized. Run:
 
 ```bash
-docker exec rtbcat-api python -c "
+docker exec catscan-api python -c "
 from config import ConfigManager
 from config.config_manager import AppConfig, AuthorizedBuyersConfig
 config = AppConfig(authorized_buyers=AuthorizedBuyersConfig(
@@ -717,7 +717,7 @@ await store.migrate_add_buyer_seats()
 1. **API Service Port Conflict**: If the systemd service fails with "Address already in use", kill old processes:
    ```bash
    sudo lsof -ti:8000 | xargs -r sudo kill -9
-   sudo systemctl restart rtbcat-api
+   sudo systemctl restart catscan-api
    ```
 
 ### Medium
@@ -734,16 +734,16 @@ The API runs as a systemd service:
 
 ```bash
 # Service file location
-/etc/systemd/system/rtbcat-api.service
+/etc/systemd/system/catscan-api.service
 
 # Common commands
-sudo systemctl status rtbcat-api
-sudo systemctl restart rtbcat-api
-sudo journalctl -u rtbcat-api -f
+sudo systemctl status catscan-api
+sudo systemctl restart catscan-api
+sudo journalctl -u catscan-api -f
 
 # If service fails to start (port in use)
 sudo lsof -ti:8000 | xargs -r sudo kill -9
-sudo systemctl restart rtbcat-api
+sudo systemctl restart catscan-api
 ```
 
 ### Service Configuration

@@ -1,0 +1,20 @@
+[Unit]
+Description=Cat-Scan Creative Intelligence API
+After=network.target
+
+[Service]
+Type=simple
+User=jen
+WorkingDirectory=/home/jen/Documents/rtbcat-platform/creative-intelligence
+Environment="PATH=/home/jen/Documents/rtbcat-platform/creative-intelligence/venv/bin"
+ExecStart=/home/jen/Documents/rtbcat-platform/creative-intelligence/venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+Restart=always
+RestartSec=3
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=catscan-api
+
+[Install]
+WantedBy=multi-user.target

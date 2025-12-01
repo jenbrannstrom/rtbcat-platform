@@ -5,7 +5,7 @@ import sqlite3
 import os
 from datetime import datetime
 
-DB_PATH = os.path.expanduser("~/.rtbcat/rtbcat.db")
+DB_PATH = os.path.expanduser("~/.catscan/catscan.db")
 
 def backup_database():
     """Create backup before destructive changes."""
