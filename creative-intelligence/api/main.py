@@ -1254,6 +1254,213 @@ async def generate_mock_traffic_endpoint(
         )
 
 
+# QPS Optimization endpoints
+
+
+class QPSReportResponse(BaseModel):
+    """Response model for full QPS optimization report."""
+
+    report_text: str
+    generated_at: str
+
+
+class SizeCoverageReportResponse(BaseModel):
+    """Response model for size coverage analysis."""
+
+    total_creatives: int
+    total_sizes_with_creatives: int
+    total_sizes_in_traffic: int
+    overall_match_rate: float
+    sizes_we_can_serve: list[str]
+    sizes_we_cannot_serve: list[str]
+    recommended_include_list: list[str]
+    opportunity_sizes: list[dict]
+    report_text: str
+    generated_at: str
+
+
+class ConfigPerformanceResponse(BaseModel):
+    """Response model for config performance analysis."""
+
+    total_reached: int
+    total_impressions: int
+    total_spend: float
+    average_efficiency: float
+    configs: list[dict]
+    report_text: str
+    generated_at: str
+
+
+class FraudSignalResponse(BaseModel):
+    """Response model for fraud signal detection."""
+
+    total_suspicious_apps: int
+    total_suspicious_publishers: int
+    signals: list[dict]
+    report_text: str
+    generated_at: str
+
+
+@app.get("/qps/report", response_model=QPSReportResponse, tags=["QPS Optimization"])
+async def get_qps_report(
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get full QPS optimization report as human-readable text.
+
+    Generates a comprehensive report combining:
+    - Size Coverage Analysis (Module 1)
+    - Config Performance Tracking (Module 2)
+    - Fraud Signal Detection (Module 3)
+
+    The report is designed to be printed or shared with AdOps teams.
+    """
+    from analytics import QPSOptimizer
+
+    try:
+        optimizer = QPSOptimizer(store)
+        report_text = await optimizer.generate_full_report()
+
+        from datetime import datetime, timezone
+        return QPSReportResponse(
+            report_text=report_text,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    except Exception as e:
+        logger.error(f"QPS report generation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"QPS report generation failed: {str(e)}")
+
+
+@app.get("/qps/size-coverage", response_model=SizeCoverageReportResponse, tags=["QPS Optimization"])
+async def get_qps_size_coverage(
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get size coverage analysis report.
+
+    Module 1 from QPS Optimization Strategy - analyzes:
+    - What sizes you have creatives for
+    - What sizes you're receiving traffic for (if data available)
+    - Match rate (% of traffic you can serve)
+    - Recommended pretargeting include list
+    - Opportunity sizes worth creating creatives for
+    """
+    from analytics import QPSOptimizer
+
+    try:
+        optimizer = QPSOptimizer(store)
+        report = await optimizer.generate_size_coverage_report()
+
+        return SizeCoverageReportResponse(
+            total_creatives=report.total_creatives,
+            total_sizes_with_creatives=report.total_sizes_with_creatives,
+            total_sizes_in_traffic=report.total_sizes_in_traffic,
+            overall_match_rate=report.overall_match_rate,
+            sizes_we_can_serve=report.sizes_we_can_serve,
+            sizes_we_cannot_serve=report.sizes_we_cannot_serve,
+            recommended_include_list=report.recommended_include_list,
+            opportunity_sizes=report.opportunity_sizes,
+            report_text=report.to_printout(),
+            generated_at=report.generated_at,
+        )
+
+    except Exception as e:
+        logger.error(f"Size coverage analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Size coverage analysis failed: {str(e)}")
+
+
+@app.get("/qps/config-performance", response_model=ConfigPerformanceResponse, tags=["QPS Optimization"])
+async def get_qps_config_performance(
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get pretargeting config performance report.
+
+    Module 2 from QPS Optimization Strategy - analyzes:
+    - Performance by billing_id (pretargeting config)
+    - Reached queries, impressions, clicks, spend per config
+    - Efficiency (impression rate)
+    - Issues and investigation recommendations
+
+    Note: Requires performance metrics with billing_account_id populated.
+    """
+    from analytics import QPSOptimizer
+
+    try:
+        optimizer = QPSOptimizer(store)
+        report = await optimizer.generate_config_performance_report()
+
+        return ConfigPerformanceResponse(
+            total_reached=report.total_reached,
+            total_impressions=report.total_impressions,
+            total_spend=report.total_spend,
+            average_efficiency=report.average_efficiency,
+            configs=[
+                {
+                    "billing_id": c.billing_id,
+                    "display_name": c.display_name,
+                    "reached_queries": c.reached_queries,
+                    "impressions": c.impressions,
+                    "clicks": c.clicks,
+                    "spend": c.spend,
+                    "efficiency": c.efficiency,
+                    "issues": c.issues,
+                }
+                for c in report.configs
+            ],
+            report_text=report.to_printout(),
+            generated_at=report.generated_at,
+        )
+
+    except Exception as e:
+        logger.error(f"Config performance analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Config performance analysis failed: {str(e)}")
+
+
+@app.get("/qps/fraud-signals", response_model=FraudSignalResponse, tags=["QPS Optimization"])
+async def get_qps_fraud_signals(
+    days: int = Query(14, ge=1, le=90, description="Days of data to analyze"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get fraud signal detection report.
+
+    Module 3 from QPS Optimization Strategy - detects suspicious patterns:
+    - Unusually high CTR (>3% when average is 0.5-1%)
+    - Clicks exceeding impressions (possible click injection)
+    - High impressions with zero conversions
+
+    These are patterns, not proof. Smart fraud mixes 70-80% real traffic
+    with 20-30% fake. Single signals are not conclusive.
+    """
+    from analytics import QPSOptimizer
+
+    try:
+        optimizer = QPSOptimizer(store)
+        report = await optimizer.generate_fraud_signal_report(days=days)
+
+        return FraudSignalResponse(
+            total_suspicious_apps=report.total_suspicious_apps,
+            total_suspicious_publishers=report.total_suspicious_publishers,
+            signals=[
+                {
+                    "entity_type": s.entity_type,
+                    "entity_id": s.entity_id,
+                    "entity_name": s.entity_name,
+                    "signal_type": s.signal_type,
+                    "signal_strength": s.signal_strength,
+                    "metrics": s.metrics,
+                    "recommendation": s.recommendation,
+                    "detail": s.detail,
+                }
+                for s in report.signals
+            ],
+            report_text=report.to_printout(),
+            generated_at=report.generated_at,
+        )
+
+    except Exception as e:
+        logger.error(f"Fraud signal detection failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Fraud signal detection failed: {str(e)}")
+
+
 # Performance Metrics endpoints
 
 

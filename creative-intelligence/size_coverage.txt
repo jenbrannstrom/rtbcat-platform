@@ -1,0 +1,46 @@
+================================================================================
+SIZE COVERAGE REPORT
+================================================================================
+
+Generated: 2025-12-01T13:37:15.101911+00:00
+
+YOUR CREATIVE INVENTORY:
+  Total creatives: 639
+  Unique sizes: 12
+
+  Sizes you have creatives for:
+    Video 9:16 (Vertical): 505 creatives (VIDEO:505)
+    Adaptive/Fluid: 37 creatives (NATIVE:37)
+    Non-Standard (320x480): 32 creatives (VIDEO:32)
+    Non-Standard (360x730): 20 creatives (VIDEO:20)
+    Non-Standard (412x828): 17 creatives (VIDEO:17)
+    300x250 (Medium Rectangle): 9 creatives (VIDEO:9)
+    320x50 (Mobile Banner): 6 creatives (HTML:6)
+    Video 4:5 (Portrait): 5 creatives (VIDEO:5)
+    Non-Standard (630x920): 3 creatives (VIDEO:3)
+    Non-Standard (320x140): 2 creatives (VIDEO:2)
+    Non-Standard (480x320): 2 creatives (VIDEO:2)
+    Non-Standard (1200x627): 1 creatives (VIDEO:1)
+
+TRAFFIC DATA: Not available
+  To get traffic data, import CSV or enable RTB Troubleshooting API
+
+RECOMMENDED PRETARGETING SIZE LIST:
+  (Add these to your pretargeting config to reduce waste)
+
+    Video 9:16 (Vertical)
+    Non-Standard (320x480)
+    Non-Standard (360x730)
+    Non-Standard (412x828)
+    320x50 (Mobile Banner)
+    Non-Standard (320x140)
+    300x250 (Medium Rectangle)
+    Non-Standard (480x320)
+    Non-Standard (1200x627)
+    Adaptive/Fluid
+    Non-Standard (630x920)
+    Video 4:5 (Portrait)
+
+  WARNING: Once you add ANY size, all other sizes are EXCLUDED
+
+================================================================================
