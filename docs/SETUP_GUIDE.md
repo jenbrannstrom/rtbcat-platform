@@ -47,15 +47,15 @@ The installer will:
 ### 1.3 Start the Services
 
 ```bash
-# Terminal 1: Start the API server
-cd creative-intelligence
-source venv/bin/activate
-python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+# Start the API server (systemd service)
+sudo systemctl start rtbcat-api
 
-# Terminal 2: Start the dashboard
+# Start the dashboard
 cd dashboard
 npm run dev
 ```
+
+To check service status: `sudo systemctl status rtbcat-api`
 
 ### 1.4 Verify Installation
 
@@ -195,8 +195,7 @@ print('Configuration saved!')
 
 ```bash
 # Restart the API to pick up the new config
-# (Ctrl+C the running API, then restart it)
-python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+sudo systemctl restart rtbcat-api
 ```
 
 Then in the dashboard:
@@ -293,9 +292,10 @@ Then restart the API.
 
 **Fix:**
 ```bash
-cd creative-intelligence
-source venv/bin/activate
-python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+sudo systemctl start rtbcat-api
+
+# Check status
+sudo systemctl status rtbcat-api
 ```
 
 ### Dashboard shows 0 creatives after sync

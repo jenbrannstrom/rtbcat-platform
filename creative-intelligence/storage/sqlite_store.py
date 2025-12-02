@@ -298,6 +298,31 @@ class SQLiteStore:
     CREATE INDEX IF NOT EXISTS idx_perf_campaign_date ON performance_metrics(campaign_id, metric_date DESC);
     CREATE INDEX IF NOT EXISTS idx_perf_date_geo ON performance_metrics(metric_date, geography);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_perf_unique_daily ON performance_metrics(creative_id, metric_date, geography, device_type, placement);
+
+    -- Campaign-Creative junction table for manual clustering
+    CREATE TABLE IF NOT EXISTS campaign_creatives (
+        campaign_id TEXT NOT NULL,
+        creative_id TEXT NOT NULL,
+        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (campaign_id, creative_id),
+        FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
+        FOREIGN KEY (creative_id) REFERENCES creatives(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_campaign_creatives_campaign ON campaign_creatives(campaign_id);
+    CREATE INDEX IF NOT EXISTS idx_campaign_creatives_creative ON campaign_creatives(creative_id);
+
+    -- Thumbnail generation status tracking
+    CREATE TABLE IF NOT EXISTS thumbnail_status (
+        creative_id TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        error_reason TEXT,
+        video_url TEXT,
+        attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (creative_id) REFERENCES creatives(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_thumbnail_status_status ON thumbnail_status(status);
     """
 
     # Migration for existing databases to add new columns
@@ -510,6 +535,16 @@ class SQLiteStore:
         "CREATE INDEX IF NOT EXISTS idx_anomalies_app ON import_anomalies(app_id)",
         "CREATE INDEX IF NOT EXISTS idx_anomalies_creative ON import_anomalies(creative_id)",
         "CREATE INDEX IF NOT EXISTS idx_anomalies_import ON import_anomalies(import_id)",
+        # Phase 10.4: Thumbnail generation status tracking
+        """CREATE TABLE IF NOT EXISTS thumbnail_status (
+            creative_id TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            error_reason TEXT,
+            video_url TEXT,
+            attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (creative_id) REFERENCES creatives(id) ON DELETE CASCADE
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_thumbnail_status_status ON thumbnail_status(status)",
     ]
 
     def __init__(self, db_path: str | Path = "~/.catscan/catscan.db") -> None:
@@ -2260,3 +2295,473 @@ class SQLiteStore:
                 return cursor.rowcount
 
             return await loop.run_in_executor(None, _clear_old)
+
+    # =========================================================================
+    # Campaign Clustering Methods
+    # =========================================================================
+
+    async def create_campaign(self, name: str, creative_ids: list[str] | None = None) -> dict:
+        """Create a new campaign with optional creatives.
+
+        Args:
+            name: Campaign name
+            creative_ids: Optional list of creative IDs to assign
+
+        Returns:
+            Created campaign dict with id, name, creative_ids
+        """
+        import uuid
+
+        campaign_id = str(uuid.uuid4())[:8]
+
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _create():
+                conn.execute(
+                    """
+                    INSERT INTO campaigns (id, name, created_at, updated_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    """,
+                    (campaign_id, name),
+                )
+
+                if creative_ids:
+                    for cid in creative_ids:
+                        conn.execute(
+                            """
+                            INSERT OR IGNORE INTO campaign_creatives (campaign_id, creative_id)
+                            VALUES (?, ?)
+                            """,
+                            (campaign_id, cid),
+                        )
+
+                conn.commit()
+                return {
+                    "id": campaign_id,
+                    "name": name,
+                    "creative_ids": creative_ids or [],
+                }
+
+            return await loop.run_in_executor(None, _create)
+
+    async def list_campaigns(self) -> list[dict]:
+        """List all campaigns with their creative IDs.
+
+        Returns:
+            List of campaign dicts with id, name, creative_ids, created_at
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _list():
+                cursor = conn.execute(
+                    """
+                    SELECT c.id, c.name, c.created_at, c.updated_at
+                    FROM campaigns c
+                    ORDER BY c.updated_at DESC
+                    """
+                )
+                campaigns = []
+                for row in cursor.fetchall():
+                    # Get creative IDs for this campaign
+                    cid_cursor = conn.execute(
+                        "SELECT creative_id FROM campaign_creatives WHERE campaign_id = ?",
+                        (row["id"],),
+                    )
+                    creative_ids = [r["creative_id"] for r in cid_cursor.fetchall()]
+
+                    campaigns.append({
+                        "id": row["id"],
+                        "name": row["name"],
+                        "creative_ids": creative_ids,
+                        "created_at": row["created_at"],
+                        "updated_at": row["updated_at"],
+                    })
+                return campaigns
+
+            return await loop.run_in_executor(None, _list)
+
+    async def get_campaign(self, campaign_id: str) -> dict | None:
+        """Get a single campaign by ID.
+
+        Args:
+            campaign_id: Campaign ID
+
+        Returns:
+            Campaign dict or None if not found
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _get():
+                cursor = conn.execute(
+                    "SELECT id, name, created_at, updated_at FROM campaigns WHERE id = ?",
+                    (campaign_id,),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return None
+
+                # Get creative IDs
+                cid_cursor = conn.execute(
+                    "SELECT creative_id FROM campaign_creatives WHERE campaign_id = ?",
+                    (campaign_id,),
+                )
+                creative_ids = [r["creative_id"] for r in cid_cursor.fetchall()]
+
+                return {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "creative_ids": creative_ids,
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                }
+
+            return await loop.run_in_executor(None, _get)
+
+    async def update_campaign(
+        self,
+        campaign_id: str,
+        name: str | None = None,
+        creative_ids: list[str] | None = None,
+    ) -> dict | None:
+        """Update a campaign's name and/or creative assignments.
+
+        Args:
+            campaign_id: Campaign ID
+            name: New name (optional)
+            creative_ids: New list of creative IDs (replaces existing)
+
+        Returns:
+            Updated campaign dict or None if not found
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _update():
+                # Check if campaign exists
+                cursor = conn.execute(
+                    "SELECT id FROM campaigns WHERE id = ?", (campaign_id,)
+                )
+                if not cursor.fetchone():
+                    return None
+
+                # Update name if provided
+                if name is not None:
+                    conn.execute(
+                        "UPDATE campaigns SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (name, campaign_id),
+                    )
+
+                # Update creative assignments if provided
+                if creative_ids is not None:
+                    # Remove existing assignments
+                    conn.execute(
+                        "DELETE FROM campaign_creatives WHERE campaign_id = ?",
+                        (campaign_id,),
+                    )
+                    # Add new assignments
+                    for cid in creative_ids:
+                        conn.execute(
+                            "INSERT OR IGNORE INTO campaign_creatives (campaign_id, creative_id) VALUES (?, ?)",
+                            (campaign_id, cid),
+                        )
+                    # Update timestamp
+                    conn.execute(
+                        "UPDATE campaigns SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (campaign_id,),
+                    )
+
+                conn.commit()
+
+                # Fetch updated campaign
+                cursor = conn.execute(
+                    "SELECT id, name, created_at, updated_at FROM campaigns WHERE id = ?",
+                    (campaign_id,),
+                )
+                row = cursor.fetchone()
+                cid_cursor = conn.execute(
+                    "SELECT creative_id FROM campaign_creatives WHERE campaign_id = ?",
+                    (campaign_id,),
+                )
+                current_creative_ids = [r["creative_id"] for r in cid_cursor.fetchall()]
+
+                return {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "creative_ids": current_creative_ids,
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                }
+
+            return await loop.run_in_executor(None, _update)
+
+    async def delete_campaign(self, campaign_id: str) -> bool:
+        """Delete a campaign (creatives become unclustered).
+
+        Args:
+            campaign_id: Campaign ID
+
+        Returns:
+            True if deleted, False if not found
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _delete():
+                cursor = conn.execute(
+                    "DELETE FROM campaigns WHERE id = ?", (campaign_id,)
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+
+            return await loop.run_in_executor(None, _delete)
+
+    async def get_unclustered_creative_ids(self) -> list[str]:
+        """Get IDs of creatives not assigned to any campaign.
+
+        Returns:
+            List of creative IDs
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _get_unclustered():
+                cursor = conn.execute(
+                    """
+                    SELECT c.id
+                    FROM creatives c
+                    LEFT JOIN campaign_creatives cc ON c.id = cc.creative_id
+                    WHERE cc.campaign_id IS NULL
+                    ORDER BY c.updated_at DESC
+                    """
+                )
+                return [row["id"] for row in cursor.fetchall()]
+
+            return await loop.run_in_executor(None, _get_unclustered)
+
+    # =========================================================================
+    # Thumbnail Status Methods (Phase 10.4)
+    # =========================================================================
+
+    async def record_thumbnail_status(
+        self,
+        creative_id: str,
+        status: str,
+        error_reason: str | None = None,
+        video_url: str | None = None,
+    ) -> None:
+        """Record the thumbnail generation status for a creative.
+
+        Args:
+            creative_id: The creative ID
+            status: Status value ('success', 'failed', 'pending')
+            error_reason: Optional error reason ('url_expired', 'no_url', 'timeout', 'network_error', 'invalid_format')
+            video_url: Optional video URL that was attempted (for debugging)
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _record():
+                conn.execute(
+                    """
+                    INSERT INTO thumbnail_status (creative_id, status, error_reason, video_url, attempted_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(creative_id) DO UPDATE SET
+                        status = excluded.status,
+                        error_reason = excluded.error_reason,
+                        video_url = excluded.video_url,
+                        attempted_at = CURRENT_TIMESTAMP
+                    """,
+                    (creative_id, status, error_reason, video_url),
+                )
+                conn.commit()
+
+            await loop.run_in_executor(None, _record)
+
+    async def get_thumbnail_status(
+        self, creative_id: str
+    ) -> dict | None:
+        """Get the thumbnail status for a single creative.
+
+        Args:
+            creative_id: The creative ID
+
+        Returns:
+            Dict with status info or None if not found
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _get():
+                cursor = conn.execute(
+                    """
+                    SELECT creative_id, status, error_reason, video_url, attempted_at
+                    FROM thumbnail_status
+                    WHERE creative_id = ?
+                    """,
+                    (creative_id,),
+                )
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        "creative_id": row["creative_id"],
+                        "status": row["status"],
+                        "error_reason": row["error_reason"],
+                        "video_url": row["video_url"],
+                        "attempted_at": row["attempted_at"],
+                    }
+                return None
+
+            return await loop.run_in_executor(None, _get)
+
+    async def get_thumbnail_statuses(
+        self, creative_ids: list[str] | None = None
+    ) -> dict[str, dict]:
+        """Get thumbnail statuses for multiple creatives.
+
+        Args:
+            creative_ids: Optional list of creative IDs. If None, returns all.
+
+        Returns:
+            Dict mapping creative_id to status info
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _get_all():
+                if creative_ids:
+                    placeholders = ",".join("?" * len(creative_ids))
+                    cursor = conn.execute(
+                        f"""
+                        SELECT creative_id, status, error_reason, video_url, attempted_at
+                        FROM thumbnail_status
+                        WHERE creative_id IN ({placeholders})
+                        """,
+                        creative_ids,
+                    )
+                else:
+                    cursor = conn.execute(
+                        """
+                        SELECT creative_id, status, error_reason, video_url, attempted_at
+                        FROM thumbnail_status
+                        """
+                    )
+
+                result = {}
+                for row in cursor.fetchall():
+                    result[row["creative_id"]] = {
+                        "status": row["status"],
+                        "error_reason": row["error_reason"],
+                        "video_url": row["video_url"],
+                        "attempted_at": row["attempted_at"],
+                    }
+                return result
+
+            return await loop.run_in_executor(None, _get_all)
+
+    async def get_video_creatives_needing_thumbnails(
+        self, limit: int = 100, force_retry_failed: bool = False
+    ) -> list[dict]:
+        """Get video creatives that need thumbnail generation.
+
+        Args:
+            limit: Maximum number of creatives to return
+            force_retry_failed: If True, include failed status for retry
+
+        Returns:
+            List of creative dicts with id, raw_data
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _get():
+                if force_retry_failed:
+                    # Retry failed ones, skip successful
+                    query = """
+                        SELECT c.id, c.raw_data
+                        FROM creatives c
+                        LEFT JOIN thumbnail_status ts ON c.id = ts.creative_id
+                        WHERE c.format = 'VIDEO'
+                        AND (ts.status IS NULL OR ts.status = 'failed')
+                        LIMIT ?
+                    """
+                else:
+                    # Skip any that already have a status
+                    query = """
+                        SELECT c.id, c.raw_data
+                        FROM creatives c
+                        LEFT JOIN thumbnail_status ts ON c.id = ts.creative_id
+                        WHERE c.format = 'VIDEO'
+                        AND ts.status IS NULL
+                        LIMIT ?
+                    """
+
+                cursor = conn.execute(query, (limit,))
+                results = []
+                for row in cursor.fetchall():
+                    raw_data = row["raw_data"]
+                    if raw_data:
+                        try:
+                            raw_data = json.loads(raw_data)
+                        except json.JSONDecodeError:
+                            raw_data = {}
+                    else:
+                        raw_data = {}
+                    results.append({
+                        "id": row["id"],
+                        "raw_data": raw_data,
+                    })
+                return results
+
+            return await loop.run_in_executor(None, _get)
+
+    async def get_thumbnail_stats(self) -> dict:
+        """Get summary statistics for thumbnail generation.
+
+        Returns:
+            Dict with counts by status and error_reason
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _get_stats():
+                # Count by status
+                cursor = conn.execute(
+                    """
+                    SELECT status, COUNT(*) as count
+                    FROM thumbnail_status
+                    GROUP BY status
+                    """
+                )
+                status_counts = {row["status"]: row["count"] for row in cursor.fetchall()}
+
+                # Count by error_reason (for failed)
+                cursor = conn.execute(
+                    """
+                    SELECT error_reason, COUNT(*) as count
+                    FROM thumbnail_status
+                    WHERE status = 'failed'
+                    GROUP BY error_reason
+                    """
+                )
+                error_counts = {row["error_reason"] or "unknown": row["count"] for row in cursor.fetchall()}
+
+                # Total video creatives
+                cursor = conn.execute(
+                    "SELECT COUNT(*) as count FROM creatives WHERE format = 'VIDEO'"
+                )
+                total_videos = cursor.fetchone()["count"]
+
+                return {
+                    "total_videos": total_videos,
+                    "status_counts": status_counts,
+                    "error_counts": error_counts,
+                    "success_count": status_counts.get("success", 0),
+                    "failed_count": status_counts.get("failed", 0),
+                    "pending_count": status_counts.get("pending", 0),
+                    "unprocessed_count": total_videos - sum(status_counts.values()),
+                }
+
+            return await loop.run_in_executor(None, _get_stats)

@@ -335,8 +335,51 @@ def _extract_video_url_from_vast(vast_xml: str) -> str | None:
     return None
 
 
-def _generate_thumbnail_ffmpeg(video_url: str, output_path: Path, timeout: int = 30) -> bool:
-    """Generate thumbnail from video URL using ffmpeg."""
+def _classify_ffmpeg_error(returncode: int, stderr: str, video_url: str, timed_out: bool = False) -> str:
+    """Classify the ffmpeg error into a user-friendly reason.
+
+    Returns one of: 'url_expired', 'no_url', 'timeout', 'network_error', 'invalid_format', 'unknown'
+    """
+    if timed_out:
+        return 'timeout'
+
+    stderr_lower = stderr.lower() if stderr else ''
+
+    # URL expiration errors
+    if 'server returned 403' in stderr_lower or 'server returned 404' in stderr_lower:
+        return 'url_expired'
+    if 'server returned 410' in stderr_lower:
+        return 'url_expired'
+    if '403 forbidden' in stderr_lower or '404 not found' in stderr_lower:
+        return 'url_expired'
+
+    # Network errors
+    if 'connection refused' in stderr_lower or 'network is unreachable' in stderr_lower:
+        return 'network_error'
+    if 'could not open' in stderr_lower and 'http' in stderr_lower:
+        return 'network_error'
+    if 'connection timed out' in stderr_lower:
+        return 'network_error'
+
+    # Format errors
+    if 'invalid data found' in stderr_lower or 'does not contain' in stderr_lower:
+        return 'invalid_format'
+    if 'unsupported codec' in stderr_lower or 'decoder not found' in stderr_lower:
+        return 'invalid_format'
+
+    # Timeout (signal 9)
+    if returncode == -9:
+        return 'timeout'
+
+    return 'unknown'
+
+
+def _generate_thumbnail_ffmpeg(video_url: str, output_path: Path, timeout: int = 30) -> dict:
+    """Generate thumbnail from video URL using ffmpeg.
+
+    Returns:
+        dict with keys: success (bool), error_reason (str|None), stderr (str|None)
+    """
     try:
         # ffmpeg command to extract first frame
         cmd = [
@@ -357,11 +400,16 @@ def _generate_thumbnail_ffmpeg(video_url: str, output_path: Path, timeout: int =
             text=True
         )
 
-        return result.returncode == 0 and output_path.exists()
-    except subprocess.TimeoutExpired:
-        return False
-    except Exception:
-        return False
+        if result.returncode == 0 and output_path.exists():
+            return {'success': True, 'error_reason': None, 'stderr': None}
+        else:
+            error_reason = _classify_ffmpeg_error(result.returncode, result.stderr, video_url)
+            return {'success': False, 'error_reason': error_reason, 'stderr': result.stderr}
+
+    except subprocess.TimeoutExpired as e:
+        return {'success': False, 'error_reason': 'timeout', 'stderr': str(e)}
+    except Exception as e:
+        return {'success': False, 'error_reason': 'unknown', 'stderr': str(e)}
 
 
 def _update_thumbnail_in_db(db_path: Path, creative_id: str, thumbnail_path: Path) -> bool:
@@ -396,8 +444,129 @@ def _update_thumbnail_in_db(db_path: Path, creative_id: str, thumbnail_path: Pat
         return False
 
 
+def _record_thumbnail_status(db_path: Path, creative_id: str, status: str,
+                             error_reason: str | None = None, video_url: str | None = None) -> bool:
+    """Record thumbnail generation status in the database."""
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            INSERT INTO thumbnail_status (creative_id, status, error_reason, video_url, attempted_at)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(creative_id) DO UPDATE SET
+                status = excluded.status,
+                error_reason = excluded.error_reason,
+                video_url = excluded.video_url,
+                attempted_at = CURRENT_TIMESTAMP
+        """, (creative_id, status, error_reason, video_url))
+
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Warning: Failed to record status: {e}")
+        return False
+
+
+def _get_videos_needing_thumbnails(db_path: Path, limit: int, force: bool) -> list:
+    """Get video creatives that need thumbnail generation.
+
+    Args:
+        db_path: Path to database
+        limit: Maximum number to return
+        force: If True, include failed status for retry
+
+    Returns:
+        List of (creative_id, vast_xml, video_url) tuples
+    """
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    if force:
+        # Retry failed ones, skip successful
+        query = """
+            SELECT c.id,
+                   json_extract(c.raw_data, '$.video.vastXml') as vast_xml,
+                   json_extract(c.raw_data, '$.video.videoUrl') as video_url
+            FROM creatives c
+            LEFT JOIN thumbnail_status ts ON c.id = ts.creative_id
+            WHERE c.format = 'VIDEO'
+            AND (ts.status IS NULL OR ts.status = 'failed')
+            ORDER BY c.id DESC
+            LIMIT ?
+        """
+    else:
+        # Skip any that already have a status
+        query = """
+            SELECT c.id,
+                   json_extract(c.raw_data, '$.video.vastXml') as vast_xml,
+                   json_extract(c.raw_data, '$.video.videoUrl') as video_url
+            FROM creatives c
+            LEFT JOIN thumbnail_status ts ON c.id = ts.creative_id
+            WHERE c.format = 'VIDEO'
+            AND ts.status IS NULL
+            ORDER BY c.id DESC
+            LIMIT ?
+        """
+
+    cursor.execute(query, (limit,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def _get_thumbnail_summary(db_path: Path) -> dict:
+    """Get summary statistics for thumbnail generation."""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # Total video creatives
+    cursor.execute("SELECT COUNT(*) FROM creatives WHERE format = 'VIDEO'")
+    total_videos = cursor.fetchone()[0]
+
+    # Count by status
+    cursor.execute("""
+        SELECT status, COUNT(*) as count
+        FROM thumbnail_status
+        GROUP BY status
+    """)
+    status_counts = {row[0]: row[1] for row in cursor.fetchall()}
+
+    # Count by error_reason (for failed)
+    cursor.execute("""
+        SELECT error_reason, COUNT(*) as count
+        FROM thumbnail_status
+        WHERE status = 'failed'
+        GROUP BY error_reason
+    """)
+    error_counts = {row[0] or 'unknown': row[1] for row in cursor.fetchall()}
+
+    conn.close()
+
+    return {
+        'total_videos': total_videos,
+        'success': status_counts.get('success', 0),
+        'failed': status_counts.get('failed', 0),
+        'unprocessed': total_videos - sum(status_counts.values()),
+        'error_counts': error_counts,
+    }
+
+
 def cmd_generate_thumbnails(args):
-    """Generate thumbnails for video creatives using ffmpeg."""
+    """Generate thumbnails for video creatives using ffmpeg.
+
+    Records status in thumbnail_status table:
+    - 'success': Thumbnail generated successfully
+    - 'failed': Generation failed (with error_reason)
+
+    Error reasons:
+    - 'no_url': No video URL found in creative data
+    - 'url_expired': URL returned 403/404/410
+    - 'timeout': ffmpeg timed out
+    - 'network_error': Connection failed
+    - 'invalid_format': ffmpeg couldn't decode the video
+    """
     # Check ffmpeg is available
     try:
         subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
@@ -414,78 +583,119 @@ def cmd_generate_thumbnails(args):
     thumb_dir = _get_thumbnails_dir()
     limit = args.limit or 100
     force = args.force
+    timeout = getattr(args, 'timeout', 30) or 30
+
+    # Show current status before starting
+    summary = _get_thumbnail_summary(db_path)
 
     print("=" * 60)
-    print("THUMBNAIL GENERATION")
+    print("THUMBNAIL GENERATION (Phase 10.4)")
     print("=" * 60)
     print(f"Database:    {db_path}")
     print(f"Output dir:  {thumb_dir}")
     print(f"Limit:       {limit}")
-    print(f"Force:       {force}")
+    print(f"Timeout:     {timeout}s")
+    print(f"Force retry: {force}")
+    print()
+    print("Current Status:")
+    print(f"  Total videos:  {summary['total_videos']}")
+    print(f"  Success:       {summary['success']}")
+    print(f"  Failed:        {summary['failed']}")
+    print(f"  Unprocessed:   {summary['unprocessed']}")
     print()
 
-    # Query video creatives
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    # Get videos needing thumbnails using new status-aware query
+    rows = _get_videos_needing_thumbnails(db_path, limit, force)
 
-    # Get video creatives with VAST XML
-    cursor.execute("""
-        SELECT id, json_extract(raw_data, '$.video.vastXml') as vast_xml,
-               json_extract(raw_data, '$.video.localThumbnailPath') as local_thumb
-        FROM creatives
-        WHERE format = 'VIDEO'
-          AND json_extract(raw_data, '$.video.vastXml') IS NOT NULL
-        ORDER BY id DESC
-        LIMIT ?
-    """, (limit * 3,))  # Get more to account for filtering
-
-    rows = cursor.fetchall()
-    conn.close()
-
-    # Filter to those needing thumbnails
+    # Build list to process
     to_process = []
-    for creative_id, vast_xml, local_thumb in rows:
+    no_url_count = 0
+
+    for creative_id, vast_xml, direct_video_url in rows:
         thumb_path = thumb_dir / f"{creative_id}.jpg"
 
-        # Skip if thumbnail exists and not forcing
-        if not force and (thumb_path.exists() or local_thumb):
-            continue
+        # Try to get video URL from VAST or direct URL
+        video_url = None
+        if vast_xml:
+            video_url = _extract_video_url_from_vast(vast_xml)
+        if not video_url and direct_video_url:
+            video_url = direct_video_url
 
-        video_url = _extract_video_url_from_vast(vast_xml)
         if video_url:
             to_process.append((creative_id, video_url, thumb_path))
+        else:
+            # Record no_url failure immediately
+            _record_thumbnail_status(db_path, creative_id, 'failed', 'no_url', None)
+            no_url_count += 1
 
         if len(to_process) >= limit:
             break
 
+    if no_url_count > 0:
+        print(f"Skipped {no_url_count} creatives with no video URL (recorded as failed)")
+        print()
+
     if not to_process:
         print("No video creatives need thumbnails.")
-        print("Use --force to regenerate existing thumbnails.")
+        if not force:
+            print("Use --force to retry failed thumbnails.")
         return
 
     print(f"Processing {len(to_process)} videos...")
     print()
 
+    # Track results by error reason
     success_count = 0
-    fail_count = 0
+    errors_by_reason = {}
 
     for i, (creative_id, video_url, thumb_path) in enumerate(to_process, 1):
         print(f"[{i}/{len(to_process)}] {creative_id}...", end=" ", flush=True)
 
-        if _generate_thumbnail_ffmpeg(video_url, thumb_path):
-            if _update_thumbnail_in_db(db_path, creative_id, thumb_path):
-                print(f"OK ({thumb_path.stat().st_size // 1024}KB)")
-                success_count += 1
-            else:
-                print("OK (file only, DB update failed)")
-                success_count += 1
-        else:
-            print("FAILED")
-            fail_count += 1
+        result = _generate_thumbnail_ffmpeg(video_url, thumb_path, timeout)
 
+        if result['success']:
+            # Update raw_data with local path
+            _update_thumbnail_in_db(db_path, creative_id, thumb_path)
+            # Record success status
+            _record_thumbnail_status(db_path, creative_id, 'success', None, video_url)
+            file_size = thumb_path.stat().st_size // 1024 if thumb_path.exists() else 0
+            print(f"OK ({file_size}KB)")
+            success_count += 1
+        else:
+            error_reason = result['error_reason']
+            # Record failure status with reason
+            _record_thumbnail_status(db_path, creative_id, 'failed', error_reason, video_url)
+            errors_by_reason[error_reason] = errors_by_reason.get(error_reason, 0) + 1
+            print(f"FAILED ({error_reason})")
+
+    # Final summary
     print()
     print("=" * 60)
-    print(f"COMPLETE: {success_count} generated, {fail_count} failed")
+    print("RESULTS")
+    print("=" * 60)
+    print(f"New successes: {success_count}")
+
+    if errors_by_reason:
+        print(f"New failures:  {sum(errors_by_reason.values())}")
+        print()
+        print("Failures by reason:")
+        for reason, count in sorted(errors_by_reason.items(), key=lambda x: -x[1]):
+            print(f"  {reason}: {count}")
+
+    # Show updated totals
+    print()
+    updated_summary = _get_thumbnail_summary(db_path)
+    coverage_pct = (updated_summary['success'] / updated_summary['total_videos'] * 100
+                   if updated_summary['total_videos'] > 0 else 0)
+    print(f"Total coverage: {updated_summary['success']} of {updated_summary['total_videos']} "
+          f"videos have thumbnails ({coverage_pct:.1f}%)")
+
+    if updated_summary['error_counts']:
+        print()
+        print("All failures by reason:")
+        for reason, count in sorted(updated_summary['error_counts'].items(), key=lambda x: -x[1]):
+            print(f"  {reason}: {count}")
+
     print("=" * 60)
 
     if success_count > 0:
@@ -558,7 +768,8 @@ Examples:
     # Generate thumbnails command
     thumb_parser = subparsers.add_parser("generate-thumbnails", help="Generate video thumbnails using ffmpeg")
     thumb_parser.add_argument("--limit", type=int, default=100, help="Max videos to process (default: 100)")
-    thumb_parser.add_argument("--force", action="store_true", help="Regenerate existing thumbnails")
+    thumb_parser.add_argument("--force", action="store_true", help="Retry failed thumbnails (skips successful)")
+    thumb_parser.add_argument("--timeout", type=int, default=30, help="Timeout per video in seconds (default: 30)")
     thumb_parser.set_defaults(func=cmd_generate_thumbnails)
 
     args = parser.parse_args()

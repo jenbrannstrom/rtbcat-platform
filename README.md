@@ -4,21 +4,23 @@
 **Phase:** 9.7 - Onboarding Flow Complete
 **Last Updated:** December 2, 2025
 
-A Python-based system for collecting Google Authorized Buyers creatives and organizing them for analysis. This tool helps RTB bidders understand what they're actually bidding on by fetching and organizing creatives that Google leaves as opaque IDs.
+A Python-based system for detecting Google Authorized Buyers wasted QPS, by fetching data such as creatives and organizing them for analysis. This tool helps RTB bidders understand what they're actually bidding on by fetching and organizing creatives that Google leaves as opaque IDs.
 
 ## What This Solves
 
 **The Problem:** Google Authorized Buyers shows you creative IDs like `cr-12345`, but doesn't tell you:
-- Which creatives belong to the same campaign
-- What the actual creative looks like (especially for native ads)
+- How to improve efficiency of the QPS that a bidder consumes
+- What QPS is unused and what should be increased
+- It does this partially by clusering creatives that belong to the same/similar campaign
+- Shows the creative for easy recogition (especially for native ads)
 - Which creatives are wasting your budget
 
 **The Solution:** Cat-Scan automatically:
 1. Fetches all your creatives from Authorized Buyers API
-2. Extracts metadata, UTM parameters, and destination URLs
+2. Extracts metadata, tracking & attribution parameters, and destination URLs
 3. Stores them in a queryable SQLite database
 4. Provides REST API and dashboard for exploration
-5. Supports filtering by format (HTML, VIDEO, NATIVE), approval status, and more
+5. Supports filtering by format (HTML, VIDEO, NATIVE), Spend, approval status, etc
 
 ## Features
 
@@ -256,8 +258,11 @@ config = AppConfig(
 ConfigManager().save(config)
 "
 
-# Start API server
-python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+# Start API server (using systemd service - recommended)
+sudo systemctl start rtbcat-api
+
+# Or for manual development mode:
+# python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## Docker Configuration
@@ -497,20 +502,16 @@ rtbcat-platform/
 
 ## Configuration Files
 
-Configuration is stored in `~/.rtbcat/` (or `/home/rtbcat/.rtbcat/` in Docker):
+Configuration is stored in `~/.catscan/`:
 
 ```
-~/.rtbcat/
+~/.catscan/
 ├── config.enc    # Encrypted configuration (Fernet)
 ├── .key          # Encryption key (mode 0600)
-└── rtbcat.db     # SQLite database
-```
-
-Credentials are mounted from `~/.rtb-cat/credentials/`:
-
-```
-~/.rtb-cat/credentials/
-└── google-credentials.json    # Google service account
+├── catscan.db    # SQLite database
+├── credentials/  # Service account keys
+│   └── google-credentials.json
+└── thumbnails/   # Generated video thumbnails
 ```
 
 ## Development

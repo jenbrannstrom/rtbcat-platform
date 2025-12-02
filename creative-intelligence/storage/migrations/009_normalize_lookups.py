@@ -283,7 +283,7 @@ def run_standalone():
     """Run migration standalone (for testing)."""
     from pathlib import Path
 
-    db_path = Path.home() / ".rtbcat" / "rtbcat.db"
+    db_path = Path.home() / ".catscan" / "catscan.db"
 
     if not db_path.exists():
         print(f"Database not found at {db_path}")

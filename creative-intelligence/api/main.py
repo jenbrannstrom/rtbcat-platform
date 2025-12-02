@@ -72,6 +72,21 @@ class NativePreview(BaseModel):
     logo: Optional[ImagePreview] = None
 
 
+class ThumbnailStatusResponse(BaseModel):
+    """Response model for thumbnail generation status."""
+
+    status: Optional[str] = None  # 'success', 'failed', or None if not processed
+    error_reason: Optional[str] = None  # 'url_expired', 'no_url', 'timeout', 'network_error', 'invalid_format'
+    has_thumbnail: bool = False  # True if thumbnail file exists
+
+
+class WasteFlagsResponse(BaseModel):
+    """Response model for waste detection flags."""
+
+    broken_video: bool = False  # thumbnail_status='failed' AND impressions > 0
+    zero_engagement: bool = False  # impressions > 1000 AND clicks = 0
+
+
 class CreativeResponse(BaseModel):
     """Response model for creative data."""
 
@@ -98,6 +113,9 @@ class CreativeResponse(BaseModel):
     video: Optional[VideoPreview] = None
     html: Optional[HtmlPreview] = None
     native: Optional[NativePreview] = None
+    # Phase 10.4: Thumbnail status and waste detection
+    thumbnail_status: Optional[ThumbnailStatusResponse] = None
+    waste_flags: Optional[WasteFlagsResponse] = None
 
 
 class CampaignResponse(BaseModel):
@@ -105,9 +123,9 @@ class CampaignResponse(BaseModel):
 
     id: str
     name: str
-    source: str
-    creative_count: int
-    metadata: dict = Field(default_factory=dict)
+    creative_ids: list[str] = Field(default_factory=list)
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
 
 class ClusterAssignment(BaseModel):
@@ -703,6 +721,110 @@ def _extract_preview_data(creative, slim: bool = False) -> dict:
     return result
 
 
+async def _get_thumbnail_status_for_creatives(
+    store: SQLiteStore, creative_ids: list[str]
+) -> dict[str, ThumbnailStatusResponse]:
+    """Get thumbnail status for multiple creatives.
+
+    Returns a dict mapping creative_id to ThumbnailStatusResponse.
+    """
+    if not creative_ids:
+        return {}
+
+    statuses = await store.get_thumbnail_statuses(creative_ids)
+    thumbnails_dir = Path.home() / ".catscan" / "thumbnails"
+
+    result = {}
+    for cid in creative_ids:
+        status_data = statuses.get(cid)
+        has_thumbnail = (thumbnails_dir / f"{cid}.jpg").exists()
+
+        if status_data:
+            result[cid] = ThumbnailStatusResponse(
+                status=status_data["status"],
+                error_reason=status_data["error_reason"],
+                has_thumbnail=has_thumbnail,
+            )
+        else:
+            result[cid] = ThumbnailStatusResponse(
+                status=None,
+                error_reason=None,
+                has_thumbnail=has_thumbnail,
+            )
+
+    return result
+
+
+async def _get_waste_flags_for_creatives(
+    store: SQLiteStore,
+    creative_ids: list[str],
+    thumbnail_statuses: dict[str, ThumbnailStatusResponse],
+    days: int = 7,
+) -> dict[str, WasteFlagsResponse]:
+    """Compute waste flags for multiple creatives.
+
+    Args:
+        store: Database store
+        creative_ids: List of creative IDs
+        thumbnail_statuses: Pre-fetched thumbnail status data
+        days: Timeframe for performance data (default 7 days)
+
+    Returns:
+        Dict mapping creative_id to WasteFlagsResponse
+    """
+    if not creative_ids:
+        return {}
+
+    # Get performance data for all creatives in timeframe
+    # We need to query the performance_data table for impressions/clicks
+    async with store._connection() as conn:
+        import asyncio
+        loop = asyncio.get_event_loop()
+
+        def _get_perf():
+            placeholders = ",".join("?" * len(creative_ids))
+            cursor = conn.execute(
+                f"""
+                SELECT creative_id,
+                       SUM(impressions) as total_impressions,
+                       SUM(clicks) as total_clicks
+                FROM performance_data
+                WHERE creative_id IN ({placeholders})
+                  AND metric_date >= date('now', '-{days} days')
+                GROUP BY creative_id
+                """,
+                creative_ids,
+            )
+            return {row["creative_id"]: {"impressions": row["total_impressions"], "clicks": row["total_clicks"]}
+                    for row in cursor.fetchall()}
+
+        perf_data = await loop.run_in_executor(None, _get_perf)
+
+    result = {}
+    for cid in creative_ids:
+        ts = thumbnail_statuses.get(cid)
+        perf = perf_data.get(cid, {"impressions": 0, "clicks": 0})
+        impressions = perf["impressions"] or 0
+        clicks = perf["clicks"] or 0
+
+        # broken_video: thumbnail failed AND has impressions (wasting money on broken video)
+        broken_video = (
+            ts is not None
+            and ts.status == "failed"
+            and impressions > 0
+        )
+
+        # zero_engagement: high impressions but no clicks (poor creative performance)
+        zero_engagement = impressions > 1000 and clicks == 0
+
+        result[cid] = WasteFlagsResponse(
+            broken_video=broken_video,
+            zero_engagement=zero_engagement,
+        )
+
+    return result
+
+
 @app.get("/creatives", response_model=list[CreativeResponse], tags=["Creatives"])
 async def list_creatives(
     campaign_id: Optional[str] = Query(None, description="Filter by campaign ID"),
@@ -712,12 +834,15 @@ async def list_creatives(
     limit: int = Query(100, ge=1, le=1000, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Results offset"),
     slim: bool = Query(True, description="Exclude large fields (vast_xml, html snippets) for faster loading"),
+    days: int = Query(7, ge=1, le=365, description="Timeframe for waste detection (default 7 days)"),
     store: SQLiteStore = Depends(get_store),
 ):
     """List creatives with optional filtering.
 
     By default, slim=True excludes large fields like vast_xml and html snippets
     to reduce payload size. Set slim=False for full data.
+
+    Includes thumbnail_status and waste_flags for each creative.
     """
     creatives = await store.list_creatives(
         campaign_id=campaign_id,
@@ -727,6 +852,12 @@ async def list_creatives(
         limit=limit,
         offset=offset,
     )
+
+    # Get thumbnail status and waste flags for all creatives
+    creative_ids = [c.id for c in creatives]
+    thumbnail_statuses = await _get_thumbnail_status_for_creatives(store, creative_ids)
+    waste_flags = await _get_waste_flags_for_creatives(store, creative_ids, thumbnail_statuses, days)
+
     return [
         CreativeResponse(
             id=c.id,
@@ -748,6 +879,8 @@ async def list_creatives(
             campaign_id=c.campaign_id,
             cluster_id=c.cluster_id,
             seat_name=c.seat_name,
+            thumbnail_status=thumbnail_statuses.get(c.id),
+            waste_flags=waste_flags.get(c.id),
             **_extract_preview_data(c, slim=slim),
         )
         for c in creatives
@@ -757,12 +890,20 @@ async def list_creatives(
 @app.get("/creatives/{creative_id}", response_model=CreativeResponse, tags=["Creatives"])
 async def get_creative(
     creative_id: str,
+    days: int = Query(7, ge=1, le=365, description="Timeframe for waste detection (default 7 days)"),
     store: SQLiteStore = Depends(get_store),
 ):
-    """Get a specific creative by ID."""
+    """Get a specific creative by ID.
+
+    Includes thumbnail_status and waste_flags.
+    """
     creative = await store.get_creative(creative_id)
     if not creative:
         raise HTTPException(status_code=404, detail="Creative not found")
+
+    # Get thumbnail status and waste flags
+    thumbnail_statuses = await _get_thumbnail_status_for_creatives(store, [creative_id])
+    waste_flags = await _get_waste_flags_for_creatives(store, [creative_id], thumbnail_statuses, days)
 
     return CreativeResponse(
         id=creative.id,
@@ -784,6 +925,8 @@ async def get_creative(
         campaign_id=creative.campaign_id,
         cluster_id=creative.cluster_id,
         seat_name=creative.seat_name,
+        thumbnail_status=thumbnail_statuses.get(creative_id),
+        waste_flags=waste_flags.get(creative_id),
         **_extract_preview_data(creative),
     )
 
@@ -828,28 +971,58 @@ async def remove_from_campaign(
 
 
 @app.get("/campaigns", response_model=list[CampaignResponse], tags=["Campaigns"])
-async def list_campaigns(
-    source: Optional[str] = Query(None, description="Filter by data source"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum results"),
-    offset: int = Query(0, ge=0, description="Results offset"),
-    store: SQLiteStore = Depends(get_store),
-):
-    """List campaigns with optional filtering."""
-    campaigns = await store.list_campaigns(
-        source=source,
-        limit=limit,
-        offset=offset,
-    )
+async def list_campaigns(store: SQLiteStore = Depends(get_store)):
+    """List all campaigns with their creative IDs."""
+    campaigns = await store.list_campaigns()
     return [
         CampaignResponse(
-            id=c.id,
-            name=c.name,
-            source=c.source,
-            creative_count=c.creative_count,
-            metadata=c.metadata,
+            id=c["id"],
+            name=c["name"],
+            creative_ids=c["creative_ids"],
+            created_at=str(c["created_at"]) if c.get("created_at") else None,
+            updated_at=str(c["updated_at"]) if c.get("updated_at") else None,
         )
         for c in campaigns
     ]
+
+
+@app.get("/campaigns/unclustered", tags=["Campaigns"])
+async def get_unclustered_creatives_early(
+    days: int = Query(None, ge=1, le=365, description="Only return creatives with activity in last N days"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get IDs of creatives not assigned to any campaign.
+
+    If days is specified, only returns creatives with impressions, clicks, or spend
+    in the given timeframe.
+    """
+    creative_ids = await store.get_unclustered_creative_ids()
+
+    # If days specified, filter to only those with activity
+    if days is not None and creative_ids:
+        async with store._connection() as conn:
+            import asyncio
+            loop = asyncio.get_event_loop()
+
+            def _filter_active():
+                placeholders = ",".join("?" * len(creative_ids))
+                cursor = conn.execute(
+                    f"""
+                    SELECT DISTINCT creative_id
+                    FROM performance_data
+                    WHERE creative_id IN ({placeholders})
+                      AND metric_date >= date('now', '-{days} days')
+                      AND (impressions > 0 OR clicks > 0 OR spend_micros > 0)
+                    """,
+                    creative_ids,
+                )
+                return [row["creative_id"] for row in cursor.fetchall()]
+
+            active_ids = await loop.run_in_executor(None, _filter_active)
+            # Preserve order from original list
+            creative_ids = [cid for cid in creative_ids if cid in set(active_ids)]
+
+    return {"creative_ids": creative_ids, "count": len(creative_ids)}
 
 
 @app.get("/campaigns/{campaign_id}", response_model=CampaignResponse, tags=["Campaigns"])
@@ -863,11 +1036,11 @@ async def get_campaign(
         raise HTTPException(status_code=404, detail="Campaign not found")
 
     return CampaignResponse(
-        id=campaign.id,
-        name=campaign.name,
-        source=campaign.source,
-        creative_count=campaign.creative_count,
-        metadata=campaign.metadata,
+        id=campaign["id"],
+        name=campaign["name"],
+        creative_ids=campaign["creative_ids"],
+        created_at=str(campaign["created_at"]) if campaign.get("created_at") else None,
+        updated_at=str(campaign["updated_at"]) if campaign.get("updated_at") else None,
     )
 
 
@@ -1237,6 +1410,194 @@ async def populate_seats_from_creatives(
     except Exception as e:
         logger.error(f"Seat population failed: {e}")
         raise HTTPException(status_code=500, detail=f"Seat population failed: {str(e)}")
+
+
+# =============================================================================
+# Campaign Clustering Endpoints
+# =============================================================================
+
+
+class CampaignCreate(BaseModel):
+    """Request body for creating a campaign."""
+
+    name: str
+    creative_ids: Optional[list[str]] = None
+
+
+class CampaignUpdate(BaseModel):
+    """Request body for updating a campaign."""
+
+    name: Optional[str] = None
+    creative_ids: Optional[list[str]] = None  # Replace all creative IDs
+    add_creative_ids: Optional[list[str]] = None  # Add to existing
+    remove_creative_ids: Optional[list[str]] = None  # Remove from existing
+
+
+class AutoClusterRequest(BaseModel):
+    """Request body for auto-clustering."""
+
+    by_url: bool = True
+    by_country: bool = False
+
+
+class ClusterSuggestion(BaseModel):
+    """A suggested campaign cluster."""
+
+    suggested_name: str
+    creative_ids: list[str]
+    domain: Optional[str] = None
+    country: Optional[str] = None
+
+
+class AutoClusterResponse(BaseModel):
+    """Response model for auto-cluster suggestions."""
+
+    suggestions: list[ClusterSuggestion]
+    unclustered_count: int
+
+
+@app.post("/campaigns", response_model=CampaignResponse, tags=["Campaigns"])
+async def create_campaign(
+    body: CampaignCreate,
+    store: SQLiteStore = Depends(get_store),
+):
+    """Create a new campaign."""
+    campaign = await store.create_campaign(
+        name=body.name,
+        creative_ids=body.creative_ids,
+    )
+    return CampaignResponse(
+        id=campaign["id"],
+        name=campaign["name"],
+        creative_ids=campaign["creative_ids"],
+    )
+
+
+@app.patch("/campaigns/{campaign_id}", response_model=CampaignResponse, tags=["Campaigns"])
+async def update_campaign(
+    campaign_id: str,
+    body: CampaignUpdate,
+    store: SQLiteStore = Depends(get_store),
+):
+    """Update a campaign's name and/or creative assignments.
+
+    Supports three modes for creative assignment:
+    - creative_ids: Replace all creative IDs with the provided list
+    - add_creative_ids: Add the provided IDs to existing assignments
+    - remove_creative_ids: Remove the provided IDs from existing assignments
+
+    add/remove can be used together in one request.
+    """
+    # Handle add/remove creative IDs
+    final_creative_ids = body.creative_ids
+    if body.add_creative_ids or body.remove_creative_ids:
+        # Get current campaign to get existing creative_ids
+        current = await store.get_campaign(campaign_id)
+        if not current:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+
+        current_ids = set(current.get("creative_ids", []))
+
+        if body.add_creative_ids:
+            current_ids.update(body.add_creative_ids)
+        if body.remove_creative_ids:
+            current_ids.difference_update(body.remove_creative_ids)
+
+        final_creative_ids = list(current_ids)
+
+    campaign = await store.update_campaign(
+        campaign_id=campaign_id,
+        name=body.name,
+        creative_ids=final_creative_ids,
+    )
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    return CampaignResponse(
+        id=campaign["id"],
+        name=campaign["name"],
+        creative_ids=campaign["creative_ids"],
+        created_at=str(campaign["created_at"]) if campaign.get("created_at") else None,
+        updated_at=str(campaign["updated_at"]) if campaign.get("updated_at") else None,
+    )
+
+
+@app.delete("/campaigns/{campaign_id}", tags=["Campaigns"])
+async def delete_campaign(
+    campaign_id: str,
+    store: SQLiteStore = Depends(get_store),
+):
+    """Delete a campaign (creatives become unclustered)."""
+    deleted = await store.delete_campaign(campaign_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    return {"status": "deleted", "campaign_id": campaign_id}
+
+
+@app.post("/campaigns/auto-cluster", response_model=AutoClusterResponse, tags=["Campaigns"])
+async def auto_cluster_creatives(
+    body: AutoClusterRequest,
+    store: SQLiteStore = Depends(get_store),
+):
+    """Auto-cluster unclustered creatives by destination URL (and optionally country).
+
+    Returns suggested clusters without saving them. User must confirm to create.
+    """
+    from urllib.parse import urlparse
+
+    # Get unclustered creatives with their data
+    unclustered_ids = await store.get_unclustered_creative_ids()
+    if not unclustered_ids:
+        return AutoClusterResponse(suggestions=[], unclustered_count=0)
+
+    # Fetch creative details
+    creatives = []
+    for cid in unclustered_ids[:500]:  # Limit to 500 for performance
+        creative = await store.get_creative(cid)
+        if creative:
+            creatives.append(creative)
+
+    # Cluster by URL
+    clusters: dict[str, list] = {}
+    for c in creatives:
+        url = c.final_url or c.display_url or ""
+        try:
+            parsed = urlparse(url if url.startswith("http") else f"https://{url}")
+            # Use domain + first path segment
+            path_parts = [p for p in parsed.path.split("/") if p][:2]
+            key = f"{parsed.netloc}/{'/'.join(path_parts)}" if path_parts else parsed.netloc
+            if not key or key == "/":
+                key = "unknown"
+        except Exception:
+            key = "unknown"
+
+        if key not in clusters:
+            clusters[key] = []
+        clusters[key].append(c)
+
+    # Build suggestions (only clusters with 2+ creatives)
+    suggestions = []
+    for domain_key, cluster_creatives in clusters.items():
+        if len(cluster_creatives) >= 2:
+            # Generate a name from the domain
+            suggested_name = domain_key.split("/")[0].replace("www.", "").split(".")[0].title()
+            if suggested_name == "Unknown":
+                suggested_name = f"Cluster {len(suggestions) + 1}"
+
+            suggestions.append(
+                ClusterSuggestion(
+                    suggested_name=suggested_name,
+                    creative_ids=[c.id for c in cluster_creatives],
+                    domain=domain_key,
+                )
+            )
+
+    # Sort by cluster size
+    suggestions.sort(key=lambda s: len(s.creative_ids), reverse=True)
+
+    return AutoClusterResponse(
+        suggestions=suggestions[:20],  # Limit to top 20 suggestions
+        unclustered_count=len(unclustered_ids),
+    )
 
 
 # Waste Analysis endpoints
@@ -2200,7 +2561,7 @@ async def import_performance_stream(
 
     try:
         # Get database path and create direct connection for repository
-        db_path = Path.home() / ".rtbcat" / "rtbcat.db"
+        db_path = Path.home() / ".catscan" / "catscan.db"
         db_conn = sqlite3.connect(str(db_path))
         repo = PerformanceRepository(db_conn)
 
@@ -2334,7 +2695,7 @@ async def import_performance_batch(
     from pathlib import Path
 
     try:
-        db_path = Path.home() / ".rtbcat" / "rtbcat.db"
+        db_path = Path.home() / ".catscan" / "catscan.db"
         conn = sqlite3.connect(str(db_path))
         cursor = conn.cursor()
 
