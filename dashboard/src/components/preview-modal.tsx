@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { X, Play, ExternalLink, Copy, Check, Loader2, Info, AlertTriangle, ChevronDown } from "lucide-react";
+import { X, Play, ExternalLink, Copy, Check, Loader2, Info, AlertTriangle } from "lucide-react";
 import type { Creative, CreativePerformanceSummary } from "@/types/api";
 import { cn, getFormatColor, getStatusColor } from "@/lib/utils";
 import { getCreative } from "@/lib/api";
@@ -145,41 +145,6 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
   );
 }
 
-function CollapsibleSection({
-  title,
-  children,
-  defaultOpen = false,
-  isEmpty = false,
-}: {
-  title: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-  isEmpty?: boolean;
-}) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-
-  if (isEmpty) {
-    return (
-      <div className="border-t border-gray-200 py-2 px-4 text-sm text-gray-400">
-        {title}: <span className="italic">none</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="border-t border-gray-200">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full py-2 px-4 flex items-center justify-between text-sm font-medium hover:bg-gray-50"
-      >
-        <span>{title}</span>
-        <ChevronDown className={cn("h-4 w-4 transition-transform", isOpen && "rotate-180")} />
-      </button>
-      {isOpen && <div className="px-4 pb-3 text-sm">{children}</div>}
-    </div>
-  );
-}
-
 function MetricCard({ value, label }: { value: string; label: string }) {
   return (
     <div className="text-center p-3 bg-gray-50 rounded-lg">
@@ -193,18 +158,24 @@ function DataNotesSection({ notes }: { notes: DataNote[] }) {
   if (notes.length === 0) return null;
 
   return (
-    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+    <div className="flex flex-wrap gap-2">
       {notes.map((note, i) => (
-        <div key={i} className="flex items-start gap-2 text-sm">
-          {note.icon === "alert" ? (
-            <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
-          ) : (
-            <Info className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
+        <span
+          key={i}
+          className={cn(
+            "inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full",
+            note.icon === "alert"
+              ? "bg-amber-50 text-amber-700 border border-amber-200"
+              : "bg-blue-50 text-blue-700 border border-blue-200"
           )}
-          <span className={note.icon === "alert" ? "text-amber-700" : "text-gray-600"}>
-            {note.message}
-          </span>
-        </div>
+        >
+          {note.icon === "alert" ? (
+            <AlertTriangle className="h-3 w-3" />
+          ) : (
+            <Info className="h-3 w-3" />
+          )}
+          {note.message}
+        </span>
       ))}
     </div>
   );
@@ -513,118 +484,144 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
             </div>
           )}
 
-          {/* Collapsible Sections */}
-          <div>
-            {/* Creative Details - Open by default */}
-            <CollapsibleSection title="Creative Details" defaultOpen={true}>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Status</span>
-                  <span className={cn("badge", getStatusColor(creative.approval_status || ""))}>
-                    {creative.approval_status?.replace(/_/g, " ") || "-"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Format</span>
-                  <span>
-                    {creative.format}
-                    {creative.width && creative.height && ` (${creative.width}×${creative.height})`}
-                  </span>
-                </div>
-                {rejectionReason && (
+          {/* Two-Column Details Section */}
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Left Column: Creative Details + Technical IDs */}
+            <div className="space-y-4">
+              {/* Creative Details */}
+              <div className="bg-gray-50 rounded-lg p-3">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Creative Details
+                </h4>
+                <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Rejection</span>
-                    <span className="text-red-600">{rejectionReason}</span>
+                    <span className="text-gray-500">Status</span>
+                    <span className={cn("badge", getStatusColor(creative.approval_status || ""))}>
+                      {creative.approval_status?.replace(/_/g, " ") || "-"}
+                    </span>
                   </div>
-                )}
-                {creative.advertiser_name && (
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Advertiser</span>
-                    <span>{creative.advertiser_name}</span>
+                    <span className="text-gray-500">Format</span>
+                    <span>
+                      {creative.format}
+                      {creative.width && creative.height && ` (${creative.width}×${creative.height})`}
+                    </span>
                   </div>
-                )}
-                {appName && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">App Name</span>
-                    <span>{appName}</span>
-                  </div>
-                )}
-              </div>
-            </CollapsibleSection>
-
-            {/* Destination URLs */}
-            <CollapsibleSection title="Destination URLs" isEmpty={parsedUrls.length === 0}>
-              <div className="space-y-2">
-                {parsedUrls.slice(0, 5).map((url, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <span className="text-gray-400">→</span>
-                    <a
-                      href={url.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary-600 hover:text-primary-700 truncate flex-1"
-                    >
-                      {getUrlDisplayText(url)}
-                    </a>
-                  </div>
-                ))}
-                {parsedUrls.length > 5 && (
-                  <div className="text-xs text-gray-400">+{parsedUrls.length - 5} more URLs</div>
-                )}
-              </div>
-            </CollapsibleSection>
-
-            {/* Tracking Parameters */}
-            <CollapsibleSection title="Tracking Parameters" isEmpty={!hasTrackingParams}>
-              <div className="space-y-1">
-                {Object.entries(trackingParams).map(([key, value]) => (
-                  <div key={key} className="flex justify-between text-xs">
-                    <span className="text-gray-500 font-mono">{key}</span>
-                    <span className="text-gray-700 truncate max-w-[200px]">{value}</span>
-                  </div>
-                ))}
-              </div>
-            </CollapsibleSection>
-
-            {/* Technical IDs */}
-            <CollapsibleSection title="Technical IDs">
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500">Creative ID</span>
-                  <div className="flex items-center gap-1">
-                    <span className="font-mono text-xs">{creative.id}</span>
-                    <CopyButton text={creative.id} />
-                  </div>
+                  {rejectionReason && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Rejection</span>
+                      <span className="text-red-600">{rejectionReason}</span>
+                    </div>
+                  )}
+                  {creative.advertiser_name && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Advertiser</span>
+                      <span>{creative.advertiser_name}</span>
+                    </div>
+                  )}
+                  {appName && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">App Name</span>
+                      <span>{appName}</span>
+                    </div>
+                  )}
                 </div>
-                {creative.account_id && (
+              </div>
+
+              {/* Technical IDs */}
+              <div className="bg-gray-50 rounded-lg p-3">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Technical IDs
+                </h4>
+                <div className="space-y-2 text-sm">
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-500">Account ID</span>
+                    <span className="text-gray-500">Creative ID</span>
                     <div className="flex items-center gap-1">
-                      <span className="font-mono text-xs">{creative.account_id}</span>
-                      <CopyButton text={creative.account_id} />
+                      <span className="font-mono text-xs">{creative.id}</span>
+                      <CopyButton text={creative.id} />
                     </div>
                   </div>
-                )}
-                {creative.buyer_id && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">Buyer ID</span>
-                    <div className="flex items-center gap-1">
-                      <span className="font-mono text-xs">{creative.buyer_id}</span>
-                      <CopyButton text={creative.buyer_id} />
+                  {creative.account_id && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Account ID</span>
+                      <div className="flex items-center gap-1">
+                        <span className="font-mono text-xs">{creative.account_id}</span>
+                        <CopyButton text={creative.account_id} />
+                      </div>
                     </div>
-                  </div>
-                )}
-                {bundleId && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">Bundle ID</span>
-                    <div className="flex items-center gap-1">
-                      <span className="font-mono text-xs">{bundleId}</span>
-                      <CopyButton text={bundleId} />
+                  )}
+                  {creative.buyer_id && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Buyer ID</span>
+                      <div className="flex items-center gap-1">
+                        <span className="font-mono text-xs">{creative.buyer_id}</span>
+                        <CopyButton text={creative.buyer_id} />
+                      </div>
                     </div>
+                  )}
+                  {bundleId && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Bundle ID</span>
+                      <div className="flex items-center gap-1">
+                        <span className="font-mono text-xs">{bundleId}</span>
+                        <CopyButton text={bundleId} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Destination URLs + Tracking Params */}
+            <div className="space-y-4">
+              {/* Destination URLs */}
+              <div className="bg-gray-50 rounded-lg p-3">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Destination
+                </h4>
+                {parsedUrls.length > 0 ? (
+                  <div className="space-y-2 text-sm">
+                    {parsedUrls.slice(0, 4).map((url, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className="text-gray-400">→</span>
+                        <a
+                          href={url.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary-600 hover:text-primary-700 truncate flex-1 text-xs"
+                        >
+                          {getUrlDisplayText(url)}
+                        </a>
+                      </div>
+                    ))}
+                    {parsedUrls.length > 4 && (
+                      <div className="text-xs text-gray-400">+{parsedUrls.length - 4} more URLs</div>
+                    )}
                   </div>
+                ) : (
+                  <p className="text-sm text-gray-400 italic">No URLs found</p>
                 )}
               </div>
-            </CollapsibleSection>
+
+              {/* Tracking Parameters */}
+              <div className="bg-gray-50 rounded-lg p-3">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Tracking Parameters
+                </h4>
+                {hasTrackingParams ? (
+                  <div className="space-y-1 text-sm">
+                    {Object.entries(trackingParams).map(([key, value]) => (
+                      <div key={key} className="flex justify-between text-xs">
+                        <span className="text-gray-500 font-mono">{key}</span>
+                        <span className="text-gray-700 truncate max-w-[150px]">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400 italic">No tracking params</p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

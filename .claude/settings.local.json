@@ -50,7 +50,8 @@
       "Bash(sudo systemctl status:*)",
       "Bash(xargs sed:*)",
       "Bash(netstat:*)",
-      "Bash(journalctl:*)"
+      "Bash(journalctl:*)",
+      "Bash(xargs kill:*)"
     ],
     "deny": [],
     "ask": []
