@@ -17,14 +17,21 @@ interface Creative {
 interface UnassignedPoolProps {
   creativeIds: string[];
   creatives: Map<string, Creative>;
+  selectedIds: Set<string>;
+  onCreativeSelect: (id: string, event?: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean }) => void;
 }
 
-export function UnassignedPool({ creativeIds, creatives }: UnassignedPoolProps) {
+export function UnassignedPool({ creativeIds, creatives, selectedIds, onCreativeSelect }: UnassignedPoolProps) {
   const [isExpanded, setIsExpanded] = useState(true);
+  const [openPopupId, setOpenPopupId] = useState<string | null>(null);
 
   const { setNodeRef, isOver } = useDroppable({
     id: 'unassigned',
   });
+
+  const handleTogglePopup = (creativeId: string | null) => {
+    setOpenPopupId(creativeId);
+  };
 
   const unassignedCreatives = creativeIds
     .map(id => creatives.get(id))
@@ -59,13 +66,17 @@ export function UnassignedPool({ creativeIds, creatives }: UnassignedPoolProps) 
 
       {/* Grid */}
       {isExpanded && (
-        <SortableContext items={creativeIds} strategy={rectSortingStrategy}>
+        <SortableContext items={creativeIds.map(id => String(id))} strategy={rectSortingStrategy}>
           <div className="mt-4 flex flex-wrap gap-1 min-h-[60px]">
             {unassignedCreatives.map(creative => (
               <div key={creative.id} className="w-14 h-14">
                 <DraggableCreative
                   creative={creative}
                   clusterId="unassigned"
+                  isSelected={selectedIds.has(String(creative.id))}
+                  isPopupOpen={openPopupId === String(creative.id)}
+                  onSelect={onCreativeSelect}
+                  onTogglePopup={handleTogglePopup}
                 />
               </div>
             ))}

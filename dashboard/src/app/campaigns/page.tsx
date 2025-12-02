@@ -1,22 +1,82 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   DndContext,
   DragOverlay,
-  closestCenter,
+  closestCorners,
   PointerSensor,
   useSensor,
   useSensors,
   DragStartEvent,
   DragEndEvent,
+  DragCancelEvent,
 } from '@dnd-kit/core';
-import { createSnapModifier } from '@dnd-kit/modifiers';
+// import { createSnapModifier } from '@dnd-kit/modifiers';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Sparkles, RefreshCw, Check } from 'lucide-react';
+import { Plus, Sparkles, RefreshCw, Check, LayoutGrid, List } from 'lucide-react';
+import { useDroppable } from '@dnd-kit/core';
 import { ClusterCard } from '@/components/campaigns/cluster-card';
 import { UnassignedPool } from '@/components/campaigns/unassigned-pool';
 import { DraggableCreative } from '@/components/campaigns/draggable-creative';
+import { ListCluster } from '@/components/campaigns/list-cluster';
+import { ListItem } from '@/components/campaigns/list-item';
+import { cn } from '@/lib/utils';
+
+// Droppable zone to create a new campaign on drop (Grid view)
+function NewCampaignDropZone({ onClick }: { onClick: () => void }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'new-campaign',
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      onClick={onClick}
+      className={cn(
+        "min-h-[200px] rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-colors cursor-pointer",
+        isOver
+          ? "border-blue-500 bg-blue-50 text-blue-600"
+          : "border-gray-300 text-gray-400 hover:border-blue-400 hover:text-blue-500"
+      )}
+    >
+      <span className="text-4xl">+</span>
+      <span>{isOver ? "Drop to create campaign" : "New Campaign"}</span>
+      {isOver && (
+        <span className="text-sm text-blue-500">Release to create with selected items</span>
+      )}
+    </div>
+  );
+}
+
+// Droppable zone to create a new campaign on drop (List view)
+function NewCampaignDropZoneList({ onClick }: { onClick: () => void }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'new-campaign',
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      onClick={onClick}
+      className={cn(
+        "w-80 flex-shrink-0 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-colors cursor-pointer",
+        isOver
+          ? "border-blue-500 bg-blue-50 text-blue-600"
+          : "border-gray-300 bg-gray-50 text-gray-400 hover:border-blue-400 hover:text-blue-500"
+      )}
+      style={{ maxHeight: '70vh', minHeight: '200px' }}
+    >
+      <span className="text-4xl">+</span>
+      <span className="text-sm">{isOver ? "Drop to create" : "New Campaign"}</span>
+      {isOver && (
+        <span className="text-xs text-blue-500">Release to create</span>
+      )}
+    </div>
+  );
+}
+
+type ViewMode = 'grid' | 'list';
 
 // =============================================================================
 // Types
@@ -216,20 +276,25 @@ export default function CampaignsPage() {
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [createdSuggestions, setCreatedSuggestions] = useState<Set<string>>(new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [lastClickedId, setLastClickedId] = useState<string | null>(null);
   const [creativesMap, setCreativesMap] = useState<Map<string, Creative>>(new Map());
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
-  // Sensors with press delay
+  // Build ordered list of all creative IDs for shift-select range
+  const allCreativeIdsRef = useRef<string[]>([]);
+
+  // Sensors: require 8px movement before drag starts (prevents click-to-move)
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        delay: 250,
-        tolerance: 5,
+        distance: 8,  // Must move 8px before drag activates
       },
     })
   );
 
-  // Snap to 60px grid
-  const snapToGrid = createSnapModifier(60);
+  // Snap modifier disabled for smoother dragging
+  // const snapToGrid = createSnapModifier(60);
 
   // Queries
   const { data: campaigns = [], isLoading: loadingCampaigns } = useQuery({
@@ -256,6 +321,16 @@ export default function CampaignsPage() {
       console.log(`[Campaigns] Built creatives map with ${map.size} entries`);
     }
   }, [allCreatives]);
+
+  // Build ordered list of creative IDs for shift-select (campaigns first, then unclustered)
+  useEffect(() => {
+    const orderedIds: string[] = [];
+    campaigns.forEach(c => {
+      c.creative_ids.forEach(id => orderedIds.push(String(id)));
+    });
+    (unclustered?.creative_ids || []).forEach(id => orderedIds.push(String(id)));
+    allCreativeIdsRef.current = orderedIds;
+  }, [campaigns, unclustered]);
 
   // Auto-cluster mutation
   const autoClusterMutation = useMutation({
@@ -295,53 +370,196 @@ export default function CampaignsPage() {
     },
   });
 
+  // Multi-select handler: Click=single, Ctrl=toggle, Shift=range
+  const handleCreativeSelect = useCallback((creativeId: string, event?: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean }) => {
+    const isCtrlKey = event?.ctrlKey || event?.metaKey;
+    const isShiftKey = event?.shiftKey;
+
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+
+      if (isShiftKey && lastClickedId) {
+        // Range select: select all between lastClickedId and creativeId
+        const allIds = allCreativeIdsRef.current;
+        const startIdx = allIds.indexOf(lastClickedId);
+        const endIdx = allIds.indexOf(creativeId);
+
+        if (startIdx !== -1 && endIdx !== -1) {
+          const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+          for (let i = from; i <= to; i++) {
+            newSet.add(allIds[i]);
+          }
+        }
+      } else if (isCtrlKey) {
+        // Toggle select
+        if (newSet.has(creativeId)) {
+          newSet.delete(creativeId);
+        } else {
+          newSet.add(creativeId);
+        }
+      } else {
+        // Single select (clear others)
+        newSet.clear();
+        newSet.add(creativeId);
+      }
+
+      return newSet;
+    });
+
+    // Always update last clicked (for shift-range)
+    setLastClickedId(creativeId);
+  }, [lastClickedId]);
+
+  // Track which IDs are being dragged (for multi-select)
+  const [draggedIds, setDraggedIds] = useState<string[]>([]);
+
   // Drag handlers
   function handleDragStart(event: DragStartEvent) {
-    setActiveId(event.active.id as string);
+    const dragId = event.active.id as string;
+    console.log('=== DRAG START ===', dragId, 'selected:', selectedIds.size);
+    setActiveId(dragId);
+
+    // If dragged item is selected, drag all selected items
+    // Otherwise, drag only the clicked item
+    if (selectedIds.has(dragId)) {
+      setDraggedIds(Array.from(selectedIds));
+    } else {
+      setDraggedIds([dragId]);
+    }
+  }
+
+  function handleDragCancel(event: DragCancelEvent) {
+    console.log('=== DRAG CANCEL ===', event.active.id);
+    setActiveId(null);
+    setDraggedIds([]);
   }
 
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
+    console.log('=== DRAG END ===', active.id, '→', over?.id, 'dragging:', draggedIds.length, 'items');
     setActiveId(null);
 
-    if (!over) return;
+    // No target - drop cancelled, do nothing
+    if (!over) {
+      setDraggedIds([]);
+      return;
+    }
 
-    const creativeId = active.id as string;
+    // Only process creative drags, not cluster drags
+    if (active.data.current?.type !== 'creative') {
+      console.log('Not a creative drag, ignoring');
+      setDraggedIds([]);
+      return;
+    }
+
     const sourceClusterId = active.data.current?.clusterId as string;
-    const targetClusterId = over.id as string;
 
-    // No change
-    if (sourceClusterId === targetClusterId) return;
+    // Target could be a cluster directly, or another creative inside a cluster
+    // If dropping on a creative, use its clusterId as the target
+    let targetClusterId = over.id as string;
+    if (over.data.current?.type === 'creative' && over.data.current?.clusterId) {
+      targetClusterId = over.data.current.clusterId as string;
+    }
 
-    // Move to unassigned
-    if (targetClusterId === 'unassigned' && sourceClusterId !== 'unassigned') {
-      await updateMutation.mutateAsync({
-        id: sourceClusterId,
-        data: { remove_creative_ids: [creativeId] },
-      });
+    console.log('Source cluster:', sourceClusterId, 'Target cluster:', targetClusterId);
+
+    // Dropped on same cluster - do nothing
+    if (sourceClusterId === targetClusterId) {
+      setDraggedIds([]);
       return;
     }
 
-    // Move from unassigned to cluster
-    if (sourceClusterId === 'unassigned' && targetClusterId !== 'unassigned') {
-      await updateMutation.mutateAsync({
-        id: targetClusterId,
-        data: { add_creative_ids: [creativeId] },
+    // Get all IDs to move (could be multiple if multi-select)
+    const idsToMove = draggedIds.length > 0 ? draggedIds : [active.id as string];
+    console.log('Moving', idsToMove.length, 'items to', targetClusterId);
+
+    // Handle drop on "new-campaign" zone - create campaign with these items
+    if (targetClusterId === 'new-campaign') {
+      console.log('Creating new campaign with', idsToMove.length, 'items');
+
+      // Remove from source clusters first
+      const idsBySource = new Map<string, string[]>();
+      idsToMove.forEach(id => {
+        let srcCluster = 'unassigned';
+        for (const campaign of campaigns) {
+          if (campaign.creative_ids.includes(id)) {
+            srcCluster = campaign.id;
+            break;
+          }
+        }
+        if (srcCluster !== 'unassigned') {
+          if (!idsBySource.has(srcCluster)) {
+            idsBySource.set(srcCluster, []);
+          }
+          idsBySource.get(srcCluster)!.push(id);
+        }
       });
+
+      for (const [srcCluster, ids] of idsBySource) {
+        await updateMutation.mutateAsync({
+          id: srcCluster,
+          data: { remove_creative_ids: ids },
+        });
+      }
+
+      // Create the new campaign with the items
+      await createMutation.mutateAsync({
+        name: `New Campaign (${idsToMove.length})`,
+        creative_ids: idsToMove,
+      });
+
+      setSelectedIds(new Set());
+      setDraggedIds([]);
       return;
     }
 
-    // Move between clusters
-    if (sourceClusterId !== 'unassigned' && targetClusterId !== 'unassigned') {
-      await updateMutation.mutateAsync({
-        id: sourceClusterId,
-        data: { remove_creative_ids: [creativeId] },
-      });
+    // Only move if dropping on a valid cluster (not on another creative)
+    const isValidTarget = targetClusterId === 'unassigned' ||
+      campaigns.some(c => c.id === targetClusterId);
+    if (!isValidTarget) {
+      console.log('Invalid target:', targetClusterId);
+      setDraggedIds([]);
+      return;
+    }
+
+    // Group IDs by their source cluster for efficient batch updates
+    const idsBySource = new Map<string, string[]>();
+    idsToMove.forEach(id => {
+      // Find which cluster this ID belongs to
+      let srcCluster = 'unassigned';
+      for (const campaign of campaigns) {
+        if (campaign.creative_ids.includes(id)) {
+          srcCluster = campaign.id;
+          break;
+        }
+      }
+      if (!idsBySource.has(srcCluster)) {
+        idsBySource.set(srcCluster, []);
+      }
+      idsBySource.get(srcCluster)!.push(id);
+    });
+
+    // Remove from source clusters
+    for (const [srcCluster, ids] of idsBySource) {
+      if (srcCluster !== 'unassigned' && srcCluster !== targetClusterId) {
+        await updateMutation.mutateAsync({
+          id: srcCluster,
+          data: { remove_creative_ids: ids },
+        });
+      }
+    }
+
+    // Add to target cluster (if not unassigned)
+    if (targetClusterId !== 'unassigned') {
       await updateMutation.mutateAsync({
         id: targetClusterId,
-        data: { add_creative_ids: [creativeId] },
+        data: { add_creative_ids: idsToMove },
       });
     }
+
+    // Clear selection after move
+    setSelectedIds(new Set());
+    setDraggedIds([]);
   }
 
   // Rename cluster
@@ -436,31 +654,62 @@ export default function CampaignsPage() {
             {campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''} · {unclustered?.count || 0} unclustered · {creativesMap.size} creatives loaded
           </p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => autoClusterMutation.mutate()}
-            disabled={autoClusterMutation.isPending}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-          >
-            {autoClusterMutation.isPending ? (
-              <>
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                Analyzing...
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4" />
-                Cluster by URL
-              </>
-            )}
-          </button>
-          <button
-            onClick={handleCreateCluster}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            New Campaign
-          </button>
+        <div className="flex items-center gap-4">
+          {/* View Toggle */}
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={cn(
+                "p-2 rounded transition-colors",
+                viewMode === 'grid'
+                  ? "bg-white shadow-sm text-blue-600"
+                  : "text-gray-500 hover:text-gray-700"
+              )}
+              title="Grid view"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={cn(
+                "p-2 rounded transition-colors",
+                viewMode === 'list'
+                  ? "bg-white shadow-sm text-blue-600"
+                  : "text-gray-500 hover:text-gray-700"
+              )}
+              title="List view"
+            >
+              <List className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => autoClusterMutation.mutate()}
+              disabled={autoClusterMutation.isPending}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {autoClusterMutation.isPending ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  Cluster by URL
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleCreateCluster}
+              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              New Campaign
+            </button>
+          </div>
         </div>
       </div>
 
@@ -532,48 +781,95 @@ export default function CampaignsPage() {
 
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
-        modifiers={[snapToGrid]}
+        collisionDetection={closestCorners}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
-        {/* Clusters Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          {campaigns.map((campaign) => (
-            <ClusterCard
-              key={campaign.id}
-              campaign={campaign}
-              creatives={getCampaignCreatives(campaign)}
-              onRename={handleRename}
-              onDelete={handleDelete}
+        {viewMode === 'grid' ? (
+          <>
+            {/* Grid View */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+              {campaigns.map((campaign) => (
+                <ClusterCard
+                  key={campaign.id}
+                  campaign={campaign}
+                  creatives={getCampaignCreatives(campaign)}
+                  onRename={handleRename}
+                  onDelete={handleDelete}
+                  selectedIds={selectedIds}
+                  onCreativeSelect={handleCreativeSelect}
+                />
+              ))}
+
+              {/* New Campaign Drop Zone */}
+              <NewCampaignDropZone onClick={handleCreateCluster} />
+            </div>
+
+            {/* Unassigned Pool - Grid */}
+            <UnassignedPool
+              creativeIds={unclustered?.creative_ids || []}
+              creatives={creativesMap}
+              selectedIds={selectedIds}
+              onCreativeSelect={handleCreativeSelect}
             />
-          ))}
-
-          {/* New Campaign Button */}
-          <button
-            onClick={handleCreateCluster}
-            className="min-h-[200px] rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-blue-400 hover:text-blue-500 transition-colors"
-          >
-            <span className="text-4xl">+</span>
-            <span>New Campaign</span>
-          </button>
-        </div>
-
-        {/* Unassigned Pool */}
-        <UnassignedPool
-          creativeIds={unclustered?.creative_ids || []}
-          creatives={creativesMap}
-        />
-
-        {/* Drag Overlay */}
-        <DragOverlay>
-          {activeCreative ? (
-            <div className="w-14 h-14">
-              <DraggableCreative
-                creative={activeCreative}
-                clusterId=""
-                isDragOverlay
+          </>
+        ) : (
+          /* List View */
+          <div className="flex gap-4 overflow-x-auto pb-4">
+            {/* Campaign columns */}
+            {campaigns.map((campaign) => (
+              <ListCluster
+                key={campaign.id}
+                id={campaign.id}
+                name={campaign.name}
+                creatives={getCampaignCreatives(campaign)}
+                selectedIds={selectedIds}
+                onCreativeSelect={handleCreativeSelect}
               />
+            ))}
+
+            {/* Unclustered column */}
+            <ListCluster
+              id="unassigned"
+              name="Unclustered"
+              creatives={(unclustered?.creative_ids || [])
+                .map(id => creativesMap.get(String(id)))
+                .filter((c): c is Creative => c !== undefined)
+              }
+              isUnclustered
+              selectedIds={selectedIds}
+              onCreativeSelect={handleCreativeSelect}
+            />
+
+            {/* New Campaign Drop Zone (List view) */}
+            <NewCampaignDropZoneList onClick={handleCreateCluster} />
+          </div>
+        )}
+
+        {/* Drag Overlay - adapts to view mode, shows count for multi-select */}
+        <DragOverlay dropAnimation={null}>
+          {activeCreative ? (
+            <div className="relative">
+              {viewMode === 'grid' ? (
+                <DraggableCreative
+                  creative={activeCreative}
+                  clusterId=""
+                  isDragOverlay
+                />
+              ) : (
+                <ListItem
+                  creative={activeCreative}
+                  clusterId=""
+                  isDragOverlay
+                />
+              )}
+              {/* Multi-select count badge */}
+              {draggedIds.length > 1 && (
+                <div className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-lg">
+                  {draggedIds.length}
+                </div>
+              )}
             </div>
           ) : null}
         </DragOverlay>
