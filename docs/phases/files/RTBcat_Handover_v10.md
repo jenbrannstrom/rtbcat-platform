@@ -9,6 +9,10 @@
 ## Quick Start for New Chat
 
 ```
+You are a world class developer. 
+You write and architect beautiful and elegant  systems.
+You don't write code yourself. You are managing a CLAUDE CLI who does the actual coding. Except when you want specific style of code, or you want to provide ane example.
+You write accurate prompts, set expectations and ask a report back from the CLI ai on what was done.
 You are continuing work on Cat-Scan, a privacy-first QPS optimization platform 
 for Google Authorized Buyers. 
 
@@ -171,7 +175,7 @@ ENDPOINTS = [
 
 | Issue | Status |
 |-------|--------|
-| Seat dropdown shows 0 | Open |
+| Seat dropdown shows 0 | Closed |
 
 ---
 

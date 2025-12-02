@@ -2136,7 +2136,7 @@ class SQLiteStore:
                         COUNT(DISTINCT metric_date) as days_with_data,
                         MIN(metric_date) as earliest_date,
                         MAX(metric_date) as latest_date
-                    FROM performance_metrics
+                    FROM performance_data
                     WHERE creative_id = ?
                       AND metric_date >= date('now', ?)
                     """,

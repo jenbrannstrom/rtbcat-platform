@@ -84,10 +84,12 @@ function VirtualizedGrid({
   creatives,
   onPreview,
   performanceData,
+  sortField,
 }: {
   creatives: Creative[];
   onPreview: (creative: Creative) => void;
   performanceData?: Record<string, CreativePerformanceSummary>;
+  sortField?: "spend" | "impressions" | "clicks" | "ctr" | null;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -136,6 +138,7 @@ function VirtualizedGrid({
                   creative={creative}
                   onPreview={onPreview}
                   performance={performanceData?.[creative.id]}
+                  sortField={sortField}
                 />
               ))}
             </div>
@@ -433,6 +436,7 @@ function CreativesContent() {
           creatives={filteredCreatives}
           onPreview={setPreviewCreative}
           performanceData={performanceData}
+          sortField={sortBy !== "none" ? "spend" : null}
         />
       ) : (
         <div className="text-center py-12">
@@ -460,6 +464,7 @@ function CreativesContent() {
       {previewCreative && (
         <PreviewModal
           creative={previewCreative}
+          performance={performanceData?.[previewCreative.id]}
           onClose={() => setPreviewCreative(null)}
         />
       )}
