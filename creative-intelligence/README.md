@@ -1,5 +1,9 @@
 # Cat-Scan Creative Intelligence
 
+**Version:** 10.3
+**Phase:** 9.7 - Onboarding Flow Complete
+**Last Updated:** December 2, 2025
+
 A Python-based system for collecting Google Authorized Buyers creatives and organizing them for analysis. This tool helps RTB bidders understand what they're actually bidding on by fetching and organizing creatives that Google leaves as opaque IDs.
 
 ## What This Solves
@@ -41,10 +45,28 @@ Enterprise customers often have multiple buyer accounts (seats) under one bidder
 ### Prerequisites
 
 1. **Google Service Account** with Authorized Buyers API access
-2. **Docker** and **Docker Compose** installed
+2. **Docker** and **Docker Compose** installed (or local Python 3.11+)
 3. Your **Bidder Account ID** (find it in your Authorized Buyers URL)
 
-### Setup
+### First Time Setup (Recommended)
+
+1. **Start services:**
+   ```bash
+   sudo systemctl start rtbcat-api
+   cd dashboard && npm run dev
+   ```
+
+2. **Go to** http://localhost:3000/connect
+
+3. **Upload your Google service account JSON key** (drag & drop or click to upload)
+
+4. **Click "Sync"** to pull your creatives from Google API
+
+5. **Import CSV performance data** via the Import page
+
+Need a JSON key? See [docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md) for step-by-step instructions.
+
+### Alternative: Docker Setup
 
 ```bash
 # 1. Clone the repository
@@ -475,12 +497,20 @@ rtbcat-creative-intel/
 │   └── ...                      # Additional test modules
 ├── dashboard/                   # Next.js frontend
 │   ├── src/
-│   │   ├── app/                 # Pages (creatives, campaigns, settings)
+│   │   ├── app/
+│   │   │   ├── connect/         # Credential upload & sync (NEW)
+│   │   │   ├── creatives/       # Creative browser
+│   │   │   ├── import/          # CSV performance import
+│   │   │   └── ...              # Other pages
 │   │   ├── components/          # React components
 │   │   └── lib/                 # API client
 │   └── package.json
+├── docs/
+│   └── SETUP_GUIDE.md           # Comprehensive setup guide (NEW)
 ├── scripts/
 │   └── test_real_api.py         # Live API testing
+├── cli/
+│   └── qps_analyzer.py          # CLI tools (import, thumbnails, reports)
 ├── main.py                      # CLI entry point
 ├── Dockerfile                   # Multi-stage build
 ├── docker-compose.yml           # Service definitions
@@ -553,6 +583,28 @@ pre-commit run --all-files
 ```
 
 ## Troubleshooting
+
+### Credential Issues
+
+**"No such file: /credentials/..." or path mismatch errors:**
+
+This happens when Docker expects `/credentials/` but you're running locally (or vice versa).
+
+**Fix:** Re-upload your JSON key via the `/connect` page. This stores credentials in `~/.catscan/credentials/` which works for both Docker and local setups.
+
+### Video Cards Show Blank/No Thumbnail
+
+Most videos don't have VAST CompanionAds with images (~91%). To generate thumbnails:
+
+```bash
+# Generate thumbnails for up to 100 videos
+python cli/qps_analyzer.py generate-thumbnails --limit 100
+
+# Force regenerate all
+python cli/qps_analyzer.py generate-thumbnails --limit 500 --force
+```
+
+Requires ffmpeg: `sudo apt install ffmpeg`
 
 ### "Service account credentials not configured"
 
@@ -679,13 +731,37 @@ await store.migrate_add_buyer_seats()
 - [x] Seat hierarchy cleanup (Phase 8.5)
 - [x] Seat display names on creative cards
 
-### v0.4 (Planned)
+### v0.4 (Completed - December 2025)
+- [x] Phase 9.6: Unified Data Architecture
+- [x] Phase 9.7: Onboarding Flow (`/connect` page)
+- [x] Video thumbnail extraction from VAST XML
+- [x] CLI thumbnail generator with ffmpeg
+- [x] Native icon display on cards
+- [x] Copy creative ID button on cards
+- [x] Modal sizing matches ad dimensions
+
+### v0.5 (Planned)
+- [ ] Phase 10: Batch video thumbnail generation (ffmpeg)
+- [ ] Phase 10.1: Multi-account support (account switcher)
+- [ ] Phase 10.2: Card/modal field redesign
 - [ ] Visual similarity detection
 - [ ] Pretargeting recommendations
-- [ ] Real-time bidding metrics integration
-- [ ] Multi-tenant support
 
-## Recent Changes (November 2025)
+## Recent Changes (December 2025)
+
+### Phase 9.7: Onboarding Flow (NEW)
+- `/connect` page for credential management and account discovery
+- JSON key upload with drag-drop support
+- Smart seat UI: single-seat shows title, multi-seat shows dropdown
+- Sync button conditionally appears after credentials uploaded
+- Comprehensive setup guide at `docs/SETUP_GUIDE.md`
+
+### Phase 9.6: Video & Card Improvements (NEW)
+- Video thumbnails extracted from VAST XML CompanionAds
+- CLI thumbnail generator: `python cli/qps_analyzer.py generate-thumbnails`
+- Native ad icon/logo display on cards with headline overlay
+- Copy creative ID button inline next to ID on cards
+- Modal sizing matches actual creative dimensions
 
 ### Phase 5: Waste Analysis Dashboard
 - Added `/waste-analysis` page with size gap analysis
@@ -717,16 +793,18 @@ await store.migrate_add_buyer_seats()
 1. **API Service Port Conflict**: If the systemd service fails with "Address already in use", kill old processes:
    ```bash
    sudo lsof -ti:8000 | xargs -r sudo kill -9
-   sudo systemctl restart catscan-api
+   sudo systemctl restart rtbcat-api
    ```
 
 ### Medium
 2. **Date Serialization**: SQLite returns dates as strings; API handles both string and datetime formats
-3. **Seat Names Not Showing**: After restart, run `/seats/populate` to populate buyer_seats table
+3. **Video Thumbnails**: ~91% of videos need ffmpeg generation (VAST CompanionAds rare)
+   - Run: `python cli/qps_analyzer.py generate-thumbnails --limit 100`
+4. **Multi-Account Support**: UI ready on /connect, backend TODO for account switching
 
 ### Low
-4. **Dashboard Hot Reload**: Sometimes requires `npm run build` after backend changes
-5. **Empty Seats on First Load**: Seats are auto-populated on API startup; refresh if empty
+5. **Dashboard Hot Reload**: Sometimes requires `npm run build` after backend changes
+6. **Empty Seats on First Load**: Seats are auto-populated on API startup; refresh if empty
 
 ## Systemd Service
 
@@ -734,27 +812,27 @@ The API runs as a systemd service:
 
 ```bash
 # Service file location
-/etc/systemd/system/catscan-api.service
+/etc/systemd/system/rtbcat-api.service
 
 # Common commands
-sudo systemctl status catscan-api
-sudo systemctl restart catscan-api
-sudo journalctl -u catscan-api -f
+sudo systemctl status rtbcat-api
+sudo systemctl restart rtbcat-api
+sudo journalctl -u rtbcat-api -f
 
 # If service fails to start (port in use)
 sudo lsof -ti:8000 | xargs -r sudo kill -9
-sudo systemctl restart catscan-api
+sudo systemctl restart rtbcat-api
 ```
 
 ### Service Configuration
 ```ini
 [Unit]
-Description=RTB.cat Creative Intelligence API
+Description=Cat-Scan Creative Intelligence API
 After=network.target
 
 [Service]
 Type=simple
-User=dnsmasq
+User=jen
 WorkingDirectory=/home/jen/Documents/rtbcat-platform/creative-intelligence
 ExecStart=/home/jen/Documents/rtbcat-platform/creative-intelligence/venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 Restart=always
@@ -793,6 +871,9 @@ sudo systemctl restart rtbcat-dashboard
 | GET | `/ai-campaigns/{id}/performance` | Get campaign performance |
 | PATCH | `/seats/{buyer_id}` | Update seat display name |
 | POST | `/seats/populate` | Populate seats from creatives |
+| POST | `/config/credentials` | Upload service account JSON key |
+| GET | `/config/status` | Check credential configuration status |
+| GET | `/thumbnails/{id}.jpg` | Serve locally-generated video thumbnail |
 
 ## API Data
 

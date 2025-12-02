@@ -267,9 +267,18 @@ function VideoPreviewPlayer({ creative }: { creative: Creative }) {
     videoUrl = extractVideoUrlFromVast(creative.video.vast_xml);
   }
 
+  // Calculate display size based on creative dimensions
+  const creativeWidth = creative.width || 640;
+  const creativeHeight = creative.height || 360;
+  const maxWidth = 640;
+  const maxHeight = 400;
+  const scale = Math.min(1, maxWidth / creativeWidth, maxHeight / creativeHeight);
+  const displayWidth = Math.round(creativeWidth * scale);
+  const displayHeight = Math.round(creativeHeight * scale);
+
   if (!videoUrl) {
     return (
-      <div className="flex items-center justify-center h-48 bg-gray-900 text-gray-400">
+      <div className="flex flex-col items-center justify-center h-48 bg-gray-900 text-gray-400">
         <div className="text-center">
           <Play className="h-10 w-10 mx-auto mb-2 opacity-50" />
           <p>No video URL available</p>
@@ -282,16 +291,24 @@ function VideoPreviewPlayer({ creative }: { creative: Creative }) {
   }
 
   return (
-    <div className="bg-black flex items-center justify-center">
+    <div className="bg-black flex flex-col items-center justify-center p-4">
       <video
         ref={videoRef}
         src={videoUrl}
         controls
-        className="max-w-full max-h-[300px] w-auto h-auto"
+        width={displayWidth}
+        height={displayHeight}
+        className="bg-black"
         poster=""
       >
         Your browser does not support the video tag.
       </video>
+      {creative.width && creative.height && (
+        <div className="mt-2 text-xs text-gray-400">
+          {creative.width} × {creative.height}
+          {creative.video?.duration && ` · ${creative.video.duration}`}
+        </div>
+      )}
     </div>
   );
 }
@@ -339,7 +356,7 @@ function HtmlPreviewFrame({ creative }: { creative: Creative }) {
   const height = Math.round(creativeHeight * scale);
 
   return (
-    <div className="flex justify-center p-4 bg-gray-100">
+    <div className="flex flex-col items-center p-4 bg-gray-100">
       <iframe
         ref={iframeRef}
         title={`Creative ${creative.id}`}
@@ -348,6 +365,10 @@ function HtmlPreviewFrame({ creative }: { creative: Creative }) {
         className="border border-gray-300 bg-white"
         sandbox="allow-scripts allow-same-origin"
       />
+      <div className="mt-2 text-xs text-gray-500">
+        {creativeWidth} × {creativeHeight}
+        {scale < 1 && ` (scaled to ${Math.round(scale * 100)}%)`}
+      </div>
     </div>
   );
 }
