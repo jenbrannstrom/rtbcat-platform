@@ -1,5 +1,6 @@
 export interface VideoPreview {
   video_url: string | null;
+  thumbnail_url: string | null;
   vast_xml: string | null;
   duration: string | null;
 }

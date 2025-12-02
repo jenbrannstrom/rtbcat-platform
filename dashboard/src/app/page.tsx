@@ -115,12 +115,12 @@ export default function DashboardPage() {
               </p>
             </a>
             <a
-              href="/collect"
+              href="/connect"
               className="block p-4 rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition-colors"
             >
-              <h3 className="font-medium text-gray-900">Collect Creatives</h3>
+              <h3 className="font-medium text-gray-900">Connect Account</h3>
               <p className="mt-1 text-sm text-gray-500">
-                Fetch latest creatives from Authorized Buyers API
+                Link your Google Authorized Buyers account
               </p>
             </a>
             <a

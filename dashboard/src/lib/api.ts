@@ -398,3 +398,42 @@ export async function getAICampaignDailyTrend(
     `/ai-campaigns/${campaignId}/performance/daily${query ? `?${query}` : ""}`
   );
 }
+
+// Configuration / Credentials API
+
+export interface CredentialsStatus {
+  configured: boolean;
+  client_email?: string;
+  project_id?: string;
+  credentials_path?: string;
+}
+
+export interface CredentialsUploadResponse {
+  success: boolean;
+  client_email?: string;
+  project_id?: string;
+  message: string;
+}
+
+export async function getCredentialsStatus(): Promise<CredentialsStatus> {
+  return fetchApi<CredentialsStatus>("/config/credentials");
+}
+
+export async function uploadCredentials(
+  serviceAccountJson: string,
+  accountId?: string
+): Promise<CredentialsUploadResponse> {
+  return fetchApi<CredentialsUploadResponse>("/config/credentials", {
+    method: "POST",
+    body: JSON.stringify({
+      service_account_json: serviceAccountJson,
+      account_id: accountId,
+    }),
+  });
+}
+
+export async function deleteCredentials(): Promise<{ success: boolean; message: string }> {
+  return fetchApi<{ success: boolean; message: string }>("/config/credentials", {
+    method: "DELETE",
+  });
+}

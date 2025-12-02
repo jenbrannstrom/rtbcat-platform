@@ -1,6 +1,7 @@
 "use client";
 
-import { ExternalLink, Play, Eye, Image, FileCode, DollarSign, TrendingUp, MousePointer } from "lucide-react";
+import { useState } from "react";
+import { ExternalLink, Play, Eye, Image, FileCode, DollarSign, TrendingUp, MousePointer, Copy, Check } from "lucide-react";
 import type { Creative, CreativePerformanceSummary } from "@/types/api";
 import { cn, getFormatColor, getStatusColor, truncate } from "@/lib/utils";
 import { getGoogleAuthBuyersUrl, extractBuyerIdFromName } from "@/lib/url-utils";
@@ -45,62 +46,79 @@ function extractVideoUrlFromVast(vastXml: string): string | null {
 }
 
 function PreviewThumbnail({ creative }: { creative: Creative }) {
-  // For VIDEO: try to show video or placeholder
+  // For VIDEO: show thumbnail if available, otherwise gradient placeholder
   if (creative.format === "VIDEO") {
-    let videoUrl = creative.video?.video_url;
-    if (!videoUrl && creative.video?.vast_xml) {
-      videoUrl = extractVideoUrlFromVast(creative.video.vast_xml);
-    }
+    const thumbnailUrl = creative.video?.thumbnail_url;
 
     return (
-      <div className="relative h-32 bg-gray-900 flex items-center justify-center">
-        {videoUrl ? (
+      <div className="relative h-32 bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center overflow-hidden">
+        {thumbnailUrl ? (
           <>
-            <video
-              src={videoUrl}
+            <img
+              src={thumbnailUrl}
+              alt="Video thumbnail"
               className="w-full h-full object-cover"
-              muted
-              preload="none"
+              onError={(e) => {
+                // Hide broken image, show placeholder
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
             />
             <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-              <Play className="h-10 w-10 text-white" />
+              <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center">
+                <Play className="h-6 w-6 text-white ml-0.5" fill="currentColor" />
+              </div>
             </div>
           </>
         ) : (
-          <div className="text-center text-gray-500">
-            <Play className="h-8 w-8 mx-auto" />
-            <p className="text-xs mt-1">Video</p>
+          <div className="flex flex-col items-center">
+            <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+              <Play className="h-6 w-6 text-white ml-0.5" fill="currentColor" />
+            </div>
+            <p className="text-xs text-gray-400 mt-2">Video</p>
           </div>
         )}
         {creative.video?.duration && (
-          <span className="absolute bottom-1 right-1 bg-black/70 text-white text-xs px-1 rounded">
+          <span className="absolute bottom-1 right-1 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
             {creative.video.duration}
+          </span>
+        )}
+        {creative.width && creative.height && (
+          <span className="absolute top-1 left-1 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded">
+            {creative.width}x{creative.height}
           </span>
         )}
       </div>
     );
   }
 
-  // For NATIVE: show image if available
-  if (creative.format === "NATIVE" && creative.native?.image?.url) {
-    return (
-      <div className="relative h-32 bg-gray-100">
-        <img
-          src={creative.native.image.url}
-          alt={creative.native.headline || "Native ad"}
-          className="w-full h-full object-cover"
-          onError={(e) => {
-            (e.target as HTMLImageElement).parentElement!.innerHTML = `
-              <div class="flex items-center justify-center h-full text-gray-400">
-                <svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-            `;
-          }}
-        />
-      </div>
-    );
+  // For NATIVE: prefer logo/icon, fall back to main image
+  if (creative.format === "NATIVE") {
+    const imageUrl = creative.native?.logo?.url || creative.native?.image?.url;
+    if (imageUrl) {
+      return (
+        <div className="relative h-32 bg-gradient-to-br from-green-50 to-green-100">
+          <img
+            src={imageUrl}
+            alt={creative.native?.headline || "Native ad"}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              (e.target as HTMLImageElement).parentElement!.innerHTML = `
+                <div class="flex items-center justify-center h-full text-gray-400">
+                  <svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+              `;
+            }}
+          />
+          {creative.native?.headline && (
+            <span className="absolute bottom-1 left-1 right-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded truncate">
+              {creative.native.headline}
+            </span>
+          )}
+        </div>
+      );
+    }
   }
 
   // For HTML: show placeholder with dimensions
@@ -108,11 +126,16 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
     const w = creative.html?.width || creative.width || 300;
     const h = creative.html?.height || creative.height || 250;
     return (
-      <div className="h-32 bg-gray-100 flex items-center justify-center">
-        <div className="text-center text-gray-500">
-          <FileCode className="h-8 w-8 mx-auto" />
-          <p className="text-xs mt-1">{w}x{h}</p>
+      <div className="relative h-32 bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
+        <div className="flex flex-col items-center">
+          <div className="w-12 h-12 rounded-full bg-blue-200 flex items-center justify-center">
+            <FileCode className="h-6 w-6 text-blue-600" />
+          </div>
+          <p className="text-xs text-blue-600 mt-2">HTML</p>
         </div>
+        <span className="absolute top-1 left-1 bg-blue-600/80 text-white text-xs px-1.5 py-0.5 rounded">
+          {w}x{h}
+        </span>
       </div>
     );
   }
@@ -126,7 +149,15 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
 }
 
 export function CreativeCard({ creative, onPreview, performance }: CreativeCardProps) {
+  const [copied, setCopied] = useState(false);
   const hasPreview = creative.video || creative.html || creative.native;
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await navigator.clipboard.writeText(creative.id);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
 
   return (
     <div className="card overflow-hidden hover:shadow-md transition-shadow">
@@ -141,13 +172,22 @@ export function CreativeCard({ creative, onPreview, performance }: CreativeCardP
       <div className="p-4">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
-            <button
-              onClick={() => onPreview?.(creative)}
-              className="text-sm font-medium text-gray-900 hover:text-primary-600 truncate block text-left w-full font-mono"
-              title={creative.id}
-            >
-              {creative.id}
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => onPreview?.(creative)}
+                className="text-sm font-medium text-gray-900 hover:text-primary-600 truncate text-left font-mono"
+                title={creative.id}
+              >
+                {creative.id}
+              </button>
+              <button
+                onClick={handleCopy}
+                className="p-0.5 text-gray-400 hover:text-gray-600 rounded flex-shrink-0"
+                title="Copy ID"
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+              </button>
+            </div>
             {creative.name && (
               <p className="mt-1 text-xs text-gray-500 truncate" title={creative.name}>
                 {creative.name}

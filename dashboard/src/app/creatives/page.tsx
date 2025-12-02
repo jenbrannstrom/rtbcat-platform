@@ -444,8 +444,8 @@ function CreativesContent() {
               : "No creatives found"}
           </p>
           {!hasActiveFilters && !selectedSeatId && (
-            <a href="/collect" className="btn-primary mt-4 inline-flex">
-              Collect Creatives
+            <a href="/connect" className="btn-primary mt-4 inline-flex">
+              Connect Account
             </a>
           )}
           {!hasActiveFilters && selectedSeatId && (

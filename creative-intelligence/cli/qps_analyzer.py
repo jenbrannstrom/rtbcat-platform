@@ -7,6 +7,7 @@ Command-line tool for QPS optimization analysis:
 - Track config performance
 - Detect fraud signals
 - Generate full reports
+- Generate video thumbnails
 
 Usage:
     python cli/qps_analyzer.py validate <csv_file>
@@ -17,19 +18,28 @@ Usage:
     python cli/qps_analyzer.py fraud [--days N]
     python cli/qps_analyzer.py full-report [--days N]
     python cli/qps_analyzer.py summary
+    python cli/qps_analyzer.py generate-thumbnails [--limit N] [--force]
 
 Examples:
     python cli/qps_analyzer.py validate ~/downloads/bigquery_export.csv
     python cli/qps_analyzer.py import ~/downloads/bigquery_export.csv
     python cli/qps_analyzer.py coverage --days 7
     python cli/qps_analyzer.py full-report --days 7 > qps_report.txt
+    python cli/qps_analyzer.py generate-thumbnails --limit 10
 """
 
 import sys
 import os
+import re
+import json
+import sqlite3
 import argparse
+import subprocess
+import tempfile
 from datetime import datetime
 from pathlib import Path
+from urllib.request import urlopen
+from urllib.error import URLError
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -297,6 +307,193 @@ def cmd_help(args):
     print(__doc__)
 
 
+def _get_db_path() -> Path:
+    """Get the Cat-Scan database path."""
+    return Path.home() / ".catscan" / "catscan.db"
+
+
+def _get_thumbnails_dir() -> Path:
+    """Get the thumbnails directory, creating if needed."""
+    thumb_dir = Path.home() / ".catscan" / "thumbnails"
+    thumb_dir.mkdir(parents=True, exist_ok=True)
+    return thumb_dir
+
+
+def _extract_video_url_from_vast(vast_xml: str) -> str | None:
+    """Extract video URL from VAST XML MediaFile element."""
+    if not vast_xml:
+        return None
+    # Match MediaFile URL, with or without CDATA
+    patterns = [
+        r'<MediaFile[^>]*><!\[CDATA\[(https?://[^\]]+)\]\]></MediaFile>',
+        r'<MediaFile[^>]*>(https?://[^<]+)</MediaFile>',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, vast_xml, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def _generate_thumbnail_ffmpeg(video_url: str, output_path: Path, timeout: int = 30) -> bool:
+    """Generate thumbnail from video URL using ffmpeg."""
+    try:
+        # ffmpeg command to extract first frame
+        cmd = [
+            "ffmpeg",
+            "-y",  # Overwrite output
+            "-ss", "1",  # Seek to 1 second (skip potential black frames)
+            "-i", video_url,
+            "-vframes", "1",  # Extract 1 frame
+            "-vf", "scale='min(480,iw)':'-1'",  # Scale to max 480px width
+            "-q:v", "2",  # High quality JPEG
+            str(output_path)
+        ]
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=timeout,
+            text=True
+        )
+
+        return result.returncode == 0 and output_path.exists()
+    except subprocess.TimeoutExpired:
+        return False
+    except Exception:
+        return False
+
+
+def _update_thumbnail_in_db(db_path: Path, creative_id: str, thumbnail_path: Path) -> bool:
+    """Update the creative's raw_data with local thumbnail path."""
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Get current raw_data
+        cursor.execute("SELECT raw_data FROM creatives WHERE id = ?", (creative_id,))
+        row = cursor.fetchone()
+        if not row or not row[0]:
+            conn.close()
+            return False
+
+        raw_data = json.loads(row[0])
+
+        # Add or update thumbnail URL in video section
+        if "video" not in raw_data:
+            raw_data["video"] = {}
+        raw_data["video"]["localThumbnailPath"] = str(thumbnail_path)
+
+        # Update the database
+        cursor.execute(
+            "UPDATE creatives SET raw_data = ? WHERE id = ?",
+            (json.dumps(raw_data), creative_id)
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def cmd_generate_thumbnails(args):
+    """Generate thumbnails for video creatives using ffmpeg."""
+    # Check ffmpeg is available
+    try:
+        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print("Error: ffmpeg is not installed or not in PATH")
+        print("Install with: sudo apt install ffmpeg")
+        sys.exit(1)
+
+    db_path = _get_db_path()
+    if not db_path.exists():
+        print(f"Error: Database not found at {db_path}")
+        sys.exit(1)
+
+    thumb_dir = _get_thumbnails_dir()
+    limit = args.limit or 100
+    force = args.force
+
+    print("=" * 60)
+    print("THUMBNAIL GENERATION")
+    print("=" * 60)
+    print(f"Database:    {db_path}")
+    print(f"Output dir:  {thumb_dir}")
+    print(f"Limit:       {limit}")
+    print(f"Force:       {force}")
+    print()
+
+    # Query video creatives
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # Get video creatives with VAST XML
+    cursor.execute("""
+        SELECT id, json_extract(raw_data, '$.video.vastXml') as vast_xml,
+               json_extract(raw_data, '$.video.localThumbnailPath') as local_thumb
+        FROM creatives
+        WHERE format = 'VIDEO'
+          AND json_extract(raw_data, '$.video.vastXml') IS NOT NULL
+        ORDER BY id DESC
+        LIMIT ?
+    """, (limit * 3,))  # Get more to account for filtering
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    # Filter to those needing thumbnails
+    to_process = []
+    for creative_id, vast_xml, local_thumb in rows:
+        thumb_path = thumb_dir / f"{creative_id}.jpg"
+
+        # Skip if thumbnail exists and not forcing
+        if not force and (thumb_path.exists() or local_thumb):
+            continue
+
+        video_url = _extract_video_url_from_vast(vast_xml)
+        if video_url:
+            to_process.append((creative_id, video_url, thumb_path))
+
+        if len(to_process) >= limit:
+            break
+
+    if not to_process:
+        print("No video creatives need thumbnails.")
+        print("Use --force to regenerate existing thumbnails.")
+        return
+
+    print(f"Processing {len(to_process)} videos...")
+    print()
+
+    success_count = 0
+    fail_count = 0
+
+    for i, (creative_id, video_url, thumb_path) in enumerate(to_process, 1):
+        print(f"[{i}/{len(to_process)}] {creative_id}...", end=" ", flush=True)
+
+        if _generate_thumbnail_ffmpeg(video_url, thumb_path):
+            if _update_thumbnail_in_db(db_path, creative_id, thumb_path):
+                print(f"OK ({thumb_path.stat().st_size // 1024}KB)")
+                success_count += 1
+            else:
+                print("OK (file only, DB update failed)")
+                success_count += 1
+        else:
+            print("FAILED")
+            fail_count += 1
+
+    print()
+    print("=" * 60)
+    print(f"COMPLETE: {success_count} generated, {fail_count} failed")
+    print("=" * 60)
+
+    if success_count > 0:
+        print()
+        print("Thumbnails saved to:", thumb_dir)
+        print("Restart the API server to see updated thumbnails.")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Cat-Scan QPS Optimization Analyzer",
@@ -357,6 +554,12 @@ Examples:
     # Help command
     help_parser = subparsers.add_parser("help", help="Show help")
     help_parser.set_defaults(func=cmd_help)
+
+    # Generate thumbnails command
+    thumb_parser = subparsers.add_parser("generate-thumbnails", help="Generate video thumbnails using ffmpeg")
+    thumb_parser.add_argument("--limit", type=int, default=100, help="Max videos to process (default: 100)")
+    thumb_parser.add_argument("--force", action="store_true", help="Regenerate existing thumbnails")
+    thumb_parser.set_defaults(func=cmd_generate_thumbnails)
 
     args = parser.parse_args()
 

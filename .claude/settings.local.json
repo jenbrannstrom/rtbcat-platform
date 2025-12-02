@@ -48,7 +48,9 @@
       "Bash(env)",
       "Bash(gcloud:*)",
       "Bash(sudo systemctl status:*)",
-      "Bash(xargs sed:*)"
+      "Bash(xargs sed:*)",
+      "Bash(netstat:*)",
+      "Bash(journalctl:*)"
     ],
     "deny": [],
     "ask": []
