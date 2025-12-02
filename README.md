@@ -884,6 +884,324 @@ sudo systemctl restart rtbcat-dashboard
 7. Push: `git push origin feature/my-feature`
 8. Open a Pull Request
 
+---
+
+## Data Architecture & Waste Detection
+
+### Data Sources Overview
+
+Cat-Scan combines two distinct data sources. Understanding what each provides is critical for waste detection.
+
+| Source | What It Provides | Update Frequency |
+|--------|------------------|------------------|
+| **Google RTB API** | Creative metadata (what the ad *is*) | On-demand sync |
+| **CSV Export** | Performance data (how it *performed*) | Manual import |
+
+**There is no Google Reporting API.** Performance metrics must be manually exported from the Authorized Buyers UI and imported via CSV.
+
+---
+
+### Table 1: `creatives` (from Google RTB API)
+
+These fields describe *what the creative is* - its structure, destination, and approval state.
+
+| Field | Type | Description | Waste Detection Use |
+|-------|------|-------------|---------------------|
+| `id` | TEXT PK | Unique creative ID (e.g., `cr-12345`) | Join key to performance_data |
+| `name` | TEXT | Resource name `bidders/{id}/creatives/{id}` | - |
+| `format` | TEXT | HTML, VIDEO, NATIVE, UNKNOWN | Video-specific waste analysis |
+| `account_id` | TEXT | Bidder account ID | Multi-account filtering |
+| `buyer_id` | TEXT | Buyer seat ID | Seat-level performance isolation |
+| `approval_status` | TEXT | APPROVED, DISAPPROVED, PENDING_REVIEW | **Disapproved = 100% waste** |
+| `width` | INT | Creative width (pixels) | Size mismatch detection |
+| `height` | INT | Creative height (pixels) | Size mismatch detection |
+| `canonical_size` | TEXT | Normalized IAB size (e.g., "300x250") | Size coverage analysis |
+| `size_category` | TEXT | IAB Standard, Video, Adaptive, Non-Standard | Inventory gap detection |
+| `final_url` | TEXT | Landing page URL | Broken link detection |
+| `display_url` | TEXT | Displayed URL | - |
+| `utm_source` | TEXT | UTM tracking parameter | Campaign grouping |
+| `utm_medium` | TEXT | UTM tracking parameter | Channel analysis |
+| `utm_campaign` | TEXT | UTM tracking parameter | **Auto-clustering by campaign** |
+| `utm_content` | TEXT | UTM tracking parameter | A/B variant detection |
+| `utm_term` | TEXT | UTM tracking parameter | Keyword analysis |
+| `advertiser_name` | TEXT | Declared advertiser | Advertiser-level aggregation |
+| `campaign_id` | TEXT FK | Manual cluster assignment | Campaign grouping |
+| `cluster_id` | TEXT FK | AI cluster assignment | Auto-grouping |
+| `raw_data` | JSON | Full API response | VAST XML, native assets, HTML snippet |
+
+**Format-specific data in `raw_data`:**
+
+| Format | Available Fields |
+|--------|-----------------|
+| HTML | `html.snippet`, `html.width`, `html.height` |
+| VIDEO | `video.vastXml`, `video.videoUrl`, `video.duration`, `video.localThumbnailPath` |
+| NATIVE | `native.headline`, `native.body`, `native.callToAction`, `native.image`, `native.logo` |
+
+---
+
+### Table 2: `performance_data` (from CSV Import)
+
+These fields describe *how the creative performed* - the actual metrics that reveal waste.
+
+#### Required Fields (import fails without these)
+
+| Field | Type | Description | Waste Detection Use |
+|-------|------|-------------|---------------------|
+| `metric_date` | DATE | Performance date | Timeframe filtering |
+| `creative_id` | TEXT | Links to creatives table | Join key |
+| `billing_id` | TEXT | Pretargeting config ID | Config efficiency analysis |
+| `creative_size` | TEXT | Size from bid request | **Size mismatch detection** |
+| `reached_queries` | INT | Bid requests received | **THE critical waste metric** |
+| `impressions` | INT | Impressions won | Win rate calculation |
+
+#### Optional Dimension Fields
+
+| Field | Type | Description | Waste Detection Use |
+|-------|------|-------------|---------------------|
+| `creative_format` | TEXT | HTML, VIDEO, etc. | Format-specific analysis |
+| `country` | TEXT | ISO country code | Geo targeting efficiency |
+| `platform` | TEXT | Desktop, Mobile, Tablet | Platform waste analysis |
+| `environment` | TEXT | App, Web | Environment performance |
+| `app_id` | TEXT | Mobile app bundle ID | App-level fraud detection |
+| `app_name` | TEXT | Mobile app name | Human-readable reports |
+| `publisher_id` | TEXT | Publisher ID | Publisher blocklist candidates |
+| `publisher_name` | TEXT | Publisher name | Human-readable reports |
+| `publisher_domain` | TEXT | Publisher website | Domain-level analysis |
+| `deal_id` | TEXT | Deal identifier | Deal performance |
+| `deal_name` | TEXT | Deal name | Human-readable reports |
+| `transaction_type` | TEXT | Open auction, PMP, etc. | Transaction efficiency |
+| `advertiser` | TEXT | Advertiser name | Advertiser grouping |
+| `buyer_account_id` | TEXT | Buyer seat ID | Multi-seat analysis |
+| `buyer_account_name` | TEXT | Buyer seat name | Human-readable reports |
+
+#### Optional Metric Fields
+
+| Field | Type | Description | Waste Detection Use |
+|-------|------|-------------|---------------------|
+| `clicks` | INT | Click count | CTR calculation, click fraud |
+| `spend_micros` | INT | Spend in USD micros | ROI, cost efficiency |
+| `video_starts` | INT | Video play initiations | Video engagement analysis |
+| `video_first_quartile` | INT | Reached 25% | Video completion funnel |
+| `video_midpoint` | INT | Reached 50% | Video completion funnel |
+| `video_third_quartile` | INT | Reached 75% | Video completion funnel |
+| `video_completions` | INT | Reached 100% | **Video completion rate** |
+| `vast_errors` | INT | VAST parsing errors | **Broken video detection** |
+| `engaged_views` | INT | Engaged view count | Engagement quality |
+| `active_view_measurable` | INT | Viewability measurable | Viewability analysis |
+| `active_view_viewable` | INT | Viewability viewable | **Viewability rate** |
+| `gma_sdk` | BOOL | Google Mobile Ads SDK | SDK coverage |
+| `buyer_sdk` | BOOL | Buyer SDK present | SDK coverage |
+
+---
+
+### Table 3: `thumbnail_status` (Generated)
+
+| Field | Type | Description | Waste Detection Use |
+|-------|------|-------------|---------------------|
+| `creative_id` | TEXT PK | Creative ID | Join key |
+| `status` | TEXT | success, failed | Thumbnail coverage |
+| `error_reason` | TEXT | url_expired, timeout, etc. | **Broken video evidence** |
+| `video_url` | TEXT | Attempted video URL | Debugging |
+| `attempted_at` | TIMESTAMP | Last attempt time | Retry scheduling |
+
+---
+
+### Waste Detection: Field Combinations & Algorithms
+
+The power of Cat-Scan is in combining fields to surface waste. Here's how:
+
+#### 1. QPS Waste Rate (The Core Metric)
+
+```
+waste_rate = (reached_queries - impressions) / reached_queries × 100
+```
+
+| Fields Used | Insight |
+|-------------|---------|
+| `reached_queries`, `impressions` | **Direct waste percentage** |
+
+*Example: 100K queries, 1K impressions = 99% waste. You're processing 99K requests for nothing.*
+
+#### 2. Size Mismatch Detection
+
+```sql
+-- Find sizes you receive traffic for but have no creatives
+SELECT p.creative_size, SUM(p.reached_queries) as wasted_qps
+FROM performance_data p
+LEFT JOIN creatives c ON c.canonical_size = p.creative_size
+WHERE c.id IS NULL
+GROUP BY p.creative_size
+ORDER BY wasted_qps DESC
+```
+
+| Fields Used | Insight |
+|-------------|---------|
+| `performance_data.creative_size` + `creatives.canonical_size` | **Sizes you lack inventory for** |
+
+*Action: Either add creatives for high-volume sizes OR exclude those sizes from pretargeting.*
+
+#### 3. Broken Video Detection
+
+```sql
+-- Videos with high impressions but thumbnail generation failed
+SELECT c.id, c.advertiser_name,
+       SUM(p.impressions) as impressions,
+       ts.error_reason
+FROM creatives c
+JOIN thumbnail_status ts ON c.id = ts.creative_id
+JOIN performance_data p ON c.id = p.creative_id
+WHERE c.format = 'VIDEO'
+  AND ts.status = 'failed'
+  AND ts.error_reason IN ('url_expired', 'timeout', 'invalid_format')
+GROUP BY c.id
+HAVING impressions > 1000
+```
+
+| Fields Used | Insight |
+|-------------|---------|
+| `creatives.format` + `thumbnail_status.error_reason` + `performance_data.impressions` | **Spending on unplayable videos** |
+
+*A video that can't generate a thumbnail likely can't play for users either.*
+
+#### 4. Zero Engagement Detection
+
+```sql
+-- Creatives with high spend but zero clicks over 7+ days
+SELECT c.id, c.advertiser_name,
+       SUM(p.impressions) as total_impressions,
+       SUM(p.clicks) as total_clicks,
+       SUM(p.spend_micros)/1000000.0 as spend_usd,
+       COUNT(DISTINCT p.metric_date) as days_active
+FROM creatives c
+JOIN performance_data p ON c.id = p.creative_id
+WHERE p.metric_date >= date('now', '-14 days')
+GROUP BY c.id
+HAVING total_impressions > 10000
+   AND total_clicks = 0
+   AND days_active >= 7
+```
+
+| Fields Used | Insight |
+|-------------|---------|
+| `impressions`, `clicks`, `spend_micros`, `metric_date` | **Money spent on creatives nobody engages with** |
+
+*Pattern over time matters: 1 day of zero clicks is normal; 7+ days is a red flag.*
+
+#### 5. Click Fraud Signals
+
+```sql
+-- Suspicious click patterns (clicks > impressions is impossible legitimately)
+SELECT p.creative_id, p.publisher_id, p.app_id,
+       p.metric_date,
+       p.impressions, p.clicks,
+       CAST(p.clicks AS FLOAT) / NULLIF(p.impressions, 0) as ctr
+FROM performance_data p
+WHERE p.clicks > p.impressions
+   OR (p.impressions > 100 AND CAST(p.clicks AS FLOAT) / p.impressions > 0.5)
+```
+
+| Fields Used | Insight |
+|-------------|---------|
+| `clicks`, `impressions`, `publisher_id`, `app_id` | **Fraudulent traffic sources** |
+
+*Flag for human review. CTR > 50% on display is almost always fraud.*
+
+#### 6. Video Completion Funnel
+
+```sql
+-- Videos where users start but don't complete
+SELECT c.id, c.advertiser_name,
+       SUM(p.video_starts) as starts,
+       SUM(p.video_completions) as completions,
+       CAST(SUM(p.video_completions) AS FLOAT) / NULLIF(SUM(p.video_starts), 0) * 100 as vcr
+FROM creatives c
+JOIN performance_data p ON c.id = p.creative_id
+WHERE c.format = 'VIDEO'
+  AND p.metric_date >= date('now', '-7 days')
+GROUP BY c.id
+HAVING starts > 1000 AND vcr < 10
+```
+
+| Fields Used | Insight |
+|-------------|---------|
+| `video_starts`, `video_completions`, `format` | **Videos that annoy users** |
+
+*Very low VCR (< 10%) suggests the video is unskippable but unwanted, or has playback issues.*
+
+#### 7. Config Efficiency Analysis
+
+```sql
+-- Which pretargeting configs waste the most QPS?
+SELECT billing_id,
+       SUM(reached_queries) as total_queries,
+       SUM(impressions) as total_impressions,
+       100.0 * (SUM(reached_queries) - SUM(impressions)) / NULLIF(SUM(reached_queries), 0) as waste_pct
+FROM performance_data
+WHERE metric_date >= date('now', '-7 days')
+GROUP BY billing_id
+ORDER BY waste_pct DESC
+```
+
+| Fields Used | Insight |
+|-------------|---------|
+| `billing_id`, `reached_queries`, `impressions` | **Which configs need tuning** |
+
+*High waste_pct = config is too broad. Tighten targeting or add exclusions.*
+
+#### 8. Publisher Blocklist Candidates
+
+```sql
+-- Publishers with high QPS but zero/low impressions
+SELECT publisher_id, publisher_name, publisher_domain,
+       SUM(reached_queries) as queries,
+       SUM(impressions) as impressions,
+       SUM(spend_micros)/1000000.0 as spend
+FROM performance_data
+WHERE metric_date >= date('now', '-14 days')
+GROUP BY publisher_id
+HAVING queries > 10000 AND (impressions = 0 OR spend/queries < 0.00001)
+```
+
+| Fields Used | Insight |
+|-------------|---------|
+| `publisher_id`, `publisher_domain`, `reached_queries`, `impressions` | **Publishers sending worthless traffic** |
+
+#### 9. Disapproved Creative Waste
+
+```sql
+-- Spending on creatives that are disapproved
+SELECT c.id, c.approval_status, c.advertiser_name,
+       SUM(p.impressions) as impressions,
+       SUM(p.spend_micros)/1000000.0 as spend
+FROM creatives c
+JOIN performance_data p ON c.id = p.creative_id
+WHERE c.approval_status = 'DISAPPROVED'
+GROUP BY c.id
+```
+
+| Fields Used | Insight |
+|-------------|---------|
+| `creatives.approval_status` + `performance_data.*` | **100% wasted spend on banned ads** |
+
+*Disapproved creatives shouldn't be bidding. If they have spend, something is wrong.*
+
+---
+
+### AI/Algorithm Recommendations Summary
+
+| Waste Type | Detection Method | Action |
+|------------|------------------|--------|
+| **Size mismatch** | `creative_size` not in `canonical_size` inventory | Add creative OR exclude size |
+| **Config inefficiency** | High `reached_queries` / low `impressions` per `billing_id` | Tighten targeting |
+| **Broken video** | `thumbnail_status.status = 'failed'` + high spend | Pause creative |
+| **Zero engagement** | High impressions, zero clicks over 7+ days | Review creative quality |
+| **Click fraud** | `clicks > impressions` OR CTR > 50% | Block publisher/app |
+| **Poor video completion** | VCR < 10% over significant volume | Replace creative |
+| **Disapproved waste** | `approval_status = 'DISAPPROVED'` with spend | Remove from bidding |
+| **Publisher waste** | High queries, zero wins from `publisher_id` | Add to blocklist |
+
+---
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) file
