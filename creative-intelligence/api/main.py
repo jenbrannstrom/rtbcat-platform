@@ -218,6 +218,8 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     configured: bool
+    has_credentials: bool = False
+    database_exists: bool = False
 
 
 class BuyerSeatResponse(BaseModel):
@@ -471,11 +473,28 @@ def get_config() -> ConfigManager:
 
 @app.get("/health", response_model=HealthResponse, tags=["System"])
 async def health_check(config: ConfigManager = Depends(get_config)):
-    """Check API health status."""
+    """Check API health status including credential and database state."""
+    has_credentials = False
+    configured = config.is_configured()
+
+    # Check if credentials file exists
+    try:
+        app_config = config.load()
+        if app_config and app_config.authorized_buyers:
+            creds_path = Path(app_config.authorized_buyers.service_account_path).expanduser()
+            has_credentials = creds_path.exists()
+    except Exception:
+        pass
+
+    # Check database exists
+    db_path = Path.home() / ".catscan" / "catscan.db"
+
     return HealthResponse(
         status="healthy",
         version="0.1.0",
-        configured=config.is_configured(),
+        configured=configured,
+        has_credentials=has_credentials,
+        database_exists=db_path.exists(),
     )
 
 
@@ -486,6 +505,524 @@ async def get_thumbnail(creative_id: str):
     if not thumb_path.exists():
         raise HTTPException(status_code=404, detail="Thumbnail not found")
     return FileResponse(thumb_path, media_type="image/jpeg")
+
+
+# ============================================================
+# Thumbnail Generation API (Phase 18)
+# ============================================================
+
+import subprocess
+import shutil
+
+
+class ThumbnailGenerateRequest(BaseModel):
+    """Request model for generating thumbnail for a single creative."""
+    creative_id: str = Field(..., description="The creative ID to generate thumbnail for")
+
+
+class ThumbnailGenerateResponse(BaseModel):
+    """Response model for single thumbnail generation."""
+    creative_id: str
+    status: str  # 'success', 'failed', 'skipped', 'no_video_url'
+    error_reason: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+
+
+class ThumbnailBatchRequest(BaseModel):
+    """Request model for batch thumbnail generation."""
+    seat_id: Optional[str] = Field(None, description="Generate for specific seat only")
+    limit: int = Field(50, ge=1, le=500, description="Maximum thumbnails to generate")
+    force: bool = Field(False, description="Retry previously failed thumbnails")
+
+
+class ThumbnailBatchResponse(BaseModel):
+    """Response model for batch thumbnail generation."""
+    status: str  # 'started', 'completed'
+    total_processed: int
+    success_count: int
+    failed_count: int
+    skipped_count: int
+    results: list[ThumbnailGenerateResponse]
+
+
+class ThumbnailStatusSummary(BaseModel):
+    """Summary of thumbnail generation status."""
+    total_videos: int
+    with_thumbnails: int
+    pending: int
+    failed: int
+    coverage_percent: float
+    ffmpeg_available: bool
+
+
+def _get_thumbnails_dir() -> Path:
+    """Get the thumbnails directory, creating if needed."""
+    thumb_dir = Path.home() / ".catscan" / "thumbnails"
+    thumb_dir.mkdir(parents=True, exist_ok=True)
+    return thumb_dir
+
+
+def _check_ffmpeg() -> bool:
+    """Check if ffmpeg is available."""
+    return shutil.which("ffmpeg") is not None
+
+
+def _classify_ffmpeg_error(returncode: int, stderr: str, url: str) -> str:
+    """Classify ffmpeg error into categories."""
+    stderr_lower = stderr.lower() if stderr else ""
+
+    if "403" in stderr or "forbidden" in stderr_lower:
+        return "url_expired"
+    if "404" in stderr or "not found" in stderr_lower:
+        return "url_not_found"
+    if "timed out" in stderr_lower or "timeout" in stderr_lower:
+        return "timeout"
+    if "protocol" in stderr_lower or "invalid" in stderr_lower:
+        return "invalid_url"
+    if "network" in stderr_lower or "connection" in stderr_lower:
+        return "network_error"
+
+    return "unknown"
+
+
+def _generate_thumbnail_ffmpeg(video_url: str, output_path: Path, timeout: int = 30) -> dict:
+    """Generate thumbnail from video URL using ffmpeg."""
+    try:
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-ss", "1",  # Seek to 1 second
+            "-i", video_url,
+            "-vframes", "1",
+            "-vf", "scale='min(480,iw)':'-1'",
+            "-q:v", "2",
+            str(output_path)
+        ]
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=timeout,
+            text=True
+        )
+
+        if result.returncode == 0 and output_path.exists():
+            return {'success': True, 'error_reason': None}
+        else:
+            error_reason = _classify_ffmpeg_error(result.returncode, result.stderr, video_url)
+            return {'success': False, 'error_reason': error_reason}
+
+    except subprocess.TimeoutExpired:
+        return {'success': False, 'error_reason': 'timeout'}
+    except Exception:
+        return {'success': False, 'error_reason': 'unknown'}
+
+
+@app.get("/thumbnails/status", response_model=ThumbnailStatusSummary, tags=["Thumbnails"])
+async def get_thumbnail_status(store: SQLiteStore = Depends(get_store)):
+    """Get summary of thumbnail generation status."""
+    import sqlite3
+
+    db_path = Path.home() / ".catscan" / "creatives.db"
+    ffmpeg_available = _check_ffmpeg()
+
+    if not db_path.exists():
+        return ThumbnailStatusSummary(
+            total_videos=0,
+            with_thumbnails=0,
+            pending=0,
+            failed=0,
+            coverage_percent=0.0,
+            ffmpeg_available=ffmpeg_available,
+        )
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    # Count total videos
+    cursor.execute("SELECT COUNT(*) FROM creatives WHERE format = 'VIDEO'")
+    total_videos = cursor.fetchone()[0]
+
+    # Count by thumbnail status
+    cursor.execute("""
+        SELECT
+            COALESCE(ts.status, 'pending') as status,
+            COUNT(*) as count
+        FROM creatives c
+        LEFT JOIN thumbnail_status ts ON c.id = ts.creative_id
+        WHERE c.format = 'VIDEO'
+        GROUP BY COALESCE(ts.status, 'pending')
+    """)
+
+    status_counts = {row['status']: row['count'] for row in cursor.fetchall()}
+    conn.close()
+
+    with_thumbnails = status_counts.get('success', 0)
+    failed = status_counts.get('failed', 0)
+    pending = total_videos - with_thumbnails - failed
+
+    coverage = (with_thumbnails / total_videos * 100) if total_videos > 0 else 0.0
+
+    return ThumbnailStatusSummary(
+        total_videos=total_videos,
+        with_thumbnails=with_thumbnails,
+        pending=pending,
+        failed=failed,
+        coverage_percent=round(coverage, 1),
+        ffmpeg_available=ffmpeg_available,
+    )
+
+
+# ============================================================
+# System Status API (Phase 19)
+# ============================================================
+
+import sys
+
+
+class SystemStatusResponse(BaseModel):
+    """Response model for system status."""
+    python_version: str
+    node_available: bool
+    node_version: Optional[str] = None
+    ffmpeg_available: bool
+    ffmpeg_version: Optional[str] = None
+    database_size_mb: float
+    thumbnails_count: int
+    disk_space_gb: float
+    creatives_count: int
+    videos_count: int
+
+
+@app.get("/system/status", response_model=SystemStatusResponse, tags=["System"])
+async def get_system_status():
+    """Get system status including installed tools and resource usage."""
+
+    # Python version
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+
+    # Node.js check
+    node_available = shutil.which("node") is not None
+    node_version = None
+    if node_available:
+        try:
+            result = subprocess.run(['node', '--version'], capture_output=True, text=True, timeout=5)
+            node_version = result.stdout.strip()
+        except Exception:
+            pass
+
+    # ffmpeg check
+    ffmpeg_available = _check_ffmpeg()
+    ffmpeg_version = None
+    if ffmpeg_available:
+        try:
+            result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True, timeout=5)
+            first_line = result.stdout.split('\n')[0]
+            parts = first_line.split(' ')
+            ffmpeg_version = parts[2] if len(parts) > 2 else 'Unknown'
+        except Exception:
+            pass
+
+    # Database size
+    db_path = Path.home() / ".catscan" / "creatives.db"
+    database_size_mb = db_path.stat().st_size / (1024 * 1024) if db_path.exists() else 0
+
+    # Thumbnails count
+    thumbnails_dir = Path.home() / ".catscan" / "thumbnails"
+    thumbnails_count = len(list(thumbnails_dir.glob("*.jpg"))) if thumbnails_dir.exists() else 0
+
+    # Disk space
+    total, used, free = shutil.disk_usage(Path.home())
+    disk_space_gb = free / (1024 ** 3)
+
+    # Creative counts
+    creatives_count = 0
+    videos_count = 0
+    if db_path.exists():
+        try:
+            import sqlite3
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM creatives")
+            creatives_count = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM creatives WHERE format = 'VIDEO'")
+            videos_count = cursor.fetchone()[0]
+            conn.close()
+        except Exception:
+            pass
+
+    return SystemStatusResponse(
+        python_version=python_version,
+        node_available=node_available,
+        node_version=node_version,
+        ffmpeg_available=ffmpeg_available,
+        ffmpeg_version=ffmpeg_version,
+        database_size_mb=round(database_size_mb, 2),
+        thumbnails_count=thumbnails_count,
+        disk_space_gb=round(disk_space_gb, 1),
+        creatives_count=creatives_count,
+        videos_count=videos_count,
+    )
+
+
+@app.post("/thumbnails/generate", response_model=ThumbnailGenerateResponse, tags=["Thumbnails"])
+async def generate_single_thumbnail(
+    request: ThumbnailGenerateRequest,
+    store: SQLiteStore = Depends(get_store),
+):
+    """Generate thumbnail for a single video creative."""
+    import sqlite3
+    import json
+
+    if not _check_ffmpeg():
+        raise HTTPException(status_code=503, detail="ffmpeg not installed on server")
+
+    db_path = Path.home() / ".catscan" / "creatives.db"
+    thumb_dir = _get_thumbnails_dir()
+
+    # Get the creative
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, format, raw_data
+        FROM creatives
+        WHERE id = ?
+    """, (request.creative_id,))
+
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Creative not found")
+
+    if row['format'] != 'VIDEO':
+        conn.close()
+        return ThumbnailGenerateResponse(
+            creative_id=request.creative_id,
+            status='skipped',
+            error_reason='not_video',
+        )
+
+    # Extract video URL from raw_data
+    raw_data = json.loads(row['raw_data']) if row['raw_data'] else {}
+    video_data = raw_data.get('video', {})
+    video_url = video_data.get('videoUrl')
+
+    # Try to extract from VAST if no direct URL
+    if not video_url and video_data.get('vastXml'):
+        video_url = _extract_video_url_from_vast(video_data['vastXml'])
+
+    if not video_url:
+        # Record status
+        cursor.execute("""
+            INSERT INTO thumbnail_status (creative_id, status, error_reason, attempted_at)
+            VALUES (?, 'failed', 'no_url', CURRENT_TIMESTAMP)
+            ON CONFLICT(creative_id) DO UPDATE SET
+                status = 'failed',
+                error_reason = 'no_url',
+                attempted_at = CURRENT_TIMESTAMP
+        """, (request.creative_id,))
+        conn.commit()
+        conn.close()
+
+        return ThumbnailGenerateResponse(
+            creative_id=request.creative_id,
+            status='failed',
+            error_reason='no_video_url',
+        )
+
+    # Generate thumbnail
+    thumb_path = thumb_dir / f"{request.creative_id}.jpg"
+    result = _generate_thumbnail_ffmpeg(video_url, thumb_path)
+
+    if result['success']:
+        # Update raw_data with local thumbnail path
+        video_data['localThumbnailPath'] = str(thumb_path)
+        raw_data['video'] = video_data
+        cursor.execute(
+            "UPDATE creatives SET raw_data = ? WHERE id = ?",
+            (json.dumps(raw_data), request.creative_id)
+        )
+
+        # Record success status
+        cursor.execute("""
+            INSERT INTO thumbnail_status (creative_id, status, video_url, attempted_at)
+            VALUES (?, 'success', ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(creative_id) DO UPDATE SET
+                status = 'success',
+                error_reason = NULL,
+                video_url = excluded.video_url,
+                attempted_at = CURRENT_TIMESTAMP
+        """, (request.creative_id, video_url))
+
+        conn.commit()
+        conn.close()
+
+        return ThumbnailGenerateResponse(
+            creative_id=request.creative_id,
+            status='success',
+            thumbnail_url=f"/thumbnails/{request.creative_id}.jpg",
+        )
+    else:
+        # Record failure
+        cursor.execute("""
+            INSERT INTO thumbnail_status (creative_id, status, error_reason, video_url, attempted_at)
+            VALUES (?, 'failed', ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(creative_id) DO UPDATE SET
+                status = 'failed',
+                error_reason = excluded.error_reason,
+                video_url = excluded.video_url,
+                attempted_at = CURRENT_TIMESTAMP
+        """, (request.creative_id, result['error_reason'], video_url))
+        conn.commit()
+        conn.close()
+
+        return ThumbnailGenerateResponse(
+            creative_id=request.creative_id,
+            status='failed',
+            error_reason=result['error_reason'],
+        )
+
+
+@app.post("/thumbnails/generate-batch", response_model=ThumbnailBatchResponse, tags=["Thumbnails"])
+async def generate_batch_thumbnails(
+    request: ThumbnailBatchRequest,
+    store: SQLiteStore = Depends(get_store),
+):
+    """Generate thumbnails for multiple video creatives.
+
+    Processes videos that don't have thumbnails yet (or failed ones if force=True).
+    """
+    import sqlite3
+    import json
+
+    if not _check_ffmpeg():
+        raise HTTPException(status_code=503, detail="ffmpeg not installed on server")
+
+    db_path = Path.home() / ".catscan" / "creatives.db"
+    thumb_dir = _get_thumbnails_dir()
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    # Build query for videos needing thumbnails
+    if request.force:
+        # Include failed ones when force=True
+        query = """
+            SELECT c.id, c.raw_data
+            FROM creatives c
+            LEFT JOIN thumbnail_status ts ON c.id = ts.creative_id
+            WHERE c.format = 'VIDEO'
+            AND (ts.status IS NULL OR ts.status = 'failed')
+        """
+    else:
+        # Only get pending (no status record)
+        query = """
+            SELECT c.id, c.raw_data
+            FROM creatives c
+            LEFT JOIN thumbnail_status ts ON c.id = ts.creative_id
+            WHERE c.format = 'VIDEO'
+            AND ts.status IS NULL
+        """
+
+    # Add seat filter if specified
+    if request.seat_id:
+        query += " AND c.buyer_id = ?"
+        cursor.execute(query + f" LIMIT {request.limit}", (request.seat_id,))
+    else:
+        cursor.execute(query + f" LIMIT {request.limit}")
+
+    rows = cursor.fetchall()
+
+    results = []
+    success_count = 0
+    failed_count = 0
+    skipped_count = 0
+
+    for row in rows:
+        creative_id = row['id']
+        raw_data = json.loads(row['raw_data']) if row['raw_data'] else {}
+        video_data = raw_data.get('video', {})
+        video_url = video_data.get('videoUrl')
+
+        # Try VAST extraction
+        if not video_url and video_data.get('vastXml'):
+            video_url = _extract_video_url_from_vast(video_data['vastXml'])
+
+        if not video_url:
+            # Record no URL
+            cursor.execute("""
+                INSERT INTO thumbnail_status (creative_id, status, error_reason, attempted_at)
+                VALUES (?, 'failed', 'no_url', CURRENT_TIMESTAMP)
+                ON CONFLICT(creative_id) DO UPDATE SET
+                    status = 'failed', error_reason = 'no_url', attempted_at = CURRENT_TIMESTAMP
+            """, (creative_id,))
+
+            results.append(ThumbnailGenerateResponse(
+                creative_id=creative_id,
+                status='failed',
+                error_reason='no_video_url',
+            ))
+            failed_count += 1
+            continue
+
+        # Generate thumbnail
+        thumb_path = thumb_dir / f"{creative_id}.jpg"
+        result = _generate_thumbnail_ffmpeg(video_url, thumb_path)
+
+        if result['success']:
+            # Update raw_data
+            video_data['localThumbnailPath'] = str(thumb_path)
+            raw_data['video'] = video_data
+            cursor.execute(
+                "UPDATE creatives SET raw_data = ? WHERE id = ?",
+                (json.dumps(raw_data), creative_id)
+            )
+
+            cursor.execute("""
+                INSERT INTO thumbnail_status (creative_id, status, video_url, attempted_at)
+                VALUES (?, 'success', ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(creative_id) DO UPDATE SET
+                    status = 'success', error_reason = NULL, video_url = excluded.video_url,
+                    attempted_at = CURRENT_TIMESTAMP
+            """, (creative_id, video_url))
+
+            results.append(ThumbnailGenerateResponse(
+                creative_id=creative_id,
+                status='success',
+                thumbnail_url=f"/thumbnails/{creative_id}.jpg",
+            ))
+            success_count += 1
+        else:
+            cursor.execute("""
+                INSERT INTO thumbnail_status (creative_id, status, error_reason, video_url, attempted_at)
+                VALUES (?, 'failed', ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(creative_id) DO UPDATE SET
+                    status = 'failed', error_reason = excluded.error_reason,
+                    video_url = excluded.video_url, attempted_at = CURRENT_TIMESTAMP
+            """, (creative_id, result['error_reason'], video_url))
+
+            results.append(ThumbnailGenerateResponse(
+                creative_id=creative_id,
+                status='failed',
+                error_reason=result['error_reason'],
+            ))
+            failed_count += 1
+
+    conn.commit()
+    conn.close()
+
+    return ThumbnailBatchResponse(
+        status='completed',
+        total_processed=len(rows),
+        success_count=success_count,
+        failed_count=failed_count,
+        skipped_count=skipped_count,
+        results=results,
+    )
 
 
 class CredentialsUploadRequest(BaseModel):
@@ -511,6 +1048,7 @@ class CredentialsStatusResponse(BaseModel):
     client_email: Optional[str] = None
     project_id: Optional[str] = None
     credentials_path: Optional[str] = None
+    account_id: Optional[str] = None
 
 
 @app.get("/config/credentials", response_model=CredentialsStatusResponse, tags=["Configuration"])
@@ -547,6 +1085,7 @@ async def get_credentials_status(config: ConfigManager = Depends(get_config)):
             client_email=creds_data.get("client_email"),
             project_id=creds_data.get("project_id"),
             credentials_path=str(creds_path),
+            account_id=app_config.authorized_buyers.account_id,
         )
     except Exception as e:
         logger.error(f"Error reading credentials: {e}")
@@ -831,28 +1370,33 @@ async def _get_waste_flags_for_creatives(
 
     # Get performance data for all creatives in timeframe
     # We need to query the rtb_daily table for impressions/clicks
-    async with store._connection() as conn:
-        import asyncio
-        loop = asyncio.get_event_loop()
+    perf_data = {}
+    try:
+        async with store._connection() as conn:
+            import asyncio
+            loop = asyncio.get_event_loop()
 
-        def _get_perf():
-            placeholders = ",".join("?" * len(creative_ids))
-            cursor = conn.execute(
-                f"""
-                SELECT creative_id,
-                       SUM(impressions) as total_impressions,
-                       SUM(clicks) as total_clicks
-                FROM rtb_daily
-                WHERE creative_id IN ({placeholders})
-                  AND metric_date >= date('now', '-{days} days')
-                GROUP BY creative_id
-                """,
-                creative_ids,
-            )
-            return {row["creative_id"]: {"impressions": row["total_impressions"], "clicks": row["total_clicks"]}
-                    for row in cursor.fetchall()}
+            def _get_perf():
+                placeholders = ",".join("?" * len(creative_ids))
+                cursor = conn.execute(
+                    f"""
+                    SELECT creative_id,
+                           SUM(impressions) as total_impressions,
+                           SUM(clicks) as total_clicks
+                    FROM rtb_daily
+                    WHERE creative_id IN ({placeholders})
+                      AND metric_date >= date('now', '-{days} days')
+                    GROUP BY creative_id
+                    """,
+                    creative_ids,
+                )
+                return {row["creative_id"]: {"impressions": row["total_impressions"], "clicks": row["total_clicks"]}
+                        for row in cursor.fetchall()}
 
-        perf_data = await loop.run_in_executor(None, _get_perf)
+            perf_data = await loop.run_in_executor(None, _get_perf)
+    except Exception as e:
+        # rtb_daily table may not exist yet (no performance data imported)
+        logger.debug(f"Could not fetch performance data: {e}")
 
     result = {}
     for cid in creative_ids:
@@ -911,26 +1455,30 @@ async def list_creatives(
     # If active_only, filter to creatives with activity in timeframe
     if active_only and creatives:
         creative_ids = [c.id for c in creatives]
-        async with store._connection() as conn:
-            import asyncio
-            loop = asyncio.get_event_loop()
+        try:
+            async with store._connection() as conn:
+                import asyncio
+                loop = asyncio.get_event_loop()
 
-            def _get_active_ids():
-                placeholders = ",".join("?" * len(creative_ids))
-                cursor = conn.execute(
-                    f"""
-                    SELECT DISTINCT creative_id
-                    FROM rtb_daily
-                    WHERE creative_id IN ({placeholders})
-                      AND metric_date >= date('now', '-{days} days')
-                      AND (impressions > 0 OR clicks > 0 OR spend_micros > 0)
-                    """,
-                    creative_ids,
-                )
-                return set(row["creative_id"] for row in cursor.fetchall())
+                def _get_active_ids():
+                    placeholders = ",".join("?" * len(creative_ids))
+                    cursor = conn.execute(
+                        f"""
+                        SELECT DISTINCT creative_id
+                        FROM rtb_daily
+                        WHERE creative_id IN ({placeholders})
+                          AND metric_date >= date('now', '-{days} days')
+                          AND (impressions > 0 OR clicks > 0 OR spend_micros > 0)
+                        """,
+                        creative_ids,
+                    )
+                    return set(row["creative_id"] for row in cursor.fetchall())
 
-            active_ids = await loop.run_in_executor(None, _get_active_ids)
-            creatives = [c for c in creatives if c.id in active_ids][:limit]
+                active_ids = await loop.run_in_executor(None, _get_active_ids)
+                creatives = [c for c in creatives if c.id in active_ids][:limit]
+        except Exception as e:
+            # rtb_daily table may not exist - return all creatives
+            logger.debug(f"Could not filter active creatives: {e}")
 
     # Get thumbnail status and waste flags for all creatives
     creative_ids = [c.id for c in creatives]

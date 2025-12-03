@@ -11,7 +11,7 @@ import { PreviewModal } from "@/components/preview-modal";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
 import type { Creative, PerformancePeriod, CreativePerformanceSummary } from "@/types/api";
-import { cn } from "@/lib/utils";
+import { cn, getFormatLabel } from "@/lib/utils";
 
 // Sort options for the dropdown
 const SORT_OPTIONS: { value: PerformancePeriod | "none"; label: string }[] = [
@@ -77,7 +77,13 @@ function calculateTiers(
 const CARD_HEIGHT = 380;
 const GAP = 16;
 
-const FORMATS = ["VIDEO", "HTML", "NATIVE", "IMAGE"];
+// Format filters - map API formats to display labels
+// Note: HTML and IMAGE both map to "Display" in the UI
+const FORMAT_FILTERS: { value: string; label: string; formats: string[] }[] = [
+  { value: "VIDEO", label: "Video", formats: ["VIDEO"] },
+  { value: "DISPLAY", label: "Display", formats: ["HTML", "IMAGE"] },
+  { value: "NATIVE", label: "Native", formats: ["NATIVE"] },
+];
 const COLUMNS = 4; // Fixed 4 columns for simplicity
 
 function VirtualizedGrid({
@@ -235,9 +241,13 @@ function CreativesContent() {
     if (!creatives) return undefined;
 
     let result = creatives.filter((c) => {
-      // Format filter
-      if (selectedFormats.size > 0 && !selectedFormats.has(c.format)) {
-        return false;
+      // Format filter - check if creative's format matches any selected filter group
+      if (selectedFormats.size > 0) {
+        const matchesFormat = Array.from(selectedFormats).some((filterValue) => {
+          const filter = FORMAT_FILTERS.find((f) => f.value === filterValue);
+          return filter?.formats.includes(c.format);
+        });
+        if (!matchesFormat) return false;
       }
 
       // Size filter
@@ -340,18 +350,18 @@ function CreativesContent() {
 
         {/* Format Filters - horizontal */}
         <div className="flex items-center gap-1">
-          {FORMATS.map((format) => (
+          {FORMAT_FILTERS.map((filter) => (
             <button
-              key={format}
-              onClick={() => toggleFormat(format)}
+              key={filter.value}
+              onClick={() => toggleFormat(filter.value)}
               className={cn(
                 "px-2.5 py-1 rounded text-xs font-medium transition-colors",
-                selectedFormats.has(format)
+                selectedFormats.has(filter.value)
                   ? "bg-primary-600 text-white"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               )}
             >
-              {format}
+              {filter.label}
             </button>
           ))}
         </div>

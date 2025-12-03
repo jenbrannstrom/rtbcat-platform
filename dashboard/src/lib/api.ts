@@ -406,6 +406,7 @@ export interface CredentialsStatus {
   client_email?: string;
   project_id?: string;
   credentials_path?: string;
+  account_id?: string;
 }
 
 export interface CredentialsUploadResponse {
@@ -436,4 +437,74 @@ export async function deleteCredentials(): Promise<{ success: boolean; message: 
   return fetchApi<{ success: boolean; message: string }>("/config/credentials", {
     method: "DELETE",
   });
+}
+
+// Thumbnail Generation API
+
+export interface ThumbnailStatusSummary {
+  total_videos: number;
+  with_thumbnails: number;
+  pending: number;
+  failed: number;
+  coverage_percent: number;
+  ffmpeg_available: boolean;
+}
+
+export interface ThumbnailGenerateResponse {
+  creative_id: string;
+  status: "success" | "failed" | "skipped";
+  error_reason?: string;
+  thumbnail_url?: string;
+}
+
+export interface ThumbnailBatchResponse {
+  status: string;
+  total_processed: number;
+  success_count: number;
+  failed_count: number;
+  skipped_count: number;
+  results: ThumbnailGenerateResponse[];
+}
+
+export async function getThumbnailStatus(): Promise<ThumbnailStatusSummary> {
+  return fetchApi<ThumbnailStatusSummary>("/thumbnails/status");
+}
+
+export async function generateThumbnail(
+  creativeId: string
+): Promise<ThumbnailGenerateResponse> {
+  return fetchApi<ThumbnailGenerateResponse>("/thumbnails/generate", {
+    method: "POST",
+    body: JSON.stringify({ creative_id: creativeId }),
+  });
+}
+
+export async function generateThumbnailsBatch(params?: {
+  seat_id?: string;
+  limit?: number;
+  force?: boolean;
+}): Promise<ThumbnailBatchResponse> {
+  return fetchApi<ThumbnailBatchResponse>("/thumbnails/generate-batch", {
+    method: "POST",
+    body: JSON.stringify(params ?? {}),
+  });
+}
+
+// System Status API
+
+export interface SystemStatus {
+  python_version: string;
+  node_available: boolean;
+  node_version?: string;
+  ffmpeg_available: boolean;
+  ffmpeg_version?: string;
+  database_size_mb: number;
+  thumbnails_count: number;
+  disk_space_gb: number;
+  creatives_count: number;
+  videos_count: number;
+}
+
+export async function getSystemStatus(): Promise<SystemStatus> {
+  return fetchApi<SystemStatus>("/system/status");
 }
