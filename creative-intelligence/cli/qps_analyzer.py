@@ -49,6 +49,12 @@ from qps.config_tracker import ConfigPerformanceTracker
 from qps.fraud_detector import FraudSignalDetector
 from qps.constants import ACCOUNT_NAME, ACCOUNT_ID, PRETARGETING_CONFIGS
 
+# Troubleshooting imports (lazy loaded to avoid auth issues when not needed)
+def _get_troubleshooting_client():
+    """Lazy load troubleshooting client to avoid auth issues on import."""
+    from collectors.troubleshooting.client import TroubleshootingClient
+    return TroubleshootingClient()
+
 
 def cmd_import(args):
     """Import a CSV file with validation."""
@@ -704,6 +710,243 @@ def cmd_generate_thumbnails(args):
         print("Restart the API server to see updated thumbnails.")
 
 
+def cmd_troubleshoot_collect(args):
+    """Collect troubleshooting data from RTB Troubleshooting API."""
+    days = args.days or 7
+    environment = args.environment
+
+    print("=" * 60)
+    print("RTB TROUBLESHOOTING DATA COLLECTION")
+    print("=" * 60)
+    print(f"Days: {days}")
+    print(f"Environment: {environment or 'all'}")
+    print()
+
+    try:
+        client = _get_troubleshooting_client()
+        print("Collecting metrics from Ad Exchange Buyer II API...")
+        print()
+
+        data = client.collect_all_metrics(days=days, environment=environment)
+
+        # Display results
+        print("=" * 60)
+        print("COLLECTION RESULTS")
+        print("=" * 60)
+
+        if "filtered_bid_requests" in data:
+            fbr = data["filtered_bid_requests"]
+            print(f"\nFiltered Bid Requests: {len(fbr)} reasons")
+            for item in fbr[:5]:
+                print(f"  - {item.get('status', 'unknown')}: {item.get('filtered_bid_request_count', 0):,} requests")
+            if len(fbr) > 5:
+                print(f"  ... and {len(fbr) - 5} more")
+
+        if "filtered_bids" in data:
+            fb = data["filtered_bids"]
+            print(f"\nFiltered Bids: {len(fb)} reasons")
+            for item in fb[:5]:
+                print(f"  - {item.get('status', 'unknown')}: {item.get('bid_count', 0):,} bids")
+            if len(fb) > 5:
+                print(f"  ... and {len(fb) - 5} more")
+
+        if "bid_metrics" in data:
+            bm = data["bid_metrics"]
+            print(f"\nBid Metrics: {len(bm)} rows")
+
+        if "callout_status" in data:
+            cs = data["callout_status"]
+            print(f"\nCallout Status: {len(cs)} statuses")
+
+        if "impression_metrics" in data:
+            im = data["impression_metrics"]
+            print(f"\nImpression Metrics: {len(im)} rows")
+
+        if "loser_bids" in data:
+            lb = data["loser_bids"]
+            print(f"\nLoser Bids: {len(lb)} reasons")
+
+        print()
+        print("=" * 60)
+        print("Collection complete. Use 'troubleshoot report' to analyze.")
+        print("=" * 60)
+
+    except Exception as e:
+        print(f"Error collecting troubleshooting data: {e}")
+        sys.exit(1)
+
+
+def cmd_troubleshoot_report(args):
+    """Generate a troubleshooting report from collected data."""
+    days = args.days or 7
+
+    print("=" * 60)
+    print("RTB TROUBLESHOOTING REPORT")
+    print("=" * 60)
+    print(f"Analysis Period: {days} days")
+    print()
+
+    try:
+        client = _get_troubleshooting_client()
+        data = client.collect_all_metrics(days=days)
+
+        # Analyze filtered bids
+        if "filtered_bids" in data and data["filtered_bids"]:
+            print("-" * 60)
+            print("FILTERED BIDS ANALYSIS")
+            print("-" * 60)
+            print()
+
+            total_filtered = sum(item.get("bid_count", 0) for item in data["filtered_bids"])
+            print(f"Total filtered bids: {total_filtered:,}")
+            print()
+
+            # Top reasons
+            sorted_reasons = sorted(data["filtered_bids"],
+                                   key=lambda x: x.get("bid_count", 0), reverse=True)
+            print("Top 10 filter reasons:")
+            for i, item in enumerate(sorted_reasons[:10], 1):
+                status = item.get("status", "unknown")
+                count = item.get("bid_count", 0)
+                pct = (count / total_filtered * 100) if total_filtered > 0 else 0
+                print(f"  {i:2}. {status}: {count:,} ({pct:.1f}%)")
+
+            print()
+
+        # Analyze callout status
+        if "callout_status" in data and data["callout_status"]:
+            print("-" * 60)
+            print("CALLOUT STATUS ANALYSIS")
+            print("-" * 60)
+            print()
+
+            for item in data["callout_status"]:
+                status = item.get("status", "unknown")
+                imp_count = item.get("impression_count", 0)
+                print(f"  {status}: {imp_count:,} impressions")
+
+            print()
+
+        # Analyze impression metrics
+        if "impression_metrics" in data and data["impression_metrics"]:
+            print("-" * 60)
+            print("IMPRESSION METRICS")
+            print("-" * 60)
+            print()
+
+            for item in data["impression_metrics"]:
+                print(f"  Impressions available: {item.get('available_impressions', 0):,}")
+                print(f"  Impressions bid on: {item.get('bid_impressions', 0):,}")
+                print(f"  Successful bids: {item.get('successful_http_requests', 0):,}")
+
+            print()
+
+        # Summary recommendations
+        print("-" * 60)
+        print("RECOMMENDATIONS")
+        print("-" * 60)
+        print()
+
+        if "filtered_bids" in data and data["filtered_bids"]:
+            # Look for creative-related filters
+            creative_filters = [f for f in data["filtered_bids"]
+                              if "creative" in f.get("status", "").lower()]
+            if creative_filters:
+                print("Creative Issues Found:")
+                for f in creative_filters[:3]:
+                    print(f"  - {f.get('status')}: {f.get('bid_count', 0):,} bids filtered")
+                print()
+
+            # Look for pretargeting filters
+            pt_filters = [f for f in data["filtered_bids"]
+                        if "pretargeting" in f.get("status", "").lower()]
+            if pt_filters:
+                print("Pretargeting Issues Found:")
+                for f in pt_filters[:3]:
+                    print(f"  - {f.get('status')}: {f.get('bid_count', 0):,} bids filtered")
+                print()
+
+        print("=" * 60)
+        print("END OF TROUBLESHOOTING REPORT")
+        print("=" * 60)
+
+    except Exception as e:
+        print(f"Error generating report: {e}")
+        sys.exit(1)
+
+
+def cmd_troubleshoot_status(args):
+    """Show status of troubleshooting data collection."""
+    db_path = _get_db_path()
+
+    if not db_path.exists():
+        print(f"Database not found: {db_path}")
+        sys.exit(1)
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    print("=" * 60)
+    print("TROUBLESHOOTING DATA STATUS")
+    print("=" * 60)
+    print()
+
+    # Check if tables exist
+    cursor.execute("""
+        SELECT name FROM sqlite_master
+        WHERE type='table' AND name IN ('troubleshooting_data', 'troubleshooting_collections')
+    """)
+    tables = [row[0] for row in cursor.fetchall()]
+
+    if "troubleshooting_data" not in tables:
+        print("Troubleshooting tables not found.")
+        print("Run: python scripts/reset_database.py to create them.")
+        conn.close()
+        return
+
+    # Get collection history
+    cursor.execute("""
+        SELECT collection_date, status, filtered_bids_count, bid_metrics_count, collected_at
+        FROM troubleshooting_collections
+        ORDER BY collected_at DESC
+        LIMIT 10
+    """)
+    collections = cursor.fetchall()
+
+    if collections:
+        print("Recent Collections:")
+        print()
+        for row in collections:
+            date, status, fb_count, bm_count, collected_at = row
+            print(f"  {date}: {status} - Filtered: {fb_count or 0}, Metrics: {bm_count or 0}")
+            print(f"          Collected: {collected_at}")
+        print()
+    else:
+        print("No collections recorded yet.")
+        print("Run: python cli/qps_analyzer.py troubleshoot collect")
+        print()
+
+    # Get data summary
+    cursor.execute("""
+        SELECT metric_type, COUNT(*) as count, MIN(collection_date), MAX(collection_date)
+        FROM troubleshooting_data
+        GROUP BY metric_type
+    """)
+    summaries = cursor.fetchall()
+
+    if summaries:
+        print("Data Summary:")
+        print()
+        for metric_type, count, min_date, max_date in summaries:
+            print(f"  {metric_type}: {count} rows ({min_date} to {max_date})")
+    else:
+        print("No troubleshooting data stored yet.")
+
+    conn.close()
+    print()
+    print("=" * 60)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Cat-Scan QPS Optimization Analyzer",
@@ -772,11 +1015,36 @@ Examples:
     thumb_parser.add_argument("--timeout", type=int, default=30, help="Timeout per video in seconds (default: 30)")
     thumb_parser.set_defaults(func=cmd_generate_thumbnails)
 
+    # Troubleshoot command group
+    troubleshoot_parser = subparsers.add_parser("troubleshoot", help="RTB Troubleshooting API commands")
+    troubleshoot_subparsers = troubleshoot_parser.add_subparsers(dest="troubleshoot_command", help="Troubleshoot action")
+
+    # troubleshoot collect
+    ts_collect = troubleshoot_subparsers.add_parser("collect", help="Collect troubleshooting data from API")
+    ts_collect.add_argument("--days", type=int, default=7, help="Days of data to collect (default: 7)")
+    ts_collect.add_argument("--environment", type=str, choices=["APP", "WEB"], help="Filter by environment")
+    ts_collect.set_defaults(func=cmd_troubleshoot_collect)
+
+    # troubleshoot report
+    ts_report = troubleshoot_subparsers.add_parser("report", help="Generate troubleshooting report")
+    ts_report.add_argument("--days", type=int, default=7, help="Days to analyze (default: 7)")
+    ts_report.set_defaults(func=cmd_troubleshoot_report)
+
+    # troubleshoot status
+    ts_status = troubleshoot_subparsers.add_parser("status", help="Show troubleshooting data status")
+    ts_status.set_defaults(func=cmd_troubleshoot_status)
+
     args = parser.parse_args()
 
     if args.command is None:
         parser.print_help()
         sys.exit(1)
+
+    # Handle troubleshoot subcommands
+    if args.command == "troubleshoot":
+        if not hasattr(args, 'troubleshoot_command') or args.troubleshoot_command is None:
+            troubleshoot_parser.print_help()
+            sys.exit(1)
 
     args.func(args)
 

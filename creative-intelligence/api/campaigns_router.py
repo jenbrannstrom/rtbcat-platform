@@ -1,8 +1,8 @@
-"""FastAPI router for AI Campaign Clustering endpoints.
+"""FastAPI router for Campaign Clustering endpoints.
 
 This module provides REST API endpoints for:
 - Auto-clustering creatives into campaigns
-- Managing AI-generated campaigns
+- Managing campaigns
 - Campaign performance aggregation
 """
 
@@ -20,7 +20,7 @@ from api.clustering.ai_clusterer import AICampaignClusterer, apply_ai_suggestion
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/ai-campaigns", tags=["AI Campaigns"])
+router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 
 
 # ============================================

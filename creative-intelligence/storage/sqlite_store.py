@@ -471,7 +471,7 @@ class SQLiteStore:
             first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""",
         # Phase 9: AI Campaign Clustering tables
-        """CREATE TABLE IF NOT EXISTS ai_campaigns (
+        """CREATE TABLE IF NOT EXISTS campaigns (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             seat_id INTEGER REFERENCES seats(id),
             name TEXT NOT NULL,
@@ -483,13 +483,13 @@ class SQLiteStore:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""",
-        "CREATE INDEX IF NOT EXISTS idx_ai_campaigns_seat ON ai_campaigns(seat_id)",
-        "CREATE INDEX IF NOT EXISTS idx_ai_campaigns_status ON ai_campaigns(status)",
+        "CREATE INDEX IF NOT EXISTS idx_campaigns_seat ON campaigns(seat_id)",
+        "CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status)",
         # Phase 9: Creative-Campaign mapping
         """CREATE TABLE IF NOT EXISTS creative_campaigns (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             creative_id TEXT NOT NULL REFERENCES creatives(id),
-            campaign_id INTEGER NOT NULL REFERENCES ai_campaigns(id),
+            campaign_id INTEGER NOT NULL REFERENCES campaigns(id),
             manually_assigned BOOLEAN DEFAULT FALSE,
             assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             assigned_by TEXT,
@@ -500,7 +500,7 @@ class SQLiteStore:
         # Phase 9: Campaign daily summary for aggregated performance
         """CREATE TABLE IF NOT EXISTS campaign_daily_summary (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            campaign_id INTEGER NOT NULL REFERENCES ai_campaigns(id),
+            campaign_id INTEGER NOT NULL REFERENCES campaigns(id),
             date DATE NOT NULL,
             total_creatives INTEGER DEFAULT 0,
             active_creatives INTEGER DEFAULT 0,
@@ -2171,7 +2171,7 @@ class SQLiteStore:
                         COUNT(DISTINCT metric_date) as days_with_data,
                         MIN(metric_date) as earliest_date,
                         MAX(metric_date) as latest_date
-                    FROM performance_data
+                    FROM rtb_daily
                     WHERE creative_id = ?
                       AND metric_date >= date('now', ?)
                     """,
@@ -2271,7 +2271,7 @@ class SQLiteStore:
 
             await loop.run_in_executor(None, _update_cache)
 
-    async def clear_old_performance_data(
+    async def clear_old_rtb_daily(
         self,
         days_to_keep: int = 90,
     ) -> int:

@@ -74,7 +74,7 @@ class FraudSignalDetector:
                     SUM(COALESCE(impressions, 0)) as total_impressions,
                     SUM(COALESCE(clicks, 0)) as total_clicks,
                     COUNT(DISTINCT metric_date) as days_active
-                FROM performance_data
+                FROM rtb_daily
                 WHERE metric_date >= ?
                   AND app_id IS NOT NULL
                   AND app_id != ''
@@ -141,7 +141,7 @@ class FraudSignalDetector:
                     SUM(CASE WHEN COALESCE(clicks, 0) > COALESCE(impressions, 0) THEN 1 ELSE 0 END) as violation_days,
                     SUM(COALESCE(clicks, 0)) as total_clicks,
                     SUM(COALESCE(impressions, 0)) as total_impressions
-                FROM performance_data
+                FROM rtb_daily
                 WHERE metric_date >= ?
                   AND COALESCE(impressions, 0) > 0
                 GROUP BY app_id, app_name

@@ -3,11 +3,11 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
-import { Pencil, Trash2, ArrowDown, ArrowUp, ZoomIn, ZoomOut } from 'lucide-react';
+import { Pencil, Trash2, ArrowDown, ArrowUp, ZoomIn, ZoomOut, Filter, Globe, X } from 'lucide-react';
 import { DraggableCreative } from './draggable-creative';
 import { cn } from '@/lib/utils';
 
-type SortField = 'spend' | 'impressions' | 'id';
+type SortField = 'spend' | 'impressions' | 'id' | 'country';
 type SortDirection = 'asc' | 'desc';
 
 // Zoom levels for thumbnails
@@ -27,6 +27,7 @@ interface Campaign {
 interface Creative {
   id: string;
   format: string;
+  country?: string;
   performance?: {
     total_spend_micros?: number;
     total_impressions?: number;
@@ -56,7 +57,10 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
   const [sortField, setSortField] = useState<SortField>('spend');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [zoomLevel, setZoomLevel] = useState(1); // Index into ZOOM_LEVELS
+  const [countryFilter, setCountryFilter] = useState<string | null>(null);
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const { setNodeRef, isOver } = useDroppable({
     id: campaign.id,
@@ -77,6 +81,19 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
     setName(campaign.name);
   }, [campaign.name]);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowCountryDropdown(false);
+      }
+    };
+    if (showCountryDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showCountryDropdown]);
+
   const handleSave = () => {
     if (name.trim() && name !== campaign.name) {
       onRename(campaign.id, name.trim());
@@ -86,9 +103,44 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
     setIsEditing(false);
   };
 
-  // Sort creatives based on current sort settings
+  // Extract unique countries from creatives
+  const uniqueCountries = useMemo(() => {
+    const countries = new Set<string>();
+    creatives.forEach(c => {
+      if (c.country) countries.add(c.country);
+    });
+    return Array.from(countries).sort();
+  }, [creatives]);
+
+  // Country breakdown with spend
+  const countryBreakdown = useMemo(() => {
+    const breakdown: Record<string, { count: number; spend: number }> = {};
+    creatives.forEach(c => {
+      const country = c.country || 'Unknown';
+      if (!breakdown[country]) breakdown[country] = { count: 0, spend: 0 };
+      breakdown[country].count++;
+      breakdown[country].spend += c.performance?.total_spend_micros || 0;
+    });
+    return breakdown;
+  }, [creatives]);
+
+  // Filter and sort creatives
   const sortedCreatives = useMemo(() => {
-    const sorted = [...creatives].sort((a, b) => {
+    // Apply country filter first
+    let filtered = countryFilter
+      ? creatives.filter(c => c.country === countryFilter)
+      : creatives;
+
+    // Then sort
+    const sorted = [...filtered].sort((a, b) => {
+      if (sortField === 'country') {
+        const aCountry = a.country || '';
+        const bCountry = b.country || '';
+        return sortDirection === 'desc'
+          ? bCountry.localeCompare(aCountry)
+          : aCountry.localeCompare(bCountry);
+      }
+
       let aVal: number, bVal: number;
 
       switch (sortField) {
@@ -111,7 +163,7 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
       return sortDirection === 'desc' ? bVal - aVal : aVal - bVal;
     });
     return sorted;
-  }, [creatives, sortField, sortDirection]);
+  }, [creatives, sortField, sortDirection, countryFilter]);
 
   const cycleSort = () => {
     if (sortField === 'spend' && sortDirection === 'desc') {
@@ -122,6 +174,11 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
     } else if (sortField === 'impressions' && sortDirection === 'desc') {
       setSortDirection('asc');
     } else if (sortField === 'impressions' && sortDirection === 'asc') {
+      setSortField('country');
+      setSortDirection('desc');
+    } else if (sortField === 'country' && sortDirection === 'desc') {
+      setSortDirection('asc');
+    } else if (sortField === 'country' && sortDirection === 'asc') {
       setSortField('id');
       setSortDirection('desc');
     } else if (sortField === 'id' && sortDirection === 'desc') {
@@ -137,6 +194,7 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
       spend: 'Spend',
       impressions: 'Imp',
       id: 'ID',
+      country: 'Geo',
     };
     return fieldLabels[sortField];
   };
@@ -200,6 +258,76 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
         )}
 
         <div className="flex items-center gap-1">
+          {/* Country filter button */}
+          {uniqueCountries.length > 0 && (
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+                className={cn(
+                  "flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors",
+                  countryFilter
+                    ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                    : "text-gray-500 hover:bg-gray-200"
+                )}
+                title="Filter by country"
+              >
+                <Globe className="h-3 w-3" />
+                {countryFilter ? (
+                  <>
+                    <span>{countryFilter}</span>
+                    <X
+                      className="h-3 w-3 ml-1 hover:text-red-500"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCountryFilter(null);
+                        setShowCountryDropdown(false);
+                      }}
+                    />
+                  </>
+                ) : (
+                  <span>Geo</span>
+                )}
+              </button>
+
+              {/* Country dropdown */}
+              {showCountryDropdown && (
+                <div className="absolute z-50 mt-1 right-0 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px] max-h-[200px] overflow-y-auto">
+                  {countryFilter && (
+                    <button
+                      onClick={() => {
+                        setCountryFilter(null);
+                        setShowCountryDropdown(false);
+                      }}
+                      className="w-full px-3 py-1.5 text-left text-xs text-gray-500 hover:bg-gray-100 flex items-center gap-2"
+                    >
+                      <X className="h-3 w-3" />
+                      Clear filter
+                    </button>
+                  )}
+                  {uniqueCountries.map(country => {
+                    const data = countryBreakdown[country];
+                    return (
+                      <button
+                        key={country}
+                        onClick={() => {
+                          setCountryFilter(country);
+                          setShowCountryDropdown(false);
+                        }}
+                        className={cn(
+                          "w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 flex items-center justify-between",
+                          countryFilter === country && "bg-blue-50 text-blue-700"
+                        )}
+                      >
+                        <span>{country}</span>
+                        <span className="text-gray-400">{data?.count || 0}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Sort button */}
           <button
             onClick={cycleSort}
@@ -276,11 +404,23 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
 
       {/* Stats */}
       <div className="mt-2 text-sm text-gray-600 flex items-center gap-3">
-        <span>{creatives.length} creative{creatives.length !== 1 ? 's' : ''}</span>
+        <span>
+          {countryFilter ? (
+            <>{sortedCreatives.length} of {creatives.length} creative{creatives.length !== 1 ? 's' : ''}</>
+          ) : (
+            <>{creatives.length} creative{creatives.length !== 1 ? 's' : ''}</>
+          )}
+        </span>
         {totalSpend > 0 && (
           <>
             <span>·</span>
             <span>{formatTotalSpend(totalSpend)}</span>
+          </>
+        )}
+        {countryFilter && (
+          <>
+            <span>·</span>
+            <span className="text-blue-600">{countryFilter}</span>
           </>
         )}
       </div>
