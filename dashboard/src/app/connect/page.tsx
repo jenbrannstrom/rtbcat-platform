@@ -1,27 +1,62 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import {
   CheckCircle,
   AlertCircle,
   Loader2,
   RefreshCw,
-  ChevronDown,
-  ChevronRight,
   Shield,
   Users,
-  Upload,
   FileJson,
   X,
+  ArrowRight,
+  Database,
 } from "lucide-react";
-import { getHealth, getSeats, syncSeat, getCredentialsStatus, uploadCredentials } from "@/lib/api";
+import { getHealth, getSeats, syncSeat, getCredentialsStatus, uploadCredentials, discoverSeats, getSystemStatus } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { BuyerSeat } from "@/types/api";
 
+type SetupStep = 1 | 2 | 3;
+
+function StepIndicator({ currentStep, totalSteps }: { currentStep: SetupStep; totalSteps: number }) {
+  return (
+    <div className="flex items-center justify-center mb-8">
+      {Array.from({ length: totalSteps }, (_, i) => {
+        const step = i + 1;
+        const isComplete = step < currentStep;
+        const isCurrent = step === currentStep;
+        return (
+          <div key={step} className="flex items-center">
+            <div
+              className={cn(
+                "w-10 h-10 rounded-full flex items-center justify-center font-semibold text-sm transition-colors",
+                isComplete && "bg-green-500 text-white",
+                isCurrent && "bg-primary-600 text-white",
+                !isComplete && !isCurrent && "bg-gray-200 text-gray-500"
+              )}
+            >
+              {isComplete ? <CheckCircle className="w-5 h-5" /> : step}
+            </div>
+            {step < totalSteps && (
+              <div
+                className={cn(
+                  "w-16 h-1 mx-2",
+                  step < currentStep ? "bg-green-500" : "bg-gray-200"
+                )}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function ConnectPage() {
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [filterQuery, setFilterQuery] = useState("");
+  const router = useRouter();
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -47,6 +82,48 @@ export default function ConnectPage() {
     queryFn: () => getSeats({ active_only: false }),
     enabled: health?.configured === true,
   });
+
+  // Check system requirements
+  const { data: systemStatus } = useQuery({
+    queryKey: ["systemStatus"],
+    queryFn: getSystemStatus,
+  });
+
+  // Track if we've attempted discovery
+  const [discoveryAttempted, setDiscoveryAttempted] = useState(false);
+
+  // Discover seats mutation
+  const discoverMutation = useMutation({
+    mutationFn: (bidderId: string) => discoverSeats({ bidder_id: bidderId }),
+    onSuccess: (data) => {
+      setMessage({
+        type: "success",
+        text: `Discovered ${data.seats_discovered} buyer seat(s)`
+      });
+      queryClient.invalidateQueries({ queryKey: ["seats"] });
+      setTimeout(() => setMessage(null), 5000);
+    },
+    onError: (error) => {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to discover seats"
+      });
+      setTimeout(() => setMessage(null), 5000);
+    },
+  });
+
+  // Auto-discover seats when credentials are configured but no seats found
+  useEffect(() => {
+    const isConfigured = health?.configured === true;
+    const noSeats = seats !== undefined && seats.length === 0;
+    const notLoading = !seatsLoading && !discoverMutation.isPending;
+    const hasAccountId = !!credentialsStatus?.account_id;
+
+    if (isConfigured && noSeats && notLoading && !discoveryAttempted && hasAccountId) {
+      setDiscoveryAttempted(true);
+      discoverMutation.mutate(credentialsStatus.account_id!);
+    }
+  }, [health, seats, seatsLoading, discoveryAttempted, credentialsStatus, discoverMutation]);
 
   // Upload mutation
   const uploadMutation = useMutation({
@@ -79,6 +156,7 @@ export default function ConnectPage() {
       });
       queryClient.invalidateQueries({ queryKey: ["health"] });
       queryClient.invalidateQueries({ queryKey: ["credentialsStatus"] });
+      queryClient.invalidateQueries({ queryKey: ["seats"] });
       refetchHealth();
     },
     onError: (error) => {
@@ -90,7 +168,7 @@ export default function ConnectPage() {
   });
 
   const syncMutation = useMutation({
-    mutationFn: (buyerId: string) => syncSeat(buyerId, filterQuery || undefined),
+    mutationFn: (buyerId: string) => syncSeat(buyerId),
     onSuccess: (data) => {
       setMessage({ type: "success", text: `Synced ${data.creatives_synced} creatives` });
       queryClient.invalidateQueries({ queryKey: ["creatives"] });
@@ -155,56 +233,101 @@ export default function ConnectPage() {
   }
 
   const isConfigured = health?.configured === true;
+  const hasSeats = seats && seats.length > 0;
+  const hasSyncedCreatives = seats?.some((s: BuyerSeat) => s.creative_count > 0);
+
+  // Determine current step
+  let currentStep: SetupStep = 1;
+  if (isConfigured) currentStep = 2;
+  if (isConfigured && hasSyncedCreatives) currentStep = 3;
+
+  const stepTitles = [
+    "Upload Credentials",
+    "Sync Creatives",
+    "Ready to Go"
+  ];
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Connect to Google Authorized Buyers</h1>
+    <div className="p-8 max-w-3xl mx-auto">
+      {/* Header */}
+      <div className="text-center mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">
+          {currentStep === 3 ? "Setup Complete!" : "Set Up Cat-Scan"}
+        </h1>
         <p className="mt-1 text-sm text-gray-500">
-          Link your account to sync creatives and analyze performance
+          {currentStep === 3
+            ? "Your account is connected and ready to analyze"
+            : `Step ${currentStep} of 3: ${stepTitles[currentStep - 1]}`}
         </p>
       </div>
 
-      <div className="max-w-2xl space-y-6">
-        {/* Status Message */}
-        {message && (
-          <div
-            className={cn(
-              "p-4 rounded-lg flex items-start justify-between",
-              message.type === "success" ? "bg-green-50" : "bg-red-50"
-            )}
-          >
-            <div className="flex items-start">
-              {message.type === "success" ? (
-                <CheckCircle className="h-5 w-5 text-green-400 mt-0.5" />
-              ) : (
-                <AlertCircle className="h-5 w-5 text-red-400 mt-0.5" />
-              )}
-              <p className={cn(
-                "ml-3 text-sm font-medium",
-                message.type === "success" ? "text-green-800" : "text-red-800"
-              )}>
-                {message.text}
-              </p>
-            </div>
-            <button
-              onClick={() => setMessage(null)}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
+      {/* Step Indicator */}
+      <StepIndicator currentStep={currentStep} totalSteps={3} />
 
-        {/* Credentials Section */}
-        <div className="card p-6">
+      {/* Requirements Notice */}
+      {systemStatus && !systemStatus.ffmpeg_available && (
+        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <h3 className="font-medium text-yellow-800 mb-1">Optional: Install ffmpeg</h3>
+          <p className="text-sm text-yellow-700 mb-2">
+            ffmpeg is required for video thumbnail generation. Without it, video creatives will show placeholder icons instead of preview frames.
+          </p>
+          <code className="block bg-yellow-100 p-2 rounded text-sm font-mono text-yellow-900">
+            sudo apt install ffmpeg
+          </code>
+        </div>
+      )}
+
+      {/* Status Message */}
+      {message && (
+        <div
+          className={cn(
+            "mb-6 p-4 rounded-lg flex items-start justify-between",
+            message.type === "success" ? "bg-green-50" : "bg-red-50"
+          )}
+        >
+          <div className="flex items-start">
+            {message.type === "success" ? (
+              <CheckCircle className="h-5 w-5 text-green-400 mt-0.5" />
+            ) : (
+              <AlertCircle className="h-5 w-5 text-red-400 mt-0.5" />
+            )}
+            <p className={cn(
+              "ml-3 text-sm font-medium",
+              message.type === "success" ? "text-green-800" : "text-red-800"
+            )}>
+              {message.text}
+            </p>
+          </div>
+          <button
+            onClick={() => setMessage(null)}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      <div className="space-y-6">
+        {/* Step 1: Credentials */}
+        <div className={cn(
+          "card p-6 transition-opacity",
+          currentStep > 1 && "opacity-60"
+        )}>
           <div className="flex items-center mb-4">
-            <Shield className="h-5 w-5 text-gray-400 mr-2" />
-            <h2 className="text-lg font-medium text-gray-900">Google Credentials</h2>
+            <div className={cn(
+              "w-8 h-8 rounded-full flex items-center justify-center mr-3 text-sm font-semibold",
+              currentStep > 1 ? "bg-green-500 text-white" : "bg-primary-600 text-white"
+            )}>
+              {currentStep > 1 ? <CheckCircle className="w-5 h-5" /> : "1"}
+            </div>
+            <div className="flex items-center">
+              <Shield className="h-5 w-5 text-gray-400 mr-2" />
+              <h2 className="text-lg font-medium text-gray-900">Google Credentials</h2>
+            </div>
           </div>
 
           {isConfigured ? (
-            <div className="space-y-4">
+            <div className="ml-11 space-y-3">
               <div className="flex items-center justify-between py-3 px-4 bg-green-50 rounded-lg border border-green-200">
                 <div className="flex items-center">
                   <CheckCircle className="h-5 w-5 text-green-500 mr-3" />
@@ -219,27 +342,19 @@ export default function ConnectPage() {
                   onClick={() => fileInputRef.current?.click()}
                   className="text-sm text-green-700 hover:text-green-800 underline"
                 >
-                  Change Credentials
+                  Change
                 </button>
               </div>
-              {credentialsStatus?.project_id && (
-                <p className="text-xs text-gray-500">
-                  Project: <code className="bg-gray-100 px-1 py-0.5 rounded">{credentialsStatus.project_id}</code>
-                </p>
-              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json,application/json"
+                onChange={handleInputChange}
+                className="hidden"
+              />
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between py-3 px-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                <div className="flex items-center">
-                  <AlertCircle className="h-5 w-5 text-yellow-500 mr-3" />
-                  <div>
-                    <p className="font-medium text-yellow-800">Not Connected</p>
-                    <p className="text-sm text-yellow-600">Upload your Google service account credentials</p>
-                  </div>
-                </div>
-              </div>
-
+            <div className="ml-11 space-y-4">
               {/* Upload UI */}
               <div
                 onClick={() => fileInputRef.current?.click()}
@@ -271,9 +386,6 @@ export default function ConnectPage() {
                     <p className="text-sm text-gray-500 mt-1">
                       Drag and drop or click to browse
                     </p>
-                    <p className="text-xs text-gray-400 mt-3">
-                      See <a href="/docs/SETUP_GUIDE.md" className="text-primary-600 underline" onClick={(e) => e.stopPropagation()}>Setup Guide</a> for instructions
-                    </p>
                   </>
                 )}
               </div>
@@ -286,14 +398,10 @@ export default function ConnectPage() {
                 className="hidden"
               />
 
-              <p className="text-xs text-gray-500">
-                Or configure via CLI: <code className="bg-gray-100 px-1 py-0.5 rounded">python main.py configure</code>
-              </p>
-
               {/* Collapsible Help Section */}
-              <details className="mt-4 border border-gray-200 rounded-lg">
+              <details className="border border-gray-200 rounded-lg">
                 <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg">
-                  How to get a JSON key
+                  How to get a service account key
                 </summary>
                 <div className="px-4 pb-4 text-sm text-gray-600 space-y-3">
                   <ol className="list-decimal list-inside space-y-2">
@@ -311,51 +419,59 @@ export default function ConnectPage() {
                     <li>Select your project (or create one)</li>
                     <li>Click <strong>+ Create Service Account</strong></li>
                     <li>Name it (e.g., &quot;catscan-service-account&quot;)</li>
-                    <li>Click <strong>Create and Continue</strong></li>
-                    <li>Skip the optional roles, click <strong>Done</strong></li>
+                    <li>Click <strong>Create and Continue</strong>, skip roles, click <strong>Done</strong></li>
                     <li>Click on the new service account email</li>
                     <li>Go to <strong>Keys</strong> tab → <strong>Add Key</strong> → <strong>Create new key</strong></li>
                     <li>Select <strong>JSON</strong> and click <strong>Create</strong></li>
-                    <li>Upload the downloaded file here</li>
+                    <li>Upload the downloaded file above</li>
                   </ol>
-                  <p className="text-xs text-gray-500 mt-3">
-                    Note: You&apos;ll also need to enable the Authorized Buyers API and grant RTB access to the service account email in your Authorized Buyers account.
-                  </p>
+                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-800">
+                      <strong>Important:</strong> You also need to add the service account email as a user in your{" "}
+                      <a
+                        href="https://authorizedbuyers.google.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline"
+                      >
+                        Authorized Buyers account
+                      </a>
+                      {" "}with RTB access.
+                    </p>
+                  </div>
                 </div>
               </details>
             </div>
           )}
-
-          {/* Hidden file input for reconfigure */}
-          {isConfigured && (
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json,application/json"
-              onChange={handleInputChange}
-              className="hidden"
-            />
-          )}
         </div>
 
-        {/* Accounts Section - Only show when configured */}
-        {isConfigured && (
-          <div className="card p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center">
-                <Users className="h-5 w-5 text-gray-400 mr-2" />
-                <h2 className="text-lg font-medium text-gray-900">Connected Accounts</h2>
-              </div>
-              <span className="text-sm text-gray-500">
-                {seats?.length || 0} seat{seats?.length !== 1 ? "s" : ""}
-              </span>
+        {/* Step 2: Sync Creatives */}
+        <div className={cn(
+          "card p-6 transition-opacity",
+          currentStep < 2 && "opacity-40 pointer-events-none",
+          currentStep > 2 && "opacity-60"
+        )}>
+          <div className="flex items-center mb-4">
+            <div className={cn(
+              "w-8 h-8 rounded-full flex items-center justify-center mr-3 text-sm font-semibold",
+              currentStep > 2 ? "bg-green-500 text-white" :
+              currentStep === 2 ? "bg-primary-600 text-white" :
+              "bg-gray-200 text-gray-500"
+            )}>
+              {currentStep > 2 ? <CheckCircle className="w-5 h-5" /> : "2"}
             </div>
+            <div className="flex items-center">
+              <Database className="h-5 w-5 text-gray-400 mr-2" />
+              <h2 className="text-lg font-medium text-gray-900">Sync Creatives</h2>
+            </div>
+          </div>
 
+          <div className="ml-11">
             {seatsLoading ? (
               <div className="py-8 flex justify-center">
                 <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
               </div>
-            ) : seats && seats.length > 0 ? (
+            ) : hasSeats ? (
               <div className="space-y-3">
                 {seats.map((seat: BuyerSeat) => (
                   <div
@@ -375,130 +491,71 @@ export default function ConnectPage() {
                       onClick={() => handleSync(seat.buyer_id)}
                       disabled={syncingId === seat.buyer_id}
                       className={cn(
-                        "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium",
+                        "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium",
                         "bg-primary-600 text-white hover:bg-primary-700",
                         "disabled:opacity-50"
                       )}
                     >
                       <RefreshCw className={cn("h-4 w-4", syncingId === seat.buyer_id && "animate-spin")} />
-                      {syncingId === seat.buyer_id ? "Syncing..." : "Sync"}
+                      {syncingId === seat.buyer_id ? "Syncing..." : "Sync Now"}
                     </button>
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="text-center py-8">
+            ) : isConfigured ? (
+              <div className="text-center py-6">
                 <Users className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">No seats discovered yet</p>
+                <p className="text-gray-500">No buyer seats found</p>
                 <p className="text-sm text-gray-400 mt-1">
-                  Go to <a href="/settings/seats" className="text-primary-600 underline">Settings → Seats</a> to discover accounts
+                  Make sure the service account has access to your Authorized Buyers account
                 </p>
               </div>
+            ) : (
+              <p className="text-gray-500 py-4">Complete step 1 to sync your creatives</p>
             )}
 
-            {/* Add Another Account - Future Feature */}
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <button
-                type="button"
-                disabled
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-400 bg-gray-50 border border-dashed border-gray-300 rounded-lg cursor-not-allowed"
-                title="Multi-account support coming soon"
-              >
-                <span className="text-lg">+</span>
-                Add Another Account
-              </button>
-              <p className="text-xs text-gray-400 text-center mt-2">
-                Multi-account support coming soon
-              </p>
+          </div>
+        </div>
+
+        {/* Step 3: Ready / Complete */}
+        <div className={cn(
+          "card p-6 transition-opacity",
+          currentStep < 3 && "opacity-40"
+        )}>
+          <div className="flex items-center mb-4">
+            <div className={cn(
+              "w-8 h-8 rounded-full flex items-center justify-center mr-3 text-sm font-semibold",
+              currentStep === 3 ? "bg-green-500 text-white" : "bg-gray-200 text-gray-500"
+            )}>
+              {currentStep === 3 ? <CheckCircle className="w-5 h-5" /> : "3"}
             </div>
+            <h2 className="text-lg font-medium text-gray-900">Ready to Analyze</h2>
           </div>
-        )}
 
-        {/* Advanced Options - Collapsible */}
-        {isConfigured && (
-          <div className="card overflow-hidden">
-            <button
-              onClick={() => setAdvancedOpen(!advancedOpen)}
-              className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 transition-colors"
-            >
-              <span className="font-medium text-gray-700">Advanced Options</span>
-              {advancedOpen ? (
-                <ChevronDown className="h-5 w-5 text-gray-400" />
-              ) : (
-                <ChevronRight className="h-5 w-5 text-gray-400" />
-              )}
-            </button>
-
-            {advancedOpen && (
-              <div className="px-4 pb-4 border-t border-gray-100 pt-4 space-y-4">
-                <div>
-                  <label
-                    htmlFor="filterQuery"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Filter Query
-                  </label>
-                  <input
-                    id="filterQuery"
-                    type="text"
-                    value={filterQuery}
-                    onChange={(e) => setFilterQuery(e.target.value)}
-                    placeholder="creativeServingDecision.networkPolicyCompliance.status=APPROVED"
-                    className="input"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    API filter string applied when syncing (optional)
-                  </p>
-                </div>
-
-                <div className="pt-2">
-                  <p className="text-sm font-medium text-gray-700 mb-2">Common Filters</p>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFilterQuery("creativeServingDecision.networkPolicyCompliance.status=APPROVED")
-                      }
-                      className="px-3 py-1 text-xs rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    >
-                      Approved only
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFilterQuery("creativeFormat=HTML")}
-                      className="px-3 py-1 text-xs rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    >
-                      HTML
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFilterQuery("creativeFormat=VIDEO")}
-                      className="px-3 py-1 text-xs rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    >
-                      Video
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFilterQuery("creativeFormat=NATIVE")}
-                      className="px-3 py-1 text-xs rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    >
-                      Native
-                    </button>
-                    {filterQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setFilterQuery("")}
-                        className="px-3 py-1 text-xs rounded-full bg-red-100 text-red-700 hover:bg-red-200"
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </div>
+          <div className="ml-11">
+            {currentStep === 3 ? (
+              <div className="space-y-4">
+                <p className="text-gray-600">
+                  Your account is set up and creatives are synced. You can now:
+                </p>
+                <ul className="text-sm text-gray-600 space-y-2 ml-4">
+                  <li>• View creative status and approvals</li>
+                  <li>• Import RTB performance data</li>
+                  <li>• Analyze QPS waste and optimization opportunities</li>
+                </ul>
+                <button
+                  onClick={() => router.push("/")}
+                  className="mt-4 flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
+                >
+                  Go to Dashboard
+                  <ArrowRight className="h-5 w-5" />
+                </button>
               </div>
+            ) : (
+              <p className="text-gray-500 py-4">Complete steps 1 and 2 to continue</p>
             )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

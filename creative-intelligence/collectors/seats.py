@@ -1,10 +1,10 @@
 """Buyer seats client for discovering multi-seat buyer accounts.
 
 This module provides the BuyerSeatsClient class for enumerating and managing
-buyer accounts under a bidder in the Google Authorized Buyers RTB API.
+buyer accounts in the Google Authorized Buyers RTB API.
 
 API Reference:
-    https://developers.google.com/authorized-buyers/apis/realtimebidding/reference/rest/v1/bidders.buyers
+    https://developers.google.com/authorized-buyers/apis/realtimebidding/reference/rest/v1/buyers
 """
 
 import logging
@@ -19,10 +19,10 @@ logger = logging.getLogger(__name__)
 
 
 class BuyerSeatsClient(BaseAuthorizedBuyersClient):
-    """Client for discovering buyer seats under a bidder account.
+    """Client for discovering buyer seats accessible to the service account.
 
     This client handles buyer seat enumeration with automatic pagination
-    and rate limit handling.
+    and rate limit handling. Uses the buyers.list() endpoint at the API root.
 
     Example:
         >>> client = BuyerSeatsClient(
@@ -34,17 +34,17 @@ class BuyerSeatsClient(BaseAuthorizedBuyersClient):
         ...     print(f"{seat.buyer_id}: {seat.display_name}")
 
     API Reference:
-        https://developers.google.com/authorized-buyers/apis/realtimebidding/reference/rest/v1/bidders.buyers
+        https://developers.google.com/authorized-buyers/apis/realtimebidding/reference/rest/v1/buyers
     """
 
     async def discover_buyer_seats(self) -> list[BuyerSeat]:
-        """Enumerate all buyer accounts under the bidder.
+        """Enumerate all buyer accounts accessible to the service account.
 
-        Uses bidders.buyers.list() to discover all buyer seats
-        associated with this bidder account.
+        Uses buyers.list() at root level to discover all buyer seats.
+        The API returns buyers that the authenticated service account has access to.
 
         Returns:
-            List of BuyerSeat objects for each buyer under this bidder.
+            List of BuyerSeat objects for each accessible buyer.
 
         Raises:
             HttpError: If the API request fails after retries.
@@ -58,8 +58,8 @@ class BuyerSeatsClient(BaseAuthorizedBuyersClient):
         seats: list[BuyerSeat] = []
 
         while True:
+            # buyers.list() is at root level and doesn't require a parent param
             request_params: dict = {
-                "parent": self.parent,
                 "pageSize": self.page_size,
             }
 
@@ -69,7 +69,7 @@ class BuyerSeatsClient(BaseAuthorizedBuyersClient):
             try:
                 params = request_params.copy()
                 response = await self._execute_with_retry(
-                    lambda p=params: service.bidders().buyers().list(**p)
+                    lambda p=params: service.buyers().list(**p)
                 )
 
                 buyers = response.get("buyers", [])
@@ -140,6 +140,11 @@ class BuyerSeatsClient(BaseAuthorizedBuyersClient):
         name = data.get("name", "")
         buyer_id = name.split("/")[-1] if "/" in name else name
 
+        # Extract bidder_id from bidder field (e.g., "bidders/299038253" -> "299038253")
+        # This is more reliable than using the value passed to the constructor
+        bidder = data.get("bidder", "")
+        bidder_id = bidder.split("/")[-1] if "/" in bidder else self.account_id
+
         # Get display name, falling back to buyer_id
         display_name = data.get("displayName") or f"Buyer {buyer_id}"
 
@@ -149,7 +154,7 @@ class BuyerSeatsClient(BaseAuthorizedBuyersClient):
 
         return BuyerSeat(
             buyer_id=buyer_id,
-            bidder_id=self.account_id,
+            bidder_id=bidder_id,
             display_name=display_name,
             active=active,
             creative_count=0,  # Will be updated after syncing
@@ -174,8 +179,8 @@ class BuyerSeatsClient(BaseAuthorizedBuyersClient):
         page_token: Optional[str] = None
 
         while True:
+            # buyers.list() is at root level and doesn't require a parent param
             request_params: dict = {
-                "parent": self.parent,
                 "pageSize": self.page_size,
             }
 
@@ -185,7 +190,7 @@ class BuyerSeatsClient(BaseAuthorizedBuyersClient):
             try:
                 params = request_params.copy()
                 response = await self._execute_with_retry(
-                    lambda p=params: service.bidders().buyers().list(**p)
+                    lambda p=params: service.buyers().list(**p)
                 )
 
                 buyers = response.get("buyers", [])

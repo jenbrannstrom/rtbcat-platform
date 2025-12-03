@@ -8,7 +8,7 @@ import {
   LayoutDashboard,
   Image,
   FolderKanban,
-  Download,
+  Link2,
   Upload,
   Settings,
   ExternalLink,
@@ -30,7 +30,7 @@ const navigation = [
   { name: "Waste Analysis", href: "/waste-analysis", icon: TrendingDown },
   { name: "Creatives", href: "/creatives", icon: Image },
   { name: "Campaigns", href: "/campaigns", icon: FolderKanban },
-  { name: "Connect", href: "/connect", icon: Download },
+  { name: "Connect", href: "/connect", icon: Link2 },
   { name: "Import", href: "/import", icon: Upload },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

@@ -1,12 +1,40 @@
 # Cat-Scan Creative Intelligence
 
-**Version:** 12.0
-**Phase:** 12 - Schema Cleanup (Single Source of Truth)
+**Version:** 19.0
+**Phase:** 19 - Installation Documentation
 **Last Updated:** December 3, 2025
 
 A privacy-first QPS optimization platform for Google Authorized Buyers. Cat-Scan helps RTB bidders eliminate 20-40% wasted QPS by surfacing evidence-based waste signals, enabling data-driven pretargeting decisions.
 
 > **Philosophy:** Intelligence without assumptions. Facts that drive action.
+
+## Quick Start
+
+```bash
+# 1. Clone and setup
+git clone https://github.com/yourorg/rtbcat-platform.git
+cd rtbcat-platform
+./setup.sh
+
+# 2. Start API
+cd creative-intelligence && source venv/bin/activate
+python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+# 3. Start dashboard (new terminal)
+cd dashboard && npm run dev
+
+# 4. Open http://localhost:3000
+```
+
+### Requirements
+
+- Python 3.11+
+- Node.js 18+
+- ffmpeg (optional, for video thumbnails)
+
+See **[INSTALL.md](INSTALL.md)** for detailed installation instructions and troubleshooting.
+
+---
 
 ## What This Solves
 
@@ -1482,12 +1510,12 @@ ORDER BY queries DESC
 | Cat-Scan Finding | Pretargeting Field | Action |
 |------------------|-------------------|--------|
 | Size mismatch (traffic for sizes you lack) | `includedCreativeDimensions` | Add ONLY sizes you have creatives for |
-| High waste from specific country | `geoTargeting.excludedIds` | Add country ID to exclusion list |
-| High waste from specific platform | `includedPlatforms` | Remove underperforming platform |
-| Fraud signals from publisher | `publisherTargeting` | Set EXCLUSIVE mode, add publisher ID |
-| Fraud signals from app | `appTargeting.mobileAppTargeting` | Exclude specific app IDs |
-| Poor performance on web vs app | `includedEnvironments` | Keep only APP or only WEB |
-| Low viewability | `minimumViewabilityDecile` | Increase threshold (e.g., 5 for 50%+) |
+| High waste from specific country | `geoTargeting.excludedIds` | Alert AdOps of this |
+| High waste from specific platform | `includedPlatforms` | Suggest removal of underperforming platform |
+| Fraud signals from publisher | `publisherTargeting` | Suggest to Set EXCLUSIVE mode, add publisher ID |
+| Fraud signals from app | `appTargeting.mobileAppTargeting` | Alert user to specific app IDs |
+| Poor performance on web vs app | `includedEnvironments` | use as secondary signal |
+| Low viewability | `minimumViewabilityDecile` | Compareto similar and alert AdOps |
 
 ---
 

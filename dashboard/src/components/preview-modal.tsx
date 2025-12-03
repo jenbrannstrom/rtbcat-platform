@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Play, ExternalLink, Copy, Check, Loader2, Info, AlertTriangle } from "lucide-react";
 import type { Creative, CreativePerformanceSummary } from "@/types/api";
-import { cn, getFormatColor, getStatusColor } from "@/lib/utils";
+import { cn, getFormatColor, getFormatLabel, getStatusColor } from "@/lib/utils";
 import { getCreative } from "@/lib/api";
 import {
   parseDestinationUrls,
@@ -503,7 +503,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                   <div className="flex justify-between">
                     <span className="text-gray-500">Format</span>
                     <span>
-                      {creative.format}
+                      {getFormatLabel(creative.format)}
                       {creative.width && creative.height && ` (${creative.width}×${creative.height})`}
                     </span>
                   </div>

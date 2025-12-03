@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ExternalLink, Play, Image, FileCode, Copy, Check } from "lucide-react";
 import type { Creative, CreativePerformanceSummary } from "@/types/api";
-import { cn, getFormatColor, getStatusColor } from "@/lib/utils";
+import { cn, getFormatColor, getFormatLabel, getStatusColor } from "@/lib/utils";
 import { getGoogleAuthBuyersUrl, extractBuyerIdFromName } from "@/lib/url-utils";
 
 interface CreativeCardProps {
@@ -94,7 +94,7 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
     );
   }
 
-  // For HTML: show placeholder
+  // For HTML/Display: show code icon placeholder
   if (creative.format === "HTML") {
     return (
       <div className="relative h-24 bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
@@ -103,7 +103,16 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
     );
   }
 
-  // Default placeholder
+  // For IMAGE/Display: show image icon placeholder (same styling as HTML)
+  if (creative.format === "IMAGE") {
+    return (
+      <div className="relative h-24 bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
+        <Image className="h-8 w-8 text-blue-400" />
+      </div>
+    );
+  }
+
+  // Default placeholder for unknown formats
   return (
     <div className="h-24 bg-gray-100 flex items-center justify-center text-gray-400">
       <Image className="h-8 w-8" />
@@ -204,7 +213,7 @@ export function CreativeCard({ creative, onPreview, performance, sortField }: Cr
         {/* Badges: Format + Status only */}
         <div className="mt-2 flex flex-wrap gap-1.5">
           <span className={cn("badge text-[10px] px-1.5 py-0.5", getFormatColor(creative.format))}>
-            {creative.format}
+            {getFormatLabel(creative.format)}
           </span>
           {creative.approval_status && (
             <span className={cn("badge text-[10px] px-1.5 py-0.5", getStatusColor(creative.approval_status))}>

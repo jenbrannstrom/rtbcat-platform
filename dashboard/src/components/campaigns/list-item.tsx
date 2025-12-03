@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { cn } from '@/lib/utils';
+import { cn, getFormatLabel } from '@/lib/utils';
 
 interface Creative {
   id: string;
@@ -185,7 +185,7 @@ export function ListItem({
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-gray-400 text-[10px]">
-                {creative.format}
+                {getFormatLabel(creative.format)}
               </div>
             )}
           </div>

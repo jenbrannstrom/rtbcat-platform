@@ -4,7 +4,7 @@ import { useRef, useEffect, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { AlertTriangle, Copy, Check } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, getFormatLabel } from '@/lib/utils';
 
 interface Creative {
   id: string;
@@ -240,7 +240,7 @@ export function DraggableCreative({
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
-            {creative.format}
+            {getFormatLabel(creative.format)}
           </div>
         )}
 

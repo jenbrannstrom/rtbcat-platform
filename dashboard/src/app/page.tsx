@@ -51,14 +51,16 @@ export default function DashboardPage() {
       </div>
 
       {health && !health.configured && (
-        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center justify-between">
           <p className="text-sm text-yellow-800">
-            API not configured. Run{" "}
-            <code className="px-1 py-0.5 bg-yellow-100 rounded">
-              python main.py configure
-            </code>{" "}
-            to set up credentials.
+            Get started by connecting your Google Authorized Buyers account.
           </p>
+          <a
+            href="/connect"
+            className="ml-4 px-4 py-2 bg-yellow-600 text-white text-sm font-medium rounded-lg hover:bg-yellow-700 transition-colors whitespace-nowrap"
+          >
+            Connect Now
+          </a>
         </div>
       )}
 

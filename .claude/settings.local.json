@@ -51,7 +51,10 @@
       "Bash(xargs sed:*)",
       "Bash(netstat:*)",
       "Bash(journalctl:*)",
-      "Bash(xargs kill:*)"
+      "Bash(xargs kill:*)",
+      "Bash(sudo journalctl:*)",
+      "Bash(ffmpeg:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []

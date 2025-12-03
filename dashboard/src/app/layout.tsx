@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import "./globals.css";
 import { Providers } from "./providers";
 import { Sidebar } from "@/components/sidebar";
+import { FirstRunCheck } from "@/components/first-run-check";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -37,12 +38,14 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <Providers>
-          <div className="flex h-screen bg-gray-50">
-            <Suspense fallback={<SidebarFallback />}>
-              <Sidebar />
-            </Suspense>
-            <main className="flex-1 overflow-auto">{children}</main>
-          </div>
+          <FirstRunCheck>
+            <div className="flex h-screen bg-gray-50">
+              <Suspense fallback={<SidebarFallback />}>
+                <Sidebar />
+              </Suspense>
+              <main className="flex-1 overflow-auto">{children}</main>
+            </div>
+          </FirstRunCheck>
         </Providers>
       </body>
     </html>
