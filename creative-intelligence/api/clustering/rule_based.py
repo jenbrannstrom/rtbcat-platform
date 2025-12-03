@@ -10,19 +10,156 @@ import re
 from collections import defaultdict
 from datetime import datetime
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
+
+
+# Common click tracking macros to strip
+CLICK_MACROS = [
+    r'%%Click_Url_Unesc%%',
+    r'%%Click_Url%%',
+    r'\$\{CLICK_URL\}',
+    r'\[CLICK_URL\]',
+    r'%24%7BCLICK_URL%7D',  # URL-encoded ${CLICK_URL}
+    r'%%CLICK_URL_UNESC%%',
+    r'%%CLICK_URL%%',
+]
+
+
+def clean_tracking_url(url: str) -> str:
+    """Remove click tracking macros and decode URL-encoded strings.
+
+    Args:
+        url: Raw URL possibly containing macros and encoding
+
+    Returns:
+        Clean URL suitable for domain extraction
+    """
+    if not url:
+        return ""
+
+    # Strip click tracking macros
+    for macro in CLICK_MACROS:
+        url = re.sub(macro, '', url, flags=re.IGNORECASE)
+
+    # URL-decode if encoded (may need multiple passes)
+    decoded = url
+    for _ in range(3):  # Max 3 decode passes
+        if '%' not in decoded:
+            break
+        try:
+            new_decoded = unquote(decoded)
+            if new_decoded == decoded:
+                break
+            decoded = new_decoded
+        except Exception:
+            break
+
+    # Strip leading/trailing whitespace
+    decoded = decoded.strip()
+
+    # If still no protocol, try to find embedded URL
+    if not decoded.startswith(('http://', 'https://')):
+        # Look for embedded https:// or http://
+        match = re.search(r'(https?://[^\s]+)', decoded, re.IGNORECASE)
+        if match:
+            decoded = match.group(1)
+
+    return decoded
+
+
+def extract_app_bundle_id(url: str) -> Optional[str]:
+    """Extract app bundle ID from attribution URLs.
+
+    Handles:
+    - AppsFlyer: app.appsflyer.com/com.example.app?...
+    - Adjust: app.adjust.com/abc123?...
+    - Play Store: play.google.com/store/apps/details?id=com.example.app
+    - App Store: apps.apple.com/.../id123456789
+    """
+    if not url:
+        return None
+
+    url = clean_tracking_url(url)
+
+    # AppsFlyer
+    match = re.search(r'app\.appsflyer\.com/([a-zA-Z0-9._-]+)', url, re.IGNORECASE)
+    if match:
+        return match.group(1)
+
+    # Play Store
+    match = re.search(r'play\.google\.com/store/apps/details\?id=([a-zA-Z0-9._-]+)', url, re.IGNORECASE)
+    if match:
+        return match.group(1)
+
+    # Generic bundle ID pattern (com.company.app)
+    match = re.search(r'\b(com\.[a-zA-Z0-9]+\.[a-zA-Z0-9._]+)\b', url)
+    if match:
+        return match.group(1)
+
+    return None
+
+
+def format_bundle_id(bundle_id: str) -> str:
+    """Format bundle ID into human-readable name.
+
+    com.drop.frenzy.bubbly -> "Frenzy Bubbly"
+    """
+    if not bundle_id:
+        return "Unknown App"
+
+    parts = bundle_id.split('.')
+
+    # Skip common prefixes: com, org, net, io, app
+    skip_prefixes = {'com', 'org', 'net', 'io', 'app', 'co'}
+    relevant_parts = [p for p in parts if p.lower() not in skip_prefixes]
+
+    # Take last 2 meaningful parts
+    if len(relevant_parts) > 2:
+        relevant_parts = relevant_parts[-2:]
+
+    # Format each part
+    formatted = []
+    for part in relevant_parts:
+        # Split camelCase
+        part = re.sub(r'([a-z])([A-Z])', r'\1 \2', part)
+        # Replace separators with spaces
+        part = re.sub(r'[-_]+', ' ', part)
+        # Title case
+        part = part.title()
+        formatted.append(part)
+
+    return ' '.join(formatted) if formatted else "Unknown App"
 
 
 def extract_domain(url: str) -> Optional[str]:
-    """Extract domain from URL."""
+    """Extract domain from URL, handling tracking macros."""
     if not url:
         return None
+
+    # Clean the URL first
+    url = clean_tracking_url(url)
+
+    if not url:
+        return None
+
     try:
         parsed = urlparse(url)
-        domain = parsed.netloc or parsed.path.split("/")[0]
+        domain = parsed.netloc
+
+        # Only fall back to path if netloc is empty AND path looks like a domain
+        if not domain and parsed.path:
+            first_part = parsed.path.split("/")[0]
+            # Check if it looks like a domain (has dots, no spaces, reasonable length)
+            if '.' in first_part and ' ' not in first_part and len(first_part) < 100:
+                domain = first_part
+
+        if not domain:
+            return None
+
         # Remove www. prefix
         if domain.startswith("www."):
             domain = domain[4:]
+
         return domain.lower() if domain else None
     except Exception:
         return None
@@ -229,30 +366,62 @@ def generate_cluster_name(cluster_key: str, creatives: list[dict]) -> str:
     will provide better names.
 
     Args:
-        cluster_key: The cluster key
+        cluster_key: The cluster key (e.g., "domain:example.com" or "domain:example.com:US")
         creatives: List of creatives in cluster
 
     Returns:
         Human-readable cluster name
     """
-    parts = cluster_key.split(":", 1)
-    if len(parts) != 2:
+    # Split by : but handle country suffix (Phase 22)
+    parts = cluster_key.split(":")
+    if len(parts) < 2:
         return f"Campaign ({len(creatives)} creatives)"
 
-    method, value = parts
+    method = parts[0]
+    value = parts[1]
+    country = parts[2] if len(parts) > 2 else None
+
+    base_name = None
 
     if method == "domain":
-        # Clean up domain for display
-        name = value.replace(".", " ").title()
-        return f"{name} Campaign"
+        # First, try to extract bundle ID from a sample creative
+        for creative in creatives[:5]:
+            url = creative.get("final_url") or creative.get("detected_url") or ""
+            bundle_id = extract_app_bundle_id(url)
+            if bundle_id:
+                base_name = format_bundle_id(bundle_id)
+                break
+
+        # Fall back to domain-based name
+        if not base_name:
+            # Clean the domain value first
+            clean_value = clean_tracking_url(value)
+            domain = extract_domain(clean_value) or value
+
+            # Don't use garbage domains
+            if len(domain) > 50 or ' ' in domain or '%' in domain:
+                return f"Campaign ({len(creatives)} creatives)"
+
+            base_name = domain.replace(".", " ").title()
 
     elif method == "url":
         # Convert URL hint to readable name
-        name = value.replace("-", " ").replace("_", " ").title()
-        return f"{name} Campaign"
+        base_name = value.replace("-", " ").replace("_", " ").title()
 
     elif method == "week":
-        return f"Week {value} Creatives"
+        base_name = f"Week {value}"
 
-    else:
-        return f"Campaign ({len(creatives)} creatives)"
+    if base_name:
+        if country and country != "UNKNOWN":
+            # Shorten country names
+            country_short = {
+                "UNITED STATES": "US",
+                "UNITED KINGDOM": "UK",
+                "UNITED ARAB EMIRATES": "UAE",
+                "SOUTH KOREA": "KR",
+                "SAUDI ARABIA": "SA",
+            }.get(country, country[:2] if len(country) > 2 else country)
+            return f"{base_name} Campaign - {country_short}"
+        return f"{base_name} Campaign"
+
+    return f"Campaign ({len(creatives)} creatives)"

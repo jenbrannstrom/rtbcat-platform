@@ -53,6 +53,7 @@ class HtmlPreview(BaseModel):
     snippet: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
+    thumbnail_url: Optional[str] = None  # Phase 22: Extracted from HTML snippet
 
 
 class ImagePreview(BaseModel):
@@ -80,6 +81,7 @@ class ThumbnailStatusResponse(BaseModel):
     status: Optional[str] = None  # 'success', 'failed', or None if not processed
     error_reason: Optional[str] = None  # 'url_expired', 'no_url', 'timeout', 'network_error', 'invalid_format'
     has_thumbnail: bool = False  # True if thumbnail file exists
+    thumbnail_url: Optional[str] = None  # Phase 22: URL for HTML-extracted thumbnails
 
 
 class WasteFlagsResponse(BaseModel):
@@ -111,6 +113,8 @@ class CreativeResponse(BaseModel):
     campaign_id: Optional[str] = None
     cluster_id: Optional[str] = None
     seat_name: Optional[str] = None
+    # Phase 22: Country data for clustering
+    country: Optional[str] = None  # Primary country by spend
     # Preview data based on format
     video: Optional[VideoPreview] = None
     html: Optional[HtmlPreview] = None
@@ -137,6 +141,10 @@ class CampaignWarningsResponse(BaseModel):
     zero_engagement_count: int = 0
     high_spend_low_performance: int = 0
     disapproved_count: int = 0
+    # Phase 22: New problem format warnings
+    non_standard_size_count: int = 0
+    low_bid_rate_count: int = 0
+    zero_bids_count: int = 0
 
 
 class CampaignResponse(BaseModel):
@@ -400,6 +408,69 @@ class BatchPerformanceResponse(BaseModel):
     count: int
 
 
+# Phase 25: Recommendation Engine Response Models
+class EvidenceResponse(BaseModel):
+    """Evidence supporting a recommendation."""
+    metric_name: str
+    metric_value: float
+    threshold: float
+    comparison: str
+    time_period_days: int
+    sample_size: int
+    trend: Optional[str] = None
+
+
+class ImpactResponse(BaseModel):
+    """Quantified impact of an issue."""
+    wasted_qps: float
+    wasted_queries_daily: int
+    wasted_spend_usd: float
+    percent_of_total_waste: float
+    potential_savings_monthly: float
+
+
+class ActionResponse(BaseModel):
+    """Recommended action to take."""
+    action_type: str
+    target_type: str
+    target_id: str
+    target_name: str
+    pretargeting_field: Optional[str] = None
+    api_example: Optional[str] = None
+
+
+class RecommendationResponse(BaseModel):
+    """A complete optimization recommendation."""
+    id: str
+    type: str
+    severity: str
+    confidence: str
+    title: str
+    description: str
+    evidence: list[EvidenceResponse]
+    impact: ImpactResponse
+    actions: list[ActionResponse]
+    affected_creatives: list[str]
+    affected_campaigns: list[str]
+    generated_at: str
+    expires_at: Optional[str] = None
+    status: str
+
+
+class RecommendationSummaryResponse(BaseModel):
+    """Summary of recommendations by severity."""
+    analysis_period_days: int
+    total_queries: int
+    total_impressions: int
+    total_waste_queries: int
+    total_waste_rate: float
+    total_wasted_qps: float
+    total_spend_usd: float
+    recommendation_count: dict[str, int]
+    total_recommendations: int
+    generated_at: str
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown."""
@@ -564,7 +635,27 @@ def _get_thumbnails_dir() -> Path:
 
 def _check_ffmpeg() -> bool:
     """Check if ffmpeg is available."""
-    return shutil.which("ffmpeg") is not None
+    # Check PATH first
+    if shutil.which("ffmpeg") is not None:
+        return True
+    # Check common system paths (venv may not include /usr/bin in PATH)
+    for path in ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/opt/homebrew/bin/ffmpeg"]:
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return True
+    return False
+
+
+def _get_ffmpeg_path() -> str:
+    """Get the ffmpeg executable path."""
+    # Check PATH first
+    path = shutil.which("ffmpeg")
+    if path:
+        return path
+    # Check common system paths
+    for path in ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/opt/homebrew/bin/ffmpeg"]:
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    return "ffmpeg"  # Fallback, will fail if not found
 
 
 def _classify_ffmpeg_error(returncode: int, stderr: str, url: str) -> str:
@@ -585,13 +676,15 @@ def _classify_ffmpeg_error(returncode: int, stderr: str, url: str) -> str:
     return "unknown"
 
 
-def _generate_thumbnail_ffmpeg(video_url: str, output_path: Path, timeout: int = 30) -> dict:
+def _generate_thumbnail_ffmpeg(video_url: str, output_path: Path, timeout: int = 15) -> dict:
     """Generate thumbnail from video URL using ffmpeg."""
     try:
         cmd = [
-            "ffmpeg",
+            _get_ffmpeg_path(),
             "-y",
-            "-ss", "1",  # Seek to 1 second
+            "-ss", "1",  # Seek to 1 second (before -i for fast seek)
+            "-t", "2",   # Only read 2 seconds of video
+            "-rw_timeout", "5000000",  # 5 second network timeout (microseconds)
             "-i", video_url,
             "-vframes", "1",
             "-vf", "scale='min(480,iw)':'-1'",
@@ -717,7 +810,7 @@ async def get_system_status():
     ffmpeg_version = None
     if ffmpeg_available:
         try:
-            result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True, timeout=5)
+            result = subprocess.run([_get_ffmpeg_path(), '-version'], capture_output=True, text=True, timeout=5)
             first_line = result.stdout.split('\n')[0]
             parts = first_line.split(' ')
             ffmpeg_version = parts[2] if len(parts) > 2 else 'Unknown'
@@ -1025,6 +1118,50 @@ async def generate_batch_thumbnails(
     )
 
 
+class HTMLThumbnailRequest(BaseModel):
+    """Request model for HTML thumbnail extraction."""
+    limit: int = Field(100, ge=1, le=1000, description="Maximum creatives to process")
+    force_retry: bool = Field(False, description="Retry previously failed extractions")
+
+
+class HTMLThumbnailResponse(BaseModel):
+    """Response model for HTML thumbnail extraction."""
+    status: str
+    processed: int
+    success: int
+    failed: int
+    no_image_found: int
+    message: Optional[str] = None
+
+
+@app.post("/thumbnails/extract-html", response_model=HTMLThumbnailResponse, tags=["Thumbnails"])
+async def extract_html_thumbnails(
+    request: HTMLThumbnailRequest = HTMLThumbnailRequest(),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Extract thumbnail URLs from HTML creatives.
+
+    Phase 22: HTML thumbnail extraction.
+
+    Parses HTML creative snippets to find embedded image URLs (from <img src> tags,
+    JavaScript document.write, or background-image styles) and saves them to
+    thumbnail_status for display in the dashboard.
+    """
+    result = await store.process_html_thumbnails(
+        limit=request.limit,
+        force_retry=request.force_retry
+    )
+
+    return HTMLThumbnailResponse(
+        status="completed",
+        processed=result.get("processed", 0),
+        success=result.get("success", 0),
+        failed=result.get("failed", 0),
+        no_image_found=result.get("no_image_found", 0),
+        message=result.get("message"),
+    )
+
+
 class CredentialsUploadRequest(BaseModel):
     """Request model for uploading service account credentials."""
 
@@ -1255,12 +1392,13 @@ def _extract_thumbnail_from_vast(vast_xml: str) -> str | None:
     return None
 
 
-def _extract_preview_data(creative, slim: bool = False) -> dict:
+def _extract_preview_data(creative, slim: bool = False, html_thumbnail_url: Optional[str] = None) -> dict:
     """Extract preview data from creative raw_data based on format.
 
     Args:
         creative: The creative object
         slim: If True, exclude large fields (vast_xml, html snippet) for list views
+        html_thumbnail_url: Optional thumbnail URL for HTML creatives (from thumbnail_status)
     """
     raw_data = creative.raw_data or {}
     result = {"video": None, "html": None, "native": None}
@@ -1295,6 +1433,7 @@ def _extract_preview_data(creative, slim: bool = False) -> dict:
                 snippet=None if slim else html_data.get("snippet"),  # Exclude in slim mode
                 width=html_data.get("width"),
                 height=html_data.get("height"),
+                thumbnail_url=html_thumbnail_url,  # Phase 22: From thumbnail_status
             )
 
     elif creative.format == "NATIVE":
@@ -1337,12 +1476,14 @@ async def _get_thumbnail_status_for_creatives(
                 status=status_data["status"],
                 error_reason=status_data["error_reason"],
                 has_thumbnail=has_thumbnail,
+                thumbnail_url=status_data.get("thumbnail_url"),  # Phase 22: HTML thumbnails
             )
         else:
             result[cid] = ThumbnailStatusResponse(
                 status=None,
                 error_reason=None,
                 has_thumbnail=has_thumbnail,
+                thumbnail_url=None,
             )
 
     return result
@@ -1423,6 +1564,64 @@ async def _get_waste_flags_for_creatives(
     return result
 
 
+async def _get_primary_countries_for_creatives(
+    store: SQLiteStore,
+    creative_ids: list[str],
+    days: int = 7,
+) -> dict[str, str]:
+    """Get the primary country (by spend) for each creative.
+
+    Args:
+        store: Database store
+        creative_ids: List of creative IDs
+        days: Timeframe for performance data (default 7 days)
+
+    Returns:
+        Dict mapping creative_id to country code
+    """
+    if not creative_ids:
+        return {}
+
+    result = {}
+    try:
+        async with store._connection() as conn:
+            import asyncio
+            loop = asyncio.get_event_loop()
+
+            def _get_countries():
+                placeholders = ",".join("?" * len(creative_ids))
+                # Get the country with highest spend for each creative
+                cursor = conn.execute(
+                    f"""
+                    WITH ranked AS (
+                        SELECT creative_id, geography,
+                               SUM(spend_micros) as total_spend,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY creative_id
+                                   ORDER BY SUM(spend_micros) DESC
+                               ) as rn
+                        FROM performance_metrics
+                        WHERE creative_id IN ({placeholders})
+                          AND geography IS NOT NULL
+                          AND metric_date >= date('now', '-{days} days')
+                        GROUP BY creative_id, geography
+                    )
+                    SELECT creative_id, geography
+                    FROM ranked
+                    WHERE rn = 1
+                    """,
+                    creative_ids,
+                )
+                return {row["creative_id"]: row["geography"] for row in cursor.fetchall()}
+
+            result = await loop.run_in_executor(None, _get_countries)
+    except Exception as e:
+        # performance_metrics table may not exist or have geography data
+        logger.debug(f"Could not fetch country data: {e}")
+
+    return result
+
+
 @app.get("/creatives", response_model=list[CreativeResponse], tags=["Creatives"])
 async def list_creatives(
     campaign_id: Optional[str] = Query(None, description="Filter by campaign ID"),
@@ -1480,10 +1679,11 @@ async def list_creatives(
             # rtb_daily table may not exist - return all creatives
             logger.debug(f"Could not filter active creatives: {e}")
 
-    # Get thumbnail status and waste flags for all creatives
+    # Get thumbnail status, waste flags, and country data for all creatives
     creative_ids = [c.id for c in creatives]
     thumbnail_statuses = await _get_thumbnail_status_for_creatives(store, creative_ids)
     waste_flags = await _get_waste_flags_for_creatives(store, creative_ids, thumbnail_statuses, days)
+    country_data = await _get_primary_countries_for_creatives(store, creative_ids, days)
 
     return [
         CreativeResponse(
@@ -1506,9 +1706,14 @@ async def list_creatives(
             campaign_id=c.campaign_id,
             cluster_id=c.cluster_id,
             seat_name=c.seat_name,
+            country=country_data.get(c.id),
             thumbnail_status=thumbnail_statuses.get(c.id),
             waste_flags=waste_flags.get(c.id),
-            **_extract_preview_data(c, slim=slim),
+            **_extract_preview_data(
+                c,
+                slim=slim,
+                html_thumbnail_url=thumbnail_statuses.get(c.id).thumbnail_url if thumbnail_statuses.get(c.id) else None
+            ),
         )
         for c in creatives
     ]
@@ -1577,10 +1782,11 @@ async def list_creatives_paginated(
             active_ids = await loop.run_in_executor(None, _get_active_ids)
             creatives = [c for c in creatives if c.id in active_ids][:limit]
 
-    # Get thumbnail status and waste flags
+    # Get thumbnail status, waste flags, and country data
     creative_ids = [c.id for c in creatives]
     thumbnail_statuses = await _get_thumbnail_status_for_creatives(store, creative_ids)
     waste_flags = await _get_waste_flags_for_creatives(store, creative_ids, thumbnail_statuses, days)
+    country_data = await _get_primary_countries_for_creatives(store, creative_ids, days)
 
     data = [
         CreativeResponse(
@@ -1603,9 +1809,14 @@ async def list_creatives_paginated(
             campaign_id=c.campaign_id,
             cluster_id=c.cluster_id,
             seat_name=c.seat_name,
+            country=country_data.get(c.id),
             thumbnail_status=thumbnail_statuses.get(c.id),
             waste_flags=waste_flags.get(c.id),
-            **_extract_preview_data(c, slim=slim),
+            **_extract_preview_data(
+                c,
+                slim=slim,
+                html_thumbnail_url=thumbnail_statuses.get(c.id).thumbnail_url if thumbnail_statuses.get(c.id) else None
+            ),
         )
         for c in creatives
     ]
@@ -1663,7 +1874,10 @@ async def get_creative(
         seat_name=creative.seat_name,
         thumbnail_status=thumbnail_statuses.get(creative_id),
         waste_flags=waste_flags.get(creative_id),
-        **_extract_preview_data(creative),
+        **_extract_preview_data(
+            creative,
+            html_thumbnail_url=thumbnail_statuses.get(creative_id).thumbnail_url if thumbnail_statuses.get(creative_id) else None
+        ),
     )
 
 
@@ -2575,6 +2789,54 @@ async def get_waste_signals(
     service = WasteAnalyzerService()
     signals = service.get_signals_for_creative(creative_id, include_resolved=include_resolved)
     return [WasteSignalResponse(**s) for s in signals]
+
+
+class ProblemFormatResponse(BaseModel):
+    """Response model for problem format detection."""
+    creative_id: str
+    problem_type: str
+    evidence: dict
+    severity: str
+    recommendation: str
+
+
+@app.get("/analytics/problem-formats", response_model=list[ProblemFormatResponse], tags=["Analytics"])
+async def detect_problem_formats(
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    days: int = Query(7, ge=1, le=90, description="Timeframe for analysis"),
+    size_tolerance: int = Query(5, ge=0, le=20, description="Pixel tolerance for size matching"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Detect creatives with problems that hurt QPS efficiency.
+
+    Phase 22: Problem format detection identifies creatives that should be
+    reviewed or removed.
+
+    Problem types:
+    - zero_bids: Has reached_queries but no impressions
+    - non_standard: Size doesn't match any IAB standard (even with tolerance)
+    - low_bid_rate: impressions / reached_queries < 1%
+    - disapproved: approval_status != 'APPROVED'
+    """
+    from analytics.waste_analyzer import WasteAnalyzer
+
+    analyzer = WasteAnalyzer(store)
+    problems = await analyzer.detect_problem_formats(
+        buyer_id=buyer_id,
+        days=days,
+        size_tolerance=size_tolerance,
+    )
+
+    return [
+        ProblemFormatResponse(
+            creative_id=p.creative_id,
+            problem_type=p.problem_type,
+            evidence=p.evidence,
+            severity=p.severity,
+            recommendation=p.recommendation,
+        )
+        for p in problems
+    ]
 
 
 @app.post("/analytics/waste-signals/analyze", tags=["Analytics"])
@@ -3688,32 +3950,30 @@ async def import_performance_batch(
                 clicks = int(row.get("clicks", 0) or 0)
                 reached = int(row.get("reached_queries", 0) or 0)
 
-                # Create row hash for deduplication
-                hash_data = f"{date}|{row.get('creative_id', '')}|{row.get('billing_id', '')}|{row.get('geography', '')}|{impressions}|{clicks}"
-                row_hash = hashlib.md5(hash_data.encode()).hexdigest()
+                # Get geography and device_type
+                geography = row.get("geography") or row.get("country") or None
+                device_type = row.get("device_type") or row.get("platform") or None
+                placement = row.get("placement") or None
+                campaign_id = row.get("campaign_id") or None
 
-                # Insert into rtb_daily
+                # Insert into performance_metrics (uses unique index for dedup)
                 cursor.execute("""
-                    INSERT OR IGNORE INTO rtb_daily (
-                        metric_date, creative_id, billing_id, creative_size,
-                        country, platform, app_id, app_name,
-                        reached_queries, impressions, clicks, spend_micros,
-                        row_hash
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO performance_metrics (
+                        creative_id, campaign_id, metric_date,
+                        impressions, clicks, spend_micros,
+                        geography, device_type, placement, reached_queries
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    date,
                     row.get("creative_id"),
-                    row.get("billing_id"),
-                    row.get("creative_size"),
-                    row.get("geography") or row.get("country"),
-                    row.get("platform") or row.get("device_type"),
-                    row.get("app_id"),
-                    row.get("app_name"),
-                    reached,
+                    campaign_id,
+                    date,
                     impressions,
                     clicks,
                     spend_micros,
-                    row_hash,
+                    geography,
+                    device_type,
+                    placement,
+                    reached,
                 ))
 
                 if cursor.rowcount > 0:
@@ -3821,6 +4081,314 @@ async def trigger_troubleshooting_collection(
         "environment": environment,
         "message": "Collection will run in background. Check /api/troubleshooting/filtered-bids after a few minutes."
     }
+
+
+# =============================================================================
+# Phase 25: Recommendation Engine Endpoints
+# =============================================================================
+
+@app.get("/recommendations", response_model=list[RecommendationResponse], tags=["Recommendations"])
+async def get_recommendations(
+    days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
+    min_severity: str = Query("low", description="Minimum severity: low, medium, high, critical"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """
+    Get actionable optimization recommendations.
+
+    Phase 25: Core Analytics Engine
+    Returns recommendations sorted by impact (highest wasted QPS first).
+    """
+    from analytics.recommendation_engine import RecommendationEngine, Severity
+
+    try:
+        severity_map = {
+            "low": Severity.LOW,
+            "medium": Severity.MEDIUM,
+            "high": Severity.HIGH,
+            "critical": Severity.CRITICAL,
+        }
+        min_sev = severity_map.get(min_severity.lower(), Severity.LOW)
+
+        engine = RecommendationEngine(store)
+        recommendations = await engine.generate_recommendations(days=days, min_severity=min_sev)
+
+        return [rec.to_dict() for rec in recommendations]
+    except Exception as e:
+        logger.error(f"Failed to generate recommendations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/recommendations/summary", response_model=RecommendationSummaryResponse, tags=["Recommendations"])
+async def get_recommendations_summary(
+    days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """
+    Get high-level waste summary with recommendation counts.
+
+    Phase 25: Core Analytics Engine
+    Returns summary metrics including total waste and recommendation breakdown.
+    """
+    from analytics.recommendation_engine import RecommendationEngine
+
+    try:
+        engine = RecommendationEngine(store)
+        summary = await engine.get_summary(days=days)
+        return summary
+    except Exception as e:
+        logger.error(f"Failed to get recommendations summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/recommendations/{recommendation_id}/resolve", tags=["Recommendations"])
+async def resolve_recommendation(
+    recommendation_id: str,
+    notes: Optional[str] = Query(None, description="Resolution notes"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """
+    Mark a recommendation as resolved.
+
+    Phase 25: Core Analytics Engine
+    Updates the recommendation status and records resolution notes.
+    """
+    from analytics.recommendation_engine import RecommendationEngine
+
+    try:
+        engine = RecommendationEngine(store)
+        success = await engine.resolve_recommendation(recommendation_id, notes)
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Recommendation not found")
+
+        return {"status": "resolved", "id": recommendation_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to resolve recommendation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/recommendations/by-type/{rec_type}", response_model=list[RecommendationResponse], tags=["Recommendations"])
+async def get_recommendations_by_type(
+    rec_type: str,
+    days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """
+    Get recommendations filtered by type.
+
+    Phase 25: Core Analytics Engine
+    Types: size_mismatch, config_inefficiency, publisher_block, app_block,
+           geo_exclusion, creative_pause, creative_review, fraud_alert
+    """
+    from analytics.recommendation_engine import RecommendationEngine, Severity
+
+    try:
+        engine = RecommendationEngine(store)
+        recommendations = await engine.generate_recommendations(days=days, min_severity=Severity.LOW)
+
+        filtered = [rec for rec in recommendations if rec.type.value == rec_type]
+        return [rec.to_dict() for rec in filtered]
+    except Exception as e:
+        logger.error(f"Failed to get recommendations by type: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# QPS Analytics Endpoints (Phase 27)
+# =============================================================================
+
+from analytics.size_coverage_analyzer import SizeCoverageAnalyzer
+from analytics.geo_waste_analyzer import GeoWasteAnalyzer
+from analytics.pretargeting_recommender import PretargetingRecommender
+
+# Database path for QPS analytics
+QPS_DB_PATH = Path.home() / ".catscan" / "catscan.db"
+
+
+@app.get("/analytics/size-coverage", tags=["QPS Analytics"])
+async def get_size_coverage(days: int = Query(7, ge=1, le=90)):
+    """
+    Analyze size coverage gaps.
+
+    Returns sizes receiving traffic but missing creatives.
+    This is the core Cat-Scan analysis for identifying QPS waste.
+    """
+    try:
+        analyzer = SizeCoverageAnalyzer(str(QPS_DB_PATH))
+        summary = analyzer.analyze(days)
+        return {
+            "period_days": days,
+            "total_sizes_in_traffic": summary.total_sizes_in_traffic,
+            "sizes_with_creatives": summary.sizes_with_creatives,
+            "sizes_without_creatives": summary.sizes_without_creatives,
+            "coverage_rate_pct": round(summary.coverage_rate, 1),
+            "wasted_queries_daily": summary.wasted_queries_daily,
+            "wasted_qps": round(summary.wasted_qps, 2),
+            "gaps": [
+                {
+                    "size": g.size,
+                    "format": g.format,
+                    "queries_received": g.queries_received,
+                    "daily_estimate": g.estimated_daily_queries,
+                    "percent_of_traffic": round(g.percent_of_total_traffic, 1),
+                    "recommendation": g.recommendation,
+                }
+                for g in summary.gaps[:20]  # Top 20 gaps
+            ],
+            "covered_sizes": [
+                {
+                    "size": s["size"],
+                    "format": s["format"],
+                    "impressions": s["impressions"],
+                    "spend_usd": round(s["spend_usd"], 2),
+                    "creative_count": s["creative_count"],
+                    "ctr_pct": round(s["ctr"], 2),
+                }
+                for s in summary.covered_sizes[:20]  # Top 20 covered
+            ],
+        }
+    except Exception as e:
+        logger.error(f"Failed to analyze size coverage: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/analytics/geo-waste", tags=["QPS Analytics"])
+async def get_geo_waste(days: int = Query(7, ge=1, le=90)):
+    """
+    Analyze geographic QPS waste.
+
+    Returns geos with poor performance that should be excluded from pretargeting.
+    """
+    try:
+        analyzer = GeoWasteAnalyzer(str(QPS_DB_PATH))
+        summary = analyzer.analyze(days)
+        return {
+            "period_days": days,
+            "total_geos": summary.total_geos,
+            "geos_with_traffic": summary.geos_with_traffic,
+            "geos_to_exclude": summary.geos_to_exclude,
+            "geos_to_monitor": summary.geos_to_monitor,
+            "geos_performing_well": summary.geos_performing_well,
+            "estimated_waste_pct": round(summary.estimated_waste_pct, 1),
+            "total_spend_usd": round(summary.total_spend_usd, 2),
+            "wasted_spend_usd": round(summary.wasted_spend_usd, 2),
+            "geos": [
+                {
+                    "country": g.country_name,
+                    "code": g.country_code,
+                    "impressions": g.impressions,
+                    "clicks": g.clicks,
+                    "spend_usd": round(g.spend_usd, 2),
+                    "ctr_pct": round(g.ctr, 2),
+                    "cpm": round(g.cpm, 2),
+                    "creative_count": g.creative_count,
+                    "recommendation": g.recommendation,
+                }
+                for g in summary.geo_breakdown
+            ],
+        }
+    except Exception as e:
+        logger.error(f"Failed to analyze geo waste: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/analytics/pretargeting-recommendations", tags=["QPS Analytics"])
+async def get_pretargeting_recommendations(
+    days: int = Query(7, ge=1, le=90),
+    max_configs: int = Query(10, ge=1, le=10),
+):
+    """
+    Generate optimal pretargeting configurations.
+
+    Given the 10-config limit, recommends how to configure them for
+    maximum QPS efficiency.
+    """
+    try:
+        recommender = PretargetingRecommender(str(QPS_DB_PATH))
+        recommendation = recommender.generate_recommendations(days, max_configs)
+        return {
+            "config_limit": recommendation.config_limit,
+            "summary": recommendation.summary,
+            "total_waste_reduction_pct": round(recommendation.total_estimated_waste_reduction_pct, 1),
+            "configs": [
+                recommender.get_config_as_json(config)
+                for config in recommendation.configs
+            ],
+        }
+    except Exception as e:
+        logger.error(f"Failed to generate pretargeting recommendations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/analytics/qps-summary", tags=["QPS Analytics"])
+async def get_qps_summary(days: int = Query(7, ge=1, le=90)):
+    """
+    High-level QPS efficiency summary.
+
+    Combines size coverage and geo waste analysis into a single dashboard view.
+    """
+    try:
+        size_analyzer = SizeCoverageAnalyzer(str(QPS_DB_PATH))
+        geo_analyzer = GeoWasteAnalyzer(str(QPS_DB_PATH))
+
+        size_summary = size_analyzer.analyze(days)
+        geo_summary = geo_analyzer.analyze(days)
+
+        # Calculate total estimated waste
+        # Size gaps are 100% waste, geo waste is partial
+        size_waste_pct = 100 - size_summary.coverage_rate if size_summary.coverage_rate > 0 else 0
+
+        return {
+            "period_days": days,
+            "size_coverage": {
+                "coverage_rate_pct": round(size_summary.coverage_rate, 1),
+                "sizes_covered": size_summary.sizes_with_creatives,
+                "sizes_missing": size_summary.sizes_without_creatives,
+                "wasted_qps": round(size_summary.wasted_qps, 2),
+            },
+            "geo_efficiency": {
+                "geos_analyzed": geo_summary.total_geos,
+                "geos_to_exclude": geo_summary.geos_to_exclude,
+                "geos_to_monitor": geo_summary.geos_to_monitor,
+                "waste_pct": round(geo_summary.estimated_waste_pct, 1),
+                "wasted_spend_usd": round(geo_summary.wasted_spend_usd, 2),
+            },
+            "action_items": {
+                "sizes_to_block": len([g for g in size_summary.gaps if g.recommendation == "BLOCK_IN_PRETARGETING"]),
+                "sizes_to_consider": len([g for g in size_summary.gaps if g.recommendation == "CONSIDER_ADDING_CREATIVE"]),
+                "geos_to_exclude": geo_summary.geos_to_exclude,
+            },
+            "estimated_savings": {
+                "geo_waste_monthly_usd": round(geo_summary.wasted_spend_usd * 30 / max(days, 1), 2),
+            },
+        }
+    except Exception as e:
+        logger.error(f"Failed to get QPS summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/analytics/geo-pretargeting-config", tags=["QPS Analytics"])
+async def get_geo_pretargeting_config(days: int = Query(7, ge=1, le=90)):
+    """
+    Get ready-to-use geo configuration for pretargeting.
+
+    Returns include and exclude lists for geo targeting.
+    """
+    try:
+        analyzer = GeoWasteAnalyzer(str(QPS_DB_PATH))
+        config = analyzer.get_pretargeting_geo_config(days)
+        return {
+            "period_days": days,
+            "include_geos": config["include"],
+            "exclude_geos": config["exclude"],
+            "estimated_monthly_savings_usd": round(config["estimated_savings_usd"] * 30 / max(days, 1), 2),
+        }
+    except Exception as e:
+        logger.error(f"Failed to get geo pretargeting config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

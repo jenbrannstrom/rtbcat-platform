@@ -54,7 +54,12 @@
       "Bash(xargs kill:*)",
       "Bash(sudo journalctl:*)",
       "Bash(ffmpeg:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(pgrep:*)",
+      "Bash(xargs:*)",
+      "Bash(time curl:*)",
+      "Bash(sudo systemctl stop:*)",
+      "Bash(sudo systemctl start:*)"
     ],
     "deny": [],
     "ask": []

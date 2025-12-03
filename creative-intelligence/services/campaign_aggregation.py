@@ -97,7 +97,7 @@ class CampaignAggregationService:
 
             # Get creative IDs for this campaign
             cursor.execute(
-                "SELECT creative_id FROM campaign_creatives WHERE campaign_id = ?",
+                "SELECT creative_id FROM creative_campaigns WHERE campaign_id = ?",
                 (campaign_id,)
             )
             creative_ids = [r["creative_id"] for r in cursor.fetchall()]
@@ -157,7 +157,7 @@ class CampaignAggregationService:
 
         # Get creative IDs
         cursor.execute(
-            "SELECT creative_id FROM campaign_creatives WHERE campaign_id = ?",
+            "SELECT creative_id FROM creative_campaigns WHERE campaign_id = ?",
             (campaign_id,)
         )
         creative_ids = [r["creative_id"] for r in cursor.fetchall()]
@@ -326,7 +326,7 @@ class CampaignAggregationService:
         cursor.execute(f"""
             SELECT DISTINCT p.creative_id
             FROM rtb_daily p
-            LEFT JOIN campaign_creatives cc ON p.creative_id = cc.creative_id
+            LEFT JOIN creative_campaigns cc ON p.creative_id = cc.creative_id
             WHERE cc.creative_id IS NULL
               AND p.metric_date >= date('now', '-{days} days')
               AND (p.impressions > 0 OR p.clicks > 0 OR p.spend_micros > 0)

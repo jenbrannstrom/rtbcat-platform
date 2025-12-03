@@ -8,6 +8,7 @@ import { getWasteReport, generateMockTraffic } from "@/lib/api";
 import { SeatSelector } from "@/components/seat-selector";
 import { WasteReportCard, WasteReportSkeleton, WasteReportEmpty } from "@/components/waste-report";
 import { SizeCoverageChart, SizeCoverageChartSkeleton } from "@/components/size-coverage-chart";
+import { QPSSummaryCard, GeoWastePanel, PretargetingPanel } from "@/components/qps";
 import { cn } from "@/lib/utils";
 
 const PERIOD_OPTIONS = [
@@ -243,6 +244,27 @@ function WasteAnalysisContent() {
         ) : wasteReport?.size_gaps ? (
           <SizeCoverageChart sizeGaps={wasteReport.size_gaps} />
         ) : null}
+      </section>
+
+      {/* QPS Summary */}
+      <section className="mt-8">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">QPS Efficiency Summary</h2>
+          <p className="text-sm text-gray-500">
+            High-level overview of your RTB efficiency and actionable insights
+          </p>
+        </div>
+        <QPSSummaryCard days={days} />
+      </section>
+
+      {/* Geographic Analysis */}
+      <section className="mt-8">
+        <GeoWastePanel days={days} />
+      </section>
+
+      {/* Pretargeting Recommendations */}
+      <section className="mt-8">
+        <PretargetingPanel days={days} />
       </section>
     </div>
   );

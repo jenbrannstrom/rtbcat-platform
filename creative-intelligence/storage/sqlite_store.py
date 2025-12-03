@@ -545,6 +545,29 @@ class SQLiteStore:
             FOREIGN KEY (creative_id) REFERENCES creatives(id) ON DELETE CASCADE
         )""",
         "CREATE INDEX IF NOT EXISTS idx_thumbnail_status_status ON thumbnail_status(status)",
+        # Phase 25: Recommendations table for Cat-Scan analytics
+        """CREATE TABLE IF NOT EXISTS recommendations (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            confidence TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            evidence_json TEXT,
+            impact_json TEXT,
+            actions_json TEXT,
+            affected_creatives TEXT,
+            affected_campaigns TEXT,
+            status TEXT DEFAULT 'new',
+            generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP,
+            resolved_at TIMESTAMP,
+            resolution_notes TEXT
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_rec_type ON recommendations(type)",
+        "CREATE INDEX IF NOT EXISTS idx_rec_severity ON recommendations(severity)",
+        "CREATE INDEX IF NOT EXISTS idx_rec_status ON recommendations(status)",
+        "CREATE INDEX IF NOT EXISTS idx_rec_generated ON recommendations(generated_at DESC)",
     ]
 
     def __init__(self, db_path: str | Path = "~/.catscan/catscan.db") -> None:
@@ -2330,10 +2353,10 @@ class SQLiteStore:
                     for cid in creative_ids:
                         conn.execute(
                             """
-                            INSERT OR IGNORE INTO campaign_creatives (campaign_id, creative_id)
+                            INSERT OR REPLACE INTO creative_campaigns (creative_id, campaign_id)
                             VALUES (?, ?)
                             """,
-                            (campaign_id, cid),
+                            (cid, campaign_id),
                         )
 
                 conn.commit()
@@ -2366,7 +2389,7 @@ class SQLiteStore:
                 for row in cursor.fetchall():
                     # Get creative IDs for this campaign
                     cid_cursor = conn.execute(
-                        "SELECT creative_id FROM campaign_creatives WHERE campaign_id = ?",
+                        "SELECT creative_id FROM creative_campaigns WHERE campaign_id = ?",
                         (row["id"],),
                     )
                     creative_ids = [r["creative_id"] for r in cid_cursor.fetchall()]
@@ -2405,7 +2428,7 @@ class SQLiteStore:
 
                 # Get creative IDs
                 cid_cursor = conn.execute(
-                    "SELECT creative_id FROM campaign_creatives WHERE campaign_id = ?",
+                    "SELECT creative_id FROM creative_campaigns WHERE campaign_id = ?",
                     (campaign_id,),
                 )
                 creative_ids = [r["creative_id"] for r in cid_cursor.fetchall()]
@@ -2458,14 +2481,14 @@ class SQLiteStore:
                 if creative_ids is not None:
                     # Remove existing assignments
                     conn.execute(
-                        "DELETE FROM campaign_creatives WHERE campaign_id = ?",
+                        "DELETE FROM creative_campaigns WHERE campaign_id = ?",
                         (campaign_id,),
                     )
                     # Add new assignments
                     for cid in creative_ids:
                         conn.execute(
-                            "INSERT OR IGNORE INTO campaign_creatives (campaign_id, creative_id) VALUES (?, ?)",
-                            (campaign_id, cid),
+                            "INSERT OR REPLACE INTO creative_campaigns (creative_id, campaign_id) VALUES (?, ?)",
+                            (cid, campaign_id),
                         )
                     # Update timestamp
                     conn.execute(
@@ -2482,7 +2505,7 @@ class SQLiteStore:
                 )
                 row = cursor.fetchone()
                 cid_cursor = conn.execute(
-                    "SELECT creative_id FROM campaign_creatives WHERE campaign_id = ?",
+                    "SELECT creative_id FROM creative_campaigns WHERE campaign_id = ?",
                     (campaign_id,),
                 )
                 current_creative_ids = [r["creative_id"] for r in cid_cursor.fetchall()]
@@ -2532,7 +2555,7 @@ class SQLiteStore:
                     """
                     SELECT c.id
                     FROM creatives c
-                    LEFT JOIN campaign_creatives cc ON c.id = cc.creative_id
+                    LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
                     WHERE cc.campaign_id IS NULL
                     ORDER BY c.updated_at DESC
                     """
@@ -2635,7 +2658,7 @@ class SQLiteStore:
                     placeholders = ",".join("?" * len(creative_ids))
                     cursor = conn.execute(
                         f"""
-                        SELECT creative_id, status, error_reason, video_url, attempted_at
+                        SELECT creative_id, status, error_reason, video_url, thumbnail_url, attempted_at
                         FROM thumbnail_status
                         WHERE creative_id IN ({placeholders})
                         """,
@@ -2644,7 +2667,7 @@ class SQLiteStore:
                 else:
                     cursor = conn.execute(
                         """
-                        SELECT creative_id, status, error_reason, video_url, attempted_at
+                        SELECT creative_id, status, error_reason, video_url, thumbnail_url, attempted_at
                         FROM thumbnail_status
                         """
                     )
@@ -2655,6 +2678,7 @@ class SQLiteStore:
                         "status": row["status"],
                         "error_reason": row["error_reason"],
                         "video_url": row["video_url"],
+                        "thumbnail_url": row["thumbnail_url"],  # Phase 22: HTML thumbnails
                         "attempted_at": row["attempted_at"],
                     }
                 return result
@@ -2765,3 +2789,184 @@ class SQLiteStore:
                 }
 
             return await loop.run_in_executor(None, _get_stats)
+
+    async def get_html_creatives_pending_thumbnails(
+        self, limit: int = 100, force_retry_failed: bool = False
+    ) -> list[dict]:
+        """Get HTML creatives that need thumbnail extraction.
+
+        Phase 22: HTML thumbnail extraction support.
+
+        Args:
+            limit: Maximum number of creatives to return.
+            force_retry_failed: If True, include previously failed extractions.
+
+        Returns:
+            List of creatives with id, raw_data containing HTML snippet.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _get_pending():
+                if force_retry_failed:
+                    # Get HTML creatives without thumbnails or with failed status
+                    query = """
+                        SELECT c.id, c.raw_data
+                        FROM creatives c
+                        LEFT JOIN thumbnail_status ts ON c.id = ts.creative_id
+                        WHERE c.format = 'HTML'
+                        AND (ts.creative_id IS NULL OR ts.status = 'failed')
+                        AND c.raw_data IS NOT NULL
+                        AND c.raw_data != ''
+                        LIMIT ?
+                    """
+                else:
+                    # Only get HTML creatives that haven't been processed yet
+                    query = """
+                        SELECT c.id, c.raw_data
+                        FROM creatives c
+                        LEFT JOIN thumbnail_status ts ON c.id = ts.creative_id
+                        WHERE c.format = 'HTML'
+                        AND ts.creative_id IS NULL
+                        AND c.raw_data IS NOT NULL
+                        AND c.raw_data != ''
+                        LIMIT ?
+                    """
+                cursor = conn.execute(query, (limit,))
+                return [dict(row) for row in cursor.fetchall()]
+
+            return await loop.run_in_executor(None, _get_pending)
+
+    async def process_html_thumbnails(
+        self, limit: int = 100, force_retry: bool = False
+    ) -> dict:
+        """Process HTML creatives to extract thumbnail URLs.
+
+        Phase 22: HTML thumbnail extraction.
+
+        Parses HTML snippets to find embedded image URLs and populates
+        the thumbnail_status table with the extracted URLs.
+
+        Args:
+            limit: Maximum number of creatives to process.
+            force_retry: If True, retry previously failed extractions.
+
+        Returns:
+            Dict with processing statistics.
+        """
+        from utils.html_thumbnail import extract_primary_image_url
+
+        # Get pending HTML creatives
+        pending = await self.get_html_creatives_pending_thumbnails(
+            limit=limit, force_retry_failed=force_retry
+        )
+
+        if not pending:
+            return {
+                "processed": 0,
+                "success": 0,
+                "failed": 0,
+                "no_image_found": 0,
+                "message": "No HTML creatives pending thumbnail extraction"
+            }
+
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _process_batch():
+                import json
+                from datetime import datetime
+
+                success = 0
+                failed = 0
+                no_image = 0
+
+                for creative in pending:
+                    creative_id = creative["id"]
+                    raw_data = creative["raw_data"]
+
+                    try:
+                        # Parse raw_data JSON to get HTML snippet
+                        if isinstance(raw_data, str):
+                            try:
+                                data = json.loads(raw_data)
+                                # Try nested html.snippet first, then fallback to other keys
+                                html_data = data.get("html", {})
+                                if isinstance(html_data, dict):
+                                    html_snippet = html_data.get("snippet", "")
+                                else:
+                                    html_snippet = ""
+                                # Fallback to top-level keys
+                                if not html_snippet:
+                                    html_snippet = data.get("html_snippet", "") or data.get("snippet", "") or ""
+                            except json.JSONDecodeError:
+                                # raw_data might be the HTML itself
+                                html_snippet = raw_data
+                        else:
+                            html_snippet = str(raw_data) if raw_data else ""
+
+                        # Extract image URL from HTML
+                        image_url = extract_primary_image_url(html_snippet)
+
+                        if image_url:
+                            # Success - insert/update thumbnail_status
+                            conn.execute("""
+                                INSERT INTO thumbnail_status
+                                (creative_id, status, thumbnail_url, created_at, updated_at)
+                                VALUES (?, 'success', ?, ?, ?)
+                                ON CONFLICT(creative_id) DO UPDATE SET
+                                    status = 'success',
+                                    thumbnail_url = excluded.thumbnail_url,
+                                    updated_at = excluded.updated_at
+                            """, (
+                                creative_id,
+                                image_url,
+                                datetime.utcnow().isoformat(),
+                                datetime.utcnow().isoformat()
+                            ))
+                            success += 1
+                        else:
+                            # No image found in HTML
+                            conn.execute("""
+                                INSERT INTO thumbnail_status
+                                (creative_id, status, error_reason, created_at, updated_at)
+                                VALUES (?, 'no_image', 'No image URL found in HTML snippet', ?, ?)
+                                ON CONFLICT(creative_id) DO UPDATE SET
+                                    status = 'no_image',
+                                    error_reason = 'No image URL found in HTML snippet',
+                                    updated_at = excluded.updated_at
+                            """, (
+                                creative_id,
+                                datetime.utcnow().isoformat(),
+                                datetime.utcnow().isoformat()
+                            ))
+                            no_image += 1
+
+                    except Exception as e:
+                        # Error processing
+                        conn.execute("""
+                            INSERT INTO thumbnail_status
+                            (creative_id, status, error_reason, created_at, updated_at)
+                            VALUES (?, 'failed', ?, ?, ?)
+                            ON CONFLICT(creative_id) DO UPDATE SET
+                                status = 'failed',
+                                error_reason = excluded.error_reason,
+                                updated_at = excluded.updated_at
+                        """, (
+                            creative_id,
+                            str(e)[:500],
+                            datetime.utcnow().isoformat(),
+                            datetime.utcnow().isoformat()
+                        ))
+                        failed += 1
+
+                conn.commit()
+
+                return {
+                    "processed": len(pending),
+                    "success": success,
+                    "failed": failed,
+                    "no_image_found": no_image
+                }
+
+            return await loop.run_in_executor(None, _process_batch)

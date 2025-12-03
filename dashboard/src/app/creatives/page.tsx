@@ -99,13 +99,27 @@ function ThumbnailGenerationBanner() {
     },
   });
 
+  const [autoGenerate, setAutoGenerate] = useState(false);
+
   const generateMutation = useMutation({
     mutationFn: (params: { force?: boolean; limit?: number }) =>
       generateThumbnailsBatch(params),
-    onSuccess: () => {
+    onSuccess: (data) => {
       // Refetch status after generation completes
       queryClient.invalidateQueries({ queryKey: ["thumbnailStatus"] });
       queryClient.invalidateQueries({ queryKey: ["creatives"] });
+
+      // Auto-continue if enabled and there are more pending
+      if (autoGenerate && data.total_processed > 0) {
+        // Small delay then trigger next batch
+        setTimeout(() => {
+          generateMutation.mutate({ limit: 10 });
+        }, 500);
+      }
+    },
+    onError: () => {
+      // Stop auto-generate on error
+      setAutoGenerate(false);
     },
   });
 
@@ -149,32 +163,52 @@ function ThumbnailGenerationBanner() {
         </div>
 
         <div className="flex gap-2">
-          {!isGenerating ? (
-            <>
-              {hasPending && (
-                <button
-                  onClick={() => generateMutation.mutate({ limit: 50 })}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium transition"
-                >
+          {hasPending && (
+            <button
+              onClick={() => {
+                if (isGenerating || autoGenerate) {
+                  // Stop
+                  setAutoGenerate(false);
+                } else {
+                  // Start auto-generate
+                  setAutoGenerate(true);
+                  generateMutation.mutate({ limit: 10 });
+                }
+              }}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition",
+                isGenerating || autoGenerate
+                  ? "bg-red-600 hover:bg-red-700 text-white"
+                  : "bg-primary-600 hover:bg-primary-700 text-white"
+              )}
+            >
+              {isGenerating || autoGenerate ? (
+                <>
+                  <Square className="h-4 w-4" />
+                  Stop
+                </>
+              ) : (
+                <>
                   <Play className="h-4 w-4" />
-                  Generate ({pending > 50 ? "50" : pending})
-                </button>
+                  Generate All ({pending})
+                </>
               )}
-              {hasFailed && (
-                <button
-                  onClick={() => generateMutation.mutate({ force: true, limit: 50 })}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm transition"
-                  title="Retry failed thumbnail generation"
-                >
-                  Retry Failed ({status.failed > 50 ? "50" : status.failed})
-                </button>
-              )}
-            </>
-          ) : (
-            <div className="flex items-center gap-2 text-sm text-gray-500">
+            </button>
+          )}
+          {hasFailed && !isGenerating && (
+            <button
+              onClick={() => generateMutation.mutate({ force: true, limit: 10 })}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm transition"
+              title="Retry failed thumbnail generation"
+            >
+              Retry Failed ({status.failed})
+            </button>
+          )}
+          {isGenerating && (
+            <span className="flex items-center gap-2 text-sm text-gray-500">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Generating thumbnails...
-            </div>
+              Processing batch...
+            </span>
           )}
         </div>
       </div>

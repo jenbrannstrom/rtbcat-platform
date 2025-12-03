@@ -141,3 +141,40 @@ class WasteReport:
             "generated_at": self.generated_at,
             "recommendations_summary": self.recommendations_summary,
         }
+
+
+@dataclass
+class ProblemFormat:
+    """A creative with a problem that affects QPS efficiency.
+
+    Phase 22: Problem format detection for identifying creatives that hurt
+    campaign performance.
+
+    Attributes:
+        creative_id: The creative ID.
+        problem_type: Type of problem detected.
+        evidence: Supporting data for the problem.
+        severity: Problem severity level.
+        recommendation: Suggested action to fix.
+    """
+
+    creative_id: str
+    problem_type: Literal[
+        "zero_bids",      # Has reached_queries but no impressions
+        "non_standard",   # Size doesn't match any IAB standard
+        "low_bid_rate",   # impressions / reached_queries < 1%
+        "disapproved",    # approval_status != 'APPROVED'
+    ]
+    evidence: dict = field(default_factory=dict)
+    severity: Literal["high", "medium", "low"] = "medium"
+    recommendation: str = ""
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "creative_id": self.creative_id,
+            "problem_type": self.problem_type,
+            "evidence": self.evidence,
+            "severity": self.severity,
+            "recommendation": self.recommendation,
+        }
