@@ -2,10 +2,10 @@
 
 import { useState, useEffect, Suspense, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Search, X, TrendingUp, Loader2 } from "lucide-react";
-import { getCreatives, getSizes, getBatchPerformance } from "@/lib/api";
+import { Search, X, TrendingUp, Loader2, Play, Square, AlertTriangle } from "lucide-react";
+import { getCreatives, getSizes, getBatchPerformance, getThumbnailStatus, generateThumbnailsBatch } from "@/lib/api";
 import { CreativeCard } from "@/components/creative-card";
 import { PreviewModal } from "@/components/preview-modal";
 import { LoadingPage } from "@/components/loading";
@@ -85,6 +85,129 @@ const FORMAT_FILTERS: { value: string; label: string; formats: string[] }[] = [
   { value: "NATIVE", label: "Native", formats: ["NATIVE"] },
 ];
 const COLUMNS = 4; // Fixed 4 columns for simplicity
+
+// Thumbnail Generation Banner Component
+function ThumbnailGenerationBanner() {
+  const queryClient = useQueryClient();
+
+  const { data: status, refetch: refetchStatus } = useQuery({
+    queryKey: ["thumbnailStatus"],
+    queryFn: getThumbnailStatus,
+    refetchInterval: (query) => {
+      // Poll every 2s while generating
+      return query.state.data?.pending && query.state.data.pending > 0 ? 2000 : false;
+    },
+  });
+
+  const generateMutation = useMutation({
+    mutationFn: (params: { force?: boolean; limit?: number }) =>
+      generateThumbnailsBatch(params),
+    onSuccess: () => {
+      // Refetch status after generation completes
+      queryClient.invalidateQueries({ queryKey: ["thumbnailStatus"] });
+      queryClient.invalidateQueries({ queryKey: ["creatives"] });
+    },
+  });
+
+  // Don't render if no status or no video creatives
+  if (!status || status.total_videos === 0) {
+    return null;
+  }
+
+  const pending = status.pending;
+  const hasPending = pending > 0;
+  const hasFailed = status.failed > 0;
+  const isGenerating = generateMutation.isPending;
+
+  // Don't show if all thumbnails are generated and no failures (and not generating)
+  if (!hasPending && !hasFailed && !isGenerating) {
+    return null;
+  }
+
+  return (
+    <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-medium text-gray-900 flex items-center gap-2">
+            Video Thumbnails
+            <span className="text-sm font-normal text-gray-500">
+              {status.with_thumbnails} of {status.total_videos} generated
+            </span>
+          </h3>
+
+          {!isGenerating && (
+            <p className="text-sm text-gray-500 mt-1">
+              {hasPending && (
+                <span className="text-yellow-600">{pending} pending</span>
+              )}
+              {hasPending && hasFailed && ' · '}
+              {hasFailed && (
+                <span className="text-red-600">{status.failed} failed</span>
+              )}
+            </p>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          {!isGenerating ? (
+            <>
+              {hasPending && (
+                <button
+                  onClick={() => generateMutation.mutate({ limit: 50 })}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium transition"
+                >
+                  <Play className="h-4 w-4" />
+                  Generate ({pending > 50 ? "50" : pending})
+                </button>
+              )}
+              {hasFailed && (
+                <button
+                  onClick={() => generateMutation.mutate({ force: true, limit: 50 })}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm transition"
+                  title="Retry failed thumbnail generation"
+                >
+                  Retry Failed ({status.failed > 50 ? "50" : status.failed})
+                </button>
+              )}
+            </>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Generating thumbnails...
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      {status.total_videos > 0 && (
+        <div className="mt-3">
+          <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+            <div
+              className="bg-primary-600 h-2 transition-all duration-300"
+              style={{ width: `${status.coverage_percent}%` }}
+            />
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            {status.coverage_percent.toFixed(0)}% coverage
+          </p>
+        </div>
+      )}
+
+      {/* ffmpeg warning - just informational, doesn't block the Generate button */}
+      {!status.ffmpeg_available && (
+        <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <span className="text-yellow-800">ffmpeg not detected in API environment. </span>
+            <span className="text-yellow-700">If generation fails, install with: </span>
+            <code className="bg-yellow-100 px-1 rounded text-yellow-900">sudo apt install ffmpeg</code>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function VirtualizedGrid({
   creatives,
@@ -321,6 +444,9 @@ function CreativesContent() {
 
   return (
     <div className="p-6">
+      {/* Thumbnail Generation Banner - shows when videos need thumbnails */}
+      <ThumbnailGenerationBanner />
+
       {/* Compact Header with Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-4">
         {/* Title */}
