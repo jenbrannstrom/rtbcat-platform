@@ -1,7 +1,7 @@
 # Cat-Scan Creative Intelligence
 
-**Version:** 19.0
-**Phase:** 19 - Installation Documentation
+**Version:** 21.0
+**Phase:** 21 - UI Polish (Thumbnails & Docs)
 **Last Updated:** December 3, 2025
 
 A privacy-first QPS optimization platform for Google Authorized Buyers. Cat-Scan helps RTB bidders eliminate 20-40% wasted QPS by surfacing evidence-based waste signals, enabling data-driven pretargeting decisions.

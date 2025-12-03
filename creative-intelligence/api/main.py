@@ -623,7 +623,7 @@ async def get_thumbnail_status(store: SQLiteStore = Depends(get_store)):
     """Get summary of thumbnail generation status."""
     import sqlite3
 
-    db_path = Path.home() / ".catscan" / "creatives.db"
+    db_path = Path.home() / ".catscan" / "catscan.db"
     ffmpeg_available = _check_ffmpeg()
 
     if not db_path.exists():
@@ -725,7 +725,7 @@ async def get_system_status():
             pass
 
     # Database size
-    db_path = Path.home() / ".catscan" / "creatives.db"
+    db_path = Path.home() / ".catscan" / "catscan.db"
     database_size_mb = db_path.stat().st_size / (1024 * 1024) if db_path.exists() else 0
 
     # Thumbnails count
@@ -778,7 +778,7 @@ async def generate_single_thumbnail(
     if not _check_ffmpeg():
         raise HTTPException(status_code=503, detail="ffmpeg not installed on server")
 
-    db_path = Path.home() / ".catscan" / "creatives.db"
+    db_path = Path.home() / ".catscan" / "catscan.db"
     thumb_dir = _get_thumbnails_dir()
 
     # Get the creative
@@ -901,7 +901,7 @@ async def generate_batch_thumbnails(
     if not _check_ffmpeg():
         raise HTTPException(status_code=503, detail="ffmpeg not installed on server")
 
-    db_path = Path.home() / ".catscan" / "creatives.db"
+    db_path = Path.home() / ".catscan" / "catscan.db"
     thumb_dir = _get_thumbnails_dir()
 
     conn = sqlite3.connect(db_path)

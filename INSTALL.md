@@ -195,7 +195,7 @@ chmod 600 ~/.catscan/credentials/google-credentials.json
 
 ```bash
 # Reset database (WARNING: deletes all data)
-rm ~/.catscan/creatives.db
+rm ~/.catscan/catscan.db
 python -c "from storage.sqlite_store import SQLiteStore; SQLiteStore()"
 ```
 
@@ -228,7 +228,7 @@ After installation, Cat-Scan uses these directories:
 
 ```
 ~/.catscan/
-├── creatives.db          # SQLite database
+├── catscan.db            # SQLite database
 ├── thumbnails/           # Generated video thumbnails
 └── credentials/          # Google service account JSON
 ```

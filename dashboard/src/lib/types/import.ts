@@ -49,7 +49,7 @@ export interface ValidationResult {
 
 export interface ImportResponse {
   success: boolean;
-  imported: number;
+  imported?: number;
   duplicates?: number;
   errors?: number;
   error_details?: ValidationError[];
@@ -60,4 +60,19 @@ export interface ImportResponse {
   };
   total_spend?: number;
   error?: string;
+  // Column mapping info from backend
+  columns_imported?: string[];
+  columns_found?: string[];
+  columns_mapped?: Record<string, string>;
+  required_missing?: string[];
+  fix_instructions?: string;
+  // Additional stats
+  rows_read?: number;
+  rows_skipped?: number;
+  unique_creatives?: number;
+  unique_sizes?: number;
+  unique_countries?: number;
+  billing_ids?: string[];
+  total_reached?: number;
+  total_impressions?: number;
 }

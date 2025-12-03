@@ -2,13 +2,18 @@
 
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Download, CheckCircle, XCircle, ArrowRight, Info, AlertTriangle } from "lucide-react";
+import {
+  CheckCircle,
+  XCircle,
+  ArrowRight,
+  AlertTriangle,
+  ChevronDown,
+  ExternalLink,
+} from "lucide-react";
 import { ImportDropzone } from "@/components/import-dropzone";
 import { ImportPreview } from "@/components/import-preview";
 import { ImportProgress } from "@/components/import-progress";
 import { ValidationErrors } from "@/components/validation-errors";
-import { CsvTypeSelector, type CsvType } from "@/components/csv-type-selector";
-import { ImportInstructions } from "@/components/import-instructions";
 import {
   validatePerformanceCSV,
   type ExtendedValidationResult,
@@ -17,13 +22,12 @@ import {
   formatAnomalyType,
 } from "@/lib/csv-validator";
 import type { AnomalyType } from "@/lib/types/import";
-import { parseCSV, type ParseResult } from "@/lib/csv-parser";
+import { parseCSV } from "@/lib/csv-parser";
 import { importPerformanceData } from "@/lib/api";
 import {
   uploadChunkedCSV,
   previewCSV,
   type UploadProgress,
-  type UploadResult,
 } from "@/lib/chunked-uploader";
 import { extractSeatFromPreview, formatSeatInfo, type SeatInfo } from "@/lib/seat-extractor";
 import type { ImportResponse } from "@/lib/types/import";
@@ -38,7 +42,6 @@ export default function ImportPage() {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const [step, setStep] = useState<ImportStep>("upload");
-  const [csvType, setCsvType] = useState<CsvType>("performance");
   const [file, setFile] = useState<File | null>(null);
   const [validationResult, setValidationResult] =
     useState<ExtendedValidationResult | null>(null);
@@ -192,24 +195,6 @@ export default function ImportPage() {
     resetForm();
   };
 
-  // Download example CSV
-  const downloadExample = () => {
-    const csv = `creative_id,date,impressions,clicks,spend,geography
-79783,2025-11-29,1000,50,25.50,US
-79783,2025-11-28,950,45,23.75,US
-79784,2025-11-29,500,10,5.00,BR
-79784,2025-11-28,480,12,6.00,BR
-79785,2025-11-29,2000,100,50.00,GB`;
-
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "performance_data_example.csv";
-    a.click();
-    window.URL.revokeObjectURL(url);
-  };
-
   const resetForm = () => {
     setFile(null);
     setValidationResult(null);
@@ -232,77 +217,55 @@ export default function ImportPage() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">
           Import Performance Data
         </h1>
         <p className="text-gray-600 mt-1">
-          Upload CSV file with creative performance metrics
+          Upload CSV exports from Google Authorized Buyers
         </p>
       </div>
 
       {/* Upload Step */}
       {step === "upload" && (
         <div className="space-y-6">
-          {/* CSV Type Selector */}
-          <CsvTypeSelector value={csvType} onChange={setCsvType} />
-
-          {/* Instructions based on CSV type */}
-          <ImportInstructions csvType={csvType} />
-
-          <ImportDropzone onFileSelect={handleFileSelect} maxSizeMB={500} />
-
-          <div className="bg-gray-50 rounded-lg p-6">
-            <h3 className="font-semibold text-gray-900 mb-3">
-              Supported CSV Formats
-            </h3>
-
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-1">
-                  Option 1: Simple Format
-                </p>
-                <code className="block bg-white p-3 rounded text-sm font-mono overflow-x-auto">
-                  creative_id,date,impressions,clicks,spend,geography
-                </code>
-              </div>
-
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-1">
-                  Option 2: Google Authorized Buyers Export
-                </p>
-                <code className="block bg-white p-3 rounded text-sm font-mono overflow-x-auto text-xs">
-                  #Creative ID,Day,Country,Impressions,Clicks,Spend (buyer currency)
-                </code>
-              </div>
-            </div>
-
-            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-              <div className="flex gap-2">
-                <Info className="h-5 w-5 text-blue-600 flex-shrink-0" />
-                <div className="text-sm text-blue-800">
-                  <p className="font-medium">Auto-detection enabled</p>
-                  <ul className="mt-1 list-disc list-inside text-blue-700">
-                    <li>Flexible column names (#Creative ID, creative_id, etc.)</li>
-                    <li>Multiple date formats (MM/DD/YY, YYYY-MM-DD)</li>
-                    <li>Currency symbols removed automatically ($10.50 → 10.50)</li>
-                    <li>Hourly data aggregated to daily totals</li>
-                    <li className="font-medium">Large files (200MB+) supported with streaming upload</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <button
-                onClick={downloadExample}
-                className="text-primary-600 hover:text-primary-700 text-sm font-medium inline-flex items-center gap-1"
-              >
-                <Download className="h-4 w-4" />
-                Download Example CSV
-              </button>
-            </div>
+          {/* Main Upload Area */}
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <ImportDropzone onFileSelect={handleFileSelect} maxSizeMB={500} />
           </div>
+
+          {/* Collapsible Instructions */}
+          <details className="bg-white rounded-lg border border-gray-200">
+            <summary className="p-4 cursor-pointer hover:bg-gray-50 font-medium text-gray-900 flex items-center justify-between">
+              <span>How to export from Google Authorized Buyers</span>
+              <ChevronDown className="h-5 w-5 text-gray-500" />
+            </summary>
+            <div className="p-4 pt-0 border-t border-gray-200">
+              <ExportInstructions />
+            </div>
+          </details>
+
+          {/* Collapsible Required Columns */}
+          <details className="bg-white rounded-lg border border-gray-200">
+            <summary className="p-4 cursor-pointer hover:bg-gray-50 font-medium text-gray-900 flex items-center justify-between">
+              <span>Required columns</span>
+              <ChevronDown className="h-5 w-5 text-gray-500" />
+            </summary>
+            <div className="p-4 pt-0 border-t border-gray-200">
+              <RequiredColumnsTable />
+            </div>
+          </details>
+
+          {/* Collapsible Troubleshooting */}
+          <details className="bg-white rounded-lg border border-gray-200">
+            <summary className="p-4 cursor-pointer hover:bg-gray-50 font-medium text-gray-900 flex items-center justify-between">
+              <span>Troubleshooting large files</span>
+              <ChevronDown className="h-5 w-5 text-gray-500" />
+            </summary>
+            <div className="p-4 pt-0 border-t border-gray-200">
+              <TroubleshootingSection />
+            </div>
+          </details>
         </div>
       )}
 
@@ -370,31 +333,7 @@ export default function ImportPage() {
 
           {/* Column Detection Info */}
           {validationResult.detectedColumns && validationResult.valid && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-start gap-2">
-                <Info className="h-5 w-5 text-blue-600 mt-0.5" />
-                <div>
-                  <p className="font-medium text-blue-900">Auto-detected columns:</p>
-                  <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
-                    {Object.entries(validationResult.detectedColumns)
-                      .filter(([, v]) => v)
-                      .map(([key, value]) => (
-                        <div key={key} className="text-blue-800">
-                          <span className="font-mono bg-blue-100 px-1 rounded">
-                            {value}
-                          </span>
-                          {" → " + key}
-                        </div>
-                      ))}
-                  </div>
-                  {validationResult.hasHourlyData && (
-                    <p className="mt-2 text-blue-700">
-                      Hourly data detected - rows will be aggregated to daily totals
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
+            <ColumnMappingCard columns={validationResult.detectedColumns} />
           )}
 
           {/* Fatal Errors (only shown if file is unparseable) */}
@@ -595,44 +534,7 @@ export default function ImportPage() {
 
       {/* Success Step */}
       {step === "success" && importResult && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-          <div className="flex items-start gap-3">
-            <CheckCircle className="h-6 w-6 text-green-600 mt-0.5" />
-            <div className="flex-1">
-              <h3 className="font-semibold text-green-900 text-lg mb-2">
-                Import Complete!
-              </h3>
-              <div className="space-y-1 text-green-800">
-                <p>Successfully imported {importResult.imported?.toLocaleString() || 0} rows</p>
-                {importResult.duplicates !== undefined &&
-                  importResult.duplicates > 0 && (
-                    <p>Skipped {importResult.duplicates.toLocaleString()} duplicates/invalid rows</p>
-                  )}
-                {importResult.date_range && (
-                  <p>
-                    Date range: {importResult.date_range.start} to{" "}
-                    {importResult.date_range.end}
-                  </p>
-                )}
-                {importResult.total_spend !== undefined && (
-                  <p>Total spend: ${importResult.total_spend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                )}
-              </div>
-              <div className="mt-6 flex gap-3">
-                <button
-                  onClick={() => router.push("/creatives")}
-                  className="btn-primary"
-                >
-                  View Creatives
-                  <ArrowRight className="ml-1 h-4 w-4" />
-                </button>
-                <button onClick={resetForm} className="btn-secondary">
-                  Import More Data
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ImportResultCard result={importResult} onReset={resetForm} onViewCreatives={() => router.push("/creatives")} />
       )}
 
       {/* Error Step */}
@@ -670,6 +572,286 @@ export default function ImportPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================================
+// Sub-components
+// ============================================================================
+
+function ExportInstructions() {
+  return (
+    <div className="space-y-6 text-sm">
+      <div>
+        <h4 className="font-semibold text-gray-900 mb-2">Step 1: Create a Scheduled Report</h4>
+        <ol className="list-decimal list-inside text-gray-700 space-y-1">
+          <li>Go to <a href="https://authorized-buyers.google.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1">Authorized Buyers <ExternalLink className="h-3 w-3" /></a></li>
+          <li>Navigate to <strong>Reporting</strong> → <strong>New Report</strong></li>
+          <li>Select <strong>Schedule</strong> → Daily (runs automatically)</li>
+        </ol>
+      </div>
+
+      <div>
+        <h4 className="font-semibold text-gray-900 mb-2">Step 2: Select ALL Dimensions</h4>
+        <p className="text-gray-600 mb-2">
+          Add <strong>every available dimension</strong>. Start with Creative ID, then add all others:
+        </p>
+        <ul className="space-y-1 text-gray-700">
+          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> <strong>Creative ID</strong> <span className="text-gray-500">(key field - links to your creatives)</span></li>
+          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Day</li>
+          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Billing ID</li>
+          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Creative size</li>
+          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Country</li>
+          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Mobile app ID / Mobile app name</li>
+          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Publisher ID / Publisher name</li>
+          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Platform / Environment</li>
+          <li className="text-gray-500 italic pl-6">...and any other dimensions available</li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 className="font-semibold text-gray-900 mb-2">Step 3: Select ALL Metrics</h4>
+        <p className="text-gray-600 mb-2">
+          Add <strong>every available metric</strong>. We want all the data:
+        </p>
+        <ul className="space-y-1 text-gray-700">
+          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Reached queries</li>
+          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Impressions</li>
+          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Clicks</li>
+          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Spend</li>
+          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Video starts, Video completions, VAST errors</li>
+          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Active View metrics</li>
+          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Conversions (if available)</li>
+          <li className="text-gray-500 italic pl-6">...and any other metrics available</li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 className="font-semibold text-gray-900 mb-2">Step 4: Save & Schedule</h4>
+        <ul className="list-disc list-inside text-gray-700 space-y-1">
+          <li>Set date range: <strong>Yesterday</strong> (for daily automated exports)</li>
+          <li>File format: <strong>CSV</strong></li>
+          <li>Save the report</li>
+        </ul>
+      </div>
+
+      <div className="bg-blue-50 p-3 rounded-lg">
+        <p className="text-blue-800">
+          <strong>Tip:</strong> Download your first export manually to verify it works,
+          then let the schedule run daily. Upload each day{"'"}s CSV here.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function RequiredColumnsTable() {
+  return (
+    <div className="space-y-4 text-sm">
+      <p className="text-gray-600">
+        Cat-Scan imports <strong>all recognized columns</strong> from your CSV.
+        The more data you export, the better the analysis.
+      </p>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+        <p className="text-blue-800">
+          <strong>Creative ID</strong> is the key field that links performance data to your creative inventory.
+          Every row must have a Creative ID.
+        </p>
+      </div>
+
+      <div className="bg-gray-50 p-3 rounded-lg">
+        <p className="text-gray-700">
+          <strong>Column auto-detection:</strong> Cat-Scan automatically maps Google{"'"}s column names
+          (e.g., <code className="bg-gray-200 px-1 rounded">#Creative ID</code> → <code className="bg-gray-200 px-1 rounded">creative_id</code>).
+          Unknown columns are safely ignored.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function TroubleshootingSection() {
+  return (
+    <div className="space-y-4 text-sm">
+      <p className="text-gray-700">
+        If your CSV export is too large (over 100MB or times out):
+      </p>
+
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+        <h4 className="font-semibold text-yellow-800 mb-2">Split by Date, Keep ALL Data</h4>
+        <p className="text-gray-700 mb-2">
+          Create multiple scheduled reports for different date ranges, but keep ALL dimensions and metrics in each:
+        </p>
+        <ul className="space-y-1 text-gray-600 ml-4">
+          <li>• Report A: Yesterday (Day 1)</li>
+          <li>• Report B: 2 days ago (Day 2)</li>
+          <li>• etc.</li>
+        </ul>
+        <p className="text-gray-600 mt-2">
+          Upload each file separately. Cat-Scan will merge them using <strong>Creative ID</strong> as the key.
+        </p>
+      </div>
+
+      <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+        <h4 className="font-semibold text-red-800 mb-2">Do NOT split by metrics</h4>
+        <p className="text-gray-700">
+          Never create separate exports for different metrics (e.g., one for video, one for display).
+          This breaks the data model. Always export ALL metrics together.
+        </p>
+      </div>
+
+      <div>
+        <h4 className="font-semibold text-gray-900 mb-1">Streaming upload</h4>
+        <p className="text-gray-600">
+          Files over 5MB are automatically uploaded using streaming mode with progress tracking.
+          This handles files up to 500MB.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ColumnMappingCard({ columns }: { columns: Record<string, string> }) {
+  const mappedColumns = Object.entries(columns).filter(([, v]) => v);
+
+  return (
+    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+      <div className="flex items-start gap-2">
+        <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
+        <div className="flex-1">
+          <p className="font-medium text-green-900">Columns detected and mapped</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {mappedColumns.map(([key, value]) => (
+              <span key={key} className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 text-xs rounded">
+                <span className="font-mono">{value}</span>
+                <span className="mx-1 text-green-600">→</span>
+                <span>{key}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ImportResultCard({
+  result,
+  onReset,
+  onViewCreatives
+}: {
+  result: ImportResponse;
+  onReset: () => void;
+  onViewCreatives: () => void;
+}) {
+  const success = result.success !== false && (result.imported ?? 0) > 0;
+
+  return (
+    <div className={`rounded-lg p-6 border ${
+      success
+        ? "bg-green-50 border-green-200"
+        : "bg-red-50 border-red-200"
+    }`}>
+      <div className="flex items-start gap-3">
+        {success ? (
+          <CheckCircle className="h-6 w-6 text-green-600 mt-0.5" />
+        ) : (
+          <XCircle className="h-6 w-6 text-red-600 mt-0.5" />
+        )}
+        <div className="flex-1">
+          <h3 className={`font-semibold text-lg mb-4 ${success ? "text-green-900" : "text-red-900"}`}>
+            {success ? "Import Successful" : "Import Failed"}
+          </h3>
+
+          {/* Stats Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div>
+              <p className="text-gray-500 text-sm">Rows imported</p>
+              <p className={`font-bold text-xl ${success ? "text-green-700" : "text-gray-700"}`}>
+                {(result.imported ?? 0).toLocaleString()}
+              </p>
+            </div>
+            {result.duplicates !== undefined && result.duplicates > 0 && (
+              <div>
+                <p className="text-gray-500 text-sm">Duplicates skipped</p>
+                <p className="font-medium text-gray-600">{result.duplicates.toLocaleString()}</p>
+              </div>
+            )}
+            {result.date_range && (
+              <div className="col-span-2">
+                <p className="text-gray-500 text-sm">Date range</p>
+                <p className="font-medium text-gray-700">
+                  {result.date_range.start} → {result.date_range.end}
+                </p>
+              </div>
+            )}
+            {result.total_spend !== undefined && result.total_spend > 0 && (
+              <div>
+                <p className="text-gray-500 text-sm">Total spend</p>
+                <p className="font-medium text-gray-700">
+                  ${result.total_spend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Columns Imported */}
+          {success && result.columns_imported && result.columns_imported.length > 0 && (
+            <div className="mb-4">
+              <p className="text-gray-500 text-sm mb-2">Columns imported:</p>
+              <div className="flex flex-wrap gap-1">
+                {result.columns_imported.map(col => (
+                  <span key={col} className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs">
+                    {col}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Error if any */}
+          {result.error && (
+            <p className="text-red-700 mb-4">{result.error}</p>
+          )}
+
+          {/* Missing required columns */}
+          {result.required_missing && result.required_missing.length > 0 && (
+            <div className="mb-4 p-3 bg-red-100 rounded-lg">
+              <p className="text-red-800 text-sm font-medium mb-1">Missing required columns:</p>
+              <div className="flex flex-wrap gap-1">
+                {result.required_missing.map(col => (
+                  <span key={col} className="px-2 py-0.5 bg-red-200 text-red-900 rounded text-xs font-medium">
+                    {col}
+                  </span>
+                ))}
+              </div>
+              {result.fix_instructions && (
+                <details className="mt-2">
+                  <summary className="text-red-700 text-sm cursor-pointer hover:underline">
+                    How to fix this
+                  </summary>
+                  <pre className="mt-2 text-xs text-red-800 whitespace-pre-wrap">{result.fix_instructions}</pre>
+                </details>
+              )}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-3">
+            {success && (
+              <button onClick={onViewCreatives} className="btn-primary">
+                View Creatives
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </button>
+            )}
+            <button onClick={onReset} className="btn-secondary">
+              {success ? "Import More Data" : "Try Again"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
