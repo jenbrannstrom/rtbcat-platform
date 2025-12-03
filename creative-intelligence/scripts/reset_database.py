@@ -30,58 +30,52 @@ def reset_tables():
     """)
     print("   ✓ Dropped: size_metrics_daily, performance_metrics, fraud_signals")
 
-    print("\n2. Creating unified performance_data table...")
+    print("\n2. Creating unified rtb_daily table...")
     cursor.executescript("""
-        -- Unified Performance Data Table
+        -- THE Fact Table: rtb_daily
         -- Stores raw CSV data from Authorized Buyers exports
         -- No aggregation at import - one CSV row = one DB row
+        --
+        -- NOTE: buyer_id, bidder_id are TEXT because Google API returns them as strings
+        -- Converting to INTEGER would risk data loss if Google changes format
 
-        CREATE TABLE IF NOT EXISTS performance_data (
+        CREATE TABLE IF NOT EXISTS rtb_daily (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-            -- REQUIRED: Date (every export has this)
-            metric_date DATE NOT NULL,
+            -- ========================================
+            -- ESSENTIAL FIELDS (Always export these)
+            -- ========================================
+            metric_date DATE NOT NULL,           -- Every export has this
+            creative_id TEXT,                    -- Join key to creatives table
+            billing_id TEXT,                     -- Pretargeting config ID (TEXT - Google format)
+            creative_size TEXT,                  -- Size from bid request
+            country TEXT,                        -- ESSENTIAL for geo analysis
+            app_id TEXT,                         -- ESSENTIAL - where we buy inventory
+            advertiser TEXT,                     -- ESSENTIAL - detect blocked advertisers
+            reached_queries INTEGER,             -- THE critical waste metric
+            impressions INTEGER,                 -- Win rate calculation
+            clicks INTEGER,                      -- ESSENTIAL - major engagement signal
+            spend_micros INTEGER,                -- Cost tracking
 
-            -- DIMENSIONS (all optional - depend on export config)
-            -- Identity
-            creative_id TEXT,
-            billing_id TEXT,
+            -- ========================================
+            -- IMPORTANT DIMENSIONS
+            -- ========================================
+            creative_format TEXT,                -- HTML, VIDEO, etc.
+            platform TEXT,                       -- Desktop, Mobile, Tablet
+            environment TEXT,                    -- App, Web
+            app_name TEXT,                       -- Human-readable app name
+            publisher_id TEXT,                   -- Publisher blocklist candidates
+            publisher_name TEXT,                 -- Human-readable
+            publisher_domain TEXT,               -- Domain-level analysis
+            deal_id TEXT,                        -- Deal identifier
+            deal_name TEXT,                      -- Human-readable
+            transaction_type TEXT,               -- Open auction, PMP, etc.
+            buyer_account_id TEXT,               -- Buyer seat ID (TEXT - Google format)
+            buyer_account_name TEXT,             -- Human-readable
 
-            -- Creative info
-            creative_size TEXT,
-            creative_format TEXT,
-
-            -- Geography/Platform
-            country TEXT,
-            platform TEXT,
-            environment TEXT,
-
-            -- App info (Mobile app ID is package name like "com.spotify.music")
-            app_id TEXT,
-            app_name TEXT,
-
-            -- Publisher info
-            publisher_id TEXT,
-            publisher_name TEXT,
-            publisher_domain TEXT,
-
-            -- Deal info
-            deal_id TEXT,
-            deal_name TEXT,
-            transaction_type TEXT,
-
-            -- Buyer/Advertiser
-            advertiser TEXT,
-            buyer_account_id TEXT,
-            buyer_account_name TEXT,
-
-            -- METRICS (store what's available)
-            reached_queries INTEGER,
-            impressions INTEGER,
-            clicks INTEGER,
-            spend_micros INTEGER,
-
-            -- Video metrics
+            -- ========================================
+            -- VIDEO METRICS
+            -- ========================================
             video_starts INTEGER,
             video_first_quartile INTEGER,
             video_midpoint INTEGER,
@@ -90,15 +84,36 @@ def reset_tables():
             vast_errors INTEGER,
             engaged_views INTEGER,
 
-            -- Viewability
+            -- ========================================
+            -- VIEWABILITY
+            -- ========================================
             active_view_measurable INTEGER,
             active_view_viewable INTEGER,
 
-            -- Flags
+            -- ========================================
+            -- CONVERSIONS (Vendor-agnostic UA data)
+            -- ========================================
+            conversions INTEGER,                          -- Generic conversion count
+            ua_installs INTEGER,                          -- App installs
+            ua_reinstalls INTEGER,                        -- App reinstalls
+            ua_uninstalls INTEGER,                        -- App uninstalls
+            ua_sessions INTEGER,                          -- App sessions
+            ua_in_app_events INTEGER,                     -- In-app events
+            ua_ad_revenue REAL,                           -- Ad revenue (USD)
+            ua_skan_conversions INTEGER,                  -- SKAdNetwork conversions (iOS)
+            ua_retargeting_reengagements INTEGER,         -- Retargeting re-engagements
+            ua_retargeting_reattributions INTEGER,        -- Retargeting re-attributions
+            ua_fraud_blocked_installs INTEGER,            -- Fraud: blocked installs
+
+            -- ========================================
+            -- SDK FLAGS
+            -- ========================================
             gma_sdk INTEGER DEFAULT 0,
             buyer_sdk INTEGER DEFAULT 0,
 
+            -- ========================================
             -- METADATA
+            -- ========================================
             row_hash TEXT,
             import_batch_id TEXT,
             imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -108,20 +123,23 @@ def reset_tables():
         );
 
         -- Indices for common queries
-        CREATE INDEX IF NOT EXISTS idx_perf_date ON performance_data(metric_date);
-        CREATE INDEX IF NOT EXISTS idx_perf_creative ON performance_data(creative_id);
-        CREATE INDEX IF NOT EXISTS idx_perf_billing ON performance_data(billing_id);
-        CREATE INDEX IF NOT EXISTS idx_perf_size ON performance_data(creative_size);
-        CREATE INDEX IF NOT EXISTS idx_perf_country ON performance_data(country);
-        CREATE INDEX IF NOT EXISTS idx_perf_app ON performance_data(app_id);
-        CREATE INDEX IF NOT EXISTS idx_perf_batch ON performance_data(import_batch_id);
+        CREATE INDEX IF NOT EXISTS idx_rtb_date ON rtb_daily(metric_date);
+        CREATE INDEX IF NOT EXISTS idx_rtb_creative ON rtb_daily(creative_id);
+        CREATE INDEX IF NOT EXISTS idx_rtb_billing ON rtb_daily(billing_id);
+        CREATE INDEX IF NOT EXISTS idx_rtb_size ON rtb_daily(creative_size);
+        CREATE INDEX IF NOT EXISTS idx_rtb_country ON rtb_daily(country);
+        CREATE INDEX IF NOT EXISTS idx_rtb_app ON rtb_daily(app_id);
+        CREATE INDEX IF NOT EXISTS idx_rtb_advertiser ON rtb_daily(advertiser);
+        CREATE INDEX IF NOT EXISTS idx_rtb_batch ON rtb_daily(import_batch_id);
 
         -- Compound indices for reports
-        CREATE INDEX IF NOT EXISTS idx_perf_date_billing ON performance_data(metric_date, billing_id);
-        CREATE INDEX IF NOT EXISTS idx_perf_date_size ON performance_data(metric_date, creative_size);
-        CREATE INDEX IF NOT EXISTS idx_perf_date_creative ON performance_data(metric_date, creative_id);
+        CREATE INDEX IF NOT EXISTS idx_rtb_date_billing ON rtb_daily(metric_date, billing_id);
+        CREATE INDEX IF NOT EXISTS idx_rtb_date_size ON rtb_daily(metric_date, creative_size);
+        CREATE INDEX IF NOT EXISTS idx_rtb_date_creative ON rtb_daily(metric_date, creative_id);
+        CREATE INDEX IF NOT EXISTS idx_rtb_date_app ON rtb_daily(metric_date, app_id);
+        CREATE INDEX IF NOT EXISTS idx_rtb_date_country ON rtb_daily(metric_date, country);
     """)
-    print("   ✓ Created: performance_data with indices")
+    print("   ✓ Created: rtb_daily with indices")
 
     print("\n3. Creating fraud_signals table...")
     cursor.executescript("""
@@ -154,7 +172,34 @@ def reset_tables():
     """)
     print("   ✓ Created: fraud_signals")
 
-    print("\n4. Creating import_history table...")
+    print("\n4. Creating waste_signals table (Phase 11.2)...")
+    cursor.executescript("""
+        -- Phase 11.2: Evidence-based waste signals
+        -- Stores waste detection signals with full evidence chain
+        CREATE TABLE IF NOT EXISTS waste_signals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            creative_id TEXT NOT NULL,
+            signal_type TEXT NOT NULL,
+            confidence TEXT DEFAULT 'medium',  -- low, medium, high
+            evidence JSON NOT NULL,  -- Full evidence object
+            observation TEXT,  -- Human-readable explanation
+            recommendation TEXT,  -- Suggested action
+            detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            resolved_at TIMESTAMP,
+            resolved_by TEXT,
+            resolution_notes TEXT,
+
+            FOREIGN KEY (creative_id) REFERENCES creatives(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_waste_signals_creative ON waste_signals(creative_id);
+        CREATE INDEX IF NOT EXISTS idx_waste_signals_type ON waste_signals(signal_type);
+        CREATE INDEX IF NOT EXISTS idx_waste_signals_confidence ON waste_signals(confidence);
+        CREATE INDEX IF NOT EXISTS idx_waste_signals_unresolved ON waste_signals(resolved_at) WHERE resolved_at IS NULL;
+    """)
+    print("   ✓ Created: waste_signals with indices")
+
+    print("\n5. Creating import_history table...")
     cursor.executescript("""
         CREATE TABLE IF NOT EXISTS import_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -183,12 +228,71 @@ def reset_tables():
     """)
     print("   ✓ Created: import_history")
 
+    print("\n6. Creating troubleshooting_data tables (Phase 11)...")
+    cursor.executescript("""
+        -- Phase 11: RTB Troubleshooting API data storage
+        -- Low-volume aggregate data (~100-200 rows/day)
+        -- Store raw JSON, extract only what's needed for indexing
+
+        CREATE TABLE IF NOT EXISTS troubleshooting_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            -- When collected
+            collection_date DATE NOT NULL,
+            collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+            -- What type of data
+            metric_type TEXT NOT NULL,  -- 'filtered_bids', 'bid_metrics', 'callout_status', 'loser_bids'
+
+            -- Extracted keys for querying (from raw_data)
+            status_code INTEGER,        -- creative_status_id or callout_status_id
+            status_name TEXT,           -- Human-readable status
+
+            -- The actual numbers
+            bid_count INTEGER,
+            impression_count INTEGER,
+
+            -- Full API response for anything we didn't extract
+            raw_data JSON,
+
+            -- Prevent duplicates
+            UNIQUE(collection_date, metric_type, status_code)
+        );
+
+        -- Collection log (one row per API call)
+        CREATE TABLE IF NOT EXISTS troubleshooting_collections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            collection_date DATE NOT NULL,
+            days_requested INTEGER,
+            filter_set_name TEXT,
+
+            -- What we got
+            filtered_bids_count INTEGER DEFAULT 0,
+            bid_metrics_count INTEGER DEFAULT 0,
+            callout_count INTEGER DEFAULT 0,
+
+            -- Full raw response (for debugging)
+            raw_response JSON,
+
+            status TEXT DEFAULT 'complete',
+            error_message TEXT,
+            collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+            UNIQUE(collection_date)
+        );
+
+        -- Minimal indexes - add more when we know query patterns
+        CREATE INDEX IF NOT EXISTS idx_ts_date_type ON troubleshooting_data(collection_date, metric_type);
+        CREATE INDEX IF NOT EXISTS idx_ts_status ON troubleshooting_data(status_name);
+    """)
+    print("   ✓ Created: troubleshooting_data and troubleshooting_collections")
+
     conn.commit()
 
     # Verify creatives table still exists
     cursor.execute("SELECT COUNT(*) FROM creatives")
     creative_count = cursor.fetchone()[0]
-    print(f"\n5. Verified: creatives table intact ({creative_count} rows)")
+    print(f"\n7. Verified: creatives table intact ({creative_count} rows)")
 
     conn.close()
     print("\n✅ Database reset complete!")

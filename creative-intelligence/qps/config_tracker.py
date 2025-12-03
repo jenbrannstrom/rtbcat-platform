@@ -47,7 +47,7 @@ class ConfigPerformanceTracker:
 
     def get_config_metrics(self, days: int = 7) -> Dict[str, Dict]:
         """
-        Get aggregated metrics by billing_id from performance_data.
+        Get aggregated metrics by billing_id from rtb_daily.
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -64,7 +64,7 @@ class ConfigPerformanceTracker:
                     SUM(COALESCE(impressions, 0)) as total_impressions,
                     SUM(COALESCE(clicks, 0)) as total_clicks,
                     SUM(COALESCE(spend_micros, 0)) as total_spend_micros
-                FROM performance_data
+                FROM rtb_daily
                 WHERE metric_date >= ?
                   AND billing_id IS NOT NULL
                 GROUP BY billing_id

@@ -15,8 +15,12 @@ from googleapiclient.errors import HttpError
 
 logger = logging.getLogger(__name__)
 
-# Authorized Buyers RTB API scope
+# Authorized Buyers API scopes
 AUTHORIZED_BUYERS_SCOPE = "https://www.googleapis.com/auth/realtime-bidding"
+ADEXCHANGE_BUYER_SCOPE = "https://www.googleapis.com/auth/adexchange.buyer"
+
+# Combined scopes for full functionality
+ALL_SCOPES = [AUTHORIZED_BUYERS_SCOPE, ADEXCHANGE_BUYER_SCOPE]
 
 T = TypeVar("T")
 

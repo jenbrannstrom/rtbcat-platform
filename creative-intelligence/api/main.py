@@ -28,6 +28,8 @@ from config import ConfigManager
 from storage import SQLiteStore, PerformanceMetric, creative_dicts_to_storage
 from analytics import WasteAnalyzer
 from api.campaigns_router import router as campaigns_router
+from services.campaign_aggregation import CampaignAggregationService
+from services.waste_analyzer import WasteAnalyzerService
 
 logger = logging.getLogger(__name__)
 
@@ -118,12 +120,35 @@ class CreativeResponse(BaseModel):
     waste_flags: Optional[WasteFlagsResponse] = None
 
 
+class CampaignMetricsResponse(BaseModel):
+    """Aggregated metrics for a campaign within a timeframe."""
+    total_spend_micros: int = 0
+    total_impressions: int = 0
+    total_clicks: int = 0
+    total_reached_queries: int = 0
+    avg_cpm: Optional[float] = None
+    avg_ctr: Optional[float] = None
+    waste_score: Optional[float] = None  # (reached - imps) / reached * 100
+
+
+class CampaignWarningsResponse(BaseModel):
+    """Warning counts for a campaign."""
+    broken_video_count: int = 0
+    zero_engagement_count: int = 0
+    high_spend_low_performance: int = 0
+    disapproved_count: int = 0
+
+
 class CampaignResponse(BaseModel):
-    """Response model for campaign data."""
+    """Response model for campaign data with optional metrics."""
 
     id: str
     name: str
     creative_ids: list[str] = Field(default_factory=list)
+    creative_count: int = 0
+    timeframe_days: Optional[int] = None
+    metrics: Optional[CampaignMetricsResponse] = None
+    warnings: Optional[CampaignWarningsResponse] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -133,6 +158,35 @@ class ClusterAssignment(BaseModel):
 
     creative_id: str
     cluster_id: str
+
+
+# ============================================================
+# Phase 11.4: Pagination Models
+# ============================================================
+
+from typing import Generic, TypeVar
+T = TypeVar('T')
+
+class PaginationMeta(BaseModel):
+    """Pagination metadata for list responses."""
+    timeframe_days: Optional[int] = None
+    total: int
+    returned: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
+class PaginatedCreativesResponse(BaseModel):
+    """Paginated response for creatives list."""
+    data: list[CreativeResponse]
+    meta: PaginationMeta
+
+
+class PaginatedCampaignsResponse(BaseModel):
+    """Paginated response for campaigns list."""
+    data: list[CampaignResponse]
+    meta: PaginationMeta
 
 
 class CollectRequest(BaseModel):
@@ -776,7 +830,7 @@ async def _get_waste_flags_for_creatives(
         return {}
 
     # Get performance data for all creatives in timeframe
-    # We need to query the performance_data table for impressions/clicks
+    # We need to query the rtb_daily table for impressions/clicks
     async with store._connection() as conn:
         import asyncio
         loop = asyncio.get_event_loop()
@@ -788,7 +842,7 @@ async def _get_waste_flags_for_creatives(
                 SELECT creative_id,
                        SUM(impressions) as total_impressions,
                        SUM(clicks) as total_clicks
-                FROM performance_data
+                FROM rtb_daily
                 WHERE creative_id IN ({placeholders})
                   AND metric_date >= date('now', '-{days} days')
                 GROUP BY creative_id
@@ -835,23 +889,48 @@ async def list_creatives(
     offset: int = Query(0, ge=0, description="Results offset"),
     slim: bool = Query(True, description="Exclude large fields (vast_xml, html snippets) for faster loading"),
     days: int = Query(7, ge=1, le=365, description="Timeframe for waste detection (default 7 days)"),
+    active_only: bool = Query(False, description="Only return creatives with activity (impressions/clicks/spend) in timeframe"),
     store: SQLiteStore = Depends(get_store),
 ):
     """List creatives with optional filtering.
 
-    By default, slim=True excludes large fields like vast_xml and html snippets
-    to reduce payload size. Set slim=False for full data.
-
-    Includes thumbnail_status and waste_flags for each creative.
+    Phase 11.1: Decision Context Foundation
+    - By default, slim=True excludes large fields like vast_xml and html snippets
+    - Set active_only=True to hide creatives with zero activity in the timeframe
+    - Includes thumbnail_status and waste_flags for each creative
     """
     creatives = await store.list_creatives(
         campaign_id=campaign_id,
         cluster_id=cluster_id,
         buyer_id=buyer_id,
         format=format,
-        limit=limit,
+        limit=limit if not active_only else limit * 3,  # Fetch more if filtering
         offset=offset,
     )
+
+    # If active_only, filter to creatives with activity in timeframe
+    if active_only and creatives:
+        creative_ids = [c.id for c in creatives]
+        async with store._connection() as conn:
+            import asyncio
+            loop = asyncio.get_event_loop()
+
+            def _get_active_ids():
+                placeholders = ",".join("?" * len(creative_ids))
+                cursor = conn.execute(
+                    f"""
+                    SELECT DISTINCT creative_id
+                    FROM rtb_daily
+                    WHERE creative_id IN ({placeholders})
+                      AND metric_date >= date('now', '-{days} days')
+                      AND (impressions > 0 OR clicks > 0 OR spend_micros > 0)
+                    """,
+                    creative_ids,
+                )
+                return set(row["creative_id"] for row in cursor.fetchall())
+
+            active_ids = await loop.run_in_executor(None, _get_active_ids)
+            creatives = [c for c in creatives if c.id in active_ids][:limit]
 
     # Get thumbnail status and waste flags for all creatives
     creative_ids = [c.id for c in creatives]
@@ -885,6 +964,115 @@ async def list_creatives(
         )
         for c in creatives
     ]
+
+
+@app.get("/creatives/v2", response_model=PaginatedCreativesResponse, tags=["Creatives"])
+async def list_creatives_paginated(
+    campaign_id: Optional[str] = Query(None, description="Filter by campaign ID"),
+    cluster_id: Optional[str] = Query(None, description="Filter by cluster ID"),
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    format: Optional[str] = Query(None, description="Filter by creative format"),
+    limit: int = Query(50, ge=1, le=200, description="Page size (max 200)"),
+    offset: int = Query(0, ge=0, description="Results offset"),
+    slim: bool = Query(True, description="Exclude large fields for faster loading"),
+    days: int = Query(7, ge=1, le=365, description="Timeframe for waste detection"),
+    active_only: bool = Query(False, description="Only return creatives with activity in timeframe"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """List creatives with pagination metadata.
+
+    Phase 11.4: Scale Readiness
+    Returns paginated results with metadata for large accounts.
+    """
+    # Get total count for pagination
+    async with store._connection() as conn:
+        import asyncio
+        loop = asyncio.get_event_loop()
+
+        def _count():
+            cursor = conn.execute("SELECT COUNT(*) FROM creatives")
+            return cursor.fetchone()[0]
+
+        total = await loop.run_in_executor(None, _count)
+
+    # Fetch creatives
+    creatives = await store.list_creatives(
+        campaign_id=campaign_id,
+        cluster_id=cluster_id,
+        buyer_id=buyer_id,
+        format=format,
+        limit=limit if not active_only else limit * 3,
+        offset=offset,
+    )
+
+    # Filter by activity if requested
+    if active_only and creatives:
+        creative_ids = [c.id for c in creatives]
+        async with store._connection() as conn:
+            import asyncio
+            loop = asyncio.get_event_loop()
+
+            def _get_active_ids():
+                placeholders = ",".join("?" * len(creative_ids))
+                cursor = conn.execute(
+                    f"""
+                    SELECT DISTINCT creative_id
+                    FROM rtb_daily
+                    WHERE creative_id IN ({placeholders})
+                      AND metric_date >= date('now', '-{days} days')
+                      AND (impressions > 0 OR clicks > 0 OR spend_micros > 0)
+                    """,
+                    creative_ids,
+                )
+                return set(row["creative_id"] for row in cursor.fetchall())
+
+            active_ids = await loop.run_in_executor(None, _get_active_ids)
+            creatives = [c for c in creatives if c.id in active_ids][:limit]
+
+    # Get thumbnail status and waste flags
+    creative_ids = [c.id for c in creatives]
+    thumbnail_statuses = await _get_thumbnail_status_for_creatives(store, creative_ids)
+    waste_flags = await _get_waste_flags_for_creatives(store, creative_ids, thumbnail_statuses, days)
+
+    data = [
+        CreativeResponse(
+            id=c.id,
+            name=c.name,
+            format=c.format,
+            account_id=c.account_id,
+            buyer_id=c.buyer_id,
+            approval_status=c.approval_status,
+            width=c.width,
+            height=c.height,
+            final_url=c.final_url,
+            display_url=c.display_url,
+            utm_source=c.utm_source,
+            utm_medium=c.utm_medium,
+            utm_campaign=c.utm_campaign,
+            utm_content=c.utm_content,
+            utm_term=c.utm_term,
+            advertiser_name=c.advertiser_name,
+            campaign_id=c.campaign_id,
+            cluster_id=c.cluster_id,
+            seat_name=c.seat_name,
+            thumbnail_status=thumbnail_statuses.get(c.id),
+            waste_flags=waste_flags.get(c.id),
+            **_extract_preview_data(c, slim=slim),
+        )
+        for c in creatives
+    ]
+
+    return PaginatedCreativesResponse(
+        data=data,
+        meta=PaginationMeta(
+            timeframe_days=days,
+            total=total,
+            returned=len(data),
+            limit=limit,
+            offset=offset,
+            has_more=offset + len(data) < total,
+        ),
+    )
 
 
 @app.get("/creatives/{creative_id}", response_model=CreativeResponse, tags=["Creatives"])
@@ -971,19 +1159,125 @@ async def remove_from_campaign(
 
 
 @app.get("/campaigns", response_model=list[CampaignResponse], tags=["Campaigns"])
-async def list_campaigns(store: SQLiteStore = Depends(get_store)):
-    """List all campaigns with their creative IDs."""
-    campaigns = await store.list_campaigns()
-    return [
+async def list_campaigns(
+    days: int = Query(7, ge=1, le=365, description="Timeframe for metrics aggregation (default 7 days)"),
+    include_metrics: bool = Query(True, description="Include performance metrics and warnings"),
+    include_empty: bool = Query(True, description="Include campaigns with no activity in timeframe"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """List all campaigns with aggregated metrics for the given timeframe.
+
+    Phase 11.1: Decision Context Foundation
+    - Returns aggregated spend, impressions, clicks, waste_score
+    - Includes warning counts (broken videos, zero engagement, etc.)
+    - Filters by timeframe to show relevant data
+    """
+    if include_metrics:
+        # Use aggregation service for metrics
+        service = CampaignAggregationService()
+        campaigns = service.get_campaigns_with_metrics(days=days, include_empty=include_empty)
+        return [
+            CampaignResponse(
+                id=c.id,
+                name=c.name,
+                creative_ids=c.creative_ids,
+                creative_count=c.creative_count,
+                timeframe_days=c.timeframe_days,
+                metrics=CampaignMetricsResponse(
+                    total_spend_micros=c.metrics.total_spend_micros,
+                    total_impressions=c.metrics.total_impressions,
+                    total_clicks=c.metrics.total_clicks,
+                    total_reached_queries=c.metrics.total_reached_queries,
+                    avg_cpm=c.metrics.avg_cpm,
+                    avg_ctr=c.metrics.avg_ctr,
+                    waste_score=c.metrics.waste_score,
+                ) if c.metrics else None,
+                warnings=CampaignWarningsResponse(
+                    broken_video_count=c.warnings.broken_video_count,
+                    zero_engagement_count=c.warnings.zero_engagement_count,
+                    high_spend_low_performance=c.warnings.high_spend_low_performance,
+                    disapproved_count=c.warnings.disapproved_count,
+                ) if c.warnings else None,
+                created_at=c.created_at,
+                updated_at=c.updated_at,
+            )
+            for c in campaigns
+        ]
+    else:
+        # Fallback to basic listing without metrics
+        campaigns = await store.list_campaigns()
+        return [
+            CampaignResponse(
+                id=c["id"],
+                name=c["name"],
+                creative_ids=c["creative_ids"],
+                creative_count=len(c["creative_ids"]),
+                created_at=str(c["created_at"]) if c.get("created_at") else None,
+                updated_at=str(c["updated_at"]) if c.get("updated_at") else None,
+            )
+            for c in campaigns
+        ]
+
+
+@app.get("/campaigns/v2", response_model=PaginatedCampaignsResponse, tags=["Campaigns"])
+async def list_campaigns_paginated(
+    days: int = Query(7, ge=1, le=365, description="Timeframe for metrics aggregation"),
+    limit: int = Query(50, ge=1, le=200, description="Page size (max 200)"),
+    offset: int = Query(0, ge=0, description="Results offset"),
+    include_empty: bool = Query(True, description="Include campaigns with no activity in timeframe"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """List campaigns with pagination metadata and aggregated metrics.
+
+    Phase 11.4: Scale Readiness
+    Returns paginated results with metadata for large accounts.
+    """
+    service = CampaignAggregationService()
+    all_campaigns = service.get_campaigns_with_metrics(days=days, include_empty=include_empty)
+
+    # Apply pagination
+    total = len(all_campaigns)
+    campaigns = all_campaigns[offset:offset + limit]
+
+    data = [
         CampaignResponse(
-            id=c["id"],
-            name=c["name"],
-            creative_ids=c["creative_ids"],
-            created_at=str(c["created_at"]) if c.get("created_at") else None,
-            updated_at=str(c["updated_at"]) if c.get("updated_at") else None,
+            id=c.id,
+            name=c.name,
+            creative_ids=c.creative_ids,
+            creative_count=c.creative_count,
+            timeframe_days=c.timeframe_days,
+            metrics=CampaignMetricsResponse(
+                total_spend_micros=c.metrics.total_spend_micros,
+                total_impressions=c.metrics.total_impressions,
+                total_clicks=c.metrics.total_clicks,
+                total_reached_queries=c.metrics.total_reached_queries,
+                avg_cpm=c.metrics.avg_cpm,
+                avg_ctr=c.metrics.avg_ctr,
+                waste_score=c.metrics.waste_score,
+            ) if c.metrics else None,
+            warnings=CampaignWarningsResponse(
+                broken_video_count=c.warnings.broken_video_count,
+                zero_engagement_count=c.warnings.zero_engagement_count,
+                high_spend_low_performance=c.warnings.high_spend_low_performance,
+                disapproved_count=c.warnings.disapproved_count,
+            ) if c.warnings else None,
+            created_at=c.created_at,
+            updated_at=c.updated_at,
         )
         for c in campaigns
     ]
+
+    return PaginatedCampaignsResponse(
+        data=data,
+        meta=PaginationMeta(
+            timeframe_days=days,
+            total=total,
+            returned=len(data),
+            limit=limit,
+            offset=offset,
+            has_more=offset + len(data) < total,
+        ),
+    )
 
 
 @app.get("/campaigns/unclustered", tags=["Campaigns"])
@@ -1009,7 +1303,7 @@ async def get_unclustered_creatives_early(
                 cursor = conn.execute(
                     f"""
                     SELECT DISTINCT creative_id
-                    FROM performance_data
+                    FROM rtb_daily
                     WHERE creative_id IN ({placeholders})
                       AND metric_date >= date('now', '-{days} days')
                       AND (impressions > 0 OR clicks > 0 OR spend_micros > 0)
@@ -1028,20 +1322,57 @@ async def get_unclustered_creatives_early(
 @app.get("/campaigns/{campaign_id}", response_model=CampaignResponse, tags=["Campaigns"])
 async def get_campaign(
     campaign_id: str,
+    days: int = Query(7, ge=1, le=365, description="Timeframe for metrics aggregation"),
+    include_metrics: bool = Query(True, description="Include performance metrics"),
     store: SQLiteStore = Depends(get_store),
 ):
-    """Get a specific campaign by ID."""
-    campaign = await store.get_campaign(campaign_id)
-    if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+    """Get a specific campaign by ID with metrics.
 
-    return CampaignResponse(
-        id=campaign["id"],
-        name=campaign["name"],
-        creative_ids=campaign["creative_ids"],
-        created_at=str(campaign["created_at"]) if campaign.get("created_at") else None,
-        updated_at=str(campaign["updated_at"]) if campaign.get("updated_at") else None,
-    )
+    Phase 11.1: Decision Context Foundation
+    """
+    if include_metrics:
+        service = CampaignAggregationService()
+        campaign = service.get_campaign_with_metrics(campaign_id, days=days)
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+
+        return CampaignResponse(
+            id=campaign.id,
+            name=campaign.name,
+            creative_ids=campaign.creative_ids,
+            creative_count=campaign.creative_count,
+            timeframe_days=campaign.timeframe_days,
+            metrics=CampaignMetricsResponse(
+                total_spend_micros=campaign.metrics.total_spend_micros,
+                total_impressions=campaign.metrics.total_impressions,
+                total_clicks=campaign.metrics.total_clicks,
+                total_reached_queries=campaign.metrics.total_reached_queries,
+                avg_cpm=campaign.metrics.avg_cpm,
+                avg_ctr=campaign.metrics.avg_ctr,
+                waste_score=campaign.metrics.waste_score,
+            ) if campaign.metrics else None,
+            warnings=CampaignWarningsResponse(
+                broken_video_count=campaign.warnings.broken_video_count,
+                zero_engagement_count=campaign.warnings.zero_engagement_count,
+                high_spend_low_performance=campaign.warnings.high_spend_low_performance,
+                disapproved_count=campaign.warnings.disapproved_count,
+            ) if campaign.warnings else None,
+            created_at=campaign.created_at,
+            updated_at=campaign.updated_at,
+        )
+    else:
+        campaign = await store.get_campaign(campaign_id)
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+
+        return CampaignResponse(
+            id=campaign["id"],
+            name=campaign["name"],
+            creative_ids=campaign["creative_ids"],
+            creative_count=len(campaign["creative_ids"]),
+            created_at=str(campaign["created_at"]) if campaign.get("created_at") else None,
+            updated_at=str(campaign["updated_at"]) if campaign.get("updated_at") else None,
+        )
 
 
 class CollectResponse(BaseModel):
@@ -1664,6 +1995,84 @@ async def get_waste_report(
     except Exception as e:
         logger.error(f"Waste analysis failed: {e}")
         raise HTTPException(status_code=500, detail=f"Waste analysis failed: {str(e)}")
+
+
+# ============================================================
+# Phase 11.2: Evidence-Based Waste Signals
+# ============================================================
+
+class WasteSignalResponse(BaseModel):
+    """Response model for a waste signal."""
+    id: int
+    creative_id: str
+    signal_type: str
+    confidence: str
+    evidence: dict
+    observation: str
+    recommendation: str
+    detected_at: str
+    resolved_at: Optional[str] = None
+
+
+@app.get("/analytics/waste-signals/{creative_id}", response_model=list[WasteSignalResponse], tags=["Analytics"])
+async def get_waste_signals(
+    creative_id: str,
+    include_resolved: bool = Query(False, description="Include resolved signals"),
+):
+    """Get evidence-based waste signals for a creative.
+
+    Phase 11.2: Evidence-Based Waste Detection
+    Returns signals with full evidence chain explaining WHY the creative is flagged.
+    """
+    service = WasteAnalyzerService()
+    signals = service.get_signals_for_creative(creative_id, include_resolved=include_resolved)
+    return [WasteSignalResponse(**s) for s in signals]
+
+
+@app.post("/analytics/waste-signals/analyze", tags=["Analytics"])
+async def run_waste_analysis(
+    days: int = Query(7, ge=1, le=90, description="Timeframe for analysis"),
+    save_to_db: bool = Query(True, description="Save signals to database"),
+):
+    """Run waste analysis on all creatives with recent activity.
+
+    Phase 11.2: Evidence-Based Waste Detection
+    Analyzes all creatives and generates signals with evidence.
+    """
+    service = WasteAnalyzerService()
+    signals = service.analyze_all_creatives(days=days, save_to_db=save_to_db)
+
+    return {
+        "status": "complete",
+        "signals_generated": len(signals),
+        "by_type": _group_signals_by_type(signals),
+    }
+
+
+def _group_signals_by_type(signals) -> dict[str, int]:
+    """Group signals by type and count."""
+    counts = {}
+    for s in signals:
+        counts[s.signal_type] = counts.get(s.signal_type, 0) + 1
+    return counts
+
+
+@app.post("/analytics/waste-signals/{signal_id}/resolve", tags=["Analytics"])
+async def resolve_waste_signal(
+    signal_id: int,
+    notes: Optional[str] = Query(None, description="Resolution notes"),
+):
+    """Mark a waste signal as resolved.
+
+    Phase 11.2: Evidence-Based Waste Detection
+    """
+    service = WasteAnalyzerService()
+    success = service.resolve_signal(signal_id, resolved_by="user", notes=notes)
+
+    if not success:
+        raise HTTPException(status_code=404, detail="Signal not found")
+
+    return {"status": "resolved", "signal_id": signal_id}
 
 
 @app.get(
@@ -2290,7 +2699,7 @@ async def refresh_campaign_performance_cache(
 
 
 @app.delete("/performance/cleanup", tags=["Performance"])
-async def cleanup_old_performance_data(
+async def cleanup_old_rtb_daily(
     days_to_keep: int = Query(90, ge=7, le=365, description="Days of data to retain"),
     store: SQLiteStore = Depends(get_store),
 ):
@@ -2300,7 +2709,7 @@ async def cleanup_old_performance_data(
     Default retention is 90 days.
     """
     try:
-        deleted = await store.clear_old_performance_data(days_to_keep=days_to_keep)
+        deleted = await store.clear_old_rtb_daily(days_to_keep=days_to_keep)
 
         return {
             "status": "completed",
@@ -2347,7 +2756,7 @@ async def import_performance_csv(
 
     Uses the unified importer which:
     - Validates required columns (Day, Creative ID, Billing ID, Creative size, Reached queries, Impressions)
-    - Stores raw data in performance_data table
+    - Stores raw data in rtb_daily table
     - Returns detailed import statistics
 
     If validation fails, returns fix instructions for BigQuery export configuration.
@@ -2675,7 +3084,7 @@ async def import_performance_batch(
     """
     Batch import endpoint for chunked uploads.
 
-    Writes directly to the unified performance_data table.
+    Writes directly to the unified rtb_daily table.
 
     This is used by the frontend chunked uploader which sends
     batches of ~10,000 rows at a time.
@@ -2735,9 +3144,9 @@ async def import_performance_batch(
                 hash_data = f"{date}|{row.get('creative_id', '')}|{row.get('billing_id', '')}|{row.get('geography', '')}|{impressions}|{clicks}"
                 row_hash = hashlib.md5(hash_data.encode()).hexdigest()
 
-                # Insert into performance_data
+                # Insert into rtb_daily
                 cursor.execute("""
-                    INSERT OR IGNORE INTO performance_data (
+                    INSERT OR IGNORE INTO rtb_daily (
                         metric_date, creative_id, billing_id, creative_size,
                         country, platform, app_id, app_name,
                         reached_queries, impressions, clicks, spend_micros,
@@ -2786,6 +3195,84 @@ async def import_performance_batch(
     except Exception as e:
         logger.error(f"Batch import failed: {e}")
         raise HTTPException(status_code=500, detail=f"Batch import failed: {str(e)}")
+
+
+# ============================================================
+# Phase 11: Evaluation Engine & Troubleshooting API Endpoints
+# ============================================================
+
+from analysis.evaluation_engine import EvaluationEngine, RecommendationType
+
+
+@app.get("/api/evaluation", tags=["Evaluation"])
+async def get_evaluation(
+    days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
+):
+    """
+    Run evaluation engine and return actionable recommendations.
+
+    Phase 11: Decision Intelligence
+    Combines all data sources (CSV, API, troubleshooting) to produce
+    prioritized recommendations for QPS optimization.
+    """
+    engine = EvaluationEngine()
+    results = engine.run_full_evaluation(days)
+
+    # Convert Recommendation dataclasses to dicts for JSON
+    results["recommendations"] = [r.to_dict() for r in results["recommendations"]]
+
+    return results
+
+
+@app.get("/api/troubleshooting/filtered-bids", tags=["Troubleshooting"])
+async def get_filtered_bids(
+    days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
+):
+    """
+    Get summary of why bids were filtered.
+
+    Phase 11: RTB Troubleshooting API
+    Shows breakdown of filtered bid reasons - the key insight for understanding waste.
+    """
+    engine = EvaluationEngine()
+    return engine.get_filtered_bids_summary(days)
+
+
+@app.get("/api/troubleshooting/funnel", tags=["Troubleshooting"])
+async def get_bid_funnel(
+    days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
+):
+    """
+    Get bid funnel metrics - from bids submitted to impressions won.
+
+    Phase 11: RTB Troubleshooting API
+    Shows the conversion funnel from bid requests to wins.
+    """
+    engine = EvaluationEngine()
+    return engine.get_bid_funnel(days)
+
+
+@app.post("/api/troubleshooting/collect", tags=["Troubleshooting"])
+async def trigger_troubleshooting_collection(
+    days: int = Query(7, ge=1, le=30, description="Days of data to collect"),
+    environment: Optional[str] = Query(None, description="Filter by APP or WEB"),
+    background_tasks: BackgroundTasks = None,
+):
+    """
+    Trigger troubleshooting data collection from Google API.
+
+    Phase 11: RTB Troubleshooting API
+    Fetches filtered bid reasons, bid metrics, and callout status.
+    Requires service account with adexchange.buyer scope.
+    """
+    # TODO: Implement background collection
+    # For now, return a placeholder
+    return {
+        "status": "collection_queued",
+        "days": days,
+        "environment": environment,
+        "message": "Collection will run in background. Check /api/troubleshooting/filtered-bids after a few minutes."
+    }
 
 
 if __name__ == "__main__":

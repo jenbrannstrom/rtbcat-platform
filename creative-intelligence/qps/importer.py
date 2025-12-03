@@ -336,7 +336,7 @@ def compute_row_hash(row_data: Dict) -> str:
 
 def import_csv(csv_path: str, db_path: str = DB_PATH) -> ImportResult:
     """
-    Import a validated CSV file into performance_data table.
+    Import a validated CSV file into rtb_daily table.
 
     IMPORTANT: Call validate_csv() first! This function assumes
     the CSV has already been validated.
@@ -552,7 +552,7 @@ def _insert_batch(cursor: sqlite3.Cursor, batch: List[Tuple]) -> Tuple[int, int]
     for row in batch:
         try:
             cursor.execute("""
-                INSERT INTO performance_data (
+                INSERT INTO rtb_daily (
                     metric_date, creative_id, billing_id,
                     creative_size, creative_format, country, platform, environment,
                     app_id, app_name, publisher_id, publisher_name, publisher_domain,
@@ -631,7 +631,7 @@ def get_data_summary(db_path: str = DB_PATH) -> Dict:
                 SUM(impressions) as total_impressions,
                 SUM(clicks) as total_clicks,
                 SUM(spend_micros) as total_spend_micros
-            FROM performance_data
+            FROM rtb_daily
         """)
         row = cursor.fetchone()
 

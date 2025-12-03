@@ -1,10 +1,12 @@
 # Cat-Scan Creative Intelligence
 
-**Version:** 10.3
-**Phase:** 9.7 - Onboarding Flow Complete
-**Last Updated:** December 2, 2025
+**Version:** 12.0
+**Phase:** 12 - Schema Cleanup (Single Source of Truth)
+**Last Updated:** December 3, 2025
 
-A Python-based system for detecting Google Authorized Buyers wasted QPS, by fetching data such as creatives and organizing them for analysis. This tool helps RTB bidders understand what they're actually bidding on by fetching and organizing creatives that Google leaves as opaque IDs.
+A privacy-first QPS optimization platform for Google Authorized Buyers. Cat-Scan helps RTB bidders eliminate 20-40% wasted QPS by surfacing evidence-based waste signals, enabling data-driven pretargeting decisions.
+
+> **Philosophy:** Intelligence without assumptions. Facts that drive action.
 
 ## What This Solves
 
@@ -32,6 +34,17 @@ A Python-based system for detecting Google Authorized Buyers wasted QPS, by fetc
 - **Encrypted Config**: Secure credential storage with Fernet encryption
 - **Docker Support**: Multi-stage Docker build with non-root user
 - **Dashboard**: Next.js frontend for visual exploration (optional)
+
+### Phase 11: Decision Intelligence (NEW)
+
+- **Timeframe Context**: All endpoints support `?days=N` for time-bounded analysis
+- **Campaign Metrics**: Aggregated spend, impressions, clicks, and waste_score per campaign
+- **Evidence-Based Signals**: Waste detection with full evidence chain explaining WHY
+- **Warning Counts**: Broken videos, zero engagement, disapproved creatives per campaign
+- **Pagination**: Scalable `/v2` endpoints with metadata for large accounts
+- **Fixed DnD**: Improved drag-and-drop collision detection
+
+See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ### Multi-Seat Buyer Accounts
 
@@ -652,14 +665,49 @@ docker compose logs api --tail 50
 
 ## Database Schema
 
-### Tables
+### Table Naming Convention (v12)
 
-| Table | Description |
-|-------|-------------|
-| `creatives` | Creative metadata with `buyer_id` for multi-seat support |
-| `performance_data` | Imported CSV performance rows (unified table) |
-| `campaigns` | Campaign clusters (manual or AI-generated) |
-| `buyer_seats` | Buyer accounts under a bidder |
+**IMPORTANT:** Phase 12 renamed tables for clarity:
+- `rtb_daily` → **`rtb_daily`** (THE fact table for all CSV imports)
+- `ai_campaigns` → **`campaigns`** (removed "ai_" prefix)
+
+If you see references to old table names in documentation, they are outdated.
+
+### Core Tables
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `rtb_daily` | **THE fact table** - all CSV imports | `metric_date`, `creative_id`, `billing_id`, `reached_queries`, `impressions` |
+| `creatives` | Creative inventory from API | `id`, `format`, `canonical_size`, `approval_status` |
+| `campaigns` | User-defined campaign groupings | `id`, `name`, `seat_id` |
+| `creative_campaigns` | Creative → Campaign mapping | `creative_id`, `campaign_id` |
+| `buyer_seats` | Buyer accounts under a bidder | `buyer_id`, `bidder_id`, `display_name` |
+
+### Support Tables
+
+| Table | Purpose |
+|-------|---------|
+| `fraud_signals` | Detected fraud patterns for review |
+| `waste_signals` | Evidence-based waste detection (Phase 11) |
+| `import_history` | CSV import tracking |
+| `troubleshooting_data` | RTB Troubleshooting API data (Phase 11) |
+| `troubleshooting_collections` | Collection audit log |
+| `thumbnail_status` | Video thumbnail generation status |
+
+### Migration
+
+If you have an existing database, run the migration script:
+
+```bash
+cd creative-intelligence
+python scripts/migrate_schema_v12.py
+```
+
+This will:
+1. Rename `rtb_daily` → `rtb_daily`
+2. Rename `ai_campaigns` → `campaigns`
+3. Update all indexes
+4. Create automatic backup first
 
 ### buyer_seats Table
 
@@ -705,7 +753,7 @@ await store.migrate_add_buyer_seats()
 - [x] Performance data visualization on creative cards
 
 ### v0.3 (Completed - November 2025)
-- [x] AI-based creative clustering (`/ai-campaigns/auto-cluster`)
+- [x] AI-based creative clustering (`/campaigns/auto-cluster`)
 - [x] Size-based campaign grouping
 - [x] Seat hierarchy cleanup (Phase 8.5)
 - [x] Seat display names on creative cards
@@ -845,9 +893,9 @@ sudo systemctl restart rtbcat-dashboard
 | POST | `/analytics/generate-mock-traffic` | Generate test traffic data |
 | POST | `/performance/import-csv` | Import performance CSV |
 | GET | `/performance/metrics/batch` | Get batch performance metrics |
-| GET | `/ai-campaigns` | List AI-generated campaigns |
-| POST | `/ai-campaigns/auto-cluster` | Auto-cluster creatives |
-| GET | `/ai-campaigns/{id}/performance` | Get campaign performance |
+| GET | `/campaigns` | List AI-generated campaigns |
+| POST | `/campaigns/auto-cluster` | Auto-cluster creatives |
+| GET | `/campaigns/{id}/performance` | Get campaign performance |
 | PATCH | `/seats/{buyer_id}` | Update seat display name |
 | POST | `/seats/populate` | Populate seats from creatives |
 | POST | `/config/credentials` | Upload service account JSON key |
@@ -907,7 +955,7 @@ These fields describe *what the creative is* - its structure, destination, and a
 
 | Field | Type | Description | Waste Detection Use |
 |-------|------|-------------|---------------------|
-| `id` | TEXT PK | Unique creative ID (e.g., `cr-12345`) | Join key to performance_data |
+| `id` | TEXT PK | Unique creative ID (e.g., `cr-12345`) | Join key to rtb_daily |
 | `name` | TEXT | Resource name `bidders/{id}/creatives/{id}` | - |
 | `format` | TEXT | HTML, VIDEO, NATIVE, UNKNOWN | Video-specific waste analysis |
 | `account_id` | TEXT | Bidder account ID | Multi-account filtering |
@@ -939,30 +987,35 @@ These fields describe *what the creative is* - its structure, destination, and a
 
 ---
 
-### Table 2: `performance_data` (from CSV Import)
+### Table 2: `rtb_daily` (from CSV Import)
 
 These fields describe *how the creative performed* - the actual metrics that reveal waste.
 
-#### Required Fields (import fails without these)
+**NOTE:** `buyer_id`, `bidder_id`, `billing_id` are TEXT fields because Google's API returns them as strings. Converting to INTEGER would risk data loss.
 
-| Field | Type | Description | Waste Detection Use |
+#### Essential Fields (Always export these)
+
+| Field | Type | Description | QPS Optimization Use |
 |-------|------|-------------|---------------------|
 | `metric_date` | DATE | Performance date | Timeframe filtering |
 | `creative_id` | TEXT | Links to creatives table | Join key |
-| `billing_id` | TEXT | Pretargeting config ID | Config efficiency analysis |
+| `billing_id` | TEXT | Pretargeting config ID | **Config efficiency analysis** |
 | `creative_size` | TEXT | Size from bid request | **Size mismatch detection** |
+| `country` | TEXT | ISO country code | **ESSENTIAL - geo targeting efficiency** |
+| `app_id` | TEXT | Mobile app bundle ID | **ESSENTIAL - where we buy inventory** |
+| `advertiser` | TEXT | Advertiser name | **ESSENTIAL - detect blocked advertisers** |
 | `reached_queries` | INT | Bid requests received | **THE critical waste metric** |
 | `impressions` | INT | Impressions won | Win rate calculation |
+| `clicks` | INT | Click count | **ESSENTIAL - major engagement signal** |
+| `spend_micros` | INT | Spend in USD micros | Cost tracking |
 
-#### Optional Dimension Fields
+#### Important Dimension Fields
 
-| Field | Type | Description | Waste Detection Use |
+| Field | Type | Description | QPS Optimization Use |
 |-------|------|-------------|---------------------|
 | `creative_format` | TEXT | HTML, VIDEO, etc. | Format-specific analysis |
-| `country` | TEXT | ISO country code | Geo targeting efficiency |
 | `platform` | TEXT | Desktop, Mobile, Tablet | Platform waste analysis |
 | `environment` | TEXT | App, Web | Environment performance |
-| `app_id` | TEXT | Mobile app bundle ID | App-level fraud detection |
 | `app_name` | TEXT | Mobile app name | Human-readable reports |
 | `publisher_id` | TEXT | Publisher ID | Publisher blocklist candidates |
 | `publisher_name` | TEXT | Publisher name | Human-readable reports |
@@ -970,16 +1023,13 @@ These fields describe *how the creative performed* - the actual metrics that rev
 | `deal_id` | TEXT | Deal identifier | Deal performance |
 | `deal_name` | TEXT | Deal name | Human-readable reports |
 | `transaction_type` | TEXT | Open auction, PMP, etc. | Transaction efficiency |
-| `advertiser` | TEXT | Advertiser name | Advertiser grouping |
 | `buyer_account_id` | TEXT | Buyer seat ID | Multi-seat analysis |
 | `buyer_account_name` | TEXT | Buyer seat name | Human-readable reports |
 
-#### Optional Metric Fields
+#### Video Metrics
 
-| Field | Type | Description | Waste Detection Use |
+| Field | Type | Description | QPS Optimization Use |
 |-------|------|-------------|---------------------|
-| `clicks` | INT | Click count | CTR calculation, click fraud |
-| `spend_micros` | INT | Spend in USD micros | ROI, cost efficiency |
 | `video_starts` | INT | Video play initiations | Video engagement analysis |
 | `video_first_quartile` | INT | Reached 25% | Video completion funnel |
 | `video_midpoint` | INT | Reached 50% | Video completion funnel |
@@ -987,8 +1037,34 @@ These fields describe *how the creative performed* - the actual metrics that rev
 | `video_completions` | INT | Reached 100% | **Video completion rate** |
 | `vast_errors` | INT | VAST parsing errors | **Broken video detection** |
 | `engaged_views` | INT | Engaged view count | Engagement quality |
+
+#### Viewability
+
+| Field | Type | Description | QPS Optimization Use |
+|-------|------|-------------|---------------------|
 | `active_view_measurable` | INT | Viewability measurable | Viewability analysis |
 | `active_view_viewable` | INT | Viewability viewable | **Viewability rate** |
+
+#### Conversions (Vendor-agnostic UA data)
+
+| Field | Type | Description | QPS Optimization Use |
+|-------|------|-------------|---------------------|
+| `conversions` | INT | Generic conversion count | Overall conversion rate |
+| `ua_installs` | INT | App installs | Install attribution |
+| `ua_reinstalls` | INT | App reinstalls | Retention analysis |
+| `ua_uninstalls` | INT | App uninstalls | Churn detection |
+| `ua_sessions` | INT | App sessions | Engagement depth |
+| `ua_in_app_events` | INT | In-app events | Post-install engagement |
+| `ua_ad_revenue` | REAL | Ad revenue (USD) | ROAS calculation |
+| `ua_skan_conversions` | INT | SKAdNetwork conversions (iOS) | iOS attribution |
+| `ua_retargeting_reengagements` | INT | Retargeting re-engagements | Retargeting efficiency |
+| `ua_retargeting_reattributions` | INT | Retargeting re-attributions | Retargeting value |
+| `ua_fraud_blocked_installs` | INT | Fraud: blocked installs | Fraud signal |
+
+#### SDK Flags
+
+| Field | Type | Description | QPS Optimization Use |
+|-------|------|-------------|---------------------|
 | `gma_sdk` | BOOL | Google Mobile Ads SDK | SDK coverage |
 | `buyer_sdk` | BOOL | Buyer SDK present | SDK coverage |
 
@@ -1027,7 +1103,7 @@ waste_rate = (reached_queries - impressions) / reached_queries × 100
 ```sql
 -- Find sizes you receive traffic for but have no creatives
 SELECT p.creative_size, SUM(p.reached_queries) as wasted_qps
-FROM performance_data p
+FROM rtb_daily p
 LEFT JOIN creatives c ON c.canonical_size = p.creative_size
 WHERE c.id IS NULL
 GROUP BY p.creative_size
@@ -1036,7 +1112,7 @@ ORDER BY wasted_qps DESC
 
 | Fields Used | Insight |
 |-------------|---------|
-| `performance_data.creative_size` + `creatives.canonical_size` | **Sizes you lack inventory for** |
+| `rtb_daily.creative_size` + `creatives.canonical_size` | **Sizes you lack inventory for** |
 
 *Action: Either add creatives for high-volume sizes OR exclude those sizes from pretargeting.*
 
@@ -1049,7 +1125,7 @@ SELECT c.id, c.advertiser_name,
        ts.error_reason
 FROM creatives c
 JOIN thumbnail_status ts ON c.id = ts.creative_id
-JOIN performance_data p ON c.id = p.creative_id
+JOIN rtb_daily p ON c.id = p.creative_id
 WHERE c.format = 'VIDEO'
   AND ts.status = 'failed'
   AND ts.error_reason IN ('url_expired', 'timeout', 'invalid_format')
@@ -1059,7 +1135,7 @@ HAVING impressions > 1000
 
 | Fields Used | Insight |
 |-------------|---------|
-| `creatives.format` + `thumbnail_status.error_reason` + `performance_data.impressions` | **Spending on unplayable videos** |
+| `creatives.format` + `thumbnail_status.error_reason` + `rtb_daily.impressions` | **Spending on unplayable videos** |
 
 *A video that can't generate a thumbnail likely can't play for users either.*
 
@@ -1073,7 +1149,7 @@ SELECT c.id, c.advertiser_name,
        SUM(p.spend_micros)/1000000.0 as spend_usd,
        COUNT(DISTINCT p.metric_date) as days_active
 FROM creatives c
-JOIN performance_data p ON c.id = p.creative_id
+JOIN rtb_daily p ON c.id = p.creative_id
 WHERE p.metric_date >= date('now', '-14 days')
 GROUP BY c.id
 HAVING total_impressions > 10000
@@ -1095,7 +1171,7 @@ SELECT p.creative_id, p.publisher_id, p.app_id,
        p.metric_date,
        p.impressions, p.clicks,
        CAST(p.clicks AS FLOAT) / NULLIF(p.impressions, 0) as ctr
-FROM performance_data p
+FROM rtb_daily p
 WHERE p.clicks > p.impressions
    OR (p.impressions > 100 AND CAST(p.clicks AS FLOAT) / p.impressions > 0.5)
 ```
@@ -1115,7 +1191,7 @@ SELECT c.id, c.advertiser_name,
        SUM(p.video_completions) as completions,
        CAST(SUM(p.video_completions) AS FLOAT) / NULLIF(SUM(p.video_starts), 0) * 100 as vcr
 FROM creatives c
-JOIN performance_data p ON c.id = p.creative_id
+JOIN rtb_daily p ON c.id = p.creative_id
 WHERE c.format = 'VIDEO'
   AND p.metric_date >= date('now', '-7 days')
 GROUP BY c.id
@@ -1136,7 +1212,7 @@ SELECT billing_id,
        SUM(reached_queries) as total_queries,
        SUM(impressions) as total_impressions,
        100.0 * (SUM(reached_queries) - SUM(impressions)) / NULLIF(SUM(reached_queries), 0) as waste_pct
-FROM performance_data
+FROM rtb_daily
 WHERE metric_date >= date('now', '-7 days')
 GROUP BY billing_id
 ORDER BY waste_pct DESC
@@ -1156,7 +1232,7 @@ SELECT publisher_id, publisher_name, publisher_domain,
        SUM(reached_queries) as queries,
        SUM(impressions) as impressions,
        SUM(spend_micros)/1000000.0 as spend
-FROM performance_data
+FROM rtb_daily
 WHERE metric_date >= date('now', '-14 days')
 GROUP BY publisher_id
 HAVING queries > 10000 AND (impressions = 0 OR spend/queries < 0.00001)
@@ -1174,14 +1250,14 @@ SELECT c.id, c.approval_status, c.advertiser_name,
        SUM(p.impressions) as impressions,
        SUM(p.spend_micros)/1000000.0 as spend
 FROM creatives c
-JOIN performance_data p ON c.id = p.creative_id
+JOIN rtb_daily p ON c.id = p.creative_id
 WHERE c.approval_status = 'DISAPPROVED'
 GROUP BY c.id
 ```
 
 | Fields Used | Insight |
 |-------------|---------|
-| `creatives.approval_status` + `performance_data.*` | **100% wasted spend on banned ads** |
+| `creatives.approval_status` + `rtb_daily.*` | **100% wasted spend on banned ads** |
 
 *Disapproved creatives shouldn't be bidding. If they have spend, something is wrong.*
 
@@ -1193,12 +1269,290 @@ GROUP BY c.id
 |------------|------------------|--------|
 | **Size mismatch** | `creative_size` not in `canonical_size` inventory | Add creative OR exclude size |
 | **Config inefficiency** | High `reached_queries` / low `impressions` per `billing_id` | Tighten targeting |
-| **Broken video** | `thumbnail_status.status = 'failed'` + high spend | Pause creative |
+| **Broken video** | `thumbnail_status.status = 'failed'` + high spend | Review creative quality |
 | **Zero engagement** | High impressions, zero clicks over 7+ days | Review creative quality |
 | **Click fraud** | `clicks > impressions` OR CTR > 50% | Block publisher/app |
-| **Poor video completion** | VCR < 10% over significant volume | Replace creative |
-| **Disapproved waste** | `approval_status = 'DISAPPROVED'` with spend | Remove from bidding |
-| **Publisher waste** | High queries, zero wins from `publisher_id` | Add to blocklist |
+| **Poor video completion** | VCR < 10% over significant volume | Review creative quality |
+| **Disapproved waste** | `approval_status = 'DISAPPROVED'` with spend | Ensure it is not included in auction |
+| **Publisher waste** | High queries, zero wins from `publisher_id` | Investigate, maybe add to blocklist |
+
+---
+
+## Actionable Controls: How to Reduce Waste
+
+Cat-Scan identifies waste. But **what can you actually change?** There are only two levels of control available to optimize QPS efficiency:
+
+### Control Hierarchy
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  BIDDER (Not Under Your Control)                                │
+│  The actual bidding logic, bid prices, creative selection       │
+│  → Coordinate with bidder team for improvements                 │
+└─────────────────────────────────────────────────────────────────┘
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  LEVEL 1: ENDPOINT ZONES                                        │
+│  Which planetary regions receive your bid requests              │
+│  → 4 zones: US-East, US-West, EU, Asia                         │
+└─────────────────────────────────────────────────────────────────┘
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  LEVEL 2: PRETARGETING CONFIGS                                  │
+│  Filter bid requests BEFORE they reach your bidder              │
+│  → The primary lever for QPS efficiency                        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Level 1: Endpoint Zone Configuration
+
+Google Authorized Buyers routes bid requests to your bidder endpoints based on geographic zones. You can enable/disable zones and set QPS limits per zone.
+
+| Zone | Region | Use Case |
+|------|--------|----------|
+| **US-East** | Eastern United States | Americas traffic |
+| **US-West** | Western United States | Americas traffic |
+| **EU** | Europe | European traffic (GDPR considerations) |
+| **Asia** | Asia-Pacific | APAC traffic |
+
+**How Cat-Scan helps:**
+```sql
+-- Find which regions waste the most QPS
+SELECT country,
+       SUM(reached_queries) as queries,
+       SUM(impressions) as impressions,
+       100.0 * (SUM(reached_queries) - SUM(impressions)) / NULLIF(SUM(reached_queries), 0) as waste_pct
+FROM rtb_daily
+WHERE metric_date >= date('now', '-7 days')
+GROUP BY country
+ORDER BY queries DESC
+```
+
+**Action:** If a region has >95% waste and low volume, consider disabling that endpoint zone entirely.
+
+---
+
+### Level 2: Pretargeting Configuration
+
+Pretargeting configs are the **primary lever** for QPS efficiency. They filter bid requests *before* they reach your bidder, eliminating waste at the source.
+
+**API Reference:** [Pretargeting Configs Guide](https://developers.google.com/authorized-buyers/apis/guides/rtb-api/pretargeting-configs)
+
+#### Core Settings
+
+| Field | Type | Description | Cat-Scan Data Link |
+|-------|------|-------------|-------------------|
+| `displayName` | string | Human-readable config name | Maps to `billing_id` in reports |
+| `billingId` | string | Unique billing identifier | **Join key to `rtb_daily.billing_id`** |
+| `state` | enum | ACTIVE, SUSPENDED | - |
+
+#### Creative Filtering
+
+| Field | Type | Description | Cat-Scan Data Link |
+|-------|------|-------------|-------------------|
+| `includedFormats` | array | HTML, NATIVE, VAST | `creatives.format`, `rtb_daily.creative_format` |
+| `includedCreativeDimensions` | array | Width/height pairs to accept | `creatives.canonical_size`, `rtb_daily.creative_size` |
+| `minimumViewabilityDecile` | int (0-10) | Min predicted viewability (5 = 50%) | `rtb_daily.active_view_viewable` |
+
+**CRITICAL:** Size filtering is **INCLUDE-ONLY**.
+- Empty list = Accept ALL sizes (maximum QPS)
+- Add ONE size = ONLY that size accepted (all others rejected)
+- There is NO "exclude size" option
+
+```sql
+-- Generate recommended includedCreativeDimensions based on your actual inventory
+SELECT DISTINCT canonical_size, width, height
+FROM creatives
+WHERE canonical_size IS NOT NULL
+ORDER BY canonical_size
+```
+
+#### Geographic Targeting
+
+| Field | Type | Description | Cat-Scan Data Link |
+|-------|------|-------------|-------------------|
+| `geoTargeting.includedIds` | array | Geo region IDs to include | `rtb_daily.country` |
+| `geoTargeting.excludedIds` | array | Geo region IDs to exclude | `rtb_daily.country` |
+| `includedLanguages` | array | Language codes | - |
+
+**Geo ID Reference:** [geo-table.csv](https://storage.googleapis.com/adx-rtb-dictionaries/geo-table.csv)
+
+```sql
+-- Find countries with high waste to consider excluding
+SELECT country,
+       SUM(reached_queries) as queries,
+       SUM(impressions) as wins,
+       SUM(spend_micros)/1000000.0 as spend,
+       100.0 * (SUM(reached_queries) - SUM(impressions)) / NULLIF(SUM(reached_queries), 0) as waste_pct
+FROM rtb_daily
+WHERE metric_date >= date('now', '-7 days')
+  AND country IS NOT NULL
+GROUP BY country
+HAVING queries > 10000
+ORDER BY waste_pct DESC
+```
+
+#### Platform & Environment
+
+| Field | Type | Description | Cat-Scan Data Link |
+|-------|------|-------------|-------------------|
+| `includedPlatforms` | array | PERSONAL_COMPUTER, PHONE, TABLET, CONNECTED_TV | `rtb_daily.platform` |
+| `includedEnvironments` | array | APP, WEB | `rtb_daily.environment` |
+| `interstitialTargeting` | enum | ONLY_INTERSTITIAL_REQUESTS, ONLY_NON_INTERSTITIAL_REQUESTS | - |
+
+```sql
+-- Platform efficiency analysis
+SELECT platform, environment,
+       SUM(reached_queries) as queries,
+       SUM(impressions) as wins,
+       100.0 * SUM(impressions) / NULLIF(SUM(reached_queries), 0) as win_rate
+FROM rtb_daily
+WHERE metric_date >= date('now', '-7 days')
+GROUP BY platform, environment
+ORDER BY queries DESC
+```
+
+#### Publisher & App Targeting
+
+| Field | Type | Description | Cat-Scan Data Link |
+|-------|------|-------------|-------------------|
+| `publisherTargeting.targetingMode` | enum | INCLUSIVE or EXCLUSIVE | - |
+| `publisherTargeting.values` | array | Publisher IDs from ads.txt | `rtb_daily.publisher_id` |
+| `webTargeting.targetingMode` | enum | INCLUSIVE or EXCLUSIVE | - |
+| `webTargeting.values` | array | Site URLs | `rtb_daily.publisher_domain` |
+| `appTargeting.mobileAppTargeting` | object | App IDs to include/exclude | `rtb_daily.app_id` |
+| `appTargeting.mobileAppCategoryTargeting` | object | App category IDs | - |
+
+```sql
+-- Publishers to consider blocking (high traffic, zero/low wins)
+SELECT publisher_id, publisher_name, publisher_domain,
+       SUM(reached_queries) as queries,
+       SUM(impressions) as wins,
+       SUM(clicks) as clicks
+FROM rtb_daily
+WHERE metric_date >= date('now', '-14 days')
+GROUP BY publisher_id
+HAVING queries > 50000 AND wins < 100
+ORDER BY queries DESC
+LIMIT 20
+```
+
+```sql
+-- Apps to consider blocking (fraud signals or poor performance)
+SELECT app_id, app_name,
+       SUM(reached_queries) as queries,
+       SUM(impressions) as impressions,
+       SUM(clicks) as clicks,
+       CASE WHEN SUM(impressions) > 0
+            THEN CAST(SUM(clicks) AS FLOAT) / SUM(impressions)
+            ELSE 0 END as ctr
+FROM rtb_daily
+WHERE metric_date >= date('now', '-14 days')
+  AND app_id IS NOT NULL
+GROUP BY app_id
+HAVING queries > 10000 AND (clicks > impressions OR ctr > 0.5)
+ORDER BY queries DESC
+```
+
+#### Audience Targeting
+
+| Field | Type | Description | Cat-Scan Data Link |
+|-------|------|-------------|-------------------|
+| `userListTargeting.includedIds` | array | User lists to target | - |
+| `userListTargeting.excludedIds` | array | User lists to exclude | - |
+| `allowedUserTargetingModes` | array | REMARKETING_ADS, INTEREST_BASED_TARGETING | - |
+| `includedUserIdTypes` | array | HOSTED_MATCH_DATA, GOOGLE_COOKIE, DEVICE_ID | - |
+| `excludedContentLabelIds` | array | Sensitive content categories | - |
+
+#### Vertical/Category Targeting
+
+| Field | Type | Description | Cat-Scan Data Link |
+|-------|------|-------------|-------------------|
+| `verticalTargeting.includedIds` | array | Industry category IDs to include | - |
+| `verticalTargeting.excludedIds` | array | Industry category IDs to exclude | - |
+
+**Vertical ID Reference:** [publisher-verticals.txt](https://storage.googleapis.com/adx-rtb-dictionaries/publisher-verticals.txt)
+
+---
+
+### Mapping Cat-Scan Insights → Pretargeting Actions
+
+| Cat-Scan Finding | Pretargeting Field | Action |
+|------------------|-------------------|--------|
+| Size mismatch (traffic for sizes you lack) | `includedCreativeDimensions` | Add ONLY sizes you have creatives for |
+| High waste from specific country | `geoTargeting.excludedIds` | Add country ID to exclusion list |
+| High waste from specific platform | `includedPlatforms` | Remove underperforming platform |
+| Fraud signals from publisher | `publisherTargeting` | Set EXCLUSIVE mode, add publisher ID |
+| Fraud signals from app | `appTargeting.mobileAppTargeting` | Exclude specific app IDs |
+| Poor performance on web vs app | `includedEnvironments` | Keep only APP or only WEB |
+| Low viewability | `minimumViewabilityDecile` | Increase threshold (e.g., 5 for 50%+) |
+
+---
+
+### Example: Full Optimization Workflow
+
+```
+1. IMPORT CSV DATA
+   → python cli/qps_analyzer.py import ~/reports/weekly.csv
+
+2. RUN ANALYSIS
+   → python cli/qps_analyzer.py full-report --days 7
+
+3. IDENTIFY WASTE SOURCES
+   Cat-Scan shows:
+   - 40% of QPS is for sizes you don't have (300x600, 970x250)
+   - Brazil has 98% waste rate, 500K queries/day
+   - Publisher "sketchy-news.com" has CTR of 85% (fraud)
+   - App "com.fake.game" has clicks > impressions
+
+4. UPDATE PRETARGETING CONFIG
+
+   includedCreativeDimensions: [
+     {width: 300, height: 250},
+     {width: 728, height: 90},
+     {width: 320, height: 50}
+     // Only sizes you actually have creatives for
+   ]
+
+   geoTargeting: {
+     excludedIds: ["2076"]  // Brazil geo ID
+   }
+
+   publisherTargeting: {
+     targetingMode: "EXCLUSIVE",
+     values: ["sketchy-news.com"]
+   }
+
+   appTargeting: {
+     mobileAppTargeting: {
+       targetingMode: "EXCLUSIVE",
+       values: ["com.fake.game"]
+     }
+   }
+
+5. MONITOR RESULTS
+   → Wait 24-48 hours
+   → Import new CSV
+   → Compare waste_pct before/after
+```
+
+---
+
+### Coordination with Bidder Team
+
+Some optimizations require coordination with the bidder (not controllable via pretargeting):
+
+| Issue | Who Fixes It | What to Communicate |
+|-------|--------------|---------------------|
+| Bid prices too low (losing auctions) | Bidder | Win rate data by segment |
+| Wrong creatives selected for context | Bidder | Creative performance by publisher/app |
+| Bidding on disapproved creatives | Bidder | List of disapproved creative IDs with spend |
+| Slow bid response (timeouts) | Bidder or EP| Endpoint latency data or misconfig |
+| Poor creative quality | Advertiser | Zero-engagement creative list |
+
+**Cat-Scan provides the evidence.** Share reports with bidder team to coordinate improvements.
 
 ---
 
@@ -1214,4 +1568,4 @@ MIT License - see [LICENSE](LICENSE) file
 
 ---
 
-**Built for RTB bidders who want to understand their creative inventory.**
+**Built for RTB bidders who want to improve QPS efficiency.**

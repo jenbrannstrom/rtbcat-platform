@@ -1,7 +1,7 @@
 """
 Campaign Repository for AI-generated campaign clustering.
 
-Handles CRUD operations for ai_campaigns, creative_campaigns,
+Handles CRUD operations for campaigns, creative_campaigns,
 and campaign_daily_summary tables.
 """
 
@@ -103,7 +103,7 @@ class CampaignRepository:
         """
         cursor = self.db.cursor()
         cursor.execute("""
-            INSERT INTO ai_campaigns
+            INSERT INTO campaigns
             (seat_id, name, description, ai_generated, ai_confidence,
              clustering_method, status, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -127,7 +127,7 @@ class CampaignRepository:
         cursor.execute("""
             SELECT c.*,
                    (SELECT COUNT(*) FROM creative_campaigns WHERE campaign_id = c.id) as creative_count
-            FROM ai_campaigns c
+            FROM campaigns c
             WHERE c.id = ?
         """, (campaign_id,))
         row = cursor.fetchone()
@@ -173,7 +173,7 @@ class CampaignRepository:
         cursor.execute(f"""
             SELECT c.*,
                    (SELECT COUNT(*) FROM creative_campaigns WHERE campaign_id = c.id) as creative_count
-            FROM ai_campaigns c
+            FROM campaigns c
             WHERE {where_clause}
             ORDER BY c.updated_at DESC
             LIMIT ? OFFSET ?
@@ -219,7 +219,7 @@ class CampaignRepository:
 
         cursor = self.db.cursor()
         cursor.execute(
-            f"UPDATE ai_campaigns SET {', '.join(updates)} WHERE id = ?",
+            f"UPDATE campaigns SET {', '.join(updates)} WHERE id = ?",
             params
         )
         self.db.commit()
@@ -246,7 +246,7 @@ class CampaignRepository:
 
         # Delete campaign
         cursor.execute(
-            "DELETE FROM ai_campaigns WHERE id = ?",
+            "DELETE FROM campaigns WHERE id = ?",
             (campaign_id,)
         )
 

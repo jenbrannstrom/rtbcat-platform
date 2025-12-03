@@ -120,7 +120,7 @@ class SizeCoverageAnalyzer:
 
     def get_traffic_sizes(self, days: int = 7) -> Dict[str, Dict]:
         """
-        Get sizes from performance_data table.
+        Get sizes from rtb_daily table.
         Aggregates at query time (not import time).
         """
         conn = sqlite3.connect(self.db_path)
@@ -138,7 +138,7 @@ class SizeCoverageAnalyzer:
                     SUM(COALESCE(impressions, 0)) as total_impressions,
                     SUM(COALESCE(clicks, 0)) as total_clicks,
                     SUM(COALESCE(spend_micros, 0)) as total_spend
-                FROM performance_data
+                FROM rtb_daily
                 WHERE metric_date >= ?
                   AND creative_size IS NOT NULL
                   AND creative_size != ''
