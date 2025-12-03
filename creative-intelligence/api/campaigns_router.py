@@ -27,6 +27,13 @@ router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 # Request/Response Models
 # ============================================
 
+class CountryBreakdownEntry(BaseModel):
+    """Country breakdown entry for a campaign."""
+    creative_ids: list[str] = []
+    spend_micros: int = 0
+    impressions: int = 0
+
+
 class AICampaignResponse(BaseModel):
     """Response model for AI campaign."""
     id: int
@@ -38,6 +45,8 @@ class AICampaignResponse(BaseModel):
     clustering_method: Optional[str] = None
     status: str = "active"
     creative_count: int = 0
+    creative_ids: list[str] = []  # Added for frontend compatibility
+    country_breakdown: Optional[dict[str, CountryBreakdownEntry]] = None  # Phase 22
     performance: Optional[dict] = None
 
 
@@ -46,6 +55,7 @@ class AutoClusterRequest(BaseModel):
     seat_id: Optional[int] = None
     use_ai: bool = True
     min_cluster_size: int = 3
+    group_by_country: bool = False  # Phase 22: Create separate campaigns per country
 
 
 class AutoClusterResponse(BaseModel):
@@ -105,6 +115,59 @@ def get_campaign_repo() -> CampaignRepository:
 # Clustering Endpoints
 # ============================================
 
+def _get_creative_countries(conn: sqlite3.Connection, creative_ids: list[str], days: int = 30) -> dict[str, str]:
+    """Get the primary country (by spend) for each creative."""
+    if not creative_ids:
+        return {}
+
+    placeholders = ",".join("?" * len(creative_ids))
+    cursor = conn.cursor()
+    cursor.execute(f"""
+        WITH ranked AS (
+            SELECT creative_id, geography,
+                   SUM(spend_micros) as total_spend,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY creative_id
+                       ORDER BY SUM(spend_micros) DESC
+                   ) as rn
+            FROM performance_metrics
+            WHERE creative_id IN ({placeholders})
+              AND geography IS NOT NULL
+              AND metric_date >= date('now', '-{days} days')
+            GROUP BY creative_id, geography
+        )
+        SELECT creative_id, geography
+        FROM ranked
+        WHERE rn = 1
+    """, creative_ids)
+
+    return {row['creative_id']: row['geography'] for row in cursor.fetchall()}
+
+
+def _split_clusters_by_country(
+    clusters: dict[str, list[dict]],
+    creative_countries: dict[str, str],
+) -> dict[str, list[dict]]:
+    """Split clusters by country, creating 'domain:example.com:US' style keys."""
+    result: dict[str, list[dict]] = {}
+
+    for cluster_key, creatives in clusters.items():
+        # Group by country within this cluster
+        by_country: dict[str, list[dict]] = {}
+        for creative in creatives:
+            country = creative_countries.get(creative["id"], "UNKNOWN")
+            if country not in by_country:
+                by_country[country] = []
+            by_country[country].append(creative)
+
+        # Create new cluster keys with country suffix
+        for country, country_creatives in by_country.items():
+            new_key = f"{cluster_key}:{country}"
+            result[new_key] = country_creatives
+
+    return result
+
+
 @router.post("/auto-cluster", response_model=AutoClusterResponse)
 async def auto_cluster_creatives(request: AutoClusterRequest):
     """
@@ -113,8 +176,9 @@ async def auto_cluster_creatives(request: AutoClusterRequest):
     This endpoint:
     1. Finds all creatives not assigned to a campaign
     2. Groups them using rule-based clustering (domain, URL patterns)
-    3. Optionally refines with AI (generates better names, merges similar)
-    4. Creates campaigns and assigns creatives
+    3. Optionally splits by country (Phase 22)
+    4. Optionally refines with AI (generates better names, merges similar)
+    5. Creates campaigns and assigns creatives
     """
     conn = get_db_connection()
     repo = CampaignRepository(conn)
@@ -137,6 +201,14 @@ async def auto_cluster_creatives(request: AutoClusterRequest):
         clusters = merge_small_clusters(clusters, request.min_cluster_size)
 
         logger.info(f"Pre-clustering created {len(clusters)} clusters")
+
+        # Step 1.5: Split by country if requested (Phase 22)
+        if request.group_by_country:
+            creative_ids = [c["id"] for c in creatives]
+            creative_countries = _get_creative_countries(conn, creative_ids)
+            clusters = _split_clusters_by_country(clusters, creative_countries)
+            clusters = merge_small_clusters(clusters, request.min_cluster_size)
+            logger.info(f"Country split created {len(clusters)} clusters")
 
         # Step 2: AI refinement (if enabled)
         if request.use_ai:
@@ -222,19 +294,26 @@ async def list_campaigns(
     seat_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     include_performance: bool = Query(True),
+    include_country_breakdown: bool = Query(False, description="Include country breakdown per campaign"),
     period: str = Query("7d"),
 ):
     """
     List all AI campaigns with optional performance data.
+
+    Phase 22: Country-aware clustering support via include_country_breakdown.
     """
     conn = get_db_connection()
     repo = CampaignRepository(conn)
 
     try:
         campaigns = repo.list_campaigns(seat_id=seat_id, status=status)
+        days = {"1d": 1, "7d": 7, "30d": 30, "all": 365}.get(period, 7)
 
         result = []
         for campaign in campaigns:
+            # Get creative IDs for this campaign
+            creative_ids = repo.get_campaign_creatives(campaign.id)
+
             campaign_data = AICampaignResponse(
                 id=campaign.id,
                 seat_id=campaign.seat_id,
@@ -245,12 +324,24 @@ async def list_campaigns(
                 clustering_method=campaign.clustering_method,
                 status=campaign.status,
                 creative_count=campaign.creative_count,
+                creative_ids=creative_ids,
             )
 
             if include_performance:
-                days = {"1d": 1, "7d": 7, "30d": 30, "all": 365}.get(period, 7)
                 perf = repo.get_campaign_performance(campaign.id, days=days)
                 campaign_data.performance = perf
+
+            if include_country_breakdown:
+                breakdown_raw = repo.get_campaign_country_breakdown(campaign.id, days=days)
+                # Convert to CountryBreakdownEntry objects
+                campaign_data.country_breakdown = {
+                    country: CountryBreakdownEntry(
+                        creative_ids=data['creative_ids'],
+                        spend_micros=data['spend_micros'],
+                        impressions=data['impressions'],
+                    )
+                    for country, data in breakdown_raw.items()
+                }
 
             result.append(campaign_data)
 
@@ -281,6 +372,9 @@ async def get_campaign(
             conn.close()
             raise HTTPException(status_code=404, detail="Campaign not found")
 
+        # Get creative IDs for this campaign
+        creative_ids = repo.get_campaign_creatives(campaign_id)
+
         result = AICampaignResponse(
             id=campaign.id,
             seat_id=campaign.seat_id,
@@ -291,6 +385,7 @@ async def get_campaign(
             clustering_method=campaign.clustering_method,
             status=campaign.status,
             creative_count=campaign.creative_count,
+            creative_ids=creative_ids,
         )
 
         conn.close()

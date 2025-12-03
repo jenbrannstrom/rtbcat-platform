@@ -8,9 +8,12 @@ import { cn, getFormatLabel } from '@/lib/utils';
 interface Creative {
   id: string;
   format: string;
+  country?: string;
+  created_at?: string;
   final_url?: string;
   video?: { thumbnail_url?: string };
   native?: { logo?: { url?: string }; image?: { url?: string } };
+  html?: { thumbnail_url?: string };
   performance?: {
     total_spend_micros?: number;
     total_impressions?: number;
@@ -24,6 +27,8 @@ interface ListItemProps {
   isDragOverlay?: boolean;
   isSelected?: boolean;
   onSelect?: (id: string, event?: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean }) => void;
+  onOpenPreview?: (id: string) => void;
+  sortField?: 'spend' | 'impressions' | 'clicks' | 'country' | 'id' | 'date_added';
 }
 
 function getThumbnail(creative: Creative): string | null {
@@ -32,6 +37,9 @@ function getThumbnail(creative: Creative): string | null {
   }
   if (creative.format === 'NATIVE') {
     return creative.native?.logo?.url || creative.native?.image?.url || null;
+  }
+  if (creative.format === 'HTML') {
+    return creative.html?.thumbnail_url || null;
   }
   return null;
 }
@@ -42,6 +50,13 @@ function formatSpend(micros?: number): string {
   if (dollars >= 1000) return `$${(dollars / 1000).toFixed(1)}K`;
   if (dollars >= 1) return `$${dollars.toFixed(0)}`;
   return `$${dollars.toFixed(2)}`;
+}
+
+function formatNumber(num?: number): string {
+  if (!num) return '0';
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
+  return num.toLocaleString();
 }
 
 function getHostname(url?: string): string {
@@ -59,6 +74,8 @@ export function ListItem({
   isDragOverlay = false,
   isSelected = false,
   onSelect,
+  onOpenPreview,
+  sortField = 'spend',
 }: ListItemProps) {
   const wasDraggingRef = useRef(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -91,13 +108,19 @@ export function ListItem({
       wasDraggingRef.current = false;
       return;
     }
-    if (onSelect) {
-      onSelect(String(creative.id), {
+
+    // Ctrl/Cmd or Shift click = selection
+    if (e.ctrlKey || e.metaKey || e.shiftKey) {
+      onSelect?.(String(creative.id), {
         ctrlKey: e.ctrlKey,
         metaKey: e.metaKey,
         shiftKey: e.shiftKey,
       });
+      return;
     }
+
+    // Plain click = open preview modal
+    onOpenPreview?.(String(creative.id));
   };
 
   const style = isDragOverlay ? undefined : {
@@ -196,13 +219,34 @@ export function ListItem({
               #{creative.id}
             </div>
             <div className="text-xs text-gray-500 truncate">
-              {getHostname(creative.final_url)}
+              {sortField === 'country' && creative.country
+                ? creative.country
+                : getHostname(creative.final_url)}
             </div>
           </div>
 
-          {/* Spend */}
-          <div className="text-sm font-medium text-green-600 flex-shrink-0">
-            {formatSpend(spend)}
+          {/* Metrics */}
+          <div className="flex-shrink-0 text-right">
+            {/* Always show spend */}
+            <div className="text-sm font-medium text-green-600">
+              {formatSpend(spend)}
+            </div>
+            {/* Show sorted metric if different from spend */}
+            {sortField === 'impressions' && (
+              <div className="text-xs text-gray-500">
+                {formatNumber(impressions)} imp
+              </div>
+            )}
+            {sortField === 'clicks' && (
+              <div className="text-xs text-gray-500">
+                {formatNumber(clicks)} clicks
+              </div>
+            )}
+            {sortField === 'date_added' && creative.created_at && (
+              <div className="text-xs text-gray-500">
+                {new Date(creative.created_at).toLocaleDateString()}
+              </div>
+            )}
           </div>
         </div>
       </div>

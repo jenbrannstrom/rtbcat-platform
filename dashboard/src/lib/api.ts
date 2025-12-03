@@ -508,3 +508,238 @@ export interface SystemStatus {
 export async function getSystemStatus(): Promise<SystemStatus> {
   return fetchApi<SystemStatus>("/system/status");
 }
+
+// ============================================================================
+// Recommendations API (Phase 25)
+// ============================================================================
+
+export interface Evidence {
+  metric_name: string;
+  metric_value: number;
+  threshold: number;
+  comparison: string;
+  time_period_days: number;
+  sample_size: number;
+  trend?: string | null;
+}
+
+export interface Impact {
+  wasted_qps: number;
+  wasted_queries_daily: number;
+  wasted_spend_usd: number;
+  percent_of_total_waste: number;
+  potential_savings_monthly: number;
+}
+
+export interface Action {
+  action_type: string; // "block", "exclude", "pause", "review", "add"
+  target_type: string; // "size", "publisher", "app", "geo", "creative", "config"
+  target_id: string;
+  target_name: string;
+  pretargeting_field?: string | null;
+  api_example?: string | null;
+}
+
+export interface Recommendation {
+  id: string;
+  type: string;
+  severity: string; // "critical", "high", "medium", "low"
+  confidence: string;
+  title: string;
+  description: string;
+  evidence: Evidence[];
+  impact: Impact;
+  actions: Action[];
+  affected_creatives: string[];
+  affected_campaigns: string[];
+  generated_at: string;
+  expires_at?: string | null;
+  status: string;
+}
+
+export interface RecommendationSummary {
+  analysis_period_days: number;
+  total_queries: number;
+  total_impressions: number;
+  total_waste_queries: number;
+  total_waste_rate: number;
+  total_wasted_qps: number;
+  total_spend_usd: number;
+  recommendation_count: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+  total_recommendations: number;
+  generated_at: string;
+}
+
+export async function getRecommendations(params?: {
+  days?: number;
+  min_severity?: string;
+  type_filter?: string;
+}): Promise<Recommendation[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.days) searchParams.set("days", String(params.days));
+  if (params?.min_severity) searchParams.set("min_severity", params.min_severity);
+  if (params?.type_filter) searchParams.set("type_filter", params.type_filter);
+
+  const query = searchParams.toString();
+  return fetchApi<Recommendation[]>(`/recommendations${query ? `?${query}` : ""}`);
+}
+
+export async function getRecommendationSummary(
+  days: number = 7
+): Promise<RecommendationSummary> {
+  return fetchApi<RecommendationSummary>(`/recommendations/summary?days=${days}`);
+}
+
+export async function resolveRecommendation(
+  id: string,
+  notes?: string
+): Promise<{ status: string; id: string }> {
+  const searchParams = new URLSearchParams();
+  if (notes) searchParams.set("notes", notes);
+  const query = searchParams.toString();
+
+  return fetchApi<{ status: string; id: string }>(
+    `/recommendations/${encodeURIComponent(id)}/resolve${query ? `?${query}` : ""}`,
+    { method: "POST" }
+  );
+}
+
+// =============================================================================
+// QPS Analytics API (Phase 27)
+// =============================================================================
+
+export interface SizeGap {
+  size: string;
+  format: string;
+  queries_received: number;
+  daily_estimate: number;
+  percent_of_traffic: number;
+  recommendation: string;
+}
+
+export interface CoveredSize {
+  size: string;
+  format: string;
+  impressions: number;
+  spend_usd: number;
+  creative_count: number;
+  ctr_pct: number;
+}
+
+export interface SizeCoverageResponse {
+  period_days: number;
+  total_sizes_in_traffic: number;
+  sizes_with_creatives: number;
+  sizes_without_creatives: number;
+  coverage_rate_pct: number;
+  wasted_queries_daily: number;
+  wasted_qps: number;
+  gaps: SizeGap[];
+  covered_sizes: CoveredSize[];
+}
+
+export interface GeoStats {
+  country: string;
+  code: string;
+  impressions: number;
+  clicks: number;
+  spend_usd: number;
+  ctr_pct: number;
+  cpm: number;
+  creative_count: number;
+  recommendation: string;
+}
+
+export interface GeoWasteResponse {
+  period_days: number;
+  total_geos: number;
+  geos_with_traffic: number;
+  geos_to_exclude: number;
+  geos_to_monitor: number;
+  geos_performing_well: number;
+  estimated_waste_pct: number;
+  total_spend_usd: number;
+  wasted_spend_usd: number;
+  geos: GeoStats[];
+}
+
+export interface PretargetingConfig {
+  name: string;
+  description: string;
+  priority: number;
+  targeting: {
+    formats: string[];
+    sizes: {
+      included: string[];
+      total_count: number;
+    };
+    geos: {
+      included: string[];
+      excluded: string[];
+      included_count: number;
+    };
+  };
+  estimated_impact: {
+    impressions: number;
+    spend_usd: number;
+    waste_reduction_pct: number;
+  };
+}
+
+export interface PretargetingResponse {
+  config_limit: number;
+  summary: string;
+  total_waste_reduction_pct: number;
+  configs: PretargetingConfig[];
+}
+
+export interface QPSSummaryResponse {
+  period_days: number;
+  size_coverage: {
+    coverage_rate_pct: number;
+    sizes_covered: number;
+    sizes_missing: number;
+    wasted_qps: number;
+  };
+  geo_efficiency: {
+    geos_analyzed: number;
+    geos_to_exclude: number;
+    geos_to_monitor: number;
+    waste_pct: number;
+    wasted_spend_usd: number;
+  };
+  action_items: {
+    sizes_to_block: number;
+    sizes_to_consider: number;
+    geos_to_exclude: number;
+  };
+  estimated_savings: {
+    geo_waste_monthly_usd: number;
+  };
+}
+
+export async function getQPSSizeCoverage(days: number = 7): Promise<SizeCoverageResponse> {
+  return fetchApi<SizeCoverageResponse>(`/analytics/size-coverage?days=${days}`);
+}
+
+export async function getGeoWaste(days: number = 7): Promise<GeoWasteResponse> {
+  return fetchApi<GeoWasteResponse>(`/analytics/geo-waste?days=${days}`);
+}
+
+export async function getPretargetingRecommendations(
+  days: number = 7,
+  maxConfigs: number = 10
+): Promise<PretargetingResponse> {
+  return fetchApi<PretargetingResponse>(
+    `/analytics/pretargeting-recommendations?days=${days}&max_configs=${maxConfigs}`
+  );
+}
+
+export async function getQPSSummary(days: number = 7): Promise<QPSSummaryResponse> {
+  return fetchApi<QPSSummaryResponse>(`/analytics/qps-summary?days=${days}`);
+}

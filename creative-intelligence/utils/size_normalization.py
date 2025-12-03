@@ -12,7 +12,7 @@ Example usage:
     'IAB Standard'
 """
 
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 
 # IAB Standard sizes mapping: (width, height) -> display name
 IAB_STANDARD_SIZES: Dict[Tuple[int, int], str] = {
@@ -139,6 +139,103 @@ def get_size_category(canonical: str) -> str:
         return "Non-Standard"
 
     return "IAB Standard"
+
+
+def find_closest_iab_size(width: int, height: int, tolerance: int = 5) -> Optional[str]:
+    """
+    Find the closest IAB standard size within tolerance.
+
+    Phase 22: Tolerance-based size normalization to map near-standard sizes
+    like 298x250 → 300x250.
+
+    Args:
+        width: The width of the creative in pixels.
+        height: The height of the creative in pixels.
+        tolerance: Maximum pixel difference for each dimension (default 5).
+
+    Returns:
+        The canonical IAB size string if within tolerance, None otherwise.
+
+    Examples:
+        >>> find_closest_iab_size(300, 250)  # exact match
+        '300x250 (Medium Rectangle)'
+
+        >>> find_closest_iab_size(298, 250, tolerance=5)  # within tolerance
+        '300x250 (Medium Rectangle)'
+
+        >>> find_closest_iab_size(290, 250, tolerance=5)  # outside tolerance
+        None
+    """
+    for (std_w, std_h), name in IAB_STANDARD_SIZES.items():
+        if abs(width - std_w) <= tolerance and abs(height - std_h) <= tolerance:
+            return name
+    return None
+
+
+def canonical_size_with_tolerance(width: int, height: int, tolerance: int = 5) -> str:
+    """
+    Convert arbitrary creative dimensions to canonical IAB standard size with tolerance.
+
+    Phase 22: Enhanced version that maps near-standard sizes to standards.
+    For example, 298x250 → 300x250 (Medium Rectangle) if within tolerance.
+
+    Args:
+        width: The width of the creative in pixels.
+        height: The height of the creative in pixels.
+        tolerance: Maximum pixel difference for each dimension (default 5).
+
+    Returns:
+        A string representing the canonical size category.
+
+    Examples:
+        >>> canonical_size_with_tolerance(298, 250)
+        '300x250 (Medium Rectangle)'
+
+        >>> canonical_size_with_tolerance(726, 92)
+        '728x90 (Leaderboard)'
+
+        >>> canonical_size_with_tolerance(123, 456)
+        'Non-Standard (123x456)'
+    """
+    # Special case: Adaptive/Fluid (zero dimension)
+    if width == 0 or height == 0:
+        return "Adaptive/Fluid"
+
+    # Special case: Adaptive/Responsive (1x1)
+    if width == 1 and height == 1:
+        return "Adaptive/Responsive"
+
+    # Check for exact IAB standard match first
+    size_key = (width, height)
+    if size_key in IAB_STANDARD_SIZES:
+        return IAB_STANDARD_SIZES[size_key]
+
+    # Check for near-standard match with tolerance
+    closest = find_closest_iab_size(width, height, tolerance)
+    if closest:
+        return closest
+
+    # Check video aspect ratios
+    aspect_ratio = width / height
+
+    # Video 9:16 (Vertical) - aspect ratio 0.5-0.6
+    if 0.5 <= aspect_ratio <= 0.6:
+        return "Video 9:16 (Vertical)"
+
+    # Video 16:9 (Horizontal) - aspect ratio 1.7-1.8
+    if 1.7 <= aspect_ratio <= 1.8:
+        return "Video 16:9 (Horizontal)"
+
+    # Video 1:1 (Square) - aspect ratio 0.9-1.1
+    if 0.9 <= aspect_ratio <= 1.1:
+        return "Video 1:1 (Square)"
+
+    # Video 4:5 (Portrait) - aspect ratio 0.7-0.8
+    if 0.7 <= aspect_ratio <= 0.8:
+        return "Video 4:5 (Portrait)"
+
+    # Non-standard size
+    return f"Non-Standard ({width}x{height})"
 
 
 # Unit tests

@@ -31,6 +31,7 @@ interface DraggableCreativeProps {
   isPopupOpen?: boolean;
   onSelect?: (id: string, event?: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean }) => void;
   onTogglePopup?: (id: string | null) => void;
+  onOpenPreview?: (id: string) => void;
 }
 
 function getThumbnail(creative: Creative): string | null {
@@ -61,6 +62,7 @@ export function DraggableCreative({
   isPopupOpen = false,
   onSelect,
   onTogglePopup,
+  onOpenPreview,
 }: DraggableCreativeProps) {
   const wasDraggingRef = useRef(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -97,19 +99,16 @@ export function DraggableCreative({
 
     // If ctrl/shift held, do multi-select
     if (e.ctrlKey || e.metaKey || e.shiftKey) {
-      if (onSelect) {
-        onSelect(String(creative.id), {
-          ctrlKey: e.ctrlKey,
-          metaKey: e.metaKey,
-          shiftKey: e.shiftKey,
-        });
-      }
-    } else {
-      // Toggle popup on regular click
-      if (onTogglePopup) {
-        onTogglePopup(isPopupOpen ? null : String(creative.id));
-      }
+      onSelect?.(String(creative.id), {
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        shiftKey: e.shiftKey,
+      });
+      return;
     }
+
+    // Plain click opens preview modal
+    onOpenPreview?.(String(creative.id));
   };
 
   const handleCopyId = async (e: React.MouseEvent) => {

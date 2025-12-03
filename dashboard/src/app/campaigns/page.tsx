@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -14,13 +14,14 @@ import {
 } from '@dnd-kit/core';
 // import { createSnapModifier } from '@dnd-kit/modifiers';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Sparkles, RefreshCw, Check, LayoutGrid, List } from 'lucide-react';
+import { Plus, Sparkles, RefreshCw, Check, LayoutGrid, List, ArrowDown, ArrowUp, Globe, X } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
 import { ClusterCard } from '@/components/campaigns/cluster-card';
 import { UnassignedPool } from '@/components/campaigns/unassigned-pool';
 import { DraggableCreative } from '@/components/campaigns/draggable-creative';
 import { ListCluster } from '@/components/campaigns/list-cluster';
 import { ListItem } from '@/components/campaigns/list-item';
+import { PreviewModal } from '@/components/preview-modal';
 import { cn } from '@/lib/utils';
 
 // Droppable zone to create a new campaign on drop (Grid view)
@@ -93,10 +94,17 @@ interface Campaign {
 interface Creative {
   id: string;
   format: string;
+  country?: string;  // Phase 22: Country from performance data
+  created_at?: string;  // Phase 24: Date Added sort
   final_url?: string;
   video?: { thumbnail_url?: string };
   native?: { logo?: { url?: string }; image?: { url?: string } };
-  performance?: { total_spend_micros?: number; total_impressions?: number };
+  html?: { thumbnail_url?: string };  // Phase 22: HTML thumbnail
+  performance?: {
+    total_spend_micros?: number;
+    total_impressions?: number;
+    total_clicks?: number;
+  };
   waste_flags?: { broken_video?: boolean; zero_engagement?: boolean };
 }
 
@@ -281,6 +289,15 @@ export default function CampaignsPage() {
   const [creativesMap, setCreativesMap] = useState<Map<string, Creative>>(new Map());
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
+  // Page-level sort/filter state (Phase 23)
+  const [pageSortField, setPageSortField] = useState<'spend' | 'impressions' | 'clicks' | 'creatives' | 'name'>('spend');
+  const [pageSortDir, setPageSortDir] = useState<'asc' | 'desc'>('desc');
+  const [countryFilter, setCountryFilter] = useState<string | null>(null);
+
+  // Preview modal state (Phase 24)
+  const [previewCreativeId, setPreviewCreativeId] = useState<string | null>(null);
+  const previewCreative = previewCreativeId ? creativesMap.get(previewCreativeId) : null;
+
   // Build ordered list of all creative IDs for shift-select range
   const allCreativeIdsRef = useRef<string[]>([]);
 
@@ -351,13 +368,38 @@ export default function CampaignsPage() {
     },
   });
 
-  // Update campaign mutation
+  // Update campaign mutation with optimistic updates for rename
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Parameters<typeof updateCampaign>[1] }) =>
       updateCampaign(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
-      queryClient.invalidateQueries({ queryKey: ['unclustered'] });
+    onMutate: async ({ id, data }) => {
+      // Cancel any outgoing refetches so they don't overwrite optimistic update
+      await queryClient.cancelQueries({ queryKey: ['campaigns'] });
+
+      // Snapshot the previous value
+      const previousCampaigns = queryClient.getQueryData<Campaign[]>(['campaigns']);
+
+      // Optimistically update for name changes (instant feedback)
+      if (data.name !== undefined) {
+        queryClient.setQueryData<Campaign[]>(['campaigns'], (old) =>
+          old?.map(c => c.id === id ? { ...c, name: data.name! } : c) ?? []
+        );
+      }
+
+      return { previousCampaigns };
+    },
+    onError: (_err, _variables, context) => {
+      // Rollback on error
+      if (context?.previousCampaigns) {
+        queryClient.setQueryData(['campaigns'], context.previousCampaigns);
+      }
+    },
+    onSettled: (_data, _error, variables) => {
+      // Only invalidate if structural changes (add/remove creatives), not just rename
+      if (variables.data.add_creative_ids || variables.data.remove_creative_ids) {
+        queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+        queryClient.invalidateQueries({ queryKey: ['unclustered'] });
+      }
     },
   });
 
@@ -575,6 +617,11 @@ export default function CampaignsPage() {
     await deleteMutation.mutateAsync(campaignId);
   }
 
+  // Open preview modal (Phase 24)
+  const handleOpenPreview = useCallback((creativeId: string) => {
+    setPreviewCreativeId(creativeId);
+  }, []);
+
   // Create new cluster
   async function handleCreateCluster() {
     await createMutation.mutateAsync({
@@ -605,11 +652,87 @@ export default function CampaignsPage() {
   const activeCreative = activeId ? creativesMap.get(String(activeId)) : null;
 
   // Get creatives for each campaign - ensure string comparison
-  const getCampaignCreatives = (campaign: Campaign): Creative[] => {
+  const getCampaignCreatives = useCallback((campaign: Campaign): Creative[] => {
     return campaign.creative_ids
       .map((id) => creativesMap.get(String(id)))
       .filter((c): c is Creative => c !== undefined);
-  };
+  }, [creativesMap]);
+
+  // Extract all unique countries for filter dropdown (Phase 23)
+  const allCountries = useMemo(() => {
+    const countries = new Set<string>();
+    creativesMap.forEach(c => {
+      if (c.country) countries.add(c.country);
+    });
+    return Array.from(countries).sort();
+  }, [creativesMap]);
+
+  // Sort and filter campaigns at page level (Phase 23)
+  const sortedCampaigns = useMemo(() => {
+    // Calculate totals for each campaign
+    const campaignsWithTotals = campaigns.map(campaign => {
+      const creatives = getCampaignCreatives(campaign);
+      const totalSpend = creatives.reduce((sum, c) => sum + (c.performance?.total_spend_micros || 0), 0);
+      const totalImpressions = creatives.reduce((sum, c) => sum + (c.performance?.total_impressions || 0), 0);
+      const totalClicks = creatives.reduce((sum, c) => sum + (c.performance?.total_clicks || 0), 0);
+
+      // Filter creatives by country if filter is set
+      const filteredCreatives = countryFilter
+        ? creatives.filter(c => c.country === countryFilter)
+        : creatives;
+
+      return {
+        ...campaign,
+        _creatives: filteredCreatives,
+        _totalSpend: totalSpend,
+        _totalImpressions: totalImpressions,
+        _totalClicks: totalClicks,
+        _creativeCount: creatives.length,
+        _hasFilteredCreatives: countryFilter ? filteredCreatives.length > 0 : true,
+      };
+    });
+
+    // Filter out campaigns with no matching creatives when country filter is active
+    let filtered = countryFilter
+      ? campaignsWithTotals.filter(c => c._hasFilteredCreatives)
+      : campaignsWithTotals;
+
+    // Sort
+    filtered.sort((a, b) => {
+      let aVal: number | string, bVal: number | string;
+
+      switch (pageSortField) {
+        case 'spend':
+          aVal = a._totalSpend;
+          bVal = b._totalSpend;
+          break;
+        case 'impressions':
+          aVal = a._totalImpressions;
+          bVal = b._totalImpressions;
+          break;
+        case 'clicks':
+          aVal = a._totalClicks;
+          bVal = b._totalClicks;
+          break;
+        case 'creatives':
+          aVal = a._creativeCount;
+          bVal = b._creativeCount;
+          break;
+        case 'name':
+          aVal = a.name.toLowerCase();
+          bVal = b.name.toLowerCase();
+          return pageSortDir === 'desc'
+            ? bVal.localeCompare(aVal as string)
+            : (aVal as string).localeCompare(bVal as string);
+        default:
+          return 0;
+      }
+
+      return pageSortDir === 'desc' ? (bVal as number) - (aVal as number) : (aVal as number) - (bVal as number);
+    });
+
+    return filtered;
+  }, [campaigns, getCampaignCreatives, pageSortField, pageSortDir, countryFilter]);
 
   // Debug: Log when data changes
   useEffect(() => {
@@ -779,6 +902,59 @@ export default function CampaignsPage() {
         </div>
       )}
 
+      {/* Page-level Sort/Filter Controls (Phase 23) */}
+      <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-gray-50 rounded-lg">
+        <span className="text-sm text-gray-600 font-medium">Sort:</span>
+        {(['spend', 'impressions', 'clicks', 'creatives', 'name'] as const).map(field => (
+          <button
+            key={field}
+            onClick={() => {
+              if (pageSortField === field) {
+                setPageSortDir(d => d === 'desc' ? 'asc' : 'desc');
+              } else {
+                setPageSortField(field);
+                setPageSortDir('desc');
+              }
+            }}
+            className={cn(
+              "px-3 py-1 text-sm rounded flex items-center gap-1 transition-colors",
+              pageSortField === field
+                ? "bg-blue-100 text-blue-700 font-medium"
+                : "hover:bg-gray-200 text-gray-600"
+            )}
+          >
+            {field.charAt(0).toUpperCase() + field.slice(1)}
+            {pageSortField === field && (
+              pageSortDir === 'desc' ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />
+            )}
+          </button>
+        ))}
+
+        {/* Country filter */}
+        {allCountries.length > 0 && (
+          <div className="ml-auto flex items-center gap-2">
+            <Globe className="h-4 w-4 text-gray-400" />
+            <select
+              value={countryFilter || ''}
+              onChange={e => setCountryFilter(e.target.value || null)}
+              className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Countries</option>
+              {allCountries.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            {countryFilter && (
+              <button
+                onClick={() => setCountryFilter(null)}
+                className="p-1 text-gray-400 hover:text-gray-600"
+                title="Clear filter"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
       <DndContext
         sensors={sensors}
         collisionDetection={pointerWithin}
@@ -790,7 +966,7 @@ export default function CampaignsPage() {
           <>
             {/* Grid View */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-              {campaigns.map((campaign) => (
+              {sortedCampaigns.map((campaign) => (
                 <ClusterCard
                   key={campaign.id}
                   campaign={campaign}
@@ -799,6 +975,7 @@ export default function CampaignsPage() {
                   onDelete={handleDelete}
                   selectedIds={selectedIds}
                   onCreativeSelect={handleCreativeSelect}
+                  onOpenPreview={handleOpenPreview}
                 />
               ))}
 
@@ -818,7 +995,7 @@ export default function CampaignsPage() {
           /* List View */
           <div className="flex gap-4 overflow-x-auto pb-4">
             {/* Campaign columns */}
-            {campaigns.map((campaign) => (
+            {sortedCampaigns.map((campaign) => (
               <ListCluster
                 key={campaign.id}
                 id={campaign.id}
@@ -826,6 +1003,10 @@ export default function CampaignsPage() {
                 creatives={getCampaignCreatives(campaign)}
                 selectedIds={selectedIds}
                 onCreativeSelect={handleCreativeSelect}
+                onRename={handleRename}
+                onDelete={handleDelete}
+                onOpenPreview={handleOpenPreview}
+                pageSortField={pageSortField}
               />
             ))}
 
@@ -840,6 +1021,8 @@ export default function CampaignsPage() {
               isUnclustered
               selectedIds={selectedIds}
               onCreativeSelect={handleCreativeSelect}
+              onOpenPreview={handleOpenPreview}
+              pageSortField={pageSortField}
             />
 
             {/* New Campaign Drop Zone (List view) */}
@@ -874,6 +1057,14 @@ export default function CampaignsPage() {
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      {/* Preview Modal (Phase 24) */}
+      {previewCreative && (
+        <PreviewModal
+          creative={previewCreative as any}
+          onClose={() => setPreviewCreativeId(null)}
+        />
+      )}
     </div>
   );
 }

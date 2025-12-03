@@ -126,7 +126,7 @@ class CampaignRepository:
         cursor = self.db.cursor()
         cursor.execute("""
             SELECT c.*,
-                   (SELECT COUNT(*) FROM creative_campaigns WHERE campaign_id = c.id) as creative_count
+                   (SELECT COUNT(*) FROM creative_campaigns WHERE campaign_id = c.id) as computed_count
             FROM campaigns c
             WHERE c.id = ?
         """, (campaign_id,))
@@ -172,7 +172,7 @@ class CampaignRepository:
         cursor = self.db.cursor()
         cursor.execute(f"""
             SELECT c.*,
-                   (SELECT COUNT(*) FROM creative_campaigns WHERE campaign_id = c.id) as creative_count
+                   (SELECT COUNT(*) FROM creative_campaigns WHERE campaign_id = c.id) as computed_count
             FROM campaigns c
             WHERE {where_clause}
             ORDER BY c.updated_at DESC
@@ -353,6 +353,54 @@ class CampaignRepository:
             (campaign_id,)
         )
         return [row['creative_id'] for row in cursor.fetchall()]
+
+    def get_campaign_country_breakdown(
+        self, campaign_id: int, days: int = 7
+    ) -> dict[str, dict]:
+        """
+        Get country breakdown for a campaign's creatives.
+
+        Args:
+            campaign_id: Campaign ID
+            days: Timeframe for performance data
+
+        Returns:
+            Dict mapping country to {creative_ids, spend_micros, impressions}
+        """
+        cursor = self.db.cursor()
+
+        # Get creatives in this campaign with their performance by country
+        cursor.execute("""
+            SELECT pm.creative_id, pm.geography,
+                   SUM(pm.spend_micros) as spend_micros,
+                   SUM(pm.impressions) as impressions
+            FROM creative_campaigns cc
+            JOIN performance_metrics pm ON cc.creative_id = pm.creative_id
+            WHERE cc.campaign_id = ?
+              AND pm.geography IS NOT NULL
+              AND pm.metric_date >= date('now', ? || ' days')
+            GROUP BY pm.creative_id, pm.geography
+        """, (campaign_id, f"-{days}"))
+
+        # Build breakdown
+        breakdown: dict[str, dict] = {}
+        for row in cursor.fetchall():
+            country = row['geography']
+            if country not in breakdown:
+                breakdown[country] = {
+                    'creative_ids': [],
+                    'spend_micros': 0,
+                    'impressions': 0
+                }
+            breakdown[country]['creative_ids'].append(row['creative_id'])
+            breakdown[country]['spend_micros'] += row['spend_micros'] or 0
+            breakdown[country]['impressions'] += row['impressions'] or 0
+
+        # De-duplicate creative_ids (a creative may appear multiple times)
+        for country in breakdown:
+            breakdown[country]['creative_ids'] = list(set(breakdown[country]['creative_ids']))
+
+        return breakdown
 
     def get_creative_campaign(self, creative_id: str) -> Optional[int]:
         """
@@ -556,6 +604,8 @@ class CampaignRepository:
 
     def _row_to_campaign(self, row: sqlite3.Row) -> AICampaign:
         """Convert database row to AICampaign object."""
+        # Use computed_count to avoid collision with creative_count table column
+        count = row['computed_count'] if 'computed_count' in row.keys() else 0
         return AICampaign(
             id=row['id'],
             seat_id=row['seat_id'],
@@ -567,5 +617,5 @@ class CampaignRepository:
             status=row['status'],
             created_at=row['created_at'],
             updated_at=row['updated_at'],
-            creative_count=row['creative_count'] if 'creative_count' in row.keys() else 0,
+            creative_count=count,
         )
