@@ -4,7 +4,7 @@
 **Phase:** 21 - UI Polish (Thumbnails & Docs)
 **Last Updated:** December 3, 2025
 
-A privacy-first QPS optimization platform for Google Authorized Buyers. Cat-Scan helps RTB bidders eliminate 20-40% wasted QPS by surfacing evidence-based waste signals, enabling data-driven pretargeting decisions.
+A privacy-first QPS optimization platform for Google Authorized Buyers. Cat-Scan helps RTB bidders eliminate wasted QPS by learning which data-streams the bidder likes to bid on. Cat-Scan is a monitoring middleware between the bidder and the Ad-exchange. By looking at both what the bidder likes to buy and seeing what never gets bid on, it proposes evidence-based waste signals, enabling data-driven pretargeting decisions. All to increase QPS & bidder efficiency
 
 > **Philosophy:** Intelligence without assumptions. Facts that drive action.
 
