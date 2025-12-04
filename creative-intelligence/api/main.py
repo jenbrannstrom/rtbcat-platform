@@ -4391,6 +4391,68 @@ async def get_geo_pretargeting_config(days: int = Query(7, ge=1, le=90)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# =============================================================================
+# RTB Funnel Analytics Endpoints (Phase 28)
+# =============================================================================
+
+from analytics.rtb_funnel_analyzer import RTBFunnelAnalyzer
+
+
+@app.get("/analytics/rtb-funnel", tags=["RTB Analytics"])
+async def get_rtb_funnel():
+    """
+    Get RTB funnel analysis from Google Authorized Buyers data.
+
+    Parses the bidding metrics CSVs to provide:
+    - Funnel summary: Bid Requests → Reached Queries → Impressions
+    - Publisher performance with win rates
+    - Geographic breakdown
+    - Creative-level metrics
+    """
+    try:
+        analyzer = RTBFunnelAnalyzer()
+        return analyzer.get_full_analysis()
+    except Exception as e:
+        logger.error(f"Failed to get RTB funnel data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/analytics/rtb-funnel/publishers", tags=["RTB Analytics"])
+async def get_rtb_publishers(limit: int = Query(30, ge=1, le=100)):
+    """
+    Get publisher performance breakdown.
+
+    Shows win rates and pretargeting filter rates by publisher.
+    """
+    try:
+        analyzer = RTBFunnelAnalyzer()
+        return {
+            "publishers": analyzer.get_publisher_performance(limit=limit),
+            "count": len(analyzer._publishers) if analyzer._data_loaded else 0,
+        }
+    except Exception as e:
+        logger.error(f"Failed to get publisher performance: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/analytics/rtb-funnel/geos", tags=["RTB Analytics"])
+async def get_rtb_geos(limit: int = Query(30, ge=1, le=100)):
+    """
+    Get geographic performance breakdown.
+
+    Shows win rates and auction participation by country.
+    """
+    try:
+        analyzer = RTBFunnelAnalyzer()
+        return {
+            "geos": analyzer.get_geo_performance(limit=limit),
+            "count": len(analyzer._geos) if analyzer._data_loaded else 0,
+        }
+    except Exception as e:
+        logger.error(f"Failed to get geo performance: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
 

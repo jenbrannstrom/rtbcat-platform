@@ -2,13 +2,13 @@
 
 import { useState, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, Database, AlertTriangle } from "lucide-react";
-import { getWasteReport, generateMockTraffic } from "@/lib/api";
-import { SeatSelector } from "@/components/seat-selector";
-import { WasteReportCard, WasteReportSkeleton, WasteReportEmpty } from "@/components/waste-report";
-import { SizeCoverageChart, SizeCoverageChartSkeleton } from "@/components/size-coverage-chart";
-import { QPSSummaryCard, GeoWastePanel, PretargetingPanel } from "@/components/qps";
+import { useQuery } from "@tanstack/react-query";
+import {
+  RefreshCw, AlertTriangle, TrendingUp, BarChart3, Globe, Monitor,
+  Smartphone, Layout, Video, Image, Lightbulb, Copy, CheckCircle,
+  Info, ArrowRight, Filter, Trophy, AlertCircle, Ban, Upload
+} from "lucide-react";
+import { getQPSSummary, getQPSSizeCoverage, getGeoWaste, getRTBFunnel, type RTBFunnelResponse, type PublisherPerformance, type GeoPerformance } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const PERIOD_OPTIONS = [
@@ -17,254 +17,872 @@ const PERIOD_OPTIONS = [
   { value: 30, label: "30 days" },
 ];
 
+// Utility to format large numbers
+function formatNumber(num: number): string {
+  if (num >= 1000000000) return `${(num / 1000000000).toFixed(1)}B`;
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  return num.toLocaleString();
+}
+
+// The RTB Funnel Visualization - Focus on what hits the bidder
+function FunnelCard({
+  bidRequests,
+  reached,
+  impressions,
+  days,
+}: {
+  bidRequests: number | null;
+  reached: number | null;
+  impressions: number;
+  days: number;
+}) {
+  const hasFunnelData = bidRequests !== null && reached !== null;
+
+  const winRate = reached && impressions ? (impressions / reached * 100) : null;
+
+  const secondsInPeriod = days * 86400;
+  const reachedQps = reached ? reached / secondsInPeriod : null;
+  const ips = impressions / secondsInPeriod;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <h2 className="text-lg font-semibold text-gray-900 mb-2">The RTB Funnel</h2>
+      <p className="text-sm text-gray-500 mb-6">
+        Traffic that reaches your bidder and converts to wins
+      </p>
+
+      {hasFunnelData ? (
+        <>
+          {/* Key Metrics - What Matters */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            {/* Reached - Primary focus */}
+            <div className="text-center p-5 bg-blue-50 rounded-xl border-2 border-blue-200">
+              <div className="text-xs text-blue-600 uppercase tracking-wide mb-1">Reached Your Bidder</div>
+              <div className="text-3xl font-bold text-blue-700">{formatNumber(reached!)}</div>
+              <div className="text-lg font-semibold text-blue-500 mt-1">{reachedQps?.toLocaleString()} QPS</div>
+            </div>
+
+            {/* Win Rate - Key efficiency metric */}
+            <div className="text-center p-5 bg-purple-50 rounded-xl border-2 border-purple-200">
+              <div className="text-xs text-purple-600 uppercase tracking-wide mb-1">Win Rate</div>
+              <div className="text-3xl font-bold text-purple-700">{winRate?.toFixed(1)}%</div>
+              <div className="text-sm text-purple-500 mt-1">of reached traffic</div>
+            </div>
+
+            {/* Impressions Won */}
+            <div className="text-center p-5 bg-green-50 rounded-xl border-2 border-green-200">
+              <div className="text-xs text-green-600 uppercase tracking-wide mb-1">Impressions Won</div>
+              <div className="text-3xl font-bold text-green-700">{formatNumber(impressions)}</div>
+              <div className="text-sm text-green-500 mt-1">{ips.toFixed(0)} IPS</div>
+            </div>
+          </div>
+
+          {/* Flow visualization */}
+          <div className="flex items-center justify-center gap-2 mb-4 text-sm text-gray-500">
+            <span className="text-blue-600 font-medium">{formatNumber(reached!)}</span>
+            <ArrowRight className="h-4 w-4" />
+            <span className="text-purple-600 font-medium">{winRate?.toFixed(1)}% win</span>
+            <ArrowRight className="h-4 w-4" />
+            <span className="text-green-600 font-medium">{formatNumber(impressions)}</span>
+          </div>
+
+          {/* Insight */}
+          <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="text-sm">
+              <strong className="text-blue-800">Your efficiency:</strong>
+              <span className="text-blue-700 ml-1">
+                {winRate?.toFixed(1)}% of traffic that reaches your bidder converts to impressions.
+                {winRate && winRate >= 30 ? " This is healthy!" : " There may be room to improve."}
+              </span>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* No data state */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="text-center p-5 bg-gray-100 rounded-xl border-2 border-dashed border-gray-300">
+              <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Reached</div>
+              <div className="text-2xl font-bold text-gray-400">?</div>
+              <div className="text-xs text-gray-400">Need RTB report</div>
+            </div>
+
+            <div className="text-center p-5 bg-gray-100 rounded-xl border-2 border-dashed border-gray-300">
+              <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Win Rate</div>
+              <div className="text-2xl font-bold text-gray-400">?</div>
+              <div className="text-xs text-gray-400">Need RTB report</div>
+            </div>
+
+            <div className="text-center p-5 bg-green-50 rounded-xl border-2 border-green-200">
+              <div className="text-xs text-green-600 uppercase tracking-wide mb-1">Impressions</div>
+              <div className="text-2xl font-bold text-green-700">{formatNumber(impressions)}</div>
+              <div className="text-xs text-green-500">{ips.toFixed(0)} IPS</div>
+            </div>
+          </div>
+
+          <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+            <div className="flex items-start gap-3">
+              <Upload className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-amber-800">
+                <strong>Place RTB CSVs in docs folder for full analysis</strong>
+                <p className="mt-1 text-amber-700">
+                  Bids-per-Pub.csv shows reached queries and win rates by publisher.
+                </p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Publisher Performance Section
+function PublisherPerformanceSection({ publishers }: { publishers: PublisherPerformance[] }) {
+  const hasPublisherData = publishers && publishers.length > 0;
+
+  if (!hasPublisherData) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-blue-600" />
+              Publisher Performance
+            </h3>
+            <p className="text-sm text-gray-500 mt-1">
+              Where are you winning vs losing?
+            </p>
+          </div>
+        </div>
+
+        <div className="p-8 text-center border-2 border-dashed border-gray-200 rounded-lg">
+          <Upload className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+          <h4 className="font-medium text-gray-700 mb-2">Publisher Data Not Available</h4>
+          <p className="text-sm text-gray-500 mb-4 max-w-md mx-auto">
+            Place your RTB report CSVs in the docs folder to see which publishers
+            you're winning on and which ones are highly competitive.
+          </p>
+          <div className="text-xs text-gray-400">
+            File: Bids-per-Pub.csv with columns: Publisher ID, Publisher name, Bid requests, Reached queries, Impressions
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Categorize publishers by win rate
+  const highWinRate = publishers.filter(p => p.win_rate >= 40 && p.impressions > 0);
+  const moderateWinRate = publishers.filter(p => p.win_rate >= 20 && p.win_rate < 40 && p.impressions > 0);
+  const lowWinRate = publishers.filter(p => p.win_rate < 20 && p.impressions > 0);
+  const blocked = publishers.filter(p => p.reached_queries === 0 && p.bid_requests > 100000);
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-blue-600" />
+            Publisher Performance
+          </h3>
+          <p className="text-sm text-gray-500 mt-1">
+            Where are you winning vs losing?
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-bold text-gray-900">{publishers.length}</div>
+          <div className="text-sm text-gray-500">publishers</div>
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        {/* High Win Rate */}
+        {highWinRate.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 text-sm font-medium text-green-700 mb-2">
+              <Trophy className="h-4 w-4" />
+              High Win Rate (&gt;40%) - {highWinRate.length} publishers
+            </div>
+            <div className="bg-green-50 rounded-lg p-3">
+              <div className="space-y-2">
+                {highWinRate.slice(0, 5).map(pub => (
+                  <div key={pub.publisher_id} className="flex items-center justify-between text-sm">
+                    <span className="text-green-800 truncate max-w-[300px]" title={pub.publisher_name}>
+                      {pub.publisher_name}
+                    </span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-green-600">{formatNumber(pub.impressions)} impr</span>
+                      <span className="font-medium text-green-700">{pub.win_rate.toFixed(1)}% win</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Moderate Win Rate */}
+        {moderateWinRate.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 text-sm font-medium text-yellow-700 mb-2">
+              <AlertCircle className="h-4 w-4" />
+              Moderate Win Rate (20-40%) - {moderateWinRate.length} publishers
+            </div>
+            <div className="bg-yellow-50 rounded-lg p-3">
+              <div className="space-y-2">
+                {moderateWinRate.slice(0, 5).map(pub => (
+                  <div key={pub.publisher_id} className="flex items-center justify-between text-sm">
+                    <span className="text-yellow-800 truncate max-w-[300px]" title={pub.publisher_name}>
+                      {pub.publisher_name}
+                    </span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-yellow-600">{formatNumber(pub.impressions)} impr</span>
+                      <span className="font-medium text-yellow-700">{pub.win_rate.toFixed(1)}% win</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Low Win Rate */}
+        {lowWinRate.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 text-sm font-medium text-orange-700 mb-2">
+              <TrendingUp className="h-4 w-4" />
+              Low Win Rate (&lt;20%) - {lowWinRate.length} publishers
+            </div>
+            <div className="bg-orange-50 rounded-lg p-3">
+              <div className="space-y-2">
+                {lowWinRate.slice(0, 5).map(pub => (
+                  <div key={pub.publisher_id} className="flex items-center justify-between text-sm">
+                    <span className="text-orange-800 truncate max-w-[300px]" title={pub.publisher_name}>
+                      {pub.publisher_name}
+                    </span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-orange-600">{formatNumber(pub.impressions)} impr</span>
+                      <span className="font-medium text-orange-700">{pub.win_rate.toFixed(1)}% win</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Blocked Publishers */}
+        {blocked.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 text-sm font-medium text-red-700 mb-2">
+              <Ban className="h-4 w-4" />
+              Blocked by Pretargeting (0 Reached) - {blocked.length} publishers
+            </div>
+            <div className="bg-red-50 rounded-lg p-3">
+              <div className="flex flex-wrap gap-2">
+                {blocked.slice(0, 10).map(pub => (
+                  <span
+                    key={pub.publisher_id}
+                    className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs"
+                    title={`${formatNumber(pub.bid_requests)} bid requests`}
+                  >
+                    {pub.publisher_name.length > 25 ? pub.publisher_name.slice(0, 25) + '...' : pub.publisher_name}
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-red-600 mt-2">
+                These publishers have traffic but pretargeting blocks all of it. Review if intentional.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Size Bar visualization component
+function SizeBar({
+  size,
+  requests,
+  impressions,
+  hasCreative,
+  creativeCount,
+  maxRequests
+}: {
+  size: string;
+  requests: number;
+  impressions: number;
+  hasCreative: boolean;
+  creativeCount: number;
+  maxRequests: number;
+}) {
+  const requestsWidth = maxRequests > 0 ? (requests / maxRequests * 100) : 0;
+  const impressionsWidth = requests > 0 ? (impressions / requests * requestsWidth) : 0;
+  const utilization = requests > 0 ? (impressions / requests * 100) : 0;
+
+  return (
+    <div className="flex items-center gap-4 py-2">
+      <div className="w-24 font-mono text-sm text-gray-700 truncate" title={size}>{size}</div>
+      <div className="flex-1 relative h-6 bg-gray-100 rounded overflow-hidden">
+        <div
+          className="absolute h-full bg-gray-300 rounded-l transition-all"
+          style={{ width: `${requestsWidth}%` }}
+        />
+        <div
+          className="absolute h-full bg-green-500 rounded-l transition-all"
+          style={{ width: `${impressionsWidth}%` }}
+        />
+      </div>
+      <div className="w-20 text-right text-sm">
+        {formatNumber(requests)}
+      </div>
+      <div className="w-24 text-right text-sm">
+        {hasCreative ? (
+          <span className="text-green-600">{utilization.toFixed(1)}% util</span>
+        ) : (
+          <span className="text-red-600 flex items-center justify-end gap-1">
+            <AlertTriangle className="h-3 w-3" />
+            No creative
+          </span>
+        )}
+      </div>
+      <div className="w-16 text-right text-xs text-gray-500">
+        {hasCreative ? `${creativeCount} ads` : '-'}
+      </div>
+    </div>
+  );
+}
+
+// Size Analysis Section
+function SizeAnalysisSection({ days }: { days: number }) {
+  const [copiedSizes, setCopiedSizes] = useState(false);
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['size-coverage', days],
+    queryFn: () => getQPSSizeCoverage(days),
+  });
+
+  const copyBlockSizes = useCallback(() => {
+    if (data?.gaps) {
+      const sizes = data.gaps.map(g => g.size).join(', ');
+      navigator.clipboard.writeText(sizes);
+      setCopiedSizes(true);
+      setTimeout(() => setCopiedSizes(false), 2000);
+    }
+  }, [data]);
+
+  if (isLoading) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-6 bg-gray-200 rounded w-1/3" />
+          <div className="space-y-2">
+            {[1,2,3,4,5].map(i => <div key={i} className="h-8 bg-gray-100 rounded" />)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="flex items-center gap-2 text-red-700">
+          <AlertTriangle className="h-5 w-5" />
+          <span>Failed to load size analysis</span>
+        </div>
+      </div>
+    );
+  }
+
+  const coveredSizes = data.covered_sizes || [];
+  const gaps = data.gaps || [];
+
+  const allSizes = [
+    ...coveredSizes.map(s => ({ ...s, hasCreative: true, requests: s.impressions * 2 })),
+    ...gaps.map(g => ({
+      size: g.size,
+      format: g.format,
+      impressions: 0,
+      spend_usd: 0,
+      creative_count: 0,
+      ctr_pct: 0,
+      hasCreative: false,
+      requests: g.queries_received
+    }))
+  ].sort((a, b) => b.requests - a.requests);
+
+  const maxRequests = Math.max(...allSizes.map(s => s.requests), 1);
+  const sizesWithoutCreative = gaps;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-blue-600" />
+            Size Analysis
+          </h3>
+          <p className="text-sm text-gray-500 mt-1">
+            Which sizes convert to impressions?
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-bold text-gray-900">{data.coverage_rate_pct ?? 0}%</div>
+          <div className="text-sm text-gray-500">coverage</div>
+        </div>
+      </div>
+
+      {allSizes.length > 0 ? (
+        <>
+          {/* Legend */}
+          <div className="flex items-center gap-6 mb-4 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-gray-300 rounded" />
+              <span className="text-gray-600">Requests</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-green-500 rounded" />
+              <span className="text-gray-600">Impressions</span>
+            </div>
+          </div>
+
+          {/* Size bars */}
+          <div className="space-y-1 mb-6">
+            <div className="flex items-center gap-4 py-1 text-xs font-medium text-gray-500 border-b">
+              <div className="w-24">Size</div>
+              <div className="flex-1">Traffic Distribution</div>
+              <div className="w-20 text-right">Requests</div>
+              <div className="w-24 text-right">Win Rate</div>
+              <div className="w-16 text-right">Creatives</div>
+            </div>
+            {allSizes.slice(0, 15).map((s) => (
+              <SizeBar
+                key={s.size}
+                size={s.size}
+                requests={s.requests}
+                impressions={s.impressions}
+                hasCreative={s.hasCreative}
+                creativeCount={s.creative_count}
+                maxRequests={maxRequests}
+              />
+            ))}
+          </div>
+
+          {/* Sizes without creatives alert */}
+          {sizesWithoutCreative.length > 0 && (
+            <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h4 className="text-sm font-medium text-red-800 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    No creatives for {sizesWithoutCreative.length} sizes
+                  </h4>
+                  <p className="text-sm text-red-700 mt-1">
+                    You're receiving traffic for sizes you can't bid on.
+                    Either add creatives or remove these sizes from pretargeting.
+                  </p>
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {sizesWithoutCreative.slice(0, 10).map(g => (
+                      <span key={g.size} className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-medium">
+                        {g.size}
+                      </span>
+                    ))}
+                    {sizesWithoutCreative.length > 10 && (
+                      <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs">
+                        +{sizesWithoutCreative.length - 10} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={copyBlockSizes}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded text-sm transition-colors"
+                >
+                  {copiedSizes ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  {copiedSizes ? 'Copied!' : 'Copy sizes'}
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="text-center py-8 text-gray-500">
+          No size data available. Import RTB performance data.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Zone mapping for geographic analysis
+const ZONE_MAPPING: Record<string, string> = {
+  'US': 'North America', 'CA': 'North America', 'MX': 'North America',
+  'GB': 'Europe', 'DE': 'Europe', 'FR': 'Europe', 'IT': 'Europe', 'ES': 'Europe', 'NL': 'Europe', 'BE': 'Europe', 'PL': 'Europe', 'SE': 'Europe', 'NO': 'Europe', 'DK': 'Europe', 'FI': 'Europe', 'AT': 'Europe', 'CH': 'Europe', 'IE': 'Europe', 'PT': 'Europe',
+  'BR': 'LATAM', 'AR': 'LATAM', 'CO': 'LATAM', 'CL': 'LATAM', 'PE': 'LATAM',
+  'JP': 'Asia', 'CN': 'Asia', 'KR': 'Asia', 'IN': 'Asia', 'ID': 'Asia', 'TH': 'Asia', 'VN': 'Asia', 'PH': 'Asia', 'MY': 'Asia', 'SG': 'Asia', 'TW': 'Asia', 'HK': 'Asia',
+  'AU': 'Oceania', 'NZ': 'Oceania',
+  'ZA': 'Africa', 'NG': 'Africa', 'EG': 'Africa', 'KE': 'Africa',
+  'SA': 'Middle East', 'AE': 'Middle East', 'IL': 'Middle East', 'TR': 'Middle East',
+};
+
+function getZone(countryCode: string): string {
+  return ZONE_MAPPING[countryCode] || 'Other';
+}
+
+// Geographic Analysis Section - Using RTB Funnel Geo Data
+function GeoAnalysisSection({ geos }: { geos: GeoPerformance[] }) {
+  const hasGeoData = geos && geos.length > 0;
+
+  if (!hasGeoData) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Globe className="h-5 w-5 text-green-600" />
+              Geographic Performance
+            </h3>
+            <p className="text-sm text-gray-500 mt-1">
+              Which geos have highest win rates?
+            </p>
+          </div>
+        </div>
+        <div className="p-8 text-center border-2 border-dashed border-gray-200 rounded-lg">
+          <Upload className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+          <h4 className="font-medium text-gray-700 mb-2">Geo Data Not Available</h4>
+          <p className="text-sm text-gray-500">
+            Place ADX bidding metrics CSV in the docs folder to see geographic win rates.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Sort by auctions won (wins)
+  const sortedGeos = [...geos].sort((a, b) => b.auctions_won - a.auctions_won);
+
+  // Categorize by win rate
+  const highWinRate = sortedGeos.filter(g => g.win_rate >= 80);
+  const goodWinRate = sortedGeos.filter(g => g.win_rate >= 50 && g.win_rate < 80);
+  const lowWinRate = sortedGeos.filter(g => g.win_rate < 50 && g.auctions_won > 0);
+
+  // Calculate totals
+  const totalBids = geos.reduce((sum, g) => sum + g.bids, 0);
+  const totalReached = geos.reduce((sum, g) => sum + g.reached_queries, 0);
+  const totalWins = geos.reduce((sum, g) => sum + g.auctions_won, 0);
+  const overallWinRate = totalReached > 0 ? (totalWins / totalReached * 100) : 0;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Globe className="h-5 w-5 text-green-600" />
+            Geographic Performance
+          </h3>
+          <p className="text-sm text-gray-500 mt-1">
+            Win rates by country
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-bold text-gray-900">{overallWinRate.toFixed(1)}%</div>
+          <div className="text-sm text-gray-500">avg win rate</div>
+        </div>
+      </div>
+
+      {/* Summary Stats */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="p-3 bg-gray-50 rounded-lg text-center">
+          <div className="text-lg font-bold text-gray-900">{geos.length}</div>
+          <div className="text-xs text-gray-500">Countries</div>
+        </div>
+        <div className="p-3 bg-blue-50 rounded-lg text-center">
+          <div className="text-lg font-bold text-blue-700">{formatNumber(totalReached)}</div>
+          <div className="text-xs text-blue-600">Reached</div>
+        </div>
+        <div className="p-3 bg-purple-50 rounded-lg text-center">
+          <div className="text-lg font-bold text-purple-700">{formatNumber(totalBids)}</div>
+          <div className="text-xs text-purple-600">Bids</div>
+        </div>
+        <div className="p-3 bg-green-50 rounded-lg text-center">
+          <div className="text-lg font-bold text-green-700">{formatNumber(totalWins)}</div>
+          <div className="text-xs text-green-600">Wins</div>
+        </div>
+      </div>
+
+      {/* Win Rate Categories */}
+      <div className="space-y-4 mb-6">
+        {highWinRate.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 text-sm font-medium text-green-700 mb-2">
+              <Trophy className="h-4 w-4" />
+              High Win Rate (&gt;80%) - {highWinRate.length} countries
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {highWinRate.map(geo => (
+                <span
+                  key={geo.country}
+                  className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium"
+                  title={`Reached: ${formatNumber(geo.reached_queries)}, Wins: ${formatNumber(geo.auctions_won)}`}
+                >
+                  {geo.country} ({geo.win_rate.toFixed(0)}%)
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {lowWinRate.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 text-sm font-medium text-orange-700 mb-2">
+              <AlertCircle className="h-4 w-4" />
+              Lower Win Rate (&lt;50%) - Optimize these
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {lowWinRate.slice(0, 10).map(geo => (
+                <span
+                  key={geo.country}
+                  className="px-2 py-1 bg-orange-100 text-orange-800 rounded text-xs font-medium"
+                  title={`Reached: ${formatNumber(geo.reached_queries)}, Wins: ${formatNumber(geo.auctions_won)}`}
+                >
+                  {geo.country} ({geo.win_rate.toFixed(0)}%)
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Geo Table with RTB metrics */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-200">
+              <th className="text-left py-2 font-medium text-gray-600">Country</th>
+              <th className="text-right py-2 font-medium text-gray-600">Bids</th>
+              <th className="text-right py-2 font-medium text-gray-600">Reached</th>
+              <th className="text-right py-2 font-medium text-gray-600">Wins</th>
+              <th className="text-right py-2 font-medium text-gray-600">Win Rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedGeos.slice(0, 15).map(geo => (
+              <tr key={geo.country} className="border-b border-gray-100 last:border-0">
+                <td className="py-2">
+                  <span className="font-medium text-gray-900">{geo.country}</span>
+                </td>
+                <td className="py-2 text-right text-gray-900">{formatNumber(geo.bids)}</td>
+                <td className="py-2 text-right text-blue-600">{formatNumber(geo.reached_queries)}</td>
+                <td className="py-2 text-right text-green-600">{formatNumber(geo.auctions_won)}</td>
+                <td className={cn(
+                  "py-2 text-right font-medium",
+                  geo.win_rate < 30 ? "text-red-600" : geo.win_rate >= 60 ? "text-green-600" : "text-gray-900"
+                )}>
+                  {geo.win_rate.toFixed(1)}%
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Recommendations Section
+function RecommendationsSection({ days }: { days: number }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <Lightbulb className="h-5 w-5 text-amber-500" />
+          Understanding Your Funnel
+        </h3>
+      </div>
+
+      <div className="space-y-4">
+        <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+          <h4 className="font-medium text-green-800 mb-2">✅ Pretargeting = Intentional Filtering</h4>
+          <p className="text-sm text-green-700">
+            When 99%+ of bid requests are filtered, that's pretargeting working correctly.
+            You only want traffic matching your sizes, geos, and formats.
+            This is NOT waste - it's cost control.
+          </p>
+        </div>
+
+        <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <h4 className="font-medium text-blue-800 mb-2">📊 Real Efficiency = Win Rate on Reached Traffic</h4>
+          <p className="text-sm text-blue-700">
+            The key metric is: Of traffic that REACHES your bidder, what % becomes impressions?
+            A 30-40% win rate on reached traffic is typical.
+            Focus on improving this, not the pretargeting filter rate.
+          </p>
+        </div>
+
+        <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+          <h4 className="font-medium text-amber-800 mb-2">🎯 Optimization Opportunities</h4>
+          <ul className="text-sm text-amber-700 space-y-1">
+            <li>• <strong>Publisher analysis:</strong> Find publishers where you win more</li>
+            <li>• <strong>Size gaps:</strong> Remove sizes you don't have creatives for</li>
+            <li>• <strong>Geo performance:</strong> Focus budget on high-performing regions</li>
+            <li>• <strong>Blocked publishers:</strong> Review if any should be unblocked</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WasteAnalysisContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const queryClient = useQueryClient();
 
-  // Get initial values from URL params
-  const initialSeatId = searchParams.get("seat") || null;
   const initialDays = parseInt(searchParams.get("days") || "7", 10);
-
-  const [selectedSeatId, setSelectedSeatId] = useState<string | null>(initialSeatId);
   const [days, setDays] = useState<number>(initialDays);
-  const [mockTrafficMessage, setMockTrafficMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Update URL when seat or days changes
   const updateUrl = useCallback(
-    (seatId: string | null, newDays: number) => {
+    (newDays: number) => {
       const params = new URLSearchParams();
-      if (seatId) params.set("seat", seatId);
       params.set("days", String(newDays));
       router.replace(`/waste-analysis?${params.toString()}`, { scroll: false });
     },
     [router]
   );
 
-  const handleSeatChange = useCallback(
-    (seatId: string | null) => {
-      setSelectedSeatId(seatId);
-      updateUrl(seatId, days);
-    },
-    [days, updateUrl]
-  );
-
   const handleDaysChange = useCallback(
     (newDays: number) => {
       setDays(newDays);
-      updateUrl(selectedSeatId, newDays);
+      updateUrl(newDays);
     },
-    [selectedSeatId, updateUrl]
+    [updateUrl]
   );
 
-  // Fetch waste report
+  // Fetch QPS summary
   const {
-    data: wasteReport,
-    isLoading: reportLoading,
-    error: reportError,
-    refetch: refetchReport,
+    data: qpsSummary,
+    isLoading: summaryLoading,
+    refetch: refetchSummary,
   } = useQuery({
-    queryKey: ["waste-report", selectedSeatId, days],
-    queryFn: () =>
-      getWasteReport({
-        buyer_id: selectedSeatId || undefined,
-        days,
-      }),
+    queryKey: ["qps-summary", days],
+    queryFn: () => getQPSSummary(days),
   });
 
-  // Generate mock traffic mutation
-  const mockTrafficMutation = useMutation({
-    mutationFn: () =>
-      generateMockTraffic({
-        days: 7,
-        buyer_id: selectedSeatId || undefined,
-        base_daily_requests: 100000,
-        waste_bias: 0.4,
-      }),
-    onSuccess: (data) => {
-      setMockTrafficMessage({ type: "success", text: data.message });
-      queryClient.invalidateQueries({ queryKey: ["waste-report"] });
-      setTimeout(() => setMockTrafficMessage(null), 5000);
-    },
-    onError: (error) => {
-      setMockTrafficMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "Failed to generate traffic",
-      });
-      setTimeout(() => setMockTrafficMessage(null), 5000);
-    },
+  // Fetch RTB funnel data from CSV files
+  const {
+    data: rtbFunnel,
+    isLoading: funnelLoading,
+    refetch: refetchFunnel,
+  } = useQuery({
+    queryKey: ["rtb-funnel"],
+    queryFn: () => getRTBFunnel(),
   });
-
-  const handleGenerateMockTraffic = () => {
-    mockTrafficMutation.mutate();
-  };
 
   const handleRefresh = () => {
-    refetchReport();
+    refetchSummary();
+    refetchFunnel();
   };
 
+  // Use real funnel data if available
+  const hasFunnelData = rtbFunnel?.funnel?.has_data ?? false;
+  const bidRequests = hasFunnelData ? rtbFunnel!.funnel.total_bid_requests : null;
+  const reached = hasFunnelData ? rtbFunnel!.funnel.total_reached_queries : null;
+  const impressions = hasFunnelData ? rtbFunnel!.funnel.total_impressions : 0;
+
+  // Publishers and Geos from RTB data
+  const publishers = rtbFunnel?.publishers || [];
+  const geos = rtbFunnel?.geos || [];
+
   return (
-    <div className="p-8">
+    <div className="p-8 max-w-7xl mx-auto">
       {/* Page Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Waste Analysis</h1>
+            <h1 className="text-2xl font-bold text-gray-900">QPS Analysis</h1>
             <p className="mt-1 text-sm text-gray-500">
-              Identify RTB bandwidth waste by comparing bid requests against your creative inventory
+              Understand your RTB funnel and optimize win rates
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {/* Period Selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Period:</span>
+              <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                {PERIOD_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => handleDaysChange(option.value)}
+                    className={cn(
+                      "px-3 py-1.5 text-sm font-medium transition-colors",
+                      days === option.value
+                        ? "bg-blue-600 text-white"
+                        : "bg-white text-gray-700 hover:bg-gray-50"
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <button
               onClick={handleRefresh}
-              disabled={reportLoading}
+              disabled={summaryLoading}
               className={cn(
                 "flex items-center gap-2 px-4 py-2",
                 "bg-white border border-gray-300 rounded-lg shadow-sm",
-                "hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500",
+                "hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500",
                 "disabled:opacity-50 disabled:cursor-not-allowed",
                 "text-sm font-medium text-gray-700"
               )}
             >
-              <RefreshCw className={cn("h-4 w-4", reportLoading && "animate-spin")} />
+              <RefreshCw className={cn("h-4 w-4", (summaryLoading || funnelLoading) && "animate-spin")} />
               Refresh
             </button>
           </div>
         </div>
       </div>
 
-      {/* Controls Bar */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
-        <div className="flex items-center gap-6">
-          {/* Seat Selector */}
-          <SeatSelector selectedSeatId={selectedSeatId} onSeatChange={handleSeatChange} />
-        </div>
-
-        <div className="flex items-center gap-4">
-          {/* Period Selector */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">Period:</span>
-            <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-              {PERIOD_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => handleDaysChange(option.value)}
-                  className={cn(
-                    "px-3 py-1.5 text-sm font-medium transition-colors",
-                    days === option.value
-                      ? "bg-primary-600 text-white"
-                      : "bg-white text-gray-700 hover:bg-gray-50"
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
+      {/* The Funnel */}
+      <section className="mb-8">
+        {(summaryLoading || funnelLoading) ? (
+          <div className="bg-white rounded-xl border p-6 animate-pulse">
+            <div className="h-6 bg-gray-200 rounded w-1/4 mb-4" />
+            <div className="flex gap-4">
+              {[1,2,3].map(i => <div key={i} className="flex-1 h-24 bg-gray-100 rounded" />)}
             </div>
           </div>
-
-          {/* Generate Mock Traffic */}
-          <button
-            onClick={handleGenerateMockTraffic}
-            disabled={mockTrafficMutation.isPending}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2",
-              "bg-amber-600 text-white rounded-lg shadow-sm",
-              "hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
-              "text-sm font-medium"
-            )}
-            title="Generate synthetic traffic data for testing"
-          >
-            <Database className={cn("h-4 w-4", mockTrafficMutation.isPending && "animate-pulse")} />
-            {mockTrafficMutation.isPending ? "Generating..." : "Generate Test Data"}
-          </button>
-        </div>
-      </div>
-
-      {/* Mock Traffic Message */}
-      {mockTrafficMessage && (
-        <div
-          className={cn(
-            "mb-6 flex items-center gap-2 px-4 py-3 rounded-lg text-sm",
-            mockTrafficMessage.type === "success"
-              ? "bg-green-50 text-green-700 border border-green-200"
-              : "bg-red-50 text-red-700 border border-red-200"
-          )}
-          role="alert"
-        >
-          {mockTrafficMessage.type === "success" ? (
-            <Database className="h-4 w-4" />
-          ) : (
-            <AlertTriangle className="h-4 w-4" />
-          )}
-          <span>{mockTrafficMessage.text}</span>
-        </div>
-      )}
-
-      {/* Error State */}
-      {reportError && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-red-500" />
-            <p className="text-sm text-red-700">
-              {reportError instanceof Error ? reportError.message : "Failed to load waste report"}
-            </p>
-          </div>
-          <button
-            onClick={handleRefresh}
-            className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
-          >
-            Try again
-          </button>
-        </div>
-      )}
-
-      {/* Waste Report */}
-      <section className="mb-8">
-        {reportLoading ? (
-          <WasteReportSkeleton />
-        ) : wasteReport ? (
-          <WasteReportCard report={wasteReport} />
         ) : (
-          <WasteReportEmpty />
+          <FunnelCard
+            bidRequests={bidRequests}
+            reached={reached}
+            impressions={impressions || 0}
+            days={days}
+          />
         )}
       </section>
 
-      {/* Size Gaps Table */}
-      <section>
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Size Gaps</h2>
-          <p className="text-sm text-gray-500">
-            Sizes receiving bid requests but with no matching creatives in your inventory
-          </p>
-        </div>
-
-        {reportLoading ? (
-          <SizeCoverageChartSkeleton />
-        ) : wasteReport?.size_gaps ? (
-          <SizeCoverageChart sizeGaps={wasteReport.size_gaps} />
-        ) : null}
+      {/* Publisher Performance */}
+      <section className="mb-8">
+        <PublisherPerformanceSection publishers={publishers} />
       </section>
 
-      {/* QPS Summary */}
-      <section className="mt-8">
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">QPS Efficiency Summary</h2>
-          <p className="text-sm text-gray-500">
-            High-level overview of your RTB efficiency and actionable insights
-          </p>
-        </div>
-        <QPSSummaryCard days={days} />
+      {/* Size Analysis */}
+      <section className="mb-8">
+        <SizeAnalysisSection days={days} />
       </section>
 
       {/* Geographic Analysis */}
-      <section className="mt-8">
-        <GeoWastePanel days={days} />
+      <section className="mb-8">
+        <GeoAnalysisSection geos={geos} />
       </section>
 
-      {/* Pretargeting Recommendations */}
-      <section className="mt-8">
-        <PretargetingPanel days={days} />
+      {/* Recommendations / Understanding */}
+      <section className="mb-8">
+        <RecommendationsSection days={days} />
       </section>
     </div>
   );
@@ -272,13 +890,16 @@ function WasteAnalysisContent() {
 
 function WasteAnalysisLoading() {
   return (
-    <div className="p-8">
+    <div className="p-8 max-w-7xl mx-auto">
       <div className="mb-8">
         <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
         <div className="mt-2 h-4 w-96 bg-gray-100 rounded animate-pulse" />
       </div>
-      <div className="mb-6 h-24 bg-gray-100 rounded-lg animate-pulse" />
-      <WasteReportSkeleton />
+      <div className="space-y-6">
+        {[1, 2, 3].map(i => (
+          <div key={i} className="h-64 bg-gray-100 rounded-xl animate-pulse" />
+        ))}
+      </div>
     </div>
   );
 }

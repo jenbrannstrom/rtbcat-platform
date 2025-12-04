@@ -743,3 +743,87 @@ export async function getPretargetingRecommendations(
 export async function getQPSSummary(days: number = 7): Promise<QPSSummaryResponse> {
   return fetchApi<QPSSummaryResponse>(`/analytics/qps-summary?days=${days}`);
 }
+
+// =============================================================================
+// RTB Funnel Analytics API (Phase 28)
+// =============================================================================
+
+export interface RTBFunnelSummary {
+  has_data: boolean;
+  message?: string;
+  total_bid_requests: number;
+  total_reached_queries: number;
+  total_bids: number;
+  total_impressions: number;
+  pretargeting_filter_rate: number;
+  reach_rate: number;
+  win_rate: number;
+  bid_rate: number;
+}
+
+export interface PublisherPerformance {
+  publisher_id: string;
+  publisher_name: string;
+  bid_requests: number;
+  reached_queries: number;
+  bids: number;
+  impressions: number;
+  pretargeting_filter_rate: number;
+  win_rate: number;
+  bid_rate: number;
+}
+
+export interface GeoPerformance {
+  country: string;
+  bids: number;
+  reached_queries: number;
+  bids_in_auction: number;
+  auctions_won: number;
+  win_rate: number;
+  auction_participation_rate: number;
+  creative_count: number;
+}
+
+export interface CreativePerformance {
+  creative_id: string;
+  bids: number;
+  reached_queries: number;
+  bids_in_auction: number;
+  auctions_won: number;
+  win_rate: number;
+  countries: string[];
+}
+
+export interface RTBFunnelResponse {
+  funnel: RTBFunnelSummary;
+  publishers: PublisherPerformance[];
+  geos: GeoPerformance[];
+  creatives: CreativePerformance[];
+  data_sources: {
+    bids_per_pub_available: boolean;
+    adx_metrics_available: boolean;
+    publishers_count: number;
+    geos_count: number;
+    creatives_count: number;
+  };
+}
+
+export async function getRTBFunnel(): Promise<RTBFunnelResponse> {
+  return fetchApi<RTBFunnelResponse>("/analytics/rtb-funnel");
+}
+
+export async function getRTBPublishers(
+  limit: number = 30
+): Promise<{ publishers: PublisherPerformance[]; count: number }> {
+  return fetchApi<{ publishers: PublisherPerformance[]; count: number }>(
+    `/analytics/rtb-funnel/publishers?limit=${limit}`
+  );
+}
+
+export async function getRTBGeos(
+  limit: number = 30
+): Promise<{ geos: GeoPerformance[]; count: number }> {
+  return fetchApi<{ geos: GeoPerformance[]; count: number }>(
+    `/analytics/rtb-funnel/geos?limit=${limit}`
+  );
+}
