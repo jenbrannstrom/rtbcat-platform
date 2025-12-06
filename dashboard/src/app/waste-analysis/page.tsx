@@ -4,12 +4,11 @@ import { useState, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
-  RefreshCw, AlertTriangle, TrendingUp, BarChart3, Globe, Monitor,
-  Smartphone, Layout, Video, Image, Lightbulb, Copy, CheckCircle,
-  Info, ArrowRight, Filter, Trophy, AlertCircle, Ban, Upload
+  RefreshCw, AlertTriangle, TrendingUp, BarChart3, Globe,
+  Lightbulb, Copy, CheckCircle, ArrowRight, Trophy, AlertCircle, Ban, Upload
 } from "lucide-react";
 import { ConfigPerformanceSection } from "@/components/rtb/config-performance";
-import { getQPSSummary, getQPSSizeCoverage, getGeoWaste, getRTBFunnel, type RTBFunnelResponse, type PublisherPerformance, type GeoPerformance } from "@/lib/api";
+import { getQPSSummary, getQPSSizeCoverage, getRTBFunnel, getSpendStats, type PublisherPerformance, type GeoPerformance } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const PERIOD_OPTIONS = [
@@ -510,8 +509,31 @@ function SizeAnalysisSection({ days }: { days: number }) {
           )}
         </>
       ) : (
-        <div className="text-center py-8 text-gray-500">
-          No size data available. Import RTB performance data.
+        <div className="p-6 border-2 border-dashed border-gray-200 rounded-lg">
+          <div className="text-center mb-4">
+            <Upload className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+            <h4 className="font-medium text-gray-700 mb-2">No Size Data Available</h4>
+            <p className="text-sm text-gray-500 max-w-md mx-auto">
+              Import a CSV with <strong>Creative size</strong> as the first dimension to see size breakdown.
+            </p>
+          </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm max-w-lg mx-auto">
+            <p className="font-medium text-blue-800 mb-2">Required CSV format:</p>
+            <p className="text-blue-700 mb-2">
+              In Google Authorized Buyers → Reporting → New Report:
+            </p>
+            <ul className="text-blue-700 space-y-1 mb-3">
+              <li>• <strong>First dimension:</strong> Creative size</li>
+              <li>• Other dimensions: Day, Creative ID</li>
+              <li>• Metrics: Reached queries, Impressions</li>
+            </ul>
+            <a
+              href="/import"
+              className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium"
+            >
+              Go to Import <ArrowRight className="h-4 w-4" />
+            </a>
+          </div>
         </div>
       )}
     </div>
@@ -781,9 +803,19 @@ function WasteAnalysisContent() {
     queryFn: () => getRTBFunnel(),
   });
 
+  // Fetch spend stats for CPM display
+  const {
+    data: spendStats,
+    refetch: refetchSpend,
+  } = useQuery({
+    queryKey: ["spend-stats", days],
+    queryFn: () => getSpendStats(days),
+  });
+
   const handleRefresh = () => {
     refetchSummary();
     refetchFunnel();
+    refetchSpend();
   };
 
   // Use real funnel data if available
@@ -808,6 +840,14 @@ function WasteAnalysisContent() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {/* CPM Badge - show when spend data available */}
+            {spendStats?.has_spend_data && spendStats.avg_cpm_usd && (
+              <div className="px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
+                <span className="text-xs text-green-600 uppercase tracking-wide">Avg CPM</span>
+                <span className="ml-2 text-sm font-bold text-green-700">${spendStats.avg_cpm_usd.toFixed(2)}</span>
+              </div>
+            )}
+
             {/* Period Selector */}
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-600">Period:</span>
