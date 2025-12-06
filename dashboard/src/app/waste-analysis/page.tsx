@@ -8,6 +8,7 @@ import {
   Smartphone, Layout, Video, Image, Lightbulb, Copy, CheckCircle,
   Info, ArrowRight, Filter, Trophy, AlertCircle, Ban, Upload
 } from "lucide-react";
+import { ConfigPerformanceSection } from "@/components/rtb/config-performance";
 import { getQPSSummary, getQPSSizeCoverage, getGeoWaste, getRTBFunnel, type RTBFunnelResponse, type PublisherPerformance, type GeoPerformance } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -863,6 +864,11 @@ function WasteAnalysisContent() {
             days={days}
           />
         )}
+      </section>
+
+      {/* Config Performance - Pretargeting Configs */}
+      <section className="mb-8">
+        <ConfigPerformanceSection />
       </section>
 
       {/* Publisher Performance */}

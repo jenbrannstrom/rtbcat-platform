@@ -4461,140 +4461,150 @@ async def get_rtb_geos(limit: int = Query(30, ge=1, le=100)):
 @app.get("/analytics/rtb-funnel/configs", tags=["RTB Analytics"])
 async def get_config_performance(
     days: int = Query(7, ge=1, le=30),
-    billing_csv_path: Optional[str] = Query(None, description="Path to billing config CSV file"),
-    bids_csv_path: Optional[str] = Query(None, description="Path to creative bids CSV file"),
 ):
     """
     Get performance breakdown by pretargeting config (billing_id).
 
-    Shows WHERE waste originates by breaking down performance across
-    pretargeting configs and sizes within each config.
-
-    Includes:
-    - Config settings (format, geos, platforms, qps_limit, budget)
+    Reads from the rtb_daily table (populated by CSV import) and aggregates
+    by billing_id to show:
+    - Reached queries and impressions per config
     - Size-level performance within each config
     - Win rate vs waste percentages
-
-    If csv_path parameters are provided, uses parse_billing_config_csv and
-    join_billing_and_bids for actual billing ID data. Otherwise falls back
-    to publisher-based proxy data.
+    - Settings derived from the data (format, geos, platforms)
     """
+    import sqlite3
+    import os
+    from collections import defaultdict
+
+    db_path = os.path.expanduser("~/.catscan/catscan.db")
+
     try:
-        analyzer = RTBFunnelAnalyzer()
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
 
-        # If CSV paths provided, use the new parsing and join methods
-        if billing_csv_path:
-            billing_data = analyzer.parse_billing_config_csv(billing_csv_path)
+        # Query aggregated data by billing_id from rtb_daily
+        cursor.execute("""
+            SELECT
+                billing_id,
+                creative_size,
+                creative_format,
+                country,
+                platform,
+                SUM(reached_queries) as total_reached,
+                SUM(impressions) as total_impressions
+            FROM rtb_daily
+            WHERE metric_date >= date('now', ?)
+            GROUP BY billing_id, creative_size, creative_format, country, platform
+            ORDER BY total_reached DESC
+        """, (f'-{days} days',))
 
-            if not billing_data:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"No data found in billing CSV: {billing_csv_path}"
-                )
+        rows = cursor.fetchall()
+        conn.close()
 
-            # If bids CSV also provided, join the data
-            joined_data = None
-            if bids_csv_path:
-                bids_data = analyzer.parse_creative_bids_csv(bids_csv_path)
-                if bids_data:
-                    joined_data = analyzer.join_billing_and_bids(billing_data, bids_data)
-
-            # Build response from parsed CSV data
-            configs_by_billing = {}
-            for row in billing_data:
-                billing_id = row["billing_id"]
-                if billing_id not in configs_by_billing:
-                    configs_by_billing[billing_id] = {
-                        "billing_id": billing_id,
-                        "name": f"Config {billing_id}",
-                        "reached": 0,
-                        "bids": 0,
-                        "impressions": 0,
-                        "sizes": {},
-                    }
-
-                config = configs_by_billing[billing_id]
-                config["reached"] += row["reached_queries"]
-                config["impressions"] += row["impressions"]
-
-                # Track size breakdown
-                size = row["creative_size"] or "unknown"
-                if size not in config["sizes"]:
-                    config["sizes"][size] = {"reached": 0, "impressions": 0, "bids": 0}
-                config["sizes"][size]["reached"] += row["reached_queries"]
-                config["sizes"][size]["impressions"] += row["impressions"]
-
-            # Merge joined data if available
-            if joined_data:
-                for billing_id, join_info in joined_data.items():
-                    if billing_id in configs_by_billing:
-                        configs_by_billing[billing_id]["bids"] = join_info["total_bids"]
-                        configs_by_billing[billing_id]["countries"] = join_info["countries"]
-                        # Update size bids from joined data
-                        for size, size_info in join_info["sizes"].items():
-                            if size in configs_by_billing[billing_id]["sizes"]:
-                                configs_by_billing[billing_id]["sizes"][size]["bids"] = size_info["bids"]
-
-            # Convert to list and calculate rates
-            configs = []
-            total_reached = 0
-            total_impressions = 0
-
-            for config in sorted(configs_by_billing.values(), key=lambda c: c["reached"], reverse=True):
-                reached = config["reached"]
-                impressions = config["impressions"]
-                win_rate = (impressions / reached * 100) if reached > 0 else 0
-                waste = 100 - win_rate
-
-                total_reached += reached
-                total_impressions += impressions
-
-                # Convert sizes dict to list
-                sizes_list = []
-                for size, size_data in sorted(config["sizes"].items(), key=lambda x: x[1]["reached"], reverse=True):
-                    size_win = (size_data["impressions"] / size_data["reached"] * 100) if size_data["reached"] > 0 else 0
-                    sizes_list.append({
-                        "size": size,
-                        "reached": size_data["reached"],
-                        "impressions": size_data["impressions"],
-                        "bids": size_data.get("bids", 0),
-                        "win_rate_pct": round(size_win, 1),
-                        "waste_pct": round(100 - size_win, 1),
-                    })
-
-                configs.append({
-                    "billing_id": config["billing_id"],
-                    "name": config["name"],
-                    "reached": reached,
-                    "bids": config.get("bids", 0),
-                    "impressions": impressions,
-                    "win_rate_pct": round(win_rate, 1),
-                    "waste_pct": round(waste, 1),
-                    "countries": config.get("countries", []),
-                    "sizes": sizes_list[:5],
-                })
-
-            overall_win = (total_impressions / total_reached * 100) if total_reached > 0 else 0
-
+        if not rows:
+            # No data in database
             return {
                 "period_days": days,
-                "data_source": "csv",
-                "billing_csv": billing_csv_path,
-                "bids_csv": bids_csv_path,
-                "configs": configs[:20],
-                "total_reached": total_reached,
-                "total_impressions": total_impressions,
-                "overall_win_rate_pct": round(overall_win, 1),
-                "overall_waste_pct": round(100 - overall_win, 1),
+                "data_source": "database",
+                "configs": [],
+                "total_reached": 0,
+                "total_impressions": 0,
+                "overall_win_rate_pct": 0,
+                "overall_waste_pct": 100,
             }
 
-        # Fallback to original behavior using publisher proxy
-        result = analyzer.get_config_performance()
-        result["period_days"] = days
-        result["data_source"] = "publisher_proxy"
-        return result
-    except HTTPException:
-        raise
+        # Aggregate by billing_id
+        configs_by_billing: dict = defaultdict(lambda: {
+            "reached": 0,
+            "impressions": 0,
+            "sizes": defaultdict(lambda: {"reached": 0, "impressions": 0}),
+            "formats": set(),
+            "countries": set(),
+            "platforms": set(),
+        })
+
+        for row in rows:
+            billing_id = row["billing_id"]
+            config = configs_by_billing[billing_id]
+            config["reached"] += row["total_reached"] or 0
+            config["impressions"] += row["total_impressions"] or 0
+
+            # Track size breakdown
+            size = row["creative_size"] or "unknown"
+            config["sizes"][size]["reached"] += row["total_reached"] or 0
+            config["sizes"][size]["impressions"] += row["total_impressions"] or 0
+
+            # Track settings
+            if row["creative_format"]:
+                config["formats"].add(row["creative_format"])
+            if row["country"]:
+                config["countries"].add(row["country"])
+            if row["platform"]:
+                config["platforms"].add(row["platform"])
+
+        # Convert to response format
+        configs = []
+        total_reached = 0
+        total_impressions = 0
+
+        for billing_id, config in sorted(configs_by_billing.items(), key=lambda x: x[1]["reached"], reverse=True):
+            reached = config["reached"]
+            impressions = config["impressions"]
+            win_rate = (impressions / reached * 100) if reached > 0 else 0
+            waste = 100 - win_rate
+
+            total_reached += reached
+            total_impressions += impressions
+
+            # Convert sizes dict to list
+            sizes_list = []
+            for size, size_data in sorted(config["sizes"].items(), key=lambda x: x[1]["reached"], reverse=True):
+                size_reached = size_data["reached"]
+                size_impressions = size_data["impressions"]
+                size_win = (size_impressions / size_reached * 100) if size_reached > 0 else 0
+                sizes_list.append({
+                    "size": size,
+                    "reached": size_reached,
+                    "impressions": size_impressions,
+                    "win_rate_pct": round(size_win, 1),
+                    "waste_pct": round(100 - size_win, 1),
+                })
+
+            # Determine format from collected formats
+            formats = list(config["formats"])
+            primary_format = formats[0] if formats else "BANNER"
+
+            configs.append({
+                "billing_id": billing_id,
+                "name": f"Config {billing_id}",
+                "reached": reached,
+                "bids": 0,  # Not available in current schema
+                "impressions": impressions,
+                "win_rate_pct": round(win_rate, 1),
+                "waste_pct": round(waste, 1),
+                "settings": {
+                    "format": primary_format,
+                    "geos": sorted(list(config["countries"]))[:10],
+                    "platforms": sorted(list(config["platforms"])),
+                    "qps_limit": None,
+                    "budget_usd": None,
+                },
+                "sizes": sizes_list[:5],
+            })
+
+        overall_win = (total_impressions / total_reached * 100) if total_reached > 0 else 0
+
+        return {
+            "period_days": days,
+            "data_source": "database",
+            "configs": configs[:20],
+            "total_reached": total_reached,
+            "total_impressions": total_impressions,
+            "overall_win_rate_pct": round(overall_win, 1),
+            "overall_waste_pct": round(100 - overall_win, 1),
+        }
+
     except Exception as e:
         logger.error(f"Failed to get config performance: {e}")
         raise HTTPException(status_code=500, detail=str(e))

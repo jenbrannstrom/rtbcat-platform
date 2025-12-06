@@ -2,8 +2,15 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { cn, formatNumber } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { ChevronRight } from 'lucide-react';
+
+// Local formatNumber since the main utils might not have it
+function formatNumber(n: number): string {
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+  return n.toString();
+}
 
 interface SizePerformance {
   size: string;
@@ -74,9 +81,6 @@ export function ConfigPerformanceSection() {
 
   return (
     <div className="bg-white rounded-lg border p-4">
-      <div className="bg-yellow-200 border border-yellow-400 p-2 mb-2 text-sm font-mono">
-        DEBUG: Loading={String(isLoading)} Configs={data?.configs?.length || 0}
-      </div>
       <h3 className="text-lg font-semibold mb-1">Pretargeting Configs</h3>
       <p className="text-xs text-gray-500 mb-3">
         Click to expand settings and size breakdown
