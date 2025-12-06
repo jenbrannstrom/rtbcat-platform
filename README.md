@@ -1,8 +1,8 @@
 # Cat-Scan Creative Intelligence
 
-**Version:** 21.0
-**Phase:** 21 - UI Polish (Thumbnails & Docs)
-**Last Updated:** December 3, 2025
+**Version:** 22.0
+**Phase:** 22 - Unified Dashboard & Schema Alignment
+**Last Updated:** December 6, 2025
 
 A privacy-first QPS optimization platform for Google Authorized Buyers. Cat-Scan helps RTB bidders eliminate wasted QPS by learning which data-streams the bidder likes to bid on. Cat-Scan is a monitoring middleware between the bidder and the Ad-exchange. By looking at both what the bidder likes to buy and seeing what never gets bid on, it proposes evidence-based waste signals, enabling data-driven pretargeting decisions. All to increase QPS & bidder efficiency
 
@@ -804,14 +804,31 @@ await store.migrate_add_buyer_seats()
 
 ## Recent Changes (December 2025)
 
-### Phase 9.7: Onboarding Flow (NEW)
+### Phase 22: Unified Dashboard & Schema Alignment (NEW)
+- **Database schema aligned** with specification in `reset_database.py`:
+  - `rtb_daily` now has 49 columns including UA/conversion fields
+  - All 13 required indexes created
+  - Added tables: `fraud_signals`, `waste_signals`, `troubleshooting_data`, `troubleshooting_collections`
+  - Dropped legacy `performance_metrics` table
+- **Avg CPM badge** in waste-analysis page header (updates with 7/14/30 day selector)
+- **Config display fix**: Pretargeting configs now show "Config {id}" instead of duplicated ID
+- **Size Analysis CSV instructions**: Empty state shows exactly which CSV report to generate in Google Authorized Buyers with link to /import
+- **API endpoint**: `/analytics/spend-stats` for CPM calculation
+
+### Phase 21: RTB Funnel Analysis
+- Config performance section fetches from database (not file paths)
+- Publisher performance with win rate categories
+- Geographic performance with country-level breakdown
+- Gmail auto-import for scheduled reports
+
+### Phase 9.7: Onboarding Flow
 - `/connect` page for credential management and account discovery
 - JSON key upload with drag-drop support
 - Smart seat UI: single-seat shows title, multi-seat shows dropdown
 - Sync button conditionally appears after credentials uploaded
 - Comprehensive setup guide at `docs/SETUP_GUIDE.md`
 
-### Phase 9.6: Video & Card Improvements (NEW)
+### Phase 9.6: Video & Card Improvements
 - Video thumbnails extracted from VAST XML CompanionAds
 - CLI thumbnail generator: `python cli/qps_analyzer.py generate-thumbnails`
 - Native ad icon/logo display on cards with headline overlay
@@ -929,6 +946,8 @@ sudo systemctl restart rtbcat-dashboard
 | POST | `/config/credentials` | Upload service account JSON key |
 | GET | `/config/status` | Check credential configuration status |
 | GET | `/thumbnails/{id}.jpg` | Serve locally-generated video thumbnail |
+| GET | `/analytics/spend-stats` | Get spend/CPM stats for time period |
+| GET | `/analytics/rtb-funnel/configs` | Get pretargeting config performance |
 
 ## API Data
 
