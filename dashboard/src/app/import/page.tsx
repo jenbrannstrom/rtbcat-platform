@@ -583,63 +583,126 @@ export default function ImportPage() {
 function ExportInstructions() {
   return (
     <div className="space-y-6 text-sm">
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+        <h4 className="font-semibold text-amber-900 mb-2">Why Multiple Reports?</h4>
+        <p className="text-amber-800">
+          Google Authorized Buyers doesn{"'"}t allow <strong>Billing ID</strong> and <strong>Bids</strong> in the same export.
+          To analyze waste by pretargeting config, we need to join two CSV files on <code className="bg-amber-100 px-1 rounded">Creative ID</code>.
+        </p>
+      </div>
+
       <div>
-        <h4 className="font-semibold text-gray-900 mb-2">Step 1: Create a Scheduled Report</h4>
+        <h4 className="font-semibold text-gray-900 mb-2">Go to Authorized Buyers Reporting</h4>
         <ol className="list-decimal list-inside text-gray-700 space-y-1">
-          <li>Go to <a href="https://authorized-buyers.google.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1">Authorized Buyers <ExternalLink className="h-3 w-3" /></a></li>
+          <li>Open <a href="https://authorized-buyers.google.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1">Authorized Buyers <ExternalLink className="h-3 w-3" /></a></li>
           <li>Navigate to <strong>Reporting</strong> → <strong>New Report</strong></li>
-          <li>Select <strong>Schedule</strong> → Daily (runs automatically)</li>
         </ol>
       </div>
 
-      <div>
-        <h4 className="font-semibold text-gray-900 mb-2">Step 2: Select ALL Dimensions</h4>
-        <p className="text-gray-600 mb-2">
-          Add <strong>every available dimension</strong>. Start with Creative ID, then add all others:
-        </p>
-        <ul className="space-y-1 text-gray-700">
-          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> <strong>Creative ID</strong> <span className="text-gray-500">(key field - links to your creatives)</span></li>
-          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Day</li>
-          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Billing ID</li>
-          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Creative size</li>
-          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Country</li>
-          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Mobile app ID / Mobile app name</li>
-          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Publisher ID / Publisher name</li>
-          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Platform / Environment</li>
-          <li className="text-gray-500 italic pl-6">...and any other dimensions available</li>
-        </ul>
+      {/* Report 1: Billing Config */}
+      <div className="border border-gray-200 rounded-lg p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded">Report 1</span>
+          <h4 className="font-semibold text-gray-900">Billing Config Performance</h4>
+        </div>
+        <p className="text-gray-600 mb-3">Shows waste per pretargeting config (billing_id)</p>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Dimensions</p>
+            <ul className="space-y-1 text-gray-700">
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Day</li>
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> <strong>Billing ID</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> <strong>Creative ID</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Creative size</li>
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Creative format</li>
+            </ul>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Metrics</p>
+            <ul className="space-y-1 text-gray-700">
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> <strong>Reached queries</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> <strong>Impressions</strong></li>
+            </ul>
+          </div>
+        </div>
+        <p className="text-xs text-gray-500 mt-3">Save as: <code className="bg-gray-100 px-1 rounded">catscan-billing-config.csv</code></p>
       </div>
 
-      <div>
-        <h4 className="font-semibold text-gray-900 mb-2">Step 3: Select ALL Metrics</h4>
-        <p className="text-gray-600 mb-2">
-          Add <strong>every available metric</strong>. We want all the data:
-        </p>
-        <ul className="space-y-1 text-gray-700">
-          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Reached queries</li>
-          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Impressions</li>
-          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Clicks</li>
-          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Spend</li>
-          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Video starts, Video completions, VAST errors</li>
-          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Active View metrics</li>
-          <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Conversions (if available)</li>
-          <li className="text-gray-500 italic pl-6">...and any other metrics available</li>
-        </ul>
+      {/* Report 2: Creative Bids */}
+      <div className="border border-gray-200 rounded-lg p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="bg-purple-100 text-purple-800 text-xs font-bold px-2 py-1 rounded">Report 2</span>
+          <h4 className="font-semibold text-gray-900">Creative Bidding Activity</h4>
+        </div>
+        <p className="text-gray-600 mb-3">Shows bidding activity per creative by geo</p>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Dimensions</p>
+            <ul className="space-y-1 text-gray-700">
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Day</li>
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> <strong>Creative ID</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Country</li>
+            </ul>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Metrics</p>
+            <ul className="space-y-1 text-gray-700">
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> <strong>Bids</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Bids in auction</li>
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> <strong>Reached queries</strong></li>
+            </ul>
+          </div>
+        </div>
+        <p className="text-xs text-gray-500 mt-3">Save as: <code className="bg-gray-100 px-1 rounded">catscan-creative-bids.csv</code></p>
       </div>
 
+      {/* Report 3: Publisher Performance (Optional) */}
+      <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="bg-gray-200 text-gray-700 text-xs font-bold px-2 py-1 rounded">Report 3</span>
+          <h4 className="font-semibold text-gray-900">Publisher Performance</h4>
+          <span className="text-xs text-gray-500">(optional)</span>
+        </div>
+        <p className="text-gray-600 mb-3">Shows publisher-level funnel metrics</p>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Dimensions</p>
+            <ul className="space-y-1 text-gray-700">
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Publisher ID</li>
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Publisher name</li>
+            </ul>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Metrics</p>
+            <ul className="space-y-1 text-gray-700">
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Bid requests</li>
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Reached queries</li>
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Bids</li>
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Successful responses</li>
+              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Impressions</li>
+            </ul>
+          </div>
+        </div>
+        <p className="text-xs text-gray-500 mt-3">Save as: <code className="bg-gray-100 px-1 rounded">catscan-publisher-perf.csv</code></p>
+      </div>
+
+      {/* Schedule Settings */}
       <div>
-        <h4 className="font-semibold text-gray-900 mb-2">Step 4: Save & Schedule</h4>
+        <h4 className="font-semibold text-gray-900 mb-2">Schedule Settings (All Reports)</h4>
         <ul className="list-disc list-inside text-gray-700 space-y-1">
-          <li>Set date range: <strong>Yesterday</strong> (for daily automated exports)</li>
+          <li>Date range: <strong>Yesterday</strong></li>
+          <li>Schedule: <strong>Daily</strong></li>
           <li>File format: <strong>CSV</strong></li>
-          <li>Save the report</li>
         </ul>
       </div>
 
       <div className="bg-blue-50 p-3 rounded-lg">
         <p className="text-blue-800">
-          <strong>Tip:</strong> Download your first export manually to verify it works,
-          then let the schedule run daily. Upload each day{"'"}s CSV here.
+          <strong>Tip:</strong> Upload all CSV files here. Cat-Scan automatically detects the report type
+          from the column headers and joins them on <code className="bg-blue-100 px-1 rounded">Creative ID</code>.
         </p>
       </div>
     </div>

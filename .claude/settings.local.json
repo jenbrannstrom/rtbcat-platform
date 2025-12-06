@@ -59,7 +59,9 @@
       "Bash(xargs:*)",
       "Bash(time curl:*)",
       "Bash(sudo systemctl stop:*)",
-      "Bash(sudo systemctl start:*)"
+      "Bash(sudo systemctl start:*)",
+      "Bash(ls:*)",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []
