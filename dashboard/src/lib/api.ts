@@ -744,6 +744,19 @@ export async function getQPSSummary(days: number = 7): Promise<QPSSummaryRespons
   return fetchApi<QPSSummaryResponse>(`/analytics/qps-summary?days=${days}`);
 }
 
+// Spend stats for CPM display
+export interface SpendStatsResponse {
+  period_days: number;
+  total_impressions: number;
+  total_spend_usd: number;
+  avg_cpm_usd: number | null;
+  has_spend_data: boolean;
+}
+
+export async function getSpendStats(days: number = 7): Promise<SpendStatsResponse> {
+  return fetchApi<SpendStatsResponse>(`/analytics/spend-stats?days=${days}`);
+}
+
 // =============================================================================
 // RTB Funnel Analytics API (Phase 28)
 // =============================================================================

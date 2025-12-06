@@ -131,10 +131,17 @@ function ConfigRow({ config }: { config: ConfigData }) {
           )}
         />
 
-        <span className="font-mono text-xs text-gray-400 w-16">{config.billing_id}</span>
-        <span className="font-medium flex-1 text-left truncate">
-          {config.name || 'Unnamed'}
-        </span>
+        {/* Show name if different from billing_id, otherwise just show billing_id */}
+        {config.name && config.name !== config.billing_id && !config.name.startsWith('Config ') ? (
+          <>
+            <span className="font-mono text-xs text-gray-400 w-20 shrink-0">{config.billing_id}</span>
+            <span className="font-medium flex-1 text-left truncate">{config.name}</span>
+          </>
+        ) : (
+          <span className="font-mono text-sm text-gray-700 flex-1 text-left">
+            Config {config.billing_id}
+          </span>
+        )}
 
         <div className="flex gap-4 text-xs">
           <span className="text-gray-600 w-20 text-right">

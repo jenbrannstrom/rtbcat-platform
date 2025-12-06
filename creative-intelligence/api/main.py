@@ -4398,6 +4398,55 @@ async def get_geo_pretargeting_config(days: int = Query(7, ge=1, le=90)):
 from analytics.rtb_funnel_analyzer import RTBFunnelAnalyzer
 
 
+@app.get("/analytics/spend-stats", tags=["RTB Analytics"])
+async def get_spend_stats(days: int = Query(7, ge=1, le=90)):
+    """
+    Get overall spend statistics for the selected period.
+
+    Returns total spend, impressions, and avg CPM from rtb_daily table.
+    """
+    try:
+        conn = sqlite3.connect(str(QPS_DB_PATH))
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                COALESCE(SUM(impressions), 0) as total_impressions,
+                COALESCE(SUM(spend_micros), 0) as total_spend_micros
+            FROM rtb_daily
+            WHERE metric_date >= date('now', ?)
+        """, (f'-{days} days',))
+
+        row = cursor.fetchone()
+        conn.close()
+
+        total_impressions = row[0] if row else 0
+        total_spend_micros = row[1] if row else 0
+        total_spend_usd = total_spend_micros / 1_000_000
+
+        # Calculate CPM: (spend / impressions) * 1000
+        avg_cpm = None
+        if total_impressions > 0 and total_spend_micros > 0:
+            avg_cpm = (total_spend_usd / total_impressions) * 1000
+
+        return {
+            "period_days": days,
+            "total_impressions": total_impressions,
+            "total_spend_usd": round(total_spend_usd, 2),
+            "avg_cpm_usd": round(avg_cpm, 2) if avg_cpm else None,
+            "has_spend_data": total_spend_micros > 0,
+        }
+    except Exception as e:
+        logger.error(f"Failed to get spend stats: {e}")
+        return {
+            "period_days": days,
+            "total_impressions": 0,
+            "total_spend_usd": 0,
+            "avg_cpm_usd": None,
+            "has_spend_data": False,
+        }
+
+
 @app.get("/analytics/rtb-funnel", tags=["RTB Analytics"])
 async def get_rtb_funnel():
     """
