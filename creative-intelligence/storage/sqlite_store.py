@@ -568,6 +568,39 @@ class SQLiteStore:
         "CREATE INDEX IF NOT EXISTS idx_rec_severity ON recommendations(severity)",
         "CREATE INDEX IF NOT EXISTS idx_rec_status ON recommendations(status)",
         "CREATE INDEX IF NOT EXISTS idx_rec_generated ON recommendations(generated_at DESC)",
+        # Phase 23: RTB Endpoints table (from bidders.endpoints API)
+        """CREATE TABLE IF NOT EXISTS rtb_endpoints (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bidder_id TEXT NOT NULL,
+            endpoint_id TEXT NOT NULL,
+            url TEXT NOT NULL,
+            maximum_qps INTEGER,
+            trading_location TEXT,
+            bid_protocol TEXT,
+            synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(bidder_id, endpoint_id)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_rtb_endpoints_bidder ON rtb_endpoints(bidder_id)",
+        # Phase 23: Pretargeting Configs table (from bidders.pretargetingConfigs API)
+        """CREATE TABLE IF NOT EXISTS pretargeting_configs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bidder_id TEXT NOT NULL,
+            config_id TEXT NOT NULL,
+            billing_id TEXT,
+            display_name TEXT,
+            user_name TEXT,
+            state TEXT DEFAULT 'ACTIVE',
+            included_formats TEXT,
+            included_platforms TEXT,
+            included_sizes TEXT,
+            included_geos TEXT,
+            excluded_geos TEXT,
+            raw_config TEXT,
+            synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(bidder_id, config_id)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_pretargeting_bidder ON pretargeting_configs(bidder_id)",
+        "CREATE INDEX IF NOT EXISTS idx_pretargeting_billing ON pretargeting_configs(billing_id)",
     ]
 
     def __init__(self, db_path: str | Path = "~/.catscan/catscan.db") -> None:
