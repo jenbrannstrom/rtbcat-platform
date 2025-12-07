@@ -127,14 +127,41 @@ function FunnelCard({
             </div>
           </div>
 
-          <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
             <div className="flex items-start gap-3">
-              <Upload className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-amber-800">
-                <strong>Place RTB CSVs in docs folder for full analysis</strong>
-                <p className="mt-1 text-amber-700">
-                  Bids-per-Pub.csv shows reached queries and win rates by publisher.
+              <Upload className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-blue-800">
+                <strong>Import RTB performance data to see the full funnel</strong>
+                <p className="mt-2 text-blue-700">
+                  Create this report in <strong>Authorized Buyers → Reporting → New Report</strong>:
                 </p>
+                <div className="mt-3 p-3 bg-white rounded border border-blue-200">
+                  <p className="font-medium text-blue-900 mb-2">Report: &quot;catscan-billing-config&quot;</p>
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <p className="font-semibold text-gray-600 mb-1">Dimensions (in order):</p>
+                      <ol className="list-decimal list-inside text-gray-700">
+                        <li>Day</li>
+                        <li>Billing ID</li>
+                        <li>Creative ID</li>
+                        <li>Creative size</li>
+                        <li>Creative format</li>
+                      </ol>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-600 mb-1">Metrics:</p>
+                      <ul className="text-gray-700">
+                        <li>✓ Reached queries</li>
+                        <li>✓ Impressions</li>
+                      </ul>
+                      <p className="font-semibold text-gray-600 mt-2 mb-1">Schedule:</p>
+                      <p className="text-gray-700">Daily, Yesterday</p>
+                    </div>
+                  </div>
+                </div>
+                <a href="/setup?tab=import" className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
+                  Go to Import → <ArrowRight className="h-3 w-3" />
+                </a>
               </div>
             </div>
           </div>
@@ -163,15 +190,39 @@ function PublisherPerformanceSection({ publishers }: { publishers: PublisherPerf
           </div>
         </div>
 
-        <div className="p-8 text-center border-2 border-dashed border-gray-200 rounded-lg">
-          <Upload className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-          <h4 className="font-medium text-gray-700 mb-2">Publisher Data Not Available</h4>
-          <p className="text-sm text-gray-500 mb-4 max-w-md mx-auto">
-            Place your RTB report CSVs in the docs folder to see which publishers
-            you're winning on and which ones are highly competitive.
-          </p>
-          <div className="text-xs text-gray-400">
-            File: Bids-per-Pub.csv with columns: Publisher ID, Publisher name, Bid requests, Reached queries, Impressions
+        <div className="p-6 border-2 border-dashed border-gray-200 rounded-lg">
+          <div className="flex items-start gap-4">
+            <Upload className="h-8 w-8 text-gray-400 flex-shrink-0" />
+            <div>
+              <h4 className="font-medium text-gray-700 mb-2">Publisher Data Not Available</h4>
+              <p className="text-sm text-gray-600 mb-4">
+                Import a publisher performance report to see which publishers you're winning on.
+              </p>
+              <div className="p-3 bg-gray-50 rounded border border-gray-200 text-xs">
+                <p className="font-semibold text-gray-700 mb-2">Report: &quot;catscan-publisher-perf&quot;</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="font-semibold text-gray-500 mb-1">Dimensions:</p>
+                    <ul className="text-gray-600">
+                      <li>1. Publisher ID</li>
+                      <li>2. Publisher name</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-500 mb-1">Metrics:</p>
+                    <ul className="text-gray-600">
+                      <li>✓ Bid requests</li>
+                      <li>✓ Reached queries</li>
+                      <li>✓ Impressions</li>
+                    </ul>
+                  </div>
+                </div>
+                <p className="mt-2 text-gray-500">Schedule: <strong>Daily</strong></p>
+              </div>
+              <a href="/setup?tab=import" className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
+                Go to Import → <ArrowRight className="h-3 w-3" />
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -579,12 +630,41 @@ function GeoAnalysisSection({ geos }: { geos: GeoPerformance[] }) {
             </p>
           </div>
         </div>
-        <div className="p-8 text-center border-2 border-dashed border-gray-200 rounded-lg">
-          <Upload className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-          <h4 className="font-medium text-gray-700 mb-2">Geo Data Not Available</h4>
-          <p className="text-sm text-gray-500">
-            Place ADX bidding metrics CSV in the docs folder to see geographic win rates.
-          </p>
+        <div className="p-6 border-2 border-dashed border-gray-200 rounded-lg">
+          <div className="flex items-start gap-4">
+            <Upload className="h-8 w-8 text-gray-400 flex-shrink-0" />
+            <div>
+              <h4 className="font-medium text-gray-700 mb-2">Geographic Data Not Available</h4>
+              <p className="text-sm text-gray-600 mb-4">
+                Import a creative bidding activity report to see geographic win rates.
+              </p>
+              <div className="p-3 bg-gray-50 rounded border border-gray-200 text-xs">
+                <p className="font-semibold text-gray-700 mb-2">Report: &quot;catscan-creative-bids&quot;</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="font-semibold text-gray-500 mb-1">Dimensions:</p>
+                    <ul className="text-gray-600">
+                      <li>1. Day</li>
+                      <li>2. Creative ID</li>
+                      <li>3. Country</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-500 mb-1">Metrics:</p>
+                    <ul className="text-gray-600">
+                      <li>✓ Bids</li>
+                      <li>✓ Bids in auction</li>
+                      <li>✓ Reached queries</li>
+                    </ul>
+                  </div>
+                </div>
+                <p className="mt-2 text-gray-500">Schedule: <strong>Daily</strong></p>
+              </div>
+              <a href="/setup?tab=import" className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
+                Go to Import → <ArrowRight className="h-3 w-3" />
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -854,9 +934,9 @@ function WasteAnalysisContent() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">QPS Analysis</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Waste Optimizer</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Understand your RTB funnel and optimize win rates
+            Understand your RTB funnel and optimize QPS waste
           </p>
         </div>
         <div className="flex items-center gap-3">
