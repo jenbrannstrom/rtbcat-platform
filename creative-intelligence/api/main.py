@@ -23,7 +23,7 @@ from qps.importer import validate_csv, import_csv
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from collectors import BuyerSeatsClient, CreativesClient
+from collectors import BuyerSeatsClient, CreativesClient, EndpointsClient, PretargetingClient
 from config import ConfigManager
 from storage import SQLiteStore, PerformanceMetric, creative_dicts_to_storage
 from analytics import WasteAnalyzer
@@ -2503,6 +2503,339 @@ async def populate_seats_from_creatives(
     except Exception as e:
         logger.error(f"Seat population failed: {e}")
         raise HTTPException(status_code=500, detail=f"Seat population failed: {str(e)}")
+
+
+# =============================================================================
+# RTB Settings Endpoints (Endpoints & Pretargeting Configs)
+# =============================================================================
+
+
+class RTBEndpointResponse(BaseModel):
+    """Response model for an RTB endpoint."""
+
+    endpoint_id: str
+    bidder_id: str
+    url: str
+    maximum_qps: Optional[int] = None
+    trading_location: Optional[str] = None
+    bid_protocol: Optional[str] = None
+    synced_at: Optional[str] = None
+
+
+class PretargetingConfigResponse(BaseModel):
+    """Response model for a pretargeting config."""
+
+    config_id: str
+    bidder_id: str
+    billing_id: Optional[str] = None
+    display_name: Optional[str] = None
+    user_name: Optional[str] = None
+    state: str = "ACTIVE"
+    included_formats: Optional[list[str]] = None
+    included_platforms: Optional[list[str]] = None
+    included_sizes: Optional[list[str]] = None
+    included_geos: Optional[list[str]] = None
+    excluded_geos: Optional[list[str]] = None
+    synced_at: Optional[str] = None
+
+
+class SyncEndpointsResponse(BaseModel):
+    """Response model for sync endpoints operation."""
+
+    status: str
+    endpoints_synced: int
+    bidder_id: str
+
+
+class SyncPretargetingResponse(BaseModel):
+    """Response model for sync pretargeting configs operation."""
+
+    status: str
+    configs_synced: int
+    bidder_id: str
+
+
+@app.post("/settings/endpoints/sync", response_model=SyncEndpointsResponse, tags=["RTB Settings"])
+async def sync_rtb_endpoints(
+    config: ConfigManager = Depends(get_config_manager),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Sync RTB endpoints from Google Authorized Buyers API.
+
+    Fetches all RTB endpoints for the configured bidder account and stores them
+    in the rtb_endpoints table.
+    """
+    if not config.has_credentials():
+        raise HTTPException(
+            status_code=400,
+            detail="Service account credentials not configured. Upload via /config/credentials."
+        )
+
+    creds = config.get_credentials()
+    if not creds:
+        raise HTTPException(status_code=500, detail="Failed to load credentials")
+
+    try:
+        client = EndpointsClient(
+            credentials_path=str(creds.credentials_path),
+            account_id=creds.account_id,
+        )
+        endpoints = await client.list_endpoints()
+
+        # Store endpoints in database
+        async with store._connection() as conn:
+            import asyncio
+            loop = asyncio.get_event_loop()
+
+            for ep in endpoints:
+                await loop.run_in_executor(
+                    None,
+                    lambda ep=ep: conn.execute(
+                        """
+                        INSERT OR REPLACE INTO rtb_endpoints
+                        (bidder_id, endpoint_id, url, maximum_qps, trading_location, bid_protocol, synced_at)
+                        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                        """,
+                        (
+                            creds.account_id,
+                            ep["endpointId"],
+                            ep["url"],
+                            ep.get("maximumQps"),
+                            ep.get("tradingLocation"),
+                            ep.get("bidProtocol"),
+                        ),
+                    ),
+                )
+            await loop.run_in_executor(None, conn.commit)
+
+        return SyncEndpointsResponse(
+            status="success",
+            endpoints_synced=len(endpoints),
+            bidder_id=creds.account_id,
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to sync RTB endpoints: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to sync endpoints: {str(e)}")
+
+
+@app.get("/settings/endpoints", response_model=list[RTBEndpointResponse], tags=["RTB Settings"])
+async def get_rtb_endpoints(
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get stored RTB endpoints.
+
+    Returns all RTB endpoints that have been synced from the Google API.
+    """
+    try:
+        async with store._connection() as conn:
+            import asyncio
+            loop = asyncio.get_event_loop()
+
+            rows = await loop.run_in_executor(
+                None,
+                lambda: conn.execute(
+                    "SELECT * FROM rtb_endpoints ORDER BY endpoint_id"
+                ).fetchall(),
+            )
+
+        return [
+            RTBEndpointResponse(
+                endpoint_id=row["endpoint_id"],
+                bidder_id=row["bidder_id"],
+                url=row["url"],
+                maximum_qps=row["maximum_qps"],
+                trading_location=row["trading_location"],
+                bid_protocol=row["bid_protocol"],
+                synced_at=row["synced_at"],
+            )
+            for row in rows
+        ]
+
+    except Exception as e:
+        logger.error(f"Failed to get RTB endpoints: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get endpoints: {str(e)}")
+
+
+@app.post("/settings/pretargeting/sync", response_model=SyncPretargetingResponse, tags=["RTB Settings"])
+async def sync_pretargeting_configs(
+    config: ConfigManager = Depends(get_config_manager),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Sync pretargeting configs from Google Authorized Buyers API.
+
+    Fetches all pretargeting configurations for the configured bidder account
+    and stores them in the pretargeting_configs table.
+    """
+    if not config.has_credentials():
+        raise HTTPException(
+            status_code=400,
+            detail="Service account credentials not configured. Upload via /config/credentials."
+        )
+
+    creds = config.get_credentials()
+    if not creds:
+        raise HTTPException(status_code=500, detail="Failed to load credentials")
+
+    try:
+        client = PretargetingClient(
+            credentials_path=str(creds.credentials_path),
+            account_id=creds.account_id,
+        )
+        configs = await client.fetch_all_pretargeting_configs()
+
+        # Store configs in database
+        async with store._connection() as conn:
+            import asyncio
+            import json
+            loop = asyncio.get_event_loop()
+
+            for cfg in configs:
+                # Extract sizes as strings
+                sizes = []
+                for dim in cfg.get("includedCreativeDimensions", []):
+                    if dim.get("width") and dim.get("height"):
+                        sizes.append(f"{dim['width']}x{dim['height']}")
+
+                # Extract geo IDs
+                geo_targeting = cfg.get("geoTargeting", {}) or {}
+                included_geos = geo_targeting.get("includedIds", [])
+                excluded_geos = geo_targeting.get("excludedIds", [])
+
+                await loop.run_in_executor(
+                    None,
+                    lambda cfg=cfg, sizes=sizes, included_geos=included_geos, excluded_geos=excluded_geos: conn.execute(
+                        """
+                        INSERT OR REPLACE INTO pretargeting_configs
+                        (bidder_id, config_id, billing_id, display_name, state,
+                         included_formats, included_platforms, included_sizes,
+                         included_geos, excluded_geos, raw_config, synced_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                        """,
+                        (
+                            creds.account_id,
+                            cfg["configId"],
+                            cfg.get("billingId"),
+                            cfg.get("displayName"),
+                            cfg.get("state", "ACTIVE"),
+                            json.dumps(cfg.get("includedFormats", [])),
+                            json.dumps(cfg.get("includedPlatforms", [])),
+                            json.dumps(sizes),
+                            json.dumps(included_geos),
+                            json.dumps(excluded_geos),
+                            json.dumps(cfg),
+                        ),
+                    ),
+                )
+            await loop.run_in_executor(None, conn.commit)
+
+        return SyncPretargetingResponse(
+            status="success",
+            configs_synced=len(configs),
+            bidder_id=creds.account_id,
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to sync pretargeting configs: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to sync configs: {str(e)}")
+
+
+@app.get("/settings/pretargeting", response_model=list[PretargetingConfigResponse], tags=["RTB Settings"])
+async def get_pretargeting_configs(
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get stored pretargeting configs.
+
+    Returns all pretargeting configurations that have been synced from the Google API.
+    Includes user-defined names if set.
+    """
+    try:
+        async with store._connection() as conn:
+            import asyncio
+            import json
+            loop = asyncio.get_event_loop()
+
+            rows = await loop.run_in_executor(
+                None,
+                lambda: conn.execute(
+                    "SELECT * FROM pretargeting_configs ORDER BY billing_id"
+                ).fetchall(),
+            )
+
+        results = []
+        for row in rows:
+            results.append(
+                PretargetingConfigResponse(
+                    config_id=row["config_id"],
+                    bidder_id=row["bidder_id"],
+                    billing_id=row["billing_id"],
+                    display_name=row["display_name"],
+                    user_name=row["user_name"],
+                    state=row["state"] or "ACTIVE",
+                    included_formats=json.loads(row["included_formats"]) if row["included_formats"] else None,
+                    included_platforms=json.loads(row["included_platforms"]) if row["included_platforms"] else None,
+                    included_sizes=json.loads(row["included_sizes"]) if row["included_sizes"] else None,
+                    included_geos=json.loads(row["included_geos"]) if row["included_geos"] else None,
+                    excluded_geos=json.loads(row["excluded_geos"]) if row["excluded_geos"] else None,
+                    synced_at=row["synced_at"],
+                )
+            )
+
+        return results
+
+    except Exception as e:
+        logger.error(f"Failed to get pretargeting configs: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get configs: {str(e)}")
+
+
+class SetPretargetingNameRequest(BaseModel):
+    """Request body for setting a custom pretargeting config name."""
+
+    user_name: str = Field(..., description="Custom name for this pretargeting config")
+
+
+@app.post("/settings/pretargeting/{billing_id}/name", tags=["RTB Settings"])
+async def set_pretargeting_name(
+    billing_id: str,
+    body: SetPretargetingNameRequest,
+    store: SQLiteStore = Depends(get_store),
+):
+    """Set a custom user-defined name for a pretargeting config.
+
+    This name will be displayed in the UI alongside the billing_id,
+    making it easier to identify configs.
+    """
+    try:
+        async with store._connection() as conn:
+            import asyncio
+            loop = asyncio.get_event_loop()
+
+            result = await loop.run_in_executor(
+                None,
+                lambda: conn.execute(
+                    "UPDATE pretargeting_configs SET user_name = ? WHERE billing_id = ?",
+                    (body.user_name, billing_id),
+                ),
+            )
+            await loop.run_in_executor(None, conn.commit)
+
+            if result.rowcount == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Pretargeting config with billing_id {billing_id} not found"
+                )
+
+        return {
+            "status": "success",
+            "billing_id": billing_id,
+            "user_name": body.user_name,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to set pretargeting name: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to set name: {str(e)}")
 
 
 # =============================================================================
