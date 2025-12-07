@@ -21,3 +21,4 @@ Thumbs.db
 
 # Data files (user-specific RTB exports)
 docs/*.csv
+data/csv-reports/
