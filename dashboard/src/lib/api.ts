@@ -840,3 +840,110 @@ export async function getRTBGeos(
     `/analytics/rtb-funnel/geos?limit=${limit}`
   );
 }
+
+// RTB Settings API
+
+export interface RTBEndpointItem {
+  endpoint_id: string;
+  url: string;
+  maximum_qps: number | null;
+  trading_location: string | null;
+  bid_protocol: string | null;
+}
+
+export interface RTBEndpointsResponse {
+  bidder_id: string;
+  account_name: string | null;
+  endpoints: RTBEndpointItem[];
+  total_qps_allocated: number;
+  qps_current: number | null;
+  synced_at: string | null;
+}
+
+export interface SyncEndpointsResponse {
+  status: string;
+  endpoints_synced: number;
+  bidder_id: string;
+}
+
+export async function getRTBEndpoints(): Promise<RTBEndpointsResponse> {
+  return fetchApi<RTBEndpointsResponse>("/settings/endpoints");
+}
+
+export async function syncRTBEndpoints(): Promise<SyncEndpointsResponse> {
+  return fetchApi<SyncEndpointsResponse>("/settings/endpoints/sync", {
+    method: "POST",
+  });
+}
+
+// Pretargeting Configs API
+
+export interface PretargetingConfigResponse {
+  config_id: string;
+  bidder_id: string;
+  billing_id: string | null;
+  display_name: string | null;
+  user_name: string | null;
+  state: 'ACTIVE' | 'SUSPENDED';
+  included_formats: string[] | null;
+  included_platforms: string[] | null;
+  included_sizes: string[] | null;
+  included_geos: string[] | null;
+  excluded_geos: string[] | null;
+  synced_at: string | null;
+}
+
+export interface SyncPretargetingResponse {
+  status: string;
+  configs_synced: number;
+  bidder_id: string;
+}
+
+export async function getPretargetingConfigs(): Promise<PretargetingConfigResponse[]> {
+  return fetchApi<PretargetingConfigResponse[]>("/settings/pretargeting");
+}
+
+export async function syncPretargetingConfigs(): Promise<SyncPretargetingResponse> {
+  return fetchApi<SyncPretargetingResponse>("/settings/pretargeting/sync", {
+    method: "POST",
+  });
+}
+
+export async function setPretargetingName(
+  billingId: string,
+  userName: string
+): Promise<{ status: string; billing_id: string; user_name: string }> {
+  return fetchApi<{ status: string; billing_id: string; user_name: string }>(
+    `/settings/pretargeting/${encodeURIComponent(billingId)}/name`,
+    {
+      method: "POST",
+      body: JSON.stringify({ user_name: userName }),
+    }
+  );
+}
+
+// Config Breakdown API
+
+export type ConfigBreakdownType = 'size' | 'geo' | 'publisher' | 'creative';
+
+export interface ConfigBreakdownItem {
+  name: string;
+  reached: number;
+  win_rate: number;
+  waste_rate: number;
+}
+
+export interface ConfigBreakdownResponse {
+  billing_id: string;
+  breakdown_by: ConfigBreakdownType;
+  breakdown: ConfigBreakdownItem[];
+}
+
+export async function getConfigBreakdown(
+  billingId: string,
+  by: ConfigBreakdownType = 'size'
+): Promise<ConfigBreakdownResponse> {
+  return fetchApi<ConfigBreakdownResponse>(
+    `/analytics/rtb-funnel/configs/${encodeURIComponent(billingId)}/breakdown?by=${by}`
+  );
+}

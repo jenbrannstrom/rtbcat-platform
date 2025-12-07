@@ -2510,15 +2510,24 @@ async def populate_seats_from_creatives(
 # =============================================================================
 
 
-class RTBEndpointResponse(BaseModel):
-    """Response model for an RTB endpoint."""
+class RTBEndpointItem(BaseModel):
+    """Individual RTB endpoint data."""
 
     endpoint_id: str
-    bidder_id: str
     url: str
     maximum_qps: Optional[int] = None
     trading_location: Optional[str] = None
     bid_protocol: Optional[str] = None
+
+
+class RTBEndpointsResponse(BaseModel):
+    """Response model for RTB endpoints with aggregated data."""
+
+    bidder_id: str
+    account_name: Optional[str] = None
+    endpoints: list[RTBEndpointItem]
+    total_qps_allocated: int
+    qps_current: Optional[int] = None
     synced_at: Optional[str] = None
 
 
@@ -2557,7 +2566,7 @@ class SyncPretargetingResponse(BaseModel):
 
 @app.post("/settings/endpoints/sync", response_model=SyncEndpointsResponse, tags=["RTB Settings"])
 async def sync_rtb_endpoints(
-    config: ConfigManager = Depends(get_config_manager),
+    config: ConfigManager = Depends(get_config),
     store: SQLiteStore = Depends(get_store),
 ):
     """Sync RTB endpoints from Google Authorized Buyers API.
@@ -2565,20 +2574,33 @@ async def sync_rtb_endpoints(
     Fetches all RTB endpoints for the configured bidder account and stores them
     in the rtb_endpoints table.
     """
-    if not config.has_credentials():
+    try:
+        app_config = config.load()
+    except Exception:
         raise HTTPException(
             status_code=400,
-            detail="Service account credentials not configured. Upload via /config/credentials."
+            detail="Configuration not set. Use /config to configure."
         )
 
-    creds = config.get_credentials()
-    if not creds:
-        raise HTTPException(status_code=500, detail="Failed to load credentials")
+    if not app_config.authorized_buyers:
+        raise HTTPException(
+            status_code=400,
+            detail="Authorized Buyers not configured. Upload credentials via /config/credentials."
+        )
+
+    creds_path = Path(app_config.authorized_buyers.service_account_path).expanduser()
+    if not creds_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail="Service account credentials file not found. Upload via /config/credentials."
+        )
+
+    account_id = app_config.authorized_buyers.account_id
 
     try:
         client = EndpointsClient(
-            credentials_path=str(creds.credentials_path),
-            account_id=creds.account_id,
+            credentials_path=str(creds_path),
+            account_id=account_id,
         )
         endpoints = await client.list_endpoints()
 
@@ -2597,7 +2619,7 @@ async def sync_rtb_endpoints(
                         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                         """,
                         (
-                            creds.account_id,
+                            account_id,
                             ep["endpointId"],
                             ep["url"],
                             ep.get("maximumQps"),
@@ -2611,7 +2633,7 @@ async def sync_rtb_endpoints(
         return SyncEndpointsResponse(
             status="success",
             endpoints_synced=len(endpoints),
-            bidder_id=creds.account_id,
+            bidder_id=account_id,
         )
 
     except Exception as e:
@@ -2619,15 +2641,27 @@ async def sync_rtb_endpoints(
         raise HTTPException(status_code=500, detail=f"Failed to sync endpoints: {str(e)}")
 
 
-@app.get("/settings/endpoints", response_model=list[RTBEndpointResponse], tags=["RTB Settings"])
+@app.get("/settings/endpoints", response_model=RTBEndpointsResponse, tags=["RTB Settings"])
 async def get_rtb_endpoints(
+    config: ConfigManager = Depends(get_config),
     store: SQLiteStore = Depends(get_store),
 ):
-    """Get stored RTB endpoints.
+    """Get stored RTB endpoints with aggregated QPS data.
 
-    Returns all RTB endpoints that have been synced from the Google API.
+    Returns all RTB endpoints that have been synced from the Google API,
+    along with total allocated QPS and current usage.
     """
     try:
+        # Get credentials for bidder_id
+        bidder_id = ""
+        account_name = None
+        try:
+            app_config = config.load()
+            if app_config and app_config.authorized_buyers:
+                bidder_id = app_config.authorized_buyers.account_id
+        except Exception:
+            pass
+
         async with store._connection() as conn:
             import asyncio
             loop = asyncio.get_event_loop()
@@ -2635,22 +2669,39 @@ async def get_rtb_endpoints(
             rows = await loop.run_in_executor(
                 None,
                 lambda: conn.execute(
-                    "SELECT * FROM rtb_endpoints ORDER BY endpoint_id"
+                    "SELECT * FROM rtb_endpoints ORDER BY trading_location, endpoint_id"
                 ).fetchall(),
             )
 
-        return [
-            RTBEndpointResponse(
-                endpoint_id=row["endpoint_id"],
-                bidder_id=row["bidder_id"],
-                url=row["url"],
-                maximum_qps=row["maximum_qps"],
-                trading_location=row["trading_location"],
-                bid_protocol=row["bid_protocol"],
-                synced_at=row["synced_at"],
+        endpoints = []
+        total_qps = 0
+        synced_at = None
+
+        for row in rows:
+            endpoints.append(
+                RTBEndpointItem(
+                    endpoint_id=row["endpoint_id"],
+                    url=row["url"],
+                    maximum_qps=row["maximum_qps"],
+                    trading_location=row["trading_location"],
+                    bid_protocol=row["bid_protocol"],
+                )
             )
-            for row in rows
-        ]
+            if row["maximum_qps"]:
+                total_qps += row["maximum_qps"]
+            if row["synced_at"] and (synced_at is None or row["synced_at"] > synced_at):
+                synced_at = row["synced_at"]
+            if not bidder_id and row["bidder_id"]:
+                bidder_id = row["bidder_id"]
+
+        return RTBEndpointsResponse(
+            bidder_id=bidder_id,
+            account_name=account_name,
+            endpoints=endpoints,
+            total_qps_allocated=total_qps,
+            qps_current=None,  # Would need real-time monitoring to populate
+            synced_at=synced_at,
+        )
 
     except Exception as e:
         logger.error(f"Failed to get RTB endpoints: {e}")
@@ -2659,7 +2710,7 @@ async def get_rtb_endpoints(
 
 @app.post("/settings/pretargeting/sync", response_model=SyncPretargetingResponse, tags=["RTB Settings"])
 async def sync_pretargeting_configs(
-    config: ConfigManager = Depends(get_config_manager),
+    config: ConfigManager = Depends(get_config),
     store: SQLiteStore = Depends(get_store),
 ):
     """Sync pretargeting configs from Google Authorized Buyers API.
@@ -2667,20 +2718,33 @@ async def sync_pretargeting_configs(
     Fetches all pretargeting configurations for the configured bidder account
     and stores them in the pretargeting_configs table.
     """
-    if not config.has_credentials():
+    try:
+        app_config = config.load()
+    except Exception:
         raise HTTPException(
             status_code=400,
-            detail="Service account credentials not configured. Upload via /config/credentials."
+            detail="Configuration not set. Use /config to configure."
         )
 
-    creds = config.get_credentials()
-    if not creds:
-        raise HTTPException(status_code=500, detail="Failed to load credentials")
+    if not app_config.authorized_buyers:
+        raise HTTPException(
+            status_code=400,
+            detail="Authorized Buyers not configured. Upload credentials via /config/credentials."
+        )
+
+    creds_path = Path(app_config.authorized_buyers.service_account_path).expanduser()
+    if not creds_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail="Service account credentials file not found. Upload via /config/credentials."
+        )
+
+    account_id = app_config.authorized_buyers.account_id
 
     try:
         client = PretargetingClient(
-            credentials_path=str(creds.credentials_path),
-            account_id=creds.account_id,
+            credentials_path=str(creds_path),
+            account_id=account_id,
         )
         configs = await client.fetch_all_pretargeting_configs()
 
@@ -2713,7 +2777,7 @@ async def sync_pretargeting_configs(
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                         """,
                         (
-                            creds.account_id,
+                            account_id,
                             cfg["configId"],
                             cfg.get("billingId"),
                             cfg.get("displayName"),
@@ -2732,7 +2796,7 @@ async def sync_pretargeting_configs(
         return SyncPretargetingResponse(
             status="success",
             configs_synced=len(configs),
-            bidder_id=creds.account_id,
+            bidder_id=account_id,
         )
 
     except Exception as e:
@@ -4989,6 +5053,85 @@ async def get_config_performance(
 
     except Exception as e:
         logger.error(f"Failed to get config performance: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/analytics/rtb-funnel/configs/{billing_id}/breakdown", tags=["RTB Analytics"])
+async def get_config_breakdown(
+    billing_id: str,
+    by: str = Query("size", regex="^(size|geo|publisher|creative)$"),
+    days: int = Query(7, ge=1, le=30),
+):
+    """
+    Get detailed breakdown for a specific pretargeting config.
+
+    Breakdown types:
+    - size: By creative size (300x250, 320x50, etc.)
+    - geo: By country/region
+    - publisher: By app/publisher
+    - creative: By individual creative ID
+    """
+    import sqlite3
+    import os
+    from collections import defaultdict
+
+    db_path = os.path.expanduser("~/.catscan/catscan.db")
+
+    # Map breakdown type to column
+    column_map = {
+        "size": "creative_size",
+        "geo": "country",
+        "publisher": "app_name",
+        "creative": "creative_id",
+    }
+    group_col = column_map.get(by, "creative_size")
+
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Query aggregated data for this billing_id
+        cursor.execute(f"""
+            SELECT
+                {group_col} as name,
+                SUM(reached_queries) as total_reached,
+                SUM(impressions) as total_impressions
+            FROM rtb_daily
+            WHERE billing_id = ?
+              AND metric_date >= date('now', ?)
+              AND {group_col} IS NOT NULL
+              AND {group_col} != ''
+            GROUP BY {group_col}
+            ORDER BY total_reached DESC
+            LIMIT 50
+        """, (billing_id, f'-{days} days'))
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        breakdown = []
+        for row in rows:
+            reached = row["total_reached"] or 0
+            impressions = row["total_impressions"] or 0
+            win_rate = (impressions / reached * 100) if reached > 0 else 0
+            waste_rate = 100 - win_rate
+
+            breakdown.append({
+                "name": row["name"] or "Unknown",
+                "reached": reached,
+                "win_rate": round(win_rate, 1),
+                "waste_rate": round(waste_rate, 1),
+            })
+
+        return {
+            "billing_id": billing_id,
+            "breakdown_by": by,
+            "breakdown": breakdown,
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get config breakdown: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
