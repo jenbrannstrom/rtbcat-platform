@@ -49,9 +49,15 @@ This will:
 4. Create a Service Account:
    - IAM & Admin → Service Accounts → Create
    - Name: `catscan`
-   - Download JSON key
-5. Authorize in [Authorized Buyers](https://authorized-buyers.google.com/):
-   - Settings → API Access → Add the service account email
+   - Go to **Keys** tab → **Add Key** → **Create new key** → **JSON**
+   - Download the JSON key file
+5. **Upload the JSON key in Cat-Scan:**
+   - Open Cat-Scan at http://localhost:3000/setup
+   - Go to the **Connect API** tab
+   - Drag and drop your JSON key file (or click to browse)
+   - The file is securely stored in `~/.catscan/credentials/google-credentials.json`
+6. Authorize in [Authorized Buyers](https://authorized-buyers.google.com/):
+   - Settings → API Access → Add the service account email (from the JSON file)
 
 ### 4. Enable WAL Mode (Important!)
 
@@ -144,7 +150,7 @@ You have two options:
 **Option A: Run on Your PC**
 ```
 ┌──────────────┐     ┌─────────────────┐     ┌──────────────────────────────┐
-│ Google sends │────▶│ Gmail inbox     │────▶│ Your PC (cron every 15 min) │
+│ Google sends │────▶│ Gmail inbox     │────▶│ Your PC (manual trigger)    │
 │ report email │     │                 │     │ Downloads → Imports to DB    │
 └──────────────┘     └─────────────────┘     └──────────────────────────────┘
 ```
@@ -155,12 +161,13 @@ You have two options:
 **Option B: Run on Server (Recommended for Production)**
 ```
 ┌──────────────┐     ┌─────────────────┐     ┌──────────────────────────────┐
-│ Google sends │────▶│ Gmail inbox     │────▶│ Server (cron every 15 min)  │
+│ Google sends │────▶│ Gmail inbox     │────▶│ Server (cron once daily)    │
 │ report email │     │                 │     │ Downloads → Imports to DB    │
 └──────────────┘     └─────────────────┘     └──────────────────────────────┘
 ```
 - ✅ Runs 24/7
 - ✅ Database is local (fast imports)
+- ✅ UI shows last import time + "Update Now" button for manual triggers
 - ⚠️ First-time auth requires extra step (see below)
 
 ### First-Time Auth for Servers (No Browser)
@@ -213,15 +220,9 @@ The token auto-refreshes, so you only do this once.
 8. Click **Download JSON**
 9. Save as `~/.catscan/credentials/gmail-oauth-client.json`
 
-### Step 4: Install Gmail API Dependencies
+### Step 4: Create the Import Script
 
-```bash
-cd creative-intelligence
-source venv/bin/activate
-pip install google-auth google-auth-oauthlib google-api-python-client
-```
-
-### Step 5: Create the Import Script
+> **Note:** Gmail API dependencies (google-auth, google-auth-oauthlib, google-api-python-client) are already included in requirements.txt and installed during the main setup.
 
 Create `scripts/gmail_import.py`:
 
@@ -515,7 +516,7 @@ Make it executable:
 chmod +x scripts/gmail_import.py
 ```
 
-### Step 6: First-Time Authorization
+### Step 5: First-Time Authorization
 
 **If running on your PC (has a browser):**
 
@@ -549,7 +550,7 @@ python scripts/gmail_import.py
 
 > **Note:** The token auto-refreshes indefinitely. You only do this once unless you revoke access in Google Account settings.
 
-### Step 7: Configure Scheduled Reports in Authorized Buyers
+### Step 6: Configure Scheduled Reports in Authorized Buyers
 
 1. Go to [Authorized Buyers](https://authorized-buyers.google.com/)
 2. Navigate to **Reporting** → **Saved Reports** (or create a new report)
@@ -560,18 +561,18 @@ python scripts/gmail_import.py
    - **Time:** Early morning (e.g., 6:00 AM)
 5. Save the schedule
 
-### Step 8: Set Up Automatic Polling (Cron)
+### Step 7: Set Up Automatic Polling (Cron)
 
-Add a cron job to check for new emails every 15 minutes.
+Add a cron job to check for new emails once daily (recommended: early morning after scheduled reports arrive).
 
 **On Linux (server or PC):**
 ```bash
 crontab -e
 ```
 
-Add this line (adjust the path):
+Add this line (runs daily at 7:00 AM, adjust the path):
 ```cron
-*/15 * * * * cd /home/ubuntu/rtbcat-platform/creative-intelligence && ./venv/bin/python scripts/gmail_import.py >> /home/ubuntu/.catscan/logs/gmail_import.log 2>&1
+0 7 * * * cd /home/ubuntu/rtbcat-platform/creative-intelligence && ./venv/bin/python scripts/gmail_import.py >> /home/ubuntu/.catscan/logs/gmail_import.log 2>&1
 ```
 
 **On Mac (if running on your laptop):**
@@ -581,7 +582,7 @@ crontab -e
 
 Add:
 ```cron
-*/15 * * * * cd /Users/yourname/rtbcat-platform/creative-intelligence && ./venv/bin/python scripts/gmail_import.py >> ~/.catscan/logs/gmail_import.log 2>&1
+0 7 * * * cd /Users/yourname/rtbcat-platform/creative-intelligence && ./venv/bin/python scripts/gmail_import.py >> ~/.catscan/logs/gmail_import.log 2>&1
 ```
 
 Create the logs directory:
@@ -589,13 +590,21 @@ Create the logs directory:
 mkdir -p ~/.catscan/logs
 ```
 
+**Manual Import via UI:**
+
+You can also trigger an import manually from the Cat-Scan UI:
+1. Go to http://localhost:3000/setup
+2. Click the **Gmail Reports** tab
+3. Click **Import Now** to check for new reports immediately
+4. The UI displays the last import time and results
+
 **Verify cron is working:**
 ```bash
-# Wait 15 minutes, then check:
+# Check the log after the scheduled time:
 tail -f ~/.catscan/logs/gmail_import.log
 ```
 
-### Step 9: Verify It's Working
+### Step 8: Verify It's Working
 
 1. Wait for a scheduled report to arrive (or trigger one manually in Authorized Buyers)
 2. Check the logs:
