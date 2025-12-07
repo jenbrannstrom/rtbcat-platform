@@ -128,14 +128,54 @@ npm run build
 
 Cat-Scan can automatically download scheduled reports from Google Authorized Buyers. This section explains how to set up a dedicated Gmail account to receive and process reports.
 
-### Overview
+### How Google Sends Reports
 
+| Report Size | Delivery Method | How We Handle It |
+|-------------|-----------------|------------------|
+| **< 10 MB** | Attached as CSV | Extract attachment from email |
+| **≥ 10 MB** | Download link (expires in 30 days) | Download from Google Cloud Storage URL |
+
+The script handles both cases automatically.
+
+### Where Does This Run?
+
+You have two options:
+
+**Option A: Run on Your PC**
 ```
-┌──────────────────┐     ┌─────────────────┐     ┌──────────────┐     ┌──────────┐
-│ Google Authorized│────▶│ Gmail (dedicated│────▶│ Python Script│────▶│ Cat-Scan │
-│ Buyers Report    │     │ catscan@gmail)  │     │ (cron job)   │     │ Database │
-└──────────────────┘     └─────────────────┘     └──────────────┘     └──────────┘
+┌──────────────┐     ┌─────────────────┐     ┌──────────────────────────────┐
+│ Google sends │────▶│ Gmail inbox     │────▶│ Your PC (cron every 15 min) │
+│ report email │     │                 │     │ Downloads → Imports to DB    │
+└──────────────┘     └─────────────────┘     └──────────────────────────────┘
 ```
+- ✅ Easy setup (browser available for first-time auth)
+- ❌ PC must stay on
+- ❌ Uses your home internet
+
+**Option B: Run on Server (Recommended for Production)**
+```
+┌──────────────┐     ┌─────────────────┐     ┌──────────────────────────────┐
+│ Google sends │────▶│ Gmail inbox     │────▶│ Server (cron every 15 min)  │
+│ report email │     │                 │     │ Downloads → Imports to DB    │
+└──────────────┘     └─────────────────┘     └──────────────────────────────┘
+```
+- ✅ Runs 24/7
+- ✅ Database is local (fast imports)
+- ⚠️ First-time auth requires extra step (see below)
+
+### First-Time Auth for Servers (No Browser)
+
+The Gmail API requires a one-time browser authorization. For headless servers:
+
+1. **Run the script on your PC first** (which has a browser)
+2. **Copy the token to the server:**
+   ```bash
+   # On your PC, after successful auth:
+   scp ~/.catscan/credentials/gmail-token.json user@your-server:~/.catscan/credentials/
+   ```
+3. **The server uses the saved token** - no browser needed after that
+
+The token auto-refreshes, so you only do this once.
 
 ### Step 1: Create a Dedicated Gmail Account
 
@@ -190,6 +230,9 @@ Create `scripts/gmail_import.py`:
 """
 Gmail Auto-Import for Cat-Scan
 Downloads scheduled reports from Google Authorized Buyers emails.
+Handles both:
+  - Large reports (≥10MB): Download from GCS URL in email body
+  - Small reports (<10MB): Extract CSV attachment from email
 """
 
 import os
@@ -259,62 +302,99 @@ def find_report_emails(service):
     return results.get('messages', [])
 
 
-def extract_download_url(service, message_id):
+def extract_download_url(body):
     """Extract the GCS download URL from email body."""
-    message = service.users().messages().get(
-        userId='me',
-        id=message_id,
-        format='full'
-    ).execute()
-    
-    # Get email body
+    pattern = r'https://storage\.cloud\.google\.com/buyside-scheduled-report-export/[\w-]+'
+    match = re.search(pattern, body)
+    return match.group(0) if match else None
+
+
+def get_email_body(payload):
+    """Extract plain text body from email payload."""
     body = ''
-    payload = message.get('payload', {})
     
-    # Check for multipart
     if 'parts' in payload:
         for part in payload['parts']:
             if part.get('mimeType') == 'text/plain':
                 data = part.get('body', {}).get('data', '')
-                body = base64.urlsafe_b64decode(data).decode('utf-8')
-                break
+                if data:
+                    body = base64.urlsafe_b64decode(data).decode('utf-8')
+                    break
+            # Recurse into nested parts
+            if 'parts' in part:
+                body = get_email_body(part)
+                if body:
+                    break
     else:
         data = payload.get('body', {}).get('data', '')
         if data:
             body = base64.urlsafe_b64decode(data).decode('utf-8')
     
-    # Also check snippet as fallback
-    if not body:
-        body = message.get('snippet', '')
-    
-    # Extract GCS URL
-    pattern = r'https://storage\.cloud\.google\.com/buyside-scheduled-report-export/[\w-]+'
-    match = re.search(pattern, body)
-    
-    if match:
-        return match.group(0)
-    
-    return None
+    return body
 
 
-def download_report(url, message_id):
-    """Download CSV from GCS URL."""
+def extract_attachments(service, message_id, payload):
+    """Extract CSV attachments from email (for reports < 10MB)."""
+    attachments = []
+    
+    def find_attachments(parts):
+        for part in parts:
+            filename = part.get('filename', '')
+            if filename.endswith('.csv'):
+                attachment_id = part.get('body', {}).get('attachmentId')
+                if attachment_id:
+                    attachments.append({
+                        'filename': filename,
+                        'attachment_id': attachment_id
+                    })
+            # Recurse into nested parts
+            if 'parts' in part:
+                find_attachments(part['parts'])
+    
+    if 'parts' in payload:
+        find_attachments(payload['parts'])
+    
+    # Download each attachment
+    downloaded_files = []
+    for att in attachments:
+        attachment = service.users().messages().attachments().get(
+            userId='me',
+            messageId=message_id,
+            id=att['attachment_id']
+        ).execute()
+        
+        data = attachment.get('data', '')
+        if data:
+            file_data = base64.urlsafe_b64decode(data)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            # Use original filename but add timestamp
+            safe_filename = re.sub(r'[^\w\-.]', '_', att['filename'])
+            filepath = IMPORTS_DIR / f"{timestamp}_{safe_filename}"
+            filepath.write_bytes(file_data)
+            downloaded_files.append(filepath)
+            print(f"  Extracted attachment: {filepath.name}")
+    
+    return downloaded_files
+
+
+def download_from_url(url, message_id):
+    """Download CSV from GCS URL (for reports ≥ 10MB)."""
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     filename = f"report_{timestamp}_{message_id[:8]}.csv"
     filepath = IMPORTS_DIR / filename
     
-    print(f"Downloading: {url}")
-    print(f"Saving to: {filepath}")
-    
+    print(f"  Downloading from URL: {url[:60]}...")
     urllib.request.urlretrieve(url, filepath)
     
     # Verify it's a valid CSV
     with open(filepath, 'r') as f:
         first_line = f.readline()
         if not first_line or '\x00' in first_line:
+            filepath.unlink()  # Delete invalid file
             raise ValueError("Downloaded file doesn't appear to be a valid CSV")
     
-    return filepath
+    print(f"  Saved: {filepath.name}")
+    return [filepath]
 
 
 def mark_as_read(service, message_id):
@@ -327,58 +407,103 @@ def mark_as_read(service, message_id):
 
 
 def import_to_catscan(filepath):
-    """Import the CSV into Cat-Scan database."""
-    import subprocess
+    """
+    Import the CSV into Cat-Scan database.
     
-    # Option 1: Call the API
-    # requests.post('http://localhost:8000/analytics/rtb-funnel/upload', files={'file': open(filepath, 'rb')})
+    TODO: Implement one of these options:
     
-    # Option 2: Direct database import (if API not running)
-    # This is a placeholder - implement based on your import logic
-    print(f"TODO: Import {filepath} to database")
-    print("For now, files are saved to ~/.catscan/imports/")
-    print("Upload manually via the dashboard or implement API call here.")
+    Option 1 - Call the API (if running):
+        import requests
+        with open(filepath, 'rb') as f:
+            requests.post('http://localhost:8000/analytics/rtb-funnel/upload', 
+                         files={'file': f})
+    
+    Option 2 - Direct database import:
+        from analytics.rtb_funnel_analyzer import RTBFunnelAnalyzer
+        analyzer = RTBFunnelAnalyzer()
+        analyzer.import_csv(filepath)
+    """
+    print(f"  Ready for import: {filepath}")
+    # For now, files are saved to ~/.catscan/imports/
+    # Implement API call or direct import based on your needs
+
+
+def process_message(service, message_id):
+    """Process a single email - extract attachment OR download from URL."""
+    message = service.users().messages().get(
+        userId='me',
+        id=message_id,
+        format='full'
+    ).execute()
+    
+    payload = message.get('payload', {})
+    downloaded_files = []
+    
+    # First, try to extract CSV attachments (reports < 10MB)
+    downloaded_files = extract_attachments(service, message_id, payload)
+    
+    # If no attachments, look for download URL (reports ≥ 10MB)
+    if not downloaded_files:
+        body = get_email_body(payload)
+        # Also check snippet as fallback
+        if not body:
+            body = message.get('snippet', '')
+        
+        url = extract_download_url(body)
+        if url:
+            downloaded_files = download_from_url(url, message_id)
+    
+    return downloaded_files
 
 
 def main():
     print("=" * 60)
-    print(f"Cat-Scan Gmail Import - {datetime.now()}")
+    print(f"Cat-Scan Gmail Import - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
     
-    service = get_gmail_service()
+    try:
+        service = get_gmail_service()
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}")
+        return
+    
     messages = find_report_emails(service)
     
     if not messages:
         print("No new report emails found.")
         return
     
-    print(f"Found {len(messages)} unread report email(s)")
+    print(f"Found {len(messages)} unread report email(s)\n")
+    
+    total_imported = 0
     
     for msg in messages:
         message_id = msg['id']
-        print(f"\nProcessing message: {message_id}")
+        print(f"Processing email: {message_id}")
         
         try:
-            url = extract_download_url(service, message_id)
+            downloaded_files = process_message(service, message_id)
             
-            if not url:
-                print("  No download URL found in email (report may be attached)")
-                # TODO: Handle attached CSVs for reports < 10MB
+            if not downloaded_files:
+                print("  No CSV found (attachment or URL)")
                 continue
             
-            filepath = download_report(url, message_id)
-            print(f"  Downloaded: {filepath.name}")
-            
-            import_to_catscan(filepath)
+            for filepath in downloaded_files:
+                import_to_catscan(filepath)
+                total_imported += 1
             
             mark_as_read(service, message_id)
-            print("  Marked as read")
+            print("  ✓ Marked as read")
             
         except Exception as e:
-            print(f"  Error: {e}")
+            print(f"  ERROR: {e}")
             continue
+        
+        print()
     
-    print("\nDone!")
+    print("=" * 60)
+    print(f"Done! Imported {total_imported} file(s) to ~/.catscan/imports/")
+    print("=" * 60)
 
 
 if __name__ == '__main__':
@@ -392,7 +517,7 @@ chmod +x scripts/gmail_import.py
 
 ### Step 6: First-Time Authorization
 
-Run the script once manually to authorize:
+**If running on your PC (has a browser):**
 
 ```bash
 cd creative-intelligence
@@ -406,7 +531,23 @@ This will:
 3. Grant permission to read/modify emails
 4. Save the token to `~/.catscan/credentials/gmail-token.json`
 
-> **Note:** You only need to do this once. The token refreshes automatically.
+**If deploying to a server (no browser):**
+
+```bash
+# 1. On your PC, run the script to generate the token:
+python scripts/gmail_import.py
+# Complete browser auth
+
+# 2. Copy BOTH credential files to server:
+scp ~/.catscan/credentials/gmail-oauth-client.json user@server:~/.catscan/credentials/
+scp ~/.catscan/credentials/gmail-token.json user@server:~/.catscan/credentials/
+
+# 3. On the server, verify it works:
+python scripts/gmail_import.py
+# Should run without opening a browser
+```
+
+> **Note:** The token auto-refreshes indefinitely. You only do this once unless you revoke access in Google Account settings.
 
 ### Step 7: Configure Scheduled Reports in Authorized Buyers
 
@@ -421,20 +562,37 @@ This will:
 
 ### Step 8: Set Up Automatic Polling (Cron)
 
-Add a cron job to check for new emails every 15 minutes:
+Add a cron job to check for new emails every 15 minutes.
 
+**On Linux (server or PC):**
 ```bash
 crontab -e
 ```
 
-Add this line:
+Add this line (adjust the path):
 ```cron
-*/15 * * * * cd /path/to/rtbcat-platform/creative-intelligence && ./venv/bin/python scripts/gmail_import.py >> ~/.catscan/logs/gmail_import.log 2>&1
+*/15 * * * * cd /home/ubuntu/rtbcat-platform/creative-intelligence && ./venv/bin/python scripts/gmail_import.py >> /home/ubuntu/.catscan/logs/gmail_import.log 2>&1
+```
+
+**On Mac (if running on your laptop):**
+```bash
+crontab -e
+```
+
+Add:
+```cron
+*/15 * * * * cd /Users/yourname/rtbcat-platform/creative-intelligence && ./venv/bin/python scripts/gmail_import.py >> ~/.catscan/logs/gmail_import.log 2>&1
 ```
 
 Create the logs directory:
 ```bash
 mkdir -p ~/.catscan/logs
+```
+
+**Verify cron is working:**
+```bash
+# Wait 15 minutes, then check:
+tail -f ~/.catscan/logs/gmail_import.log
 ```
 
 ### Step 9: Verify It's Working
@@ -455,6 +613,9 @@ mkdir -p ~/.catscan/logs
 ```bash
 # Verify the file exists
 ls -la ~/.catscan/credentials/gmail-oauth-client.json
+
+# If missing, download from Google Cloud Console:
+# APIs & Services → Credentials → Your OAuth client → Download JSON
 ```
 
 **"Token has been expired or revoked"**
@@ -462,20 +623,50 @@ ls -la ~/.catscan/credentials/gmail-oauth-client.json
 # Delete old token and re-authorize
 rm ~/.catscan/credentials/gmail-token.json
 python scripts/gmail_import.py
+# This will open a browser - log in again
 ```
 
-**"No download URL found in email"**
-- Reports smaller than 10MB are attached directly (not via URL)
-- Check if the email has a CSV attachment
-- The script currently only handles URL-based downloads
+**"No CSV found (attachment or URL)"**
+
+The script looks for:
+1. CSV attachments (reports < 10MB)
+2. Download URL in email body (reports ≥ 10MB)
+
+If neither is found, check:
+- Is the email actually a report? (Check sender address)
+- Did Google change their email format?
+
+**Running on a headless server (no browser)**
+
+First-time auth requires a browser. Workaround:
+```bash
+# 1. On your PC (has browser), run:
+python scripts/gmail_import.py
+# Complete the browser auth
+
+# 2. Copy the token to your server:
+scp ~/.catscan/credentials/gmail-token.json user@server:~/.catscan/credentials/
+
+# 3. On the server, the script now works without browser
+```
 
 **Cron not running**
 ```bash
+# Check if cron service is running
+systemctl status cron
+
 # Check cron logs
 grep CRON /var/log/syslog | tail -20
 
-# Verify cron is running
-systemctl status cron
+# Test the script manually first
+cd /path/to/creative-intelligence
+./venv/bin/python scripts/gmail_import.py
+```
+
+**Permission errors on server**
+```bash
+chmod 600 ~/.catscan/credentials/gmail-token.json
+chmod 600 ~/.catscan/credentials/gmail-oauth-client.json
 ```
 
 ---
