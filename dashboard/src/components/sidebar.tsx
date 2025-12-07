@@ -5,11 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  LayoutDashboard,
   Image,
   FolderKanban,
-  Link2,
-  Upload,
   Settings,
   ExternalLink,
   TrendingDown,
@@ -26,13 +23,10 @@ import { getSeats, syncSeat } from "@/lib/api";
 const SIDEBAR_COLLAPSED_KEY = "rtbcat-sidebar-collapsed";
 
 const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Waste Analysis", href: "/waste-analysis", icon: TrendingDown },
+  { name: "Waste Optimizer", href: "/waste-analysis", icon: TrendingDown },
   { name: "Creatives", href: "/creatives", icon: Image },
   { name: "Campaigns", href: "/campaigns", icon: FolderKanban },
-  { name: "Connect", href: "/connect", icon: Link2 },
-  { name: "Import", href: "/import", icon: Upload },
-  { name: "Settings", href: "/settings", icon: Settings },
+  { name: "Setup", href: "/setup", icon: Settings },
 ];
 
 function formatRelativeTime(dateString: string | null): string {
@@ -266,7 +260,10 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-2 py-4 space-y-1">
         {navigation.map((item) => {
-          const isActive = pathname === item.href;
+          // Handle both exact match and home page redirect case
+          const isActive = pathname === item.href ||
+            (item.href === "/waste-analysis" && pathname === "/") ||
+            (item.href !== "/" && pathname.startsWith(item.href));
           return (
             <Link
               key={item.name}
