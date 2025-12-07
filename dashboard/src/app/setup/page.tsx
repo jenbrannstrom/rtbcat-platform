@@ -42,6 +42,8 @@ import {
   getCredentialsStatus,
   uploadCredentials,
   discoverSeats,
+  getGmailStatus,
+  triggerGmailImport,
 } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
@@ -92,6 +94,11 @@ export default function SetupPage() {
     queryFn: getHealth,
   });
 
+  const { data: gmailStatus } = useQuery({
+    queryKey: ["gmailStatus"],
+    queryFn: getGmailStatus,
+  });
+
   if (healthLoading) {
     return <LoadingPage />;
   }
@@ -110,6 +117,8 @@ export default function SetupPage() {
   }
 
   const isConfigured = health?.configured === true;
+  const isGmailAuthorized = gmailStatus?.authorized === true;
+  const isGmailConfigured = gmailStatus?.configured === true;
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -135,9 +144,12 @@ export default function SetupPage() {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-gray-400" />
+              <div className={cn(
+                "w-2 h-2 rounded-full",
+                isGmailAuthorized ? "bg-green-500" : isGmailConfigured ? "bg-yellow-500" : "bg-gray-400"
+              )} />
               <span className="text-sm text-gray-600">
-                Gmail: Not configured
+                Gmail: {isGmailAuthorized ? "Connected" : isGmailConfigured ? "Not authorized" : "Not configured"}
               </span>
             </div>
           </div>
@@ -531,8 +543,84 @@ function ApiConnectionTab() {
 // ============================================================================
 
 function GmailReportsTab() {
+  const queryClient = useQueryClient();
+  const [importMessage, setImportMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const { data: gmailStatus, isLoading: statusLoading, refetch: refetchStatus } = useQuery({
+    queryKey: ["gmailStatus"],
+    queryFn: getGmailStatus,
+  });
+
+  const importMutation = useMutation({
+    mutationFn: triggerGmailImport,
+    onSuccess: (data) => {
+      if (data.success) {
+        if (data.files_imported > 0) {
+          setImportMessage({ type: "success", text: `Imported ${data.files_imported} file(s) from ${data.emails_processed} email(s)` });
+        } else if (data.emails_processed === 0) {
+          setImportMessage({ type: "success", text: "No new report emails found" });
+        } else {
+          setImportMessage({ type: "success", text: `Processed ${data.emails_processed} email(s), no new files to import` });
+        }
+      } else {
+        setImportMessage({ type: "error", text: data.errors?.[0] || "Import failed" });
+      }
+      refetchStatus();
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
+      setTimeout(() => setImportMessage(null), 8000);
+    },
+    onError: (error) => {
+      setImportMessage({ type: "error", text: error instanceof Error ? error.message : "Import failed" });
+      setTimeout(() => setImportMessage(null), 8000);
+    },
+  });
+
+  const formatRelativeTime = (isoString: string | null) => {
+    if (!isoString) return "Never";
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins} minute${diffMins === 1 ? "" : "s"} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+    return date.toLocaleDateString();
+  };
+
+  const isConfigured = gmailStatus?.configured === true;
+  const isAuthorized = gmailStatus?.authorized === true;
+
   return (
     <div className="space-y-6">
+      {/* Import Message */}
+      {importMessage && (
+        <div className={cn(
+          "p-4 rounded-lg flex items-start justify-between",
+          importMessage.type === "success" ? "bg-green-50" : "bg-red-50"
+        )}>
+          <div className="flex items-start">
+            {importMessage.type === "success" ? (
+              <CheckCircle className="h-5 w-5 text-green-400 mt-0.5" />
+            ) : (
+              <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5" />
+            )}
+            <p className={cn(
+              "ml-3 text-sm font-medium",
+              importMessage.type === "success" ? "text-green-800" : "text-red-800"
+            )}>
+              {importMessage.text}
+            </p>
+          </div>
+          <button onClick={() => setImportMessage(null)} className="text-gray-400 hover:text-gray-600">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* Intro */}
       <div className="card p-6">
         <div className="flex items-start gap-4">
@@ -587,23 +675,140 @@ function GmailReportsTab() {
       <div className="card p-6">
         <div className="flex items-center justify-between mb-4">
           <h4 className="font-medium text-gray-900">Gmail Connection</h4>
-          <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs font-medium rounded">Not configured</span>
+          {statusLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+          ) : (
+            <span className={cn(
+              "px-2 py-1 text-xs font-medium rounded",
+              isAuthorized ? "bg-green-100 text-green-800" :
+              isConfigured ? "bg-yellow-100 text-yellow-800" :
+              "bg-gray-100 text-gray-600"
+            )}>
+              {isAuthorized ? "Connected" : isConfigured ? "Not authorized" : "Not configured"}
+            </span>
+          )}
         </div>
 
-        <div className="p-6 border-2 border-dashed border-gray-200 rounded-lg text-center">
-          <Inbox className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-          <h5 className="font-medium text-gray-700 mb-2">Gmail Integration Coming Soon</h5>
-          <p className="text-sm text-gray-500 mb-4 max-w-md mx-auto">
-            Automatic Gmail report fetching is in development. For now, use Manual Import
-            to upload your scheduled report CSVs.
-          </p>
-          <button
-            disabled
-            className="px-4 py-2 bg-gray-100 text-gray-400 rounded-lg cursor-not-allowed"
-          >
-            Connect Gmail Account
-          </button>
-        </div>
+        {isAuthorized ? (
+          <div className="space-y-4">
+            {/* Status display */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-gray-500 mb-1">Last Import</p>
+                <p className="font-medium text-gray-900">{formatRelativeTime(gmailStatus?.last_run || null)}</p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-gray-500 mb-1">Last Success</p>
+                <p className="font-medium text-green-600">{formatRelativeTime(gmailStatus?.last_success || null)}</p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-gray-500 mb-1">Total Imports</p>
+                <p className="font-bold text-xl text-gray-900">{gmailStatus?.total_imports || 0}</p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-gray-500 mb-1">Schedule</p>
+                <p className="font-medium text-gray-900">Daily (cron)</p>
+              </div>
+            </div>
+
+            {/* Last error if any */}
+            {gmailStatus?.last_error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5" />
+                  <div className="text-sm text-red-800">
+                    <strong>Last error:</strong> {gmailStatus.last_error}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Import Now button */}
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => importMutation.mutate()}
+                disabled={importMutation.isPending}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-lg font-medium",
+                  "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                )}
+              >
+                {importMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Checking Gmail...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4" />
+                    Import Now
+                  </>
+                )}
+              </button>
+              <p className="text-sm text-gray-500">
+                Check for new report emails and import them immediately
+              </p>
+            </div>
+
+            {/* Recent history */}
+            {gmailStatus?.recent_history && gmailStatus.recent_history.length > 0 && (
+              <div className="pt-4 border-t border-gray-200">
+                <h5 className="text-sm font-medium text-gray-700 mb-3">Recent Import History</h5>
+                <div className="space-y-2">
+                  {gmailStatus.recent_history.slice(0, 5).map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-sm py-2 border-b border-gray-100 last:border-0">
+                      <div className="flex items-center gap-2">
+                        {item.success ? (
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-red-500" />
+                        )}
+                        <span className="text-gray-600">
+                          {new Date(item.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+                      <span className={cn(
+                        "text-xs",
+                        item.success ? "text-green-600" : "text-red-600"
+                      )}>
+                        {item.success
+                          ? item.files_imported > 0
+                            ? `${item.files_imported} file(s) imported`
+                            : "No new files"
+                          : item.error || "Failed"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="p-6 border-2 border-dashed border-gray-200 rounded-lg text-center">
+            <Inbox className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+            <h5 className="font-medium text-gray-700 mb-2">
+              {isConfigured ? "Gmail Authorization Required" : "Gmail Not Configured"}
+            </h5>
+            <p className="text-sm text-gray-500 mb-4 max-w-md mx-auto">
+              {isConfigured ? (
+                <>Run the import script manually first to complete OAuth authorization:<br />
+                <code className="bg-gray-100 px-2 py-1 rounded text-xs">python scripts/gmail_import.py</code></>
+              ) : (
+                <>Follow the INSTALL.md guide to set up Gmail API credentials.<br />
+                Upload <code className="bg-gray-100 px-1 rounded">gmail-oauth-client.json</code> to <code className="bg-gray-100 px-1 rounded">~/.catscan/credentials/</code></>
+              )}
+            </p>
+            <a
+              href="https://github.com/yourorg/rtbcat-platform/blob/main/INSTALL.md#automatic-report-import-gmail"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
+            >
+              View Setup Guide
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
+        )}
       </div>
 
       {/* Expected Reports */}
@@ -655,11 +860,11 @@ function GmailReportsTab() {
             <Calendar className="h-5 w-5 text-amber-600 mt-0.5" />
             <div className="text-sm text-amber-800">
               <strong>Schedule Settings for All Reports:</strong>
-              <ul className="mt-2 space-y-1">
-                <li>• Date range: <strong>Yesterday</strong></li>
-                <li>• Schedule: <strong>Daily</strong></li>
-                <li>• File format: <strong>CSV</strong></li>
-                <li>• Delivery: <strong>Email</strong> (to your Gmail)</li>
+              <ul className="mt-2 space-y-1 list-disc list-inside">
+                <li>Date range: <strong>Yesterday</strong></li>
+                <li>Schedule: <strong>Daily</strong></li>
+                <li>File format: <strong>CSV</strong></li>
+                <li>Delivery: <strong>Email</strong> (to your Gmail)</li>
               </ul>
             </div>
           </div>
