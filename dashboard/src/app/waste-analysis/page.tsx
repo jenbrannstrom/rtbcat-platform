@@ -2,13 +2,19 @@
 
 import { useState, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   RefreshCw, AlertTriangle, TrendingUp, BarChart3, Globe,
-  Lightbulb, Copy, CheckCircle, ArrowRight, Trophy, AlertCircle, Ban, Upload
+  Copy, CheckCircle, ArrowRight, Trophy, AlertCircle, Ban, Upload
 } from "lucide-react";
-import { ConfigPerformanceSection } from "@/components/rtb/config-performance";
-import { getQPSSummary, getQPSSizeCoverage, getRTBFunnel, getSpendStats, type PublisherPerformance, type GeoPerformance } from "@/lib/api";
+import { AccountEndpointsHeader } from "@/components/rtb/account-endpoints-header";
+import { PretargetingConfigCard, type PretargetingConfig } from "@/components/rtb/pretargeting-config-card";
+import { ConfigBreakdownPanel } from "@/components/rtb/config-breakdown-panel";
+import {
+  getQPSSummary, getQPSSizeCoverage, getRTBFunnel, getSpendStats,
+  getPretargetingConfigs, syncPretargetingConfigs,
+  type PublisherPerformance, type GeoPerformance, type PretargetingConfigResponse
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const PERIOD_OPTIONS = [
@@ -715,56 +721,42 @@ function GeoAnalysisSection({ geos }: { geos: GeoPerformance[] }) {
   );
 }
 
-// Recommendations Section
-function RecommendationsSection({ days }: { days: number }) {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <Lightbulb className="h-5 w-5 text-amber-500" />
-          Understanding Your Funnel
-        </h3>
-      </div>
+// Helper to transform API response to component props
+function transformConfigToProps(
+  apiConfig: PretargetingConfigResponse,
+  performanceData?: { reached: number; impressions: number; win_rate: number; waste_rate: number }
+): PretargetingConfig {
+  const name = apiConfig.user_name || apiConfig.display_name || `Config ${apiConfig.billing_id}`;
+  const reached = performanceData?.reached || 0;
+  const impressions = performanceData?.impressions || 0;
+  const win_rate = performanceData?.win_rate || 0;
+  const waste_rate = performanceData?.waste_rate || 100;
 
-      <div className="space-y-4">
-        <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-          <h4 className="font-medium text-green-800 mb-2">✅ Pretargeting = Intentional Filtering</h4>
-          <p className="text-sm text-green-700">
-            When 99%+ of bid requests are filtered, that's pretargeting working correctly.
-            You only want traffic matching your sizes, geos, and formats.
-            This is NOT waste - it's cost control.
-          </p>
-        </div>
-
-        <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <h4 className="font-medium text-blue-800 mb-2">📊 Real Efficiency = Win Rate on Reached Traffic</h4>
-          <p className="text-sm text-blue-700">
-            The key metric is: Of traffic that REACHES your bidder, what % becomes impressions?
-            A 30-40% win rate on reached traffic is typical.
-            Focus on improving this, not the pretargeting filter rate.
-          </p>
-        </div>
-
-        <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
-          <h4 className="font-medium text-amber-800 mb-2">🎯 Optimization Opportunities</h4>
-          <ul className="text-sm text-amber-700 space-y-1">
-            <li>• <strong>Publisher analysis:</strong> Find publishers where you win more</li>
-            <li>• <strong>Size gaps:</strong> Remove sizes you don't have creatives for</li>
-            <li>• <strong>Geo performance:</strong> Focus budget on high-performing regions</li>
-            <li>• <strong>Blocked publishers:</strong> Review if any should be unblocked</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  );
+  return {
+    billing_id: apiConfig.billing_id || apiConfig.config_id,
+    name,
+    display_name: apiConfig.display_name,
+    user_name: apiConfig.user_name,
+    state: (apiConfig.state as 'ACTIVE' | 'SUSPENDED') || 'ACTIVE',
+    formats: apiConfig.included_formats || [],
+    platforms: apiConfig.included_platforms || [],
+    sizes: apiConfig.included_sizes || [],
+    included_geos: apiConfig.included_geos || [],
+    reached,
+    impressions,
+    win_rate,
+    waste_rate,
+  };
 }
 
 function WasteAnalysisContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
 
   const initialDays = parseInt(searchParams.get("days") || "7", 10);
   const [days, setDays] = useState<number>(initialDays);
+  const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
 
   const updateUrl = useCallback(
     (newDays: number) => {
@@ -812,10 +804,29 @@ function WasteAnalysisContent() {
     queryFn: () => getSpendStats(days),
   });
 
+  // Fetch pretargeting configs
+  const {
+    data: pretargetingConfigs,
+    isLoading: configsLoading,
+    refetch: refetchConfigs,
+  } = useQuery({
+    queryKey: ["pretargeting-configs"],
+    queryFn: () => getPretargetingConfigs(),
+  });
+
+  // Sync pretargeting mutation
+  const syncConfigsMutation = useMutation({
+    mutationFn: syncPretargetingConfigs,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pretargeting-configs"] });
+    },
+  });
+
   const handleRefresh = () => {
     refetchSummary();
     refetchFunnel();
     refetchSpend();
+    refetchConfigs();
   };
 
   // Use real funnel data if available
@@ -828,67 +839,78 @@ function WasteAnalysisContent() {
   const publishers = rtbFunnel?.publishers || [];
   const geos = rtbFunnel?.geos || [];
 
+  // Build a map of billing_id to performance data from qpsSummary or rtbFunnel
+  const configPerformanceMap = new Map<string, { reached: number; impressions: number; win_rate: number; waste_rate: number }>();
+  // If we have config-level data from the funnel, use it (placeholder for now)
+
+  // Transform configs for display
+  const displayConfigs = (pretargetingConfigs || []).map(config =>
+    transformConfigToProps(config, configPerformanceMap.get(config.billing_id || config.config_id))
+  );
+  const activeConfigsCount = displayConfigs.filter(c => c.state === 'ACTIVE').length;
+
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Page Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">QPS Analysis</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Understand your RTB funnel and optimize win rates
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* CPM Badge - show when spend data available */}
-            {spendStats?.has_spend_data && spendStats.avg_cpm_usd && (
-              <div className="px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
-                <span className="text-xs text-green-600 uppercase tracking-wide">Avg CPM</span>
-                <span className="ml-2 text-sm font-bold text-green-700">${spendStats.avg_cpm_usd.toFixed(2)}</span>
-              </div>
-            )}
-
-            {/* Period Selector */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">Period:</span>
-              <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-                {PERIOD_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => handleDaysChange(option.value)}
-                    className={cn(
-                      "px-3 py-1.5 text-sm font-medium transition-colors",
-                      days === option.value
-                        ? "bg-blue-600 text-white"
-                        : "bg-white text-gray-700 hover:bg-gray-50"
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">QPS Analysis</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Understand your RTB funnel and optimize win rates
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {/* CPM Badge - show when spend data available */}
+          {spendStats?.has_spend_data && spendStats.avg_cpm_usd && (
+            <div className="px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
+              <span className="text-xs text-green-600 uppercase tracking-wide">Avg CPM</span>
+              <span className="ml-2 text-sm font-bold text-green-700">${spendStats.avg_cpm_usd.toFixed(2)}</span>
             </div>
+          )}
 
-            <button
-              onClick={handleRefresh}
-              disabled={summaryLoading}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2",
-                "bg-white border border-gray-300 rounded-lg shadow-sm",
-                "hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500",
-                "disabled:opacity-50 disabled:cursor-not-allowed",
-                "text-sm font-medium text-gray-700"
-              )}
-            >
-              <RefreshCw className={cn("h-4 w-4", (summaryLoading || funnelLoading) && "animate-spin")} />
-              Refresh
-            </button>
+          {/* Period Selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">Period:</span>
+            <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+              {PERIOD_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => handleDaysChange(option.value)}
+                  className={cn(
+                    "px-3 py-1.5 text-sm font-medium transition-colors",
+                    days === option.value
+                      ? "bg-blue-600 text-white"
+                      : "bg-white text-gray-700 hover:bg-gray-50"
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
+
+          <button
+            onClick={handleRefresh}
+            disabled={summaryLoading}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2",
+              "bg-white border border-gray-300 rounded-lg shadow-sm",
+              "hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500",
+              "disabled:opacity-50 disabled:cursor-not-allowed",
+              "text-sm font-medium text-gray-700"
+            )}
+          >
+            <RefreshCw className={cn("h-4 w-4", (summaryLoading || funnelLoading) && "animate-spin")} />
+            Refresh
+          </button>
         </div>
       </div>
 
+      {/* Account Endpoints Header */}
+      <AccountEndpointsHeader />
+
       {/* The Funnel */}
-      <section className="mb-8">
+      <section>
         {(summaryLoading || funnelLoading) ? (
           <div className="bg-white rounded-xl border p-6 animate-pulse">
             <div className="h-6 bg-gray-200 rounded w-1/4 mb-4" />
@@ -906,29 +928,74 @@ function WasteAnalysisContent() {
         )}
       </section>
 
-      {/* Config Performance - Pretargeting Configs */}
-      <section className="mb-8">
-        <ConfigPerformanceSection />
+      {/* Pretargeting Configs Section */}
+      <section>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Pretargeting Configs ({activeConfigsCount} active)
+          </h2>
+          <button
+            onClick={() => syncConfigsMutation.mutate()}
+            disabled={syncConfigsMutation.isPending}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md",
+              "bg-gray-100 text-gray-700 hover:bg-gray-200",
+              "disabled:opacity-50 disabled:cursor-not-allowed"
+            )}
+          >
+            <RefreshCw className={cn("h-4 w-4", syncConfigsMutation.isPending && "animate-spin")} />
+            {syncConfigsMutation.isPending ? "Syncing..." : "Sync from Google"}
+          </button>
+        </div>
+
+        {configsLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+            ))}
+          </div>
+        ) : displayConfigs.length === 0 ? (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+            <AlertTriangle className="h-8 w-8 text-yellow-500 mx-auto mb-3" />
+            <h3 className="font-medium text-yellow-800 mb-2">No Pretargeting Configs</h3>
+            <p className="text-sm text-yellow-700 mb-4">
+              Click "Sync from Google" to fetch your pretargeting configurations from the Authorized Buyers API.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {displayConfigs.map(config => (
+              <div key={config.billing_id}>
+                <PretargetingConfigCard
+                  config={config}
+                  isExpanded={expandedConfigId === config.billing_id}
+                  onToggleExpand={() => setExpandedConfigId(
+                    prev => prev === config.billing_id ? null : config.billing_id
+                  )}
+                />
+                <ConfigBreakdownPanel
+                  billing_id={config.billing_id}
+                  isExpanded={expandedConfigId === config.billing_id}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Publisher Performance */}
-      <section className="mb-8">
+      <section>
         <PublisherPerformanceSection publishers={publishers} />
       </section>
 
       {/* Size Analysis */}
-      <section className="mb-8">
+      <section>
         <SizeAnalysisSection days={days} />
       </section>
 
       {/* Geographic Analysis */}
-      <section className="mb-8">
+      <section>
         <GeoAnalysisSection geos={geos} />
-      </section>
-
-      {/* Recommendations / Understanding */}
-      <section className="mb-8">
-        <RecommendationsSection days={days} />
       </section>
     </div>
   );
