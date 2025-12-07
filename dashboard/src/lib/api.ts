@@ -947,3 +947,41 @@ export async function getConfigBreakdown(
     `/analytics/rtb-funnel/configs/${encodeURIComponent(billingId)}/breakdown?by=${by}`
   );
 }
+
+// Gmail Import API
+
+export interface GmailImportHistoryItem {
+  timestamp: string;
+  success: boolean;
+  files_imported: number;
+  emails_processed: number;
+  error: string | null;
+}
+
+export interface GmailStatus {
+  configured: boolean;
+  authorized: boolean;
+  last_run: string | null;
+  last_success: string | null;
+  last_error: string | null;
+  total_imports: number;
+  recent_history: GmailImportHistoryItem[];
+}
+
+export interface GmailImportResult {
+  success: boolean;
+  emails_processed: number;
+  files_imported: number;
+  files: string[];
+  errors: string[];
+}
+
+export async function getGmailStatus(): Promise<GmailStatus> {
+  return fetchApi<GmailStatus>("/gmail/status");
+}
+
+export async function triggerGmailImport(): Promise<GmailImportResult> {
+  return fetchApi<GmailImportResult>("/gmail/import", {
+    method: "POST",
+  });
+}
