@@ -29,6 +29,8 @@ from config import ConfigManager
 from storage import SQLiteStore, PerformanceMetric, creative_dicts_to_storage
 from analytics import WasteAnalyzer
 from api.campaigns_router import router as campaigns_router
+from api.routers import system_router
+from api.dependencies import set_store, set_config_manager
 from services.campaign_aggregation import CampaignAggregationService
 from services.waste_analyzer import WasteAnalyzerService
 
@@ -482,6 +484,10 @@ async def lifespan(app: FastAPI):
     _store = SQLiteStore()
     await _store.initialize()
 
+    # Set dependencies for routers
+    set_store(_store)
+    set_config_manager(_config_manager)
+
     # Auto-populate buyer_seats from existing creatives if needed
     try:
         seats_created = await _store.populate_buyer_seats_from_creatives()
@@ -526,6 +532,7 @@ def create_app() -> FastAPI:
 app = create_app()
 
 # Include routers
+app.include_router(system_router)  # System & Thumbnails - from api/routers/system.py
 app.include_router(campaigns_router)
 
 
