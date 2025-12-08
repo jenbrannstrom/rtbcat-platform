@@ -29,7 +29,7 @@ from config import ConfigManager
 from storage import SQLiteStore, PerformanceMetric, creative_dicts_to_storage
 from analytics import WasteAnalyzer
 from api.campaigns_router import router as campaigns_router
-from api.routers import system_router
+from api.routers import system_router, creatives_router, seats_router
 from api.dependencies import set_store, set_config_manager
 from services.campaign_aggregation import CampaignAggregationService
 from services.waste_analyzer import WasteAnalyzerService
@@ -533,6 +533,8 @@ app = create_app()
 
 # Include routers
 app.include_router(system_router)  # System & Thumbnails - from api/routers/system.py
+app.include_router(creatives_router)  # Creatives - from api/routers/creatives.py
+app.include_router(seats_router)  # Buyer Seats - from api/routers/seats.py
 app.include_router(campaigns_router)
 
 
