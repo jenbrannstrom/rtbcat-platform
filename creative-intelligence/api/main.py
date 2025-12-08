@@ -6,6 +6,7 @@ using the Google Authorized Buyers RTB API.
 """
 
 import logging
+import sqlite3
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -1834,6 +1835,106 @@ async def list_creatives_paginated(
     )
 
 
+class NewlyUploadedCreativesResponse(BaseModel):
+    """Response model for newly uploaded creatives."""
+
+    creatives: list[dict]
+    total_count: int
+    period_start: str
+    period_end: str
+
+
+@app.get("/creatives/newly-uploaded", response_model=NewlyUploadedCreativesResponse, tags=["Creatives"])
+async def get_newly_uploaded_creatives(
+    days: int = Query(7, description="Number of days to look back", ge=1, le=90),
+    limit: int = Query(100, description="Maximum number of creatives to return", ge=1, le=1000),
+    format: Optional[str] = Query(None, description="Filter by format (HTML, VIDEO, NATIVE)"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get creatives that were first seen within the specified time period.
+
+    Returns creatives that appeared for the first time in imports during the specified period.
+    This is useful for identifying new creatives added to the account.
+    """
+    try:
+        from datetime import datetime, timedelta
+
+        period_end = datetime.now()
+        period_start = period_end - timedelta(days=days)
+
+        async with store._connection() as conn:
+            import asyncio
+            loop = asyncio.get_event_loop()
+
+            # Build query
+            query = """
+                SELECT c.*,
+                    (SELECT SUM(spend_micros) FROM rtb_daily WHERE creative_id = c.id) as total_spend_micros,
+                    (SELECT SUM(impressions) FROM rtb_daily WHERE creative_id = c.id) as total_impressions
+                FROM creatives c
+                WHERE c.first_seen_at >= ?
+                AND c.first_seen_at <= ?
+            """
+            params = [period_start.isoformat(), period_end.isoformat()]
+
+            if format:
+                query += " AND c.format = ?"
+                params.append(format.upper())
+
+            query += " ORDER BY c.first_seen_at DESC LIMIT ?"
+            params.append(limit)
+
+            rows = await loop.run_in_executor(
+                None,
+                lambda: conn.execute(query, params).fetchall(),
+            )
+
+            # Get total count
+            count_query = """
+                SELECT COUNT(*) FROM creatives c
+                WHERE c.first_seen_at >= ?
+                AND c.first_seen_at <= ?
+            """
+            count_params = [period_start.isoformat(), period_end.isoformat()]
+            if format:
+                count_query += " AND c.format = ?"
+                count_params.append(format.upper())
+
+            total_count = await loop.run_in_executor(
+                None,
+                lambda: conn.execute(count_query, count_params).fetchone()[0],
+            )
+
+        creatives = []
+        for row in rows:
+            creative = {
+                "id": row["id"],
+                "name": row["name"],
+                "format": row["format"],
+                "approval_status": row["approval_status"],
+                "width": row["width"],
+                "height": row["height"],
+                "canonical_size": row["canonical_size"],
+                "final_url": row["final_url"],
+                "first_seen_at": row["first_seen_at"],
+                "first_import_batch_id": row["first_import_batch_id"],
+                "total_spend_usd": (row["total_spend_micros"] or 0) / 1_000_000,
+                "total_impressions": row["total_impressions"] or 0,
+            }
+            creatives.append(creative)
+
+        return NewlyUploadedCreativesResponse(
+            creatives=creatives,
+            total_count=total_count or 0,
+            period_start=period_start.strftime("%Y-%m-%d"),
+            period_end=period_end.strftime("%Y-%m-%d"),
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get newly uploaded creatives: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get newly uploaded creatives: {str(e)}")
+
+
 @app.get("/creatives/{creative_id}", response_model=CreativeResponse, tags=["Creatives"])
 async def get_creative(
     creative_id: str,
@@ -3068,7 +3169,7 @@ async def get_import_history(
                 None,
                 lambda: conn.execute(
                     """SELECT * FROM import_history
-                    ORDER BY imported_at DESC
+                    ORDER BY created_at DESC
                     LIMIT ? OFFSET ?""",
                     (limit, offset),
                 ).fetchall(),
@@ -3083,7 +3184,7 @@ async def get_import_history(
                 ImportHistoryResponse(
                     batch_id=row["batch_id"],
                     filename=row["filename"],
-                    imported_at=row["imported_at"],
+                    imported_at=row["created_at"],
                     rows_read=row["rows_read"] or 0,
                     rows_imported=row["rows_imported"] or 0,
                     rows_skipped=row["rows_skipped"] or 0,
@@ -3185,111 +3286,6 @@ async def get_pretargeting_history(
     except Exception as e:
         logger.error(f"Failed to get pretargeting history: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get pretargeting history: {str(e)}")
-
-
-# =============================================================================
-# Newly Uploaded Creatives Endpoint
-# =============================================================================
-
-
-class NewlyUploadedCreativesResponse(BaseModel):
-    """Response model for newly uploaded creatives."""
-
-    creatives: list[dict]
-    total_count: int
-    period_start: str
-    period_end: str
-
-
-@app.get("/creatives/newly-uploaded", response_model=NewlyUploadedCreativesResponse, tags=["Creatives"])
-async def get_newly_uploaded_creatives(
-    days: int = Query(7, description="Number of days to look back", ge=1, le=90),
-    limit: int = Query(100, description="Maximum number of creatives to return", ge=1, le=1000),
-    format: Optional[str] = Query(None, description="Filter by format (HTML, VIDEO, NATIVE)"),
-    store: SQLiteStore = Depends(get_store),
-):
-    """Get creatives that were first seen within the specified time period.
-
-    Returns creatives that appeared for the first time in imports during the specified period.
-    This is useful for identifying new creatives added to the account.
-    """
-    try:
-        from datetime import datetime, timedelta
-
-        period_end = datetime.now()
-        period_start = period_end - timedelta(days=days)
-
-        async with store._connection() as conn:
-            import asyncio
-            loop = asyncio.get_event_loop()
-
-            # Build query
-            query = """
-                SELECT c.*,
-                    (SELECT SUM(spend_micros) FROM rtb_daily WHERE creative_id = c.id) as total_spend_micros,
-                    (SELECT SUM(impressions) FROM rtb_daily WHERE creative_id = c.id) as total_impressions
-                FROM creatives c
-                WHERE c.first_seen_at >= ?
-                AND c.first_seen_at <= ?
-            """
-            params = [period_start.isoformat(), period_end.isoformat()]
-
-            if format:
-                query += " AND c.format = ?"
-                params.append(format.upper())
-
-            query += " ORDER BY c.first_seen_at DESC LIMIT ?"
-            params.append(limit)
-
-            rows = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(query, params).fetchall(),
-            )
-
-            # Get total count
-            count_query = """
-                SELECT COUNT(*) FROM creatives c
-                WHERE c.first_seen_at >= ?
-                AND c.first_seen_at <= ?
-            """
-            count_params = [period_start.isoformat(), period_end.isoformat()]
-            if format:
-                count_query += " AND c.format = ?"
-                count_params.append(format.upper())
-
-            total_count = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(count_query, count_params).fetchone()[0],
-            )
-
-        creatives = []
-        for row in rows:
-            creative = {
-                "id": row["id"],
-                "name": row["name"],
-                "format": row["format"],
-                "approval_status": row["approval_status"],
-                "width": row["width"],
-                "height": row["height"],
-                "canonical_size": row["canonical_size"],
-                "final_url": row["final_url"],
-                "first_seen_at": row["first_seen_at"],
-                "first_import_batch_id": row["first_import_batch_id"],
-                "total_spend_usd": (row["total_spend_micros"] or 0) / 1_000_000,
-                "total_impressions": row["total_impressions"] or 0,
-            }
-            creatives.append(creative)
-
-        return NewlyUploadedCreativesResponse(
-            creatives=creatives,
-            total_count=total_count or 0,
-            period_start=period_start.strftime("%Y-%m-%d"),
-            period_end=period_end.strftime("%Y-%m-%d"),
-        )
-
-    except Exception as e:
-        logger.error(f"Failed to get newly uploaded creatives: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get newly uploaded creatives: {str(e)}")
 
 
 # =============================================================================

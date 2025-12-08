@@ -61,7 +61,9 @@
       "Bash(sudo systemctl stop:*)",
       "Bash(sudo systemctl start:*)",
       "Bash(ls:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(gh pr view:*)",
+      "Bash(git fetch:*)"
     ],
     "deny": [],
     "ask": []
