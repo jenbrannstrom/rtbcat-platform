@@ -41,13 +41,30 @@ Cat-Scan identifies 20-40% QPS waste by detecting:
 
 | Page | URL | Purpose |
 |------|-----|---------|
-| Home | `/` | Waste Optimizer - main analysis dashboard |
-| Setup | `/setup` | Unified setup: Connect API, Gmail Import, Data Retention |
-| Waste Analysis | `/waste-analysis` | Size coverage, config performance, funnel view |
+| Home | `/` | Redirects to `/waste-analysis` |
+| **Waste Analysis** | `/waste-analysis` | Main dashboard - RTB funnel, pretargeting configs, size coverage |
+| Setup | `/setup` | Unified setup: API credentials, Gmail import, data retention |
 | Creatives | `/creatives` | Browse all synced creatives with filters |
 | Campaigns | `/campaigns` | AI-clustered campaign groups |
+| Campaign Detail | `/campaigns/[id]` | Individual campaign performance |
 | Import | `/import` | Manual CSV upload for performance data |
-| Connect | `/connect` | Legacy credential upload (now in /setup) |
+| Connect | `/connect` | Legacy credential upload (redirects to /setup) |
+| Settings | `/settings` | Settings hub |
+| Seats | `/settings/seats` | Manage buyer seat display names |
+| Retention | `/settings/retention` | Data retention policies |
+
+### Waste Analysis Page Sections (`/waste-analysis`)
+
+The main dashboard contains these sections:
+
+1. **Account Endpoints Header** - RTB endpoint URLs, QPS allocations per region (US West, US East, Asia), sync button
+2. **RTB Funnel Card** - Reached queries → Win rate → Impressions visualization with QPS/IPS metrics
+3. **Pretargeting Configs** - Expandable cards per billing_id showing:
+   - Win rate & waste percentage with color-coded indicators
+   - Included geos, formats, sizes, platforms (as pills)
+   - Config breakdown panel (tabs: By Size, By Geo, By Publisher, By Creative)
+4. **Size Analysis** - Size coverage heatmap, gap detection (requires CSV with size dimension)
+5. **Period Selector** - 7/14/30 day toggle affecting all metrics
 
 ---
 
