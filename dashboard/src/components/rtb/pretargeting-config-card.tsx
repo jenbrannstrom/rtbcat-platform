@@ -142,9 +142,12 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
       )}
     >
       {/* Main row - clickable to expand */}
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={handleToggle}
-        className="w-full px-4 py-3 flex items-center gap-3 text-left"
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleToggle(); }}
+        className="w-full px-4 py-3 flex items-center gap-3 text-left cursor-pointer hover:bg-gray-50/50"
       >
         <ChevronRight
           className={cn(
@@ -248,7 +251,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
           </span>
           <WasteMiniBar pct={config.waste_rate} />
         </div>
-      </button>
+      </div>
 
       {/* Expanded content */}
       {expanded && (

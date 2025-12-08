@@ -154,13 +154,13 @@ export function AccountEndpointsHeader() {
                 key={endpoint.endpoint_id}
                 className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg text-sm"
               >
-                <div className="flex items-center gap-3">
-                  <Globe className="h-4 w-4 text-gray-400" />
-                  <span className="font-medium text-gray-700">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <Globe className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  <span className="font-medium text-gray-700 flex-shrink-0 w-16">
                     {formatLocation(endpoint.trading_location)}
                   </span>
-                  <span className="text-xs text-gray-400 font-mono truncate max-w-[200px]">
-                    {endpoint.url}
+                  <span className="text-xs text-gray-400 font-mono truncate" title={endpoint.url}>
+                    {endpoint.url.replace(/^https?:\/\//, '')}
                   </span>
                 </div>
                 <div className="flex items-center gap-4">
