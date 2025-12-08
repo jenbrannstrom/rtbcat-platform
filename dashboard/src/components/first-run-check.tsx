@@ -20,7 +20,7 @@ export function FirstRunCheck({ children }: { children: React.ReactNode }) {
     // Check if configured
     async function checkConfig() {
       try {
-        const res = await fetch('http://localhost:8000/health');
+        const res = await fetch('/api/health');
         const data = await res.json();
 
         // If not configured or no credentials, redirect to connect
