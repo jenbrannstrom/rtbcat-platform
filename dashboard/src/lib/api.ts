@@ -24,17 +24,43 @@ async function fetchApi<T>(
   endpoint: string,
   options?: RequestInit
 ): Promise<T> {
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-    ...options,
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_BASE}${endpoint}`, {
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+      ...options,
+    });
+  } catch (err) {
+    // Network error - API server likely not running
+    throw new Error(
+      "Cannot connect to API server. Please ensure the backend is running on port 8000."
+    );
+  }
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.detail || `API error: ${response.status}`);
+    // Try to parse error response
+    const text = await response.text();
+    let errorMessage: string;
+
+    try {
+      const errorData = JSON.parse(text);
+      errorMessage = errorData.detail || `API error: ${response.status}`;
+    } catch {
+      // Not JSON - check for common proxy errors
+      if (response.status === 500 && text.includes("Internal Server Error")) {
+        errorMessage = "Cannot connect to API server. Please ensure the backend is running on port 8000.";
+      } else if (response.status === 502 || response.status === 503) {
+        errorMessage = "API server is unavailable. Please check if the backend is running.";
+      } else {
+        errorMessage = `API error: ${response.status}`;
+      }
+    }
+
+    throw new Error(errorMessage);
   }
 
   return response.json();
