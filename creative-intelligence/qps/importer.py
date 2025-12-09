@@ -519,6 +519,9 @@ def import_csv(csv_path: str, db_path: str = DB_PATH) -> ImportResult:
 
         conn.commit()
 
+        # Track first_seen_at for creatives
+        _update_creative_first_seen(cursor, creative_ids, result.batch_id)
+
         # Record import history
         _record_import_history(cursor, result, csv_path, validation)
         conn.commit()
@@ -580,12 +583,16 @@ def _insert_batch(cursor: sqlite3.Cursor, batch: List[Tuple]) -> Tuple[int, int]
 def _record_import_history(cursor, result: ImportResult, csv_path: str, validation: ValidationResult):
     """Record import in history table."""
     try:
+        # Get file size
+        file_size_bytes = os.path.getsize(csv_path) if os.path.exists(csv_path) else 0
+
         cursor.execute("""
             INSERT INTO import_history (
                 batch_id, filename, rows_read, rows_imported, rows_skipped, rows_duplicate,
                 date_range_start, date_range_end, columns_found, columns_missing,
-                total_reached, total_impressions, total_spend_usd, status, error_message
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                total_reached, total_impressions, total_spend_usd, status, error_message,
+                file_size_bytes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             result.batch_id,
             os.path.basename(csv_path),
@@ -601,10 +608,151 @@ def _record_import_history(cursor, result: ImportResult, csv_path: str, validati
             result.total_impressions,
             result.total_spend_usd,
             "complete" if result.success else "failed",
-            result.error_message if result.error_message else None
+            result.error_message if result.error_message else None,
+            file_size_bytes
         ))
+
+        # Update daily upload summary
+        _update_daily_upload_summary(cursor, result, file_size_bytes)
+
     except Exception as e:
         logger.warning(f"Failed to record import history: {e}")
+
+
+def _update_daily_upload_summary(cursor, result: ImportResult, file_size_bytes: int):
+    """Update the daily upload summary table with aggregated stats."""
+    try:
+        import_date = datetime.now().strftime("%Y-%m-%d")
+        is_success = 1 if result.success else 0
+        is_failure = 0 if result.success else 1
+
+        # Check if entry exists for today
+        cursor.execute(
+            "SELECT id, total_uploads, successful_uploads, failed_uploads, "
+            "total_rows_written, total_file_size_bytes, min_rows, max_rows "
+            "FROM daily_upload_summary WHERE upload_date = ?",
+            (import_date,)
+        )
+        existing = cursor.fetchone()
+
+        if existing:
+            # Update existing entry
+            new_total = existing[1] + 1
+            new_success = existing[2] + is_success
+            new_failed = existing[3] + is_failure
+            new_rows = existing[4] + result.rows_imported
+            new_size = existing[5] + file_size_bytes
+            new_avg = new_rows / new_total if new_total > 0 else 0
+
+            # Update min/max rows
+            min_rows = min(existing[6], result.rows_imported) if existing[6] is not None else result.rows_imported
+            max_rows = max(existing[7], result.rows_imported) if existing[7] is not None else result.rows_imported
+
+            cursor.execute("""
+                UPDATE daily_upload_summary SET
+                    total_uploads = ?,
+                    successful_uploads = ?,
+                    failed_uploads = ?,
+                    total_rows_written = ?,
+                    total_file_size_bytes = ?,
+                    avg_rows_per_upload = ?,
+                    min_rows = ?,
+                    max_rows = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE upload_date = ?
+            """, (new_total, new_success, new_failed, new_rows, new_size,
+                  new_avg, min_rows, max_rows, import_date))
+        else:
+            # Insert new entry
+            cursor.execute("""
+                INSERT INTO daily_upload_summary (
+                    upload_date, total_uploads, successful_uploads, failed_uploads,
+                    total_rows_written, total_file_size_bytes, avg_rows_per_upload,
+                    min_rows, max_rows
+                ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?)
+            """, (import_date, is_success, is_failure, result.rows_imported,
+                  file_size_bytes, result.rows_imported, result.rows_imported, result.rows_imported))
+
+        # Check for anomalies (row count spikes/drops compared to recent days)
+        _check_upload_anomalies(cursor, import_date)
+
+    except Exception as e:
+        logger.warning(f"Failed to update daily upload summary: {e}")
+
+
+def _update_creative_first_seen(cursor, creative_ids: Set[str], batch_id: str):
+    """Update first_seen_at for creatives that don't have it set yet."""
+    try:
+        now = datetime.now().isoformat()
+
+        for creative_id in creative_ids:
+            # Update only if first_seen_at is NULL
+            cursor.execute("""
+                UPDATE creatives
+                SET first_seen_at = ?,
+                    first_import_batch_id = ?
+                WHERE id = ?
+                AND first_seen_at IS NULL
+            """, (now, batch_id, creative_id))
+
+    except Exception as e:
+        logger.warning(f"Failed to update creative first_seen_at: {e}")
+
+
+def _check_upload_anomalies(cursor, current_date: str):
+    """Check for anomalies in row counts compared to recent days (Mon-Sun pattern)."""
+    try:
+        # Get last 7 days of data
+        cursor.execute("""
+            SELECT upload_date, total_rows_written
+            FROM daily_upload_summary
+            WHERE upload_date < ?
+            ORDER BY upload_date DESC
+            LIMIT 7
+        """, (current_date,))
+        recent_days = cursor.fetchall()
+
+        if len(recent_days) < 3:
+            # Not enough data to detect anomalies
+            return
+
+        # Calculate average and std deviation of recent days
+        row_counts = [day[1] for day in recent_days if day[1] is not None and day[1] > 0]
+        if not row_counts:
+            return
+
+        avg_rows = sum(row_counts) / len(row_counts)
+
+        # Get current day's row count
+        cursor.execute(
+            "SELECT total_rows_written FROM daily_upload_summary WHERE upload_date = ?",
+            (current_date,)
+        )
+        current = cursor.fetchone()
+        if not current or current[0] is None:
+            return
+
+        current_rows = current[0]
+
+        # Detect anomaly: >50% drop or >200% spike from average
+        anomaly_reason = None
+        if avg_rows > 0:
+            ratio = current_rows / avg_rows
+            if ratio < 0.5:
+                anomaly_reason = f"Row count dropped {((1-ratio)*100):.0f}% below 7-day average ({current_rows:,} vs avg {avg_rows:,.0f})"
+            elif ratio > 2.0:
+                anomaly_reason = f"Row count spiked {((ratio-1)*100):.0f}% above 7-day average ({current_rows:,} vs avg {avg_rows:,.0f})"
+
+        # Update anomaly flag
+        has_anomaly = 1 if anomaly_reason else 0
+        cursor.execute("""
+            UPDATE daily_upload_summary
+            SET has_anomaly = ?, anomaly_reason = ?
+            WHERE upload_date = ?
+        """, (has_anomaly, anomaly_reason, current_date))
+
+    except Exception as e:
+        logger.warning(f"Failed to check upload anomalies: {e}")
 
 
 # ============================================================================
