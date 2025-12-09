@@ -6,7 +6,8 @@ and campaign_daily_summary tables.
 """
 
 import sqlite3
-from typing import Optional
+import uuid
+from typing import Optional, Union
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -14,7 +15,7 @@ from datetime import datetime
 @dataclass
 class AICampaign:
     """AI-generated campaign record."""
-    id: Optional[int] = None
+    id: Optional[str] = None
     seat_id: Optional[int] = None
     name: str = ""
     description: Optional[str] = None
@@ -32,7 +33,7 @@ class CreativeCampaignMapping:
     """Creative to campaign assignment."""
     id: Optional[int] = None
     creative_id: str = ""
-    campaign_id: int = 0
+    campaign_id: str = ""
     manually_assigned: bool = False
     assigned_at: Optional[datetime] = None
     assigned_by: Optional[str] = None
@@ -41,7 +42,7 @@ class CreativeCampaignMapping:
 @dataclass
 class CampaignPerformance:
     """Campaign daily performance summary."""
-    campaign_id: int = 0
+    campaign_id: str = ""
     date: str = ""
     total_creatives: int = 0
     active_creatives: int = 0
@@ -86,7 +87,7 @@ class CampaignRepository:
         ai_generated: bool = True,
         ai_confidence: Optional[float] = None,
         clustering_method: Optional[str] = None,
-    ) -> int:
+    ) -> str:
         """
         Create a new AI campaign.
 
@@ -99,26 +100,28 @@ class CampaignRepository:
             clustering_method: Clustering method used (domain, url, ai, manual)
 
         Returns:
-            New campaign ID
+            New campaign ID (string UUID)
         """
+        # Generate a unique text ID
+        campaign_id = str(uuid.uuid4())[:8]  # Short UUID for readability
+
         cursor = self.db.cursor()
         cursor.execute("""
             INSERT INTO campaigns
-            (seat_id, name, description, ai_generated, ai_confidence,
+            (id, seat_id, name, description, ai_generated, ai_confidence,
              clustering_method, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        """, (seat_id, name, description, ai_generated, ai_confidence, clustering_method))
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """, (campaign_id, seat_id, name, description, ai_generated, ai_confidence, clustering_method))
 
-        campaign_id = cursor.lastrowid
         self.db.commit()
         return campaign_id
 
-    def get_campaign(self, campaign_id: int) -> Optional[AICampaign]:
+    def get_campaign(self, campaign_id: Union[str, int]) -> Optional[AICampaign]:
         """
         Get a campaign by ID with creative count.
 
         Args:
-            campaign_id: Campaign ID
+            campaign_id: Campaign ID (string or int)
 
         Returns:
             AICampaign object or None
@@ -129,7 +132,7 @@ class CampaignRepository:
                    (SELECT COUNT(*) FROM creative_campaigns WHERE campaign_id = c.id) as computed_count
             FROM campaigns c
             WHERE c.id = ?
-        """, (campaign_id,))
+        """, (str(campaign_id),))
         row = cursor.fetchone()
 
         if row:
@@ -183,7 +186,7 @@ class CampaignRepository:
 
     def update_campaign(
         self,
-        campaign_id: int,
+        campaign_id: Union[str, int],
         name: Optional[str] = None,
         description: Optional[str] = None,
         status: Optional[str] = None,
@@ -258,7 +261,7 @@ class CampaignRepository:
     def assign_creative_to_campaign(
         self,
         creative_id: str,
-        campaign_id: int,
+        campaign_id: Union[str, int],
         assigned_by: str = "ai",
         manually_assigned: bool = False,
     ) -> bool:
@@ -289,7 +292,7 @@ class CampaignRepository:
     def assign_creatives_batch(
         self,
         creative_ids: list[str],
-        campaign_id: int,
+        campaign_id: Union[str, int],
         assigned_by: str = "ai",
         manually_assigned: bool = False,
     ) -> int:
@@ -355,7 +358,7 @@ class CampaignRepository:
         return [row['creative_id'] for row in cursor.fetchall()]
 
     def get_campaign_country_breakdown(
-        self, campaign_id: int, days: int = 7
+        self, campaign_id: Union[str, int], days: int = 7
     ) -> dict[str, dict]:
         """
         Get country breakdown for a campaign's creatives.
@@ -460,7 +463,7 @@ class CampaignRepository:
 
     def update_campaign_summary(
         self,
-        campaign_id: int,
+        campaign_id: Union[str, int],
         date: str,
     ) -> None:
         """
@@ -524,7 +527,7 @@ class CampaignRepository:
 
     def get_campaign_performance(
         self,
-        campaign_id: int,
+        campaign_id: Union[str, int],
         days: int = 7,
     ) -> dict:
         """
@@ -576,7 +579,7 @@ class CampaignRepository:
 
     def get_campaign_daily_trend(
         self,
-        campaign_id: int,
+        campaign_id: Union[str, int],
         days: int = 30,
     ) -> list[dict]:
         """
