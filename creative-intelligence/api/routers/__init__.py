@@ -10,6 +10,10 @@ from .config import router as config_router
 from .gmail import router as gmail_router
 from .recommendations import router as recommendations_router
 from .retention import router as retention_router
+from .qps import router as qps_router
+from .performance import router as performance_router
+from .troubleshooting import router as troubleshooting_router
+from .collect import router as collect_router
 
 __all__ = [
     "system_router",
@@ -22,4 +26,8 @@ __all__ = [
     "gmail_router",
     "recommendations_router",
     "retention_router",
+    "qps_router",
+    "performance_router",
+    "troubleshooting_router",
+    "collect_router",
 ]
