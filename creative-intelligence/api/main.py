@@ -29,7 +29,18 @@ from config import ConfigManager
 from storage import SQLiteStore, PerformanceMetric, creative_dicts_to_storage
 from analytics import WasteAnalyzer
 from api.campaigns_router import router as campaigns_router
-from api.routers import system_router, creatives_router, seats_router, settings_router, uploads_router
+from api.routers import (
+    system_router,
+    creatives_router,
+    seats_router,
+    settings_router,
+    uploads_router,
+    analytics_router,
+    config_router,
+    gmail_router,
+    recommendations_router,
+    retention_router,
+)
 from api.dependencies import set_store, set_config_manager
 from services.campaign_aggregation import CampaignAggregationService
 from services.waste_analyzer import WasteAnalyzerService
@@ -537,6 +548,11 @@ app.include_router(creatives_router)  # Creatives - from api/routers/creatives.p
 app.include_router(seats_router)  # Buyer Seats - from api/routers/seats.py
 app.include_router(settings_router)  # RTB Settings - from api/routers/settings.py
 app.include_router(uploads_router)  # Uploads - from api/routers/uploads.py
+app.include_router(analytics_router)  # Analytics - from api/routers/analytics.py
+app.include_router(config_router)  # Configuration - from api/routers/config.py
+app.include_router(gmail_router)  # Gmail Import - from api/routers/gmail.py
+app.include_router(recommendations_router)  # Recommendations - from api/routers/recommendations.py
+app.include_router(retention_router)  # Retention - from api/routers/retention.py
 app.include_router(campaigns_router)
 
 

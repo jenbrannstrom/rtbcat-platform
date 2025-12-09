@@ -5,6 +5,11 @@ from .creatives import router as creatives_router
 from .seats import router as seats_router
 from .settings import router as settings_router
 from .uploads import router as uploads_router
+from .analytics import router as analytics_router
+from .config import router as config_router
+from .gmail import router as gmail_router
+from .recommendations import router as recommendations_router
+from .retention import router as retention_router
 
 __all__ = [
     "system_router",
@@ -12,4 +17,9 @@ __all__ = [
     "seats_router",
     "settings_router",
     "uploads_router",
+    "analytics_router",
+    "config_router",
+    "gmail_router",
+    "recommendations_router",
+    "retention_router",
 ]

@@ -12,8 +12,7 @@ from pydantic import BaseModel
 from config import ConfigManager
 from storage import SQLiteStore, creative_dicts_to_storage
 from api.dependencies import get_store, get_config
-from clients.buyer_seats import BuyerSeatsClient
-from clients.creatives import CreativesClient
+from collectors import BuyerSeatsClient, CreativesClient
 
 logger = logging.getLogger(__name__)
 
