@@ -437,6 +437,7 @@ export interface CredentialsStatus {
 
 export interface CredentialsUploadResponse {
   success: boolean;
+  id?: string;
   client_email?: string;
   project_id?: string;
   message: string;
@@ -448,13 +449,13 @@ export async function getCredentialsStatus(): Promise<CredentialsStatus> {
 
 export async function uploadCredentials(
   serviceAccountJson: string,
-  accountId?: string
+  displayName?: string
 ): Promise<CredentialsUploadResponse> {
   return fetchApi<CredentialsUploadResponse>("/config/credentials", {
     method: "POST",
     body: JSON.stringify({
       service_account_json: serviceAccountJson,
-      account_id: accountId,
+      display_name: displayName,
     }),
   });
 }
@@ -463,6 +464,52 @@ export async function deleteCredentials(): Promise<{ success: boolean; message: 
   return fetchApi<{ success: boolean; message: string }>("/config/credentials", {
     method: "DELETE",
   });
+}
+
+// Multi-Account Service Accounts API
+
+export interface ServiceAccount {
+  id: string;
+  client_email: string;
+  project_id?: string;
+  display_name?: string;
+  is_active: boolean;
+  created_at?: string;
+  last_used?: string;
+}
+
+export interface ServiceAccountListResponse {
+  accounts: ServiceAccount[];
+  count: number;
+}
+
+export async function getServiceAccounts(activeOnly: boolean = false): Promise<ServiceAccountListResponse> {
+  const params = activeOnly ? "?active_only=true" : "";
+  return fetchApi<ServiceAccountListResponse>(`/config/service-accounts${params}`);
+}
+
+export async function getServiceAccount(accountId: string): Promise<ServiceAccount> {
+  return fetchApi<ServiceAccount>(`/config/service-accounts/${encodeURIComponent(accountId)}`);
+}
+
+export async function addServiceAccount(
+  serviceAccountJson: string,
+  displayName?: string
+): Promise<CredentialsUploadResponse> {
+  return fetchApi<CredentialsUploadResponse>("/config/service-accounts", {
+    method: "POST",
+    body: JSON.stringify({
+      service_account_json: serviceAccountJson,
+      display_name: displayName,
+    }),
+  });
+}
+
+export async function deleteServiceAccount(accountId: string): Promise<{ success: boolean; message: string }> {
+  return fetchApi<{ success: boolean; message: string }>(
+    `/config/service-accounts/${encodeURIComponent(accountId)}`,
+    { method: "DELETE" }
+  );
 }
 
 // Thumbnail Generation API
@@ -492,8 +539,13 @@ export interface ThumbnailBatchResponse {
   results: ThumbnailGenerateResponse[];
 }
 
-export async function getThumbnailStatus(): Promise<ThumbnailStatusSummary> {
-  return fetchApi<ThumbnailStatusSummary>("/thumbnails/status");
+export async function getThumbnailStatus(params?: {
+  buyer_id?: string;
+}): Promise<ThumbnailStatusSummary> {
+  const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  const query = searchParams.toString();
+  return fetchApi<ThumbnailStatusSummary>(`/thumbnails/status${query ? `?${query}` : ""}`);
 }
 
 export async function generateThumbnail(

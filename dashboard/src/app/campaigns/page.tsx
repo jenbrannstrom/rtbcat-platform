@@ -23,6 +23,7 @@ import { ListCluster } from '@/components/campaigns/list-cluster';
 import { ListItem } from '@/components/campaigns/list-item';
 import { PreviewModal } from '@/components/preview-modal';
 import { cn } from '@/lib/utils';
+import { useAccount } from '@/contexts/account-context';
 
 // Droppable zone to create a new campaign on drop (Grid view)
 function NewCampaignDropZone({ onClick }: { onClick: () => void }) {
@@ -228,8 +229,10 @@ async function fetchUnclustered(): Promise<{ creative_ids: string[]; count: numb
   return res.json();
 }
 
-async function fetchAllCreatives(): Promise<Creative[]> {
-  const res = await fetch('/api/creatives?limit=1000');
+async function fetchAllCreatives(buyerId?: string | null): Promise<Creative[]> {
+  const params = new URLSearchParams({ limit: '1000' });
+  if (buyerId) params.set('buyer_id', buyerId);
+  const res = await fetch(`/api/creatives?${params.toString()}`);
   if (!res.ok) throw new Error('Failed to fetch creatives');
   const data = await res.json();
   // API returns list directly, not { creatives: [...] }
@@ -280,6 +283,7 @@ async function deleteCampaign(id: string): Promise<void> {
 
 export default function CampaignsPage() {
   const queryClient = useQueryClient();
+  const { selectedBuyerId } = useAccount();
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [createdSuggestions, setCreatedSuggestions] = useState<Set<string>>(new Set());
@@ -325,8 +329,8 @@ export default function CampaignsPage() {
   });
 
   const { data: allCreatives = [], isLoading: loadingCreatives } = useQuery({
-    queryKey: ['all-creatives'],
-    queryFn: fetchAllCreatives,
+    queryKey: ['all-creatives', selectedBuyerId],
+    queryFn: () => fetchAllCreatives(selectedBuyerId),
   });
 
   // Build creatives map when data loads

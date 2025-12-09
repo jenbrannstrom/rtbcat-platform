@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, Suspense, useRef, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Search, X, TrendingUp, Loader2, Play, Square, AlertTriangle } from "lucide-react";
@@ -12,6 +11,7 @@ import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
 import type { Creative, PerformancePeriod, CreativePerformanceSummary } from "@/types/api";
 import { cn, getFormatLabel } from "@/lib/utils";
+import { useAccount } from "@/contexts/account-context";
 
 // Sort options for the dropdown
 const SORT_OPTIONS: { value: PerformancePeriod | "none"; label: string }[] = [
@@ -87,12 +87,12 @@ const FORMAT_FILTERS: { value: string; label: string; formats: string[] }[] = [
 const COLUMNS = 4; // Fixed 4 columns for simplicity
 
 // Thumbnail Generation Banner Component
-function ThumbnailGenerationBanner() {
+function ThumbnailGenerationBanner({ buyerId }: { buyerId?: string | null }) {
   const queryClient = useQueryClient();
 
   const { data: status, refetch: refetchStatus } = useQuery({
-    queryKey: ["thumbnailStatus"],
-    queryFn: getThumbnailStatus,
+    queryKey: ["thumbnailStatus", buyerId],
+    queryFn: () => getThumbnailStatus({ buyer_id: buyerId ?? undefined }),
     refetchInterval: (query) => {
       // Poll every 2s while generating
       return query.state.data?.pending && query.state.data.pending > 0 ? 2000 : false;
@@ -313,10 +313,10 @@ function VirtualizedGrid({
 }
 
 function CreativesContent() {
-  const searchParams = useSearchParams();
+  const { selectedBuyerId } = useAccount();
 
-  // Get buyer_id from URL params (set by sidebar)
-  const selectedSeatId = searchParams.get("buyer_id");
+  // Get buyer_id from context (persistent across pages)
+  const selectedSeatId = selectedBuyerId;
 
   const [selectedFormats, setSelectedFormats] = useState<Set<string>>(new Set());
   const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set());
@@ -479,7 +479,7 @@ function CreativesContent() {
   return (
     <div className="p-6">
       {/* Thumbnail Generation Banner - shows when videos need thumbnails */}
-      <ThumbnailGenerationBanner />
+      <ThumbnailGenerationBanner buyerId={selectedSeatId} />
 
       {/* Compact Header with Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-4">
