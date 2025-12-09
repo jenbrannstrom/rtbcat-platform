@@ -61,7 +61,15 @@
       "Bash(sudo systemctl stop:*)",
       "Bash(sudo systemctl start:*)",
       "Bash(ls:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(gh pr view:*)",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(head -c 100 echo \"\" curl -s http://localhost:8000/analytics/spend-stats?days=7)",
+      "Bash(git restore:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(gh auth:*)"
     ],
     "deny": [],
     "ask": []
