@@ -646,3 +646,36 @@ async def extract_html_thumbnails(
         no_image_found=result.get("no_image_found", 0),
         message=result.get("message"),
     )
+
+
+# =============================================================================
+# Stats and Sizes endpoints
+# =============================================================================
+
+
+class StatsResponse(BaseModel):
+    """Response model for database statistics."""
+    creative_count: int
+    campaign_count: int
+    cluster_count: int
+    formats: dict[str, int]
+    db_path: str
+
+
+class SizesResponse(BaseModel):
+    """Response model for available creative sizes."""
+    sizes: list[str]
+
+
+@router.get("/stats", response_model=StatsResponse)
+async def get_stats(store: SQLiteStore = Depends(get_store)):
+    """Get database statistics."""
+    stats = await store.get_stats()
+    return StatsResponse(**stats)
+
+
+@router.get("/sizes", response_model=SizesResponse)
+async def get_sizes(store: SQLiteStore = Depends(get_store)):
+    """Get available creative sizes from the database."""
+    sizes = await store.get_available_sizes()
+    return SizesResponse(sizes=sizes)
