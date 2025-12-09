@@ -51,18 +51,24 @@ class AICampaignResponse(BaseModel):
 
 
 class AutoClusterRequest(BaseModel):
-    """Request for auto-clustering."""
-    seat_id: Optional[int] = None
-    use_ai: bool = True
-    min_cluster_size: int = 3
-    group_by_country: bool = False  # Phase 22: Create separate campaigns per country
+    """Request body for auto-clustering."""
+    by_url: bool = True
+    by_country: bool = False
+    buyer_id: Optional[str] = None  # Filter by buyer_id for multi-account support
+
+
+class ClusterSuggestion(BaseModel):
+    """A suggested campaign cluster."""
+    suggested_name: str
+    creative_ids: list[str]
+    domain: Optional[str] = None
+    country: Optional[str] = None
 
 
 class AutoClusterResponse(BaseModel):
-    """Response from auto-clustering."""
-    campaigns_created: int
-    creatives_categorized: int
-    campaigns: list[dict]
+    """Response model for auto-cluster suggestions."""
+    suggestions: list[ClusterSuggestion]
+    unclustered_count: int
 
 
 class CampaignUpdateRequest(BaseModel):
@@ -171,118 +177,140 @@ def _split_clusters_by_country(
 @router.post("/auto-cluster", response_model=AutoClusterResponse)
 async def auto_cluster_creatives(request: AutoClusterRequest):
     """
-    Automatically cluster all uncategorized creatives into campaigns.
+    Auto-cluster unclustered creatives by destination URL (and optionally country).
 
-    This endpoint:
-    1. Finds all creatives not assigned to a campaign
-    2. Groups them using rule-based clustering (domain, URL patterns)
-    3. Optionally splits by country (Phase 22)
-    4. Optionally refines with AI (generates better names, merges similar)
-    5. Creates campaigns and assigns creatives
+    Returns suggested clusters without saving them. User must confirm to create.
+    Supports buyer_id filtering for multi-account scenarios.
     """
     conn = get_db_connection()
-    repo = CampaignRepository(conn)
 
     try:
-        # Get uncategorized creatives
-        creatives = repo.get_uncategorized_creatives(request.seat_id)
+        cursor = conn.cursor()
 
-        if not creatives:
-            return AutoClusterResponse(
-                campaigns_created=0,
-                creatives_categorized=0,
-                campaigns=[],
-            )
-
-        logger.info(f"Found {len(creatives)} uncategorized creatives")
-
-        # Step 1: Rule-based pre-clustering
-        clusters = pre_cluster_creatives(creatives)
-        clusters = merge_small_clusters(clusters, request.min_cluster_size)
-
-        logger.info(f"Pre-clustering created {len(clusters)} clusters")
-
-        # Step 1.5: Split by country if requested (Phase 22)
-        if request.group_by_country:
-            creative_ids = [c["id"] for c in creatives]
-            creative_countries = _get_creative_countries(conn, creative_ids)
-            clusters = _split_clusters_by_country(clusters, creative_countries)
-            clusters = merge_small_clusters(clusters, request.min_cluster_size)
-            logger.info(f"Country split created {len(clusters)} clusters")
-
-        # Step 2: AI refinement (if enabled)
-        if request.use_ai:
-            try:
-                clusterer = AICampaignClusterer()
-                ai_result = clusterer.analyze_and_name_clusters(clusters)
-                campaign_defs = apply_ai_suggestions(clusters, ai_result)
-            except Exception as e:
-                logger.warning(f"AI clustering failed, falling back to rules: {e}")
-                # Fallback to rule-based naming
-                from api.clustering.rule_based import generate_cluster_name
-                campaign_defs = []
-                for cluster_key, creatives_in_cluster in clusters.items():
-                    campaign_defs.append({
-                        "name": generate_cluster_name(cluster_key, creatives_in_cluster),
-                        "description": None,
-                        "creative_ids": [c["id"] for c in creatives_in_cluster],
-                        "ai_confidence": 0.3,
-                        "clustering_method": cluster_key.split(":")[0],
-                    })
+        # Build query for unclustered creatives, optionally filtered by buyer_id
+        if request.buyer_id:
+            cursor.execute("""
+                SELECT c.id as creative_id, c.final_url, c.buyer_id
+                FROM creatives c
+                LEFT JOIN campaign_creatives cc ON c.id = cc.creative_id
+                WHERE cc.creative_id IS NULL
+                  AND c.buyer_id = ?
+                ORDER BY c.id
+            """, (request.buyer_id,))
         else:
-            # Rule-based only
-            from api.clustering.rule_based import generate_cluster_name
-            campaign_defs = []
-            for cluster_key, creatives_in_cluster in clusters.items():
-                campaign_defs.append({
-                    "name": generate_cluster_name(cluster_key, creatives_in_cluster),
-                    "description": None,
-                    "creative_ids": [c["id"] for c in creatives_in_cluster],
-                    "ai_confidence": 0.5,
-                    "clustering_method": cluster_key.split(":")[0],
-                })
+            cursor.execute("""
+                SELECT c.id as creative_id, c.final_url, c.buyer_id
+                FROM creatives c
+                LEFT JOIN campaign_creatives cc ON c.id = cc.creative_id
+                WHERE cc.creative_id IS NULL
+                ORDER BY c.id
+            """)
 
-        # Step 3: Create campaigns and assign creatives
-        created = []
-        for campaign_def in campaign_defs:
-            campaign_id = repo.create_campaign(
-                name=campaign_def["name"],
-                seat_id=request.seat_id,
-                description=campaign_def.get("description"),
-                ai_generated=True,
-                ai_confidence=campaign_def.get("ai_confidence"),
-                clustering_method=campaign_def.get("clustering_method"),
-            )
+        rows = cursor.fetchall()
+        unclustered_count = len(rows)
 
-            # Assign creatives
-            creative_ids = campaign_def.get("creative_ids", [])
-            repo.assign_creatives_batch(
+        if not rows:
+            conn.close()
+            return AutoClusterResponse(suggestions=[], unclustered_count=0)
+
+        logger.info(f"Found {unclustered_count} unclustered creatives for buyer_id={request.buyer_id}")
+
+        # Group by final_url (domain extraction)
+        from urllib.parse import urlparse
+        from collections import defaultdict
+
+        url_groups: dict[str, list[str]] = defaultdict(list)
+
+        for row in rows:
+            creative_id = str(row['creative_id'])
+            final_url = row['final_url'] or ''
+
+            # Extract domain from URL
+            domain = None
+            if final_url:
+                try:
+                    parsed = urlparse(final_url)
+                    domain = parsed.netloc or parsed.path.split('/')[0]
+                    # Clean up domain
+                    domain = domain.replace('www.', '').lower()
+                except Exception:
+                    domain = final_url[:50]
+
+            if not domain:
+                domain = 'unknown'
+
+            url_groups[domain].append(creative_id)
+
+        # Generate cluster suggestions
+        suggestions: list[ClusterSuggestion] = []
+
+        for domain, creative_ids in url_groups.items():
+            if len(creative_ids) < 1:
+                continue
+
+            # Generate a clean name from domain
+            suggested_name = _generate_name_from_domain(domain)
+
+            suggestions.append(ClusterSuggestion(
+                suggested_name=suggested_name,
                 creative_ids=creative_ids,
-                campaign_id=campaign_id,
-                assigned_by="ai" if request.use_ai else "rule",
-            )
+                domain=domain,
+                country=None,  # Could be populated if by_country is True
+            ))
 
-            created.append({
-                "id": campaign_id,
-                "name": campaign_def["name"],
-                "count": len(creative_ids),
-            })
+        # Sort by number of creatives (largest first)
+        suggestions.sort(key=lambda s: len(s.creative_ids), reverse=True)
 
-        conn.commit()
         conn.close()
 
-        total_categorized = sum(c["count"] for c in created)
-
         return AutoClusterResponse(
-            campaigns_created=len(created),
-            creatives_categorized=total_categorized,
-            campaigns=created,
+            suggestions=suggestions,
+            unclustered_count=unclustered_count,
         )
 
     except Exception as e:
         conn.close()
         logger.error(f"Auto-clustering failed: {e}")
         raise HTTPException(status_code=500, detail=f"Clustering failed: {str(e)}")
+
+
+def _generate_name_from_domain(domain: str) -> str:
+    """Generate a clean campaign name from a domain."""
+    if not domain or domain == 'unknown':
+        return 'Unknown'
+
+    # Handle app store URLs
+    if 'play.google.com' in domain:
+        return 'Google Play'
+    if 'apps.apple.com' in domain or 'itunes.apple.com' in domain:
+        return 'App Store'
+    if 'app.appsflyer.com' in domain:
+        return 'AppsFlyer'
+    if 'app.adjust.com' in domain or 'adjust.com' in domain:
+        return 'Adjust'
+
+    # Handle bundle IDs (com.example.app)
+    if domain.startswith('com.') or domain.startswith('org.') or domain.startswith('io.'):
+        parts = domain.split('.')
+        if len(parts) >= 3:
+            # Take the last two meaningful parts
+            name_parts = parts[-2:]
+            name = ' '.join(p.replace('_', ' ').replace('-', ' ').title() for p in name_parts)
+            return name
+        return domain.split('.')[-1].title()
+
+    # Clean up domain
+    # Remove common TLDs
+    for tld in ['.com', '.io', '.app', '.net', '.org', '.co', '.me']:
+        if domain.endswith(tld):
+            domain = domain[:-len(tld)]
+            break
+
+    # Convert to title case, replace separators with spaces
+    name = domain.replace('.', ' ').replace('-', ' ').replace('_', ' ')
+    name = ' '.join(word.capitalize() for word in name.split())
+
+    return name or 'Unknown'
 
 
 # ============================================
