@@ -223,8 +223,11 @@ async function fetchCampaigns(): Promise<Campaign[]> {
   return res.json();
 }
 
-async function fetchUnclustered(): Promise<{ creative_ids: string[]; count: number }> {
-  const res = await fetch('/api/campaigns/unclustered');
+async function fetchUnclustered(buyerId?: string | null): Promise<{ creative_ids: string[]; count: number }> {
+  const params = new URLSearchParams();
+  if (buyerId) params.set('buyer_id', buyerId);
+  const query = params.toString();
+  const res = await fetch(`/api/campaigns/unclustered${query ? `?${query}` : ''}`);
   if (!res.ok) throw new Error('Failed to fetch unclustered');
   return res.json();
 }
@@ -324,8 +327,8 @@ export default function CampaignsPage() {
   });
 
   const { data: unclustered, isLoading: loadingUnclustered } = useQuery({
-    queryKey: ['unclustered'],
-    queryFn: fetchUnclustered,
+    queryKey: ['unclustered', selectedBuyerId],
+    queryFn: () => fetchUnclustered(selectedBuyerId),
   });
 
   const { data: allCreatives = [], isLoading: loadingCreatives } = useQuery({
@@ -693,13 +696,20 @@ export default function CampaignsPage() {
         _totalClicks: totalClicks,
         _creativeCount: creatives.length,
         _hasFilteredCreatives: countryFilter ? filteredCreatives.length > 0 : true,
+        _hasBuyerCreatives: creatives.length > 0, // True if campaign has creatives from selected buyer
       };
     });
 
-    // Filter out campaigns with no matching creatives when country filter is active
-    let filtered = countryFilter
-      ? campaignsWithTotals.filter(c => c._hasFilteredCreatives)
-      : campaignsWithTotals;
+    // Filter out campaigns with no matching creatives:
+    // - When buyer is selected: only show campaigns with creatives from that buyer
+    // - When country filter is active: only show campaigns with creatives from that country
+    let filtered = campaignsWithTotals.filter(c => {
+      // If a buyer is selected, filter to campaigns with creatives from that buyer
+      if (selectedBuyerId && !c._hasBuyerCreatives) return false;
+      // If country filter active, filter by country
+      if (countryFilter && !c._hasFilteredCreatives) return false;
+      return true;
+    });
 
     // Sort
     filtered.sort((a, b) => {
@@ -736,7 +746,7 @@ export default function CampaignsPage() {
     });
 
     return filtered;
-  }, [campaigns, getCampaignCreatives, pageSortField, pageSortDir, countryFilter]);
+  }, [campaigns, getCampaignCreatives, pageSortField, pageSortDir, countryFilter, selectedBuyerId]);
 
   // Debug: Log when data changes
   useEffect(() => {
