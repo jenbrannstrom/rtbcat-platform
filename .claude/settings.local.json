@@ -69,7 +69,10 @@
       "Bash(git restore:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(gh auth:*)"
+      "Bash(gh auth:*)",
+      "Bash(source ~/.nvm/nvm.sh)",
+      "Bash(./node_modules/.bin/tsc:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

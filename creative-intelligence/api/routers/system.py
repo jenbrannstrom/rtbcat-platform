@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -211,18 +211,32 @@ def _extract_video_url_from_vast(vast_xml: str) -> str | None:
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health_check(config: ConfigManager = Depends(get_config)):
-    """Check API health status including credential and database state."""
-    has_credentials = False
-    configured = config.is_configured()
+async def health_check(
+    config: ConfigManager = Depends(get_config),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Check API health status including credential and database state.
 
+    For the new multi-account system, configured=True only when there are
+    service accounts in the database. Legacy config.enc is ignored for
+    the configured status since the UI now uses the multi-account system.
+    """
+    has_credentials = False
+    configured = False
+
+    # Check new multi-account system - this is the primary credential source
     try:
-        app_config = config.load()
-        if app_config and app_config.authorized_buyers:
-            creds_path = Path(app_config.authorized_buyers.service_account_path).expanduser()
-            has_credentials = creds_path.exists()
+        service_accounts = await store.get_service_accounts(active_only=True)
+        if service_accounts:
+            configured = True
+            has_credentials = True
     except Exception:
         pass
+
+    # Note: We intentionally do NOT fall back to legacy config.is_configured()
+    # because the UI now uses the multi-account system exclusively.
+    # The legacy config.enc may exist but is not used for displaying
+    # "Connected Accounts" in the Setup page.
 
     db_path = Path.home() / ".catscan" / "catscan.db"
 
@@ -245,8 +259,14 @@ async def get_thumbnail(creative_id: str):
 
 
 @router.get("/thumbnails/status", response_model=ThumbnailStatusSummary, tags=["Thumbnails"])
-async def get_thumbnail_status(store: SQLiteStore = Depends(get_store)):
-    """Get summary of thumbnail generation status."""
+async def get_thumbnail_status(
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get summary of thumbnail generation status.
+
+    Optionally filter by buyer_id to see status for a specific account.
+    """
     db_path = Path.home() / ".catscan" / "catscan.db"
     ffmpeg_available = _check_ffmpeg()
 
@@ -264,18 +284,25 @@ async def get_thumbnail_status(store: SQLiteStore = Depends(get_store)):
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
-    cursor.execute("SELECT COUNT(*) FROM creatives WHERE format = 'VIDEO'")
+    # Build WHERE clause with optional buyer_id filter
+    where_clause = "WHERE c.format = 'VIDEO'"
+    params = []
+    if buyer_id:
+        where_clause += " AND c.buyer_id = ?"
+        params.append(buyer_id)
+
+    cursor.execute(f"SELECT COUNT(*) FROM creatives c {where_clause}", params)
     total_videos = cursor.fetchone()[0]
 
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT
             COALESCE(ts.status, 'pending') as status,
             COUNT(*) as count
         FROM creatives c
         LEFT JOIN thumbnail_status ts ON c.id = ts.creative_id
-        WHERE c.format = 'VIDEO'
+        {where_clause}
         GROUP BY COALESCE(ts.status, 'pending')
-    """)
+    """, params)
 
     status_counts = {row['status']: row['count'] for row in cursor.fetchall()}
     conn.close()

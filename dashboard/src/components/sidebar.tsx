@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Image,
@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getSeats, syncSeat } from "@/lib/api";
+import { useAccount } from "@/contexts/account-context";
 
 const SIDEBAR_COLLAPSED_KEY = "rtbcat-sidebar-collapsed";
 
@@ -26,6 +27,7 @@ const navigation = [
   { name: "Waste Optimizer", href: "/waste-analysis", icon: TrendingDown },
   { name: "Creatives", href: "/creatives", icon: Image },
   { name: "Campaigns", href: "/campaigns", icon: FolderKanban },
+  { name: "Uploads", href: "/uploads", icon: RefreshCw },
   { name: "Setup", href: "/setup", icon: Settings },
 ];
 
@@ -46,15 +48,15 @@ function formatRelativeTime(dateString: string | null): string {
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const { selectedBuyerId, setSelectedBuyerId } = useAccount();
 
   const [collapsed, setCollapsed] = useState(false);
   const [seatDropdownOpen, setSeatDropdownOpen] = useState(false);
   const [syncMessage, setSyncMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Get current buyer_id from URL
-  const currentBuyerId = searchParams.get("buyer_id");
+  // Use context for buyer_id (persistent across pages)
+  const currentBuyerId = selectedBuyerId;
 
   // Load collapsed state from localStorage
   useEffect(() => {
@@ -95,14 +97,13 @@ export function Sidebar() {
 
   const handleSeatSelect = (seatId: string | null) => {
     setSeatDropdownOpen(false);
-    const params = new URLSearchParams(searchParams.toString());
-    if (seatId) {
-      params.set("buyer_id", seatId);
-    } else {
-      params.delete("buyer_id");
-    }
-    // Navigate to creatives page with the seat filter
-    router.push(`/creatives${params.toString() ? `?${params.toString()}` : ""}`);
+    // Update the context (persisted to localStorage)
+    setSelectedBuyerId(seatId);
+    // Invalidate queries so they refetch with new buyer_id
+    queryClient.invalidateQueries({ queryKey: ["creatives"] });
+    queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+    queryClient.invalidateQueries({ queryKey: ["stats"] });
+    queryClient.invalidateQueries({ queryKey: ["thumbnail-status"] });
   };
 
   return (

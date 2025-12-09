@@ -1,6 +1,7 @@
 """Buyer Seats Router - Buyer seat management endpoints.
 
 Handles discovery, sync, and management of Google Authorized Buyers seats.
+Supports multi-account credentials for different buyer seats.
 """
 
 import logging
@@ -15,6 +16,54 @@ from api.dependencies import get_store, get_config
 from collectors import BuyerSeatsClient, CreativesClient
 
 logger = logging.getLogger(__name__)
+
+
+async def get_credentials_for_seat(
+    store: SQLiteStore,
+    seat,
+    config: ConfigManager,
+) -> str:
+    """Get credentials path for a buyer seat.
+
+    Tries multi-account credentials first (via service_account_id),
+    falls back to legacy ConfigManager credentials.
+
+    Returns:
+        Path to service account JSON file.
+
+    Raises:
+        HTTPException: If no valid credentials found.
+    """
+    # Try multi-account: seat has service_account_id linked
+    if seat.service_account_id:
+        service_account = await store.get_service_account(seat.service_account_id)
+        if service_account and service_account.credentials_path:
+            # Update last_used timestamp
+            await store.update_service_account_last_used(seat.service_account_id)
+            return service_account.credentials_path
+
+    # Try multi-account: get first active service account
+    service_accounts = await store.get_service_accounts(active_only=True)
+    if service_accounts:
+        # Use first available and link it to the seat for future use
+        service_account = service_accounts[0]
+        await store.link_buyer_seat_to_service_account(
+            seat.buyer_id, service_account.id
+        )
+        await store.update_service_account_last_used(service_account.id)
+        return service_account.credentials_path
+
+    # Fall back to legacy ConfigManager
+    if config.is_configured():
+        try:
+            return str(config.get_service_account_path())
+        except Exception:
+            pass
+
+    raise HTTPException(
+        status_code=400,
+        detail="No service account credentials configured. Add a service account in Setup.",
+    )
 
 router = APIRouter(tags=["Buyer Seats"])
 
@@ -37,6 +86,7 @@ class BuyerSeatResponse(BaseModel):
 class DiscoverSeatsRequest(BaseModel):
     """Request model for discovering buyer seats."""
     bidder_id: str
+    service_account_id: Optional[str] = None  # Multi-account: specify which credentials to use
 
 
 class DiscoverSeatsResponse(BaseModel):
@@ -120,19 +170,46 @@ async def discover_seats(
 
     Queries the Authorized Buyers API to enumerate all buyer accounts
     associated with the specified bidder and saves them to the database.
-    """
-    if not config.is_configured():
-        raise HTTPException(
-            status_code=400,
-            detail="API not configured. Run 'rtbcat configure' first.",
-        )
 
-    try:
-        credentials_path = str(config.get_service_account_path())
-    except Exception:
+    Supports multi-account credentials via service_account_id parameter.
+    Falls back to first available service account or legacy config.
+    """
+    credentials_path: Optional[str] = None
+    service_account_id: Optional[str] = request.service_account_id
+
+    # Try to get credentials from multi-account system
+    if service_account_id:
+        # Specific account requested
+        service_account = await store.get_service_account(service_account_id)
+        if service_account and service_account.credentials_path:
+            credentials_path = service_account.credentials_path
+            await store.update_service_account_last_used(service_account_id)
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Service account {service_account_id} not found.",
+            )
+    else:
+        # Try first available service account
+        service_accounts = await store.get_service_accounts(active_only=True)
+        if service_accounts:
+            service_account = service_accounts[0]
+            service_account_id = service_account.id
+            credentials_path = service_account.credentials_path
+            await store.update_service_account_last_used(service_account_id)
+
+    # Fall back to legacy ConfigManager
+    if not credentials_path:
+        if config.is_configured():
+            try:
+                credentials_path = str(config.get_service_account_path())
+            except Exception:
+                pass
+
+    if not credentials_path:
         raise HTTPException(
             status_code=400,
-            detail="Service account credentials not configured.",
+            detail="No service account credentials configured. Add a service account in Setup.",
         )
 
     try:
@@ -145,8 +222,11 @@ async def discover_seats(
         seats = await client.discover_buyer_seats()
         logger.info(f"Discovered {len(seats)} buyer seats for bidder {request.bidder_id}")
 
-        # Save to database
+        # Save to database and link to service account
         for seat in seats:
+            # Set the service_account_id for newly discovered seats
+            if service_account_id:
+                seat.service_account_id = service_account_id
             await store.save_buyer_seat(seat)
 
         return DiscoverSeatsResponse(
@@ -167,6 +247,8 @@ async def discover_seats(
             ],
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Seat discovery failed: {e}")
         raise HTTPException(status_code=500, detail=f"Seat discovery failed: {str(e)}")
@@ -183,25 +265,16 @@ async def sync_seat_creatives(
 
     Fetches all creatives associated with the buyer seat and stores them
     in the database with the buyer_id field populated.
+
+    Uses multi-account credentials if available, falling back to legacy config.
     """
     # Verify seat exists
     seat = await store.get_buyer_seat(buyer_id)
     if not seat:
         raise HTTPException(status_code=404, detail="Buyer seat not found")
 
-    if not config.is_configured():
-        raise HTTPException(
-            status_code=400,
-            detail="API not configured. Run 'rtbcat configure' first.",
-        )
-
-    try:
-        credentials_path = str(config.get_service_account_path())
-    except Exception:
-        raise HTTPException(
-            status_code=400,
-            detail="Service account credentials not configured.",
-        )
+    # Get credentials (multi-account or legacy)
+    credentials_path = await get_credentials_for_seat(store, seat, config)
 
     try:
         # Use the bidder_id as account_id for API access
@@ -231,6 +304,8 @@ async def sync_seat_creatives(
             message=f"Successfully synced {count} creatives for buyer {buyer_id}.",
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Seat sync failed for {buyer_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Seat sync failed: {str(e)}")

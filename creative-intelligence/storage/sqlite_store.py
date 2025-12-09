@@ -121,12 +121,38 @@ class Cluster:
 
 
 @dataclass
+class ServiceAccount:
+    """Service account record for multi-account support.
+
+    Attributes:
+        id: UUID for the service account.
+        client_email: Service account email (unique identifier from Google).
+        project_id: Google Cloud project ID.
+        display_name: User-friendly name for the account.
+        credentials_path: Path to the JSON credentials file.
+        is_active: Whether the account is active.
+        created_at: Record creation timestamp.
+        last_used: Timestamp of last API call using this account.
+    """
+
+    id: str
+    client_email: str
+    project_id: Optional[str] = None
+    display_name: Optional[str] = None
+    credentials_path: str = ""
+    is_active: bool = True
+    created_at: Optional[datetime] = None
+    last_used: Optional[datetime] = None
+
+
+@dataclass
 class BuyerSeat:
     """Buyer seat record for multi-seat account support.
 
     Attributes:
         buyer_id: Unique buyer account ID (e.g., "456" from buyers/456).
         bidder_id: Parent bidder account ID.
+        service_account_id: Foreign key to service_accounts table.
         display_name: Human-readable name for the buyer seat.
         active: Whether the seat is active for syncing.
         creative_count: Number of creatives associated with this seat.
@@ -136,6 +162,7 @@ class BuyerSeat:
 
     buyer_id: str
     bidder_id: str
+    service_account_id: Optional[str] = None
     display_name: Optional[str] = None
     active: bool = True
     creative_count: int = 0
@@ -239,17 +266,32 @@ class SQLiteStore:
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS service_accounts (
+        id TEXT PRIMARY KEY,
+        client_email TEXT UNIQUE NOT NULL,
+        project_id TEXT,
+        display_name TEXT,
+        credentials_path TEXT NOT NULL,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_used TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS buyer_seats (
         buyer_id TEXT PRIMARY KEY,
         bidder_id TEXT NOT NULL,
+        service_account_id TEXT,
         display_name TEXT,
         active INTEGER DEFAULT 1,
         creative_count INTEGER DEFAULT 0,
         last_synced TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(bidder_id, buyer_id)
+        UNIQUE(bidder_id, buyer_id),
+        FOREIGN KEY (service_account_id) REFERENCES service_accounts(id) ON DELETE SET NULL
     );
 
+    CREATE INDEX IF NOT EXISTS idx_service_accounts_email ON service_accounts(client_email);
+    CREATE INDEX IF NOT EXISTS idx_buyer_seats_service_account ON buyer_seats(service_account_id);
     CREATE INDEX IF NOT EXISTS idx_creatives_campaign ON creatives(campaign_id);
     CREATE INDEX IF NOT EXISTS idx_creatives_cluster ON creatives(cluster_id);
     CREATE INDEX IF NOT EXISTS idx_creatives_format ON creatives(format);
@@ -643,6 +685,21 @@ class SQLiteStore:
         "CREATE INDEX IF NOT EXISTS idx_pretargeting_history_config ON pretargeting_history(config_id)",
         "CREATE INDEX IF NOT EXISTS idx_pretargeting_history_date ON pretargeting_history(changed_at DESC)",
         "CREATE INDEX IF NOT EXISTS idx_pretargeting_history_bidder ON pretargeting_history(bidder_id)",
+        # Phase 27: Multi-account support - service accounts table
+        """CREATE TABLE IF NOT EXISTS service_accounts (
+            id TEXT PRIMARY KEY,
+            client_email TEXT UNIQUE NOT NULL,
+            project_id TEXT,
+            display_name TEXT,
+            credentials_path TEXT NOT NULL,
+            is_active INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_used TIMESTAMP
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_service_accounts_email ON service_accounts(client_email)",
+        # Phase 27: Add service_account_id to buyer_seats
+        "ALTER TABLE buyer_seats ADD COLUMN service_account_id TEXT REFERENCES service_accounts(id)",
+        "CREATE INDEX IF NOT EXISTS idx_buyer_seats_service_account ON buyer_seats(service_account_id)",
     ]
 
     def __init__(self, db_path: str | Path = "~/.catscan/catscan.db") -> None:
@@ -1510,9 +1567,9 @@ class SQLiteStore:
                 lambda: conn.execute(
                     """
                     INSERT OR REPLACE INTO buyer_seats (
-                        buyer_id, bidder_id, display_name, active,
+                        buyer_id, bidder_id, service_account_id, display_name, active,
                         creative_count, last_synced, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, COALESCE(
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(
                         (SELECT created_at FROM buyer_seats WHERE buyer_id = ?),
                         CURRENT_TIMESTAMP
                     ))
@@ -1520,6 +1577,7 @@ class SQLiteStore:
                     (
                         seat.buyer_id,
                         seat.bidder_id,
+                        seat.service_account_id,
                         seat.display_name,
                         1 if seat.active else 0,
                         seat.creative_count,
@@ -1562,7 +1620,7 @@ class SQLiteStore:
                 # Use LEFT JOIN to get dynamic creative count from creatives.account_id
                 cursor = conn.execute(
                     f"""
-                    SELECT bs.buyer_id, bs.bidder_id, bs.display_name, bs.active,
+                    SELECT bs.buyer_id, bs.bidder_id, bs.service_account_id, bs.display_name, bs.active,
                            COALESCE(c.cnt, 0) as creative_count,
                            bs.last_synced, bs.created_at
                     FROM buyer_seats bs
@@ -1584,11 +1642,12 @@ class SQLiteStore:
             BuyerSeat(
                 buyer_id=row[0],
                 bidder_id=row[1],
-                display_name=row[2],
-                active=bool(row[3]),
-                creative_count=row[4] or 0,
-                last_synced=row[5],
-                created_at=row[6],
+                service_account_id=row[2],
+                display_name=row[3],
+                active=bool(row[4]),
+                creative_count=row[5] or 0,
+                last_synced=row[6],
+                created_at=row[7],
             )
             for row in rows
         ]
@@ -1608,7 +1667,7 @@ class SQLiteStore:
             def _query():
                 cursor = conn.execute(
                     """
-                    SELECT buyer_id, bidder_id, display_name, active,
+                    SELECT buyer_id, bidder_id, service_account_id, display_name, active,
                            creative_count, last_synced, created_at
                     FROM buyer_seats
                     WHERE buyer_id = ?
@@ -1623,11 +1682,12 @@ class SQLiteStore:
                 return BuyerSeat(
                     buyer_id=row[0],
                     bidder_id=row[1],
-                    display_name=row[2],
-                    active=bool(row[3]),
-                    creative_count=row[4] or 0,
-                    last_synced=row[5],
-                    created_at=row[6],
+                    service_account_id=row[2],
+                    display_name=row[3],
+                    active=bool(row[4]),
+                    creative_count=row[5] or 0,
+                    last_synced=row[6],
+                    created_at=row[7],
                 )
             return None
 
@@ -1939,6 +1999,241 @@ class SQLiteStore:
                 return cursor.rowcount
 
             return await loop.run_in_executor(None, _clear_traffic)
+
+    # ==================== Service Account Methods ====================
+
+    async def save_service_account(self, account: ServiceAccount) -> None:
+        """Insert or update a service account.
+
+        Args:
+            account: The ServiceAccount to save.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: conn.execute(
+                    """
+                    INSERT OR REPLACE INTO service_accounts (
+                        id, client_email, project_id, display_name,
+                        credentials_path, is_active, created_at, last_used
+                    ) VALUES (?, ?, ?, ?, ?, ?, COALESCE(
+                        (SELECT created_at FROM service_accounts WHERE id = ?),
+                        CURRENT_TIMESTAMP
+                    ), ?)
+                    """,
+                    (
+                        account.id,
+                        account.client_email,
+                        account.project_id,
+                        account.display_name,
+                        account.credentials_path,
+                        1 if account.is_active else 0,
+                        account.id,
+                        account.last_used,
+                    ),
+                ),
+            )
+            await loop.run_in_executor(None, conn.commit)
+
+    async def get_service_accounts(
+        self,
+        active_only: bool = False,
+    ) -> list[ServiceAccount]:
+        """Get all service accounts.
+
+        Args:
+            active_only: If True, only return active accounts.
+
+        Returns:
+            List of ServiceAccount objects.
+        """
+        conditions = []
+        if active_only:
+            conditions.append("is_active = 1")
+
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _query():
+                cursor = conn.execute(
+                    f"""
+                    SELECT id, client_email, project_id, display_name,
+                           credentials_path, is_active, created_at, last_used
+                    FROM service_accounts
+                    WHERE {where_clause}
+                    ORDER BY display_name, client_email
+                    """,
+                )
+                return cursor.fetchall()
+
+            rows = await loop.run_in_executor(None, _query)
+
+        return [
+            ServiceAccount(
+                id=row[0],
+                client_email=row[1],
+                project_id=row[2],
+                display_name=row[3],
+                credentials_path=row[4],
+                is_active=bool(row[5]),
+                created_at=row[6],
+                last_used=row[7],
+            )
+            for row in rows
+        ]
+
+    async def get_service_account(self, account_id: str) -> Optional[ServiceAccount]:
+        """Get a specific service account.
+
+        Args:
+            account_id: The service account ID (UUID).
+
+        Returns:
+            ServiceAccount object or None if not found.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _query():
+                cursor = conn.execute(
+                    """
+                    SELECT id, client_email, project_id, display_name,
+                           credentials_path, is_active, created_at, last_used
+                    FROM service_accounts
+                    WHERE id = ?
+                    """,
+                    (account_id,),
+                )
+                return cursor.fetchone()
+
+            row = await loop.run_in_executor(None, _query)
+
+            if row:
+                return ServiceAccount(
+                    id=row[0],
+                    client_email=row[1],
+                    project_id=row[2],
+                    display_name=row[3],
+                    credentials_path=row[4],
+                    is_active=bool(row[5]),
+                    created_at=row[6],
+                    last_used=row[7],
+                )
+            return None
+
+    async def get_service_account_by_email(self, client_email: str) -> Optional[ServiceAccount]:
+        """Get a service account by its client email.
+
+        Args:
+            client_email: The service account email address.
+
+        Returns:
+            ServiceAccount object or None if not found.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _query():
+                cursor = conn.execute(
+                    """
+                    SELECT id, client_email, project_id, display_name,
+                           credentials_path, is_active, created_at, last_used
+                    FROM service_accounts
+                    WHERE client_email = ?
+                    """,
+                    (client_email,),
+                )
+                return cursor.fetchone()
+
+            row = await loop.run_in_executor(None, _query)
+
+            if row:
+                return ServiceAccount(
+                    id=row[0],
+                    client_email=row[1],
+                    project_id=row[2],
+                    display_name=row[3],
+                    credentials_path=row[4],
+                    is_active=bool(row[5]),
+                    created_at=row[6],
+                    last_used=row[7],
+                )
+            return None
+
+    async def delete_service_account(self, account_id: str) -> bool:
+        """Delete a service account and its credentials file.
+
+        Note: This also sets service_account_id to NULL for any buyer_seats
+        that referenced this account (due to ON DELETE SET NULL).
+
+        Args:
+            account_id: The service account ID to delete.
+
+        Returns:
+            True if deleted, False if not found.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _delete():
+                cursor = conn.execute(
+                    "DELETE FROM service_accounts WHERE id = ?",
+                    (account_id,),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+
+            return await loop.run_in_executor(None, _delete)
+
+    async def update_service_account_last_used(self, account_id: str) -> None:
+        """Update last_used timestamp for a service account.
+
+        Args:
+            account_id: The service account ID.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: conn.execute(
+                    """
+                    UPDATE service_accounts
+                    SET last_used = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (account_id,),
+                ),
+            )
+            await loop.run_in_executor(None, conn.commit)
+
+    async def link_buyer_seat_to_service_account(
+        self,
+        buyer_id: str,
+        service_account_id: str,
+    ) -> None:
+        """Link a buyer seat to a service account.
+
+        Args:
+            buyer_id: The buyer seat ID.
+            service_account_id: The service account ID to link.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: conn.execute(
+                    """
+                    UPDATE buyer_seats
+                    SET service_account_id = ?
+                    WHERE buyer_id = ?
+                    """,
+                    (service_account_id, buyer_id),
+                ),
+            )
+            await loop.run_in_executor(None, conn.commit)
 
     # ==================== Performance Metrics Methods ====================
 

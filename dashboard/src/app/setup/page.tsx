@@ -22,10 +22,7 @@ import {
   Shield,
   FileJson,
   RefreshCw,
-  ArrowRight,
   ExternalLink,
-  ChevronDown,
-  HardDrive,
   Cpu,
   X,
   Calendar,
@@ -39,44 +36,24 @@ import {
   getSystemStatus,
   getSeats,
   syncSeat,
-  getCredentialsStatus,
-  uploadCredentials,
   discoverSeats,
   getGmailStatus,
   triggerGmailImport,
+  getServiceAccounts,
+  addServiceAccount,
+  deleteServiceAccount,
 } from "@/lib/api";
+import type { ServiceAccount } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
-import { ImportDropzone } from "@/components/import-dropzone";
-import { ImportPreview } from "@/components/import-preview";
-import { ImportProgress } from "@/components/import-progress";
-import { ValidationErrors } from "@/components/validation-errors";
-import {
-  validatePerformanceCSV,
-  type ExtendedValidationResult,
-  groupAnomaliesByType,
-  getTopAnomalyApps,
-  formatAnomalyType,
-} from "@/lib/csv-validator";
-import type { AnomalyType } from "@/lib/types/import";
-import { parseCSV } from "@/lib/csv-parser";
-import { importPerformanceData } from "@/lib/api";
-import {
-  uploadChunkedCSV,
-  previewCSV,
-  type UploadProgress,
-} from "@/lib/chunked-uploader";
-import { extractSeatFromPreview, formatSeatInfo, type SeatInfo } from "@/lib/seat-extractor";
-import type { ImportResponse } from "@/lib/types/import";
 import { cn } from "@/lib/utils";
 import type { BuyerSeat } from "@/types/api";
 
-type SetupTab = "api" | "gmail" | "import" | "system";
+type SetupTab = "api" | "gmail" | "system";
 
 const TABS: { id: SetupTab; label: string; icon: React.ElementType; description: string }[] = [
   { id: "api", label: "Connect API", icon: Link2, description: "Google Authorized Buyers" },
   { id: "gmail", label: "Gmail Reports", icon: Mail, description: "Auto-fetch scheduled reports" },
-  { id: "import", label: "Manual Import", icon: Upload, description: "Upload CSV files" },
   { id: "system", label: "System", icon: Settings, description: "Status & settings" },
 ];
 
@@ -191,7 +168,6 @@ export default function SetupPage() {
       <div className="min-h-[500px]">
         {activeTab === "api" && <ApiConnectionTab />}
         {activeTab === "gmail" && <GmailReportsTab />}
-        {activeTab === "import" && <ManualImportTab />}
         {activeTab === "system" && <SystemTab />}
       </div>
     </div>
@@ -207,6 +183,8 @@ function ApiConnectionTab() {
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [showAddAccount, setShowAddAccount] = useState(false);
+  const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: health, refetch: refetchHealth } = useQuery({
@@ -214,16 +192,19 @@ function ApiConnectionTab() {
     queryFn: getHealth,
   });
 
-  const { data: credentialsStatus } = useQuery({
-    queryKey: ["credentialsStatus"],
-    queryFn: getCredentialsStatus,
-    enabled: health?.configured === true,
+  // Fetch all service accounts (multi-account support)
+  const { data: serviceAccountsData, isLoading: accountsLoading } = useQuery({
+    queryKey: ["serviceAccounts"],
+    queryFn: () => getServiceAccounts(),
   });
+
+  const serviceAccounts = serviceAccountsData?.accounts ?? [];
+  const hasAccounts = serviceAccounts.length > 0;
 
   const { data: seats, isLoading: seatsLoading } = useQuery({
     queryKey: ["seats"],
     queryFn: () => getSeats({ active_only: false }),
-    enabled: health?.configured === true,
+    enabled: hasAccounts,
   });
 
   const [discoveryAttempted, setDiscoveryAttempted] = useState(false);
@@ -241,17 +222,20 @@ function ApiConnectionTab() {
     },
   });
 
+  // Auto-discover seats when first account is added
   useEffect(() => {
-    const isConfigured = health?.configured === true;
     const noSeats = seats !== undefined && seats.length === 0;
     const notLoading = !seatsLoading && !discoverMutation.isPending;
-    const hasAccountId = !!credentialsStatus?.account_id;
 
-    if (isConfigured && noSeats && notLoading && !discoveryAttempted && hasAccountId) {
-      setDiscoveryAttempted(true);
-      discoverMutation.mutate(credentialsStatus.account_id!);
+    if (hasAccounts && noSeats && notLoading && !discoveryAttempted) {
+      // Try to discover using the first service account's project_id
+      const firstAccount = serviceAccounts[0];
+      if (firstAccount?.project_id) {
+        setDiscoveryAttempted(true);
+        discoverMutation.mutate(firstAccount.project_id);
+      }
     }
-  }, [health, seats, seatsLoading, discoveryAttempted, credentialsStatus, discoverMutation]);
+  }, [hasAccounts, seats, seatsLoading, discoveryAttempted, serviceAccounts, discoverMutation]);
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -268,19 +252,43 @@ function ApiConnectionTab() {
       if (json.type !== "service_account") {
         throw new Error(`Invalid credential type: "${json.type}". Expected "service_account".`);
       }
-      return uploadCredentials(contents);
+      return addServiceAccount(contents);
     },
     onSuccess: (data) => {
       setMessage({ type: "success", text: `Connected as ${data.client_email}` });
       queryClient.invalidateQueries({ queryKey: ["health"] });
-      queryClient.invalidateQueries({ queryKey: ["credentialsStatus"] });
+      queryClient.invalidateQueries({ queryKey: ["serviceAccounts"] });
       queryClient.invalidateQueries({ queryKey: ["seats"] });
+      setShowAddAccount(false);
       refetchHealth();
     },
     onError: (error) => {
       setMessage({ type: "error", text: error instanceof Error ? error.message : "Upload failed" });
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (accountId: string) => deleteServiceAccount(accountId),
+    onSuccess: () => {
+      setMessage({ type: "success", text: "Service account removed" });
+      queryClient.invalidateQueries({ queryKey: ["health"] });
+      queryClient.invalidateQueries({ queryKey: ["serviceAccounts"] });
+      queryClient.invalidateQueries({ queryKey: ["seats"] });
+      setDeletingAccountId(null);
+      refetchHealth();
+      setTimeout(() => setMessage(null), 5000);
+    },
+    onError: (error) => {
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to remove account" });
+      setDeletingAccountId(null);
+      setTimeout(() => setMessage(null), 5000);
+    },
+  });
+
+  const handleDeleteAccount = (accountId: string) => {
+    setDeletingAccountId(accountId);
+    deleteMutation.mutate(accountId);
+  };
 
   const syncMutation = useMutation({
     mutationFn: (buyerId: string) => syncSeat(buyerId),
@@ -334,7 +342,7 @@ function ApiConnectionTab() {
     if (file) handleFileSelect(file);
   }, [handleFileSelect]);
 
-  const isConfigured = health?.configured === true;
+  const isConfigured = hasAccounts;
   const hasSeats = seats && seats.length > 0;
 
   return (
@@ -364,50 +372,180 @@ function ApiConnectionTab() {
         </div>
       )}
 
-      {/* Step 1: Credentials */}
-      <div className="card p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <div className={cn(
-            "w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold",
-            isConfigured ? "bg-green-500 text-white" : "bg-blue-600 text-white"
-          )}>
-            {isConfigured ? <CheckCircle className="w-5 h-5" /> : "1"}
+      {/* Quick Start Guide - always visible */}
+      <div className="card p-6 bg-blue-50 border-blue-200">
+        <h3 className="text-lg font-semibold text-blue-900 mb-4">How to Connect Your Account</h3>
+        <div className="grid md:grid-cols-3 gap-4">
+          <div className="bg-white rounded-lg p-4 border border-blue-200">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</span>
+              <span className="font-semibold text-gray-900">Create Service Account</span>
+            </div>
+            <p className="text-sm text-gray-600">
+              In <a href="https://console.cloud.google.com/iam-admin/serviceaccounts" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Google Cloud Console</a>, create a service account and download the JSON key file.
+            </p>
           </div>
-          <div>
-            <h3 className="text-lg font-medium text-gray-900">Google Service Account</h3>
-            <p className="text-sm text-gray-500">Required to access Authorized Buyers API</p>
+          <div className="bg-white rounded-lg p-4 border border-blue-200">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">2</span>
+              <span className="font-semibold text-gray-900">Grant RTB Access</span>
+            </div>
+            <p className="text-sm text-gray-600">
+              In <a href="https://authorizedbuyers.google.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Authorized Buyers</a>, add the service account email as a user with RTB access.
+            </p>
+          </div>
+          <div className="bg-white rounded-lg p-4 border border-blue-200">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">3</span>
+              <span className="font-semibold text-gray-900">Upload Key File</span>
+            </div>
+            <p className="text-sm text-gray-600">
+              Upload the JSON key file below. Cat-Scan will automatically discover your buyer seats.
+            </p>
           </div>
         </div>
+      </div>
 
-        {isConfigured ? (
-          <div className="ml-11 space-y-3">
-            <div className="flex items-center justify-between py-3 px-4 bg-green-50 rounded-lg border border-green-200">
-              <div className="flex items-center">
-                <CheckCircle className="h-5 w-5 text-green-500 mr-3" />
-                <div>
-                  <p className="font-medium text-green-800">Connected</p>
-                  <p className="text-sm text-green-600">
-                    {credentialsStatus?.client_email || "Service account configured"}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="text-sm text-green-700 hover:text-green-800 underline"
-              >
-                Change
-              </button>
+      {/* Connected Accounts Section */}
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              "w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold",
+              isConfigured ? "bg-green-500 text-white" : "bg-gray-200 text-gray-500"
+            )}>
+              {isConfigured ? <CheckCircle className="w-5 h-5" /> : <Shield className="w-5 h-5" />}
             </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json,application/json"
-              onChange={handleInputChange}
-              className="hidden"
-            />
+            <div>
+              <h3 className="text-lg font-medium text-gray-900">Connected Accounts</h3>
+              <p className="text-sm text-gray-500">Service accounts with access to Authorized Buyers API</p>
+            </div>
+          </div>
+          {isConfigured && !showAddAccount && (
+            <button
+              onClick={() => setShowAddAccount(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+            >
+              <Upload className="h-4 w-4" />
+              Add Account
+            </button>
+          )}
+        </div>
+
+        {accountsLoading ? (
+          <div className="py-8 flex justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+          </div>
+        ) : isConfigured ? (
+          <div className="space-y-4">
+            {/* Connected account cards - list all service accounts */}
+            {serviceAccounts.map((account: ServiceAccount) => (
+              <div
+                key={account.id}
+                className="flex items-center justify-between py-4 px-4 bg-green-50 rounded-lg border border-green-200"
+              >
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="h-6 w-6 text-green-500 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="font-medium text-green-900 truncate">
+                      {account.display_name || account.client_email}
+                    </p>
+                    <p className="text-sm text-green-700 truncate">
+                      {account.client_email}
+                      {account.project_id && ` · ${account.project_id}`}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleDeleteAccount(account.id)}
+                  disabled={deletingAccountId === account.id}
+                  className={cn(
+                    "text-sm text-red-600 hover:text-red-700 font-medium flex-shrink-0 ml-4",
+                    deletingAccountId === account.id && "opacity-50"
+                  )}
+                >
+                  {deletingAccountId === account.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Remove"
+                  )}
+                </button>
+              </div>
+            ))}
+
+            {/* Summary of seats */}
+            {hasSeats && (
+              <p className="text-sm text-gray-500 px-1">
+                {seats.length} buyer seat{seats.length > 1 ? "s" : ""} discovered across {serviceAccounts.length} account{serviceAccounts.length > 1 ? "s" : ""}
+              </p>
+            )}
+
+            {/* Add another account form */}
+            {showAddAccount && (
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium text-gray-900">Add Another Account</h4>
+                  <button onClick={() => setShowAddAccount(false)} className="text-gray-400 hover:text-gray-600">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  className={cn(
+                    "border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer",
+                    isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300 hover:border-blue-400 bg-white",
+                    uploadMutation.isPending && "opacity-50 pointer-events-none"
+                  )}
+                >
+                  {uploadMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-8 w-8 text-blue-600 mx-auto mb-2 animate-spin" />
+                      <p className="text-sm text-gray-700">Uploading...</p>
+                    </>
+                  ) : (
+                    <>
+                      <FileJson className={cn("h-8 w-8 mx-auto mb-2", isDragging ? "text-blue-600" : "text-gray-400")} />
+                      <p className="text-sm font-medium text-gray-700">
+                        {isDragging ? "Drop file here" : "Upload Service Account JSON"}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">Drag and drop or click to browse</p>
+                    </>
+                  )}
+                </div>
+                <details className="border border-gray-200 rounded-lg mt-3 bg-white">
+                  <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg">
+                    Setup instructions
+                  </summary>
+                  <div className="px-4 pb-4 text-sm text-gray-600 space-y-3">
+                    <ol className="list-decimal list-inside space-y-2">
+                      <li>Go to the <a href="https://console.cloud.google.com/iam-admin/serviceaccounts" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">GCP Service Accounts page</a></li>
+                      <li>Select your project (or create one)</li>
+                      <li>Click <strong>+ Create Service Account</strong></li>
+                      <li>Name it (e.g., &quot;catscan-service-account&quot;)</li>
+                      <li>Click <strong>Create and Continue</strong>, skip roles, click <strong>Done</strong></li>
+                      <li>Click on the new service account email</li>
+                      <li>Go to <strong>Keys</strong> tab → <strong>Add Key</strong> → <strong>Create new key</strong></li>
+                      <li>Select <strong>JSON</strong> and click <strong>Create</strong></li>
+                      <li>Upload the downloaded file above</li>
+                    </ol>
+                    <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <p className="text-sm text-yellow-800">
+                        <strong>Important:</strong> Add the service account email as a user in your{" "}
+                        <a href="https://authorizedbuyers.google.com" target="_blank" rel="noopener noreferrer" className="underline">
+                          Authorized Buyers account
+                        </a> with RTB access.
+                      </p>
+                    </div>
+                  </div>
+                </details>
+              </div>
+            )}
           </div>
         ) : (
-          <div className="ml-11 space-y-4">
+          <div className="space-y-4">
             <div
               onClick={() => fileInputRef.current?.click()}
               onDrop={handleDrop}
@@ -434,17 +572,10 @@ function ApiConnectionTab() {
                 </>
               )}
             </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json,application/json"
-              onChange={handleInputChange}
-              className="hidden"
-            />
 
             <details className="border border-gray-200 rounded-lg">
               <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg">
-                How to get a service account key
+                Detailed setup instructions
               </summary>
               <div className="px-4 pb-4 text-sm text-gray-600 space-y-3">
                 <ol className="list-decimal list-inside space-y-2">
@@ -470,9 +601,17 @@ function ApiConnectionTab() {
             </details>
           </div>
         )}
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,application/json"
+          onChange={handleInputChange}
+          className="hidden"
+        />
       </div>
 
-      {/* Step 2: Sync Creatives */}
+      {/* Buyer Seats Section */}
       <div className={cn("card p-6 transition-opacity", !isConfigured && "opacity-50")}>
         <div className="flex items-center gap-3 mb-4">
           <div className={cn(
@@ -483,11 +622,11 @@ function ApiConnectionTab() {
                 ? "bg-blue-600 text-white"
                 : "bg-gray-200 text-gray-500"
           )}>
-            {hasSeats && seats.some((s: BuyerSeat) => s.creative_count > 0) ? <CheckCircle className="w-5 h-5" /> : "2"}
+            {hasSeats && seats.some((s: BuyerSeat) => s.creative_count > 0) ? <CheckCircle className="w-5 h-5" /> : <Users className="w-5 h-5" />}
           </div>
           <div>
-            <h3 className="text-lg font-medium text-gray-900">Sync Buyer Seats</h3>
-            <p className="text-sm text-gray-500">Fetch creatives from your Authorized Buyers account</p>
+            <h3 className="text-lg font-medium text-gray-900">Buyer Seats</h3>
+            <p className="text-sm text-gray-500">Seats discovered from your connected accounts</p>
           </div>
         </div>
 
@@ -496,47 +635,80 @@ function ApiConnectionTab() {
             <div className="py-8 flex justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
             </div>
-          ) : hasSeats ? (
-            <div className="space-y-3">
-              {seats.map((seat: BuyerSeat) => (
-                <div key={seat.buyer_id} className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg">
-                  <div>
-                    <p className="font-medium text-gray-900">{seat.display_name || `Account ${seat.buyer_id}`}</p>
-                    <p className="text-sm text-gray-500">
-                      {seat.creative_count} creatives
-                      {seat.last_synced && ` · Last synced ${new Date(seat.last_synced).toLocaleDateString()}`}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleSync(seat.buyer_id)}
-                    disabled={syncingId === seat.buyer_id}
-                    className={cn(
-                      "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium",
-                      "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                    )}
-                  >
-                    <RefreshCw className={cn("h-4 w-4", syncingId === seat.buyer_id && "animate-spin")} />
-                    {syncingId === seat.buyer_id ? "Syncing..." : "Sync Now"}
-                  </button>
-                </div>
-              ))}
-            </div>
           ) : isConfigured ? (
-            <div className="text-center py-6">
-              <Users className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500">No buyer seats found</p>
-              <p className="text-sm text-gray-400 mt-1">
-                Make sure the service account has access to your Authorized Buyers account
-              </p>
+            <div className="space-y-4">
+              {/* Per-account discover buttons */}
+              {serviceAccounts.length > 0 && (
+                <div className="flex flex-wrap gap-2 pb-2 border-b border-gray-200">
+                  <span className="text-sm text-gray-500 py-1">Discover seats for:</span>
+                  {serviceAccounts.map((account: ServiceAccount) => (
+                    <button
+                      key={account.id}
+                      onClick={() => account.project_id && discoverMutation.mutate(account.project_id)}
+                      disabled={discoverMutation.isPending || !account.project_id}
+                      className={cn(
+                        "px-3 py-1 rounded-md text-sm font-medium",
+                        "bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+                      )}
+                    >
+                      {discoverMutation.isPending ? (
+                        <span className="flex items-center gap-1">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Discovering...
+                        </span>
+                      ) : (
+                        account.project_id || account.client_email.split("@")[0]
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Seats list */}
+              {hasSeats ? (
+                <div className="space-y-3">
+                  {seats.map((seat: BuyerSeat) => (
+                    <div key={seat.buyer_id} className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="font-medium text-gray-900">{seat.display_name || `Buyer ${seat.buyer_id}`}</p>
+                        <p className="text-sm text-gray-500">
+                          {seat.creative_count} creatives
+                          {seat.last_synced && ` · Last synced ${new Date(seat.last_synced).toLocaleDateString()}`}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleSync(seat.buyer_id)}
+                        disabled={syncingId === seat.buyer_id}
+                        className={cn(
+                          "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium",
+                          "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                        )}
+                      >
+                        <RefreshCw className={cn("h-4 w-4", syncingId === seat.buyer_id && "animate-spin")} />
+                        {syncingId === seat.buyer_id ? "Syncing..." : "Sync Now"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <Users className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500">No buyer seats found</p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    Click a project above to discover buyer seats
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
-            <p className="text-gray-500 py-4">Complete step 1 to sync your creatives</p>
+            <p className="text-gray-500 py-4">Connect a service account to discover buyer seats</p>
           )}
         </div>
       </div>
     </div>
   );
 }
+
 
 // ============================================================================
 // Gmail Reports Tab
@@ -936,346 +1108,6 @@ function ReportSpecCard({
           Save as: <code className="bg-gray-100 px-1 rounded">{filename}.csv</code>
         </p>
       </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// Manual Import Tab
-// ============================================================================
-
-type ImportStep = "upload" | "preview" | "importing" | "success" | "error";
-const CHUNKED_UPLOAD_THRESHOLD = 5 * 1024 * 1024;
-
-function ManualImportTab() {
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const [step, setStep] = useState<ImportStep>("upload");
-  const [file, setFile] = useState<File | null>(null);
-  const [validationResult, setValidationResult] = useState<ExtendedValidationResult | null>(null);
-  const [importResult, setImportResult] = useState<ImportResponse | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [isLargeFile, setIsLargeFile] = useState(false);
-  const [chunkedProgress, setChunkedProgress] = useState<UploadProgress | null>(null);
-  const [seatInfo, setSeatInfo] = useState<SeatInfo | null>(null);
-  const [previewData, setPreviewData] = useState<{
-    headers: string[];
-    rows: Record<string, string>[];
-    columnMappings: Record<string, string>;
-    estimatedRowCount: number;
-  } | null>(null);
-
-  const handleFileSelect = async (selectedFile: File) => {
-    setFile(selectedFile);
-    setStep("preview");
-    setIsLargeFile(selectedFile.size > CHUNKED_UPLOAD_THRESHOLD);
-
-    try {
-      if (selectedFile.size > CHUNKED_UPLOAD_THRESHOLD) {
-        const preview = await previewCSV(selectedFile, 10);
-        setPreviewData(preview);
-        const seat = extractSeatFromPreview(preview.rows);
-        setSeatInfo(seat);
-        const hasRequiredCols = !!(preview.columnMappings.creative_id && preview.columnMappings.date);
-        setValidationResult({
-          valid: hasRequiredCols,
-          errors: hasRequiredCols ? [] : [{
-            row: 0,
-            field: "columns",
-            error: `Missing required columns. Detected: ${Object.entries(preview.columnMappings)
-              .filter(([, v]) => v)
-              .map(([k, v]) => `${v} → ${k}`)
-              .join(", ") || "none"}`,
-            value: null,
-          }],
-          warnings: [],
-          anomalies: [],
-          rowCount: preview.estimatedRowCount,
-          data: [],
-          detectedColumns: preview.columnMappings,
-          hasHourlyData: preview.headers.some(h => h.toLowerCase().includes("hour")),
-        });
-      } else {
-        const parseResult = await parseCSV(selectedFile);
-        const validation = validatePerformanceCSV(parseResult);
-        setValidationResult(validation);
-      }
-    } catch (error) {
-      console.error("CSV parsing error:", error);
-      setValidationResult({
-        valid: false,
-        errors: [{ row: 0, field: "file", error: "Failed to parse CSV file.", value: null }],
-        warnings: [],
-        anomalies: [],
-        rowCount: 0,
-        data: [],
-      });
-    }
-  };
-
-  const handleChunkedProgress = useCallback((progress: UploadProgress) => {
-    setChunkedProgress(progress);
-    setUploadProgress(progress.progress);
-  }, []);
-
-  const handleImport = async () => {
-    if (!file) return;
-    setStep("importing");
-    setUploadProgress(0);
-    setChunkedProgress(null);
-    abortControllerRef.current = new AbortController();
-
-    try {
-      if (isLargeFile) {
-        const result = await uploadChunkedCSV(file, {
-          onProgress: handleChunkedProgress,
-          signal: abortControllerRef.current.signal,
-        });
-        setImportResult({
-          success: result.success,
-          imported: result.imported,
-          duplicates: result.skipped,
-          error_details: result.errors.map(e => ({ row: e.row || 0, field: e.field || "unknown", error: e.error, value: e.value })),
-          date_range: result.dateRange,
-          total_spend: result.totalSpend,
-        });
-        setStep(result.success || result.imported > 0 ? "success" : "error");
-      } else {
-        const result = await importPerformanceData(file, (progress) => setUploadProgress(progress));
-        setImportResult(result);
-        setStep("success");
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Import failed";
-      if (errorMessage === "Upload cancelled") {
-        setStep("upload");
-        return;
-      }
-      setImportResult({
-        success: false,
-        imported: chunkedProgress?.rowsImported || 0,
-        error: errorMessage,
-      });
-      setStep("error");
-    } finally {
-      abortControllerRef.current = null;
-    }
-  };
-
-  const handleCancel = () => {
-    if (abortControllerRef.current) abortControllerRef.current.abort();
-    resetForm();
-  };
-
-  const resetForm = () => {
-    setFile(null);
-    setValidationResult(null);
-    setImportResult(null);
-    setUploadProgress(0);
-    setIsLargeFile(false);
-    setChunkedProgress(null);
-    setPreviewData(null);
-    setSeatInfo(null);
-    setStep("upload");
-  };
-
-  const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  return (
-    <div className="space-y-6">
-      {step === "upload" && (
-        <>
-          <div className="card p-6">
-            <ImportDropzone onFileSelect={handleFileSelect} maxSizeMB={500} />
-          </div>
-
-          <details className="card">
-            <summary className="p-4 cursor-pointer hover:bg-gray-50 font-medium text-gray-900 flex items-center justify-between">
-              <span>Expected CSV Format</span>
-              <ChevronDown className="h-5 w-5 text-gray-500" />
-            </summary>
-            <div className="p-4 pt-0 border-t border-gray-200">
-              <p className="text-sm text-gray-600 mb-4">
-                Upload one of the three report types. Cat-Scan auto-detects the report type from column headers.
-              </p>
-              <div className="space-y-3">
-                <ReportSpecCard
-                  reportNumber={1}
-                  title="Billing Config Performance"
-                  filename="catscan-billing-config"
-                  dimensions={["Day", "Billing ID", "Creative ID", "Creative size", "Creative format"]}
-                  metrics={["Reached queries", "Impressions"]}
-                  purpose="Shows waste per pretargeting config"
-                  color="blue"
-                />
-                <ReportSpecCard
-                  reportNumber={2}
-                  title="Creative Bidding Activity"
-                  filename="catscan-creative-bids"
-                  dimensions={["Day", "Creative ID", "Country"]}
-                  metrics={["Bids", "Bids in auction", "Reached queries"]}
-                  purpose="Shows bidding activity per creative by geo"
-                  color="purple"
-                />
-              </div>
-            </div>
-          </details>
-        </>
-      )}
-
-      {step === "preview" && validationResult && (
-        <div className="space-y-4">
-          <div className="bg-gray-50 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-gray-900">{file?.name}</p>
-                <p className="text-sm text-gray-600">
-                  {formatFileSize(file?.size || 0)} · {validationResult.rowCount.toLocaleString()} rows
-                  {isLargeFile && " (estimated)"}
-                </p>
-              </div>
-              <button onClick={resetForm} className="text-sm text-gray-600 hover:text-gray-800">Remove</button>
-            </div>
-          </div>
-
-          {seatInfo && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <div className="flex items-start gap-2">
-                <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
-                <div>
-                  <p className="font-medium text-green-900">Seat detected</p>
-                  <p className="text-sm text-green-800 mt-1">{formatSeatInfo(seatInfo)}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {!validationResult.valid && <ValidationErrors errors={validationResult.errors} />}
-
-          {validationResult.valid && validationResult.detectedColumns && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <div className="flex items-start gap-2">
-                <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-medium text-green-900">Columns detected</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {Object.entries(validationResult.detectedColumns)
-                      .filter(([, v]) => v)
-                      .map(([key, value]) => (
-                        <span key={key} className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 text-xs rounded">
-                          <span className="font-mono">{value}</span>
-                          <span className="mx-1 text-green-600">→</span>
-                          <span>{key}</span>
-                        </span>
-                      ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {validationResult.valid && (
-            <div className="flex gap-3 justify-end">
-              <button onClick={resetForm} className="btn-secondary">Cancel</button>
-              <button onClick={handleImport} className="btn-primary">
-                Import {validationResult.rowCount.toLocaleString()} Rows
-                <ArrowRight className="ml-1 h-4 w-4" />
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {step === "importing" && (
-        <div className="space-y-6">
-          <ImportProgress progress={uploadProgress} />
-          {isLargeFile && chunkedProgress && (
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">{chunkedProgress.rowsProcessed.toLocaleString()}</p>
-                  <p className="text-sm text-gray-600">Rows Processed</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-green-600">{chunkedProgress.rowsImported.toLocaleString()}</p>
-                  <p className="text-sm text-gray-600">Imported</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-500">{chunkedProgress.batchesSent}</p>
-                  <p className="text-sm text-gray-600">Batches</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-700">{chunkedProgress.currentPhase}</p>
-                  <p className="text-xs text-gray-500 mt-1">Phase</p>
-                </div>
-              </div>
-            </div>
-          )}
-          {isLargeFile && (
-            <div className="flex justify-center">
-              <button onClick={handleCancel} className="btn-secondary text-red-600 hover:text-red-700">
-                Cancel Import
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {step === "success" && importResult && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-          <div className="flex items-start gap-3">
-            <CheckCircle className="h-6 w-6 text-green-600 mt-0.5" />
-            <div className="flex-1">
-              <h3 className="font-semibold text-green-900 text-lg mb-4">Import Successful</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
-                <div>
-                  <p className="text-gray-500 text-sm">Rows imported</p>
-                  <p className="font-bold text-xl text-green-700">{(importResult.imported ?? 0).toLocaleString()}</p>
-                </div>
-                {importResult.duplicates !== undefined && importResult.duplicates > 0 && (
-                  <div>
-                    <p className="text-gray-500 text-sm">Duplicates skipped</p>
-                    <p className="font-medium text-gray-600">{importResult.duplicates.toLocaleString()}</p>
-                  </div>
-                )}
-                {importResult.date_range && (
-                  <div>
-                    <p className="text-gray-500 text-sm">Date range</p>
-                    <p className="font-medium text-gray-700">{importResult.date_range.start} → {importResult.date_range.end}</p>
-                  </div>
-                )}
-              </div>
-              <div className="flex gap-3">
-                <a href="/waste-analysis" className="btn-primary">
-                  View Waste Analysis <ArrowRight className="ml-1 h-4 w-4" />
-                </a>
-                <button onClick={resetForm} className="btn-secondary">Import More</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {step === "error" && importResult && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <div className="flex items-start gap-3">
-            <XCircle className="h-6 w-6 text-red-600 mt-0.5" />
-            <div className="flex-1">
-              <h3 className="font-semibold text-red-900 text-lg mb-2">Import Failed</h3>
-              {importResult.error && <p className="text-red-800">{importResult.error}</p>}
-              {importResult.error_details && importResult.error_details.length > 0 && (
-                <div className="mt-4"><ValidationErrors errors={importResult.error_details} /></div>
-              )}
-              <div className="mt-4">
-                <button onClick={resetForm} className="btn-primary">Try Again</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
