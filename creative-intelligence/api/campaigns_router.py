@@ -36,7 +36,7 @@ class CountryBreakdownEntry(BaseModel):
 
 class AICampaignResponse(BaseModel):
     """Response model for AI campaign."""
-    id: int
+    id: str
     seat_id: Optional[int] = None
     name: str
     description: Optional[str] = None
@@ -71,6 +71,13 @@ class AutoClusterResponse(BaseModel):
     unclustered_count: int
 
 
+class CampaignCreateRequest(BaseModel):
+    """Request for creating a new campaign."""
+    name: str
+    creative_ids: list[str] = []
+    description: Optional[str] = None
+
+
 class CampaignUpdateRequest(BaseModel):
     """Request for updating campaign."""
     name: Optional[str] = None
@@ -85,7 +92,7 @@ class AssignCreativesRequest(BaseModel):
 
 class MoveCreativeRequest(BaseModel):
     """Request for moving a creative."""
-    to_campaign_id: int
+    to_campaign_id: str
 
 
 class CampaignPerformanceResponse(BaseModel):
@@ -382,9 +389,64 @@ async def list_campaigns(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("", response_model=AICampaignResponse)
+async def create_campaign(request: CampaignCreateRequest):
+    """
+    Create a new campaign and optionally assign creatives to it.
+    """
+    conn = get_db_connection()
+    repo = CampaignRepository(conn)
+
+    try:
+        # Create the campaign
+        campaign_id = repo.create_campaign(
+            name=request.name,
+            seat_id=None,  # Could be added to request if needed
+            description=request.description,
+            ai_generated=False,
+            ai_confidence=None,
+            clustering_method="manual",
+        )
+
+        # Assign creatives if provided
+        if request.creative_ids:
+            repo.assign_creatives_batch(
+                creative_ids=request.creative_ids,
+                campaign_id=campaign_id,
+                assigned_by="user",
+                manually_assigned=True,
+            )
+
+        conn.commit()
+
+        # Fetch the created campaign
+        campaign = repo.get_campaign(campaign_id)
+        creative_ids = repo.get_campaign_creatives(campaign_id)
+
+        conn.close()
+
+        return AICampaignResponse(
+            id=campaign.id,
+            seat_id=campaign.seat_id,
+            name=campaign.name,
+            description=campaign.description,
+            ai_generated=campaign.ai_generated,
+            ai_confidence=campaign.ai_confidence,
+            clustering_method=campaign.clustering_method,
+            status=campaign.status,
+            creative_count=len(creative_ids),
+            creative_ids=creative_ids,
+        )
+
+    except Exception as e:
+        conn.close()
+        logger.error(f"Failed to create campaign: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{campaign_id}", response_model=AICampaignResponse)
 async def get_campaign(
-    campaign_id: int,
+    campaign_id: str,
     include_creatives: bool = Query(False),
 ):
     """
@@ -428,7 +490,7 @@ async def get_campaign(
 
 
 @router.put("/{campaign_id}")
-async def update_campaign(campaign_id: int, request: CampaignUpdateRequest):
+async def update_campaign(campaign_id: str, request: CampaignUpdateRequest):
     """
     Update campaign name or description.
     """
@@ -460,7 +522,7 @@ async def update_campaign(campaign_id: int, request: CampaignUpdateRequest):
 
 
 @router.delete("/{campaign_id}")
-async def delete_campaign(campaign_id: int):
+async def delete_campaign(campaign_id: str):
     """
     Delete a campaign and unassign all its creatives.
     """
@@ -490,7 +552,7 @@ async def delete_campaign(campaign_id: int):
 # ============================================
 
 @router.get("/{campaign_id}/creatives")
-async def get_campaign_creatives(campaign_id: int):
+async def get_campaign_creatives(campaign_id: str):
     """
     Get all creative IDs in a campaign.
     """
@@ -509,7 +571,7 @@ async def get_campaign_creatives(campaign_id: int):
 
 
 @router.post("/{campaign_id}/creatives")
-async def add_creatives_to_campaign(campaign_id: int, request: AssignCreativesRequest):
+async def add_creatives_to_campaign(campaign_id: str, request: AssignCreativesRequest):
     """
     Manually assign creatives to a campaign.
     """
@@ -536,7 +598,7 @@ async def add_creatives_to_campaign(campaign_id: int, request: AssignCreativesRe
 
 
 @router.delete("/{campaign_id}/creatives/{creative_id}")
-async def remove_creative_from_campaign(campaign_id: int, creative_id: str):
+async def remove_creative_from_campaign(campaign_id: str, creative_id: str):
     """
     Remove a creative from a campaign.
     """
@@ -594,7 +656,7 @@ async def move_creative(creative_id: str, request: MoveCreativeRequest):
 
 @router.get("/{campaign_id}/performance", response_model=CampaignPerformanceResponse)
 async def get_campaign_performance(
-    campaign_id: int,
+    campaign_id: str,
     period: str = Query("7d"),
 ):
     """
@@ -618,7 +680,7 @@ async def get_campaign_performance(
 
 @router.get("/{campaign_id}/performance/daily")
 async def get_campaign_daily_trend(
-    campaign_id: int,
+    campaign_id: str,
     days: int = Query(30),
 ):
     """
