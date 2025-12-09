@@ -553,7 +553,8 @@ app.include_router(config_router)  # Configuration - from api/routers/config.py
 app.include_router(gmail_router)  # Gmail Import - from api/routers/gmail.py
 app.include_router(recommendations_router)  # Recommendations - from api/routers/recommendations.py
 app.include_router(retention_router)  # Retention - from api/routers/retention.py
-app.include_router(campaigns_router)
+# Note: campaigns_router not included here - campaign routes defined in main.py
+# app.include_router(campaigns_router)
 
 
 def get_store() -> SQLiteStore:
@@ -2172,15 +2173,17 @@ async def list_campaigns_paginated(
 
 @app.get("/campaigns/unclustered", tags=["Campaigns"])
 async def get_unclustered_creatives_early(
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     days: int = Query(None, ge=1, le=365, description="Only return creatives with activity in last N days"),
     store: SQLiteStore = Depends(get_store),
 ):
     """Get IDs of creatives not assigned to any campaign.
 
+    If buyer_id is specified, only returns creatives belonging to that buyer.
     If days is specified, only returns creatives with impressions, clicks, or spend
     in the given timeframe.
     """
-    creative_ids = await store.get_unclustered_creative_ids()
+    creative_ids = await store.get_unclustered_creative_ids(buyer_id=buyer_id)
 
     # If days specified, filter to only those with activity
     if days is not None and creative_ids:

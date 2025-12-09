@@ -2911,8 +2911,11 @@ class SQLiteStore:
 
             return await loop.run_in_executor(None, _delete)
 
-    async def get_unclustered_creative_ids(self) -> list[str]:
+    async def get_unclustered_creative_ids(self, buyer_id: str | None = None) -> list[str]:
         """Get IDs of creatives not assigned to any campaign.
+
+        Args:
+            buyer_id: Optional buyer ID to filter by
 
         Returns:
             List of creative IDs
@@ -2921,15 +2924,28 @@ class SQLiteStore:
             loop = asyncio.get_event_loop()
 
             def _get_unclustered():
-                cursor = conn.execute(
-                    """
-                    SELECT c.id
-                    FROM creatives c
-                    LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
-                    WHERE cc.campaign_id IS NULL
-                    ORDER BY c.updated_at DESC
-                    """
-                )
+                if buyer_id:
+                    cursor = conn.execute(
+                        """
+                        SELECT c.id
+                        FROM creatives c
+                        LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
+                        WHERE cc.campaign_id IS NULL
+                          AND c.buyer_id = ?
+                        ORDER BY c.updated_at DESC
+                        """,
+                        (buyer_id,)
+                    )
+                else:
+                    cursor = conn.execute(
+                        """
+                        SELECT c.id
+                        FROM creatives c
+                        LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
+                        WHERE cc.campaign_id IS NULL
+                        ORDER BY c.updated_at DESC
+                        """
+                    )
                 return [row["id"] for row in cursor.fetchall()]
 
             return await loop.run_in_executor(None, _get_unclustered)

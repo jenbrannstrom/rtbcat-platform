@@ -103,7 +103,9 @@ export function Sidebar() {
     queryClient.invalidateQueries({ queryKey: ["creatives"] });
     queryClient.invalidateQueries({ queryKey: ["campaigns"] });
     queryClient.invalidateQueries({ queryKey: ["stats"] });
-    queryClient.invalidateQueries({ queryKey: ["thumbnail-status"] });
+    queryClient.invalidateQueries({ queryKey: ["thumbnailStatus"] });
+    queryClient.invalidateQueries({ queryKey: ["all-creatives"] });
+    queryClient.invalidateQueries({ queryKey: ["unclustered"] });
   };
 
   return (
