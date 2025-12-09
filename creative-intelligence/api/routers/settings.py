@@ -15,8 +15,7 @@ from pydantic import BaseModel, Field
 from config import ConfigManager
 from storage import SQLiteStore
 from api.dependencies import get_store, get_config
-from clients.endpoints import EndpointsClient
-from clients.pretargeting import PretargetingClient
+from collectors import EndpointsClient, PretargetingClient
 
 logger = logging.getLogger(__name__)
 
