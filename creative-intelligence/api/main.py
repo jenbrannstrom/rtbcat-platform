@@ -6,6 +6,7 @@ using the Google Authorized Buyers RTB API.
 """
 
 import logging
+import sqlite3
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -28,6 +29,19 @@ from config import ConfigManager
 from storage import SQLiteStore, PerformanceMetric, creative_dicts_to_storage
 from analytics import WasteAnalyzer
 from api.campaigns_router import router as campaigns_router
+from api.routers import (
+    system_router,
+    creatives_router,
+    seats_router,
+    settings_router,
+    uploads_router,
+    analytics_router,
+    config_router,
+    gmail_router,
+    recommendations_router,
+    retention_router,
+)
+from api.dependencies import set_store, set_config_manager
 from services.campaign_aggregation import CampaignAggregationService
 from services.waste_analyzer import WasteAnalyzerService
 
@@ -481,6 +495,10 @@ async def lifespan(app: FastAPI):
     _store = SQLiteStore()
     await _store.initialize()
 
+    # Set dependencies for routers
+    set_store(_store)
+    set_config_manager(_config_manager)
+
     # Auto-populate buyer_seats from existing creatives if needed
     try:
         seats_created = await _store.populate_buyer_seats_from_creatives()
@@ -525,6 +543,16 @@ def create_app() -> FastAPI:
 app = create_app()
 
 # Include routers
+app.include_router(system_router)  # System & Thumbnails - from api/routers/system.py
+app.include_router(creatives_router)  # Creatives - from api/routers/creatives.py
+app.include_router(seats_router)  # Buyer Seats - from api/routers/seats.py
+app.include_router(settings_router)  # RTB Settings - from api/routers/settings.py
+app.include_router(uploads_router)  # Uploads - from api/routers/uploads.py
+app.include_router(analytics_router)  # Analytics - from api/routers/analytics.py
+app.include_router(config_router)  # Configuration - from api/routers/config.py
+app.include_router(gmail_router)  # Gmail Import - from api/routers/gmail.py
+app.include_router(recommendations_router)  # Recommendations - from api/routers/recommendations.py
+app.include_router(retention_router)  # Retention - from api/routers/retention.py
 app.include_router(campaigns_router)
 
 
@@ -1834,6 +1862,106 @@ async def list_creatives_paginated(
     )
 
 
+class NewlyUploadedCreativesResponse(BaseModel):
+    """Response model for newly uploaded creatives."""
+
+    creatives: list[dict]
+    total_count: int
+    period_start: str
+    period_end: str
+
+
+@app.get("/creatives/newly-uploaded", response_model=NewlyUploadedCreativesResponse, tags=["Creatives"])
+async def get_newly_uploaded_creatives(
+    days: int = Query(7, description="Number of days to look back", ge=1, le=90),
+    limit: int = Query(100, description="Maximum number of creatives to return", ge=1, le=1000),
+    format: Optional[str] = Query(None, description="Filter by format (HTML, VIDEO, NATIVE)"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get creatives that were first seen within the specified time period.
+
+    Returns creatives that appeared for the first time in imports during the specified period.
+    This is useful for identifying new creatives added to the account.
+    """
+    try:
+        from datetime import datetime, timedelta
+
+        period_end = datetime.now()
+        period_start = period_end - timedelta(days=days)
+
+        async with store._connection() as conn:
+            import asyncio
+            loop = asyncio.get_event_loop()
+
+            # Build query
+            query = """
+                SELECT c.*,
+                    (SELECT SUM(spend_micros) FROM rtb_daily WHERE creative_id = c.id) as total_spend_micros,
+                    (SELECT SUM(impressions) FROM rtb_daily WHERE creative_id = c.id) as total_impressions
+                FROM creatives c
+                WHERE c.first_seen_at >= ?
+                AND c.first_seen_at <= ?
+            """
+            params = [period_start.isoformat(), period_end.isoformat()]
+
+            if format:
+                query += " AND c.format = ?"
+                params.append(format.upper())
+
+            query += " ORDER BY c.first_seen_at DESC LIMIT ?"
+            params.append(limit)
+
+            rows = await loop.run_in_executor(
+                None,
+                lambda: conn.execute(query, params).fetchall(),
+            )
+
+            # Get total count
+            count_query = """
+                SELECT COUNT(*) FROM creatives c
+                WHERE c.first_seen_at >= ?
+                AND c.first_seen_at <= ?
+            """
+            count_params = [period_start.isoformat(), period_end.isoformat()]
+            if format:
+                count_query += " AND c.format = ?"
+                count_params.append(format.upper())
+
+            total_count = await loop.run_in_executor(
+                None,
+                lambda: conn.execute(count_query, count_params).fetchone()[0],
+            )
+
+        creatives = []
+        for row in rows:
+            creative = {
+                "id": row["id"],
+                "name": row["name"],
+                "format": row["format"],
+                "approval_status": row["approval_status"],
+                "width": row["width"],
+                "height": row["height"],
+                "canonical_size": row["canonical_size"],
+                "final_url": row["final_url"],
+                "first_seen_at": row["first_seen_at"],
+                "first_import_batch_id": row["first_import_batch_id"],
+                "total_spend_usd": (row["total_spend_micros"] or 0) / 1_000_000,
+                "total_impressions": row["total_impressions"] or 0,
+            }
+            creatives.append(creative)
+
+        return NewlyUploadedCreativesResponse(
+            creatives=creatives,
+            total_count=total_count or 0,
+            period_start=period_start.strftime("%Y-%m-%d"),
+            period_end=period_end.strftime("%Y-%m-%d"),
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get newly uploaded creatives: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get newly uploaded creatives: {str(e)}")
+
+
 @app.get("/creatives/{creative_id}", response_model=CreativeResponse, tags=["Creatives"])
 async def get_creative(
     creative_id: str,
@@ -2874,20 +3002,47 @@ async def set_pretargeting_name(
             import asyncio
             loop = asyncio.get_event_loop()
 
-            result = await loop.run_in_executor(
+            # Get current value for history tracking
+            current = await loop.run_in_executor(
+                None,
+                lambda: conn.execute(
+                    "SELECT user_name, config_id, bidder_id FROM pretargeting_configs WHERE billing_id = ?",
+                    (billing_id,),
+                ).fetchone(),
+            )
+
+            if not current:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Pretargeting config with billing_id {billing_id} not found"
+                )
+
+            old_name = current["user_name"]
+            config_id = current["config_id"]
+            bidder_id = current["bidder_id"]
+
+            # Update the name
+            await loop.run_in_executor(
                 None,
                 lambda: conn.execute(
                     "UPDATE pretargeting_configs SET user_name = ? WHERE billing_id = ?",
                     (body.user_name, billing_id),
                 ),
             )
-            await loop.run_in_executor(None, conn.commit)
 
-            if result.rowcount == 0:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Pretargeting config with billing_id {billing_id} not found"
+            # Record history if value changed
+            if old_name != body.user_name:
+                await loop.run_in_executor(
+                    None,
+                    lambda: conn.execute(
+                        """INSERT INTO pretargeting_history
+                        (config_id, bidder_id, change_type, field_changed, old_value, new_value, change_source)
+                        VALUES (?, ?, 'update', 'user_name', ?, ?, 'user')""",
+                        (config_id, bidder_id, old_name, body.user_name),
+                    ),
                 )
+
+            await loop.run_in_executor(None, conn.commit)
 
         return {
             "status": "success",
@@ -2900,6 +3055,264 @@ async def set_pretargeting_name(
     except Exception as e:
         logger.error(f"Failed to set pretargeting name: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to set name: {str(e)}")
+
+
+# =============================================================================
+# Upload Tracking Endpoints
+# =============================================================================
+
+
+class DailyUploadSummaryResponse(BaseModel):
+    """Response model for daily upload summary."""
+
+    upload_date: str
+    total_uploads: int
+    successful_uploads: int
+    failed_uploads: int
+    total_rows_written: int
+    total_file_size_mb: float
+    avg_rows_per_upload: float
+    min_rows: Optional[int] = None
+    max_rows: Optional[int] = None
+    has_anomaly: bool = False
+    anomaly_reason: Optional[str] = None
+
+
+class UploadTrackingResponse(BaseModel):
+    """Response model for upload tracking data."""
+
+    daily_summaries: list[DailyUploadSummaryResponse]
+    total_days: int
+    total_uploads: int
+    total_rows: int
+    days_with_anomalies: int
+
+
+@app.get("/uploads/tracking", response_model=UploadTrackingResponse, tags=["Uploads"])
+async def get_upload_tracking(
+    days: int = Query(30, description="Number of days to retrieve", ge=1, le=365),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get daily upload tracking summary.
+
+    Returns upload statistics for each day, including:
+    - Date with success/failure indicator
+    - File size in MB
+    - Total rows written
+    - Anomaly warnings for sudden drops/spikes in row counts
+    """
+    try:
+        async with store._connection() as conn:
+            import asyncio
+            loop = asyncio.get_event_loop()
+
+            rows = await loop.run_in_executor(
+                None,
+                lambda: conn.execute(
+                    """SELECT * FROM daily_upload_summary
+                    ORDER BY upload_date DESC
+                    LIMIT ?""",
+                    (days,),
+                ).fetchall(),
+            )
+
+        daily_summaries = []
+        total_uploads = 0
+        total_rows = 0
+        days_with_anomalies = 0
+
+        for row in rows:
+            file_size_mb = (row["total_file_size_bytes"] or 0) / (1024 * 1024)
+            has_anomaly = bool(row["has_anomaly"])
+
+            daily_summaries.append(
+                DailyUploadSummaryResponse(
+                    upload_date=row["upload_date"],
+                    total_uploads=row["total_uploads"] or 0,
+                    successful_uploads=row["successful_uploads"] or 0,
+                    failed_uploads=row["failed_uploads"] or 0,
+                    total_rows_written=row["total_rows_written"] or 0,
+                    total_file_size_mb=round(file_size_mb, 2),
+                    avg_rows_per_upload=round(row["avg_rows_per_upload"] or 0, 1),
+                    min_rows=row["min_rows"],
+                    max_rows=row["max_rows"],
+                    has_anomaly=has_anomaly,
+                    anomaly_reason=row["anomaly_reason"],
+                )
+            )
+
+            total_uploads += row["total_uploads"] or 0
+            total_rows += row["total_rows_written"] or 0
+            if has_anomaly:
+                days_with_anomalies += 1
+
+        return UploadTrackingResponse(
+            daily_summaries=daily_summaries,
+            total_days=len(daily_summaries),
+            total_uploads=total_uploads,
+            total_rows=total_rows,
+            days_with_anomalies=days_with_anomalies,
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get upload tracking: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get upload tracking: {str(e)}")
+
+
+class ImportHistoryResponse(BaseModel):
+    """Response model for import history entry."""
+
+    batch_id: str
+    filename: Optional[str] = None
+    imported_at: str
+    rows_read: int
+    rows_imported: int
+    rows_skipped: int
+    rows_duplicate: int
+    date_range_start: Optional[str] = None
+    date_range_end: Optional[str] = None
+    total_spend_usd: float
+    file_size_mb: float
+    status: str
+    error_message: Optional[str] = None
+
+
+@app.get("/uploads/history", response_model=list[ImportHistoryResponse], tags=["Uploads"])
+async def get_import_history(
+    limit: int = Query(50, description="Maximum number of records to return", ge=1, le=500),
+    offset: int = Query(0, description="Number of records to skip", ge=0),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get import history records.
+
+    Returns detailed history of all CSV imports with file sizes, row counts, and status.
+    """
+    try:
+        async with store._connection() as conn:
+            import asyncio
+            loop = asyncio.get_event_loop()
+
+            rows = await loop.run_in_executor(
+                None,
+                lambda: conn.execute(
+                    """SELECT * FROM import_history
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?""",
+                    (limit, offset),
+                ).fetchall(),
+            )
+
+        results = []
+        for row in rows:
+            file_size_bytes = row["file_size_bytes"] if "file_size_bytes" in row.keys() else 0
+            file_size_mb = (file_size_bytes or 0) / (1024 * 1024)
+
+            results.append(
+                ImportHistoryResponse(
+                    batch_id=row["batch_id"],
+                    filename=row["filename"],
+                    imported_at=row["created_at"],
+                    rows_read=row["rows_read"] or 0,
+                    rows_imported=row["rows_imported"] or 0,
+                    rows_skipped=row["rows_skipped"] or 0,
+                    rows_duplicate=row["rows_duplicate"] or 0,
+                    date_range_start=row["date_range_start"],
+                    date_range_end=row["date_range_end"],
+                    total_spend_usd=row["total_spend_usd"] or 0,
+                    file_size_mb=round(file_size_mb, 2),
+                    status=row["status"] or "unknown",
+                    error_message=row["error_message"],
+                )
+            )
+
+        return results
+
+    except Exception as e:
+        logger.error(f"Failed to get import history: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get import history: {str(e)}")
+
+
+# =============================================================================
+# Pretargeting History Endpoints
+# =============================================================================
+
+
+class PretargetingHistoryResponse(BaseModel):
+    """Response model for pretargeting history entry."""
+
+    id: int
+    config_id: str
+    bidder_id: str
+    change_type: str
+    field_changed: Optional[str] = None
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+    changed_at: str
+    changed_by: Optional[str] = None
+    change_source: str
+
+
+@app.get("/settings/pretargeting/history", response_model=list[PretargetingHistoryResponse], tags=["RTB Settings"])
+async def get_pretargeting_history(
+    config_id: Optional[str] = Query(None, description="Filter by config_id"),
+    billing_id: Optional[str] = Query(None, description="Filter by billing_id"),
+    days: int = Query(30, description="Number of days of history to retrieve", ge=1, le=365),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get pretargeting settings change history.
+
+    Returns a log of all changes made to pretargeting configurations,
+    including who made the change and when.
+    """
+    try:
+        async with store._connection() as conn:
+            import asyncio
+            loop = asyncio.get_event_loop()
+
+            # Build query based on filters
+            query = """
+                SELECT ph.* FROM pretargeting_history ph
+                LEFT JOIN pretargeting_configs pc ON ph.config_id = pc.config_id
+                WHERE ph.changed_at >= datetime('now', ?)
+            """
+            params = [f"-{days} days"]
+
+            if config_id:
+                query += " AND ph.config_id = ?"
+                params.append(config_id)
+            if billing_id:
+                query += " AND pc.billing_id = ?"
+                params.append(billing_id)
+
+            query += " ORDER BY ph.changed_at DESC LIMIT 500"
+
+            rows = await loop.run_in_executor(
+                None,
+                lambda: conn.execute(query, params).fetchall(),
+            )
+
+        results = []
+        for row in rows:
+            results.append(
+                PretargetingHistoryResponse(
+                    id=row["id"],
+                    config_id=row["config_id"],
+                    bidder_id=row["bidder_id"],
+                    change_type=row["change_type"],
+                    field_changed=row["field_changed"],
+                    old_value=row["old_value"],
+                    new_value=row["new_value"],
+                    changed_at=row["changed_at"],
+                    changed_by=row["changed_by"],
+                    change_source=row["change_source"] or "unknown",
+                )
+            )
+
+        return results
+
+    except Exception as e:
+        logger.error(f"Failed to get pretargeting history: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get pretargeting history: {str(e)}")
 
 
 # =============================================================================
