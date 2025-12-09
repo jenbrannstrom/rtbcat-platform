@@ -601,6 +601,48 @@ class SQLiteStore:
         )""",
         "CREATE INDEX IF NOT EXISTS idx_pretargeting_bidder ON pretargeting_configs(bidder_id)",
         "CREATE INDEX IF NOT EXISTS idx_pretargeting_billing ON pretargeting_configs(billing_id)",
+        # Phase 26: Enhanced upload tracking - add file_size_bytes to import_history
+        "ALTER TABLE import_history ADD COLUMN file_size_bytes INTEGER DEFAULT 0",
+        # Phase 26: Daily upload summary table for upload tracking UI
+        """CREATE TABLE IF NOT EXISTS daily_upload_summary (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            upload_date DATE NOT NULL UNIQUE,
+            total_uploads INTEGER DEFAULT 0,
+            successful_uploads INTEGER DEFAULT 0,
+            failed_uploads INTEGER DEFAULT 0,
+            total_rows_written INTEGER DEFAULT 0,
+            total_file_size_bytes INTEGER DEFAULT 0,
+            avg_rows_per_upload REAL DEFAULT 0,
+            min_rows INTEGER,
+            max_rows INTEGER,
+            has_anomaly INTEGER DEFAULT 0,
+            anomaly_reason TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_daily_upload_date ON daily_upload_summary(upload_date DESC)",
+        # Phase 26: Track when creatives are first seen (for "newly uploaded" feature)
+        "ALTER TABLE creatives ADD COLUMN first_seen_at TIMESTAMP",
+        "ALTER TABLE creatives ADD COLUMN first_import_batch_id TEXT",
+        "CREATE INDEX IF NOT EXISTS idx_creatives_first_seen ON creatives(first_seen_at DESC)",
+        # Phase 26: Pretargeting settings history table for tracking changes
+        """CREATE TABLE IF NOT EXISTS pretargeting_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            config_id TEXT NOT NULL,
+            bidder_id TEXT NOT NULL,
+            change_type TEXT NOT NULL,
+            field_changed TEXT,
+            old_value TEXT,
+            new_value TEXT,
+            changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            changed_by TEXT,
+            change_source TEXT DEFAULT 'api_sync',
+            raw_config_snapshot TEXT,
+            FOREIGN KEY (config_id) REFERENCES pretargeting_configs(config_id)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_pretargeting_history_config ON pretargeting_history(config_id)",
+        "CREATE INDEX IF NOT EXISTS idx_pretargeting_history_date ON pretargeting_history(changed_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_pretargeting_history_bidder ON pretargeting_history(bidder_id)",
     ]
 
     def __init__(self, db_path: str | Path = "~/.catscan/catscan.db") -> None:

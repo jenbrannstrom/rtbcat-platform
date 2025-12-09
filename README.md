@@ -1,6 +1,6 @@
 # Cat-Scan Creative Intelligence
 
-**Version:** 22.0 | **Phase:** Unified Dashboard & Schema Alignment | **Last Updated:** December 8, 2025
+**Version:** 23.0 | **Phase:** Modular Router Architecture | **Last Updated:** December 8, 2025
 
 A privacy-first QPS optimization platform for Google Authorized Buyers. Cat-Scan helps RTB bidders eliminate wasted QPS by learning which data-streams the bidder likes to bid on.
 
@@ -93,6 +93,18 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 ┌─────────────────────────────────────────────────────────────┐
 │         FastAPI Backend (Port 8000)                          │
 │         /creative-intelligence                               │
+│                                                              │
+│         Modular Router Architecture:                         │
+│         • system      - Health, stats, thumbnails            │
+│         • creatives   - Creative management & sync           │
+│         • seats       - Buyer seat discovery                 │
+│         • settings    - RTB endpoints, pretargeting          │
+│         • analytics   - Waste analysis, RTB funnel           │
+│         • config      - Configuration & credentials          │
+│         • gmail       - Auto-import from Gmail               │
+│         • recommendations - AI recommendations               │
+│         • retention   - Data retention policies              │
+│         • uploads     - CSV file uploads                     │
 └─────────────────────────────────────────────────────────────┘
               │                               │
               ▼                               ▼

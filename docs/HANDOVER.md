@@ -1,7 +1,7 @@
 # Cat-Scan Project Handover
 
 **Date:** December 8, 2025
-**Version:** 22.0
+**Version:** 23.0
 **Status:** Production-Ready with Active Development
 
 ---
@@ -85,10 +85,12 @@ The main dashboard contains these sections:
 │         Language: Python 3.11 + FastAPI + SQLite             │
 │                                                              │
 │         Key Modules:                                         │
-│         • api/main.py        - FastAPI endpoints             │
+│         • api/main.py        - FastAPI app & middleware      │
+│         • api/routers/       - Modular API routers (10)      │
 │         • storage/           - SQLite database layer         │
 │         • collectors/        - Google API clients            │
 │         • analytics/         - RTB funnel, waste analysis    │
+│         • services/          - Business logic services       │
 │         • cli/               - CLI tools (qps_analyzer.py)   │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -288,16 +290,30 @@ Full API docs: http://localhost:8000/docs
 rtbcat-platform/
 ├── creative-intelligence/      # Python backend
 │   ├── api/
-│   │   └── main.py             # FastAPI app (50+ endpoints)
+│   │   ├── main.py             # FastAPI app & middleware
+│   │   ├── dependencies.py     # Shared dependencies
+│   │   └── routers/            # Modular API routers
+│   │       ├── system.py       # Health, stats, thumbnails
+│   │       ├── creatives.py    # Creative management
+│   │       ├── seats.py        # Buyer seat management
+│   │       ├── settings.py     # RTB endpoints, pretargeting
+│   │       ├── uploads.py      # CSV file uploads
+│   │       ├── analytics.py    # Waste analysis, RTB funnel
+│   │       ├── config.py       # Configuration endpoints
+│   │       ├── gmail.py        # Gmail auto-import
+│   │       ├── recommendations.py  # AI recommendations
+│   │       └── retention.py    # Data retention settings
 │   ├── storage/
 │   │   └── sqlite_store.py     # Database layer
 │   ├── collectors/
 │   │   ├── creatives/          # Google Creatives API client
 │   │   ├── pretargeting/       # Pretargeting configs client
+│   │   ├── endpoints/          # RTB endpoints client
 │   │   └── seats.py            # Buyer seats discovery
+│   ├── services/
+│   │   └── waste_analyzer.py   # Waste analysis service
 │   ├── analytics/
-│   │   ├── rtb_funnel_analyzer.py
-│   │   └── waste_analyzer.py
+│   │   └── rtb_funnel_analyzer.py
 │   ├── cli/
 │   │   └── qps_analyzer.py     # CLI tools
 │   ├── config/
@@ -413,6 +429,28 @@ sqlite3 ~/.catscan/catscan.db ".backup ~/backups/catscan_$(date +%Y%m%d).db"
    - Update `reset_database.py` with new schema
    - Document in this handover
 
+### API Router Architecture
+
+The FastAPI backend uses a modular router architecture. Each router handles a specific domain:
+
+| Router | File | Endpoints | Purpose |
+|--------|------|-----------|---------|
+| **system** | `routers/system.py` | `/health`, `/stats`, `/thumbnails/*` | Health checks, database stats, video thumbnails |
+| **creatives** | `routers/creatives.py` | `/creatives/*`, `/collect/*` | Creative CRUD, API sync |
+| **seats** | `routers/seats.py` | `/seats/*` | Buyer seat discovery and management |
+| **settings** | `routers/settings.py` | `/settings/*` | RTB endpoints, pretargeting configs |
+| **uploads** | `routers/uploads.py` | `/uploads/*` | CSV file uploads |
+| **analytics** | `routers/analytics.py` | `/analytics/*` | Waste analysis, RTB funnel, spend stats |
+| **config** | `routers/config.py` | `/config/*` | Configuration and credentials |
+| **gmail** | `routers/gmail.py` | `/gmail/*` | Gmail OAuth and auto-import |
+| **recommendations** | `routers/recommendations.py` | `/recommendations/*` | AI-powered recommendations |
+| **retention** | `routers/retention.py` | `/retention/*` | Data retention policies |
+
+**Adding a new endpoint:**
+1. Identify the appropriate router or create a new one in `api/routers/`
+2. Add the router to `api/routers/__init__.py`
+3. Import and include the router in `api/main.py`
+
 ---
 
 ## Mental Model: Understanding Cat-Scan
@@ -476,6 +514,7 @@ IMPRESSIONS WON:        8.4 MILLION
 
 | Version | Date | Key Changes |
 |---------|------|-------------|
+| 23.0 | Dec 8, 2025 | Modular router architecture: refactored main.py into 10 router modules |
 | 22.0 | Dec 6, 2025 | Unified dashboard, schema alignment, Avg CPM badge |
 | 21.0 | Dec 5, 2025 | RTB Funnel Analysis, Gmail auto-import |
 | 12.0 | Dec 3, 2025 | Schema cleanup: `performance_data` → `rtb_daily` |
