@@ -242,11 +242,11 @@ async function fetchAllCreatives(buyerId?: string | null): Promise<Creative[]> {
   return Array.isArray(data) ? data : (data.creatives || []);
 }
 
-async function autoCluster(): Promise<AutoClusterResponse> {
+async function autoCluster(buyerId?: string | null): Promise<AutoClusterResponse> {
   const res = await fetch('/api/campaigns/auto-cluster', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ by_url: true }),
+    body: JSON.stringify({ by_url: true, buyer_id: buyerId ?? undefined }),
   });
   if (!res.ok) throw new Error('Failed to auto-cluster');
   return res.json();
@@ -288,6 +288,7 @@ export default function CampaignsPage() {
   const queryClient = useQueryClient();
   const { selectedBuyerId } = useAccount();
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showAllSuggestions, setShowAllSuggestions] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [createdSuggestions, setCreatedSuggestions] = useState<Set<string>>(new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -358,7 +359,7 @@ export default function CampaignsPage() {
 
   // Auto-cluster mutation
   const autoClusterMutation = useMutation({
-    mutationFn: autoCluster,
+    mutationFn: (buyerId?: string | null) => autoCluster(buyerId),
     onSuccess: () => {
       setShowSuggestions(true);
       setCreatedSuggestions(new Set()); // Reset created tracking
@@ -823,7 +824,7 @@ export default function CampaignsPage() {
           {/* Action buttons */}
           <div className="flex gap-2">
             <button
-              onClick={() => autoClusterMutation.mutate()}
+              onClick={() => autoClusterMutation.mutate(selectedBuyerId)}
               disabled={autoClusterMutation.isPending}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
             >
@@ -865,14 +866,14 @@ export default function CampaignsPage() {
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {suggestions.slice(0, 9).map((suggestion) => {
+            {(showAllSuggestions ? suggestions : suggestions.slice(0, 9)).map((suggestion, index) => {
               const isCreated = createdSuggestions.has(suggestion.suggested_name);
               const isApplying = applyingId === suggestion.suggested_name;
               const displayName = generateClusterName(suggestion.domain) || suggestion.suggested_name;
 
               return (
                 <div
-                  key={suggestion.suggested_name}
+                  key={`${index}-${suggestion.suggested_name}`}
                   className={`border rounded-xl p-4 ${isCreated ? 'bg-green-50 border-green-200' : 'bg-purple-50 border-purple-200'}`}
                 >
                   <div className="flex items-center justify-between mb-2">
@@ -909,9 +910,12 @@ export default function CampaignsPage() {
             })}
           </div>
           {suggestions.length > 9 && (
-            <p className="mt-3 text-sm text-purple-600 text-center">
-              +{suggestions.length - 9} more suggestions
-            </p>
+            <button
+              onClick={() => setShowAllSuggestions(!showAllSuggestions)}
+              className="mt-3 text-sm text-purple-600 hover:text-purple-800 text-center w-full"
+            >
+              {showAllSuggestions ? 'Show less' : `+${suggestions.length - 9} more suggestions`}
+            </button>
           )}
         </div>
       )}

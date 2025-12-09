@@ -72,7 +72,8 @@
       "Bash(gh auth:*)",
       "Bash(source ~/.nvm/nvm.sh)",
       "Bash(./node_modules/.bin/tsc:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []
