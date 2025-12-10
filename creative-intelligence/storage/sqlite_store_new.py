@@ -697,3 +697,677 @@ class SQLiteStore:
                 return result
 
             return await loop.run_in_executor(None, _query)
+
+    # =========================================================================
+    # Migration Methods
+    # =========================================================================
+
+    async def migrate_canonical_sizes(self) -> int:
+        """Migrate existing creatives to populate canonical_size fields.
+
+        Updates all creatives that have width/height but no canonical_size,
+        computing the normalized size values. For VIDEO creatives, it also
+        parses VAST XML to extract dimensions.
+
+        Returns:
+            Number of creatives updated.
+        """
+        from utils.size_normalization import canonical_size as compute_canonical_size
+        from utils.size_normalization import get_size_category
+        import re
+
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _parse_video_dimensions(raw_data: dict) -> tuple[Optional[int], Optional[int]]:
+                """Extract width and height from video VAST XML."""
+                video_data = raw_data.get("video")
+                if not video_data:
+                    return None, None
+                vast_xml = video_data.get("vastXml")
+                if not vast_xml:
+                    return None, None
+                match = re.search(
+                    r'<MediaFile[^>]*\s+width=["\'](\d+)["\'][^>]*\s+height=["\'](\d+)["\']',
+                    vast_xml,
+                )
+                if match:
+                    return int(match.group(1)), int(match.group(2))
+                match = re.search(
+                    r'<MediaFile[^>]*\s+height=["\'](\d+)["\'][^>]*\s+width=["\'](\d+)["\']',
+                    vast_xml,
+                )
+                if match:
+                    return int(match.group(2)), int(match.group(1))
+                return None, None
+
+            def _get_unmigrated_with_dims():
+                cursor = conn.execute(
+                    """
+                    SELECT id, width, height FROM creatives
+                    WHERE width IS NOT NULL AND height IS NOT NULL AND canonical_size IS NULL
+                    """
+                )
+                return cursor.fetchall()
+
+            def _get_unmigrated_videos():
+                cursor = conn.execute(
+                    """
+                    SELECT id, raw_data FROM creatives
+                    WHERE format = 'VIDEO' AND (width IS NULL OR height IS NULL)
+                    AND canonical_size IS NULL
+                    """
+                )
+                return cursor.fetchall()
+
+            rows_with_dims = await loop.run_in_executor(None, _get_unmigrated_with_dims)
+            rows_videos = await loop.run_in_executor(None, _get_unmigrated_videos)
+
+            updates = []
+            updates_with_dims = []
+
+            for row in rows_with_dims:
+                creative_id, width, height = row
+                canonical = compute_canonical_size(width, height)
+                category = get_size_category(canonical)
+                updates.append((canonical, category, creative_id))
+
+            for row in rows_videos:
+                creative_id, raw_data_str = row
+                if not raw_data_str:
+                    continue
+                raw_data = json.loads(raw_data_str)
+                width, height = _parse_video_dimensions(raw_data)
+                if width is not None and height is not None:
+                    canonical = compute_canonical_size(width, height)
+                    category = get_size_category(canonical)
+                    updates_with_dims.append((canonical, category, width, height, creative_id))
+
+            if not updates and not updates_with_dims:
+                return 0
+
+            if updates:
+                await loop.run_in_executor(
+                    None,
+                    lambda: conn.executemany(
+                        """
+                        UPDATE creatives
+                        SET canonical_size = ?, size_category = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                        """,
+                        updates,
+                    ),
+                )
+
+            if updates_with_dims:
+                await loop.run_in_executor(
+                    None,
+                    lambda: conn.executemany(
+                        """
+                        UPDATE creatives
+                        SET canonical_size = ?, size_category = ?, width = ?, height = ?,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                        """,
+                        updates_with_dims,
+                    ),
+                )
+
+            await loop.run_in_executor(None, conn.commit)
+
+        total = len(updates) + len(updates_with_dims)
+        logger.info(f"Migrated canonical sizes for {total} creatives ({len(updates_with_dims)} from VAST XML)")
+        return total
+
+    async def migrate_add_buyer_seats(self) -> int:
+        """Migrate existing creatives to populate buyer_id from account_id.
+
+        Returns:
+            Number of creatives updated with buyer_id.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            for migration in MIGRATIONS:
+                try:
+                    await loop.run_in_executor(None, lambda m=migration: conn.execute(m))
+                    await loop.run_in_executor(None, conn.commit)
+                except sqlite3.OperationalError:
+                    pass
+
+            def _get_creatives_needing_buyer_id():
+                cursor = conn.execute(
+                    "SELECT id, name, account_id FROM creatives WHERE buyer_id IS NULL"
+                )
+                return cursor.fetchall()
+
+            rows = await loop.run_in_executor(None, _get_creatives_needing_buyer_id)
+
+            if not rows:
+                logger.info("No creatives need buyer_id migration")
+                return 0
+
+            updates = []
+            for row in rows:
+                creative_id, name, account_id = row
+                buyer_id = account_id
+                if buyer_id:
+                    updates.append((buyer_id, creative_id))
+
+            if updates:
+                await loop.run_in_executor(
+                    None,
+                    lambda: conn.executemany(
+                        """
+                        UPDATE creatives SET buyer_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+                        """,
+                        updates,
+                    ),
+                )
+                await loop.run_in_executor(None, conn.commit)
+
+            logger.info(f"Migrated buyer_id for {len(updates)} creatives")
+            return len(updates)
+
+    # =========================================================================
+    # Import Anomalies Methods
+    # =========================================================================
+
+    async def save_import_anomalies(self, import_id: str, anomalies: list[dict]) -> int:
+        """Store anomalies from import for later analysis.
+
+        Args:
+            import_id: Unique identifier for the import batch.
+            anomalies: List of anomaly dictionaries.
+
+        Returns:
+            Number of anomalies saved.
+        """
+        if not anomalies:
+            return 0
+
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _insert_anomalies():
+                count = 0
+                for a in anomalies:
+                    try:
+                        details = a.get("details", {})
+                        conn.execute(
+                            """
+                            INSERT INTO import_anomalies
+                            (import_id, row_number, anomaly_type, creative_id, app_id, app_name, details)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                import_id,
+                                a.get("row"),
+                                a.get("type"),
+                                str(details.get("creative_id")) if details.get("creative_id") else None,
+                                details.get("app_id"),
+                                details.get("app_name"),
+                                json.dumps(details),
+                            ),
+                        )
+                        count += 1
+                    except sqlite3.Error as e:
+                        logger.warning(f"Failed to insert anomaly: {e}")
+                conn.commit()
+                return count
+
+            return await loop.run_in_executor(None, _insert_anomalies)
+
+    async def get_fraud_apps(self, limit: int = 50) -> list[dict]:
+        """Get apps with most fraud signals.
+
+        Args:
+            limit: Maximum number of apps to return.
+
+        Returns:
+            List of app dictionaries with anomaly counts.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _query():
+                cursor = conn.execute(
+                    """
+                    SELECT
+                        app_id, app_name,
+                        COUNT(*) as anomaly_count,
+                        COUNT(DISTINCT anomaly_type) as anomaly_types,
+                        GROUP_CONCAT(DISTINCT anomaly_type) as types_list
+                    FROM import_anomalies
+                    WHERE anomaly_type IN ('clicks_exceed_impressions', 'extremely_high_ctr', 'zero_impressions_with_spend')
+                    AND app_id IS NOT NULL
+                    GROUP BY app_id
+                    ORDER BY anomaly_count DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                )
+                return cursor.fetchall()
+
+            rows = await loop.run_in_executor(None, _query)
+
+        return [
+            {
+                "app_id": row["app_id"],
+                "app_name": row["app_name"],
+                "anomaly_count": row["anomaly_count"],
+                "anomaly_types": row["anomaly_types"],
+                "types_list": row["types_list"].split(",") if row["types_list"] else [],
+            }
+            for row in rows
+        ]
+
+    async def get_anomaly_summary(self) -> dict:
+        """Get summary of all import anomalies.
+
+        Returns:
+            Dictionary with anomaly type counts.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _query():
+                cursor = conn.execute(
+                    """
+                    SELECT anomaly_type, COUNT(*) as count
+                    FROM import_anomalies
+                    GROUP BY anomaly_type
+                    ORDER BY count DESC
+                    """
+                )
+                return cursor.fetchall()
+
+            rows = await loop.run_in_executor(None, _query)
+
+        return {row["anomaly_type"]: row["count"] for row in rows}
+
+    # =========================================================================
+    # Campaign Clustering Methods (with UUID generation)
+    # =========================================================================
+
+    async def create_campaign(self, name: str, creative_ids: list[str] | None = None) -> dict:
+        """Create a new campaign with optional creatives.
+
+        Args:
+            name: Campaign name
+            creative_ids: Optional list of creative IDs to assign
+
+        Returns:
+            Created campaign dict with id, name, creative_ids
+        """
+        import uuid
+
+        campaign_id = str(uuid.uuid4())[:8]
+
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _create():
+                conn.execute(
+                    """
+                    INSERT INTO campaigns (id, name, created_at, updated_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    """,
+                    (campaign_id, name),
+                )
+
+                if creative_ids:
+                    for cid in creative_ids:
+                        conn.execute(
+                            """
+                            INSERT OR REPLACE INTO creative_campaigns (creative_id, campaign_id)
+                            VALUES (?, ?)
+                            """,
+                            (cid, campaign_id),
+                        )
+
+                conn.commit()
+                return {
+                    "id": campaign_id,
+                    "name": name,
+                    "creative_ids": creative_ids or [],
+                }
+
+            return await loop.run_in_executor(None, _create)
+
+    async def update_campaign(
+        self,
+        campaign_id: str,
+        name: str | None = None,
+        creative_ids: list[str] | None = None,
+    ) -> dict | None:
+        """Update a campaign's name and/or creative assignments.
+
+        Args:
+            campaign_id: Campaign ID
+            name: New name (optional)
+            creative_ids: New list of creative IDs (replaces existing)
+
+        Returns:
+            Updated campaign dict or None if not found
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _update():
+                cursor = conn.execute(
+                    "SELECT id FROM campaigns WHERE id = ?", (campaign_id,)
+                )
+                if not cursor.fetchone():
+                    return None
+
+                if name is not None:
+                    conn.execute(
+                        "UPDATE campaigns SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (name, campaign_id),
+                    )
+
+                if creative_ids is not None:
+                    conn.execute(
+                        "DELETE FROM creative_campaigns WHERE campaign_id = ?",
+                        (campaign_id,),
+                    )
+                    for cid in creative_ids:
+                        conn.execute(
+                            "INSERT OR REPLACE INTO creative_campaigns (creative_id, campaign_id) VALUES (?, ?)",
+                            (cid, campaign_id),
+                        )
+                    conn.execute(
+                        "UPDATE campaigns SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (campaign_id,),
+                    )
+
+                conn.commit()
+
+                cursor = conn.execute(
+                    "SELECT id, name, created_at, updated_at FROM campaigns WHERE id = ?",
+                    (campaign_id,),
+                )
+                row = cursor.fetchone()
+                cid_cursor = conn.execute(
+                    "SELECT creative_id FROM creative_campaigns WHERE campaign_id = ?",
+                    (campaign_id,),
+                )
+                current_creative_ids = [r["creative_id"] for r in cid_cursor.fetchall()]
+
+                return {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "creative_ids": current_creative_ids,
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                }
+
+            return await loop.run_in_executor(None, _update)
+
+    async def delete_campaign(self, campaign_id: str) -> bool:
+        """Delete a campaign (creatives become unclustered).
+
+        Args:
+            campaign_id: Campaign ID
+
+        Returns:
+            True if deleted, False if not found
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _delete():
+                cursor = conn.execute(
+                    "DELETE FROM campaigns WHERE id = ?", (campaign_id,)
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+
+            return await loop.run_in_executor(None, _delete)
+
+    # =========================================================================
+    # Performance Cache Methods
+    # =========================================================================
+
+    async def update_campaign_performance_cache(self, campaign_id: str) -> None:
+        """Update cached performance aggregates for a campaign.
+
+        Computes and stores spend_7d, spend_30d, total_impressions,
+        total_clicks, avg_cpm, and avg_cpc on the campaigns table.
+
+        Args:
+            campaign_id: The campaign ID to update.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _update_cache():
+                cursor = conn.execute(
+                    """
+                    SELECT SUM(spend_micros) as spend
+                    FROM performance_metrics
+                    WHERE campaign_id = ? AND metric_date >= date('now', '-7 days')
+                    """,
+                    (campaign_id,),
+                )
+                spend_7d = cursor.fetchone()["spend"] or 0
+
+                cursor = conn.execute(
+                    """
+                    SELECT SUM(spend_micros) as spend
+                    FROM performance_metrics
+                    WHERE campaign_id = ? AND metric_date >= date('now', '-30 days')
+                    """,
+                    (campaign_id,),
+                )
+                spend_30d = cursor.fetchone()["spend"] or 0
+
+                cursor = conn.execute(
+                    """
+                    SELECT
+                        SUM(impressions) as total_impressions,
+                        SUM(clicks) as total_clicks,
+                        CASE WHEN SUM(impressions) > 0
+                             THEN CAST(SUM(spend_micros) * 1000.0 / SUM(impressions) AS INTEGER)
+                             ELSE NULL END as avg_cpm_micros,
+                        CASE WHEN SUM(clicks) > 0
+                             THEN CAST(SUM(spend_micros) * 1.0 / SUM(clicks) AS INTEGER)
+                             ELSE NULL END as avg_cpc_micros
+                    FROM performance_metrics
+                    WHERE campaign_id = ?
+                    """,
+                    (campaign_id,),
+                )
+                row = cursor.fetchone()
+
+                conn.execute(
+                    """
+                    UPDATE campaigns SET
+                        spend_7d_micros = ?, spend_30d_micros = ?,
+                        total_impressions = ?, total_clicks = ?,
+                        avg_cpm_micros = ?, avg_cpc_micros = ?,
+                        perf_updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (
+                        spend_7d, spend_30d,
+                        row["total_impressions"] or 0, row["total_clicks"] or 0,
+                        row["avg_cpm_micros"], row["avg_cpc_micros"],
+                        campaign_id,
+                    ),
+                )
+                conn.commit()
+
+            await loop.run_in_executor(None, _update_cache)
+
+    async def get_creative_performance_summary_single(
+        self,
+        creative_id: str,
+        days: int = 30,
+    ) -> dict:
+        """Get aggregated performance summary for a single creative.
+
+        Args:
+            creative_id: The creative ID.
+            days: Number of days to aggregate.
+
+        Returns:
+            Dictionary with aggregated metrics.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _query():
+                cursor = conn.execute(
+                    """
+                    SELECT
+                        SUM(impressions) as total_impressions,
+                        SUM(clicks) as total_clicks,
+                        SUM(spend_micros) as total_spend_micros,
+                        CASE WHEN SUM(impressions) > 0
+                             THEN CAST(SUM(spend_micros) * 1000.0 / SUM(impressions) AS INTEGER)
+                             ELSE NULL END as avg_cpm_micros,
+                        CASE WHEN SUM(clicks) > 0
+                             THEN CAST(SUM(spend_micros) * 1.0 / SUM(clicks) AS INTEGER)
+                             ELSE NULL END as avg_cpc_micros,
+                        CASE WHEN SUM(impressions) > 0
+                             THEN CAST(SUM(clicks) * 100.0 / SUM(impressions) AS REAL)
+                             ELSE NULL END as ctr_percent,
+                        COUNT(DISTINCT metric_date) as days_with_data,
+                        MIN(metric_date) as earliest_date,
+                        MAX(metric_date) as latest_date
+                    FROM rtb_daily
+                    WHERE creative_id = ? AND metric_date >= date('now', ?)
+                    """,
+                    (creative_id, f"-{days} days"),
+                )
+                row = cursor.fetchone()
+                if row:
+                    return dict(row)
+                return {}
+
+            return await loop.run_in_executor(None, _query) or {}
+
+    # =========================================================================
+    # HTML Thumbnail Processing
+    # =========================================================================
+
+    async def process_html_thumbnails(
+        self, limit: int = 100, force_retry: bool = False
+    ) -> dict:
+        """Process HTML creatives to extract thumbnail URLs.
+
+        Parses HTML snippets to find embedded image URLs and populates
+        the thumbnail_status table with the extracted URLs.
+
+        Args:
+            limit: Maximum number of creatives to process.
+            force_retry: If True, retry previously failed extractions.
+
+        Returns:
+            Dict with processing statistics.
+        """
+        from utils.html_thumbnail import extract_primary_image_url
+
+        pending = await self.get_html_creatives_pending_thumbnails(
+            limit=limit, force_retry_failed=force_retry
+        )
+
+        if not pending:
+            return {
+                "processed": 0,
+                "success": 0,
+                "failed": 0,
+                "no_image_found": 0,
+                "message": "No HTML creatives pending thumbnail extraction"
+            }
+
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _process_batch():
+                from datetime import datetime
+
+                success = 0
+                failed = 0
+                no_image = 0
+
+                for creative in pending:
+                    creative_id = creative["id"]
+                    raw_data = creative["raw_data"]
+
+                    try:
+                        if isinstance(raw_data, str):
+                            try:
+                                data = json.loads(raw_data)
+                                html_data = data.get("html", {})
+                                if isinstance(html_data, dict):
+                                    html_snippet = html_data.get("snippet", "")
+                                else:
+                                    html_snippet = ""
+                                if not html_snippet:
+                                    html_snippet = data.get("html_snippet", "") or data.get("snippet", "") or ""
+                            except json.JSONDecodeError:
+                                html_snippet = raw_data
+                        else:
+                            html_snippet = str(raw_data) if raw_data else ""
+
+                        image_url = extract_primary_image_url(html_snippet)
+
+                        if image_url:
+                            conn.execute("""
+                                INSERT INTO thumbnail_status
+                                (creative_id, status, thumbnail_url, created_at, updated_at)
+                                VALUES (?, 'success', ?, ?, ?)
+                                ON CONFLICT(creative_id) DO UPDATE SET
+                                    status = 'success',
+                                    thumbnail_url = excluded.thumbnail_url,
+                                    updated_at = excluded.updated_at
+                            """, (
+                                creative_id, image_url,
+                                datetime.utcnow().isoformat(),
+                                datetime.utcnow().isoformat()
+                            ))
+                            success += 1
+                        else:
+                            conn.execute("""
+                                INSERT INTO thumbnail_status
+                                (creative_id, status, error_reason, created_at, updated_at)
+                                VALUES (?, 'no_image', 'No image URL found in HTML snippet', ?, ?)
+                                ON CONFLICT(creative_id) DO UPDATE SET
+                                    status = 'no_image',
+                                    error_reason = 'No image URL found in HTML snippet',
+                                    updated_at = excluded.updated_at
+                            """, (
+                                creative_id,
+                                datetime.utcnow().isoformat(),
+                                datetime.utcnow().isoformat()
+                            ))
+                            no_image += 1
+
+                    except Exception as e:
+                        conn.execute("""
+                            INSERT INTO thumbnail_status
+                            (creative_id, status, error_reason, created_at, updated_at)
+                            VALUES (?, 'failed', ?, ?, ?)
+                            ON CONFLICT(creative_id) DO UPDATE SET
+                                status = 'failed',
+                                error_reason = excluded.error_reason,
+                                updated_at = excluded.updated_at
+                        """, (
+                            creative_id, str(e)[:500],
+                            datetime.utcnow().isoformat(),
+                            datetime.utcnow().isoformat()
+                        ))
+                        failed += 1
+
+                conn.commit()
+                return {
+                    "processed": len(pending),
+                    "success": success,
+                    "failed": failed,
+                    "no_image_found": no_image
+                }
+
+            return await loop.run_in_executor(None, _process_batch)
