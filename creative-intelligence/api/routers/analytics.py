@@ -32,6 +32,61 @@ router = APIRouter(tags=["Analytics"])
 QPS_DB_PATH = Path.home() / ".catscan" / "catscan.db"
 
 
+def get_current_bidder_id() -> Optional[str]:
+    """Get the current bidder_id from the most recently synced pretargeting config.
+
+    Returns the bidder_id that was most recently synced, which represents
+    the currently active account.
+    """
+    try:
+        conn = sqlite3.connect(str(QPS_DB_PATH))
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT bidder_id FROM pretargeting_configs
+            WHERE bidder_id IS NOT NULL
+            ORDER BY synced_at DESC
+            LIMIT 1
+        """)
+        row = cursor.fetchone()
+        conn.close()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+
+def get_valid_billing_ids() -> list[str]:
+    """Get list of billing_ids from pretargeting_configs table for current account.
+
+    This ensures we only query data for billing IDs that belong to the
+    currently configured account, preventing cross-account data mixing.
+
+    The function first identifies the current bidder_id (account), then
+    returns only billing_ids associated with that account.
+    """
+    try:
+        conn = sqlite3.connect(str(QPS_DB_PATH))
+        cursor = conn.cursor()
+
+        # Get the current bidder_id (most recently synced account)
+        current_bidder = get_current_bidder_id()
+
+        if current_bidder:
+            # Filter by the current account's bidder_id
+            cursor.execute(
+                "SELECT DISTINCT billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL AND bidder_id = ?",
+                (current_bidder,)
+            )
+        else:
+            # Fallback: return all billing_ids if no bidder_id found
+            cursor.execute("SELECT DISTINCT billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL")
+
+        billing_ids = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return billing_ids
+    except Exception:
+        return []
+
+
 # =============================================================================
 # Pydantic Models
 # =============================================================================
@@ -608,18 +663,35 @@ async def get_spend_stats(days: int = Query(7, ge=1, le=90)):
     Get overall spend statistics for the selected period.
 
     Returns total spend, impressions, and avg CPM from rtb_daily table.
+    Only includes data for billing_ids that belong to the current account.
     """
     try:
+        # Get valid billing IDs for current account to prevent cross-account data mixing
+        valid_billing_ids = get_valid_billing_ids()
+
         conn = sqlite3.connect(str(QPS_DB_PATH))
         cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT
-                COALESCE(SUM(impressions), 0) as total_impressions,
-                COALESCE(SUM(spend_micros), 0) as total_spend_micros
-            FROM rtb_daily
-            WHERE metric_date >= date('now', ?)
-        """, (f'-{days} days',))
+        if valid_billing_ids:
+            # Filter by valid billing IDs
+            placeholders = ",".join("?" * len(valid_billing_ids))
+            cursor.execute(f"""
+                SELECT
+                    COALESCE(SUM(impressions), 0) as total_impressions,
+                    COALESCE(SUM(spend_micros), 0) as total_spend_micros
+                FROM rtb_daily
+                WHERE metric_date >= date('now', ?)
+                  AND billing_id IN ({placeholders})
+            """, (f'-{days} days', *valid_billing_ids))
+        else:
+            # No pretargeting configs synced yet - return all data as fallback
+            cursor.execute("""
+                SELECT
+                    COALESCE(SUM(impressions), 0) as total_impressions,
+                    COALESCE(SUM(spend_micros), 0) as total_spend_micros
+                FROM rtb_daily
+                WHERE metric_date >= date('now', ?)
+            """, (f'-{days} days',))
 
         row = cursor.fetchone()
         conn.close()
@@ -723,29 +795,55 @@ async def get_config_performance(
     - Size-level performance within each config
     - Win rate vs waste percentages
     - Settings derived from the data (format, geos, platforms)
+
+    Only returns data for billing_ids that belong to the current account
+    (those synced in pretargeting_configs table).
     """
     db_path = str(QPS_DB_PATH)
 
     try:
+        # Get valid billing IDs for current account to prevent cross-account data mixing
+        valid_billing_ids = get_valid_billing_ids()
+
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
         # Query aggregated data by billing_id from rtb_daily
-        cursor.execute("""
-            SELECT
-                billing_id,
-                creative_size,
-                creative_format,
-                country,
-                platform,
-                SUM(reached_queries) as total_reached,
-                SUM(impressions) as total_impressions
-            FROM rtb_daily
-            WHERE metric_date >= date('now', ?)
-            GROUP BY billing_id, creative_size, creative_format, country, platform
-            ORDER BY total_reached DESC
-        """, (f'-{days} days',))
+        # Filter by valid billing_ids to prevent cross-account mixing
+        if valid_billing_ids:
+            placeholders = ",".join("?" * len(valid_billing_ids))
+            cursor.execute(f"""
+                SELECT
+                    billing_id,
+                    creative_size,
+                    creative_format,
+                    country,
+                    platform,
+                    SUM(reached_queries) as total_reached,
+                    SUM(impressions) as total_impressions
+                FROM rtb_daily
+                WHERE metric_date >= date('now', ?)
+                  AND billing_id IN ({placeholders})
+                GROUP BY billing_id, creative_size, creative_format, country, platform
+                ORDER BY total_reached DESC
+            """, (f'-{days} days', *valid_billing_ids))
+        else:
+            # No pretargeting configs synced yet - return all data as fallback
+            cursor.execute("""
+                SELECT
+                    billing_id,
+                    creative_size,
+                    creative_format,
+                    country,
+                    platform,
+                    SUM(reached_queries) as total_reached,
+                    SUM(impressions) as total_impressions
+                FROM rtb_daily
+                WHERE metric_date >= date('now', ?)
+                GROUP BY billing_id, creative_size, creative_format, country, platform
+                ORDER BY total_reached DESC
+            """, (f'-{days} days',))
 
         rows = cursor.fetchall()
         conn.close()
