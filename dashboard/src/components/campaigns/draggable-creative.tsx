@@ -155,12 +155,12 @@ export function DraggableCreative({
       {/* Popup - shows on hover or click */}
       {showTooltip && (
         <div
-          className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 min-w-[260px] bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl"
+          className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-[280px] max-w-[300px] bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Creative ID with copy button */}
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-medium text-sm select-all">#{creative.id}</span>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span className="font-medium text-sm select-all truncate flex-1 min-w-0">#{creative.id}</span>
             <button
               onClick={handleCopyId}
               className="p-1 hover:bg-gray-700 rounded transition-colors"

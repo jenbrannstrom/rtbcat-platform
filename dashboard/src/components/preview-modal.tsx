@@ -243,6 +243,10 @@ function VideoPreviewPlayer({ creative }: { creative: Creative }) {
 function HtmlPreviewFrame({ creative }: { creative: Creative }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  // Get declared dimensions from creative
+  const creativeWidth = creative.html?.width || creative.width || 300;
+  const creativeHeight = creative.html?.height || creative.height || 250;
+
   useEffect(() => {
     if (iframeRef.current && creative.html?.snippet) {
       const doc = iframeRef.current.contentDocument;
@@ -253,7 +257,24 @@ function HtmlPreviewFrame({ creative }: { creative: Creative }) {
           <html>
           <head>
             <style>
-              body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100%; background: #f3f4f6; }
+              * { box-sizing: border-box; }
+              html, body {
+                margin: 0;
+                padding: 0;
+                width: ${creativeWidth}px;
+                height: ${creativeHeight}px;
+                overflow: hidden;
+                background: #fff;
+              }
+              body {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+              }
+              img, video, canvas {
+                max-width: 100%;
+                max-height: 100%;
+              }
             </style>
           </head>
           <body>${creative.html.snippet}</body>
@@ -262,7 +283,7 @@ function HtmlPreviewFrame({ creative }: { creative: Creative }) {
         doc.close();
       }
     }
-  }, [creative.html?.snippet]);
+  }, [creative.html?.snippet, creativeWidth, creativeHeight]);
 
   if (!creative.html?.snippet) {
     return (
@@ -272,24 +293,31 @@ function HtmlPreviewFrame({ creative }: { creative: Creative }) {
     );
   }
 
-  const creativeWidth = creative.html.width || creative.width || 300;
-  const creativeHeight = creative.html.height || creative.height || 250;
   const maxWidth = 640;
   const maxHeight = 500;
   const scale = Math.min(1, maxWidth / creativeWidth, maxHeight / creativeHeight);
-  const width = Math.round(creativeWidth * scale);
-  const height = Math.round(creativeHeight * scale);
+  const displayWidth = Math.round(creativeWidth * scale);
+  const displayHeight = Math.round(creativeHeight * scale);
 
   return (
     <div className="flex flex-col items-center p-4 bg-gray-100">
-      <iframe
-        ref={iframeRef}
-        title={`Creative ${creative.id}`}
-        width={width}
-        height={height}
-        className="border border-gray-300 bg-white"
-        sandbox="allow-scripts allow-same-origin"
-      />
+      <div
+        className="border border-gray-300 bg-white overflow-hidden"
+        style={{ width: displayWidth, height: displayHeight }}
+      >
+        <iframe
+          ref={iframeRef}
+          title={`Creative ${creative.id}`}
+          width={creativeWidth}
+          height={creativeHeight}
+          className="border-0"
+          style={{
+            transform: scale < 1 ? `scale(${scale})` : undefined,
+            transformOrigin: 'top left',
+          }}
+          sandbox="allow-scripts allow-same-origin"
+        />
+      </div>
       <div className="mt-2 text-xs text-gray-500">
         {creativeWidth} × {creativeHeight}
         {scale < 1 && ` (scaled to ${Math.round(scale * 100)}%)`}
@@ -409,8 +437,8 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
         <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-gray-900 font-mono">#{creative.id}</h2>
-              <CopyButton text={creative.id} />
+              <h2 className="text-lg font-semibold text-gray-900 font-mono truncate max-w-[400px]" title={creative.id}>#{creative.id}</h2>
+              <CopyButton text={creative.id} className="flex-shrink-0" />
             </div>
             {googleUrl && (
               <a
@@ -534,11 +562,11 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                   Technical IDs
                 </h4>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">Creative ID</span>
-                    <div className="flex items-center gap-1">
-                      <span className="font-mono text-xs">{creative.id}</span>
-                      <CopyButton text={creative.id} />
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-gray-500 flex-shrink-0">Creative ID</span>
+                    <div className="flex items-center gap-1 min-w-0">
+                      <span className="font-mono text-xs truncate" title={creative.id}>{creative.id}</span>
+                      <CopyButton text={creative.id} className="flex-shrink-0" />
                     </div>
                   </div>
                   {creative.account_id && (
