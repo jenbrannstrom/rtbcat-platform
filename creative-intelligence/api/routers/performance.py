@@ -12,6 +12,7 @@ import logging
 import os
 import sqlite3
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -42,6 +43,26 @@ router = APIRouter(prefix="/performance", tags=["Performance"])
 class BatchImportRequest(BaseModel):
     """Request for batch import (array of rows)."""
     rows: list[dict]
+    batch_id: Optional[str] = None  # Session ID to track across batches
+    is_final: bool = False  # True if this is the last batch
+    filename: Optional[str] = None  # Original filename (sent with final batch)
+    file_size_bytes: Optional[int] = None  # File size (sent with final batch)
+
+
+class FinalizeImportRequest(BaseModel):
+    """Request to finalize a chunked import and record history."""
+    batch_id: str
+    filename: Optional[str] = None
+    file_size_bytes: int = 0
+    rows_read: int = 0
+    rows_imported: int = 0
+    rows_skipped: int = 0
+    rows_duplicate: int = 0
+    date_range_start: Optional[str] = None
+    date_range_end: Optional[str] = None
+    total_spend_usd: float = 0
+    total_impressions: int = 0
+    total_reached: int = 0
 
 
 @router.post("/import", response_model=ImportPerformanceResponse)
@@ -541,13 +562,15 @@ async def import_performance_batch(
                 device_type = row.get("device_type") or row.get("platform") or None
                 placement = row.get("placement") or None
                 campaign_id = row.get("campaign_id") or None
+                billing_id = row.get("billing_id") or None
 
                 cursor.execute("""
                     INSERT OR REPLACE INTO performance_metrics (
                         creative_id, campaign_id, metric_date,
                         impressions, clicks, spend_micros,
-                        geography, device_type, placement, reached_queries
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        geography, device_type, placement, reached_queries,
+                        billing_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     row.get("creative_id"),
                     campaign_id,
@@ -559,6 +582,7 @@ async def import_performance_batch(
                     device_type,
                     placement,
                     reached,
+                    billing_id,
                 ))
 
                 if cursor.rowcount > 0:
@@ -588,3 +612,80 @@ async def import_performance_batch(
     except Exception as e:
         logger.error(f"Batch import failed: {e}")
         raise HTTPException(status_code=500, detail=f"Batch import failed: {str(e)}")
+
+
+@router.post("/import/finalize")
+async def finalize_import(request: FinalizeImportRequest):
+    """
+    Finalize a chunked import session and record in import_history.
+
+    Called by the frontend after all batches have been sent.
+    Records the import metadata for tracking/calendar display.
+    """
+    try:
+        db_path = Path.home() / ".catscan" / "catscan.db"
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+
+        # Record in import_history
+        cursor.execute("""
+            INSERT INTO import_history (
+                batch_id, filename, rows_read, rows_imported, rows_skipped, rows_duplicate,
+                date_range_start, date_range_end, total_reached, total_impressions,
+                total_spend_usd, status, file_size_bytes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            request.batch_id,
+            request.filename,
+            request.rows_read,
+            request.rows_imported,
+            request.rows_skipped,
+            request.rows_duplicate,
+            request.date_range_start,
+            request.date_range_end,
+            request.total_reached,
+            request.total_impressions,
+            request.total_spend_usd,
+            "complete",
+            request.file_size_bytes,
+        ))
+
+        # Update daily upload summary
+        import_date = cursor.execute("SELECT date('now')").fetchone()[0]
+
+        cursor.execute("""
+            INSERT INTO daily_upload_summary (
+                upload_date, total_uploads, successful_uploads, failed_uploads,
+                total_rows_written, total_file_size_bytes, min_rows, max_rows, avg_rows_per_upload
+            ) VALUES (?, 1, 1, 0, ?, ?, ?, ?, ?)
+            ON CONFLICT(upload_date) DO UPDATE SET
+                total_uploads = total_uploads + 1,
+                successful_uploads = successful_uploads + 1,
+                total_rows_written = total_rows_written + excluded.total_rows_written,
+                total_file_size_bytes = total_file_size_bytes + excluded.total_file_size_bytes,
+                min_rows = MIN(min_rows, excluded.min_rows),
+                max_rows = MAX(max_rows, excluded.max_rows),
+                avg_rows_per_upload = (total_rows_written + excluded.total_rows_written) / (total_uploads + 1)
+        """, (
+            import_date,
+            request.rows_imported,
+            request.file_size_bytes,
+            request.rows_imported,
+            request.rows_imported,
+            request.rows_imported,
+        ))
+
+        conn.commit()
+        conn.close()
+
+        logger.info(f"Import finalized: batch_id={request.batch_id}, rows={request.rows_imported}")
+
+        return {
+            "status": "recorded",
+            "batch_id": request.batch_id,
+            "rows_imported": request.rows_imported,
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to finalize import: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to finalize import: {str(e)}")

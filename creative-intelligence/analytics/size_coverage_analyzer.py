@@ -40,9 +40,14 @@ class SizeCoverageAnalyzer:
     def __init__(self, db_path: str):
         self.db_path = db_path
 
-    def analyze(self, days: int = 7) -> SizeCoverageSummary:
+    def analyze(self, days: int = 7, billing_id: Optional[str] = None) -> SizeCoverageSummary:
         """
         Compare sizes in traffic against creative inventory.
+
+        Args:
+            days: Number of days to analyze.
+            billing_id: Optional billing account ID to filter by. If provided,
+                       only analyzes traffic for that specific account.
 
         Returns:
             Summary of size coverage with specific gaps.
@@ -92,6 +97,14 @@ class SizeCoverageAnalyzer:
         # Get traffic by size and format from performance_metrics
         # Since reached_queries is empty, use impressions as proxy
         traffic_by_size = {}
+
+        # Build query with optional billing_id filter
+        billing_filter = ""
+        params = []
+        if billing_id:
+            billing_filter = " AND pm.billing_id = ?"
+            params.append(billing_id)
+
         cursor = conn.execute(f"""
             SELECT
                 COALESCE(c.canonical_size, '(any)') as size,
@@ -102,9 +115,10 @@ class SizeCoverageAnalyzer:
             FROM performance_metrics pm
             JOIN creatives c ON pm.creative_id = c.id
             WHERE pm.metric_date >= date('now', '-{days} days')
+            {billing_filter}
             GROUP BY COALESCE(c.canonical_size, '(any)'), c.format
             ORDER BY total_impressions DESC
-        """)
+        """, params)
 
         for row in cursor:
             key = f"{row['size']}|{row['format']}"

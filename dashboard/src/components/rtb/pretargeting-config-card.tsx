@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { setPretargetingName } from '@/lib/api';
 import { ChevronRight, Pencil, Check, X, AlertTriangle, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SnapshotComparisonPanel } from './snapshot-comparison-panel';
 
 export interface PretargetingConfig {
   billing_id: string;
@@ -305,6 +306,14 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                 {config.waste_rate.toFixed(1)}%
               </div>
             </div>
+          </div>
+
+          {/* A/B Comparison Panel */}
+          <div className="mt-4">
+            <SnapshotComparisonPanel
+              billing_id={config.billing_id}
+              configName={config.name}
+            />
           </div>
         </div>
       )}

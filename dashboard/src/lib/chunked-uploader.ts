@@ -55,6 +55,7 @@ export interface ChunkedUploaderOptions {
   onProgress?: (progress: UploadProgress) => void;
   signal?: AbortSignal;
   columnMappings?: Record<string, string>;
+  filename?: string;  // Original filename for tracking
 }
 
 // Column name variations for auto-detection
@@ -220,13 +221,59 @@ function estimateRowCount(fileSize: number): number {
 }
 
 /**
+ * Generate a unique batch ID
+ */
+function generateBatchId(): string {
+  return `batch-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+/**
+ * Finalize import and record in history
+ */
+async function finalizeImport(params: {
+  batchId: string;
+  filename: string;
+  fileSize: number;
+  rowsRead: number;
+  rowsImported: number;
+  rowsSkipped: number;
+  dateRangeStart?: string;
+  dateRangeEnd?: string;
+  totalSpend: number;
+}): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/performance/import/finalize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        batch_id: params.batchId,
+        filename: params.filename,
+        file_size_bytes: params.fileSize,
+        rows_read: params.rowsRead,
+        rows_imported: params.rowsImported,
+        rows_skipped: params.rowsSkipped,
+        rows_duplicate: 0,
+        date_range_start: params.dateRangeStart,
+        date_range_end: params.dateRangeEnd,
+        total_spend_usd: params.totalSpend,
+        total_impressions: 0,
+        total_reached: 0,
+      }),
+    });
+  } catch (err) {
+    console.warn("Failed to finalize import:", err);
+  }
+}
+
+/**
  * Upload large CSV file using chunked streaming
  */
 export async function uploadChunkedCSV(
   file: File,
   options: ChunkedUploaderOptions = {}
 ): Promise<UploadResult> {
-  const { onProgress, signal } = options;
+  const { onProgress, signal, filename } = options;
+  const batchId = generateBatchId();
 
   let rowsProcessed = 0;
   let rowsImported = 0;
@@ -379,6 +426,19 @@ export async function uploadChunkedCSV(
               });
             }
           }
+
+          // Finalize import and record in history
+          await finalizeImport({
+            batchId,
+            filename: filename || file.name,
+            fileSize: file.size,
+            rowsRead: rowsProcessed,
+            rowsImported,
+            rowsSkipped,
+            dateRangeStart: minDate,
+            dateRangeEnd: maxDate,
+            totalSpend,
+          });
 
           // Report completion
           if (onProgress) {
