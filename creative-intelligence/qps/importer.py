@@ -3,6 +3,11 @@
 Imports Authorized Buyers CSV exports. REQUIRES specific columns
 to enable all RTBcat analysis features.
 
+Multi-Account Support:
+    The importer tracks which account (bidder_id) each import belongs to.
+    If bidder_id is not provided, it will be looked up from the billing_id
+    using the pretargeting_configs table.
+
 Usage:
     from qps.importer import import_csv, validate_csv
 
@@ -12,7 +17,10 @@ Usage:
         print(validation.error_message)
         return
 
-    # Import
+    # Import with explicit account association
+    result = import_csv("/path/to/file.csv", bidder_id="12345678")
+
+    # Or let it auto-detect from billing_id
     result = import_csv("/path/to/file.csv")
 """
 
@@ -181,6 +189,10 @@ class ImportResult:
     batch_id: str = ""
     columns_imported: List[str] = field(default_factory=list)
 
+    # Account association (multi-account support)
+    bidder_id: Optional[str] = None  # The account this import belongs to
+    bidder_id_source: str = ""  # "explicit", "inferred", "unknown"
+
     # Errors
     errors: List[str] = field(default_factory=list)
 
@@ -334,22 +346,40 @@ def compute_row_hash(row_data: Dict) -> str:
 # IMPORT
 # ============================================================================
 
-def import_csv(csv_path: str, db_path: str = DB_PATH) -> ImportResult:
+def import_csv(
+    csv_path: str,
+    db_path: str = DB_PATH,
+    bidder_id: Optional[str] = None,
+) -> ImportResult:
     """
     Import a validated CSV file into rtb_daily table.
 
     IMPORTANT: Call validate_csv() first! This function assumes
     the CSV has already been validated.
 
+    Multi-Account Support:
+        If bidder_id is provided, all rows will be associated with that account.
+        If not provided, the importer will try to infer it from the billing_id
+        by looking up the pretargeting_configs table.
+
     Args:
         csv_path: Path to CSV file
         db_path: Database path
+        bidder_id: Optional account ID to associate with this import.
+                   If not provided, will be inferred from billing_id.
 
     Returns:
         ImportResult with statistics
     """
     result = ImportResult()
     result.batch_id = str(uuid.uuid4())[:8]
+
+    # Track bidder_id source
+    if bidder_id:
+        result.bidder_id = bidder_id
+        result.bidder_id_source = "explicit"
+    else:
+        result.bidder_id_source = "unknown"  # Will update if inferred
 
     # Validate first
     validation = validate_csv(csv_path)
@@ -360,6 +390,14 @@ def import_csv(csv_path: str, db_path: str = DB_PATH) -> ImportResult:
 
     column_map = validation.columns_mapped
     result.columns_imported = list(column_map.keys())
+
+    # Import account mapper for bidder_id lookup
+    try:
+        from qps.account_mapper import get_account_mapper
+        account_mapper = get_account_mapper(db_path)
+    except ImportError:
+        account_mapper = None
+        logger.warning("AccountMapper not available, bidder_id inference disabled")
 
     # Connect to database
     conn = sqlite3.connect(db_path)
@@ -481,7 +519,16 @@ def import_csv(csv_path: str, db_path: str = DB_PATH) -> ImportResult:
                     result.total_impressions += impressions
                     result.total_spend_usd += spend_raw
 
-                    # Add to batch
+                    # Determine bidder_id for this row
+                    row_bidder_id = result.bidder_id  # Use explicit if provided
+                    if not row_bidder_id and account_mapper and billing_id:
+                        # Try to infer from billing_id
+                        row_bidder_id = account_mapper.get_bidder_id(billing_id)
+                        if row_bidder_id and result.bidder_id_source == "unknown":
+                            result.bidder_id = row_bidder_id
+                            result.bidder_id_source = "inferred"
+
+                    # Add to batch (includes bidder_id)
                     batch.append((
                         metric_date, creative_id, billing_id,
                         creative_size, creative_format, country, platform, environment,
@@ -493,7 +540,8 @@ def import_csv(csv_path: str, db_path: str = DB_PATH) -> ImportResult:
                         video_third_quartile, video_completions, vast_errors, engaged_views,
                         active_view_measurable, active_view_viewable,
                         gma_sdk, buyer_sdk,
-                        row_hash, result.batch_id
+                        row_hash, result.batch_id,
+                        row_bidder_id  # NEW: bidder_id for multi-account support
                     ))
 
                     # Insert batch
@@ -566,10 +614,11 @@ def _insert_batch(cursor: sqlite3.Cursor, batch: List[Tuple]) -> Tuple[int, int]
                     video_third_quartile, video_completions, vast_errors, engaged_views,
                     active_view_measurable, active_view_viewable,
                     gma_sdk, buyer_sdk,
-                    row_hash, import_batch_id
+                    row_hash, import_batch_id,
+                    bidder_id
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
             """, row)
             inserted += 1
@@ -582,17 +631,22 @@ def _insert_batch(cursor: sqlite3.Cursor, batch: List[Tuple]) -> Tuple[int, int]
 
 def _record_import_history(cursor, result: ImportResult, csv_path: str, validation: ValidationResult):
     """Record import in history table."""
+    import json
+
     try:
         # Get file size
         file_size_bytes = os.path.getsize(csv_path) if os.path.exists(csv_path) else 0
+
+        # Serialize billing_ids as JSON
+        billing_ids_json = json.dumps(result.unique_billing_ids) if result.unique_billing_ids else None
 
         cursor.execute("""
             INSERT INTO import_history (
                 batch_id, filename, rows_read, rows_imported, rows_skipped, rows_duplicate,
                 date_range_start, date_range_end, columns_found, columns_missing,
                 total_reached, total_impressions, total_spend_usd, status, error_message,
-                file_size_bytes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                file_size_bytes, bidder_id, billing_ids_found
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             result.batch_id,
             os.path.basename(csv_path),
@@ -609,11 +663,17 @@ def _record_import_history(cursor, result: ImportResult, csv_path: str, validati
             result.total_spend_usd,
             "complete" if result.success else "failed",
             result.error_message if result.error_message else None,
-            file_size_bytes
+            file_size_bytes,
+            result.bidder_id,  # NEW: account association
+            billing_ids_json,  # NEW: all billing IDs found in this import
         ))
 
         # Update daily upload summary
         _update_daily_upload_summary(cursor, result, file_size_bytes)
+
+        # Update per-account daily summary if we have bidder_id
+        if result.bidder_id:
+            _update_account_daily_upload_summary(cursor, result, file_size_bytes)
 
     except Exception as e:
         logger.warning(f"Failed to record import history: {e}")
@@ -753,6 +813,72 @@ def _check_upload_anomalies(cursor, current_date: str):
 
     except Exception as e:
         logger.warning(f"Failed to check upload anomalies: {e}")
+
+
+def _update_account_daily_upload_summary(cursor, result: ImportResult, file_size_bytes: int):
+    """Update the per-account daily upload summary table.
+
+    This tracks upload statistics per account (bidder_id) per day,
+    enabling multi-account upload monitoring.
+    """
+    if not result.bidder_id:
+        return
+
+    try:
+        import_date = datetime.now().strftime("%Y-%m-%d")
+        is_success = 1 if result.success else 0
+        is_failure = 0 if result.success else 1
+
+        # Check if entry exists for today + this account
+        cursor.execute(
+            """SELECT id, total_uploads, successful_uploads, failed_uploads,
+               total_rows_written, total_file_size_bytes, min_rows, max_rows
+               FROM account_daily_upload_summary
+               WHERE upload_date = ? AND bidder_id = ?""",
+            (import_date, result.bidder_id)
+        )
+        existing = cursor.fetchone()
+
+        if existing:
+            # Update existing entry
+            new_total = existing[1] + 1
+            new_success = existing[2] + is_success
+            new_failed = existing[3] + is_failure
+            new_rows = existing[4] + result.rows_imported
+            new_size = existing[5] + file_size_bytes
+            new_avg = new_rows / new_total if new_total > 0 else 0
+
+            # Update min/max rows
+            min_rows = min(existing[6], result.rows_imported) if existing[6] is not None else result.rows_imported
+            max_rows = max(existing[7], result.rows_imported) if existing[7] is not None else result.rows_imported
+
+            cursor.execute("""
+                UPDATE account_daily_upload_summary SET
+                    total_uploads = ?,
+                    successful_uploads = ?,
+                    failed_uploads = ?,
+                    total_rows_written = ?,
+                    total_file_size_bytes = ?,
+                    avg_rows_per_upload = ?,
+                    min_rows = ?,
+                    max_rows = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE upload_date = ? AND bidder_id = ?
+            """, (new_total, new_success, new_failed, new_rows, new_size,
+                  new_avg, min_rows, max_rows, import_date, result.bidder_id))
+        else:
+            # Insert new entry for this account + date
+            cursor.execute("""
+                INSERT INTO account_daily_upload_summary (
+                    upload_date, bidder_id, total_uploads, successful_uploads, failed_uploads,
+                    total_rows_written, total_file_size_bytes, avg_rows_per_upload,
+                    min_rows, max_rows
+                ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+            """, (import_date, result.bidder_id, is_success, is_failure, result.rows_imported,
+                  file_size_bytes, result.rows_imported, result.rows_imported, result.rows_imported))
+
+    except Exception as e:
+        logger.warning(f"Failed to update account daily upload summary: {e}")
 
 
 # ============================================================================
