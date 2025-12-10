@@ -22,3 +22,7 @@ Thumbs.db
 # Data files (user-specific RTB exports)
 docs/*.csv
 data/csv-reports/
+
+# Database files (local user data)
+*.db
+!*.db.example
