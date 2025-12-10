@@ -174,14 +174,14 @@ export function CreativeCard({ creative, onPreview, performance, sortField }: Cr
                 <div className="text-base font-medium text-gray-900">
                   {hasData ? `${formatSpend(performance?.total_spend_micros)} spent` : "No data"}
                 </div>
-                <div className="text-sm text-gray-500 font-mono truncate">
+                <div className="text-sm text-gray-500 font-mono truncate" title={creative.id}>
                   #{creative.id}
                 </div>
               </>
             ) : (
               <>
                 {/* ID first (default) */}
-                <div className="text-sm font-medium text-gray-900 font-mono truncate">
+                <div className="text-sm font-medium text-gray-900 font-mono truncate" title={creative.id}>
                   #{creative.id}
                 </div>
                 <div className={cn(
