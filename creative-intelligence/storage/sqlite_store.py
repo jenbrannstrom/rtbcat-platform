@@ -643,8 +643,29 @@ class SQLiteStore:
         )""",
         "CREATE INDEX IF NOT EXISTS idx_pretargeting_bidder ON pretargeting_configs(bidder_id)",
         "CREATE INDEX IF NOT EXISTS idx_pretargeting_billing ON pretargeting_configs(billing_id)",
-        # Phase 26: Enhanced upload tracking - add file_size_bytes to import_history
-        "ALTER TABLE import_history ADD COLUMN file_size_bytes INTEGER DEFAULT 0",
+        # Phase 26: Import history table for tracking CSV uploads
+        """CREATE TABLE IF NOT EXISTS import_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id TEXT NOT NULL UNIQUE,
+            filename TEXT,
+            imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            rows_read INTEGER DEFAULT 0,
+            rows_imported INTEGER DEFAULT 0,
+            rows_skipped INTEGER DEFAULT 0,
+            rows_duplicate INTEGER DEFAULT 0,
+            date_range_start DATE,
+            date_range_end DATE,
+            columns_found TEXT,
+            columns_missing TEXT,
+            total_reached INTEGER DEFAULT 0,
+            total_impressions INTEGER DEFAULT 0,
+            total_spend_usd REAL DEFAULT 0,
+            status TEXT DEFAULT 'complete',
+            error_message TEXT,
+            file_size_bytes INTEGER DEFAULT 0
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_import_history_batch ON import_history(batch_id)",
+        "CREATE INDEX IF NOT EXISTS idx_import_history_date ON import_history(imported_at DESC)",
         # Phase 26: Daily upload summary table for upload tracking UI
         """CREATE TABLE IF NOT EXISTS daily_upload_summary (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
