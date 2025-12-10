@@ -339,24 +339,43 @@ async def sync_pretargeting_configs(
 
 @router.get("/settings/pretargeting", response_model=list[PretargetingConfigResponse])
 async def get_pretargeting_configs(
+    config: ConfigManager = Depends(get_config),
     store: SQLiteStore = Depends(get_store),
 ):
-    """Get stored pretargeting configs.
+    """Get stored pretargeting configs for the current account.
 
-    Returns all pretargeting configurations that have been synced from the Google API.
+    Returns pretargeting configurations that have been synced from the Google API
+    for the currently configured account (bidder_id). This prevents cross-account
+    data mixing when multiple accounts have been synced.
+
     Includes user-defined names if set.
     """
     try:
+        # Get the current account's bidder_id from config
+        app_config = config.load()
+        current_bidder_id = app_config.authorized_buyers.account_id if app_config.authorized_buyers else None
+
         async with store._connection() as conn:
             import asyncio
             loop = asyncio.get_event_loop()
 
-            rows = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    "SELECT * FROM pretargeting_configs ORDER BY billing_id"
-                ).fetchall(),
-            )
+            if current_bidder_id:
+                # Filter by current account's bidder_id
+                rows = await loop.run_in_executor(
+                    None,
+                    lambda: conn.execute(
+                        "SELECT * FROM pretargeting_configs WHERE bidder_id = ? ORDER BY billing_id",
+                        (current_bidder_id,)
+                    ).fetchall(),
+                )
+            else:
+                # Fallback: return all configs if no account configured
+                rows = await loop.run_in_executor(
+                    None,
+                    lambda: conn.execute(
+                        "SELECT * FROM pretargeting_configs ORDER BY billing_id"
+                    ).fetchall(),
+                )
 
         results = []
         for row in rows:
