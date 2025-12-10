@@ -1,8 +1,8 @@
 'use client';
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getRTBEndpoints, syncRTBEndpoints } from '@/lib/api';
-import { RefreshCw, Server, AlertTriangle, Globe } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { getRTBEndpoints } from '@/lib/api';
+import { Server, AlertTriangle, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // Helper to format trading location for display
@@ -27,18 +27,9 @@ function formatQPS(qps: number | null): string {
 }
 
 export function AccountEndpointsHeader() {
-  const queryClient = useQueryClient();
-
   const { data, isLoading, error } = useQuery({
     queryKey: ['rtb-endpoints'],
     queryFn: getRTBEndpoints,
-  });
-
-  const syncMutation = useMutation({
-    mutationFn: syncRTBEndpoints,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rtb-endpoints'] });
-    },
   });
 
   // Loading skeleton
@@ -91,22 +82,9 @@ export function AccountEndpointsHeader() {
           <div className="flex-1">
             <h3 className="font-medium text-yellow-800">No RTB Endpoints Configured</h3>
             <p className="text-sm text-yellow-700 mt-1">
-              No RTB endpoints have been synced yet. Click "Sync" to fetch your endpoint
-              configuration from Google Authorized Buyers.
+              RTB endpoints will be synced automatically when you configure your service account credentials.
             </p>
           </div>
-          <button
-            onClick={() => syncMutation.mutate()}
-            disabled={syncMutation.isPending}
-            className={cn(
-              'px-3 py-1.5 text-sm font-medium rounded-md flex items-center gap-2',
-              'bg-yellow-600 text-white hover:bg-yellow-700',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
-            )}
-          >
-            <RefreshCw className={cn('h-4 w-4', syncMutation.isPending && 'animate-spin')} />
-            {syncMutation.isPending ? 'Syncing...' : 'Sync'}
-          </button>
         </div>
       </div>
     );
@@ -131,18 +109,6 @@ export function AccountEndpointsHeader() {
             </p>
           )}
         </div>
-        <button
-          onClick={() => syncMutation.mutate()}
-          disabled={syncMutation.isPending}
-          className={cn(
-            'px-3 py-1.5 text-sm font-medium rounded-md flex items-center gap-2',
-            'bg-gray-100 text-gray-700 hover:bg-gray-200',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
-          )}
-        >
-          <RefreshCw className={cn('h-4 w-4', syncMutation.isPending && 'animate-spin')} />
-          {syncMutation.isPending ? 'Syncing...' : 'Sync'}
-        </button>
       </div>
 
       <div className="flex gap-6">

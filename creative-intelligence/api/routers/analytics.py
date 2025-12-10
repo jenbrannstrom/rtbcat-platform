@@ -471,18 +471,24 @@ async def generate_mock_traffic_endpoint(
 # =============================================================================
 
 @router.get("/analytics/size-coverage", tags=["QPS Analytics"])
-async def get_size_coverage(days: int = Query(7, ge=1, le=90)):
+async def get_size_coverage(
+    days: int = Query(7, ge=1, le=90),
+    billing_id: Optional[str] = Query(None, description="Filter by billing account ID (pretargeting config)")
+):
     """
     Analyze size coverage gaps.
 
     Returns sizes receiving traffic but missing creatives.
     This is the core Cat-Scan analysis for identifying QPS waste.
+
+    Optional: Filter by billing_id to analyze a specific pretargeting config.
     """
     try:
         analyzer = SizeCoverageAnalyzer(str(QPS_DB_PATH))
-        summary = analyzer.analyze(days)
+        summary = analyzer.analyze(days, billing_id=billing_id)
         return {
             "period_days": days,
+            "billing_id": billing_id,  # Include filter in response
             "total_sizes_in_traffic": summary.total_sizes_in_traffic,
             "sizes_with_creatives": summary.sizes_with_creatives,
             "sizes_without_creatives": summary.sizes_without_creatives,
