@@ -156,7 +156,7 @@ async def get_import_history(
                 None,
                 lambda: conn.execute(
                     """SELECT * FROM import_history
-                    ORDER BY created_at DESC
+                    ORDER BY imported_at DESC
                     LIMIT ? OFFSET ?""",
                     (limit, offset),
                 ).fetchall(),
@@ -171,7 +171,7 @@ async def get_import_history(
                 ImportHistoryResponse(
                     batch_id=row["batch_id"],
                     filename=row["filename"],
-                    imported_at=row["created_at"],
+                    imported_at=row["imported_at"],
                     rows_read=row["rows_read"] or 0,
                     rows_imported=row["rows_imported"] or 0,
                     rows_skipped=row["rows_skipped"] or 0,
