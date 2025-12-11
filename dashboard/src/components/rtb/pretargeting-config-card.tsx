@@ -3,9 +3,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { setPretargetingName } from '@/lib/api';
-import { ChevronRight, Pencil, Check, X, AlertTriangle, AlertCircle } from 'lucide-react';
+import { ChevronRight, Pencil, Check, X, AlertTriangle, AlertCircle, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SnapshotComparisonPanel } from './snapshot-comparison-panel';
+import { PretargetingSettingsEditor } from './pretargeting-settings-editor';
 
 export interface PretargetingConfig {
   billing_id: string;
@@ -77,6 +78,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   const handleToggle = onToggleExpand || (() => setInternalExpanded(!internalExpanded));
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(config.name);
+  const [showSettingsEditor, setShowSettingsEditor] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -257,13 +259,41 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
       {/* Expanded content */}
       {expanded && (
         <div className="px-4 pb-4 pt-1 border-t bg-gray-50/50">
-          {/* Settings pills */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            <SettingPill label="Geos" values={config.included_geos} max={5} />
-            <SettingPill label="Formats" values={config.formats} />
-            <SettingPill label="Platforms" values={config.platforms} />
-            <SettingPill label="Sizes" values={config.sizes} max={4} />
+          {/* Settings pills with Edit button */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-wrap gap-2">
+              <SettingPill label="Geos" values={config.included_geos} max={5} />
+              <SettingPill label="Formats" values={config.formats} />
+              <SettingPill label="Platforms" values={config.platforms} />
+              <SettingPill label="Sizes" values={config.sizes} max={4} />
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowSettingsEditor(!showSettingsEditor);
+              }}
+              className={cn(
+                'flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors',
+                showSettingsEditor
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              )}
+            >
+              <Settings className="h-3 w-3" />
+              {showSettingsEditor ? 'Hide Settings' : 'Edit Settings'}
+            </button>
           </div>
+
+          {/* Settings Editor */}
+          {showSettingsEditor && (
+            <div className="mb-4 -mx-4 border-y">
+              <PretargetingSettingsEditor
+                billing_id={config.billing_id}
+                configName={config.name}
+                onClose={() => setShowSettingsEditor(false)}
+              />
+            </div>
+          )}
 
           {/* Detailed metrics */}
           <div className="grid grid-cols-4 gap-4">
