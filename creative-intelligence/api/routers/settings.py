@@ -13,8 +13,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from config import ConfigManager
-from storage import SQLiteStore
-from api.dependencies import get_store, get_config
+from storage.database import db_query, db_query_one, db_execute, db_insert_returning_id, db_transaction_async
+from api.dependencies import get_config
 from collectors import EndpointsClient, PretargetingClient
 
 logger = logging.getLogger(__name__)
@@ -101,7 +101,6 @@ class PretargetingHistoryResponse(BaseModel):
 @router.post("/settings/endpoints/sync", response_model=SyncEndpointsResponse)
 async def sync_rtb_endpoints(
     config: ConfigManager = Depends(get_config),
-    store: SQLiteStore = Depends(get_store),
 ):
     """Sync RTB endpoints from Google Authorized Buyers API.
 
@@ -138,31 +137,23 @@ async def sync_rtb_endpoints(
         )
         endpoints = await client.list_endpoints()
 
-        # Store endpoints in database
-        async with store._connection() as conn:
-            import asyncio
-            loop = asyncio.get_event_loop()
-
-            for ep in endpoints:
-                await loop.run_in_executor(
-                    None,
-                    lambda ep=ep: conn.execute(
-                        """
-                        INSERT OR REPLACE INTO rtb_endpoints
-                        (bidder_id, endpoint_id, url, maximum_qps, trading_location, bid_protocol, synced_at)
-                        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                        """,
-                        (
-                            account_id,
-                            ep["endpointId"],
-                            ep["url"],
-                            ep.get("maximumQps"),
-                            ep.get("tradingLocation"),
-                            ep.get("bidProtocol"),
-                        ),
-                    ),
-                )
-            await loop.run_in_executor(None, conn.commit)
+        # Store endpoints in database using new db module
+        for ep in endpoints:
+            await db_execute(
+                """
+                INSERT OR REPLACE INTO rtb_endpoints
+                (bidder_id, endpoint_id, url, maximum_qps, trading_location, bid_protocol, synced_at)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (
+                    account_id,
+                    ep["endpointId"],
+                    ep["url"],
+                    ep.get("maximumQps"),
+                    ep.get("tradingLocation"),
+                    ep.get("bidProtocol"),
+                ),
+            )
 
         return SyncEndpointsResponse(
             status="success",
@@ -178,7 +169,6 @@ async def sync_rtb_endpoints(
 @router.get("/settings/endpoints", response_model=RTBEndpointsResponse)
 async def get_rtb_endpoints(
     config: ConfigManager = Depends(get_config),
-    store: SQLiteStore = Depends(get_store),
 ):
     """Get stored RTB endpoints with aggregated QPS data.
 
@@ -196,16 +186,9 @@ async def get_rtb_endpoints(
         except Exception:
             pass
 
-        async with store._connection() as conn:
-            import asyncio
-            loop = asyncio.get_event_loop()
-
-            rows = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    "SELECT * FROM rtb_endpoints ORDER BY trading_location, endpoint_id"
-                ).fetchall(),
-            )
+        rows = await db_query(
+            "SELECT * FROM rtb_endpoints ORDER BY trading_location, endpoint_id"
+        )
 
         endpoints = []
         total_qps = 0
@@ -245,7 +228,6 @@ async def get_rtb_endpoints(
 @router.post("/settings/pretargeting/sync", response_model=SyncPretargetingResponse)
 async def sync_pretargeting_configs(
     config: ConfigManager = Depends(get_config),
-    store: SQLiteStore = Depends(get_store),
 ):
     """Sync pretargeting configs from Google Authorized Buyers API.
 
@@ -282,49 +264,41 @@ async def sync_pretargeting_configs(
         )
         configs = await client.fetch_all_pretargeting_configs()
 
-        # Store configs in database
-        async with store._connection() as conn:
-            import asyncio
-            loop = asyncio.get_event_loop()
+        # Store configs in database using new db module
+        for cfg in configs:
+            # Extract sizes as strings
+            sizes = []
+            for dim in cfg.get("includedCreativeDimensions", []):
+                if dim.get("width") and dim.get("height"):
+                    sizes.append(f"{dim['width']}x{dim['height']}")
 
-            for cfg in configs:
-                # Extract sizes as strings
-                sizes = []
-                for dim in cfg.get("includedCreativeDimensions", []):
-                    if dim.get("width") and dim.get("height"):
-                        sizes.append(f"{dim['width']}x{dim['height']}")
+            # Extract geo IDs
+            geo_targeting = cfg.get("geoTargeting", {}) or {}
+            included_geos = geo_targeting.get("includedIds", [])
+            excluded_geos = geo_targeting.get("excludedIds", [])
 
-                # Extract geo IDs
-                geo_targeting = cfg.get("geoTargeting", {}) or {}
-                included_geos = geo_targeting.get("includedIds", [])
-                excluded_geos = geo_targeting.get("excludedIds", [])
-
-                await loop.run_in_executor(
-                    None,
-                    lambda cfg=cfg, sizes=sizes, included_geos=included_geos, excluded_geos=excluded_geos: conn.execute(
-                        """
-                        INSERT OR REPLACE INTO pretargeting_configs
-                        (bidder_id, config_id, billing_id, display_name, state,
-                         included_formats, included_platforms, included_sizes,
-                         included_geos, excluded_geos, raw_config, synced_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                        """,
-                        (
-                            account_id,
-                            cfg["configId"],
-                            cfg.get("billingId"),
-                            cfg.get("displayName"),
-                            cfg.get("state", "ACTIVE"),
-                            json.dumps(cfg.get("includedFormats", [])),
-                            json.dumps(cfg.get("includedPlatforms", [])),
-                            json.dumps(sizes),
-                            json.dumps(included_geos),
-                            json.dumps(excluded_geos),
-                            json.dumps(cfg),
-                        ),
-                    ),
-                )
-            await loop.run_in_executor(None, conn.commit)
+            await db_execute(
+                """
+                INSERT OR REPLACE INTO pretargeting_configs
+                (bidder_id, config_id, billing_id, display_name, state,
+                 included_formats, included_platforms, included_sizes,
+                 included_geos, excluded_geos, raw_config, synced_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (
+                    account_id,
+                    cfg["configId"],
+                    cfg.get("billingId"),
+                    cfg.get("displayName"),
+                    cfg.get("state", "ACTIVE"),
+                    json.dumps(cfg.get("includedFormats", [])),
+                    json.dumps(cfg.get("includedPlatforms", [])),
+                    json.dumps(sizes),
+                    json.dumps(included_geos),
+                    json.dumps(excluded_geos),
+                    json.dumps(cfg),
+                ),
+            )
 
         return SyncPretargetingResponse(
             status="success",
@@ -340,7 +314,6 @@ async def sync_pretargeting_configs(
 @router.get("/settings/pretargeting", response_model=list[PretargetingConfigResponse])
 async def get_pretargeting_configs(
     config: ConfigManager = Depends(get_config),
-    store: SQLiteStore = Depends(get_store),
 ):
     """Get stored pretargeting configs for the current account.
 
@@ -355,27 +328,17 @@ async def get_pretargeting_configs(
         app_config = config.load()
         current_bidder_id = app_config.authorized_buyers.account_id if app_config.authorized_buyers else None
 
-        async with store._connection() as conn:
-            import asyncio
-            loop = asyncio.get_event_loop()
-
-            if current_bidder_id:
-                # Filter by current account's bidder_id
-                rows = await loop.run_in_executor(
-                    None,
-                    lambda: conn.execute(
-                        "SELECT * FROM pretargeting_configs WHERE bidder_id = ? ORDER BY billing_id",
-                        (current_bidder_id,)
-                    ).fetchall(),
-                )
-            else:
-                # Fallback: return all configs if no account configured
-                rows = await loop.run_in_executor(
-                    None,
-                    lambda: conn.execute(
-                        "SELECT * FROM pretargeting_configs ORDER BY billing_id"
-                    ).fetchall(),
-                )
+        if current_bidder_id:
+            # Filter by current account's bidder_id
+            rows = await db_query(
+                "SELECT * FROM pretargeting_configs WHERE bidder_id = ? ORDER BY billing_id",
+                (current_bidder_id,)
+            )
+        else:
+            # Fallback: return all configs if no account configured
+            rows = await db_query(
+                "SELECT * FROM pretargeting_configs ORDER BY billing_id"
+            )
 
         results = []
         for row in rows:
@@ -407,7 +370,6 @@ async def get_pretargeting_configs(
 async def set_pretargeting_name(
     billing_id: str,
     body: SetPretargetingNameRequest,
-    store: SQLiteStore = Depends(get_store),
 ):
     """Set a custom user-defined name for a pretargeting config.
 
@@ -415,51 +377,36 @@ async def set_pretargeting_name(
     making it easier to identify configs.
     """
     try:
-        async with store._connection() as conn:
-            import asyncio
-            loop = asyncio.get_event_loop()
+        # Get current value for history tracking
+        current = await db_query_one(
+            "SELECT user_name, config_id, bidder_id FROM pretargeting_configs WHERE billing_id = ?",
+            (billing_id,),
+        )
 
-            # Get current value for history tracking
-            current = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    "SELECT user_name, config_id, bidder_id FROM pretargeting_configs WHERE billing_id = ?",
-                    (billing_id,),
-                ).fetchone(),
+        if not current:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Pretargeting config with billing_id {billing_id} not found"
             )
 
-            if not current:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Pretargeting config with billing_id {billing_id} not found"
-                )
+        old_name = current["user_name"]
+        config_id = current["config_id"]
+        bidder_id = current["bidder_id"]
 
-            old_name = current["user_name"]
-            config_id = current["config_id"]
-            bidder_id = current["bidder_id"]
+        # Update the name
+        await db_execute(
+            "UPDATE pretargeting_configs SET user_name = ? WHERE billing_id = ?",
+            (body.user_name, billing_id),
+        )
 
-            # Update the name
-            await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    "UPDATE pretargeting_configs SET user_name = ? WHERE billing_id = ?",
-                    (body.user_name, billing_id),
-                ),
+        # Record history if value changed
+        if old_name != body.user_name:
+            await db_execute(
+                """INSERT INTO pretargeting_history
+                (config_id, bidder_id, change_type, field_changed, old_value, new_value, change_source)
+                VALUES (?, ?, 'update', 'user_name', ?, ?, 'user')""",
+                (config_id, bidder_id, old_name, body.user_name),
             )
-
-            # Record history if value changed
-            if old_name != body.user_name:
-                await loop.run_in_executor(
-                    None,
-                    lambda: conn.execute(
-                        """INSERT INTO pretargeting_history
-                        (config_id, bidder_id, change_type, field_changed, old_value, new_value, change_source)
-                        VALUES (?, ?, 'update', 'user_name', ?, ?, 'user')""",
-                        (config_id, bidder_id, old_name, body.user_name),
-                    ),
-                )
-
-            await loop.run_in_executor(None, conn.commit)
 
         return {
             "status": "success",
@@ -479,7 +426,6 @@ async def get_pretargeting_history(
     config_id: Optional[str] = Query(None, description="Filter by config_id"),
     billing_id: Optional[str] = Query(None, description="Filter by billing_id"),
     days: int = Query(30, description="Number of days of history to retrieve", ge=1, le=365),
-    store: SQLiteStore = Depends(get_store),
 ):
     """Get pretargeting settings change history.
 
@@ -487,31 +433,24 @@ async def get_pretargeting_history(
     including who made the change and when.
     """
     try:
-        async with store._connection() as conn:
-            import asyncio
-            loop = asyncio.get_event_loop()
+        # Build query based on filters
+        query = """
+            SELECT ph.* FROM pretargeting_history ph
+            LEFT JOIN pretargeting_configs pc ON ph.config_id = pc.config_id
+            WHERE ph.changed_at >= datetime('now', ?)
+        """
+        params = [f"-{days} days"]
 
-            # Build query based on filters
-            query = """
-                SELECT ph.* FROM pretargeting_history ph
-                LEFT JOIN pretargeting_configs pc ON ph.config_id = pc.config_id
-                WHERE ph.changed_at >= datetime('now', ?)
-            """
-            params = [f"-{days} days"]
+        if config_id:
+            query += " AND ph.config_id = ?"
+            params.append(config_id)
+        if billing_id:
+            query += " AND pc.billing_id = ?"
+            params.append(billing_id)
 
-            if config_id:
-                query += " AND ph.config_id = ?"
-                params.append(config_id)
-            if billing_id:
-                query += " AND pc.billing_id = ?"
-                params.append(billing_id)
+        query += " ORDER BY ph.changed_at DESC LIMIT 500"
 
-            query += " ORDER BY ph.changed_at DESC LIMIT 500"
-
-            rows = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(query, params).fetchall(),
-            )
+        rows = await db_query(query, tuple(params))
 
         results = []
         for row in rows:
@@ -616,96 +555,85 @@ async def create_pretargeting_snapshot(request: SnapshotCreate):
 
     Use this before making changes to track the "before" state.
     """
-    import asyncio
-    import sqlite3
-    from datetime import datetime
-
-    db_path = Path.home() / ".catscan" / "catscan.db"
-
     try:
-        loop = asyncio.get_event_loop()
-        with sqlite3.connect(str(db_path)) as conn:
-            conn.row_factory = sqlite3.Row
+        # Get current config state
+        config = await db_query_one(
+            """SELECT * FROM pretargeting_configs WHERE billing_id = ?""",
+            (request.billing_id,)
+        )
 
-            # Get current config state
-            config = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    """SELECT * FROM pretargeting_configs WHERE billing_id = ?""",
-                    (request.billing_id,)
-                ).fetchone()
+        if not config:
+            raise HTTPException(status_code=404, detail=f"Config not found for billing_id: {request.billing_id}")
+
+        # Get accumulated performance for this billing_id
+        # Try rtb_daily first (new schema), fallback to performance_metrics (old schema)
+        perf = await db_query_one(
+            """SELECT
+                COUNT(DISTINCT metric_date) as days_tracked,
+                SUM(impressions) as total_impressions,
+                SUM(clicks) as total_clicks,
+                SUM(spend_micros) / 1000000.0 as total_spend_usd
+            FROM rtb_daily
+            WHERE billing_id = ?""",
+            (request.billing_id,)
+        )
+
+        # If no data in rtb_daily, try performance_metrics
+        if not perf or perf["days_tracked"] == 0:
+            perf = await db_query_one(
+                """SELECT
+                    COUNT(DISTINCT metric_date) as days_tracked,
+                    SUM(impressions) as total_impressions,
+                    SUM(clicks) as total_clicks,
+                    SUM(spend_micros) / 1000000.0 as total_spend_usd
+                FROM performance_metrics
+                WHERE billing_id = ?""",
+                (request.billing_id,)
             )
 
-            if not config:
-                raise HTTPException(status_code=404, detail=f"Config not found for billing_id: {request.billing_id}")
+        days = perf["days_tracked"] or 0 if perf else 0
+        imps = perf["total_impressions"] or 0 if perf else 0
+        clicks = perf["total_clicks"] or 0 if perf else 0
+        spend = perf["total_spend_usd"] or 0 if perf else 0
 
-            # Get accumulated performance for this billing_id
-            perf = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    """SELECT
-                        COUNT(DISTINCT metric_date) as days_tracked,
-                        SUM(impressions) as total_impressions,
-                        SUM(clicks) as total_clicks,
-                        SUM(spend_micros) / 1000000.0 as total_spend_usd
-                    FROM performance_metrics
-                    WHERE billing_id = ?""",
-                    (request.billing_id,)
-                ).fetchone()
+        # Compute averages
+        avg_daily_imps = imps / days if days > 0 else None
+        avg_daily_spend = spend / days if days > 0 else None
+        ctr = (clicks / imps * 100) if imps > 0 else None
+        cpm = (spend / imps * 1000) if imps > 0 else None
+
+        # Create snapshot
+        snapshot_id = await db_insert_returning_id(
+            """INSERT INTO pretargeting_snapshots (
+                billing_id, snapshot_name, snapshot_type,
+                included_formats, included_platforms, included_sizes,
+                included_geos, excluded_geos, state,
+                total_impressions, total_clicks, total_spend_usd,
+                days_tracked,
+                avg_daily_impressions, avg_daily_spend_usd, ctr_pct, cpm_usd,
+                notes
+            ) VALUES (?, ?, 'manual', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                request.billing_id,
+                request.snapshot_name,
+                config["included_formats"],
+                config["included_platforms"],
+                config["included_sizes"],
+                config["included_geos"],
+                config["excluded_geos"],
+                config["state"],
+                imps, clicks, spend, days,
+                avg_daily_imps, avg_daily_spend, ctr, cpm,
+                request.notes
             )
+        )
 
-            days = perf["days_tracked"] or 0
-            imps = perf["total_impressions"] or 0
-            clicks = perf["total_clicks"] or 0
-            spend = perf["total_spend_usd"] or 0
-
-            # Compute averages
-            avg_daily_imps = imps / days if days > 0 else None
-            avg_daily_spend = spend / days if days > 0 else None
-            ctr = (clicks / imps * 100) if imps > 0 else None
-            cpm = (spend / imps * 1000) if imps > 0 else None
-
-            # Create snapshot
-            cursor = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    """INSERT INTO pretargeting_snapshots (
-                        billing_id, snapshot_name, snapshot_type,
-                        included_formats, included_platforms, included_sizes,
-                        included_geos, excluded_geos, state,
-                        total_impressions, total_clicks, total_spend_usd,
-                        total_reached_queries, days_tracked,
-                        avg_daily_impressions, avg_daily_spend_usd, ctr_pct, cpm_usd,
-                        notes
-                    ) VALUES (?, ?, 'manual', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        request.billing_id,
-                        request.snapshot_name,
-                        config["included_formats"],
-                        config["included_platforms"],
-                        config["included_sizes"],
-                        config["included_geos"],
-                        config["excluded_geos"],
-                        config["state"],
-                        imps, clicks, spend, days,
-                        avg_daily_imps, avg_daily_spend, ctr, cpm,
-                        request.notes
-                    )
-                )
-            )
-            conn.commit()
-
-            snapshot_id = cursor.lastrowid
-
-            # Fetch the created snapshot
-            row = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    "SELECT * FROM pretargeting_snapshots WHERE id = ?",
-                    (snapshot_id,)
-                ).fetchone()
-            )
+        # Fetch the created snapshot
+        row = await db_query_one(
+            "SELECT * FROM pretargeting_snapshots WHERE id = ?",
+            (snapshot_id,)
+        )
 
         return SnapshotResponse(
             id=row["id"],
@@ -743,37 +671,22 @@ async def list_pretargeting_snapshots(
     limit: int = Query(50, ge=1, le=200),
 ):
     """List pretargeting snapshots, optionally filtered by billing account."""
-    import asyncio
-    import sqlite3
-
-    db_path = Path.home() / ".catscan" / "catscan.db"
-
     try:
-        loop = asyncio.get_event_loop()
-        with sqlite3.connect(str(db_path)) as conn:
-            conn.row_factory = sqlite3.Row
-
-            if billing_id:
-                rows = await loop.run_in_executor(
-                    None,
-                    lambda: conn.execute(
-                        """SELECT * FROM pretargeting_snapshots
-                        WHERE billing_id = ?
-                        ORDER BY created_at DESC
-                        LIMIT ?""",
-                        (billing_id, limit)
-                    ).fetchall()
-                )
-            else:
-                rows = await loop.run_in_executor(
-                    None,
-                    lambda: conn.execute(
-                        """SELECT * FROM pretargeting_snapshots
-                        ORDER BY created_at DESC
-                        LIMIT ?""",
-                        (limit,)
-                    ).fetchall()
-                )
+        if billing_id:
+            rows = await db_query(
+                """SELECT * FROM pretargeting_snapshots
+                WHERE billing_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?""",
+                (billing_id, limit)
+            )
+        else:
+            rows = await db_query(
+                """SELECT * FROM pretargeting_snapshots
+                ORDER BY created_at DESC
+                LIMIT ?""",
+                (limit,)
+            )
 
         return [
             SnapshotResponse(
@@ -815,56 +728,35 @@ async def create_comparison(request: ComparisonCreate):
     After making changes to the config, use the complete endpoint to
     capture the "after" snapshot and compute deltas.
     """
-    import asyncio
-    import sqlite3
-
-    db_path = Path.home() / ".catscan" / "catscan.db"
-
     try:
-        loop = asyncio.get_event_loop()
-        with sqlite3.connect(str(db_path)) as conn:
-            conn.row_factory = sqlite3.Row
+        # Verify before_snapshot exists
+        snapshot = await db_query_one(
+            "SELECT * FROM pretargeting_snapshots WHERE id = ?",
+            (request.before_snapshot_id,)
+        )
 
-            # Verify before_snapshot exists
-            snapshot = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    "SELECT * FROM pretargeting_snapshots WHERE id = ?",
-                    (request.before_snapshot_id,)
-                ).fetchone()
+        if not snapshot:
+            raise HTTPException(status_code=404, detail="Before snapshot not found")
+
+        # Create comparison
+        comparison_id = await db_insert_returning_id(
+            """INSERT INTO snapshot_comparisons (
+                billing_id, comparison_name, before_snapshot_id,
+                before_start_date, before_end_date, status
+            ) VALUES (?, ?, ?, ?, ?, 'in_progress')""",
+            (
+                request.billing_id,
+                request.comparison_name,
+                request.before_snapshot_id,
+                request.before_start_date,
+                request.before_end_date,
             )
+        )
 
-            if not snapshot:
-                raise HTTPException(status_code=404, detail="Before snapshot not found")
-
-            # Create comparison
-            cursor = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    """INSERT INTO snapshot_comparisons (
-                        billing_id, comparison_name, before_snapshot_id,
-                        before_start_date, before_end_date, status
-                    ) VALUES (?, ?, ?, ?, ?, 'in_progress')""",
-                    (
-                        request.billing_id,
-                        request.comparison_name,
-                        request.before_snapshot_id,
-                        request.before_start_date,
-                        request.before_end_date,
-                    )
-                )
-            )
-            conn.commit()
-
-            comparison_id = cursor.lastrowid
-
-            row = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    "SELECT * FROM snapshot_comparisons WHERE id = ?",
-                    (comparison_id,)
-                ).fetchone()
-            )
+        row = await db_query_one(
+            "SELECT * FROM snapshot_comparisons WHERE id = ?",
+            (comparison_id,)
+        )
 
         return ComparisonResponse(
             id=row["id"],
@@ -902,33 +794,21 @@ async def list_comparisons(
     limit: int = Query(50, ge=1, le=200),
 ):
     """List A/B comparisons, optionally filtered by billing account or status."""
-    import asyncio
-    import sqlite3
-
-    db_path = Path.home() / ".catscan" / "catscan.db"
-
     try:
-        loop = asyncio.get_event_loop()
-        with sqlite3.connect(str(db_path)) as conn:
-            conn.row_factory = sqlite3.Row
+        query = "SELECT * FROM snapshot_comparisons WHERE 1=1"
+        params = []
 
-            query = "SELECT * FROM snapshot_comparisons WHERE 1=1"
-            params = []
+        if billing_id:
+            query += " AND billing_id = ?"
+            params.append(billing_id)
+        if status:
+            query += " AND status = ?"
+            params.append(status)
 
-            if billing_id:
-                query += " AND billing_id = ?"
-                params.append(billing_id)
-            if status:
-                query += " AND status = ?"
-                params.append(status)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
 
-            query += " ORDER BY created_at DESC LIMIT ?"
-            params.append(limit)
-
-            rows = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(query, params).fetchall()
-            )
+        rows = await db_query(query, tuple(params))
 
         return [
             ComparisonResponse(
@@ -1012,10 +892,7 @@ class ConfigDetailResponse(BaseModel):
 
 
 @router.post("/settings/pretargeting/pending-change", response_model=PendingChangeResponse)
-async def create_pending_change(
-    request: PendingChangeCreate,
-    store: SQLiteStore = Depends(get_store),
-):
+async def create_pending_change(request: PendingChangeCreate):
     """
     Create a pending change to a pretargeting configuration.
 
@@ -1032,11 +909,6 @@ async def create_pending_change(
     - Applied manually by the user in Google Authorized Buyers
     - Cancelled if no longer needed
     """
-    import asyncio
-    import sqlite3
-
-    db_path = Path.home() / ".catscan" / "catscan.db"
-
     # Validate change_type
     valid_change_types = [
         'add_size', 'remove_size',
@@ -1052,72 +924,56 @@ async def create_pending_change(
         )
 
     try:
-        loop = asyncio.get_event_loop()
-        with sqlite3.connect(str(db_path)) as conn:
-            conn.row_factory = sqlite3.Row
+        # Verify the config exists and get config_id
+        config = await db_query_one(
+            "SELECT config_id FROM pretargeting_configs WHERE billing_id = ?",
+            (request.billing_id,)
+        )
 
-            # Verify the config exists and get config_id
-            config = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    "SELECT config_id FROM pretargeting_configs WHERE billing_id = ?",
-                    (request.billing_id,)
-                ).fetchone()
+        if not config:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Pretargeting config not found for billing_id: {request.billing_id}"
             )
 
-            if not config:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Pretargeting config not found for billing_id: {request.billing_id}"
-                )
+        config_id = config["config_id"]
 
-            config_id = config["config_id"]
-
-            # Insert the pending change
-            cursor = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    """INSERT INTO pretargeting_pending_changes (
-                        billing_id, config_id, change_type, field_name, value,
-                        reason, estimated_qps_impact, status
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')""",
-                    (
-                        request.billing_id,
-                        config_id,
-                        request.change_type,
-                        request.field_name,
-                        request.value,
-                        request.reason,
-                        request.estimated_qps_impact,
-                    )
-                )
+        # Insert the pending change
+        change_id = await db_insert_returning_id(
+            """INSERT INTO pretargeting_pending_changes (
+                billing_id, config_id, change_type, field_name, value,
+                reason, estimated_qps_impact, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')""",
+            (
+                request.billing_id,
+                config_id,
+                request.change_type,
+                request.field_name,
+                request.value,
+                request.reason,
+                request.estimated_qps_impact,
             )
-            conn.commit()
+        )
 
-            change_id = cursor.lastrowid
-
-            # Also log to pretargeting_history
-            await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    """INSERT INTO pretargeting_history (
-                        config_id, bidder_id, change_type, field_changed,
-                        old_value, new_value, change_source, changed_by
-                    ) SELECT ?, bidder_id, 'pending_change', ?, NULL, ?, 'user', 'ui'
-                    FROM pretargeting_configs WHERE billing_id = ?""",
-                    (config_id, request.field_name, f"{request.change_type}:{request.value}", request.billing_id)
-                )
+        # Also log to pretargeting_history
+        bidder_row = await db_query_one(
+            "SELECT bidder_id FROM pretargeting_configs WHERE billing_id = ?",
+            (request.billing_id,)
+        )
+        if bidder_row:
+            await db_execute(
+                """INSERT INTO pretargeting_history (
+                    config_id, bidder_id, change_type, field_changed,
+                    old_value, new_value, change_source, changed_by
+                ) VALUES (?, ?, 'pending_change', ?, NULL, ?, 'user', 'ui')""",
+                (config_id, bidder_row["bidder_id"], request.field_name, f"{request.change_type}:{request.value}")
             )
-            conn.commit()
 
-            # Fetch the created change
-            row = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    "SELECT * FROM pretargeting_pending_changes WHERE id = ?",
-                    (change_id,)
-                ).fetchone()
-            )
+        # Fetch the created change
+        row = await db_query_one(
+            "SELECT * FROM pretargeting_pending_changes WHERE id = ?",
+            (change_id,)
+        )
 
         return PendingChangeResponse(
             id=row["id"],
@@ -1147,30 +1003,18 @@ async def list_pending_changes(
     limit: int = Query(100, ge=1, le=500),
 ):
     """List pending changes to pretargeting configurations."""
-    import asyncio
-    import sqlite3
-
-    db_path = Path.home() / ".catscan" / "catscan.db"
-
     try:
-        loop = asyncio.get_event_loop()
-        with sqlite3.connect(str(db_path)) as conn:
-            conn.row_factory = sqlite3.Row
+        query = "SELECT * FROM pretargeting_pending_changes WHERE status = ?"
+        params = [status]
 
-            query = "SELECT * FROM pretargeting_pending_changes WHERE status = ?"
-            params = [status]
+        if billing_id:
+            query += " AND billing_id = ?"
+            params.append(billing_id)
 
-            if billing_id:
-                query += " AND billing_id = ?"
-                params.append(billing_id)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
 
-            query += " ORDER BY created_at DESC LIMIT ?"
-            params.append(limit)
-
-            rows = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(query, params).fetchall()
-            )
+        rows = await db_query(query, tuple(params))
 
         return [
             PendingChangeResponse(
@@ -1197,43 +1041,27 @@ async def list_pending_changes(
 @router.delete("/settings/pretargeting/pending-change/{change_id}")
 async def cancel_pending_change(change_id: int):
     """Cancel a pending change (mark as cancelled, not deleted)."""
-    import asyncio
-    import sqlite3
-
-    db_path = Path.home() / ".catscan" / "catscan.db"
-
     try:
-        loop = asyncio.get_event_loop()
-        with sqlite3.connect(str(db_path)) as conn:
-            conn.row_factory = sqlite3.Row
+        # Check if change exists and is pending
+        change = await db_query_one(
+            "SELECT * FROM pretargeting_pending_changes WHERE id = ?",
+            (change_id,)
+        )
 
-            # Check if change exists and is pending
-            change = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    "SELECT * FROM pretargeting_pending_changes WHERE id = ?",
-                    (change_id,)
-                ).fetchone()
+        if not change:
+            raise HTTPException(status_code=404, detail="Pending change not found")
+
+        if change["status"] != "pending":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Change cannot be cancelled - current status: {change['status']}"
             )
 
-            if not change:
-                raise HTTPException(status_code=404, detail="Pending change not found")
-
-            if change["status"] != "pending":
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Change cannot be cancelled - current status: {change['status']}"
-                )
-
-            # Mark as cancelled
-            await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    "UPDATE pretargeting_pending_changes SET status = 'cancelled' WHERE id = ?",
-                    (change_id,)
-                )
-            )
-            conn.commit()
+        # Mark as cancelled
+        await db_execute(
+            "UPDATE pretargeting_pending_changes SET status = 'cancelled' WHERE id = ?",
+            (change_id,)
+        )
 
         return {"status": "cancelled", "id": change_id}
 
@@ -1251,43 +1079,27 @@ async def mark_change_applied(change_id: int):
 
     This is for tracking purposes only - it does NOT make any API calls.
     """
-    import asyncio
-    import sqlite3
-
-    db_path = Path.home() / ".catscan" / "catscan.db"
-
     try:
-        loop = asyncio.get_event_loop()
-        with sqlite3.connect(str(db_path)) as conn:
-            conn.row_factory = sqlite3.Row
+        change = await db_query_one(
+            "SELECT * FROM pretargeting_pending_changes WHERE id = ?",
+            (change_id,)
+        )
 
-            change = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    "SELECT * FROM pretargeting_pending_changes WHERE id = ?",
-                    (change_id,)
-                ).fetchone()
+        if not change:
+            raise HTTPException(status_code=404, detail="Pending change not found")
+
+        if change["status"] != "pending":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Change is not pending - current status: {change['status']}"
             )
 
-            if not change:
-                raise HTTPException(status_code=404, detail="Pending change not found")
-
-            if change["status"] != "pending":
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Change is not pending - current status: {change['status']}"
-                )
-
-            await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    """UPDATE pretargeting_pending_changes
-                    SET status = 'applied', applied_at = CURRENT_TIMESTAMP
-                    WHERE id = ?""",
-                    (change_id,)
-                )
-            )
-            conn.commit()
+        await db_execute(
+            """UPDATE pretargeting_pending_changes
+            SET status = 'applied', applied_at = CURRENT_TIMESTAMP
+            WHERE id = ?""",
+            (change_id,)
+        )
 
         return {"status": "applied", "id": change_id}
 
@@ -1299,10 +1111,7 @@ async def mark_change_applied(change_id: int):
 
 
 @router.get("/settings/pretargeting/{billing_id}/detail", response_model=ConfigDetailResponse)
-async def get_pretargeting_config_detail(
-    billing_id: str,
-    store: SQLiteStore = Depends(get_store),
-):
+async def get_pretargeting_config_detail(billing_id: str):
     """
     Get detailed pretargeting config including current state and pending changes.
 
@@ -1311,41 +1120,26 @@ async def get_pretargeting_config_detail(
     - List of pending changes
     - Effective values (what the config would look like after pending changes)
     """
-    import asyncio
-    import sqlite3
-
-    db_path = Path.home() / ".catscan" / "catscan.db"
-
     try:
-        loop = asyncio.get_event_loop()
-        with sqlite3.connect(str(db_path)) as conn:
-            conn.row_factory = sqlite3.Row
+        # Get config
+        config = await db_query_one(
+            "SELECT * FROM pretargeting_configs WHERE billing_id = ?",
+            (billing_id,)
+        )
 
-            # Get config
-            config = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    "SELECT * FROM pretargeting_configs WHERE billing_id = ?",
-                    (billing_id,)
-                ).fetchone()
+        if not config:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Config not found for billing_id: {billing_id}"
             )
 
-            if not config:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Config not found for billing_id: {billing_id}"
-                )
-
-            # Get pending changes
-            pending_rows = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(
-                    """SELECT * FROM pretargeting_pending_changes
-                    WHERE billing_id = ? AND status = 'pending'
-                    ORDER BY created_at ASC""",
-                    (billing_id,)
-                ).fetchall()
-            )
+        # Get pending changes
+        pending_rows = await db_query(
+            """SELECT * FROM pretargeting_pending_changes
+            WHERE billing_id = ? AND status = 'pending'
+            ORDER BY created_at ASC""",
+            (billing_id,)
+        )
 
         # Parse current values
         included_sizes = json.loads(config["included_sizes"]) if config["included_sizes"] else []

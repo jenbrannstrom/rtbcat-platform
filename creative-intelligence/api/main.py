@@ -30,7 +30,7 @@ from api.routers import (
     troubleshooting_router,
     collect_router,
 )
-from api.dependencies import set_store, set_config_manager
+from api.dependencies import set_store, set_config_manager, startup_event
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,9 @@ _config_manager: Optional[ConfigManager] = None
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown."""
     global _store, _config_manager
+
+    # Initialize v40 database schema
+    await startup_event()
 
     # Initialize on startup
     _config_manager = ConfigManager()
