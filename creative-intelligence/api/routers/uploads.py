@@ -62,6 +62,9 @@ class ImportHistoryResponse(BaseModel):
     file_size_mb: float
     status: str
     error_message: Optional[str] = None
+    # Multi-account support
+    bidder_id: Optional[str] = None
+    billing_ids_found: Optional[list[str]] = None
 
 
 class DailyFileUpload(BaseModel):
@@ -172,11 +175,15 @@ async def get_upload_tracking(
 async def get_import_history(
     limit: int = Query(50, description="Maximum number of records to return", ge=1, le=500),
     offset: int = Query(0, description="Number of records to skip", ge=0),
+    bidder_id: Optional[str] = Query(None, description="Filter by account (bidder_id)"),
 ):
     """Get import history records.
 
     Returns detailed history of all CSV imports with file sizes, row counts, and status.
+    Optionally filter by bidder_id to see imports for a specific account.
     """
+    import json
+
     if not QPS_DB_PATH.exists():
         return []
 
@@ -185,12 +192,22 @@ async def get_import_history(
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        cursor.execute(
-            """SELECT * FROM import_history
-            ORDER BY imported_at DESC
-            LIMIT ? OFFSET ?""",
-            (limit, offset),
-        )
+        if bidder_id:
+            # Filter by bidder_id
+            cursor.execute(
+                """SELECT * FROM import_history
+                WHERE bidder_id = ?
+                ORDER BY imported_at DESC
+                LIMIT ? OFFSET ?""",
+                (bidder_id, limit, offset),
+            )
+        else:
+            cursor.execute(
+                """SELECT * FROM import_history
+                ORDER BY imported_at DESC
+                LIMIT ? OFFSET ?""",
+                (limit, offset),
+            )
         rows = cursor.fetchall()
         conn.close()
 
@@ -198,6 +215,14 @@ async def get_import_history(
         for row in rows:
             file_size_bytes = row["file_size_bytes"] if "file_size_bytes" in row.keys() else 0
             file_size_mb = (file_size_bytes or 0) / (1024 * 1024)
+
+            # Parse billing_ids_found JSON if present
+            billing_ids = None
+            if "billing_ids_found" in row.keys() and row["billing_ids_found"]:
+                try:
+                    billing_ids = json.loads(row["billing_ids_found"])
+                except json.JSONDecodeError:
+                    billing_ids = None
 
             results.append(
                 ImportHistoryResponse(
@@ -214,6 +239,8 @@ async def get_import_history(
                     file_size_mb=round(file_size_mb, 2),
                     status=row["status"] or "unknown",
                     error_message=row["error_message"],
+                    bidder_id=row["bidder_id"] if "bidder_id" in row.keys() else None,
+                    billing_ids_found=billing_ids,
                 )
             )
 
@@ -323,3 +350,101 @@ async def get_daily_uploads_grid(
     except Exception as e:
         logger.error(f"Failed to get daily uploads grid: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get daily uploads grid: {str(e)}")
+
+
+# =============================================================================
+# Multi-Account Upload Tracking Endpoints
+# =============================================================================
+
+class AccountUploadStats(BaseModel):
+    """Upload statistics for a single account."""
+    bidder_id: str
+    total_uploads: int
+    total_rows: int
+    latest_upload: Optional[str] = None
+    latest_upload_status: Optional[str] = None
+    billing_ids: list[str] = []
+
+
+class AccountsUploadSummaryResponse(BaseModel):
+    """Response for accounts upload summary."""
+    accounts: list[AccountUploadStats]
+    total_accounts: int
+    unassigned_uploads: int  # Uploads without bidder_id
+
+
+@router.get("/uploads/accounts", response_model=AccountsUploadSummaryResponse)
+async def get_accounts_upload_summary():
+    """Get upload statistics grouped by account (bidder_id).
+
+    Returns a list of accounts with their upload statistics,
+    helping identify which accounts have data and their upload patterns.
+    """
+    import json
+
+    if not QPS_DB_PATH.exists():
+        return AccountsUploadSummaryResponse(
+            accounts=[],
+            total_accounts=0,
+            unassigned_uploads=0,
+        )
+
+    try:
+        conn = sqlite3.connect(str(QPS_DB_PATH))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Get per-account stats
+        cursor.execute("""
+            SELECT
+                bidder_id,
+                COUNT(*) as upload_count,
+                SUM(rows_imported) as total_rows,
+                MAX(imported_at) as latest_upload,
+                GROUP_CONCAT(DISTINCT billing_ids_found) as all_billing_ids
+            FROM import_history
+            WHERE bidder_id IS NOT NULL
+            GROUP BY bidder_id
+            ORDER BY latest_upload DESC
+        """)
+        rows = cursor.fetchall()
+
+        # Count unassigned uploads
+        cursor.execute("""
+            SELECT COUNT(*) FROM import_history WHERE bidder_id IS NULL
+        """)
+        unassigned = cursor.fetchone()[0] or 0
+
+        conn.close()
+
+        accounts = []
+        for row in rows:
+            # Parse billing_ids from JSON
+            billing_ids = set()
+            if row["all_billing_ids"]:
+                for json_str in row["all_billing_ids"].split(","):
+                    if json_str:
+                        try:
+                            ids = json.loads(json_str)
+                            if isinstance(ids, list):
+                                billing_ids.update(ids)
+                        except json.JSONDecodeError:
+                            pass
+
+            accounts.append(AccountUploadStats(
+                bidder_id=row["bidder_id"],
+                total_uploads=row["upload_count"] or 0,
+                total_rows=row["total_rows"] or 0,
+                latest_upload=row["latest_upload"],
+                billing_ids=sorted(list(billing_ids)),
+            ))
+
+        return AccountsUploadSummaryResponse(
+            accounts=accounts,
+            total_accounts=len(accounts),
+            unassigned_uploads=unassigned,
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get accounts upload summary: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get accounts upload summary: {str(e)}")
