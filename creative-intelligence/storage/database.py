@@ -379,13 +379,19 @@ CREATE TABLE IF NOT EXISTS import_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     batch_id TEXT UNIQUE NOT NULL,
     account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE,
+    bidder_id TEXT,  -- Denormalized for multi-account queries
     filename TEXT,
     report_type TEXT,
     imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    rows_read INTEGER DEFAULT 0,
     rows_imported INTEGER DEFAULT 0,
     rows_skipped INTEGER DEFAULT 0,
+    rows_duplicate INTEGER DEFAULT 0,
     date_range_start DATE,
     date_range_end DATE,
+    total_spend_usd REAL DEFAULT 0,
+    file_size_bytes INTEGER DEFAULT 0,
+    billing_ids_found TEXT,  -- JSON array of billing IDs in the file
     status TEXT DEFAULT 'complete',
     error_message TEXT
 );
@@ -547,4 +553,21 @@ SELECT
 FROM pretargeting_configs pc
 LEFT JOIN rtb_daily r ON pc.billing_id = r.billing_id
 GROUP BY pc.id;
+
+-- Daily upload summary for tracking CSV imports
+CREATE VIEW IF NOT EXISTS daily_upload_summary AS
+SELECT
+    date(imported_at) as upload_date,
+    COUNT(*) as total_uploads,
+    SUM(CASE WHEN status = 'complete' THEN 1 ELSE 0 END) as successful_uploads,
+    SUM(CASE WHEN status != 'complete' THEN 1 ELSE 0 END) as failed_uploads,
+    SUM(rows_imported) as total_rows_written,
+    SUM(COALESCE(file_size_bytes, 0)) as total_file_size_bytes,
+    CASE WHEN COUNT(*) > 0 THEN AVG(rows_imported) ELSE 0 END as avg_rows_per_upload,
+    MIN(rows_imported) as min_rows,
+    MAX(rows_imported) as max_rows,
+    0 as has_anomaly,
+    NULL as anomaly_reason
+FROM import_history
+GROUP BY date(imported_at);
 """

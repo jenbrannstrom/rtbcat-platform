@@ -73,7 +73,9 @@
       "Bash(source ~/.nvm/nvm.sh)",
       "Bash(./node_modules/.bin/tsc:*)",
       "Bash(find:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(timeout 10 uvicorn:*)",
+      "Bash(uvicorn api.main:app:*)"
     ],
     "deny": [],
     "ask": []

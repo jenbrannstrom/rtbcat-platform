@@ -7,16 +7,13 @@ and RTB funnel analytics for Google Authorized Buyers.
 import csv
 import io
 import logging
-import sqlite3
 from collections import defaultdict
-from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
-from storage import SQLiteStore
-from api.dependencies import get_store
+from storage.database import db_query, db_query_one
 from analytics.waste_analyzer import WasteAnalyzer
 from services.waste_analyzer import WasteAnalyzerService
 from analytics.size_coverage_analyzer import SizeCoverageAnalyzer
@@ -28,33 +25,26 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Analytics"])
 
-# Database path for QPS analytics
-QPS_DB_PATH = Path.home() / ".catscan" / "catscan.db"
 
-
-def get_current_bidder_id() -> Optional[str]:
+async def get_current_bidder_id() -> Optional[str]:
     """Get the current bidder_id from the most recently synced pretargeting config.
 
     Returns the bidder_id that was most recently synced, which represents
     the currently active account.
     """
     try:
-        conn = sqlite3.connect(str(QPS_DB_PATH))
-        cursor = conn.cursor()
-        cursor.execute("""
+        row = await db_query_one("""
             SELECT bidder_id FROM pretargeting_configs
             WHERE bidder_id IS NOT NULL
             ORDER BY synced_at DESC
             LIMIT 1
         """)
-        row = cursor.fetchone()
-        conn.close()
-        return row[0] if row else None
+        return row["bidder_id"] if row else None
     except Exception:
         return None
 
 
-def get_valid_billing_ids() -> list[str]:
+async def get_valid_billing_ids() -> list[str]:
     """Get list of billing_ids from pretargeting_configs table for current account.
 
     This ensures we only query data for billing IDs that belong to the
@@ -64,25 +54,22 @@ def get_valid_billing_ids() -> list[str]:
     returns only billing_ids associated with that account.
     """
     try:
-        conn = sqlite3.connect(str(QPS_DB_PATH))
-        cursor = conn.cursor()
-
         # Get the current bidder_id (most recently synced account)
-        current_bidder = get_current_bidder_id()
+        current_bidder = await get_current_bidder_id()
 
         if current_bidder:
             # Filter by the current account's bidder_id
-            cursor.execute(
+            rows = await db_query(
                 "SELECT DISTINCT billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL AND bidder_id = ?",
                 (current_bidder,)
             )
         else:
             # Fallback: return all billing_ids if no bidder_id found
-            cursor.execute("SELECT DISTINCT billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL")
+            rows = await db_query(
+                "SELECT DISTINCT billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL"
+            )
 
-        billing_ids = [row[0] for row in cursor.fetchall()]
-        conn.close()
-        return billing_ids
+        return [row["billing_id"] for row in rows]
     except Exception:
         return []
 
@@ -177,7 +164,6 @@ def _group_signals_by_type(signals) -> dict[str, int]:
 async def get_waste_report(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     days: int = Query(7, ge=1, le=90, description="Days of traffic to analyze"),
-    store: SQLiteStore = Depends(get_store),
 ):
     """Get waste analysis report comparing bid requests vs creative inventory.
 
@@ -192,7 +178,8 @@ async def get_waste_report(
     - **Monitor**: Low volume sizes to watch for growth
     """
     try:
-        analyzer = WasteAnalyzer(store)
+        # WasteAnalyzer uses its own db connection internally
+        analyzer = WasteAnalyzer()
         report = await analyzer.analyze_waste(buyer_id=buyer_id, days=days)
 
         return WasteReportResponse(
@@ -256,7 +243,6 @@ async def detect_problem_formats(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     days: int = Query(7, ge=1, le=90, description="Timeframe for analysis"),
     size_tolerance: int = Query(5, ge=0, le=20, description="Pixel tolerance for size matching"),
-    store: SQLiteStore = Depends(get_store),
 ):
     """Detect creatives with problems that hurt QPS efficiency.
 
@@ -269,7 +255,7 @@ async def detect_problem_formats(
     - low_bid_rate: impressions / reached_queries < 1%
     - disapproved: approval_status != 'APPROVED'
     """
-    analyzer = WasteAnalyzer(store)
+    analyzer = WasteAnalyzer()
     problems = await analyzer.detect_problem_formats(
         buyer_id=buyer_id,
         days=days,
@@ -326,14 +312,9 @@ async def resolve_waste_signal(
     return {"status": "resolved", "signal_id": signal_id}
 
 
-# Note: /analytics/size-coverage endpoint is defined below in QPS Analytics section
-# The duplicate from main.py has been consolidated into a single endpoint
-
-
 @router.post("/analytics/import-traffic", response_model=ImportTrafficResponse)
 async def import_traffic_data(
     file: UploadFile = File(..., description="CSV file with traffic data"),
-    store: SQLiteStore = Depends(get_store),
 ):
     """Import RTB traffic data from CSV file.
 
@@ -392,8 +373,17 @@ async def import_traffic_data(
         if not records:
             raise HTTPException(status_code=400, detail="No valid records found in CSV")
 
-        # Store traffic data
-        count = await store.store_traffic_data(records)
+        # Store traffic data - use db_execute for inserts
+        from storage.database import db_execute
+        count = 0
+        for r in records:
+            await db_execute(
+                """INSERT OR REPLACE INTO rtb_traffic
+                (canonical_size, raw_size, request_count, traffic_date, buyer_id)
+                VALUES (?, ?, ?, ?, ?)""",
+                (r["canonical_size"], r["raw_size"], r["request_count"], r["date"], r["buyer_id"])
+            )
+            count += 1
 
         return ImportTrafficResponse(
             status="completed",
@@ -414,7 +404,6 @@ async def generate_mock_traffic_endpoint(
     buyer_id: Optional[str] = Query(None, description="Buyer ID to associate"),
     base_daily_requests: int = Query(100000, ge=1000, le=1000000, description="Base daily request volume"),
     waste_bias: float = Query(0.3, ge=0.0, le=1.0, description="Bias towards waste traffic (0-1)"),
-    store: SQLiteStore = Depends(get_store),
 ):
     """Generate mock RTB traffic data for testing and demos.
 
@@ -430,6 +419,7 @@ async def generate_mock_traffic_endpoint(
     - 1.0 = heavy waste traffic
     """
     from analytics import generate_mock_traffic
+    from storage.database import db_execute
 
     try:
         # Generate mock traffic
@@ -440,20 +430,16 @@ async def generate_mock_traffic_endpoint(
             waste_bias=waste_bias,
         )
 
-        # Convert to dict format for storage
-        records = [
-            {
-                "canonical_size": r.canonical_size,
-                "raw_size": r.raw_size,
-                "request_count": r.request_count,
-                "date": r.date,
-                "buyer_id": r.buyer_id,
-            }
-            for r in traffic_records
-        ]
-
         # Store traffic data
-        count = await store.store_traffic_data(records)
+        count = 0
+        for r in traffic_records:
+            await db_execute(
+                """INSERT OR REPLACE INTO rtb_traffic
+                (canonical_size, raw_size, request_count, traffic_date, buyer_id)
+                VALUES (?, ?, ?, ?, ?)""",
+                (r.canonical_size, r.raw_size, r.request_count, r.date, r.buyer_id)
+            )
+            count += 1
 
         return ImportTrafficResponse(
             status="completed",
@@ -484,11 +470,13 @@ async def get_size_coverage(
     Optional: Filter by billing_id to analyze a specific pretargeting config.
     """
     try:
-        analyzer = SizeCoverageAnalyzer(str(QPS_DB_PATH))
+        # SizeCoverageAnalyzer uses its own db connection pattern
+        from storage.database import DB_PATH
+        analyzer = SizeCoverageAnalyzer(str(DB_PATH))
         summary = analyzer.analyze(days, billing_id=billing_id)
         return {
             "period_days": days,
-            "billing_id": billing_id,  # Include filter in response
+            "billing_id": billing_id,
             "total_sizes_in_traffic": summary.total_sizes_in_traffic,
             "sizes_with_creatives": summary.sizes_with_creatives,
             "sizes_without_creatives": summary.sizes_without_creatives,
@@ -504,7 +492,7 @@ async def get_size_coverage(
                     "percent_of_traffic": round(g.percent_of_total_traffic, 1),
                     "recommendation": g.recommendation,
                 }
-                for g in summary.gaps[:20]  # Top 20 gaps
+                for g in summary.gaps[:20]
             ],
             "covered_sizes": [
                 {
@@ -515,7 +503,7 @@ async def get_size_coverage(
                     "creative_count": s["creative_count"],
                     "ctr_pct": round(s["ctr"], 2),
                 }
-                for s in summary.covered_sizes[:20]  # Top 20 covered
+                for s in summary.covered_sizes[:20]
             ],
         }
     except Exception as e:
@@ -531,7 +519,8 @@ async def get_geo_waste(days: int = Query(7, ge=1, le=90)):
     Returns geos with poor performance that should be excluded from pretargeting.
     """
     try:
-        analyzer = GeoWasteAnalyzer(str(QPS_DB_PATH))
+        from storage.database import DB_PATH
+        analyzer = GeoWasteAnalyzer(str(DB_PATH))
         summary = analyzer.analyze(days)
         return {
             "period_days": days,
@@ -575,7 +564,8 @@ async def get_pretargeting_recommendations(
     maximum QPS efficiency.
     """
     try:
-        recommender = PretargetingRecommender(str(QPS_DB_PATH))
+        from storage.database import DB_PATH
+        recommender = PretargetingRecommender(str(DB_PATH))
         recommendation = recommender.generate_recommendations(days, max_configs)
         return {
             "config_limit": recommendation.config_limit,
@@ -599,8 +589,9 @@ async def get_qps_summary(days: int = Query(7, ge=1, le=90)):
     Combines size coverage and geo waste analysis into a single dashboard view.
     """
     try:
-        size_analyzer = SizeCoverageAnalyzer(str(QPS_DB_PATH))
-        geo_analyzer = GeoWasteAnalyzer(str(QPS_DB_PATH))
+        from storage.database import DB_PATH
+        size_analyzer = SizeCoverageAnalyzer(str(DB_PATH))
+        geo_analyzer = GeoWasteAnalyzer(str(DB_PATH))
 
         size_summary = size_analyzer.analyze(days)
         geo_summary = geo_analyzer.analyze(days)
@@ -646,7 +637,8 @@ async def get_geo_pretargeting_config(days: int = Query(7, ge=1, le=90)):
     Returns include and exclude lists for geo targeting.
     """
     try:
-        analyzer = GeoWasteAnalyzer(str(QPS_DB_PATH))
+        from storage.database import DB_PATH
+        analyzer = GeoWasteAnalyzer(str(DB_PATH))
         config = analyzer.get_pretargeting_geo_config(days)
         return {
             "period_days": days,
@@ -673,15 +665,12 @@ async def get_spend_stats(days: int = Query(7, ge=1, le=90)):
     """
     try:
         # Get valid billing IDs for current account to prevent cross-account data mixing
-        valid_billing_ids = get_valid_billing_ids()
-
-        conn = sqlite3.connect(str(QPS_DB_PATH))
-        cursor = conn.cursor()
+        valid_billing_ids = await get_valid_billing_ids()
 
         if valid_billing_ids:
             # Filter by valid billing IDs
             placeholders = ",".join("?" * len(valid_billing_ids))
-            cursor.execute(f"""
+            row = await db_query_one(f"""
                 SELECT
                     COALESCE(SUM(impressions), 0) as total_impressions,
                     COALESCE(SUM(spend_micros), 0) as total_spend_micros
@@ -691,7 +680,7 @@ async def get_spend_stats(days: int = Query(7, ge=1, le=90)):
             """, (f'-{days} days', *valid_billing_ids))
         else:
             # No pretargeting configs synced yet - return all data as fallback
-            cursor.execute("""
+            row = await db_query_one("""
                 SELECT
                     COALESCE(SUM(impressions), 0) as total_impressions,
                     COALESCE(SUM(spend_micros), 0) as total_spend_micros
@@ -699,11 +688,8 @@ async def get_spend_stats(days: int = Query(7, ge=1, le=90)):
                 WHERE metric_date >= date('now', ?)
             """, (f'-{days} days',))
 
-        row = cursor.fetchone()
-        conn.close()
-
-        total_impressions = row[0] if row else 0
-        total_spend_micros = row[1] if row else 0
+        total_impressions = row["total_impressions"] if row else 0
+        total_spend_micros = row["total_spend_micros"] if row else 0
         total_spend_usd = total_spend_micros / 1_000_000
 
         # Calculate CPM: (spend / impressions) * 1000
@@ -805,21 +791,14 @@ async def get_config_performance(
     Only returns data for billing_ids that belong to the current account
     (those synced in pretargeting_configs table).
     """
-    db_path = str(QPS_DB_PATH)
-
     try:
         # Get valid billing IDs for current account to prevent cross-account data mixing
-        valid_billing_ids = get_valid_billing_ids()
-
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
+        valid_billing_ids = await get_valid_billing_ids()
 
         # Query aggregated data by billing_id from rtb_daily
-        # Filter by valid billing_ids to prevent cross-account mixing
         if valid_billing_ids:
             placeholders = ",".join("?" * len(valid_billing_ids))
-            cursor.execute(f"""
+            rows = await db_query(f"""
                 SELECT
                     billing_id,
                     creative_size,
@@ -836,7 +815,7 @@ async def get_config_performance(
             """, (f'-{days} days', *valid_billing_ids))
         else:
             # No pretargeting configs synced yet - return all data as fallback
-            cursor.execute("""
+            rows = await db_query("""
                 SELECT
                     billing_id,
                     creative_size,
@@ -850,9 +829,6 @@ async def get_config_performance(
                 GROUP BY billing_id, creative_size, creative_format, country, platform
                 ORDER BY total_reached DESC
             """, (f'-{days} days',))
-
-        rows = cursor.fetchall()
-        conn.close()
 
         if not rows:
             # No data in database
@@ -931,7 +907,7 @@ async def get_config_performance(
                 "billing_id": billing_id,
                 "name": f"Config {billing_id}",
                 "reached": reached,
-                "bids": 0,  # Not available in current schema
+                "bids": 0,
                 "impressions": impressions,
                 "win_rate_pct": round(win_rate, 1),
                 "waste_pct": round(waste, 1),
@@ -977,8 +953,6 @@ async def get_config_breakdown(
     - publisher: By app/publisher
     - creative: By individual creative ID
     """
-    db_path = str(QPS_DB_PATH)
-
     # Map breakdown type to column
     column_map = {
         "size": "creative_size",
@@ -989,12 +963,8 @@ async def get_config_breakdown(
     group_col = column_map.get(by, "creative_size")
 
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
         # Query aggregated data for this billing_id
-        cursor.execute(f"""
+        rows = await db_query(f"""
             SELECT
                 {group_col} as name,
                 SUM(reached_queries) as total_reached,
@@ -1008,9 +978,6 @@ async def get_config_breakdown(
             ORDER BY total_reached DESC
             LIMIT 50
         """, (billing_id, f'-{days} days'))
-
-        rows = cursor.fetchall()
-        conn.close()
 
         breakdown = []
         for row in rows:

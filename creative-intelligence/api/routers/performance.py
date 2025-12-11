@@ -10,10 +10,7 @@ This module provides endpoints for importing and querying performance metrics:
 import json
 import logging
 import os
-import sqlite3
 import tempfile
-import uuid
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File
@@ -34,6 +31,7 @@ from api.schemas.performance import (
 )
 from qps.importer import validate_csv, import_csv
 from storage import SQLiteStore, PerformanceMetric
+from storage.database import db_execute, db_query_one, db_transaction_async
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +41,10 @@ router = APIRouter(prefix="/performance", tags=["Performance"])
 class BatchImportRequest(BaseModel):
     """Request for batch import (array of rows)."""
     rows: list[dict]
-    batch_id: Optional[str] = None  # Session ID to track across batches
-    is_final: bool = False  # True if this is the last batch
-    filename: Optional[str] = None  # Original filename (sent with final batch)
-    file_size_bytes: Optional[int] = None  # File size (sent with final batch)
+    batch_id: Optional[str] = None
+    is_final: bool = False
+    filename: Optional[str] = None
+    file_size_bytes: Optional[int] = None
 
 
 class FinalizeImportRequest(BaseModel):
@@ -75,9 +73,6 @@ async def import_performance_metrics(
     Accepts an array of performance metrics and stores them using UPSERT semantics.
     If a record with the same (creative_id, metric_date, geography, device_type, placement)
     already exists, it will be updated.
-
-    Currency values are in USD micros (1,000,000 = $1.00). CPM and CPC are computed
-    automatically if not provided.
     """
     try:
         metrics = [
@@ -114,14 +109,7 @@ async def get_creative_performance(
     days: int = Query(30, ge=1, le=365, description="Days to aggregate"),
     store: SQLiteStore = Depends(get_store),
 ):
-    """Get aggregated performance summary for a creative.
-
-    Returns total impressions, clicks, spend, and computed metrics (CPM, CPC, CTR)
-    for the specified time period.
-
-    Currency values are in USD micros (1,000,000 = $1.00).
-    CTR is returned as a percentage (e.g., 1.5 = 1.5%).
-    """
+    """Get aggregated performance summary for a creative."""
     try:
         summary = await store.get_creative_performance_summary(creative_id, days=days)
 
@@ -153,11 +141,7 @@ async def list_performance_metrics(
     limit: int = Query(100, ge=1, le=1000, description="Maximum results"),
     store: SQLiteStore = Depends(get_store),
 ):
-    """List performance metrics with optional filtering.
-
-    Returns individual daily performance records matching the specified filters.
-    Use the creative/{id} endpoint for aggregated summaries.
-    """
+    """List performance metrics with optional filtering."""
     try:
         metrics = await store.get_performance_metrics(
             creative_id=creative_id,
@@ -197,13 +181,7 @@ async def refresh_campaign_performance_cache(
     campaign_id: str,
     store: SQLiteStore = Depends(get_store),
 ):
-    """Refresh cached performance aggregates for a campaign.
-
-    Computes and stores spend_7d, spend_30d, total_impressions, total_clicks,
-    avg_cpm, and avg_cpc on the campaigns table for faster lookups.
-
-    Call this after importing new performance data for a campaign.
-    """
+    """Refresh cached performance aggregates for a campaign."""
     try:
         campaign = await store.get_campaign(campaign_id)
         if not campaign:
@@ -225,11 +203,7 @@ async def cleanup_old_rtb_daily(
     days_to_keep: int = Query(90, ge=7, le=365, description="Days of data to retain"),
     store: SQLiteStore = Depends(get_store),
 ):
-    """Delete performance data older than the retention period.
-
-    Use this to manage database size by removing old historical data.
-    Default retention is 90 days.
-    """
+    """Delete performance data older than the retention period."""
     try:
         deleted = await store.clear_old_rtb_daily(days_to_keep=days_to_keep)
 
@@ -254,8 +228,6 @@ async def import_performance_csv(
     - Validates required columns (Day, Creative ID, Billing ID, Creative size, Reached queries, Impressions)
     - Stores raw data in rtb_daily table
     - Returns detailed import statistics
-
-    If validation fails, returns fix instructions for BigQuery export configuration.
     """
     if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
@@ -326,19 +298,7 @@ async def get_batch_performance(
     request: BatchPerformanceRequest,
     store: SQLiteStore = Depends(get_store),
 ):
-    """Get performance summaries for multiple creatives in a single request.
-
-    This is optimized for the dashboard view where performance data for all
-    visible creatives needs to be fetched at once.
-
-    Period options:
-    - `yesterday`: Last 1 day
-    - `7d`: Last 7 days
-    - `30d`: Last 30 days
-    - `all_time`: All available data (up to 365 days)
-
-    Returns a dict mapping creative_id to performance summary.
-    """
+    """Get performance summaries for multiple creatives in a single request."""
     try:
         period_days = {
             "yesterday": 1,
@@ -390,21 +350,13 @@ async def get_batch_performance(
 @router.post("/import/stream", response_model=StreamingImportResult)
 async def import_performance_stream(
     request: Request,
-    store: SQLiteStore = Depends(get_store),
 ):
-    """
-    Streaming import endpoint for large CSV files.
+    """Streaming import endpoint for large CSV files.
 
     Accepts NDJSON (newline-delimited JSON) stream of performance rows.
-    Each line should be a JSON object with performance data.
-
-    This endpoint:
-    - Processes data in batches of 1000 rows
-    - Uses optimized lookup tables for repeated values
-    - Returns progress updates (if SSE client)
-    - Never holds entire file in memory
     """
     from storage.performance_repository import PerformanceRepository
+    from storage.database import _get_connection
 
     BATCH_SIZE = 1000
     batch: list[dict] = []
@@ -418,8 +370,8 @@ async def import_performance_stream(
     total_spend = 0.0
 
     try:
-        db_path = Path.home() / ".catscan" / "catscan.db"
-        db_conn = sqlite3.connect(str(db_path))
+        # Use connection from database module
+        db_conn = _get_connection()
         repo = PerformanceRepository(db_conn)
 
         body = b""
@@ -495,6 +447,7 @@ async def import_performance_stream(
                     "rows_affected": len(batch),
                 })
 
+        db_conn.commit()
         db_conn.close()
 
         return StreamingImportResult(
@@ -517,86 +470,83 @@ async def import_performance_stream(
 async def import_performance_batch(
     request: BatchImportRequest,
 ):
-    """
-    Batch import endpoint for chunked uploads.
+    """Batch import endpoint for chunked uploads.
 
     Writes directly to the unified performance_metrics table.
-
-    This is used by the frontend chunked uploader which sends
-    batches of ~10,000 rows at a time.
     """
     try:
-        db_path = Path.home() / ".catscan" / "catscan.db"
-        conn = sqlite3.connect(str(db_path))
-        cursor = conn.cursor()
-
         min_date: Optional[str] = None
         max_date: Optional[str] = None
         total_spend = 0.0
         imported = 0
         skipped = 0
 
-        for row in request.rows:
-            try:
-                date = row.get("date") or row.get("metric_date")
-                if not date:
+        def _do_batch_import(conn):
+            nonlocal min_date, max_date, total_spend, imported, skipped
+            cursor = conn.cursor()
+
+            for row in request.rows:
+                try:
+                    date = row.get("date") or row.get("metric_date")
+                    if not date:
+                        skipped += 1
+                        continue
+
+                    if min_date is None or date < min_date:
+                        min_date = date
+                    if max_date is None or date > max_date:
+                        max_date = date
+
+                    spend = row.get("spend", 0)
+                    if isinstance(spend, str):
+                        spend = float(spend.replace("$", "").replace(",", ""))
+                    spend_micros = int(float(spend) * 1_000_000)
+                    total_spend += float(spend)
+
+                    impressions = int(row.get("impressions", 0) or 0)
+                    clicks = int(row.get("clicks", 0) or 0)
+                    reached = int(row.get("reached_queries", 0) or 0)
+
+                    geography = row.get("geography") or row.get("country") or None
+                    device_type = row.get("device_type") or row.get("platform") or None
+                    placement = row.get("placement") or None
+                    campaign_id = row.get("campaign_id") or None
+                    billing_id = row.get("billing_id") or None
+
+                    cursor.execute("""
+                        INSERT OR REPLACE INTO performance_metrics (
+                            creative_id, campaign_id, metric_date,
+                            impressions, clicks, spend_micros,
+                            geography, device_type, placement, reached_queries,
+                            billing_id
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        row.get("creative_id"),
+                        campaign_id,
+                        date,
+                        impressions,
+                        clicks,
+                        spend_micros,
+                        geography,
+                        device_type,
+                        placement,
+                        reached,
+                        billing_id,
+                    ))
+
+                    if cursor.rowcount > 0:
+                        imported += 1
+                    else:
+                        skipped += 1
+
+                except Exception as row_err:
+                    logger.warning(f"Row error: {row_err}")
                     skipped += 1
                     continue
 
-                if min_date is None or date < min_date:
-                    min_date = date
-                if max_date is None or date > max_date:
-                    max_date = date
+            return imported
 
-                spend = row.get("spend", 0)
-                if isinstance(spend, str):
-                    spend = float(spend.replace("$", "").replace(",", ""))
-                spend_micros = int(float(spend) * 1_000_000)
-                total_spend += float(spend)
-
-                impressions = int(row.get("impressions", 0) or 0)
-                clicks = int(row.get("clicks", 0) or 0)
-                reached = int(row.get("reached_queries", 0) or 0)
-
-                geography = row.get("geography") or row.get("country") or None
-                device_type = row.get("device_type") or row.get("platform") or None
-                placement = row.get("placement") or None
-                campaign_id = row.get("campaign_id") or None
-                billing_id = row.get("billing_id") or None
-
-                cursor.execute("""
-                    INSERT OR REPLACE INTO performance_metrics (
-                        creative_id, campaign_id, metric_date,
-                        impressions, clicks, spend_micros,
-                        geography, device_type, placement, reached_queries,
-                        billing_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    row.get("creative_id"),
-                    campaign_id,
-                    date,
-                    impressions,
-                    clicks,
-                    spend_micros,
-                    geography,
-                    device_type,
-                    placement,
-                    reached,
-                    billing_id,
-                ))
-
-                if cursor.rowcount > 0:
-                    imported += 1
-                else:
-                    skipped += 1
-
-            except Exception as row_err:
-                logger.warning(f"Row error: {row_err}")
-                skipped += 1
-                continue
-
-        conn.commit()
-        conn.close()
+        await db_transaction_async(_do_batch_import)
 
         return StreamingImportResult(
             status="completed",
@@ -616,67 +566,60 @@ async def import_performance_batch(
 
 @router.post("/import/finalize")
 async def finalize_import(request: FinalizeImportRequest):
-    """
-    Finalize a chunked import session and record in import_history.
-
-    Called by the frontend after all batches have been sent.
-    Records the import metadata for tracking/calendar display.
-    """
+    """Finalize a chunked import session and record in import_history."""
     try:
-        db_path = Path.home() / ".catscan" / "catscan.db"
-        conn = sqlite3.connect(str(db_path))
-        cursor = conn.cursor()
+        def _do_finalize(conn):
+            cursor = conn.cursor()
 
-        # Record in import_history
-        cursor.execute("""
-            INSERT INTO import_history (
-                batch_id, filename, rows_read, rows_imported, rows_skipped, rows_duplicate,
-                date_range_start, date_range_end, total_reached, total_impressions,
-                total_spend_usd, status, file_size_bytes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            request.batch_id,
-            request.filename,
-            request.rows_read,
-            request.rows_imported,
-            request.rows_skipped,
-            request.rows_duplicate,
-            request.date_range_start,
-            request.date_range_end,
-            request.total_reached,
-            request.total_impressions,
-            request.total_spend_usd,
-            "complete",
-            request.file_size_bytes,
-        ))
+            # Record in import_history
+            cursor.execute("""
+                INSERT INTO import_history (
+                    batch_id, filename, rows_read, rows_imported, rows_skipped, rows_duplicate,
+                    date_range_start, date_range_end, total_reached, total_impressions,
+                    total_spend_usd, status, file_size_bytes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                request.batch_id,
+                request.filename,
+                request.rows_read,
+                request.rows_imported,
+                request.rows_skipped,
+                request.rows_duplicate,
+                request.date_range_start,
+                request.date_range_end,
+                request.total_reached,
+                request.total_impressions,
+                request.total_spend_usd,
+                "complete",
+                request.file_size_bytes,
+            ))
 
-        # Update daily upload summary
-        import_date = cursor.execute("SELECT date('now')").fetchone()[0]
+            # Update daily upload summary
+            import_date = cursor.execute("SELECT date('now')").fetchone()[0]
 
-        cursor.execute("""
-            INSERT INTO daily_upload_summary (
-                upload_date, total_uploads, successful_uploads, failed_uploads,
-                total_rows_written, total_file_size_bytes, min_rows, max_rows, avg_rows_per_upload
-            ) VALUES (?, 1, 1, 0, ?, ?, ?, ?, ?)
-            ON CONFLICT(upload_date) DO UPDATE SET
-                total_uploads = total_uploads + 1,
-                successful_uploads = successful_uploads + 1,
-                total_rows_written = total_rows_written + excluded.total_rows_written,
-                total_file_size_bytes = total_file_size_bytes + excluded.total_file_size_bytes,
-                min_rows = MIN(min_rows, excluded.min_rows),
-                max_rows = MAX(max_rows, excluded.max_rows),
-                avg_rows_per_upload = (total_rows_written + excluded.total_rows_written) / (total_uploads + 1)
-        """, (
-            import_date,
-            request.rows_imported,
-            request.file_size_bytes,
-            request.rows_imported,
-            request.rows_imported,
-            request.rows_imported,
-        ))
+            cursor.execute("""
+                INSERT INTO daily_upload_summary (
+                    upload_date, total_uploads, successful_uploads, failed_uploads,
+                    total_rows_written, total_file_size_bytes, min_rows, max_rows, avg_rows_per_upload
+                ) VALUES (?, 1, 1, 0, ?, ?, ?, ?, ?)
+                ON CONFLICT(upload_date) DO UPDATE SET
+                    total_uploads = total_uploads + 1,
+                    successful_uploads = successful_uploads + 1,
+                    total_rows_written = total_rows_written + excluded.total_rows_written,
+                    total_file_size_bytes = total_file_size_bytes + excluded.total_file_size_bytes,
+                    min_rows = MIN(min_rows, excluded.min_rows),
+                    max_rows = MAX(max_rows, excluded.max_rows),
+                    avg_rows_per_upload = (total_rows_written + excluded.total_rows_written) / (total_uploads + 1)
+            """, (
+                import_date,
+                request.rows_imported,
+                request.file_size_bytes,
+                request.rows_imported,
+                request.rows_imported,
+                request.rows_imported,
+            ))
 
-        conn.commit()
-        conn.close()
+        await db_transaction_async(_do_finalize)
 
         logger.info(f"Import finalized: batch_id={request.batch_id}, rows={request.rows_imported}")
 
