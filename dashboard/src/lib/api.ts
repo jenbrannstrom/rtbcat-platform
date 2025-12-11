@@ -1294,3 +1294,89 @@ export async function getComparisons(params?: {
     `/settings/pretargeting/comparisons${query ? `?${query}` : ""}`
   );
 }
+
+// =============================================================================
+// Pretargeting Pending Changes API (Local Changes - NO Google API Writes)
+// =============================================================================
+
+export interface PendingChange {
+  id: number;
+  billing_id: string;
+  config_id: string;
+  change_type: string;
+  field_name: string;
+  value: string;
+  reason: string | null;
+  estimated_qps_impact: number | null;
+  created_at: string;
+  created_by: string | null;
+  status: string;
+}
+
+export interface ConfigDetail {
+  config_id: string;
+  billing_id: string;
+  display_name: string | null;
+  user_name: string | null;
+  state: string;
+  included_formats: string[];
+  included_platforms: string[];
+  included_sizes: string[];
+  included_geos: string[];
+  excluded_geos: string[];
+  synced_at: string | null;
+  pending_changes: PendingChange[];
+  effective_sizes: string[];
+  effective_geos: string[];
+  effective_formats: string[];
+}
+
+export async function createPendingChange(params: {
+  billing_id: string;
+  change_type: string;
+  field_name: string;
+  value: string;
+  reason?: string;
+  estimated_qps_impact?: number;
+}): Promise<PendingChange> {
+  return fetchApi<PendingChange>("/settings/pretargeting/pending-change", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+export async function getPendingChanges(params?: {
+  billing_id?: string;
+  status?: string;
+  limit?: number;
+}): Promise<PendingChange[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.billing_id) searchParams.set("billing_id", params.billing_id);
+  if (params?.status) searchParams.set("status", params.status || "pending");
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+
+  const query = searchParams.toString();
+  return fetchApi<PendingChange[]>(
+    `/settings/pretargeting/pending-changes${query ? `?${query}` : ""}`
+  );
+}
+
+export async function cancelPendingChange(changeId: number): Promise<{ status: string; id: number }> {
+  return fetchApi<{ status: string; id: number }>(
+    `/settings/pretargeting/pending-change/${changeId}`,
+    { method: "DELETE" }
+  );
+}
+
+export async function markChangeApplied(changeId: number): Promise<{ status: string; id: number }> {
+  return fetchApi<{ status: string; id: number }>(
+    `/settings/pretargeting/pending-change/${changeId}/mark-applied`,
+    { method: "POST" }
+  );
+}
+
+export async function getPretargetingConfigDetail(billingId: string): Promise<ConfigDetail> {
+  return fetchApi<ConfigDetail>(
+    `/settings/pretargeting/${encodeURIComponent(billingId)}/detail`
+  );
+}
