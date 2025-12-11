@@ -4,12 +4,13 @@ Handles retention configuration, storage statistics, and running retention jobs.
 """
 
 import logging
-import sqlite3
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+
+from storage.database import db_query, db_execute, db_transaction_async, DB_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +61,7 @@ async def get_retention_config():
     """Get current retention configuration."""
     from storage.retention_manager import RetentionManager
 
-    db_path = Path.home() / ".catscan" / "catscan.db"
-    if not db_path.exists():
+    if not DB_PATH.exists():
         # Return defaults if no database
         return RetentionConfigResponse(
             raw_retention_days=90,
@@ -70,10 +70,11 @@ async def get_retention_config():
         )
 
     try:
-        conn = sqlite3.connect(db_path)
-        manager = RetentionManager(conn)
-        config = manager.get_retention_config()
-        conn.close()
+        def _get_config(conn):
+            manager = RetentionManager(conn)
+            return manager.get_retention_config()
+
+        config = await db_transaction_async(_get_config)
 
         return RetentionConfigResponse(
             raw_retention_days=config.get('raw_retention_days', 90),
@@ -95,34 +96,32 @@ async def set_retention_config(request: RetentionConfigRequest):
     """Update retention configuration."""
     from storage.retention_manager import RetentionManager
 
-    db_path = Path.home() / ".catscan" / "catscan.db"
-    if not db_path.exists():
+    if not DB_PATH.exists():
         raise HTTPException(status_code=404, detail="Database not found")
 
     try:
-        conn = sqlite3.connect(db_path)
+        def _set_config(conn):
+            # Ensure retention_config table exists
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS retention_config (
+                    id INTEGER PRIMARY KEY,
+                    seat_id INTEGER,
+                    raw_retention_days INTEGER NOT NULL DEFAULT 90,
+                    summary_retention_days INTEGER NOT NULL DEFAULT 365,
+                    auto_aggregate_after_days INTEGER NOT NULL DEFAULT 30,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(seat_id)
+                )
+            """)
 
-        # Ensure retention_config table exists
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS retention_config (
-                id INTEGER PRIMARY KEY,
-                seat_id INTEGER,
-                raw_retention_days INTEGER NOT NULL DEFAULT 90,
-                summary_retention_days INTEGER NOT NULL DEFAULT 365,
-                auto_aggregate_after_days INTEGER NOT NULL DEFAULT 30,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(seat_id)
+            manager = RetentionManager(conn)
+            manager.set_retention_config(
+                raw_retention_days=request.raw_retention_days,
+                summary_retention_days=request.summary_retention_days,
+                auto_aggregate_after_days=request.auto_aggregate_after_days,
             )
-        """)
-        conn.commit()
 
-        manager = RetentionManager(conn)
-        manager.set_retention_config(
-            raw_retention_days=request.raw_retention_days,
-            summary_retention_days=request.summary_retention_days,
-            auto_aggregate_after_days=request.auto_aggregate_after_days,
-        )
-        conn.close()
+        await db_transaction_async(_set_config)
 
         return RetentionConfigResponse(
             raw_retention_days=request.raw_retention_days,
@@ -139,8 +138,7 @@ async def get_storage_stats():
     """Get storage statistics for performance data."""
     from storage.retention_manager import RetentionManager
 
-    db_path = Path.home() / ".catscan" / "catscan.db"
-    if not db_path.exists():
+    if not DB_PATH.exists():
         return StorageStatsResponse(
             raw_rows=0,
             raw_earliest_date=None,
@@ -151,33 +149,32 @@ async def get_storage_stats():
         )
 
     try:
-        conn = sqlite3.connect(db_path)
+        def _get_stats(conn):
+            # Ensure daily_creative_summary table exists
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS daily_creative_summary (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    seat_id INTEGER,
+                    creative_id TEXT NOT NULL,
+                    date DATE NOT NULL,
+                    total_queries INTEGER DEFAULT 0,
+                    total_impressions INTEGER DEFAULT 0,
+                    total_clicks INTEGER DEFAULT 0,
+                    total_spend REAL DEFAULT 0,
+                    win_rate REAL,
+                    ctr REAL,
+                    cpm REAL,
+                    unique_geos INTEGER DEFAULT 0,
+                    unique_apps INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(seat_id, creative_id, date)
+                )
+            """)
 
-        # Ensure daily_creative_summary table exists
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS daily_creative_summary (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                seat_id INTEGER,
-                creative_id TEXT NOT NULL,
-                date DATE NOT NULL,
-                total_queries INTEGER DEFAULT 0,
-                total_impressions INTEGER DEFAULT 0,
-                total_clicks INTEGER DEFAULT 0,
-                total_spend REAL DEFAULT 0,
-                win_rate REAL,
-                ctr REAL,
-                cpm REAL,
-                unique_geos INTEGER DEFAULT 0,
-                unique_apps INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(seat_id, creative_id, date)
-            )
-        """)
-        conn.commit()
+            manager = RetentionManager(conn)
+            return manager.get_storage_stats()
 
-        manager = RetentionManager(conn)
-        stats = manager.get_storage_stats()
-        conn.close()
+        stats = await db_transaction_async(_get_stats)
 
         return StorageStatsResponse(**stats)
     except Exception as e:
@@ -197,49 +194,47 @@ async def run_retention_job():
     """Run the retention job to aggregate and clean up old data."""
     from storage.retention_manager import RetentionManager
 
-    db_path = Path.home() / ".catscan" / "catscan.db"
-    if not db_path.exists():
+    if not DB_PATH.exists():
         raise HTTPException(status_code=404, detail="Database not found")
 
     try:
-        conn = sqlite3.connect(db_path)
+        def _run_job(conn):
+            # Ensure required tables exist
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS retention_config (
+                    id INTEGER PRIMARY KEY,
+                    seat_id INTEGER,
+                    raw_retention_days INTEGER NOT NULL DEFAULT 90,
+                    summary_retention_days INTEGER NOT NULL DEFAULT 365,
+                    auto_aggregate_after_days INTEGER NOT NULL DEFAULT 30,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(seat_id)
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS daily_creative_summary (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    seat_id INTEGER,
+                    creative_id TEXT NOT NULL,
+                    date DATE NOT NULL,
+                    total_queries INTEGER DEFAULT 0,
+                    total_impressions INTEGER DEFAULT 0,
+                    total_clicks INTEGER DEFAULT 0,
+                    total_spend REAL DEFAULT 0,
+                    win_rate REAL,
+                    ctr REAL,
+                    cpm REAL,
+                    unique_geos INTEGER DEFAULT 0,
+                    unique_apps INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(seat_id, creative_id, date)
+                )
+            """)
 
-        # Ensure required tables exist
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS retention_config (
-                id INTEGER PRIMARY KEY,
-                seat_id INTEGER,
-                raw_retention_days INTEGER NOT NULL DEFAULT 90,
-                summary_retention_days INTEGER NOT NULL DEFAULT 365,
-                auto_aggregate_after_days INTEGER NOT NULL DEFAULT 30,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(seat_id)
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS daily_creative_summary (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                seat_id INTEGER,
-                creative_id TEXT NOT NULL,
-                date DATE NOT NULL,
-                total_queries INTEGER DEFAULT 0,
-                total_impressions INTEGER DEFAULT 0,
-                total_clicks INTEGER DEFAULT 0,
-                total_spend REAL DEFAULT 0,
-                win_rate REAL,
-                ctr REAL,
-                cpm REAL,
-                unique_geos INTEGER DEFAULT 0,
-                unique_apps INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(seat_id, creative_id, date)
-            )
-        """)
-        conn.commit()
+            manager = RetentionManager(conn)
+            return manager.run_retention_job()
 
-        manager = RetentionManager(conn)
-        result = manager.run_retention_job()
-        conn.close()
+        result = await db_transaction_async(_run_job)
 
         return RetentionJobResponse(**result)
     except Exception as e:

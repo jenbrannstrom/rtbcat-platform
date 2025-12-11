@@ -8,7 +8,6 @@ import os
 import shutil
 import subprocess
 import sys
-import sqlite3
 import json
 from pathlib import Path
 from typing import Optional
@@ -19,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from api.dependencies import get_store, get_config
 from storage import SQLiteStore
+from storage.database import db_query, db_execute, DB_PATH
 from config import ConfigManager
 
 logger = logging.getLogger(__name__)
@@ -267,10 +267,9 @@ async def get_thumbnail_status(
 
     Optionally filter by buyer_id to see status for a specific account.
     """
-    db_path = Path.home() / ".catscan" / "catscan.db"
     ffmpeg_available = _check_ffmpeg()
 
-    if not db_path.exists():
+    if not DB_PATH.exists():
         return ThumbnailStatusSummary(
             total_videos=0,
             with_thumbnails=0,
@@ -280,10 +279,6 @@ async def get_thumbnail_status(
             ffmpeg_available=ffmpeg_available,
         )
 
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
     # Build WHERE clause with optional buyer_id filter
     where_clause = "WHERE c.format = 'VIDEO'"
     params = []
@@ -291,10 +286,13 @@ async def get_thumbnail_status(
         where_clause += " AND c.buyer_id = ?"
         params.append(buyer_id)
 
-    cursor.execute(f"SELECT COUNT(*) FROM creatives c {where_clause}", params)
-    total_videos = cursor.fetchone()[0]
+    count_rows = await db_query(
+        f"SELECT COUNT(*) as cnt FROM creatives c {where_clause}",
+        tuple(params)
+    )
+    total_videos = count_rows[0]["cnt"] if count_rows else 0
 
-    cursor.execute(f"""
+    status_rows = await db_query(f"""
         SELECT
             COALESCE(ts.status, 'pending') as status,
             COUNT(*) as count
@@ -302,10 +300,9 @@ async def get_thumbnail_status(
         LEFT JOIN thumbnail_status ts ON c.id = ts.creative_id
         {where_clause}
         GROUP BY COALESCE(ts.status, 'pending')
-    """, params)
+    """, tuple(params))
 
-    status_counts = {row['status']: row['count'] for row in cursor.fetchall()}
-    conn.close()
+    status_counts = {row['status']: row['count'] for row in status_rows}
 
     with_thumbnails = status_counts.get('success', 0)
     failed = status_counts.get('failed', 0)
@@ -348,8 +345,7 @@ async def get_system_status():
         except Exception:
             pass
 
-    db_path = Path.home() / ".catscan" / "catscan.db"
-    database_size_mb = db_path.stat().st_size / (1024 * 1024) if db_path.exists() else 0
+    database_size_mb = DB_PATH.stat().st_size / (1024 * 1024) if DB_PATH.exists() else 0
 
     thumbnails_dir = Path.home() / ".catscan" / "thumbnails"
     thumbnails_count = len(list(thumbnails_dir.glob("*.jpg"))) if thumbnails_dir.exists() else 0
@@ -359,15 +355,12 @@ async def get_system_status():
 
     creatives_count = 0
     videos_count = 0
-    if db_path.exists():
+    if DB_PATH.exists():
         try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM creatives")
-            creatives_count = cursor.fetchone()[0]
-            cursor.execute("SELECT COUNT(*) FROM creatives WHERE format = 'VIDEO'")
-            videos_count = cursor.fetchone()[0]
-            conn.close()
+            rows = await db_query("SELECT COUNT(*) as cnt FROM creatives")
+            creatives_count = rows[0]["cnt"] if rows else 0
+            video_rows = await db_query("SELECT COUNT(*) as cnt FROM creatives WHERE format = 'VIDEO'")
+            videos_count = video_rows[0]["cnt"] if video_rows else 0
         except Exception:
             pass
 
@@ -394,26 +387,19 @@ async def generate_single_thumbnail(
     if not _check_ffmpeg():
         raise HTTPException(status_code=503, detail="ffmpeg not installed on server")
 
-    db_path = Path.home() / ".catscan" / "catscan.db"
     thumb_dir = _get_thumbnails_dir()
 
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    cursor.execute("""
+    rows = await db_query("""
         SELECT id, format, raw_data
         FROM creatives
         WHERE id = ?
     """, (request.creative_id,))
 
-    row = cursor.fetchone()
-    if not row:
-        conn.close()
+    if not rows:
         raise HTTPException(status_code=404, detail="Creative not found")
 
+    row = rows[0]
     if row['format'] != 'VIDEO':
-        conn.close()
         return ThumbnailGenerateResponse(
             creative_id=request.creative_id,
             status='skipped',
@@ -428,7 +414,7 @@ async def generate_single_thumbnail(
         video_url = _extract_video_url_from_vast(video_data['vastXml'])
 
     if not video_url:
-        cursor.execute("""
+        await db_execute("""
             INSERT INTO thumbnail_status (creative_id, status, error_reason, attempted_at)
             VALUES (?, 'failed', 'no_url', CURRENT_TIMESTAMP)
             ON CONFLICT(creative_id) DO UPDATE SET
@@ -436,8 +422,6 @@ async def generate_single_thumbnail(
                 error_reason = 'no_url',
                 attempted_at = CURRENT_TIMESTAMP
         """, (request.creative_id,))
-        conn.commit()
-        conn.close()
 
         return ThumbnailGenerateResponse(
             creative_id=request.creative_id,
@@ -451,12 +435,12 @@ async def generate_single_thumbnail(
     if result['success']:
         video_data['localThumbnailPath'] = str(thumb_path)
         raw_data['video'] = video_data
-        cursor.execute(
+        await db_execute(
             "UPDATE creatives SET raw_data = ? WHERE id = ?",
             (json.dumps(raw_data), request.creative_id)
         )
 
-        cursor.execute("""
+        await db_execute("""
             INSERT INTO thumbnail_status (creative_id, status, video_url, attempted_at)
             VALUES (?, 'success', ?, CURRENT_TIMESTAMP)
             ON CONFLICT(creative_id) DO UPDATE SET
@@ -466,16 +450,13 @@ async def generate_single_thumbnail(
                 attempted_at = CURRENT_TIMESTAMP
         """, (request.creative_id, video_url))
 
-        conn.commit()
-        conn.close()
-
         return ThumbnailGenerateResponse(
             creative_id=request.creative_id,
             status='success',
             thumbnail_url=f"/thumbnails/{request.creative_id}.jpg",
         )
     else:
-        cursor.execute("""
+        await db_execute("""
             INSERT INTO thumbnail_status (creative_id, status, error_reason, video_url, attempted_at)
             VALUES (?, 'failed', ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(creative_id) DO UPDATE SET
@@ -484,8 +465,6 @@ async def generate_single_thumbnail(
                 video_url = excluded.video_url,
                 attempted_at = CURRENT_TIMESTAMP
         """, (request.creative_id, result['error_reason'], video_url))
-        conn.commit()
-        conn.close()
 
         return ThumbnailGenerateResponse(
             creative_id=request.creative_id,
@@ -506,12 +485,7 @@ async def generate_batch_thumbnails(
     if not _check_ffmpeg():
         raise HTTPException(status_code=503, detail="ffmpeg not installed on server")
 
-    db_path = Path.home() / ".catscan" / "catscan.db"
     thumb_dir = _get_thumbnails_dir()
-
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
 
     if request.force:
         query = """
@@ -532,11 +506,9 @@ async def generate_batch_thumbnails(
 
     if request.seat_id:
         query += " AND c.buyer_id = ?"
-        cursor.execute(query + f" LIMIT {request.limit}", (request.seat_id,))
+        rows = await db_query(query + f" LIMIT {request.limit}", (request.seat_id,))
     else:
-        cursor.execute(query + f" LIMIT {request.limit}")
-
-    rows = cursor.fetchall()
+        rows = await db_query(query + f" LIMIT {request.limit}")
 
     results = []
     success_count = 0
@@ -553,7 +525,7 @@ async def generate_batch_thumbnails(
             video_url = _extract_video_url_from_vast(video_data['vastXml'])
 
         if not video_url:
-            cursor.execute("""
+            await db_execute("""
                 INSERT INTO thumbnail_status (creative_id, status, error_reason, attempted_at)
                 VALUES (?, 'failed', 'no_url', CURRENT_TIMESTAMP)
                 ON CONFLICT(creative_id) DO UPDATE SET
@@ -574,12 +546,12 @@ async def generate_batch_thumbnails(
         if result['success']:
             video_data['localThumbnailPath'] = str(thumb_path)
             raw_data['video'] = video_data
-            cursor.execute(
+            await db_execute(
                 "UPDATE creatives SET raw_data = ? WHERE id = ?",
                 (json.dumps(raw_data), creative_id)
             )
 
-            cursor.execute("""
+            await db_execute("""
                 INSERT INTO thumbnail_status (creative_id, status, video_url, attempted_at)
                 VALUES (?, 'success', ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(creative_id) DO UPDATE SET
@@ -594,7 +566,7 @@ async def generate_batch_thumbnails(
             ))
             success_count += 1
         else:
-            cursor.execute("""
+            await db_execute("""
                 INSERT INTO thumbnail_status (creative_id, status, error_reason, video_url, attempted_at)
                 VALUES (?, 'failed', ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(creative_id) DO UPDATE SET
@@ -608,9 +580,6 @@ async def generate_batch_thumbnails(
                 error_reason=result['error_reason'],
             ))
             failed_count += 1
-
-    conn.commit()
-    conn.close()
 
     return ThumbnailBatchResponse(
         status='completed',

@@ -3,20 +3,19 @@
 Handles upload tracking summary and detailed import history for CSV imports.
 """
 
+import json
 import logging
-import sqlite3
-from pathlib import Path
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from storage.database import db_query, DB_PATH
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Uploads"])
-
-# Database path for QPS data (import history lives here)
-QPS_DB_PATH = Path.home() / ".catscan" / "catscan.db"
 
 
 # =============================================================================
@@ -62,7 +61,6 @@ class ImportHistoryResponse(BaseModel):
     file_size_mb: float
     status: str
     error_message: Optional[str] = None
-    # Multi-account support
     bidder_id: Optional[str] = None
     billing_ids_found: Optional[list[str]] = None
 
@@ -70,15 +68,15 @@ class ImportHistoryResponse(BaseModel):
 class DailyFileUpload(BaseModel):
     """Single file upload for a day."""
     rows: int
-    status: str  # 'success', 'error', or 'missing'
+    status: str
     error_message: Optional[str] = None
 
 
 class DailyUploadRow(BaseModel):
     """One row in the daily uploads grid - shows all files for a day."""
-    date: str  # e.g. "Mon 8 Dec"
-    date_iso: str  # e.g. "2024-12-08"
-    uploads: list[DailyFileUpload]  # List of file uploads for this day
+    date: str
+    date_iso: str
+    uploads: list[DailyFileUpload]
     total_rows: int
     has_error: bool
 
@@ -97,15 +95,8 @@ class DailyUploadsGridResponse(BaseModel):
 async def get_upload_tracking(
     days: int = Query(30, description="Number of days to retrieve", ge=1, le=365),
 ):
-    """Get daily upload tracking summary.
-
-    Returns upload statistics for each day, including:
-    - Date with success/failure indicator
-    - File size in MB
-    - Total rows written
-    - Anomaly warnings for sudden drops/spikes in row counts
-    """
-    if not QPS_DB_PATH.exists():
+    """Get daily upload tracking summary."""
+    if not DB_PATH.exists():
         return UploadTrackingResponse(
             daily_summaries=[],
             total_days=0,
@@ -115,18 +106,12 @@ async def get_upload_tracking(
         )
 
     try:
-        conn = sqlite3.connect(str(QPS_DB_PATH))
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        cursor.execute(
+        rows = await db_query(
             """SELECT * FROM daily_upload_summary
             ORDER BY upload_date DESC
             LIMIT ?""",
             (days,),
         )
-        rows = cursor.fetchall()
-        conn.close()
 
         daily_summaries = []
         total_uploads = 0
@@ -135,7 +120,7 @@ async def get_upload_tracking(
 
         for row in rows:
             file_size_mb = (row["total_file_size_bytes"] or 0) / (1024 * 1024)
-            has_anomaly = bool(row["has_anomaly"])
+            has_anomaly = bool(row["has_anomaly"]) if "has_anomaly" in row.keys() else False
 
             daily_summaries.append(
                 DailyUploadSummaryResponse(
@@ -146,10 +131,10 @@ async def get_upload_tracking(
                     total_rows_written=row["total_rows_written"] or 0,
                     total_file_size_mb=round(file_size_mb, 2),
                     avg_rows_per_upload=round(row["avg_rows_per_upload"] or 0, 1),
-                    min_rows=row["min_rows"],
-                    max_rows=row["max_rows"],
+                    min_rows=row["min_rows"] if "min_rows" in row.keys() else None,
+                    max_rows=row["max_rows"] if "max_rows" in row.keys() else None,
                     has_anomaly=has_anomaly,
-                    anomaly_reason=row["anomaly_reason"],
+                    anomaly_reason=row["anomaly_reason"] if "anomaly_reason" in row.keys() else None,
                 )
             )
 
@@ -177,24 +162,13 @@ async def get_import_history(
     offset: int = Query(0, description="Number of records to skip", ge=0),
     bidder_id: Optional[str] = Query(None, description="Filter by account (bidder_id)"),
 ):
-    """Get import history records.
-
-    Returns detailed history of all CSV imports with file sizes, row counts, and status.
-    Optionally filter by bidder_id to see imports for a specific account.
-    """
-    import json
-
-    if not QPS_DB_PATH.exists():
+    """Get import history records."""
+    if not DB_PATH.exists():
         return []
 
     try:
-        conn = sqlite3.connect(str(QPS_DB_PATH))
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
         if bidder_id:
-            # Filter by bidder_id
-            cursor.execute(
+            rows = await db_query(
                 """SELECT * FROM import_history
                 WHERE bidder_id = ?
                 ORDER BY imported_at DESC
@@ -202,21 +176,18 @@ async def get_import_history(
                 (bidder_id, limit, offset),
             )
         else:
-            cursor.execute(
+            rows = await db_query(
                 """SELECT * FROM import_history
                 ORDER BY imported_at DESC
                 LIMIT ? OFFSET ?""",
                 (limit, offset),
             )
-        rows = cursor.fetchall()
-        conn.close()
 
         results = []
         for row in rows:
             file_size_bytes = row["file_size_bytes"] if "file_size_bytes" in row.keys() else 0
             file_size_mb = (file_size_bytes or 0) / (1024 * 1024)
 
-            # Parse billing_ids_found JSON if present
             billing_ids = None
             if "billing_ids_found" in row.keys() and row["billing_ids_found"]:
                 try:
@@ -256,25 +227,13 @@ async def get_daily_uploads_grid(
     days: int = Query(14, description="Number of days to show", ge=1, le=90),
     expected_per_day: int = Query(3, description="Expected uploads per day", ge=1, le=10),
 ):
-    """Get daily uploads in a simple grid format.
-
-    Shows each day with its uploads:
-    - Mon 8 Dec: 200 rows | 15 rows | error
-    - Tue 9 Dec: 180 rows | 200 rows | 1,007,000 rows
-    """
-    from datetime import datetime, timedelta
-
-    if not QPS_DB_PATH.exists():
+    """Get daily uploads in a simple grid format."""
+    if not DB_PATH.exists():
         return DailyUploadsGridResponse(days=[], expected_uploads_per_day=expected_per_day)
 
     try:
-        conn = sqlite3.connect(str(QPS_DB_PATH))
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        # Get all imports for the last N days
         start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-        cursor.execute(
+        imports = await db_query(
             """
             SELECT
                 date(imported_at) as import_date,
@@ -288,8 +247,6 @@ async def get_daily_uploads_grid(
             """,
             (start_date,),
         )
-        imports = cursor.fetchall()
-        conn.close()
 
         # Group imports by date
         imports_by_date: dict[str, list] = {}
@@ -310,11 +267,10 @@ async def get_daily_uploads_grid(
         for i in range(days):
             check_date = current - timedelta(days=i)
             date_iso = check_date.strftime("%Y-%m-%d")
-            date_display = check_date.strftime("%a %d %b")  # e.g. "Mon 08 Dec"
+            date_display = check_date.strftime("%a %d %b")
 
             day_uploads = imports_by_date.get(date_iso, [])
 
-            # Build upload list
             uploads = []
             total_rows = 0
             has_error = False
@@ -330,7 +286,6 @@ async def get_daily_uploads_grid(
                 ))
                 total_rows += upload["rows"]
 
-            # Mark missing uploads if less than expected
             while len(uploads) < expected_per_day:
                 uploads.append(DailyFileUpload(rows=0, status="missing"))
 
@@ -370,19 +325,13 @@ class AccountsUploadSummaryResponse(BaseModel):
     """Response for accounts upload summary."""
     accounts: list[AccountUploadStats]
     total_accounts: int
-    unassigned_uploads: int  # Uploads without bidder_id
+    unassigned_uploads: int
 
 
 @router.get("/uploads/accounts", response_model=AccountsUploadSummaryResponse)
 async def get_accounts_upload_summary():
-    """Get upload statistics grouped by account (bidder_id).
-
-    Returns a list of accounts with their upload statistics,
-    helping identify which accounts have data and their upload patterns.
-    """
-    import json
-
-    if not QPS_DB_PATH.exists():
+    """Get upload statistics grouped by account (bidder_id)."""
+    if not DB_PATH.exists():
         return AccountsUploadSummaryResponse(
             accounts=[],
             total_accounts=0,
@@ -390,12 +339,7 @@ async def get_accounts_upload_summary():
         )
 
     try:
-        conn = sqlite3.connect(str(QPS_DB_PATH))
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        # Get per-account stats
-        cursor.execute("""
+        rows = await db_query("""
             SELECT
                 bidder_id,
                 COUNT(*) as upload_count,
@@ -407,19 +351,14 @@ async def get_accounts_upload_summary():
             GROUP BY bidder_id
             ORDER BY latest_upload DESC
         """)
-        rows = cursor.fetchall()
 
-        # Count unassigned uploads
-        cursor.execute("""
-            SELECT COUNT(*) FROM import_history WHERE bidder_id IS NULL
+        unassigned_row = await db_query("""
+            SELECT COUNT(*) as cnt FROM import_history WHERE bidder_id IS NULL
         """)
-        unassigned = cursor.fetchone()[0] or 0
-
-        conn.close()
+        unassigned = unassigned_row[0]["cnt"] if unassigned_row else 0
 
         accounts = []
         for row in rows:
-            # Parse billing_ids from JSON
             billing_ids = set()
             if row["all_billing_ids"]:
                 for json_str in row["all_billing_ids"].split(","):
