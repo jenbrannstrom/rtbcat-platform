@@ -412,7 +412,8 @@ async def set_pretargeting_name(
     """Set a custom user-defined name for a pretargeting config.
 
     This name will be displayed in the UI alongside the billing_id,
-    making it easier to identify configs.
+    making it easier to identify configs. The identifier can be either
+    billing_id or config_id.
     """
     try:
         async with store._connection() as conn:
@@ -420,30 +421,32 @@ async def set_pretargeting_name(
             loop = asyncio.get_event_loop()
 
             # Get current value for history tracking
+            # Search by billing_id OR config_id since frontend falls back to config_id
             current = await loop.run_in_executor(
                 None,
                 lambda: conn.execute(
-                    "SELECT user_name, config_id, bidder_id FROM pretargeting_configs WHERE billing_id = ?",
-                    (billing_id,),
+                    "SELECT user_name, config_id, bidder_id, billing_id FROM pretargeting_configs WHERE billing_id = ? OR config_id = ?",
+                    (billing_id, billing_id),
                 ).fetchone(),
             )
 
             if not current:
                 raise HTTPException(
                     status_code=404,
-                    detail=f"Pretargeting config with billing_id {billing_id} not found"
+                    detail=f"Pretargeting config with identifier {billing_id} not found"
                 )
 
             old_name = current["user_name"]
             config_id = current["config_id"]
             bidder_id = current["bidder_id"]
+            actual_billing_id = current["billing_id"]
 
-            # Update the name
+            # Update the name using the actual billing_id or config_id
             await loop.run_in_executor(
                 None,
                 lambda: conn.execute(
-                    "UPDATE pretargeting_configs SET user_name = ? WHERE billing_id = ?",
-                    (body.user_name, billing_id),
+                    "UPDATE pretargeting_configs SET user_name = ? WHERE billing_id = ? OR config_id = ?",
+                    (body.user_name, actual_billing_id or config_id, config_id),
                 ),
             )
 
@@ -503,7 +506,9 @@ async def get_pretargeting_history(
                 query += " AND ph.config_id = ?"
                 params.append(config_id)
             if billing_id:
-                query += " AND pc.billing_id = ?"
+                # Search by billing_id OR config_id since frontend falls back to config_id
+                query += " AND (pc.billing_id = ? OR pc.config_id = ?)"
+                params.append(billing_id)
                 params.append(billing_id)
 
             query += " ORDER BY ph.changed_at DESC LIMIT 500"
@@ -1057,21 +1062,23 @@ async def create_pending_change(
             conn.row_factory = sqlite3.Row
 
             # Verify the config exists and get config_id
+            # Search by billing_id OR config_id since frontend falls back to config_id
             config = await loop.run_in_executor(
                 None,
                 lambda: conn.execute(
-                    "SELECT config_id FROM pretargeting_configs WHERE billing_id = ?",
-                    (request.billing_id,)
+                    "SELECT config_id, billing_id FROM pretargeting_configs WHERE billing_id = ? OR config_id = ?",
+                    (request.billing_id, request.billing_id)
                 ).fetchone()
             )
 
             if not config:
                 raise HTTPException(
                     status_code=404,
-                    detail=f"Pretargeting config not found for billing_id: {request.billing_id}"
+                    detail=f"Pretargeting config not found for identifier: {request.billing_id}"
                 )
 
             config_id = config["config_id"]
+            actual_billing_id = config["billing_id"] or config_id  # Use config_id if billing_id is NULL
 
             # Insert the pending change
             cursor = await loop.run_in_executor(
@@ -1082,7 +1089,7 @@ async def create_pending_change(
                         reason, estimated_qps_impact, status
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')""",
                     (
-                        request.billing_id,
+                        actual_billing_id,
                         config_id,
                         request.change_type,
                         request.field_name,
@@ -1104,8 +1111,8 @@ async def create_pending_change(
                         config_id, bidder_id, change_type, field_changed,
                         old_value, new_value, change_source, changed_by
                     ) SELECT ?, bidder_id, 'pending_change', ?, NULL, ?, 'user', 'ui'
-                    FROM pretargeting_configs WHERE billing_id = ?""",
-                    (config_id, request.field_name, f"{request.change_type}:{request.value}", request.billing_id)
+                    FROM pretargeting_configs WHERE config_id = ?""",
+                    (config_id, request.field_name, f"{request.change_type}:{request.value}", config_id)
                 )
             )
             conn.commit()
@@ -1306,6 +1313,9 @@ async def get_pretargeting_config_detail(
     """
     Get detailed pretargeting config including current state and pending changes.
 
+    The identifier can be either a billing_id or config_id (frontend falls back
+    to config_id when billing_id is null).
+
     Returns:
     - Current config values (from last Google sync)
     - List of pending changes
@@ -1321,29 +1331,34 @@ async def get_pretargeting_config_detail(
         with sqlite3.connect(str(db_path)) as conn:
             conn.row_factory = sqlite3.Row
 
-            # Get config
+            # Get config - search by billing_id OR config_id since frontend
+            # falls back to config_id when billing_id is null
             config = await loop.run_in_executor(
                 None,
                 lambda: conn.execute(
-                    "SELECT * FROM pretargeting_configs WHERE billing_id = ?",
-                    (billing_id,)
+                    "SELECT * FROM pretargeting_configs WHERE billing_id = ? OR config_id = ?",
+                    (billing_id, billing_id)
                 ).fetchone()
             )
 
             if not config:
                 raise HTTPException(
                     status_code=404,
-                    detail=f"Config not found for billing_id: {billing_id}"
+                    detail=f"Config not found for identifier: {billing_id}"
                 )
 
-            # Get pending changes
+            # Get the actual billing_id and config_id from the found config
+            actual_billing_id = config["billing_id"]
+            actual_config_id = config["config_id"]
+
+            # Get pending changes - search by both billing_id and config_id
             pending_rows = await loop.run_in_executor(
                 None,
                 lambda: conn.execute(
                     """SELECT * FROM pretargeting_pending_changes
-                    WHERE billing_id = ? AND status = 'pending'
+                    WHERE (billing_id = ? OR config_id = ?) AND status = 'pending'
                     ORDER BY created_at ASC""",
-                    (billing_id,)
+                    (actual_billing_id or actual_config_id, actual_config_id)
                 ).fetchall()
             )
 

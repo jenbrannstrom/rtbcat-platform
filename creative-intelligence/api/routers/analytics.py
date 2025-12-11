@@ -971,6 +971,9 @@ async def get_config_breakdown(
     """
     Get detailed breakdown for a specific pretargeting config.
 
+    The identifier can be either a billing_id or config_id (frontend falls back
+    to config_id when billing_id is null).
+
     Breakdown types:
     - size: By creative size (300x250, 320x50, etc.)
     - geo: By country/region
@@ -993,6 +996,17 @@ async def get_config_breakdown(
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
+        # First, look up the actual billing_id from pretargeting_configs
+        # The identifier could be either billing_id or config_id
+        cursor.execute("""
+            SELECT billing_id FROM pretargeting_configs
+            WHERE billing_id = ? OR config_id = ?
+        """, (billing_id, billing_id))
+        config_row = cursor.fetchone()
+
+        # Use the actual billing_id if found, otherwise use the provided identifier
+        actual_billing_id = config_row["billing_id"] if config_row and config_row["billing_id"] else billing_id
+
         # Query aggregated data for this billing_id
         cursor.execute(f"""
             SELECT
@@ -1007,7 +1021,7 @@ async def get_config_breakdown(
             GROUP BY {group_col}
             ORDER BY total_reached DESC
             LIMIT 50
-        """, (billing_id, f'-{days} days'))
+        """, (actual_billing_id, f'-{days} days'))
 
         rows = cursor.fetchall()
         conn.close()
