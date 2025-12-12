@@ -75,7 +75,9 @@
       "Bash(find:*)",
       "Bash(grep:*)",
       "Bash(timeout 10 uvicorn:*)",
-      "Bash(uvicorn api.main:app:*)"
+      "Bash(uvicorn api.main:app:*)",
+      "Bash(echo '10. /analytics/spend-stats?days=7' curl -s http://localhost:8000/analytics/spend-stats?days=7)",
+      "Bash(__NEW_LINE__ echo \"1. GET /health\")"
     ],
     "deny": [],
     "ask": []
