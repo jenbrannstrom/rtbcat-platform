@@ -83,13 +83,12 @@ if [ ! -d "venv" ]; then
     echo "Created virtual environment"
 fi
 
-source venv/bin/activate
-pip install --upgrade pip -q
-pip install -r requirements.txt -q
+./venv/bin/pip install --upgrade pip -q
+./venv/bin/pip install -r requirements.txt -q
 echo -e "${GREEN}✓${NC} Python dependencies installed"
 
 # Initialize database
-python -c "from storage.sqlite_store import SQLiteStore; SQLiteStore()" 2>/dev/null || true
+./venv/bin/python -c "from storage.sqlite_store import SQLiteStore; SQLiteStore()" 2>/dev/null || true
 echo -e "${GREEN}✓${NC} Database initialized"
 
 cd "$SCRIPT_DIR"
@@ -116,16 +115,7 @@ echo "======================================"
 echo ""
 echo "Next steps:"
 echo ""
-echo "1. Start the API:"
-echo "   cd $SCRIPT_DIR/creative-intelligence"
-echo "   source venv/bin/activate"
-echo "   python -m uvicorn api.main:app --host 0.0.0.0 --port 8000"
-echo ""
-echo "2. Start the dashboard (in another terminal):"
-echo "   cd $SCRIPT_DIR/dashboard"
-echo "   npm run dev"
-echo ""
-echo "3. Open http://localhost:3000 in your browser"
-echo ""
-echo "4. Configure your Google credentials at /connect"
+echo "  1. Start services:  ./run.sh"
+echo "  2. Open browser:    http://localhost:3000"
+echo "  3. Configure:       Go to /setup to add credentials"
 echo ""

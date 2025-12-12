@@ -76,12 +76,18 @@ sqlite3 ~/.catscan/catscan.db "PRAGMA journal_mode;"
 ### 5. Start Cat-Scan
 
 ```bash
-# Start the API
-cd creative-intelligence
-source venv/bin/activate
-python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+./run.sh
+```
 
-# In another terminal, start the dashboard
+This starts both the API (port 8000) and Dashboard (port 3000).
+
+**Manual startup (if run.sh doesn't work):**
+```bash
+# Terminal 1: API
+cd creative-intelligence
+./venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+# Terminal 2: Dashboard
 cd dashboard
 npm run dev
 ```
@@ -103,14 +109,13 @@ cd creative-intelligence
 
 # Create virtual environment
 python3.11 -m venv venv
-source venv/bin/activate
 
-# Install dependencies
-pip install --upgrade pip
-pip install -r requirements.txt
+# Install dependencies (no need to activate venv)
+./venv/bin/pip install --upgrade pip
+./venv/bin/pip install -r requirements.txt
 
 # Initialize database
-python -c "from storage.sqlite_store import SQLiteStore; SQLiteStore()"
+./venv/bin/python -c "from storage.sqlite_store import SQLiteStore; SQLiteStore()"
 
 # Enable WAL mode
 sqlite3 ~/.catscan/catscan.db "PRAGMA journal_mode=WAL;"

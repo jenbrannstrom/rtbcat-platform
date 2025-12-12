@@ -1,6 +1,6 @@
 # Cat-Scan Creative Intelligence
 
-**Version:** 23.0 | **Phase:** Modular Router Architecture | **Last Updated:** December 8, 2025
+**Version:** 24.0 | **Phase:** Schema Refactoring | **Last Updated:** December 11, 2025
 
 A privacy-first QPS optimization platform for Google Authorized Buyers. Cat-Scan helps RTB bidders eliminate wasted QPS by learning which data-streams the bidder likes to bid on.
 
@@ -33,14 +33,10 @@ git clone https://github.com/yourorg/rtbcat-platform.git
 cd rtbcat-platform
 ./setup.sh
 
-# 2. Start API (Terminal 1)
-cd creative-intelligence && source venv/bin/activate
-python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+# 2. Start services
+./run.sh
 
-# 3. Start Dashboard (Terminal 2)
-cd dashboard && npm run dev
-
-# 4. Open http://localhost:3000
+# 3. Open http://localhost:3000
 ```
 
 ### Requirements
@@ -130,22 +126,22 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 ## CLI Commands
 
 ```bash
-cd creative-intelligence && source venv/bin/activate
+cd creative-intelligence
 
 # Import performance CSV
-python cli/qps_analyzer.py import /path/to/report.csv
+./venv/bin/python cli/qps_analyzer.py import /path/to/report.csv
 
 # Validate CSV before import
-python cli/qps_analyzer.py validate /path/to/report.csv
+./venv/bin/python cli/qps_analyzer.py validate /path/to/report.csv
 
 # View database summary
-python cli/qps_analyzer.py summary
+./venv/bin/python cli/qps_analyzer.py summary
 
 # Generate waste analysis report
-python cli/qps_analyzer.py full-report --days 7
+./venv/bin/python cli/qps_analyzer.py full-report --days 7
 
 # Generate video thumbnails
-python cli/qps_analyzer.py generate-thumbnails --limit 100
+./venv/bin/python cli/qps_analyzer.py generate-thumbnails --limit 100
 ```
 
 ---
@@ -264,23 +260,41 @@ See **[docs/HANDOVER.md](docs/HANDOVER.md)** for complete roadmap.
 | Issue | Workaround |
 |-------|------------|
 | Port 8000 stuck | `sudo lsof -ti:8000 \| xargs -r sudo kill -9` |
-| No video thumbnails | Run `python cli/qps_analyzer.py generate-thumbnails` |
+| No video thumbnails | Run `./venv/bin/python cli/qps_analyzer.py generate-thumbnails` |
 | Dashboard not updating | Run `npm run build` |
+| uvicorn "module not found" | Use `./venv/bin/python -m uvicorn` instead of `uvicorn` directly |
+
+### API Startup (Manual Method)
+
+If `./run.sh` doesn't work, start the services manually:
+
+```bash
+# Terminal 1: API
+cd creative-intelligence
+./venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+# Terminal 2: Dashboard
+cd dashboard
+npm run dev
+```
+
+**Why use `./venv/bin/python -m uvicorn`?** Running `uvicorn` directly after `source venv/bin/activate` can fail in some environments (Flatpak, certain shells). Using the venv's Python directly is more reliable.
 
 ---
 
 ## Development
 
 ```bash
+cd creative-intelligence
+
 # Format and lint
-cd creative-intelligence && source venv/bin/activate
-black . && isort . && ruff check .
+./venv/bin/black . && ./venv/bin/isort . && ./venv/bin/ruff check .
 
 # Run tests
-pytest tests/ -v
+./venv/bin/pytest tests/ -v
 
 # Type check
-mypy .
+./venv/bin/mypy .
 ```
 
 ---
