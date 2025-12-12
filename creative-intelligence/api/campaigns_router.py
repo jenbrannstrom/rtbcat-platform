@@ -7,13 +7,12 @@ This module provides REST API endpoints for:
 """
 
 import logging
-import sqlite3
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from storage.database import db_query, db_transaction_async, DB_PATH
 from storage.campaign_repository import CampaignRepository, AICampaign
 from api.clustering.rule_based import pre_cluster_creatives, merge_small_clusters
 from api.clustering.ai_clusterer import AICampaignClusterer, apply_ai_suggestions
@@ -110,32 +109,21 @@ class CampaignPerformanceResponse(BaseModel):
 # Helper Functions
 # ============================================
 
-def get_db_connection() -> sqlite3.Connection:
-    """Get a database connection."""
-    db_path = Path.home() / ".catscan" / "catscan.db"
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def get_campaign_repo() -> CampaignRepository:
-    """Get campaign repository instance."""
-    conn = get_db_connection()
-    return CampaignRepository(conn)
+# Note: get_db_connection() and get_campaign_repo() removed
+# All endpoints now use db_transaction_async() for thread-safe database access
 
 
 # ============================================
 # Clustering Endpoints
 # ============================================
 
-def _get_creative_countries(conn: sqlite3.Connection, creative_ids: list[str], days: int = 30) -> dict[str, str]:
+async def _get_creative_countries(creative_ids: list[str], days: int = 30) -> dict[str, str]:
     """Get the primary country (by spend) for each creative."""
     if not creative_ids:
         return {}
 
     placeholders = ",".join("?" * len(creative_ids))
-    cursor = conn.cursor()
-    cursor.execute(f"""
+    rows = await db_query(f"""
         WITH ranked AS (
             SELECT creative_id, geography,
                    SUM(spend_micros) as total_spend,
@@ -152,9 +140,9 @@ def _get_creative_countries(conn: sqlite3.Connection, creative_ids: list[str], d
         SELECT creative_id, geography
         FROM ranked
         WHERE rn = 1
-    """, creative_ids)
+    """, tuple(creative_ids))
 
-    return {row['creative_id']: row['geography'] for row in cursor.fetchall()}
+    return {row['creative_id']: row['geography'] for row in rows}
 
 
 def _split_clusters_by_country(
@@ -189,35 +177,29 @@ async def auto_cluster_creatives(request: AutoClusterRequest):
     Returns suggested clusters without saving them. User must confirm to create.
     Supports buyer_id filtering for multi-account scenarios.
     """
-    conn = get_db_connection()
-
     try:
-        cursor = conn.cursor()
-
         # Build query for unclustered creatives, optionally filtered by buyer_id
         if request.buyer_id:
-            cursor.execute("""
+            rows = await db_query("""
                 SELECT c.id as creative_id, c.final_url, c.buyer_id
                 FROM creatives c
-                LEFT JOIN campaign_creatives cc ON c.id = cc.creative_id
+                LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
                 WHERE cc.creative_id IS NULL
                   AND c.buyer_id = ?
                 ORDER BY c.id
             """, (request.buyer_id,))
         else:
-            cursor.execute("""
+            rows = await db_query("""
                 SELECT c.id as creative_id, c.final_url, c.buyer_id
                 FROM creatives c
-                LEFT JOIN campaign_creatives cc ON c.id = cc.creative_id
+                LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
                 WHERE cc.creative_id IS NULL
                 ORDER BY c.id
             """)
 
-        rows = cursor.fetchall()
         unclustered_count = len(rows)
 
         if not rows:
-            conn.close()
             return AutoClusterResponse(suggestions=[], unclustered_count=0)
 
         logger.info(f"Found {unclustered_count} unclustered creatives for buyer_id={request.buyer_id}")
@@ -268,15 +250,12 @@ async def auto_cluster_creatives(request: AutoClusterRequest):
         # Sort by number of creatives (largest first)
         suggestions.sort(key=lambda s: len(s.creative_ids), reverse=True)
 
-        conn.close()
-
         return AutoClusterResponse(
             suggestions=suggestions,
             unclustered_count=unclustered_count,
         )
 
     except Exception as e:
-        conn.close()
         logger.error(f"Auto-clustering failed: {e}")
         raise HTTPException(status_code=500, detail=f"Clustering failed: {str(e)}")
 
@@ -337,54 +316,56 @@ async def list_campaigns(
 
     Phase 22: Country-aware clustering support via include_country_breakdown.
     """
-    conn = get_db_connection()
-    repo = CampaignRepository(conn)
-
     try:
-        campaigns = repo.list_campaigns(seat_id=seat_id, status=status)
         days = {"1d": 1, "7d": 7, "30d": 30, "all": 365}.get(period, 7)
 
-        result = []
-        for campaign in campaigns:
-            # Get creative IDs for this campaign
-            creative_ids = repo.get_campaign_creatives(campaign.id)
+        def _list_campaigns(conn):
+            repo = CampaignRepository(conn)
+            campaigns = repo.list_campaigns(seat_id=seat_id, status=status)
 
-            campaign_data = AICampaignResponse(
-                id=campaign.id,
-                seat_id=campaign.seat_id,
-                name=campaign.name,
-                description=campaign.description,
-                ai_generated=campaign.ai_generated,
-                ai_confidence=campaign.ai_confidence,
-                clustering_method=campaign.clustering_method,
-                status=campaign.status,
-                creative_count=campaign.creative_count,
-                creative_ids=creative_ids,
-            )
+            result = []
+            for campaign in campaigns:
+                # Get creative IDs for this campaign
+                creative_ids = repo.get_campaign_creatives(campaign.id)
 
-            if include_performance:
-                perf = repo.get_campaign_performance(campaign.id, days=days)
-                campaign_data.performance = perf
-
-            if include_country_breakdown:
-                breakdown_raw = repo.get_campaign_country_breakdown(campaign.id, days=days)
-                # Convert to CountryBreakdownEntry objects
-                campaign_data.country_breakdown = {
-                    country: CountryBreakdownEntry(
-                        creative_ids=data['creative_ids'],
-                        spend_micros=data['spend_micros'],
-                        impressions=data['impressions'],
-                    )
-                    for country, data in breakdown_raw.items()
+                campaign_data = {
+                    "id": campaign.id,
+                    "seat_id": campaign.seat_id,
+                    "name": campaign.name,
+                    "description": campaign.description,
+                    "ai_generated": campaign.ai_generated,
+                    "ai_confidence": campaign.ai_confidence,
+                    "clustering_method": campaign.clustering_method,
+                    "status": campaign.status,
+                    "creative_count": campaign.creative_count,
+                    "creative_ids": creative_ids,
+                    "performance": None,
+                    "country_breakdown": None,
                 }
 
-            result.append(campaign_data)
+                if include_performance:
+                    perf = repo.get_campaign_performance(campaign.id, days=days)
+                    campaign_data["performance"] = perf
 
-        conn.close()
-        return result
+                if include_country_breakdown:
+                    breakdown_raw = repo.get_campaign_country_breakdown(campaign.id, days=days)
+                    campaign_data["country_breakdown"] = {
+                        country: {
+                            "creative_ids": data['creative_ids'],
+                            "spend_micros": data['spend_micros'],
+                            "impressions": data['impressions'],
+                        }
+                        for country, data in breakdown_raw.items()
+                    }
+
+                result.append(campaign_data)
+
+            return result
+
+        campaigns_data = await db_transaction_async(_list_campaigns)
+        return [AICampaignResponse(**c) for c in campaigns_data]
 
     except Exception as e:
-        conn.close()
         logger.error(f"Failed to list campaigns: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -394,52 +375,50 @@ async def create_campaign(request: CampaignCreateRequest):
     """
     Create a new campaign and optionally assign creatives to it.
     """
-    conn = get_db_connection()
-    repo = CampaignRepository(conn)
-
     try:
-        # Create the campaign
-        campaign_id = repo.create_campaign(
-            name=request.name,
-            seat_id=None,  # Could be added to request if needed
-            description=request.description,
-            ai_generated=False,
-            ai_confidence=None,
-            clustering_method="manual",
-        )
+        def _create_campaign(conn):
+            repo = CampaignRepository(conn)
 
-        # Assign creatives if provided
-        if request.creative_ids:
-            repo.assign_creatives_batch(
-                creative_ids=request.creative_ids,
-                campaign_id=campaign_id,
-                assigned_by="user",
-                manually_assigned=True,
+            # Create the campaign
+            campaign_id = repo.create_campaign(
+                name=request.name,
+                seat_id=None,  # Could be added to request if needed
+                description=request.description,
+                ai_generated=False,
+                ai_confidence=None,
+                clustering_method="manual",
             )
 
-        conn.commit()
+            # Assign creatives if provided
+            if request.creative_ids:
+                repo.assign_creatives_batch(
+                    creative_ids=request.creative_ids,
+                    campaign_id=campaign_id,
+                    assigned_by="user",
+                    manually_assigned=True,
+                )
 
-        # Fetch the created campaign
-        campaign = repo.get_campaign(campaign_id)
-        creative_ids = repo.get_campaign_creatives(campaign_id)
+            # Fetch the created campaign
+            campaign = repo.get_campaign(campaign_id)
+            creative_ids = repo.get_campaign_creatives(campaign_id)
 
-        conn.close()
+            return {
+                "id": campaign.id,
+                "seat_id": campaign.seat_id,
+                "name": campaign.name,
+                "description": campaign.description,
+                "ai_generated": campaign.ai_generated,
+                "ai_confidence": campaign.ai_confidence,
+                "clustering_method": campaign.clustering_method,
+                "status": campaign.status,
+                "creative_count": len(creative_ids),
+                "creative_ids": creative_ids,
+            }
 
-        return AICampaignResponse(
-            id=campaign.id,
-            seat_id=campaign.seat_id,
-            name=campaign.name,
-            description=campaign.description,
-            ai_generated=campaign.ai_generated,
-            ai_confidence=campaign.ai_confidence,
-            clustering_method=campaign.clustering_method,
-            status=campaign.status,
-            creative_count=len(creative_ids),
-            creative_ids=creative_ids,
-        )
+        campaign_data = await db_transaction_async(_create_campaign)
+        return AICampaignResponse(**campaign_data)
 
     except Exception as e:
-        conn.close()
         logger.error(f"Failed to create campaign: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -452,39 +431,40 @@ async def get_campaign(
     """
     Get campaign details.
     """
-    conn = get_db_connection()
-    repo = CampaignRepository(conn)
-
     try:
-        campaign = repo.get_campaign(campaign_id)
+        def _get_campaign(conn):
+            repo = CampaignRepository(conn)
+            campaign = repo.get_campaign(campaign_id)
 
-        if not campaign:
-            conn.close()
+            if not campaign:
+                return None
+
+            # Get creative IDs for this campaign
+            creative_ids = repo.get_campaign_creatives(campaign_id)
+
+            return {
+                "id": campaign.id,
+                "seat_id": campaign.seat_id,
+                "name": campaign.name,
+                "description": campaign.description,
+                "ai_generated": campaign.ai_generated,
+                "ai_confidence": campaign.ai_confidence,
+                "clustering_method": campaign.clustering_method,
+                "status": campaign.status,
+                "creative_count": campaign.creative_count,
+                "creative_ids": creative_ids,
+            }
+
+        campaign_data = await db_transaction_async(_get_campaign)
+
+        if not campaign_data:
             raise HTTPException(status_code=404, detail="Campaign not found")
 
-        # Get creative IDs for this campaign
-        creative_ids = repo.get_campaign_creatives(campaign_id)
-
-        result = AICampaignResponse(
-            id=campaign.id,
-            seat_id=campaign.seat_id,
-            name=campaign.name,
-            description=campaign.description,
-            ai_generated=campaign.ai_generated,
-            ai_confidence=campaign.ai_confidence,
-            clustering_method=campaign.clustering_method,
-            status=campaign.status,
-            creative_count=campaign.creative_count,
-            creative_ids=creative_ids,
-        )
-
-        conn.close()
-        return result
+        return AICampaignResponse(**campaign_data)
 
     except HTTPException:
         raise
     except Exception as e:
-        conn.close()
         logger.error(f"Failed to get campaign: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -494,19 +474,17 @@ async def update_campaign(campaign_id: str, request: CampaignUpdateRequest):
     """
     Update campaign name or description.
     """
-    conn = get_db_connection()
-    repo = CampaignRepository(conn)
-
     try:
-        success = repo.update_campaign(
-            campaign_id=campaign_id,
-            name=request.name,
-            description=request.description,
-            status=request.status,
-        )
+        def _update_campaign(conn):
+            repo = CampaignRepository(conn)
+            return repo.update_campaign(
+                campaign_id=campaign_id,
+                name=request.name,
+                description=request.description,
+                status=request.status,
+            )
 
-        conn.commit()
-        conn.close()
+        success = await db_transaction_async(_update_campaign)
 
         if not success:
             raise HTTPException(status_code=404, detail="Campaign not found")
@@ -516,7 +494,6 @@ async def update_campaign(campaign_id: str, request: CampaignUpdateRequest):
     except HTTPException:
         raise
     except Exception as e:
-        conn.close()
         logger.error(f"Failed to update campaign: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -526,13 +503,12 @@ async def delete_campaign(campaign_id: str):
     """
     Delete a campaign and unassign all its creatives.
     """
-    conn = get_db_connection()
-    repo = CampaignRepository(conn)
-
     try:
-        success = repo.delete_campaign(campaign_id)
-        conn.commit()
-        conn.close()
+        def _delete_campaign(conn):
+            repo = CampaignRepository(conn)
+            return repo.delete_campaign(campaign_id)
+
+        success = await db_transaction_async(_delete_campaign)
 
         if not success:
             raise HTTPException(status_code=404, detail="Campaign not found")
@@ -542,7 +518,6 @@ async def delete_campaign(campaign_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        conn.close()
         logger.error(f"Failed to delete campaign: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -556,16 +531,15 @@ async def get_campaign_creatives(campaign_id: str):
     """
     Get all creative IDs in a campaign.
     """
-    conn = get_db_connection()
-    repo = CampaignRepository(conn)
-
     try:
-        creative_ids = repo.get_campaign_creatives(campaign_id)
-        conn.close()
+        def _get_creatives(conn):
+            repo = CampaignRepository(conn)
+            return repo.get_campaign_creatives(campaign_id)
+
+        creative_ids = await db_transaction_async(_get_creatives)
         return {"creative_ids": creative_ids, "count": len(creative_ids)}
 
     except Exception as e:
-        conn.close()
         logger.error(f"Failed to get campaign creatives: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -575,24 +549,20 @@ async def add_creatives_to_campaign(campaign_id: str, request: AssignCreativesRe
     """
     Manually assign creatives to a campaign.
     """
-    conn = get_db_connection()
-    repo = CampaignRepository(conn)
-
     try:
-        count = repo.assign_creatives_batch(
-            creative_ids=request.creative_ids,
-            campaign_id=campaign_id,
-            assigned_by="user",
-            manually_assigned=True,
-        )
+        def _assign_creatives(conn):
+            repo = CampaignRepository(conn)
+            return repo.assign_creatives_batch(
+                creative_ids=request.creative_ids,
+                campaign_id=campaign_id,
+                assigned_by="user",
+                manually_assigned=True,
+            )
 
-        conn.commit()
-        conn.close()
-
+        count = await db_transaction_async(_assign_creatives)
         return {"status": "assigned", "count": count}
 
     except Exception as e:
-        conn.close()
         logger.error(f"Failed to assign creatives: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -602,13 +572,12 @@ async def remove_creative_from_campaign(campaign_id: str, creative_id: str):
     """
     Remove a creative from a campaign.
     """
-    conn = get_db_connection()
-    repo = CampaignRepository(conn)
-
     try:
-        success = repo.remove_creative_from_campaign(creative_id)
-        conn.commit()
-        conn.close()
+        def _remove_creative(conn):
+            repo = CampaignRepository(conn)
+            return repo.remove_creative_from_campaign(creative_id)
+
+        success = await db_transaction_async(_remove_creative)
 
         if not success:
             raise HTTPException(status_code=404, detail="Creative not in campaign")
@@ -618,7 +587,6 @@ async def remove_creative_from_campaign(campaign_id: str, creative_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        conn.close()
         logger.error(f"Failed to remove creative: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -628,24 +596,20 @@ async def move_creative(creative_id: str, request: MoveCreativeRequest):
     """
     Move a creative from one campaign to another.
     """
-    conn = get_db_connection()
-    repo = CampaignRepository(conn)
-
     try:
-        success = repo.assign_creative_to_campaign(
-            creative_id=creative_id,
-            campaign_id=request.to_campaign_id,
-            assigned_by="user",
-            manually_assigned=True,
-        )
+        def _move_creative(conn):
+            repo = CampaignRepository(conn)
+            return repo.assign_creative_to_campaign(
+                creative_id=creative_id,
+                campaign_id=request.to_campaign_id,
+                assigned_by="user",
+                manually_assigned=True,
+            )
 
-        conn.commit()
-        conn.close()
-
+        await db_transaction_async(_move_creative)
         return {"status": "moved"}
 
     except Exception as e:
-        conn.close()
         logger.error(f"Failed to move creative: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -662,18 +626,17 @@ async def get_campaign_performance(
     """
     Get performance metrics for a campaign.
     """
-    conn = get_db_connection()
-    repo = CampaignRepository(conn)
-
     try:
         days = {"1d": 1, "7d": 7, "30d": 30, "all": 365}.get(period, 7)
-        perf = repo.get_campaign_performance(campaign_id, days=days)
-        conn.close()
 
+        def _get_perf(conn):
+            repo = CampaignRepository(conn)
+            return repo.get_campaign_performance(campaign_id, days=days)
+
+        perf = await db_transaction_async(_get_perf)
         return CampaignPerformanceResponse(**perf)
 
     except Exception as e:
-        conn.close()
         logger.error(f"Failed to get campaign performance: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -686,16 +649,15 @@ async def get_campaign_daily_trend(
     """
     Get daily performance trend for a campaign.
     """
-    conn = get_db_connection()
-    repo = CampaignRepository(conn)
-
     try:
-        trend = repo.get_campaign_daily_trend(campaign_id, days=days)
-        conn.close()
+        def _get_trend(conn):
+            repo = CampaignRepository(conn)
+            return repo.get_campaign_daily_trend(campaign_id, days=days)
+
+        trend = await db_transaction_async(_get_trend)
         return {"trend": trend}
 
     except Exception as e:
-        conn.close()
         logger.error(f"Failed to get campaign trend: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -706,32 +668,30 @@ async def refresh_campaign_summaries(seat_id: Optional[int] = None):
     Recalculate campaign_daily_summary from performance_metrics.
     Run this after importing new data.
     """
-    conn = get_db_connection()
-    repo = CampaignRepository(conn)
-
     try:
-        campaigns = repo.list_campaigns(seat_id=seat_id)
+        def _refresh_summaries(conn):
+            repo = CampaignRepository(conn)
+            campaigns = repo.list_campaigns(seat_id=seat_id)
 
-        # Get date range from performance data
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT DISTINCT metric_date FROM performance_metrics
-            ORDER BY metric_date DESC LIMIT 30
-        """)
-        dates = [row['metric_date'] for row in cursor.fetchall()]
+            # Get date range from performance data
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT DISTINCT metric_date FROM performance_metrics
+                ORDER BY metric_date DESC LIMIT 30
+            """)
+            dates = [row['metric_date'] for row in cursor.fetchall()]
 
-        updated = 0
-        for campaign in campaigns:
-            for date in dates:
-                repo.update_campaign_summary(campaign.id, date)
-                updated += 1
+            updated = 0
+            for campaign in campaigns:
+                for date in dates:
+                    repo.update_campaign_summary(campaign.id, date)
+                    updated += 1
 
-        conn.commit()
-        conn.close()
+            return {"campaigns": len(campaigns), "dates": len(dates)}
 
-        return {"status": "refreshed", "campaigns_updated": len(campaigns), "dates_processed": len(dates)}
+        result = await db_transaction_async(_refresh_summaries)
+        return {"status": "refreshed", "campaigns_updated": result["campaigns"], "dates_processed": result["dates"]}
 
     except Exception as e:
-        conn.close()
         logger.error(f"Failed to refresh summaries: {e}")
         raise HTTPException(status_code=500, detail=str(e))

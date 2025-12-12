@@ -322,6 +322,7 @@ CREATE TABLE IF NOT EXISTS creatives (
     id TEXT PRIMARY KEY,
     account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE,
     buyer_seat_id INTEGER REFERENCES buyer_seats(id),
+    buyer_id TEXT,
     format TEXT,
     width INTEGER,
     height INTEGER,
@@ -330,7 +331,8 @@ CREATE TABLE IF NOT EXISTS creatives (
     final_url TEXT,
     advertiser_name TEXT,
     raw_data TEXT,
-    synced_at TIMESTAMP
+    synced_at TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_creatives_account ON creatives(account_id);
@@ -492,20 +494,47 @@ CREATE TABLE IF NOT EXISTS snapshot_comparisons (
 CREATE TABLE IF NOT EXISTS campaigns (
     id TEXT PRIMARY KEY,
     account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE,
+    seat_id INTEGER,
     name TEXT NOT NULL,
     description TEXT,
     is_ai_generated INTEGER DEFAULT 0,
+    ai_generated INTEGER DEFAULT 1,
     ai_confidence REAL,
     clustering_method TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS campaign_creatives (
+CREATE TABLE IF NOT EXISTS creative_campaigns (
     campaign_id TEXT REFERENCES campaigns(id) ON DELETE CASCADE,
     creative_id TEXT REFERENCES creatives(id) ON DELETE CASCADE,
     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (campaign_id, creative_id)
 );
+
+CREATE TABLE IF NOT EXISTS campaign_daily_summary (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id TEXT NOT NULL REFERENCES campaigns(id),
+    date DATE NOT NULL,
+    total_creatives INTEGER DEFAULT 0,
+    active_creatives INTEGER DEFAULT 0,
+    total_queries INTEGER DEFAULT 0,
+    total_impressions INTEGER DEFAULT 0,
+    total_clicks INTEGER DEFAULT 0,
+    total_spend REAL DEFAULT 0,
+    total_video_starts INTEGER,
+    total_video_completions INTEGER,
+    avg_win_rate REAL,
+    avg_ctr REAL,
+    avg_cpm REAL,
+    unique_geos INTEGER,
+    top_geo_id INTEGER,
+    top_geo_spend REAL,
+    UNIQUE(campaign_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cds_campaign_date ON campaign_daily_summary(campaign_id, date DESC);
 
 -- SUPPORTING TABLES
 CREATE TABLE IF NOT EXISTS thumbnail_status (
