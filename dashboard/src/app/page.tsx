@@ -413,12 +413,12 @@ function SizeBar({
 }
 
 // Size Analysis Section
-function SizeAnalysisSection({ days }: { days: number }) {
+function SizeAnalysisSection({ days, billingId }: { days: number; billingId?: string }) {
   const [copiedSizes, setCopiedSizes] = useState(false);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['size-coverage', days],
-    queryFn: () => getQPSSizeCoverage(days),
+    queryKey: ['size-coverage', days, billingId],
+    queryFn: () => getQPSSizeCoverage(days, billingId),
   });
 
   const copyBlockSizes = useCallback(() => {
@@ -481,9 +481,15 @@ function SizeAnalysisSection({ days }: { days: number }) {
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-blue-600" />
             Size Analysis
+            {billingId && (
+              <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                Filtered: {billingId}
+              </span>
+            )}
           </h3>
           <p className="text-sm text-gray-500 mt-1">
             Which sizes convert to impressions?
+            {billingId && <span className="ml-1 text-blue-600">(for selected config)</span>}
           </p>
         </div>
         <div className="text-right">
@@ -875,13 +881,13 @@ function WasteAnalysisContent() {
     queryFn: () => getRTBFunnel(),
   });
 
-  // Fetch spend stats for CPM display
+  // Fetch spend stats for CPM display (filtered by expanded config if selected)
   const {
     data: spendStats,
     refetch: refetchSpend,
   } = useQuery({
-    queryKey: ["spend-stats", days],
-    queryFn: () => getSpendStats(days),
+    queryKey: ["spend-stats", days, expandedConfigId],
+    queryFn: () => getSpendStats(days, expandedConfigId || undefined),
   });
 
   // Fetch pretargeting configs
@@ -942,9 +948,24 @@ function WasteAnalysisContent() {
         <div className="flex items-center gap-3">
           {/* CPM Badge - show when spend data available */}
           {spendStats?.has_spend_data && spendStats.avg_cpm_usd && (
-            <div className="px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
-              <span className="text-xs text-green-600 uppercase tracking-wide">Avg CPM</span>
-              <span className="ml-2 text-sm font-bold text-green-700">${spendStats.avg_cpm_usd.toFixed(2)}</span>
+            <div className={cn(
+              "px-3 py-1.5 rounded-lg",
+              expandedConfigId
+                ? "bg-blue-50 border border-blue-200"
+                : "bg-green-50 border border-green-200"
+            )}>
+              <span className={cn(
+                "text-xs uppercase tracking-wide",
+                expandedConfigId ? "text-blue-600" : "text-green-600"
+              )}>
+                {expandedConfigId ? "Config CPM" : "Avg CPM"}
+              </span>
+              <span className={cn(
+                "ml-2 text-sm font-bold",
+                expandedConfigId ? "text-blue-700" : "text-green-700"
+              )}>
+                ${spendStats.avg_cpm_usd.toFixed(2)}
+              </span>
             </div>
           )}
 
@@ -1070,7 +1091,7 @@ function WasteAnalysisContent() {
 
       {/* Size Analysis */}
       <section>
-        <SizeAnalysisSection days={days} />
+        <SizeAnalysisSection days={days} billingId={expandedConfigId || undefined} />
       </section>
 
       {/* Geographic Analysis */}

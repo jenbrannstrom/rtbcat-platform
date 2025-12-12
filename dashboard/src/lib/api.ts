@@ -801,8 +801,10 @@ export interface QPSSummaryResponse {
   };
 }
 
-export async function getQPSSizeCoverage(days: number = 7): Promise<SizeCoverageResponse> {
-  return fetchApi<SizeCoverageResponse>(`/analytics/size-coverage?days=${days}`);
+export async function getQPSSizeCoverage(days: number = 7, billingId?: string): Promise<SizeCoverageResponse> {
+  const params = new URLSearchParams({ days: String(days) });
+  if (billingId) params.set("billing_id", billingId);
+  return fetchApi<SizeCoverageResponse>(`/analytics/size-coverage?${params.toString()}`);
 }
 
 export async function getGeoWaste(days: number = 7): Promise<GeoWasteResponse> {
@@ -831,8 +833,10 @@ export interface SpendStatsResponse {
   has_spend_data: boolean;
 }
 
-export async function getSpendStats(days: number = 7): Promise<SpendStatsResponse> {
-  return fetchApi<SpendStatsResponse>(`/analytics/spend-stats?days=${days}`);
+export async function getSpendStats(days: number = 7, billingId?: string): Promise<SpendStatsResponse> {
+  const params = new URLSearchParams({ days: String(days) });
+  if (billingId) params.set("billing_id", billingId);
+  return fetchApi<SpendStatsResponse>(`/analytics/spend-stats?${params.toString()}`);
 }
 
 // =============================================================================
