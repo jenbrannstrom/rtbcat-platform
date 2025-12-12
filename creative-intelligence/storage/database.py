@@ -31,8 +31,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Database location
-DB_PATH = Path(__file__).parent.parent / "rtbcat.db"
+# Database location - use ~/.catscan for user data
+DB_PATH = Path.home() / ".catscan" / "catscan.db"
 
 
 def _get_connection() -> sqlite3.Connection:
