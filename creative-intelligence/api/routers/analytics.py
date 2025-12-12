@@ -656,37 +656,52 @@ async def get_geo_pretargeting_config(days: int = Query(7, ge=1, le=90)):
 # =============================================================================
 
 @router.get("/analytics/spend-stats", tags=["RTB Analytics"])
-async def get_spend_stats(days: int = Query(7, ge=1, le=90)):
+async def get_spend_stats(
+    days: int = Query(7, ge=1, le=90),
+    billing_id: Optional[str] = Query(None, description="Filter by specific billing account ID")
+):
     """
     Get overall spend statistics for the selected period.
 
     Returns total spend, impressions, and avg CPM from rtb_daily table.
     Only includes data for billing_ids that belong to the current account.
+    Optionally filter by a specific billing_id.
     """
     try:
-        # Get valid billing IDs for current account to prevent cross-account data mixing
-        valid_billing_ids = await get_valid_billing_ids()
-
-        if valid_billing_ids:
-            # Filter by valid billing IDs
-            placeholders = ",".join("?" * len(valid_billing_ids))
-            row = await db_query_one(f"""
-                SELECT
-                    COALESCE(SUM(impressions), 0) as total_impressions,
-                    COALESCE(SUM(spend_micros), 0) as total_spend_micros
-                FROM rtb_daily
-                WHERE metric_date >= date('now', ?)
-                  AND billing_id IN ({placeholders})
-            """, (f'-{days} days', *valid_billing_ids))
-        else:
-            # No pretargeting configs synced yet - return all data as fallback
+        if billing_id:
+            # Filter by specific billing_id
             row = await db_query_one("""
                 SELECT
                     COALESCE(SUM(impressions), 0) as total_impressions,
                     COALESCE(SUM(spend_micros), 0) as total_spend_micros
                 FROM rtb_daily
                 WHERE metric_date >= date('now', ?)
-            """, (f'-{days} days',))
+                  AND billing_id = ?
+            """, (f'-{days} days', billing_id))
+        else:
+            # Get valid billing IDs for current account to prevent cross-account data mixing
+            valid_billing_ids = await get_valid_billing_ids()
+
+            if valid_billing_ids:
+                # Filter by valid billing IDs
+                placeholders = ",".join("?" * len(valid_billing_ids))
+                row = await db_query_one(f"""
+                    SELECT
+                        COALESCE(SUM(impressions), 0) as total_impressions,
+                        COALESCE(SUM(spend_micros), 0) as total_spend_micros
+                    FROM rtb_daily
+                    WHERE metric_date >= date('now', ?)
+                      AND billing_id IN ({placeholders})
+                """, (f'-{days} days', *valid_billing_ids))
+            else:
+                # No pretargeting configs synced yet - return all data as fallback
+                row = await db_query_one("""
+                    SELECT
+                        COALESCE(SUM(impressions), 0) as total_impressions,
+                        COALESCE(SUM(spend_micros), 0) as total_spend_micros
+                    FROM rtb_daily
+                    WHERE metric_date >= date('now', ?)
+                """, (f'-{days} days',))
 
         total_impressions = row["total_impressions"] if row else 0
         total_spend_micros = row["total_spend_micros"] if row else 0

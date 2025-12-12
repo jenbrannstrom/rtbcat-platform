@@ -24,7 +24,7 @@ import { useAccount } from "@/contexts/account-context";
 const SIDEBAR_COLLAPSED_KEY = "rtbcat-sidebar-collapsed";
 
 const navigation = [
-  { name: "Waste Optimizer", href: "/waste-analysis", icon: TrendingDown },
+  { name: "Waste Optimizer", href: "/", icon: TrendingDown },
   { name: "Creatives", href: "/creatives", icon: Image },
   { name: "Campaigns", href: "/campaigns", icon: FolderKanban },
   { name: "Uploads", href: "/uploads", icon: RefreshCw },
@@ -263,10 +263,10 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-2 py-4 space-y-1">
         {navigation.map((item) => {
-          // Handle both exact match and home page redirect case
-          const isActive = pathname === item.href ||
-            (item.href === "/waste-analysis" && pathname === "/") ||
-            (item.href !== "/" && pathname.startsWith(item.href));
+          // Handle exact match for home, prefix match for other routes
+          const isActive = item.href === "/"
+            ? pathname === "/"
+            : pathname.startsWith(item.href);
           return (
             <Link
               key={item.name}
