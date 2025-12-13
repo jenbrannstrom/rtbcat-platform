@@ -25,95 +25,21 @@ GOOGLE_AVAILABLE_SIZES = frozenset([
     "2912x360", "3720x720", "3880x360", "3880x1000", "3920x480",
 ])
 
-# The 10 pretargeting configurations with billing IDs
+# Pretargeting configurations with billing IDs
+# Note: These are loaded from database via API - this is just a fallback/reference
 PRETARGETING_CONFIGS = {
-    "72245759413": {
-        "name": "Africa/Asia Mix",
-        "geos": ["BF", "BR", "CI", "CM", "EG", "NG", "SA", "SE", "IN", "PH", "KZ"],
-        "budget_daily": 1200,
-        "qps_limit": 50000,
-    },
-    "83435423204": {
-        "name": "ID/BR Android",
-        "geos": ["ID", "BR", "IN", "US", "KR", "ZA", "AR"],
-        "platform": "Android",
-        "budget_daily": 2000,
-        "qps_limit": 50000,
-    },
-    "104602012074": {
-        "name": "MENA iOS&AND",
-        "geos": ["SA", "AE", "EG", "PH", "IT", "ES", "BF", "KZ", "FR", "PE", "ZA", "HU", "SK"],
-        "budget_daily": 1200,
-        "qps_limit": 50000,
-    },
-    "137175951277": {
-        "name": "SEA Whitelist",
-        "geos": ["BR", "ID", "MY", "TH", "VN"],
-        "budget_daily": 1200,
-        "qps_limit": 30000,
-    },
-    "151274651962": {
-        "name": "USEast CA/MX",
-        "geos": ["CA", "MX"],
-        "budget_daily": 1500,
-        "qps_limit": 5000,
-    },
-    "153322387893": {
-        "name": "Brazil Android",
-        "geos": ["BR"],
-        "platform": "Android",
-        "budget_daily": 1500,
-        "qps_limit": 30000,
-    },
-    "155546863666": {
-        "name": "Asia BL2003",
-        "geos": ["ID", "IN", "TH", "CN", "KR", "TR", "VN", "BD", "PH", "MY"],
-        "budget_daily": 1800,
-        "qps_limit": 50000,
-    },
-    "156494841242": {
-        "name": "Nova WL",
-        "geos": ["JP", "BR"],
-        "budget_daily": 2000,
-        "qps_limit": 30000,
-    },
-    "157331516553": {
-        "name": "US/Global",
-        "geos": ["US", "PH", "AU", "KR", "EG", "PK", "BD", "UZ", "SA", "JP", "PE", "ZA", "HU", "SK", "AR", "KW"],
-        "budget_daily": 3000,
-        "qps_limit": 50000,
-    },
-    "158323666240": {
-        "name": "BR/PH Spotify",
-        "geos": ["BR", "PH"],
-        "apps": ["com.spotify.music"],
-        "budget_daily": 2000,
-        "qps_limit": 30000,
-    },
+    # MobYoung configs will be synced from Google API
 }
 
 # Endpoint configuration (the real QPS bottleneck)
+# Note: These are loaded from database via API - this is just a fallback/reference
 ENDPOINTS = {
-    "us_west": {
-        "url": "bidder.novabeyond.com",
-        "qps_limit": 10000,
-        "location": "US West",
-    },
-    "asia": {
-        "url": "bidder-sg.novabeyond.com",
-        "qps_limit": 30000,
-        "location": "Asia",
-    },
-    "us_east": {
-        "url": "bidder-us.novabeyond.com",
-        "qps_limit": 50000,
-        "location": "US East",
-    },
+    # MobYoung endpoints will be synced from Google API
 }
 
 # Total endpoint capacity (this is the REAL bottleneck, not pretargeting QPS)
-TOTAL_ENDPOINT_QPS = sum(e["qps_limit"] for e in ENDPOINTS.values())  # 90,000
+TOTAL_ENDPOINT_QPS = sum(e.get("qps_limit", 0) for e in ENDPOINTS.values())
 
-# Account info
-ACCOUNT_ID = "299038253"
-ACCOUNT_NAME = "Tuky Data Research Ltd."
+# Account info (MobYoung)
+ACCOUNT_ID = "6634662463"
+ACCOUNT_NAME = "Amazing MobYoung"

@@ -27,7 +27,7 @@ from collectors.seats import BuyerSeatsClient
 
 # Configuration
 CREDENTIALS_PATH = os.path.expanduser("~/.rtb-cat/credentials/google-credentials.json")
-BIDDER_ID = "299038253"  # Tuky Data Research Ltd.
+BIDDER_ID = "6634662463"  # Amazing MobYoung
 
 
 async def test_api_access():
