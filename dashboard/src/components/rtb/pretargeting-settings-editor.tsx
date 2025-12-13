@@ -137,7 +137,10 @@ function TargetingSection({
   pendingRemoves,
   onAddValue,
   onRemoveValue,
+  onSelectAll,
+  onInvertAll,
   fieldName,
+  showBulkActions = false,
 }: {
   title: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -146,7 +149,10 @@ function TargetingSection({
   pendingRemoves: string[];
   onAddValue: (value: string) => void;
   onRemoveValue: (value: string) => void;
+  onSelectAll?: () => void;
+  onInvertAll?: () => void;
   fieldName: string;
+  showBulkActions?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [newValue, setNewValue] = useState('');
@@ -207,6 +213,29 @@ function TargetingSection({
               <Plus className="h-4 w-4" />
             </button>
           </div>
+
+          {/* Bulk actions */}
+          {showBulkActions && values.length > 0 && (
+            <div className="flex items-center gap-2 pb-2 border-b">
+              <span className="text-xs text-gray-500">Bulk:</span>
+              {onSelectAll && (
+                <button
+                  onClick={onSelectAll}
+                  className="px-2 py-1 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
+                >
+                  Remove All
+                </button>
+              )}
+              {onInvertAll && (
+                <button
+                  onClick={onInvertAll}
+                  className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
+                >
+                  Invert
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Current values */}
           <div className="flex flex-wrap gap-2">
@@ -366,6 +395,50 @@ export function PretargetingSettingsEditor({
     });
   };
 
+  // Bulk action handlers for sizes
+  const handleSelectAllSizes = () => {
+    if (!configDetail) return;
+    const pendingRemoves = getPendingByType('remove_size');
+    // Remove all sizes that aren't already pending removal
+    configDetail.included_sizes
+      .filter(size => !pendingRemoves.includes(size))
+      .forEach(size => {
+        createChangeMutation.mutate({
+          billing_id,
+          change_type: 'remove_size',
+          field_name: 'included_sizes',
+          value: size,
+          reason: 'Bulk removal to reduce QPS waste',
+        });
+      });
+  };
+
+  const handleInvertSizesSelection = () => {
+    if (!configDetail) return;
+    const pendingRemoves = getPendingByType('remove_size');
+
+    configDetail.included_sizes.forEach(size => {
+      if (pendingRemoves.includes(size)) {
+        // Cancel the pending removal
+        const pendingChange = configDetail.pending_changes.find(
+          c => c.change_type === 'remove_size' && c.value === size
+        );
+        if (pendingChange) {
+          cancelChangeMutation.mutate(pendingChange.id);
+        }
+      } else {
+        // Add a pending removal
+        createChangeMutation.mutate({
+          billing_id,
+          change_type: 'remove_size',
+          field_name: 'included_sizes',
+          value: size,
+          reason: 'Bulk removal to reduce QPS waste',
+        });
+      }
+    });
+  };
+
   if (configLoading) {
     return (
       <div className="p-4 animate-pulse">
@@ -450,10 +523,32 @@ export function PretargetingSettingsEditor({
         {/* Pending changes section */}
         {hasPendingChanges && (
           <div className="space-y-2">
-            <h4 className="text-sm font-medium text-yellow-800 flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              Pending Changes ({pendingChanges.length})
-            </h4>
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-medium text-yellow-800 flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Pending Changes ({pendingChanges.length})
+              </h4>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    // Mark all as applied
+                    pendingChanges.forEach(c => markAppliedMutation.mutate(c.id));
+                  }}
+                  className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
+                >
+                  Apply All
+                </button>
+                <button
+                  onClick={() => {
+                    // Cancel all pending changes
+                    pendingChanges.forEach(c => cancelChangeMutation.mutate(c.id));
+                  }}
+                  className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
+                >
+                  Clear All
+                </button>
+              </div>
+            </div>
             <div className="space-y-2">
               {pendingChanges.map((change) => (
                 <PendingChangeCard
@@ -476,7 +571,10 @@ export function PretargetingSettingsEditor({
           pendingRemoves={getPendingByType('remove_size')}
           onAddValue={handleAddSize}
           onRemoveValue={handleRemoveSize}
+          onSelectAll={handleSelectAllSizes}
+          onInvertAll={handleInvertSizesSelection}
           fieldName="included_sizes"
+          showBulkActions={true}
         />
 
         <TargetingSection

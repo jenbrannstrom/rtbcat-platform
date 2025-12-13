@@ -10,6 +10,7 @@ import {
 import { AccountEndpointsHeader } from "@/components/rtb/account-endpoints-header";
 import { PretargetingConfigCard, type PretargetingConfig } from "@/components/rtb/pretargeting-config-card";
 import { ConfigBreakdownPanel } from "@/components/rtb/config-breakdown-panel";
+import { RecommendedOptimizationsPanel } from "@/components/rtb/recommended-optimizations-panel";
 import {
   getQPSSummary, getQPSSizeCoverage, getRTBFunnel, getSpendStats,
   getPretargetingConfigs, syncPretargetingConfigs,
@@ -1027,6 +1028,14 @@ function WasteAnalysisContent() {
             days={days}
           />
         )}
+      </section>
+
+      {/* Recommended Optimizations Panel */}
+      <section>
+        <RecommendedOptimizationsPanel
+          days={days}
+          onConfigSelect={(billingId) => setExpandedConfigId(billingId)}
+        />
       </section>
 
       {/* Pretargeting Configs Section */}

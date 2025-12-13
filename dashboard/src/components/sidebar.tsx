@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Check,
   AlertCircle,
+  History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getSeats, syncSeat } from "@/lib/api";
@@ -27,6 +28,7 @@ const navigation = [
   { name: "Waste Optimizer", href: "/", icon: TrendingDown },
   { name: "Creatives", href: "/creatives", icon: Image },
   { name: "Campaigns", href: "/campaigns", icon: FolderKanban },
+  { name: "Change History", href: "/history", icon: History },
   { name: "Uploads", href: "/uploads", icon: RefreshCw },
   { name: "Setup", href: "/setup", icon: Settings },
 ];

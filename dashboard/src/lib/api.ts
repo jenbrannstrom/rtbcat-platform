@@ -776,6 +776,27 @@ export interface PretargetingResponse {
   configs: PretargetingConfig[];
 }
 
+// Individual optimization recommendation
+export interface PretargetingRecommendation {
+  id: string;
+  type: 'size_mismatch' | 'config_underperforming' | 'opportunity' | 'geo_waste';
+  title: string;
+  description: string;
+  reasoning?: string;
+  estimated_savings?: {
+    qps_per_day: number;
+    usd_per_month?: number;
+  };
+  data?: {
+    sizes?: string[];
+    geos?: string[];
+    billing_id?: string;
+    config_name?: string;
+    current_win_rate?: number;
+    avg_win_rate?: number;
+  };
+}
+
 export interface QPSSummaryResponse {
   period_days: number;
   size_coverage: {
@@ -920,6 +941,31 @@ export async function getRTBGeos(
 ): Promise<{ geos: GeoPerformance[]; count: number }> {
   return fetchApi<{ geos: GeoPerformance[]; count: number }>(
     `/analytics/rtb-funnel/geos?limit=${limit}`
+  );
+}
+
+// RTB Config Performance API
+
+export interface ConfigPerformanceItem {
+  billing_id: string;
+  config_name: string | null;
+  reached_queries: number;
+  impressions: number;
+  win_rate: number;
+  size_count: number;
+}
+
+export interface ConfigPerformanceResponse {
+  period_days: number;
+  total_configs: number;
+  configs: ConfigPerformanceItem[];
+}
+
+export async function getRTBFunnelConfigs(
+  days: number = 7
+): Promise<ConfigPerformanceResponse> {
+  return fetchApi<ConfigPerformanceResponse>(
+    `/analytics/rtb-funnel/configs?days=${days}`
   );
 }
 
