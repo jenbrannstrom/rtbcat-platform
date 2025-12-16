@@ -994,12 +994,22 @@ export interface SyncEndpointsResponse {
   bidder_id: string;
 }
 
-export async function getRTBEndpoints(): Promise<RTBEndpointsResponse> {
-  return fetchApi<RTBEndpointsResponse>("/settings/endpoints");
+export async function getRTBEndpoints(params?: {
+  service_account_id?: string;
+}): Promise<RTBEndpointsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.service_account_id) searchParams.set("service_account_id", params.service_account_id);
+  const query = searchParams.toString();
+  return fetchApi<RTBEndpointsResponse>(`/settings/endpoints${query ? `?${query}` : ""}`);
 }
 
-export async function syncRTBEndpoints(): Promise<SyncEndpointsResponse> {
-  return fetchApi<SyncEndpointsResponse>("/settings/endpoints/sync", {
+export async function syncRTBEndpoints(params?: {
+  service_account_id?: string;
+}): Promise<SyncEndpointsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.service_account_id) searchParams.set("service_account_id", params.service_account_id);
+  const query = searchParams.toString();
+  return fetchApi<SyncEndpointsResponse>(`/settings/endpoints/sync${query ? `?${query}` : ""}`, {
     method: "POST",
   });
 }
@@ -1027,12 +1037,22 @@ export interface SyncPretargetingResponse {
   bidder_id: string;
 }
 
-export async function getPretargetingConfigs(): Promise<PretargetingConfigResponse[]> {
-  return fetchApi<PretargetingConfigResponse[]>("/settings/pretargeting");
+export async function getPretargetingConfigs(params?: {
+  service_account_id?: string;
+}): Promise<PretargetingConfigResponse[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.service_account_id) searchParams.set("service_account_id", params.service_account_id);
+  const query = searchParams.toString();
+  return fetchApi<PretargetingConfigResponse[]>(`/settings/pretargeting${query ? `?${query}` : ""}`);
 }
 
-export async function syncPretargetingConfigs(): Promise<SyncPretargetingResponse> {
-  return fetchApi<SyncPretargetingResponse>("/settings/pretargeting/sync", {
+export async function syncPretargetingConfigs(params?: {
+  service_account_id?: string;
+}): Promise<SyncPretargetingResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.service_account_id) searchParams.set("service_account_id", params.service_account_id);
+  const query = searchParams.toString();
+  return fetchApi<SyncPretargetingResponse>(`/settings/pretargeting/sync${query ? `?${query}` : ""}`, {
     method: "POST",
   });
 }
