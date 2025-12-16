@@ -14,7 +14,8 @@ from pydantic import BaseModel, Field
 
 from config import ConfigManager
 from storage.database import db_query, db_query_one, db_execute, db_insert_returning_id, db_transaction_async
-from api.dependencies import get_config
+from api.dependencies import get_config, get_store
+from storage.sqlite_store import SQLiteStore
 from collectors import EndpointsClient, PretargetingClient
 
 logger = logging.getLogger(__name__)
@@ -100,35 +101,36 @@ class PretargetingHistoryResponse(BaseModel):
 
 @router.post("/settings/endpoints/sync", response_model=SyncEndpointsResponse)
 async def sync_rtb_endpoints(
-    config: ConfigManager = Depends(get_config),
+    store: SQLiteStore = Depends(get_store),
 ):
     """Sync RTB endpoints from Google Authorized Buyers API.
 
     Fetches all RTB endpoints for the configured bidder account and stores them
     in the rtb_endpoints table.
     """
-    try:
-        app_config = config.load()
-    except Exception:
+    # Get service account from new multi-account system
+    accounts = await store.get_service_accounts(active_only=True)
+    if not accounts:
         raise HTTPException(
             status_code=400,
-            detail="Configuration not set. Use /config to configure."
+            detail="No service account configured. Upload credentials via /setup."
         )
 
-    if not app_config.authorized_buyers:
-        raise HTTPException(
-            status_code=400,
-            detail="Authorized Buyers not configured. Upload credentials via /config/credentials."
-        )
-
-    creds_path = Path(app_config.authorized_buyers.service_account_path).expanduser()
+    # Use the first active service account
+    service_account = accounts[0]
+    creds_path = Path(service_account.credentials_path).expanduser()
     if not creds_path.exists():
         raise HTTPException(
             status_code=400,
-            detail="Service account credentials file not found. Upload via /config/credentials."
+            detail="Service account credentials file not found. Re-upload via /setup."
         )
 
-    account_id = app_config.authorized_buyers.account_id
+    # Get bidder account ID from buyer_seats table (linked to service account)
+    bidder_row = await db_query_one(
+        "SELECT bidder_id FROM buyer_seats WHERE service_account_id = ? LIMIT 1",
+        (service_account.id,)
+    )
+    account_id = bidder_row["bidder_id"] if bidder_row else service_account.project_id
 
     try:
         client = EndpointsClient(
@@ -168,7 +170,7 @@ async def sync_rtb_endpoints(
 
 @router.get("/settings/endpoints", response_model=RTBEndpointsResponse)
 async def get_rtb_endpoints(
-    config: ConfigManager = Depends(get_config),
+    store: SQLiteStore = Depends(get_store),
 ):
     """Get stored RTB endpoints with aggregated QPS data.
 
@@ -176,15 +178,20 @@ async def get_rtb_endpoints(
     along with total allocated QPS and current usage.
     """
     try:
-        # Get credentials for bidder_id
+        # Get credentials for bidder_id from new multi-account system
         bidder_id = ""
         account_name = None
-        try:
-            app_config = config.load()
-            if app_config and app_config.authorized_buyers:
-                bidder_id = app_config.authorized_buyers.account_id
-        except Exception:
-            pass
+        accounts = await store.get_service_accounts(active_only=True)
+        if accounts:
+            service_account = accounts[0]
+            account_name = service_account.display_name
+            # Try to get bidder_id from buyer_seats
+            bidder_row = await db_query_one(
+                "SELECT bidder_id FROM buyer_seats WHERE service_account_id = ? LIMIT 1",
+                (service_account.id,)
+            )
+            if bidder_row:
+                bidder_id = bidder_row["bidder_id"]
 
         rows = await db_query(
             "SELECT * FROM rtb_endpoints ORDER BY trading_location, endpoint_id"
@@ -227,35 +234,36 @@ async def get_rtb_endpoints(
 
 @router.post("/settings/pretargeting/sync", response_model=SyncPretargetingResponse)
 async def sync_pretargeting_configs(
-    config: ConfigManager = Depends(get_config),
+    store: SQLiteStore = Depends(get_store),
 ):
     """Sync pretargeting configs from Google Authorized Buyers API.
 
     Fetches all pretargeting configurations for the configured bidder account
     and stores them in the pretargeting_configs table.
     """
-    try:
-        app_config = config.load()
-    except Exception:
+    # Get service account from new multi-account system
+    accounts = await store.get_service_accounts(active_only=True)
+    if not accounts:
         raise HTTPException(
             status_code=400,
-            detail="Configuration not set. Use /config to configure."
+            detail="No service account configured. Upload credentials via /setup."
         )
 
-    if not app_config.authorized_buyers:
-        raise HTTPException(
-            status_code=400,
-            detail="Authorized Buyers not configured. Upload credentials via /config/credentials."
-        )
-
-    creds_path = Path(app_config.authorized_buyers.service_account_path).expanduser()
+    # Use the first active service account
+    service_account = accounts[0]
+    creds_path = Path(service_account.credentials_path).expanduser()
     if not creds_path.exists():
         raise HTTPException(
             status_code=400,
-            detail="Service account credentials file not found. Upload via /config/credentials."
+            detail="Service account credentials file not found. Re-upload via /setup."
         )
 
-    account_id = app_config.authorized_buyers.account_id
+    # Get bidder account ID from buyer_seats table (linked to service account)
+    bidder_row = await db_query_one(
+        "SELECT bidder_id FROM buyer_seats WHERE service_account_id = ? LIMIT 1",
+        (service_account.id,)
+    )
+    account_id = bidder_row["bidder_id"] if bidder_row else service_account.project_id
 
     try:
         client = PretargetingClient(
@@ -279,11 +287,22 @@ async def sync_pretargeting_configs(
 
             await db_execute(
                 """
-                INSERT OR REPLACE INTO pretargeting_configs
+                INSERT INTO pretargeting_configs
                 (bidder_id, config_id, billing_id, display_name, state,
                  included_formats, included_platforms, included_sizes,
                  included_geos, excluded_geos, raw_config, synced_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(bidder_id, config_id) DO UPDATE SET
+                    billing_id = excluded.billing_id,
+                    display_name = excluded.display_name,
+                    state = excluded.state,
+                    included_formats = excluded.included_formats,
+                    included_platforms = excluded.included_platforms,
+                    included_sizes = excluded.included_sizes,
+                    included_geos = excluded.included_geos,
+                    excluded_geos = excluded.excluded_geos,
+                    raw_config = excluded.raw_config,
+                    synced_at = CURRENT_TIMESTAMP
                 """,
                 (
                     account_id,
@@ -313,7 +332,7 @@ async def sync_pretargeting_configs(
 
 @router.get("/settings/pretargeting", response_model=list[PretargetingConfigResponse])
 async def get_pretargeting_configs(
-    config: ConfigManager = Depends(get_config),
+    store: SQLiteStore = Depends(get_store),
 ):
     """Get stored pretargeting configs for the current account.
 
@@ -324,9 +343,17 @@ async def get_pretargeting_configs(
     Includes user-defined names if set.
     """
     try:
-        # Get the current account's bidder_id from config
-        app_config = config.load()
-        current_bidder_id = app_config.authorized_buyers.account_id if app_config.authorized_buyers else None
+        # Get the current account's bidder_id from new multi-account system
+        current_bidder_id = None
+        accounts = await store.get_service_accounts(active_only=True)
+        if accounts:
+            service_account = accounts[0]
+            bidder_row = await db_query_one(
+                "SELECT bidder_id FROM buyer_seats WHERE service_account_id = ? LIMIT 1",
+                (service_account.id,)
+            )
+            if bidder_row:
+                current_bidder_id = bidder_row["bidder_id"]
 
         if current_bidder_id:
             # Filter by current account's bidder_id

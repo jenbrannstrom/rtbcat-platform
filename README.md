@@ -33,11 +33,13 @@ git clone https://github.com/yourorg/rtbcat-platform.git
 cd rtbcat-platform
 ./setup.sh
 
-# 2. Start services
+# 2. Start services (from terminal)
 ./run.sh
 
 # 3. Open http://localhost:3000
 ```
+
+> **Note:** On Linux (Zorin, Ubuntu, etc.), run `./run.sh` from a terminal, not by double-clicking in the file manager. If double-clicking doesn't work, right-click → "Open With Terminal" or run from command line.
 
 ### Requirements
 

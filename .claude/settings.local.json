@@ -82,7 +82,8 @@
       "Bash(timeout 10 python:*)",
       "Bash(dpkg -l:*)",
       "Bash(snap list:*)",
-      "Bash(/home/jen/Documents/rtbcat-platform/dashboard/node_modules/.bin/next:*)"
+      "Bash(/home/jen/Documents/rtbcat-platform/dashboard/node_modules/.bin/next:*)",
+      "Bash(/home/jen/Documents/rtbcat-platform/creative-intelligence/venv/bin/pip install:*)"
     ],
     "deny": [],
     "ask": []
