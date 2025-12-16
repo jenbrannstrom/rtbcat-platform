@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AIControlSettings, useAIControlMode, type AIControlMode } from './ai-control-settings';
+import { useAccount } from '@/contexts/account-context';
 import {
   getPretargetingConfigs,
   getQPSSizeCoverage,
@@ -377,10 +378,12 @@ export function RecommendedOptimizationsPanel({
     }
   }
 
+  const { selectedServiceAccountId } = useAccount();
+
   // Fetch configs for the dropdown
   const { data: configs } = useQuery({
-    queryKey: ['pretargeting-configs'],
-    queryFn: getPretargetingConfigs,
+    queryKey: ['pretargeting-configs', selectedServiceAccountId],
+    queryFn: () => getPretargetingConfigs({ service_account_id: selectedServiceAccountId || undefined }),
   });
 
   // Mutation to apply recommendation

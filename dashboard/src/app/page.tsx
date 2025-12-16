@@ -17,6 +17,7 @@ import {
   type PublisherPerformance, type GeoPerformance, type PretargetingConfigResponse
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useAccount } from "@/contexts/account-context";
 
 const PERIOD_OPTIONS = [
   { value: 7, label: "7 days" },
@@ -840,6 +841,7 @@ function WasteAnalysisContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const { selectedServiceAccountId } = useAccount();
 
   const initialDays = parseInt(searchParams.get("days") || "7", 10);
   const [days, setDays] = useState<number>(initialDays);
@@ -897,15 +899,15 @@ function WasteAnalysisContent() {
     isLoading: configsLoading,
     refetch: refetchConfigs,
   } = useQuery({
-    queryKey: ["pretargeting-configs"],
-    queryFn: () => getPretargetingConfigs(),
+    queryKey: ["pretargeting-configs", selectedServiceAccountId],
+    queryFn: () => getPretargetingConfigs({ service_account_id: selectedServiceAccountId || undefined }),
   });
 
   // Sync pretargeting mutation
   const syncConfigsMutation = useMutation({
-    mutationFn: syncPretargetingConfigs,
+    mutationFn: () => syncPretargetingConfigs({ service_account_id: selectedServiceAccountId || undefined }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pretargeting-configs"] });
+      queryClient.invalidateQueries({ queryKey: ["pretargeting-configs", selectedServiceAccountId] });
     },
   });
 

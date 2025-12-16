@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getRTBEndpoints } from '@/lib/api';
 import { Server, AlertTriangle, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAccount } from '@/contexts/account-context';
 
 // Helper to format trading location for display
 function formatLocation(location: string | null): string {
@@ -27,9 +28,11 @@ function formatQPS(qps: number | null): string {
 }
 
 export function AccountEndpointsHeader() {
+  const { selectedServiceAccountId } = useAccount();
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ['rtb-endpoints'],
-    queryFn: getRTBEndpoints,
+    queryKey: ['rtb-endpoints', selectedServiceAccountId],
+    queryFn: () => getRTBEndpoints({ service_account_id: selectedServiceAccountId || undefined }),
   });
 
   // Loading skeleton
