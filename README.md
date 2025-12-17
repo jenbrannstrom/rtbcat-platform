@@ -125,6 +125,35 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 
 ---
 
+## CSV Format Requirements
+
+Import CSV reports exported from Google Authorized Buyers BigQuery. The importer requires specific columns for QPS waste analysis.
+
+### Required Dimensions
+| Column | Purpose |
+|--------|---------|
+| Day | Date for metrics aggregation |
+| Billing ID | Links data to pretargeting configs |
+| Creative ID | Identifies the creative |
+| Creative size | For size mismatch detection |
+| Country | **Required** for geo-level QPS optimization |
+
+### Required Metrics
+| Column | Purpose |
+|--------|---------|
+| Reached queries | Total QPS received |
+| Impressions | Won impressions |
+
+### Optional (if available)
+- Creative format, Platform, Environment
+- Publisher ID/Name/Domain
+- Clicks, Spend
+- Video metrics (starts, quartiles, completions)
+
+> **Waste Calculation:** `(Reached Queries - Impressions) / Reached Queries`
+
+---
+
 ## CLI Commands
 
 ```bash

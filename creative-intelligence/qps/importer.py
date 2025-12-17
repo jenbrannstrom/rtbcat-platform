@@ -50,6 +50,7 @@ REQUIRED_COLUMNS = {
     "creative_id": ["Creative ID", "#Creative ID"],
     "billing_id": ["Billing ID", "#Billing ID"],
     "creative_size": ["Creative size", "#Creative size"],
+    "country": ["Country", "#Country"],  # Required for geo-level QPS optimization
     "reached_queries": ["Reached queries", "#Reached queries"],
     "impressions": ["Impressions", "#Impressions"],
 }
@@ -57,7 +58,6 @@ REQUIRED_COLUMNS = {
 # Optional columns - imported if present
 OPTIONAL_COLUMNS = {
     "creative_format": ["Creative format", "#Creative format"],
-    "country": ["Country", "#Country"],
     "platform": ["Platform", "#Platform"],
     "environment": ["Environment", "#Environment"],
     "app_id": ["Mobile app ID", "#Mobile app ID"],
@@ -131,6 +131,7 @@ class ValidationResult:
             "creative_id": "   • Creative ID",
             "billing_id": "   • Billing ID",
             "creative_size": "   • Creative size",
+            "country": "   • Country",
             "day": "   • Day (under Time dimensions)",
         }
 
