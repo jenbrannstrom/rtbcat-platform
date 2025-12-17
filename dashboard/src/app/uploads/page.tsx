@@ -446,18 +446,36 @@ function ManualImportSection({ onImportSuccess }: { onImportSuccess: () => void 
                 </summary>
                 <div className="p-3 pt-0 border-t border-gray-200 text-sm text-gray-600">
                   <p className="mb-3">
-                    Upload performance reports from Google Authorized Buyers. Cat-Scan auto-detects the report type from column headers.
+                    Upload performance reports from Google Authorized Buyers. Create this report in <strong>Authorized Buyers → Reporting → New Report</strong>.
                   </p>
-                  <div className="space-y-2">
-                    <div className="p-2 bg-blue-50 rounded">
-                      <p className="font-medium text-blue-800">Report 1: Billing Config Performance</p>
-                      <p className="text-xs text-blue-600">Columns: Day, Billing ID, Creative ID, Creative size, Creative format, Reached queries, Impressions</p>
-                    </div>
-                    <div className="p-2 bg-purple-50 rounded">
-                      <p className="font-medium text-purple-800">Report 2: Creative Bidding Activity</p>
-                      <p className="text-xs text-purple-600">Columns: Day, Creative ID, Country, Bids, Bids in auction, Reached queries</p>
+                  <div className="p-3 bg-blue-50 rounded border border-blue-200">
+                    <p className="font-medium text-blue-900 mb-2">Report: &quot;catscan-billing-config&quot;</p>
+                    <div className="grid grid-cols-2 gap-4 text-xs">
+                      <div>
+                        <p className="font-semibold text-gray-600 mb-1">Dimensions (required):</p>
+                        <ol className="list-decimal list-inside text-gray-700">
+                          <li>Day</li>
+                          <li>Billing ID</li>
+                          <li>Creative ID</li>
+                          <li>Creative size</li>
+                          <li>Country</li>
+                          <li>Creative format <span className="text-gray-400">(optional)</span></li>
+                        </ol>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-600 mb-1">Metrics (required):</p>
+                        <ul className="text-gray-700">
+                          <li>• Reached queries</li>
+                          <li>• Impressions</li>
+                        </ul>
+                        <p className="font-semibold text-gray-600 mt-2 mb-1">Schedule:</p>
+                        <p className="text-gray-700">Daily, Yesterday</p>
+                      </div>
                     </div>
                   </div>
+                  <p className="mt-3 text-xs text-gray-500">
+                    Optional additional columns: Clicks, Spend, Publisher ID, etc.
+                  </p>
                 </div>
               </details>
             </div>

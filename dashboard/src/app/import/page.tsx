@@ -599,73 +599,45 @@ function ExportInstructions() {
         </ol>
       </div>
 
-      {/* Report 1: Billing Config */}
-      <div className="border border-gray-200 rounded-lg p-4">
+      {/* Main Report: Billing Config Performance */}
+      <div className="border-2 border-blue-200 rounded-lg p-4 bg-blue-50">
         <div className="flex items-center gap-2 mb-3">
-          <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded">Report 1</span>
+          <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded">Required</span>
           <h4 className="font-semibold text-gray-900">Billing Config Performance</h4>
         </div>
-        <p className="text-gray-600 mb-3">Shows waste per pretargeting config (billing_id)</p>
+        <p className="text-gray-600 mb-3">This is the main report for QPS waste analysis. Shows waste per pretargeting config.</p>
 
         <div className="grid md:grid-cols-2 gap-4">
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Dimensions</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Dimensions (in order)</p>
             <ul className="space-y-1 text-gray-700">
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Day</li>
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> <strong>Billing ID</strong></li>
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> <strong>Creative ID</strong></li>
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Creative size</li>
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Creative format</li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Day</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Billing ID</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Creative ID</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Creative size</strong></li>
+              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Creative format <span className="text-xs text-gray-400">(optional)</span></li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Country</strong></li>
             </ul>
           </div>
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Metrics</p>
             <ul className="space-y-1 text-gray-700">
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> <strong>Reached queries</strong></li>
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> <strong>Impressions</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Reached queries</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Impressions</strong></li>
+              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Clicks <span className="text-xs text-gray-400">(optional)</span></li>
+              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Spend <span className="text-xs text-gray-400">(optional)</span></li>
             </ul>
           </div>
         </div>
-        <p className="text-xs text-gray-500 mt-3">Save as: <code className="bg-gray-100 px-1 rounded">catscan-billing-config.csv</code></p>
       </div>
 
-      {/* Report 2: Creative Bids */}
+      {/* Optional: Publisher Performance */}
       <div className="border border-gray-200 rounded-lg p-4">
         <div className="flex items-center gap-2 mb-3">
-          <span className="bg-purple-100 text-purple-800 text-xs font-bold px-2 py-1 rounded">Report 2</span>
-          <h4 className="font-semibold text-gray-900">Creative Bidding Activity</h4>
-        </div>
-        <p className="text-gray-600 mb-3">Shows bidding activity per creative by geo</p>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Dimensions</p>
-            <ul className="space-y-1 text-gray-700">
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Day</li>
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> <strong>Creative ID</strong></li>
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Country</li>
-            </ul>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Metrics</p>
-            <ul className="space-y-1 text-gray-700">
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> <strong>Bids</strong></li>
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Bids in auction</li>
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> <strong>Reached queries</strong></li>
-            </ul>
-          </div>
-        </div>
-        <p className="text-xs text-gray-500 mt-3">Save as: <code className="bg-gray-100 px-1 rounded">catscan-creative-bids.csv</code></p>
-      </div>
-
-      {/* Report 3: Publisher Performance (Optional) */}
-      <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="bg-gray-200 text-gray-700 text-xs font-bold px-2 py-1 rounded">Report 3</span>
+          <span className="bg-gray-200 text-gray-700 text-xs font-bold px-2 py-1 rounded">Optional</span>
           <h4 className="font-semibold text-gray-900">Publisher Performance</h4>
-          <span className="text-xs text-gray-500">(optional)</span>
         </div>
-        <p className="text-gray-600 mb-3">Shows publisher-level funnel metrics</p>
+        <p className="text-gray-600 mb-3">Shows publisher-level funnel metrics (for advanced analysis)</p>
 
         <div className="grid md:grid-cols-2 gap-4">
           <div>
@@ -680,18 +652,15 @@ function ExportInstructions() {
             <ul className="space-y-1 text-gray-700">
               <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Bid requests</li>
               <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Reached queries</li>
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Bids</li>
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Successful responses</li>
               <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Impressions</li>
             </ul>
           </div>
         </div>
-        <p className="text-xs text-gray-500 mt-3">Save as: <code className="bg-gray-100 px-1 rounded">catscan-publisher-perf.csv</code></p>
       </div>
 
       {/* Schedule Settings */}
       <div>
-        <h4 className="font-semibold text-gray-900 mb-2">Schedule Settings (All Reports)</h4>
+        <h4 className="font-semibold text-gray-900 mb-2">Schedule Settings</h4>
         <ul className="list-disc list-inside text-gray-700 space-y-1">
           <li>Date range: <strong>Yesterday</strong></li>
           <li>Schedule: <strong>Daily</strong></li>
