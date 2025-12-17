@@ -1,4 +1,4 @@
-# Cat-Scan Creative Intelligence
+# Cat-Scan QPS Optimizer & Creative Intelligence Tool
 
 **Version:** 24.0 | **Phase:** Schema Refactoring | **Last Updated:** December 11, 2025
 
