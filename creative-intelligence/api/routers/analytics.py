@@ -20,6 +20,7 @@ from analytics.size_coverage_analyzer import SizeCoverageAnalyzer
 from analytics.geo_waste_analyzer import GeoWasteAnalyzer
 from analytics.pretargeting_recommender import PretargetingRecommender
 from analytics.rtb_funnel_analyzer import RTBFunnelAnalyzer
+from analytics.qps_optimizer import QPSOptimizer
 
 logger = logging.getLogger(__name__)
 
@@ -1042,4 +1043,194 @@ async def get_creative_win_performance(
         return result
     except Exception as e:
         logger.error(f"Failed to get creative win performance: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# QPS Optimization Endpoints (Enhanced Analysis)
+# =============================================================================
+
+@router.get("/analytics/qps-optimization", tags=["QPS Optimization"])
+async def get_qps_optimization_report(
+    days: int = Query(7, ge=1, le=30),
+    bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
+):
+    """
+    Get comprehensive QPS optimization report with actionable recommendations.
+
+    This endpoint JOINs data from:
+    - rtb_funnel (bid pipeline metrics)
+    - rtb_daily (creative/app performance)
+    - rtb_bid_filtering (bid filtering reasons)
+    - rtb_quality (fraud/viewability signals)
+
+    Returns:
+    - Summary statistics (efficiency, waste estimate)
+    - Actionable recommendations
+    - Publisher waste ranking
+    - Platform efficiency breakdown
+    - Hourly patterns
+    - Bid filtering analysis
+    - Fraud risk publishers
+    - Viewability issues
+
+    This is the main endpoint for AI-driven QPS optimization.
+    """
+    try:
+        optimizer = QPSOptimizer()
+        report = await optimizer.get_full_optimization_report(days, bidder_id)
+        return report
+    except Exception as e:
+        logger.error(f"Failed to generate QPS optimization report: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/publisher-waste", tags=["QPS Optimization"])
+async def get_publisher_waste(
+    days: int = Query(7, ge=1, le=30),
+    limit: int = Query(50, ge=1, le=100),
+    bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
+):
+    """
+    Get publishers ranked by QPS waste.
+
+    JOINs rtb_funnel + rtb_daily to calculate:
+    - Bid requests vs auctions won
+    - Waste percentage
+    - Win rate
+    - Spend
+
+    Use this to identify publishers to block in pretargeting.
+    """
+    try:
+        optimizer = QPSOptimizer()
+        result = await optimizer.get_publisher_waste_ranking(days, limit, bidder_id)
+        return {
+            "period_days": days,
+            "publishers": result,
+            "count": len(result),
+        }
+    except Exception as e:
+        logger.error(f"Failed to get publisher waste ranking: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/bid-filtering", tags=["QPS Optimization"])
+async def get_bid_filtering_analysis(
+    days: int = Query(7, ge=1, le=30),
+    bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
+):
+    """
+    Analyze why bids are being filtered.
+
+    Returns bid filtering reasons ranked by:
+    - Volume (bids filtered)
+    - Opportunity cost
+
+    Use this to identify and fix creative policy issues.
+    """
+    try:
+        optimizer = QPSOptimizer()
+        result = await optimizer.get_bid_filtering_analysis(days, bidder_id)
+        return {
+            "period_days": days,
+            "filtering_reasons": result,
+            "count": len(result),
+        }
+    except Exception as e:
+        logger.error(f"Failed to get bid filtering analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/platform-efficiency", tags=["QPS Optimization"])
+async def get_platform_efficiency(
+    days: int = Query(7, ge=1, le=30),
+    bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
+):
+    """
+    Analyze efficiency by platform (Desktop/Mobile/Tablet).
+
+    Returns win rates and spend by device type for bid adjustments.
+    """
+    try:
+        optimizer = QPSOptimizer()
+        result = await optimizer.get_platform_efficiency(days, bidder_id)
+        result["period_days"] = days
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get platform efficiency: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/hourly-patterns", tags=["QPS Optimization"])
+async def get_hourly_patterns(
+    days: int = Query(7, ge=1, le=30),
+    bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
+):
+    """
+    Analyze hourly bidding patterns for QPS throttling.
+
+    Returns bid requests, win rate, and efficiency by hour of day.
+    """
+    try:
+        optimizer = QPSOptimizer()
+        result = await optimizer.get_hourly_patterns(days, bidder_id)
+        return {
+            "period_days": days,
+            "hourly_patterns": result,
+        }
+    except Exception as e:
+        logger.error(f"Failed to get hourly patterns: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/fraud-risk", tags=["QPS Optimization"])
+async def get_fraud_risk_publishers(
+    days: int = Query(7, ge=1, le=30),
+    threshold_pct: float = Query(5.0, ge=0, le=100, description="IVT rate threshold"),
+    bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
+):
+    """
+    Find publishers with high fraud/IVT rates.
+
+    Returns publishers with IVT rate above threshold.
+    Use this to identify publishers to block.
+    """
+    try:
+        optimizer = QPSOptimizer()
+        result = await optimizer.get_fraud_risk_publishers(days, threshold_pct, bidder_id)
+        return {
+            "period_days": days,
+            "ivt_threshold_pct": threshold_pct,
+            "fraud_risk_publishers": result,
+            "count": len(result),
+        }
+    except Exception as e:
+        logger.error(f"Failed to get fraud risk publishers: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/viewability-waste", tags=["QPS Optimization"])
+async def get_viewability_waste(
+    days: int = Query(7, ge=1, le=30),
+    threshold_pct: float = Query(50.0, ge=0, le=100, description="Viewability threshold"),
+    bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
+):
+    """
+    Find publishers with low viewability but high spend.
+
+    Returns publishers with viewability below threshold.
+    Use this to identify where to reduce bids.
+    """
+    try:
+        optimizer = QPSOptimizer()
+        result = await optimizer.get_viewability_waste(days, threshold_pct, bidder_id)
+        return {
+            "period_days": days,
+            "viewability_threshold_pct": threshold_pct,
+            "viewability_issues": result,
+            "count": len(result),
+        }
+    except Exception as e:
+        logger.error(f"Failed to get viewability waste: {e}")
         raise HTTPException(status_code=500, detail=str(e))

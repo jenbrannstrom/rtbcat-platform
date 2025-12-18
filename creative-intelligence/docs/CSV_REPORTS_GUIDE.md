@@ -1,12 +1,27 @@
 # Cat-Scan Required CSV Reports Guide
 
-**Version:** 1.0 | **Updated:** December 17, 2025
+**Version:** 2.0 | **Updated:** December 18, 2025
 
-Cat-Scan requires **3 separate CSV reports** from Google Authorized Buyers due to field incompatibilities in Google's reporting system.
+Cat-Scan supports **5 CSV report types** from Google Authorized Buyers for comprehensive QPS optimization.
 
 ---
 
-## Why 3 Reports?
+## Report Types Overview
+
+| Report | Table | Purpose |
+|--------|-------|---------|
+| **1. Performance Detail** | `rtb_daily` | Creative, Size, App-level performance |
+| **2. RTB Funnel (Geo)** | `rtb_funnel` | Full bid pipeline by country |
+| **3. RTB Funnel (Publisher)** | `rtb_funnel` | Publisher-level bid pipeline |
+| **4. Bid Filtering** | `rtb_bid_filtering` | Why bids are being filtered |
+| **5. Quality Signals** | `rtb_quality` | Fraud and viewability signals |
+
+Reports 1-3 are **required** for basic QPS optimization.
+Reports 4-5 are **optional** but enable advanced fraud detection and bid filtering analysis.
+
+---
+
+## Why Multiple Reports?
 
 When creating reports in Google Authorized Buyers, certain fields are **mutually exclusive**:
 
@@ -75,6 +90,62 @@ This means:
 - Which publishers send the most traffic
 - Publisher-level win rates
 - Where to focus publisher optimization
+
+---
+
+### Report 4: Bid Filtering (Optional)
+**Purpose:** Understand why bids are being filtered
+**Database Table:** `rtb_bid_filtering`
+**Filename:** `catscan-bid-filtering`
+
+| Type | Fields |
+|------|--------|
+| **Dimensions** | Day, Country, Buyer account ID |
+| **Required Metrics** | Bid filtering reason, Bids, Bids in auction |
+
+**What this tells you:**
+- Why your bids are being rejected
+- Which creative policies are affecting your QPS
+- Opportunity cost of filtering
+
+---
+
+### Report 5: Quality Signals (Optional)
+**Purpose:** Fraud and viewability analysis by publisher
+**Database Table:** `rtb_quality`
+**Filename:** `catscan-quality`
+
+| Type | Fields |
+|------|--------|
+| **Dimensions** | Day, Publisher ID, Publisher name, Country |
+| **Metrics** | Impressions, Pre-filtered impressions, IVT credited impressions, Billed impressions, Active View measurable, Active View viewable |
+
+**What this tells you:**
+- Which publishers have high fraud (IVT) rates
+- Which publishers have low viewability
+- Where to reduce bids or block
+
+---
+
+## Enhanced Fields for QPS Optimization
+
+The following optional fields can be added to Reports 1-3 for better optimization:
+
+### Performance Detail (Report 1) - Optional Fields
+| Field | Column Name | Why Useful |
+|-------|-------------|------------|
+| Hour | `Hour` | Hourly traffic patterns |
+| Platform | `Platform` | Desktop vs Mobile optimization |
+| Environment | `Environment` | App vs Web strategy |
+| Viewable | `Active View viewable` | Viewability tracking |
+| Measurable | `Active View measurable` | Viewability tracking |
+
+### RTB Funnel (Reports 2 & 3) - Optional Fields
+| Field | Column Name | Why Useful |
+|-------|-------------|------------|
+| Platform | `Platform` | Device-level optimization |
+| Environment | `Environment` | App vs Web analysis |
+| Transaction Type | `Transaction type` | Open vs Private auction analysis |
 
 ---
 

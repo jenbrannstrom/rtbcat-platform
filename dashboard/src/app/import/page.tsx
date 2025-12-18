@@ -759,6 +759,69 @@ function ExportInstructions() {
         </div>
       </div>
 
+      {/* Report 4: Bid Filtering (Optional) */}
+      <div className="border-2 border-orange-200 rounded-lg p-4 bg-orange-50">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="bg-orange-600 text-white text-xs font-bold px-2 py-1 rounded">4</span>
+          <span className="bg-gray-400 text-white text-xs font-bold px-2 py-1 rounded">Optional</span>
+          <h4 className="font-semibold text-gray-900">Bid Filtering</h4>
+          <span className="text-xs text-gray-500 ml-auto">→ rtb_bid_filtering table</span>
+        </div>
+        <p className="text-gray-600 mb-3">Understand <strong>why your bids are being filtered</strong>. Enables bid filtering analysis.</p>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Dimensions</p>
+            <ul className="space-y-1 text-gray-700">
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Day</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Country</strong></li>
+              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Buyer account ID</li>
+            </ul>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Metrics</p>
+            <ul className="space-y-1 text-gray-700">
+              <li className="flex items-center gap-2"><span className="text-orange-600 font-bold">★</span> <strong>Bid filtering reason</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> Bids</li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> Bids in auction</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Report 5: Quality Signals (Optional) */}
+      <div className="border-2 border-red-200 rounded-lg p-4 bg-red-50">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="bg-red-600 text-white text-xs font-bold px-2 py-1 rounded">5</span>
+          <span className="bg-gray-400 text-white text-xs font-bold px-2 py-1 rounded">Optional</span>
+          <h4 className="font-semibold text-gray-900">Quality Signals</h4>
+          <span className="text-xs text-gray-500 ml-auto">→ rtb_quality table</span>
+        </div>
+        <p className="text-gray-600 mb-3">Fraud and viewability analysis. Enables <strong>IVT detection</strong> and viewability waste analysis.</p>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Dimensions</p>
+            <ul className="space-y-1 text-gray-700">
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Day</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Publisher ID</strong></li>
+              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Publisher name</li>
+              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Country</li>
+            </ul>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Metrics</p>
+            <ul className="space-y-1 text-gray-700">
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> Impressions</li>
+              <li className="flex items-center gap-2"><span className="text-red-600 font-bold">★</span> <strong>IVT credited impressions</strong></li>
+              <li className="flex items-center gap-2"><span className="text-red-600 font-bold">★</span> <strong>Pre-filtered impressions</strong></li>
+              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Active View measurable</li>
+              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Active View viewable</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
       {/* How Cat-Scan Joins */}
       <div className="bg-gray-100 rounded-lg p-4">
         <h4 className="font-semibold text-gray-900 mb-2">How Cat-Scan Joins the Data</h4>
@@ -786,7 +849,7 @@ function ExportInstructions() {
 
       <div className="bg-blue-50 p-3 rounded-lg">
         <p className="text-blue-800">
-          <strong>Tip:</strong> Upload all 3 CSV files here. Cat-Scan <strong>automatically detects</strong> the report type
+          <strong>Tip:</strong> Upload any CSV file here. Cat-Scan <strong>automatically detects</strong> all 5 report types
           from the column headers and routes to the correct table.
         </p>
       </div>

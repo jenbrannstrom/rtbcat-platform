@@ -57,6 +57,7 @@ REQUIRED_COLUMNS = {
 
 # Optional columns - imported if present
 OPTIONAL_COLUMNS = {
+    "hour": ["Hour", "#Hour"],  # NEW: Hourly granularity
     "creative_format": ["Creative format", "#Creative format"],
     "platform": ["Platform", "#Platform"],
     "environment": ["Environment", "#Environment"],
@@ -334,7 +335,7 @@ def compute_row_hash(row_data: Dict) -> str:
     """Compute hash of dimension values for deduplication."""
     # Include all dimension values (not metrics) in hash
     dimension_keys = [
-        "metric_date", "creative_id", "billing_id", "creative_size",
+        "metric_date", "hour", "creative_id", "billing_id", "creative_size",
         "country", "platform", "environment", "app_id", "publisher_id",
         "deal_id", "advertiser", "buyer_account_id"
     ]
@@ -454,6 +455,9 @@ def import_csv(
                             return None
                         return parse_int(row.get(column_map[key], ""))
 
+                    # NEW: Parse hour for hourly granularity
+                    hour = get_opt_int("hour")
+
                     creative_format = get_opt("creative_format")
                     country = get_opt("country")
                     platform = get_opt("platform")
@@ -495,6 +499,7 @@ def import_csv(
                     # Build row data for hash
                     row_data = {
                         "metric_date": metric_date,
+                        "hour": hour,
                         "creative_id": creative_id,
                         "billing_id": billing_id,
                         "creative_size": creative_size,
@@ -529,9 +534,9 @@ def import_csv(
                             result.bidder_id = row_bidder_id
                             result.bidder_id_source = "inferred"
 
-                    # Add to batch (includes bidder_id)
+                    # Add to batch (includes bidder_id and hour)
                     batch.append((
-                        metric_date, creative_id, billing_id,
+                        metric_date, hour, creative_id, billing_id,
                         creative_size, creative_format, country, platform, environment,
                         app_id, app_name, publisher_id, publisher_name, publisher_domain,
                         deal_id, deal_name, transaction_type,
@@ -542,7 +547,7 @@ def import_csv(
                         active_view_measurable, active_view_viewable,
                         gma_sdk, buyer_sdk,
                         row_hash, result.batch_id,
-                        row_bidder_id  # NEW: bidder_id for multi-account support
+                        row_bidder_id  # bidder_id for multi-account support
                     ))
 
                     # Insert batch
@@ -605,7 +610,7 @@ def _insert_batch(cursor: sqlite3.Cursor, batch: List[Tuple]) -> Tuple[int, int]
         try:
             cursor.execute("""
                 INSERT INTO rtb_daily (
-                    metric_date, creative_id, billing_id,
+                    metric_date, hour, creative_id, billing_id,
                     creative_size, creative_format, country, platform, environment,
                     app_id, app_name, publisher_id, publisher_name, publisher_domain,
                     deal_id, deal_name, transaction_type,
@@ -618,7 +623,7 @@ def _insert_batch(cursor: sqlite3.Cursor, batch: List[Tuple]) -> Tuple[int, int]
                     row_hash, import_batch_id,
                     bidder_id
                 ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
             """, row)
