@@ -83,7 +83,14 @@
       "Bash(dpkg -l:*)",
       "Bash(snap list:*)",
       "Bash(/home/jen/Documents/rtbcat-platform/dashboard/node_modules/.bin/next:*)",
-      "Bash(/home/jen/Documents/rtbcat-platform/creative-intelligence/venv/bin/pip install:*)"
+      "Bash(/home/jen/Documents/rtbcat-platform/creative-intelligence/venv/bin/pip install:*)",
+      "mcp__chrome-devtools__take_snapshot",
+      "mcp__chrome-devtools__navigate_page",
+      "mcp__chrome-devtools__list_console_messages",
+      "mcp__chrome-devtools__list_network_requests",
+      "mcp__chrome-devtools__take_screenshot",
+      "mcp__chrome-devtools__evaluate_script",
+      "mcp__chrome-devtools__click"
     ],
     "deny": [],
     "ask": []

@@ -29,7 +29,7 @@ const navigation = [
   { name: "Creatives", href: "/creatives", icon: Image },
   { name: "Campaigns", href: "/campaigns", icon: FolderKanban },
   { name: "Change History", href: "/history", icon: History },
-  { name: "Uploads", href: "/uploads", icon: RefreshCw },
+  { name: "Import", href: "/import", icon: RefreshCw },
   { name: "Setup", href: "/setup", icon: Settings },
 ];
 

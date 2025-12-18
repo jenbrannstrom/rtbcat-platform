@@ -127,28 +127,45 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 
 ## CSV Format Requirements
 
-Import CSV reports exported from Google Authorized Buyers BigQuery. The importer requires specific columns for QPS waste analysis.
+Cat-Scan requires **3 separate CSV reports** from Google Authorized Buyers due to field incompatibilities in Google's reporting system.
 
-### Required Dimensions
-| Column | Purpose |
-|--------|---------|
-| Day | Date for metrics aggregation |
-| Billing ID | Links data to pretargeting configs |
-| Creative ID | Identifies the creative |
-| Creative size | For size mismatch detection |
-| Country | **Required** for geo-level QPS optimization |
+> **See [docs/CSV_REPORTS_GUIDE.md](docs/CSV_REPORTS_GUIDE.md) for complete setup instructions.**
 
-### Required Metrics
-| Column | Purpose |
-|--------|---------|
-| Reached queries | Total QPS received |
-| Impressions | Won impressions |
+### The 3 Required Reports
 
-### Optional (if available)
-- Creative format, Platform, Environment
-- Publisher ID/Name/Domain
-- Clicks, Spend
-- Video metrics (starts, quartiles, completions)
+| Report | Purpose | Key Fields | Table |
+|--------|---------|------------|-------|
+| **Performance Detail** | Creative/Size/App data | Creative ID, Size, App ID, Publisher | `rtb_daily` |
+| **RTB Funnel (Geo)** | Bid pipeline by country | Bid requests, Bids, Auctions won | `rtb_funnel` |
+| **RTB Funnel (Publishers)** | Bid pipeline by publisher | Publisher ID + Bid metrics | `rtb_funnel` |
+
+### Why 3 Reports?
+
+Google's limitation: *"Mobile app ID is not compatible with [Bid requests]..."*
+
+- To get **App/Creative detail** → you lose Bid request metrics
+- To get **Bid request metrics** → you lose App/Creative detail
+- Cat-Scan **joins them** by date + country to give you the full picture
+
+### Quick Reference
+
+**Report 1 - Performance Detail:**
+```
+Dimensions: Day, Billing ID, Creative ID, Creative size, Country, Publisher ID, Mobile app ID
+Metrics: Reached queries, Impressions, Clicks, Spend
+```
+
+**Report 2 - RTB Funnel (Geo):**
+```
+Dimensions: Day, Country, Buyer account ID
+Metrics: Bid requests, Inventory matches, Reached queries, Bids, Bids in auction, Auctions won, Impressions
+```
+
+**Report 3 - RTB Funnel (Publishers):**
+```
+Dimensions: Day, Country, Buyer account ID, Publisher ID, Publisher name
+Metrics: Same as Report 2
+```
 
 > **Waste Calculation:** `(Reached Queries - Impressions) / Reached Queries`
 
@@ -159,8 +176,17 @@ Import CSV reports exported from Google Authorized Buyers BigQuery. The importer
 ```bash
 cd creative-intelligence
 
-# Import performance CSV
+# Smart import (auto-detects report type)
+./venv/bin/python -m qps.smart_importer /path/to/any-report.csv
+
+# Show CSV report creation instructions
+./venv/bin/python -m qps.smart_importer --help
+
+# Import performance CSV specifically
 ./venv/bin/python cli/qps_analyzer.py import /path/to/report.csv
+
+# Import funnel CSV specifically
+./venv/bin/python -m qps.funnel_importer /path/to/funnel-report.csv
 
 # Validate CSV before import
 ./venv/bin/python cli/qps_analyzer.py validate /path/to/report.csv
