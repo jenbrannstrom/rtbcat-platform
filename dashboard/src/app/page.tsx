@@ -575,29 +575,41 @@ function SizeAnalysisSection({ days, billingId }: { days: number; billingId?: st
         </>
       ) : (
         <div className="p-6 border-2 border-dashed border-gray-200 rounded-lg">
-          <div className="text-center mb-4">
-            <Upload className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-            <h4 className="font-medium text-gray-700 mb-2">No Size Data Available</h4>
-            <p className="text-sm text-gray-500 max-w-md mx-auto">
-              Import a CSV with <strong>Creative size</strong> as the first dimension to see size breakdown.
-            </p>
-          </div>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm max-w-lg mx-auto">
-            <p className="font-medium text-blue-800 mb-2">Required CSV format:</p>
-            <p className="text-blue-700 mb-2">
-              In Google Authorized Buyers → Reporting → New Report:
-            </p>
-            <ul className="text-blue-700 space-y-1 mb-3">
-              <li>• <strong>First dimension:</strong> Creative size</li>
-              <li>• Other dimensions: Day, Creative ID</li>
-              <li>• Metrics: Reached queries, Impressions</li>
-            </ul>
-            <a
-              href="/import"
-              className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium"
-            >
-              Go to Import <ArrowRight className="h-4 w-4" />
-            </a>
+          <div className="flex items-start gap-4">
+            <Upload className="h-8 w-8 text-gray-400 flex-shrink-0" />
+            <div>
+              <h4 className="font-medium text-gray-700 mb-2">No Size Data Available</h4>
+              <p className="text-sm text-gray-600 mb-4">
+                Import a CSV with <strong>Creative size</strong> as the first dimension to see size breakdown.
+              </p>
+              <div className="p-3 bg-gray-50 rounded border border-gray-200 text-xs">
+                <p className="font-semibold text-gray-700 mb-2">Required CSV format:</p>
+                <p className="text-gray-600 mb-2">
+                  In Google Authorized Buyers → Reporting → New Report:
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="font-semibold text-gray-500 mb-1">Dimensions:</p>
+                    <ul className="text-gray-600">
+                      <li>1. Creative size</li>
+                      <li>2. Day</li>
+                      <li>3. Creative ID</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-500 mb-1">Metrics:</p>
+                    <ul className="text-gray-600">
+                      <li>✓ Reached queries</li>
+                      <li>✓ Impressions</li>
+                    </ul>
+                  </div>
+                </div>
+                <p className="mt-2 text-gray-500">Schedule: <strong>Daily</strong></p>
+              </div>
+              <a href="/setup?tab=import" className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
+                Go to Import → <ArrowRight className="h-3 w-3" />
+              </a>
+            </div>
           </div>
         </div>
       )}

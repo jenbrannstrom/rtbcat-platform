@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle,
@@ -9,6 +9,8 @@ import {
   AlertTriangle,
   ChevronDown,
   ExternalLink,
+  History,
+  RefreshCw,
 } from "lucide-react";
 import { ImportDropzone } from "@/components/import-dropzone";
 import { ImportPreview } from "@/components/import-preview";
@@ -23,7 +25,7 @@ import {
 } from "@/lib/csv-validator";
 import type { AnomalyType } from "@/lib/types/import";
 import { parseCSV } from "@/lib/csv-parser";
-import { importPerformanceData } from "@/lib/api";
+import { importPerformanceData, getImportHistory, type ImportHistoryItem } from "@/lib/api";
 import {
   uploadChunkedCSV,
   previewCSV,
@@ -56,6 +58,26 @@ export default function ImportPage() {
     columnMappings: Record<string, string>;
     estimatedRowCount: number;
   } | null>(null);
+
+  // Import history state
+  const [importHistory, setImportHistory] = useState<ImportHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+  // Load import history on mount and after successful imports
+  const loadHistory = useCallback(async () => {
+    try {
+      const history = await getImportHistory(10);
+      setImportHistory(history);
+    } catch (error) {
+      console.error("Failed to load import history:", error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
 
   // Handle file selection
   const handleFileSelect = async (selectedFile: File) => {
@@ -158,6 +180,9 @@ export default function ImportPage() {
           total_spend: result.totalSpend,
         });
         setStep(result.success || result.imported > 0 ? "success" : "error");
+        if (result.success || result.imported > 0) {
+          loadHistory(); // Reload history after successful import
+        }
       } else {
         // Use standard upload for small files
         const result = await importPerformanceData(file, (progress) => {
@@ -166,6 +191,7 @@ export default function ImportPage() {
 
         setImportResult(result);
         setStep("success");
+        loadHistory(); // Reload history after successful import
       }
     } catch (error) {
       console.error("Import error:", error);
@@ -266,6 +292,13 @@ export default function ImportPage() {
               <TroubleshootingSection />
             </div>
           </details>
+
+          {/* Recent Import History */}
+          <ImportHistorySection
+            history={importHistory}
+            loading={historyLoading}
+            onRefresh={loadHistory}
+          />
         </div>
       )}
 
@@ -583,11 +616,18 @@ export default function ImportPage() {
 function ExportInstructions() {
   return (
     <div className="space-y-6 text-sm">
+      {/* Why 3 Reports */}
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-        <h4 className="font-semibold text-amber-900 mb-2">Why Multiple Reports?</h4>
-        <p className="text-amber-800">
-          Google Authorized Buyers doesn{"'"}t allow <strong>Billing ID</strong> and <strong>Bids</strong> in the same export.
-          To analyze waste by pretargeting config, we need to join two CSV files on <code className="bg-amber-100 px-1 rounded">Creative ID</code>.
+        <h4 className="font-semibold text-amber-900 mb-2">Why 3 Separate Reports?</h4>
+        <p className="text-amber-800 mb-2">
+          Google Authorized Buyers has <strong>field incompatibilities</strong>:
+        </p>
+        <ul className="text-amber-700 space-y-1 ml-4">
+          <li>• <code className="bg-amber-100 px-1 rounded">Mobile app ID</code> cannot be combined with <code className="bg-amber-100 px-1 rounded">Bid requests</code></li>
+          <li>• <code className="bg-amber-100 px-1 rounded">Creative ID</code> cannot be combined with <code className="bg-amber-100 px-1 rounded">Bid requests</code></li>
+        </ul>
+        <p className="text-amber-800 mt-2">
+          Cat-Scan joins these reports by <strong>Date + Country</strong> to give you the complete picture.
         </p>
       </div>
 
@@ -595,17 +635,19 @@ function ExportInstructions() {
         <h4 className="font-semibold text-gray-900 mb-2">Go to Authorized Buyers Reporting</h4>
         <ol className="list-decimal list-inside text-gray-700 space-y-1">
           <li>Open <a href="https://authorized-buyers.google.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1">Authorized Buyers <ExternalLink className="h-3 w-3" /></a></li>
-          <li>Navigate to <strong>Reporting</strong> → <strong>New Report</strong></li>
+          <li>Navigate to <strong>Reporting</strong> → <strong>Scheduled Reports</strong> → <strong>New Report</strong></li>
         </ol>
       </div>
 
-      {/* Main Report: Billing Config Performance */}
+      {/* Report 1: Performance Detail */}
       <div className="border-2 border-blue-200 rounded-lg p-4 bg-blue-50">
         <div className="flex items-center gap-2 mb-3">
+          <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded">1</span>
           <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded">Required</span>
-          <h4 className="font-semibold text-gray-900">Billing Config Performance</h4>
+          <h4 className="font-semibold text-gray-900">Performance Detail</h4>
+          <span className="text-xs text-gray-500 ml-auto">→ rtb_daily table</span>
         </div>
-        <p className="text-gray-600 mb-3">This is the main report for QPS waste analysis. Shows waste per pretargeting config.</p>
+        <p className="text-gray-600 mb-3">Creative, Size, and App-level performance. <strong>Has App/Creative detail but NO bid request metrics.</strong></p>
 
         <div className="grid md:grid-cols-2 gap-4">
           <div>
@@ -615,8 +657,11 @@ function ExportInstructions() {
               <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Billing ID</strong></li>
               <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Creative ID</strong></li>
               <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Creative size</strong></li>
-              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Creative format <span className="text-xs text-gray-400">(optional)</span></li>
+              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Creative format</li>
               <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Country</strong></li>
+              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Publisher ID</li>
+              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Mobile app ID</li>
+              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Mobile app name</li>
             </ul>
           </div>
           <div>
@@ -624,43 +669,114 @@ function ExportInstructions() {
             <ul className="space-y-1 text-gray-700">
               <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Reached queries</strong></li>
               <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Impressions</strong></li>
-              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Clicks <span className="text-xs text-gray-400">(optional)</span></li>
-              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Spend <span className="text-xs text-gray-400">(optional)</span></li>
+              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Clicks</li>
+              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Spend (buyer currency)</li>
+            </ul>
+            <div className="mt-3 p-2 bg-red-100 rounded text-xs text-red-700">
+              <strong>Cannot include:</strong> Bid requests, Bids, Bids in auction
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Report 2: RTB Funnel (Geo) */}
+      <div className="border-2 border-purple-200 rounded-lg p-4 bg-purple-50">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded">2</span>
+          <span className="bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded">Required</span>
+          <h4 className="font-semibold text-gray-900">RTB Funnel (Geo Only)</h4>
+          <span className="text-xs text-gray-500 ml-auto">→ rtb_funnel table</span>
+        </div>
+        <p className="text-gray-600 mb-3">Full bid pipeline by country. <strong>Has Bid requests but NO Creative/App detail.</strong></p>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Dimensions (in order)</p>
+            <ul className="space-y-1 text-gray-700">
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Day</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Country</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Buyer account ID</strong></li>
+              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Hour</li>
+            </ul>
+            <div className="mt-3 p-2 bg-red-100 rounded text-xs text-red-700">
+              <strong>Cannot include:</strong> Creative ID, Creative size, Mobile app ID, Billing ID
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Metrics (THE FUNNEL)</p>
+            <ul className="space-y-1 text-gray-700">
+              <li className="flex items-center gap-2"><span className="text-purple-600 font-bold">★</span> <strong>Bid requests</strong></li>
+              <li className="flex items-center gap-2"><span className="text-purple-600 font-bold">★</span> <strong>Inventory matches</strong></li>
+              <li className="flex items-center gap-2"><span className="text-purple-600 font-bold">★</span> <strong>Successful responses</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Reached queries</strong></li>
+              <li className="flex items-center gap-2"><span className="text-purple-600 font-bold">★</span> <strong>Bids</strong></li>
+              <li className="flex items-center gap-2"><span className="text-purple-600 font-bold">★</span> <strong>Bids in auction</strong></li>
+              <li className="flex items-center gap-2"><span className="text-purple-600 font-bold">★</span> <strong>Auctions won</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> Impressions</li>
             </ul>
           </div>
         </div>
       </div>
 
-      {/* Optional: Publisher Performance */}
-      <div className="border border-gray-200 rounded-lg p-4">
+      {/* Report 3: RTB Funnel (Publishers) */}
+      <div className="border-2 border-green-200 rounded-lg p-4 bg-green-50">
         <div className="flex items-center gap-2 mb-3">
-          <span className="bg-gray-200 text-gray-700 text-xs font-bold px-2 py-1 rounded">Optional</span>
-          <h4 className="font-semibold text-gray-900">Publisher Performance</h4>
+          <span className="bg-green-600 text-white text-xs font-bold px-2 py-1 rounded">3</span>
+          <span className="bg-green-600 text-white text-xs font-bold px-2 py-1 rounded">Required</span>
+          <h4 className="font-semibold text-gray-900">RTB Funnel (With Publishers)</h4>
+          <span className="text-xs text-gray-500 ml-auto">→ rtb_funnel table</span>
         </div>
-        <p className="text-gray-600 mb-3">Shows publisher-level funnel metrics (for advanced analysis)</p>
+        <p className="text-gray-600 mb-3">Bid pipeline by publisher. <strong>Has Publisher + Bid requests but NO App detail.</strong></p>
 
         <div className="grid md:grid-cols-2 gap-4">
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Dimensions</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Dimensions (in order)</p>
             <ul className="space-y-1 text-gray-700">
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Publisher ID</li>
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Publisher name</li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Day</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Country</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Buyer account ID</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Publisher ID</strong></li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> <strong>Publisher name</strong></li>
+              <li className="flex items-center gap-2"><span className="text-gray-400">○</span> Hour</li>
             </ul>
+            <div className="mt-3 p-2 bg-red-100 rounded text-xs text-red-700">
+              <strong>Cannot include:</strong> Creative ID, Mobile app ID
+            </div>
           </div>
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Metrics</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Metrics (same as Report 2)</p>
             <ul className="space-y-1 text-gray-700">
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Bid requests</li>
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Reached queries</li>
-              <li className="flex items-center gap-2"><span className="text-green-600">✓</span> Impressions</li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> Bid requests</li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> Inventory matches</li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> Successful responses</li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> Reached queries</li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> Bids</li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> Bids in auction</li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> Auctions won</li>
+              <li className="flex items-center gap-2"><span className="text-green-600 font-bold">✓</span> Impressions</li>
             </ul>
           </div>
         </div>
+      </div>
+
+      {/* How Cat-Scan Joins */}
+      <div className="bg-gray-100 rounded-lg p-4">
+        <h4 className="font-semibold text-gray-900 mb-2">How Cat-Scan Joins the Data</h4>
+        <div className="font-mono text-xs bg-white p-3 rounded border">
+          <div className="text-purple-700">Report 2 (funnel-geo):</div>
+          <div className="ml-4 text-gray-600">Bid requests → Bids → Auctions won (by country)</div>
+          <div className="text-center my-1">↓ <span className="text-gray-400">JOIN ON date + country</span></div>
+          <div className="text-blue-700">Report 1 (performance):</div>
+          <div className="ml-4 text-gray-600">→ Creative breakdown, Size breakdown, App breakdown</div>
+        </div>
+        <p className="text-gray-600 text-xs mt-2">
+          This gives AI the full picture: <strong>Total traffic → What you bid on → What you won → By which creative/app</strong>
+        </p>
       </div>
 
       {/* Schedule Settings */}
       <div>
-        <h4 className="font-semibold text-gray-900 mb-2">Schedule Settings</h4>
+        <h4 className="font-semibold text-gray-900 mb-2">Schedule Settings (for all 3 reports)</h4>
         <ul className="list-disc list-inside text-gray-700 space-y-1">
           <li>Date range: <strong>Yesterday</strong></li>
           <li>Schedule: <strong>Daily</strong></li>
@@ -670,8 +786,8 @@ function ExportInstructions() {
 
       <div className="bg-blue-50 p-3 rounded-lg">
         <p className="text-blue-800">
-          <strong>Tip:</strong> Upload all CSV files here. Cat-Scan automatically detects the report type
-          from the column headers and joins them on <code className="bg-blue-100 px-1 rounded">Creative ID</code>.
+          <strong>Tip:</strong> Upload all 3 CSV files here. Cat-Scan <strong>automatically detects</strong> the report type
+          from the column headers and routes to the correct table.
         </p>
       </div>
     </div>
@@ -883,6 +999,101 @@ function ImportResultCard({
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ImportHistorySection({
+  history,
+  loading,
+  onRefresh,
+}: {
+  history: ImportHistoryItem[];
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  const formatFileSize = (mb: number) => {
+    if (mb < 1) return `${(mb * 1024).toFixed(0)} KB`;
+    return `${mb.toFixed(1)} MB`;
+  };
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  };
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200">
+      <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <History className="h-5 w-5 text-gray-400" />
+          <h3 className="font-medium text-gray-900">Recent Imports</h3>
+        </div>
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+          title="Refresh"
+        >
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+        </button>
+      </div>
+
+      <div className="divide-y divide-gray-100">
+        {loading ? (
+          <div className="p-8 text-center text-gray-500">
+            <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2" />
+            Loading...
+          </div>
+        ) : history.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            No imports yet. Upload your first CSV above.
+          </div>
+        ) : (
+          history.map((item) => (
+            <div key={item.batch_id} className="px-4 py-3 hover:bg-gray-50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0">
+                  {item.status === "complete" ? (
+                    <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900 truncate">
+                      {item.filename || item.batch_id}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {formatDate(item.imported_at)} · {formatFileSize(item.file_size_mb)}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0 ml-4">
+                  <p className="font-medium text-gray-900">
+                    {item.rows_imported.toLocaleString()}
+                  </p>
+                  <p className="text-sm text-gray-500">rows</p>
+                </div>
+              </div>
+              {item.rows_duplicate > 0 && (
+                <p className="text-xs text-gray-400 mt-1 ml-8">
+                  {item.rows_duplicate.toLocaleString()} duplicates skipped
+                </p>
+              )}
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
