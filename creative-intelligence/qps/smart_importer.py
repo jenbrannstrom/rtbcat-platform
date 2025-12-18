@@ -19,6 +19,8 @@ from qps.csv_report_types import (
 )
 from qps.importer import import_csv, ImportResult
 from qps.funnel_importer import import_funnel_csv, FunnelImportResult
+from qps.bid_filtering_importer import import_bid_filtering_csv, BidFilteringImportResult
+from qps.quality_importer import import_quality_csv, QualityImportResult
 
 
 @dataclass
@@ -35,7 +37,7 @@ class SmartImportResult:
     error_message: str = ""
 
     # The underlying result object
-    detail: Union[ImportResult, FunnelImportResult, None] = None
+    detail: Union[ImportResult, FunnelImportResult, BidFilteringImportResult, QualityImportResult, None] = None
 
 
 def smart_import(
@@ -129,6 +131,48 @@ def smart_import(
             detail=result
         )
 
+    elif detection.report_type == ReportType.BID_FILTERING:
+        # Use bid filtering importer for rtb_bid_filtering
+        kwargs = {"csv_path": csv_path}
+        if db_path:
+            kwargs["db_path"] = db_path
+        if bidder_id:
+            kwargs["bidder_id"] = bidder_id
+
+        result = import_bid_filtering_csv(**kwargs)
+
+        return SmartImportResult(
+            success=result.success,
+            report_type=ReportType.BID_FILTERING,
+            target_table="rtb_bid_filtering",
+            report_name="Bid Filtering",
+            rows_imported=result.rows_imported,
+            rows_read=result.rows_read,
+            error_message=result.error_message,
+            detail=result
+        )
+
+    elif detection.report_type == ReportType.QUALITY_SIGNALS:
+        # Use quality importer for rtb_quality
+        kwargs = {"csv_path": csv_path}
+        if db_path:
+            kwargs["db_path"] = db_path
+        if bidder_id:
+            kwargs["bidder_id"] = bidder_id
+
+        result = import_quality_csv(**kwargs)
+
+        return SmartImportResult(
+            success=result.success,
+            report_type=ReportType.QUALITY_SIGNALS,
+            target_table="rtb_quality",
+            report_name="Quality Signals",
+            rows_imported=result.rows_imported,
+            rows_read=result.rows_read,
+            error_message=result.error_message,
+            detail=result
+        )
+
     else:
         # Unknown report type
         return SmartImportResult(
@@ -140,7 +184,9 @@ def smart_import(
                 "Could not detect report type from CSV columns.\n\n"
                 "Expected one of:\n"
                 "  1. Performance Detail: must have 'Creative ID' + 'Billing ID'\n"
-                "  2. RTB Funnel: must have 'Bid requests'\n\n"
+                "  2. RTB Funnel: must have 'Bid requests'\n"
+                "  3. Bid Filtering: must have 'Bid filtering reason'\n"
+                "  4. Quality Signals: must have 'IVT credited impressions' or 'Pre-filtered impressions'\n\n"
                 f"Columns found: {', '.join(header[:10])}...\n\n"
                 "See: python -m qps.csv_report_types for required CSV formats"
             )
