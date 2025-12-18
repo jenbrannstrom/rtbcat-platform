@@ -47,10 +47,12 @@ from typing import Dict, List, Optional, Set
 
 
 class ReportType(Enum):
-    """The 3 CSV report types users must create."""
+    """The 5 CSV report types for QPS optimization."""
     PERFORMANCE_DETAIL = "performance_detail"      # rtb_daily - has creative/app/size
     RTB_FUNNEL_GEO = "rtb_funnel_geo"             # rtb_funnel - geo only, full pipeline
     RTB_FUNNEL_PUBLISHER = "rtb_funnel_publisher"  # rtb_funnel - with publisher, full pipeline
+    BID_FILTERING = "bid_filtering"                # rtb_bid_filtering - why bids fail
+    QUALITY_SIGNALS = "quality_signals"            # rtb_quality - fraud/viewability signals
     UNKNOWN = "unknown"
 
 
@@ -70,6 +72,7 @@ PERFORMANCE_DETAIL_REQUIRED = {
 }
 
 PERFORMANCE_DETAIL_OPTIONAL = {
+    "hour": ["Hour", "#Hour"],  # NEW: Hourly granularity
     "creative_format": ["Creative format", "#Creative format"],
     "platform": ["Platform", "#Platform"],
     "environment": ["Environment", "#Environment"],
@@ -83,6 +86,9 @@ PERFORMANCE_DETAIL_OPTIONAL = {
               "Spend (buyer currency)", "#Spend"],
     "video_starts": ["Video starts", "#Video starts"],
     "video_completions": ["Video completions", "#Video completions"],
+    # NEW: Viewability metrics
+    "viewable_impressions": ["Active View viewable", "Active view viewable", "#Active View viewable"],
+    "measurable_impressions": ["Active View measurable", "Active view measurable", "#Active View measurable"],
 }
 
 # Report 2 & 3: RTB Funnel (goes to rtb_funnel)
@@ -109,12 +115,69 @@ RTB_FUNNEL_OPTIONAL = {
     # Publisher fields - presence determines funnel subtype
     "publisher_id": ["Publisher ID", "#Publisher ID"],
     "publisher_name": ["Publisher name", "#Publisher name"],
+    # NEW: Platform/Environment/Transaction type
+    "platform": ["Platform", "#Platform"],
+    "environment": ["Environment", "#Environment"],
+    "transaction_type": ["Transaction type", "#Transaction type"],
 }
 
 # Fields that are MUTUALLY EXCLUSIVE with bid_requests (Google limitation)
 INCOMPATIBLE_WITH_BID_REQUESTS = {
     "creative_id", "creative_size", "creative_format",
     "app_id", "app_name", "billing_id"
+}
+
+# ============================================================================
+# Report 4: Bid Filtering (goes to rtb_bid_filtering)
+# ============================================================================
+# This report answers: "WHY are bids being filtered?"
+# Detected by presence of "Bid filtering reason" column
+
+BID_FILTERING_REQUIRED = {
+    "day": ["#Day", "Day", "#Date", "Date"],
+    "filtering_reason": ["Bid filtering reason", "#Bid filtering reason",
+                         "Filtering reason", "#Filtering reason"],
+}
+
+BID_FILTERING_METRICS = {
+    "bids": ["Bids", "#Bids"],
+    "bids_in_auction": ["Bids in auction", "#Bids in auction"],
+}
+
+BID_FILTERING_OPTIONAL = {
+    "country": ["Country", "#Country"],
+    "buyer_account_id": ["Buyer account ID", "#Buyer account ID"],
+    "creative_id": ["Creative ID", "#Creative ID"],  # May not be available due to incompatibilities
+    "opportunity_cost": ["Opportunity cost", "#Opportunity cost", "Lost spend", "#Lost spend"],
+}
+
+# ============================================================================
+# Report 5: Quality Signals (goes to rtb_quality)
+# ============================================================================
+# This report answers: "Which publishers have fraud or low viewability?"
+# Detected by presence of "IVT credited impressions" or "Pre-filtered impressions"
+
+QUALITY_SIGNALS_REQUIRED = {
+    "day": ["#Day", "Day", "#Date", "Date"],
+    "publisher_id": ["Publisher ID", "#Publisher ID"],
+}
+
+QUALITY_SIGNALS_METRICS = {
+    "impressions": ["Impressions", "#Impressions"],
+    "pre_filtered_impressions": ["Pre-filtered impressions", "#Pre-filtered impressions",
+                                  "Pre filtered impressions"],
+    "ivt_credited_impressions": ["IVT credited impressions", "#IVT credited impressions",
+                                  "IVT credited", "Invalid traffic credited impressions"],
+    "billed_impressions": ["Billed impressions", "#Billed impressions"],
+    "measurable_impressions": ["Active View measurable", "Active view measurable",
+                               "Measurable impressions", "#Active View measurable"],
+    "viewable_impressions": ["Active View viewable", "Active view viewable",
+                             "Viewable impressions", "#Active View viewable"],
+}
+
+QUALITY_SIGNALS_OPTIONAL = {
+    "publisher_name": ["Publisher name", "#Publisher name"],
+    "country": ["Country", "#Country"],
 }
 
 
@@ -146,18 +209,28 @@ class ReportDetectionResult:
             self.report_name = "RTB Funnel (Publisher)"
             self.description = "Bid pipeline by publisher"
             self.target_table = "rtb_funnel"
+        elif self.report_type == ReportType.BID_FILTERING:
+            self.report_name = "Bid Filtering"
+            self.description = "Bid filtering reasons (why bids fail)"
+            self.target_table = "rtb_bid_filtering"
+        elif self.report_type == ReportType.QUALITY_SIGNALS:
+            self.report_name = "Quality Signals"
+            self.description = "Fraud and viewability signals by publisher"
+            self.target_table = "rtb_quality"
 
 
 def detect_report_type(header: List[str]) -> ReportDetectionResult:
     """
-    Detect which of the 3 report types a CSV is based on its header.
+    Detect which of the 5 report types a CSV is based on its header.
 
     Detection logic:
-    1. Has "Bid requests" column? → RTB Funnel type
+    1. Has "Bid filtering reason" column? → BID_FILTERING
+    2. Has "IVT credited impressions" or "Pre-filtered impressions"? → QUALITY_SIGNALS
+    3. Has "Bid requests" column? → RTB Funnel type
        - Also has Publisher ID? → RTB_FUNNEL_PUBLISHER
        - No Publisher? → RTB_FUNNEL_GEO
-    2. Has "Creative ID" + "Billing ID"? → PERFORMANCE_DETAIL
-    3. Otherwise → UNKNOWN
+    4. Has "Creative ID" + "Billing ID"? → PERFORMANCE_DETAIL
+    5. Otherwise → UNKNOWN
     """
     header_set = set(header)
     result = ReportDetectionResult(
@@ -174,14 +247,60 @@ def detect_report_type(header: List[str]) -> ReportDetectionResult:
                 return name
         return None
 
-    # Check for bid_requests - this is THE distinguishing field
+    # Check for distinguishing columns
     bid_requests_col = has_column(["Bid requests", "#Bid requests"])
     creative_id_col = has_column(["Creative ID", "#Creative ID"])
     billing_id_col = has_column(["Billing ID", "#Billing ID"])
     publisher_id_col = has_column(["Publisher ID", "#Publisher ID"])
 
-    if bid_requests_col:
-        # This is an RTB Funnel report
+    # NEW: Check for bid filtering reason (Report 4)
+    filtering_reason_col = has_column(["Bid filtering reason", "#Bid filtering reason",
+                                        "Filtering reason", "#Filtering reason"])
+
+    # NEW: Check for quality signal columns (Report 5)
+    ivt_credited_col = has_column(["IVT credited impressions", "#IVT credited impressions",
+                                   "IVT credited", "Invalid traffic credited impressions"])
+    pre_filtered_col = has_column(["Pre-filtered impressions", "#Pre-filtered impressions",
+                                   "Pre filtered impressions"])
+
+    # Detection order matters - check most specific first
+
+    # 1. Check for Bid Filtering report (has filtering reason)
+    if filtering_reason_col:
+        result.report_type = ReportType.BID_FILTERING
+        result.target_table = "rtb_bid_filtering"
+        result.confidence = "high"
+
+        # Map columns
+        for our_name, possible_names in {**BID_FILTERING_REQUIRED, **BID_FILTERING_METRICS, **BID_FILTERING_OPTIONAL}.items():
+            col = has_column(possible_names)
+            if col:
+                result.columns_mapped[our_name] = col
+
+        # Check required
+        for our_name, possible_names in BID_FILTERING_REQUIRED.items():
+            if not has_column(possible_names):
+                result.required_missing.append(our_name)
+
+    # 2. Check for Quality Signals report (has IVT or pre-filtered)
+    elif ivt_credited_col or pre_filtered_col:
+        result.report_type = ReportType.QUALITY_SIGNALS
+        result.target_table = "rtb_quality"
+        result.confidence = "high"
+
+        # Map columns
+        for our_name, possible_names in {**QUALITY_SIGNALS_REQUIRED, **QUALITY_SIGNALS_METRICS, **QUALITY_SIGNALS_OPTIONAL}.items():
+            col = has_column(possible_names)
+            if col:
+                result.columns_mapped[our_name] = col
+
+        # Check required
+        for our_name, possible_names in QUALITY_SIGNALS_REQUIRED.items():
+            if not has_column(possible_names):
+                result.required_missing.append(our_name)
+
+    # 3. Check for RTB Funnel report (has bid_requests)
+    elif bid_requests_col:
         # Check if it has publisher data
         if publisher_id_col:
             result.report_type = ReportType.RTB_FUNNEL_PUBLISHER
@@ -202,8 +321,8 @@ def detect_report_type(header: List[str]) -> ReportDetectionResult:
             if not has_column(possible_names):
                 result.required_missing.append(our_name)
 
+    # 4. Check for Performance Detail report (has Creative ID + Billing ID)
     elif creative_id_col and billing_id_col:
-        # This is a Performance Detail report
         result.report_type = ReportType.PERFORMANCE_DETAIL
         result.target_table = "rtb_daily"
         result.confidence = "high"
