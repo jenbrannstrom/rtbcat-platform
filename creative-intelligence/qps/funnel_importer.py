@@ -91,7 +91,8 @@ def parse_int(value) -> int:
 
 def compute_funnel_row_hash(row_data: Dict) -> str:
     """Compute hash of dimension values for deduplication."""
-    keys = ["metric_date", "country", "hour", "buyer_account_id", "publisher_id"]
+    keys = ["metric_date", "country", "hour", "buyer_account_id", "publisher_id",
+            "platform", "environment", "transaction_type"]
     hash_input = "|".join(str(row_data.get(k, "")) for k in keys)
     return hashlib.md5(hash_input.encode()).hexdigest()
 
@@ -197,6 +198,11 @@ def import_funnel_csv(
                     publisher_id = row.get(column_map.get("publisher_id", ""), "").strip() or None
                     publisher_name = row.get(column_map.get("publisher_name", ""), "").strip() or None
 
+                    # NEW: Platform/Environment/Transaction type
+                    platform = row.get(column_map.get("platform", ""), "").strip() or None
+                    environment = row.get(column_map.get("environment", ""), "").strip() or None
+                    transaction_type = row.get(column_map.get("transaction_type", ""), "").strip() or None
+
                     # Pipeline metrics
                     inventory_matches = parse_int(row.get(column_map.get("inventory_matches", ""), 0))
                     successful_responses = parse_int(row.get(column_map.get("successful_responses", ""), 0))
@@ -223,13 +229,17 @@ def import_funnel_csv(
                         "hour": hour,
                         "buyer_account_id": buyer_account_id,
                         "publisher_id": publisher_id,
+                        "platform": platform,
+                        "environment": environment,
+                        "transaction_type": transaction_type,
                     }
                     row_hash = compute_funnel_row_hash(row_data)
 
-                    # Add to batch
+                    # Add to batch (includes new platform/environment/transaction_type)
                     batch.append((
                         metric_date, hour, country, buyer_account_id,
                         publisher_id, publisher_name,
+                        platform, environment, transaction_type,
                         inventory_matches, bid_requests, successful_responses,
                         reached_queries, bids, bids_in_auction, auctions_won,
                         impressions, clicks,
@@ -278,7 +288,7 @@ def import_funnel_csv(
 
 
 def _ensure_funnel_table(cursor):
-    """Ensure rtb_funnel table exists."""
+    """Ensure rtb_funnel table exists with all required columns."""
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS rtb_funnel (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -288,6 +298,9 @@ def _ensure_funnel_table(cursor):
             buyer_account_id TEXT,
             publisher_id TEXT,
             publisher_name TEXT,
+            platform TEXT,
+            environment TEXT,
+            transaction_type TEXT,
             inventory_matches INTEGER DEFAULT 0,
             bid_requests INTEGER DEFAULT 0,
             successful_responses INTEGER DEFAULT 0,
@@ -307,6 +320,8 @@ def _ensure_funnel_table(cursor):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_funnel_date ON rtb_funnel(metric_date)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_funnel_country ON rtb_funnel(country)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_funnel_date_country ON rtb_funnel(metric_date, country)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_funnel_platform ON rtb_funnel(platform)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_funnel_environment ON rtb_funnel(environment)")
 
 
 def _insert_funnel_batch(cursor, batch: List[Tuple]) -> Tuple[int, int]:
@@ -320,11 +335,12 @@ def _insert_funnel_batch(cursor, batch: List[Tuple]) -> Tuple[int, int]:
                 INSERT INTO rtb_funnel (
                     metric_date, hour, country, buyer_account_id,
                     publisher_id, publisher_name,
+                    platform, environment, transaction_type,
                     inventory_matches, bid_requests, successful_responses,
                     reached_queries, bids, bids_in_auction, auctions_won,
                     impressions, clicks,
                     bidder_id, row_hash, import_batch_id, report_type
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, row)
             inserted += 1
         except sqlite3.IntegrityError:
