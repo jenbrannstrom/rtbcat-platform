@@ -6,13 +6,16 @@ Handles both:
   - Large reports (>=10MB): Download from GCS URL in email body
   - Small reports (<10MB): Extract CSV attachment from email
 
-Tracks import status in ~/.catscan/gmail_import_status.json
+Features:
+  - Archives all imported CSVs to S3 with gzip compression
+  - Tracks import status in ~/.catscan/gmail_import_status.json
 """
 
 import os
 import re
 import sys
 import json
+import gzip
 import base64
 import urllib.request
 from pathlib import Path
@@ -21,6 +24,9 @@ from typing import Optional, Dict, Any, List
 
 # Add parent directory for imports when running as script
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+import boto3
+from botocore.exceptions import ClientError, NoCredentialsError
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -36,6 +42,11 @@ LOGS_DIR = CATSCAN_DIR / 'logs'
 TOKEN_PATH = CREDENTIALS_DIR / 'gmail-token.json'
 CLIENT_SECRET_PATH = CREDENTIALS_DIR / 'gmail-oauth-client.json'
 STATUS_PATH = CATSCAN_DIR / 'gmail_import_status.json'
+
+# S3 Archive Configuration (Frankfurt region)
+S3_BUCKET = os.environ.get('CATSCAN_S3_BUCKET', 'rtbcat-csv-archive-frankfurt-328614522524')
+S3_REGION = os.environ.get('CATSCAN_S3_REGION', 'eu-central-1')
+S3_ARCHIVE_ENABLED = os.environ.get('CATSCAN_S3_ARCHIVE', 'true').lower() == 'true'
 
 # Create directories
 IMPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -107,6 +118,104 @@ def get_status() -> Dict[str, Any]:
         "total_imports": status.get("total_imports", 0),
         "recent_history": status.get("history", [])[:10]
     }
+
+
+def detect_report_type(filepath: Path) -> str:
+    """
+    Detect the report type from the CSV filename or content.
+
+    Returns one of: 'performance', 'funnel-geo', 'funnel-publishers'
+    """
+    filename_lower = filepath.name.lower()
+
+    # Check filename patterns
+    if 'funnel' in filename_lower and 'geo' in filename_lower:
+        return 'funnel-geo'
+    elif 'funnel' in filename_lower and 'pub' in filename_lower:
+        return 'funnel-publishers'
+    elif 'performance' in filename_lower or 'rtb' in filename_lower:
+        return 'performance'
+
+    # Default to performance if can't determine
+    try:
+        with open(filepath, 'r') as f:
+            header = f.readline().lower()
+            if 'country' in header or 'region' in header:
+                return 'funnel-geo'
+            elif 'publisher' in header or 'domain' in header:
+                return 'funnel-publishers'
+    except Exception:
+        pass
+
+    return 'performance'
+
+
+def archive_to_s3(filepath: Path, report_type: Optional[str] = None, verbose: bool = True) -> Optional[str]:
+    """
+    Archive CSV to S3 with gzip compression.
+
+    Args:
+        filepath: Local path to CSV file
+        report_type: One of 'performance', 'funnel-geo', 'funnel-publishers'.
+                     If None, will auto-detect from filename/content.
+
+    Returns:
+        S3 URI of archived file, or None if archival failed/disabled
+    """
+    if not S3_ARCHIVE_ENABLED:
+        if verbose:
+            print("  S3 archival disabled, skipping...")
+        return None
+
+    if report_type is None:
+        report_type = detect_report_type(filepath)
+
+    # Extract date from filename or use today
+    date_match = re.search(r'(\d{4})[-_]?(\d{2})[-_]?(\d{2})', filepath.name)
+    if date_match:
+        year, month, day = date_match.groups()
+    else:
+        today = datetime.now()
+        year, month, day = today.strftime('%Y'), today.strftime('%m'), today.strftime('%d')
+
+    # Build S3 key with date-based structure
+    s3_filename = f"catscan-{report_type}-{year}-{month}-{day}.csv.gz"
+    s3_key = f"{report_type}/{year}/{month}/{day}/{s3_filename}"
+
+    try:
+        # Create S3 client (uses IAM role on EC2, or local credentials)
+        s3_client = boto3.client('s3', region_name=S3_REGION)
+
+        # Compress and upload
+        compressed_path = filepath.with_suffix('.csv.gz')
+        with open(filepath, 'rb') as f_in:
+            with gzip.open(compressed_path, 'wb') as f_out:
+                f_out.writelines(f_in)
+
+        # Upload to S3
+        s3_client.upload_file(str(compressed_path), S3_BUCKET, s3_key)
+
+        # Clean up local compressed file
+        compressed_path.unlink()
+
+        s3_uri = f"s3://{S3_BUCKET}/{s3_key}"
+        if verbose:
+            print(f"  Archived to S3: {s3_uri}")
+
+        return s3_uri
+
+    except NoCredentialsError:
+        if verbose:
+            print("  Warning: No AWS credentials found, skipping S3 archival")
+        return None
+    except ClientError as e:
+        if verbose:
+            print(f"  Warning: S3 upload failed: {e}")
+        return None
+    except Exception as e:
+        if verbose:
+            print(f"  Warning: S3 archival error: {e}")
+        return None
 
 
 def get_gmail_service():
@@ -379,6 +488,10 @@ def run_import(verbose: bool = True) -> Dict[str, Any]:
 
             for filepath in downloaded_files:
                 result["files"].append(str(filepath))
+
+                # Archive to S3 before importing to database
+                archive_to_s3(filepath, verbose=verbose)
+
                 if import_to_catscan(filepath):
                     total_imported += 1
 

@@ -19,11 +19,168 @@ This document outlines the complete plan for deploying Cat-Scan Creative Intelli
 
 ---
 
+## Quick Reference - How to Connect
+
+### Server Details
+
+| Property | Value |
+|----------|-------|
+| **Public IP** | `63.176.52.250` |
+| **Region** | `eu-central-1` (Frankfurt) |
+| **Instance ID** | `i-018d0db64128c2bd3` |
+| **Instance Type** | t3.micro (2 vCPU, 1GB RAM) |
+| **OS** | Amazon Linux 2023 |
+| **API Port** | 8000 |
+
+### SSH Access
+
+```bash
+# Connect to the server (uses your local ~/.ssh/id_ed25519 key)
+ssh ec2-user@63.176.52.250
+
+# Or explicitly specify the key
+ssh -i ~/.ssh/id_ed25519 ec2-user@63.176.52.250
+```
+
+### API Access
+
+```bash
+# Health check
+curl http://63.176.52.250:8000/health
+
+# API documentation (Swagger UI)
+# Open in browser: http://63.176.52.250:8000/docs
+
+# Import status
+curl http://63.176.52.250:8000/gmail/status
+
+# List recent imports
+curl http://63.176.52.250:8000/uploads/history
+```
+
+### Service Management (on server)
+
+```bash
+# Check service status
+sudo systemctl status catscan-api
+
+# View logs (live)
+sudo journalctl -u catscan-api -f
+
+# View recent logs
+sudo journalctl -u catscan-api -n 100
+
+# Restart service
+sudo systemctl restart catscan-api
+
+# Stop/Start service
+sudo systemctl stop catscan-api
+sudo systemctl start catscan-api
+```
+
+### File Locations (on server)
+
+| Path | Contents |
+|------|----------|
+| `/opt/catscan/` | Application code |
+| `/opt/catscan/venv/` | Python virtual environment |
+| `~/.catscan/catscan.db` | SQLite database |
+| `~/.catscan/credentials/` | API credentials (service accounts) |
+| `~/.catscan/imports/` | Downloaded CSV files |
+| `~/.catscan/logs/` | Cron job logs |
+
+### Manual Operations
+
+```bash
+# SSH into server first
+ssh ec2-user@63.176.52.250
+
+# Activate virtual environment
+cd /opt/catscan && source venv/bin/activate
+
+# Run Gmail import manually
+python scripts/gmail_import.py
+
+# Run cleanup manually (dry-run first)
+python scripts/cleanup_old_data.py --dry-run
+python scripts/cleanup_old_data.py
+
+# Check cron jobs
+crontab -l
+
+# View import log
+tail -100 ~/.catscan/logs/gmail-import.log
+
+# View cleanup log
+tail -100 ~/.catscan/logs/cleanup.log
+```
+
+### S3 Archive Access
+
+```bash
+# List all archived files
+aws s3 ls s3://rtbcat-csv-archive-frankfurt-328614522524/ --recursive --region eu-central-1
+
+# List performance reports
+aws s3 ls s3://rtbcat-csv-archive-frankfurt-328614522524/performance/ --recursive --region eu-central-1
+
+# Download a specific file
+aws s3 cp s3://rtbcat-csv-archive-frankfurt-328614522524/performance/2025/12/21/catscan-performance-2025-12-21.csv.gz ./ --region eu-central-1
+
+# Decompress
+gunzip catscan-performance-2025-12-21.csv.gz
+```
+
+### Redeploy Application
+
+```bash
+# On local machine - create package and upload
+cd /home/jen/Documents/rtbcat-platform/creative-intelligence
+tar -czf /tmp/catscan-deploy.tar.gz --exclude='*.pyc' --exclude='__pycache__' --exclude='.git' --exclude='*.db' --exclude='venv' .
+scp /tmp/catscan-deploy.tar.gz ec2-user@63.176.52.250:/tmp/
+
+# On server - extract and restart
+ssh ec2-user@63.176.52.250
+cd /opt/catscan
+tar -xzf /tmp/catscan-deploy.tar.gz
+sudo systemctl restart catscan-api
+```
+
+### AWS Console Access
+
+- **EC2 Console:** https://eu-central-1.console.aws.amazon.com/ec2/home?region=eu-central-1#Instances:instanceId=i-018d0db64128c2bd3
+- **S3 Console:** https://s3.console.aws.amazon.com/s3/buckets/rtbcat-csv-archive-frankfurt-328614522524?region=eu-central-1
+
+### Troubleshooting
+
+```bash
+# Check if API is responding
+curl -v http://63.176.52.250:8000/health
+
+# Check disk space
+df -h
+
+# Check memory usage
+free -m
+
+# Check running processes
+ps aux | grep python
+
+# Check if port 8000 is listening
+sudo ss -tlnp | grep 8000
+
+# Check security group allows traffic (from local)
+nc -zv 63.176.52.250 8000
+nc -zv 63.176.52.250 22
+```
+
+---
+
 ## Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         AWS Account (ap-south-1)                    │
+│                         AWS Account (eu-central-1 - Frankfurt)      │
 │                                                                     │
 │  ┌─────────────────┐     ┌──────────────────────────────────────┐  │
 │  │   S3 Bucket     │     │         EC2 t3.micro                 │  │
@@ -50,28 +207,30 @@ External:
 
 ---
 
-## Existing AWS Resources (Reuse)
+## Existing AWS Resources (Frankfurt - eu-central-1)
 
-The following resources already exist in the account and will be reused:
+The following resources exist in the Frankfurt region:
 
 | Resource | ID/Name | Purpose |
 |----------|---------|---------|
-| SSH Key Pair | `rtb-gateway-key` | SSH access to EC2 |
-| Security Group | `sg-0a84f5107d486995c` (rtb-gateway-sg) | Allows SSH + HTTP |
-| VPC | `vpc-0cc69037ad33c9149` (default) | Network |
-| S3 Bucket | `rtbcat-csv-archive-328614522524` | CSV archival (created) |
+| SSH Key Pair | `catscan-frankfurt-key` | SSH access to EC2 (uses local ~/.ssh/id_ed25519) |
+| Security Group | `sg-00367df5f7826fd77` (catscan-sg) | Allows SSH (22) + HTTP (8000) |
+| VPC | `vpc-05cc8303080eb9fa3` (default) | Network |
+| S3 Bucket | `rtbcat-csv-archive-frankfurt-328614522524` | CSV archival with lifecycle |
+| IAM Role | `catscan-ec2-role` | EC2 access to S3 |
+| EC2 Instance | `i-018d0db64128c2bd3` (catscan-server) | Running at 63.176.52.250 |
 
 ---
 
 ## Component 1: S3 CSV Archival
 
-### Status: COMPLETED
+### Status: COMPLETED (Frankfurt)
 
-**Bucket:** `rtbcat-csv-archive-328614522524`
+**Bucket:** `rtbcat-csv-archive-frankfurt-328614522524`
 
 **Structure:**
 ```
-s3://rtbcat-csv-archive-328614522524/
+s3://rtbcat-csv-archive-frankfurt-328614522524/
 ├── performance/
 │   ├── 2025/12/19/catscan-performance-2025-12-19.csv.gz
 │   └── ...
@@ -99,17 +258,18 @@ s3://rtbcat-csv-archive-328614522524/
 
 ## Component 2: EC2 Instance
 
-### Configuration
+### Configuration (Frankfurt)
 
 | Setting | Value |
 |---------|-------|
-| AMI | Amazon Linux 2023 (ami-0c44f651ab5e9285f) |
+| AMI | Amazon Linux 2023 (ami-0b9f50ee4cf81e8d8) |
 | Instance Type | t3.micro (2 vCPU, 1GB RAM) |
 | Storage | 30 GB gp3 EBS |
-| Key Pair | rtb-gateway-key |
-| Security Group | rtb-gateway-sg |
+| Key Pair | catscan-frankfurt-key |
+| Security Group | catscan-sg (sg-00367df5f7826fd77) |
 | Subnet | Default VPC public subnet |
-| Public IP | Enabled (Elastic IP recommended) |
+| Public IP | 63.176.52.250 |
+| Instance ID | i-018d0db64128c2bd3 |
 
 ### Security Group Rules Required
 
@@ -193,8 +353,8 @@ class RetentionConfig:
 
 @dataclass
 class S3ArchiveConfig:
-    bucket: str = "rtbcat-csv-archive-328614522524"
-    region: str = "ap-south-1"
+    bucket: str = "rtbcat-csv-archive-frankfurt-328614522524"
+    region: str = "eu-central-1"
     compress: bool = True  # gzip compression
 ```
 
@@ -320,10 +480,10 @@ If you need to reconstruct historical data beyond the 90-day retention:
 
 ```bash
 # List available archives
-aws s3 ls s3://rtbcat-csv-archive-328614522524/performance/ --recursive
+aws s3 ls s3://rtbcat-csv-archive-frankfurt-328614522524/performance/ --recursive --region eu-central-1
 
 # Download specific date range
-aws s3 cp s3://rtbcat-csv-archive-328614522524/performance/2025/06/ ./recovery/ --recursive
+aws s3 cp s3://rtbcat-csv-archive-frankfurt-328614522524/performance/2025/06/ ./recovery/ --recursive --region eu-central-1
 
 # Decompress and import
 gunzip recovery/*.csv.gz
@@ -384,19 +544,20 @@ python -m qps.smart_importer recovery/*.csv
 
 ## Implementation Checklist
 
-- [x] Create S3 bucket with lifecycle policy
-- [ ] Create IAM role for EC2 with S3 access
-- [ ] Launch EC2 instance
-- [ ] Modify `gmail_import.py` to archive to S3
-- [ ] Create `cleanup_old_data.py` script
-- [ ] Update config manager with retention settings
-- [ ] Deploy application to EC2
-- [ ] Copy credentials to EC2
-- [ ] Configure systemd service
-- [ ] Set up cron jobs
-- [ ] Verify Gmail import works
-- [ ] Verify S3 archival works
+- [x] Create S3 bucket with lifecycle policy (Frankfurt: rtbcat-csv-archive-frankfurt-328614522524)
+- [x] Create IAM role for EC2 with S3 access (catscan-ec2-role with AmazonS3FullAccess)
+- [x] Launch EC2 instance (i-018d0db64128c2bd3 at 63.176.52.250)
+- [x] Modify `gmail_import.py` to archive to S3
+- [x] Create `cleanup_old_data.py` script
+- [x] Update config manager with retention settings
+- [x] Deploy application to EC2
+- [x] Copy credentials to EC2
+- [x] Configure systemd service (catscan-api.service)
+- [x] Set up cron jobs (8:00 UTC daily import, 2:00 UTC Sunday cleanup)
+- [x] Verify API works (http://63.176.52.250:8000/health)
+- [x] Verify S3 archival works (tested 2025-12-21)
 - [ ] Test data recovery from S3
+- [ ] Set up Gmail OAuth on EC2 (requires browser-based auth)
 
 ---
 
@@ -412,13 +573,32 @@ If deployment fails:
 
 ## Next Steps
 
-1. Review and approve this plan
-2. Implement code changes (S3 archival, cleanup script)
-3. Execute deployment steps
-4. Verify all systems operational
-5. Monitor for first few days
+1. ~~Review and approve this plan~~ DONE
+2. ~~Implement code changes (S3 archival, cleanup script)~~ DONE
+3. ~~Execute deployment steps~~ DONE
+4. ~~Verify all systems operational~~ DONE
+5. **Set up Gmail OAuth on EC2** - Required for automated imports
+6. Monitor for first few days
+
+### Setting Up Gmail OAuth
+
+Gmail OAuth requires browser-based authentication. To complete setup:
+
+```bash
+# SSH to server
+ssh ec2-user@63.176.52.250
+
+# Run the import script interactively
+cd /opt/catscan && source venv/bin/activate
+python scripts/gmail_import.py
+
+# This will print a URL - open it in your browser
+# Complete the OAuth flow and paste the authorization code
+# The token will be saved to ~/.catscan/credentials/gmail-token.json
+```
 
 ---
 
 *Document maintained by: Claude Code*
-*Last updated: December 19, 2025*
+*Last updated: December 21, 2025*
+*Deployment completed: December 21, 2025 (Frankfurt, eu-central-1)*

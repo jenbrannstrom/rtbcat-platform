@@ -41,6 +41,22 @@ class S3Config(BaseModel):
     endpoint_url: Optional[str] = None
 
 
+class S3ArchiveConfig(BaseModel):
+    """S3 archive configuration for CSV backup."""
+
+    bucket: str = "rtbcat-csv-archive-frankfurt-328614522524"
+    region: str = "eu-central-1"
+    compress: bool = True
+    enabled: bool = True
+
+
+class RetentionConfig(BaseModel):
+    """Data retention configuration."""
+
+    database_days: int = 90  # Days to keep in SQLite
+    archive_enabled: bool = True  # Archive to S3 before cleanup
+
+
 class DatabaseConfig(BaseModel):
     """Database configuration."""
 
@@ -53,6 +69,8 @@ class AppConfig(BaseModel):
 
     authorized_buyers: Optional[AuthorizedBuyersConfig] = None
     s3: Optional[S3Config] = None
+    s3_archive: S3ArchiveConfig = Field(default_factory=S3ArchiveConfig)
+    retention: RetentionConfig = Field(default_factory=RetentionConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     log_level: str = "INFO"
     api_host: str = "0.0.0.0"

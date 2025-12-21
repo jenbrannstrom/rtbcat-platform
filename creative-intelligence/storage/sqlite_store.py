@@ -107,17 +107,28 @@ class SQLiteStore:
         """Synchronously initialize the database schema and run migrations."""
         conn = sqlite3.connect(self.db_path)
         try:
-            conn.executescript(SCHEMA)
-            conn.commit()
+            # Check if v40 schema is already initialized (has 'accounts' table)
+            # If so, skip the legacy schema to avoid conflicts
+            cursor = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='accounts'"
+            )
+            has_v40_schema = cursor.fetchone() is not None
 
-            # Run migrations for existing databases
-            for migration in MIGRATIONS:
-                try:
-                    conn.execute(migration)
-                    conn.commit()
-                except sqlite3.OperationalError:
-                    # Column/index already exists, skip
-                    pass
+            if not has_v40_schema:
+                # Only run legacy schema on pre-v40 databases
+                conn.executescript(SCHEMA)
+                conn.commit()
+
+                # Run migrations for existing databases
+                for migration in MIGRATIONS:
+                    try:
+                        conn.execute(migration)
+                        conn.commit()
+                    except sqlite3.OperationalError:
+                        # Column/index already exists, skip
+                        pass
+            else:
+                logger.info("v40 schema detected, skipping legacy schema initialization")
         finally:
             conn.close()
 
