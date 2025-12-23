@@ -37,7 +37,7 @@ chown -R catscan:catscan /home/catscan/.catscan
 # Clone repository
 cd /home/catscan
 if [ ! -d "rtbcat-platform" ]; then
-    git clone https://github.com/jenbrannstrom/rtbcat-platform.git
+    git clone https://github.com/rtbcat/catscan.git rtbcat-platform
     chown -R catscan:catscan rtbcat-platform
 fi
 
