@@ -90,7 +90,21 @@
       "mcp__chrome-devtools__list_network_requests",
       "mcp__chrome-devtools__take_screenshot",
       "mcp__chrome-devtools__evaluate_script",
-      "mcp__chrome-devtools__click"
+      "mcp__chrome-devtools__click",
+      "mcp__chrome-devtools__list_pages",
+      "mcp__chrome-devtools__select_page",
+      "mcp__chrome-devtools__press_key",
+      "WebSearch",
+      "WebFetch(domain:www.gartner.com)",
+      "WebFetch(domain:omr.com)",
+      "Bash(terraform version:*)",
+      "Bash(aws:*)",
+      "Bash(wget:*)",
+      "Bash(sudo gpg:*)",
+      "Bash(sudo tee:*)",
+      "Bash(sudo apt-get update:*)",
+      "Bash(sudo apt-get install:*)",
+      "Bash(~/bin/terraform plan:*)"
     ],
     "deny": [],
     "ask": []
