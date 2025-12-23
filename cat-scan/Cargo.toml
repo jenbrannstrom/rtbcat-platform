@@ -1,7 +1,0 @@
-[workspace]
-resolver = "2"
-members = [
-    "fake_ssp",
-    "fake_bidder",
-    "cat_scan",
-]
