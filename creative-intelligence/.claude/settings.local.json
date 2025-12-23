@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(crontab:*)",
+      "Bash(aws sts get-caller-identity:*)",
+      "Bash(aws configure list:*)",
+      "Bash(aws iam get-user:*)",
+      "Bash(aws s3api create-bucket:*)",
+      "Bash(aws s3api put-bucket-lifecycle-configuration:*)",
+      "Bash(aws s3api put-bucket-tagging:*)",
+      "Bash(aws ec2:*)",
+      "Bash(aws iam attach-role-policy:*)",
+      "Bash(aws iam create-instance-profile:*)",
+      "Bash(aws iam add-role-to-instance-profile:*)",
+      "Bash(chmod:*)",
+      "Bash(aws s3api list-buckets:*)",
+      "Bash(aws s3api get-bucket-lifecycle-configuration:*)",
+      "Bash(aws iam list-roles:*)",
+      "Bash(aws iam get-role:*)",
+      "Bash(aws iam list-attached-role-policies:*)",
+      "Bash(aws iam list-instance-profiles:*)",
+      "Bash(tar:*)",
+      "Bash(scp:*)",
+      "Bash(ssh ec2-user@63.176.52.250 'ls -la ~/.catscan/credentials/')"
+    ]
+  }
+}
