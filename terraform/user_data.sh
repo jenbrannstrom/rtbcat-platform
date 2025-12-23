@@ -1,13 +1,13 @@
 #!/bin/bash
 # Cat-Scan EC2 User Data Script
 # Installs Docker and starts the application
-# Note: $$ is used where Terraform should not interpolate (becomes single $ at runtime)
 
 set -e
 
 # Log everything
 exec > >(tee /var/log/catscan-setup.log) 2>&1
-echo "Starting Cat-Scan setup at $$(date)"
+echo "Starting Cat-Scan setup..."
+date
 
 # Update system
 dnf update -y
@@ -19,9 +19,10 @@ dnf install -y docker git
 systemctl start docker
 systemctl enable docker
 
-# Install Docker Compose
-curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$$(uname -s)-$$(uname -m)" -o /usr/local/bin/docker-compose
-chmod +x /usr/local/bin/docker-compose
+# Install Docker Compose v2
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -SL "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64" -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
 # Create app user
 useradd -m -s /bin/bash catscan || true
@@ -42,7 +43,7 @@ fi
 
 cd rtbcat-platform
 
-# Create environment file (Terraform variables interpolated here)
+# Create environment file with Terraform-provided values
 cat > .env << 'ENVEOF'
 # Cat-Scan Environment Configuration
 ENVIRONMENT=${environment}
@@ -53,7 +54,6 @@ API_HOST=0.0.0.0
 API_PORT=8000
 
 # Dashboard Configuration
-NEXT_PUBLIC_API_URL=http://localhost:8000
 DASHBOARD_PORT=3000
 
 # Data paths
@@ -61,12 +61,9 @@ CATSCAN_DATA_DIR=/home/catscan/.catscan
 DATABASE_PATH=/home/catscan/.catscan/catscan.db
 ENVEOF
 
-# Replace Terraform placeholders with actual values
-sed -i "s/\$${environment}/${environment}/g" .env
-sed -i "s/\$${s3_bucket}/${s3_bucket}/g" .env
-
 # Get public IP for API_HOST
-PUBLIC_IP=$$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+echo "Public IP: $PUBLIC_IP"
 
 # Create production docker-compose override
 cat > docker-compose.prod.yml << COMPOSEEOF
@@ -91,7 +88,7 @@ services:
     restart: always
     environment:
       - API_HOST=creative-api
-      - NEXT_PUBLIC_API_URL=http://$${PUBLIC_IP}:8000
+      - NEXT_PUBLIC_API_URL=http://$PUBLIC_IP:8000
     logging:
       driver: "json-file"
       options:
@@ -100,8 +97,9 @@ services:
 COMPOSEEOF
 
 # Build and start services (API + Dashboard only, skip testing services)
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d creative-api dashboard
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d creative-api dashboard
 
-echo "Cat-Scan setup complete at $$(date)"
-echo "Dashboard: http://$$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):3000"
-echo "API: http://$$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8000"
+echo "Cat-Scan setup complete!"
+echo "Dashboard: http://$PUBLIC_IP:3000"
+echo "API: http://$PUBLIC_IP:8000"
+date
