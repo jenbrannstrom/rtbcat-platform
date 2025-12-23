@@ -22,3 +22,10 @@ Thumbs.db
 # Data files (user-specific RTB exports)
 docs/*.csv
 data/csv-reports/
+
+# Terraform state
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/tfplan
+terraform/.terraform/
+terraform/.terraform.lock.hcl
