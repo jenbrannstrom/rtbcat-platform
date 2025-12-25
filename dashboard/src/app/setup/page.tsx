@@ -1125,7 +1125,7 @@ function SystemTab() {
   const { data: stats } = useQuery({ queryKey: ["stats"], queryFn: getStats });
   const { data: thumbnailStatus, isLoading: thumbnailStatusLoading } = useQuery({
     queryKey: ["thumbnailStatus"],
-    queryFn: getThumbnailStatus,
+    queryFn: () => getThumbnailStatus(),
   });
   const { data: systemStatus, isLoading: systemStatusLoading } = useQuery({
     queryKey: ["systemStatus"],
