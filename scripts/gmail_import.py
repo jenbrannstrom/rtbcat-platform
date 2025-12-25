@@ -34,7 +34,10 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 # Configuration
-SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
+SCOPES = [
+    'https://www.googleapis.com/auth/gmail.modify',
+    'https://www.googleapis.com/auth/devstorage.read_only',  # For GCS report downloads
+]
 CATSCAN_DIR = Path.home() / '.catscan'
 CREDENTIALS_DIR = CATSCAN_DIR / 'credentials'
 IMPORTS_DIR = CATSCAN_DIR / 'imports'
@@ -219,7 +222,11 @@ def archive_to_s3(filepath: Path, report_type: Optional[str] = None, verbose: bo
 
 
 def get_gmail_service():
-    """Authenticate and return Gmail API service."""
+    """Authenticate and return Gmail API service and credentials.
+
+    Returns:
+        tuple: (Gmail API service, OAuth credentials)
+    """
     creds = None
 
     # Load existing token
@@ -242,7 +249,7 @@ def get_gmail_service():
         # Save token for next run
         TOKEN_PATH.write_text(creds.to_json())
 
-    return build('gmail', 'v1', credentials=creds)
+    return build('gmail', 'v1', credentials=creds), creds
 
 
 def find_report_emails(service):
@@ -255,7 +262,7 @@ def find_report_emails(service):
     results = service.users().messages().list(
         userId='me',
         q=query,
-        maxResults=10
+        maxResults=50
     ).execute()
 
     return results.get('messages', [])
@@ -336,19 +343,39 @@ def extract_attachments(service, message_id: str, payload: Dict) -> List[Path]:
     return downloaded_files
 
 
-def download_from_url(url: str, message_id: str) -> List[Path]:
-    """Download CSV from GCS URL (for reports >= 10MB)."""
+def download_from_url(url: str, message_id: str, access_token: str = None) -> List[Path]:
+    """Download CSV from GCS URL (for reports >= 10MB).
+
+    Uses OAuth access token for authenticated GCS downloads.
+    """
+    import requests
+
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     filename = f"report_{timestamp}_{message_id[:8]}.csv"
     filepath = IMPORTS_DIR / filename
 
     print(f"  Downloading from URL: {url[:60]}...")
-    urllib.request.urlretrieve(url, filepath)
+
+    # Convert browser URL to API URL for authenticated access
+    # https://storage.cloud.google.com/bucket/object -> https://storage.googleapis.com/bucket/object
+    api_url = url.replace('storage.cloud.google.com', 'storage.googleapis.com')
+
+    if access_token:
+        headers = {'Authorization': f'Bearer {access_token}'}
+        response = requests.get(api_url, headers=headers)
+
+        if response.status_code == 200:
+            filepath.write_bytes(response.content)
+        else:
+            raise ValueError(f"GCS download failed: {response.status_code} - {response.text[:200]}")
+    else:
+        # Fallback to unauthenticated (will likely fail for private buckets)
+        urllib.request.urlretrieve(url, filepath)
 
     # Verify it's a valid CSV
     with open(filepath, 'r') as f:
         first_line = f.readline()
-        if not first_line or '\x00' in first_line:
+        if not first_line or '\x00' in first_line or first_line.startswith('<!doctype'):
             filepath.unlink()  # Delete invalid file
             raise ValueError("Downloaded file doesn't appear to be a valid CSV")
 
@@ -375,7 +402,7 @@ def import_to_catscan(filepath: Path) -> bool:
     try:
         with open(filepath, 'rb') as f:
             response = requests.post(
-                'http://localhost:8000/performance/import',
+                'http://localhost:8000/performance/import-csv',
                 files={'file': (filepath.name, f, 'text/csv')}
             )
 
@@ -394,8 +421,14 @@ def import_to_catscan(filepath: Path) -> bool:
         return False
 
 
-def process_message(service, message_id: str) -> List[Path]:
-    """Process a single email - extract attachment OR download from URL."""
+def process_message(service, message_id: str, access_token: str = None) -> List[Path]:
+    """Process a single email - extract attachment OR download from URL.
+
+    Args:
+        service: Gmail API service
+        message_id: Email message ID
+        access_token: OAuth access token for authenticated GCS downloads
+    """
     message = service.users().messages().get(
         userId='me',
         id=message_id,
@@ -417,7 +450,7 @@ def process_message(service, message_id: str) -> List[Path]:
 
         url = extract_download_url(body)
         if url:
-            downloaded_files = download_from_url(url, message_id)
+            downloaded_files = download_from_url(url, message_id, access_token)
 
     return downloaded_files
 
@@ -441,7 +474,8 @@ def run_import(verbose: bool = True) -> Dict[str, Any]:
         print("=" * 60)
 
     try:
-        service = get_gmail_service()
+        service, creds = get_gmail_service()
+        access_token = creds.token  # For authenticated GCS downloads
     except FileNotFoundError as e:
         error_msg = str(e)
         if verbose:
@@ -477,7 +511,7 @@ def run_import(verbose: bool = True) -> Dict[str, Any]:
             print(f"Processing email: {message_id}")
 
         try:
-            downloaded_files = process_message(service, message_id)
+            downloaded_files = process_message(service, message_id, access_token)
 
             if not downloaded_files:
                 if verbose:

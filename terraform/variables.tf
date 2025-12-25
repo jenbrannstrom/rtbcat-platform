@@ -35,3 +35,43 @@ variable "allowed_ssh_cidr" {
   type        = string
   default     = "0.0.0.0/0" # Restrict this in production!
 }
+
+variable "domain_name" {
+  description = "Domain name for HTTPS (e.g., catscan.example.com). Leave empty for HTTP-only mode."
+  type        = string
+  default     = ""
+}
+
+variable "enable_https" {
+  description = "Enable HTTPS with Caddy reverse proxy. Requires domain_name to be set."
+  type        = bool
+  default     = false
+}
+
+# Cloudflare DNS Configuration
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token with DNS edit permissions. Leave empty to skip DNS automation."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "cloudflare_zone_id" {
+  description = "Cloudflare Zone ID for your domain (find in dashboard overview page)."
+  type        = string
+  default     = ""
+}
+
+# Basic Auth for Dashboard
+variable "basic_auth_user" {
+  description = "Username for dashboard basic auth. Leave empty to disable."
+  type        = string
+  default     = ""
+}
+
+variable "basic_auth_password" {
+  description = "Password for dashboard basic auth (will be hashed)."
+  type        = string
+  default     = ""
+  sensitive   = true
+}

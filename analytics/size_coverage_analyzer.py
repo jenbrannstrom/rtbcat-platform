@@ -56,22 +56,38 @@ class SizeCoverageAnalyzer:
         conn.row_factory = sqlite3.Row
 
         # Get all sizes we have approved creatives for
+        # Normalize sizes to just WxH format (strip descriptions like "(Mobile Banner)")
         creative_sizes = {}  # size -> {format, count}
         cursor = conn.execute("""
             SELECT
-                canonical_size,
+                CASE
+                    WHEN width IS NOT NULL AND height IS NOT NULL AND width > 0 AND height > 0
+                    THEN CAST(width AS TEXT) || 'x' || CAST(height AS TEXT)
+                    ELSE
+                        CASE
+                            WHEN canonical_size LIKE '%(%'
+                            THEN TRIM(SUBSTR(canonical_size, 1, INSTR(canonical_size, '(') - 1))
+                            ELSE canonical_size
+                        END
+                END as normalized_size,
                 format,
                 COUNT(*) as count
             FROM creatives
             WHERE approval_status = 'APPROVED'
-              AND canonical_size IS NOT NULL
-              AND canonical_size != ''
-            GROUP BY canonical_size, format
+              AND (
+                  (width IS NOT NULL AND height IS NOT NULL AND width > 0 AND height > 0)
+                  OR (canonical_size IS NOT NULL AND canonical_size != '')
+              )
+            GROUP BY normalized_size, format
         """)
         for row in cursor:
-            key = f"{row['canonical_size']}|{row['format']}"
+            size = row['normalized_size']
+            if not size or size.strip() == '':
+                continue
+            size = size.strip()
+            key = f"{size}|{row['format']}"
             creative_sizes[key] = {
-                'size': row['canonical_size'],
+                'size': size,
                 'format': row['format'],
                 'creative_count': row['count'],
             }
@@ -94,29 +110,31 @@ class SizeCoverageAnalyzer:
                 'creative_count': row['count'],
             }
 
-        # Get traffic by size and format from performance_metrics
-        # Since reached_queries is empty, use impressions as proxy
+        # Get traffic by size and format from rtb_daily
+        # This is the actual imported CSV data
         traffic_by_size = {}
 
         # Build query with optional billing_id filter
         billing_filter = ""
-        params = []
+        params = [days]
         if billing_id:
-            billing_filter = " AND pm.billing_id = ?"
+            billing_filter = " AND billing_id = ?"
             params.append(billing_id)
 
         cursor = conn.execute(f"""
             SELECT
-                COALESCE(c.canonical_size, '(any)') as size,
-                c.format,
-                SUM(pm.impressions) as total_impressions,
-                SUM(pm.spend_micros) / 1000000.0 as spend_usd,
-                SUM(pm.clicks) as clicks
-            FROM performance_metrics pm
-            JOIN creatives c ON pm.creative_id = c.id
-            WHERE pm.metric_date >= date('now', '-{days} days')
+                creative_size as size,
+                COALESCE(creative_format, 'BANNER') as format,
+                SUM(COALESCE(reached_queries, 0)) as total_reached,
+                SUM(COALESCE(impressions, 0)) as total_impressions,
+                SUM(COALESCE(spend_micros, 0)) / 1000000.0 as spend_usd,
+                SUM(COALESCE(clicks, 0)) as clicks
+            FROM rtb_daily
+            WHERE metric_date >= date('now', '-' || ? || ' days')
+              AND creative_size IS NOT NULL
+              AND creative_size != ''
             {billing_filter}
-            GROUP BY COALESCE(c.canonical_size, '(any)'), c.format
+            GROUP BY creative_size, COALESCE(creative_format, 'BANNER')
             ORDER BY total_impressions DESC
         """, params)
 
@@ -125,38 +143,58 @@ class SizeCoverageAnalyzer:
             traffic_by_size[key] = {
                 'size': row['size'],
                 'format': row['format'],
+                'reached_queries': row['total_reached'],
                 'impressions': row['total_impressions'],
                 'spend_usd': row['spend_usd'],
                 'clicks': row['clicks'],
             }
 
-        # Calculate coverage
+        # Calculate coverage using reached_queries (the actual QPS metric)
+        total_reached = sum(t['reached_queries'] for t in traffic_by_size.values())
         total_impressions = sum(t['impressions'] for t in traffic_by_size.values())
 
         covered_sizes = []
         gaps = []
 
+        # Build a lookup for just the size part (without format) for more flexible matching
+        creative_size_only = {size.split('|')[0] for size in creative_sizes.keys()}
+
         # Check each size in traffic
         for key, traffic in traffic_by_size.items():
-            if key in creative_sizes:
+            size_only = traffic['size']
+
+            # Check if we have this size (try exact key first, then just size)
+            has_creative = key in creative_sizes or size_only in creative_size_only
+
+            if has_creative:
                 # We have creatives for this size
+                creative_count = 0
+                if key in creative_sizes:
+                    creative_count = creative_sizes[key]['creative_count']
+                else:
+                    # Sum up all creatives for this size across formats
+                    creative_count = sum(
+                        v['creative_count'] for k, v in creative_sizes.items()
+                        if k.startswith(f"{size_only}|")
+                    )
+
                 covered_sizes.append({
                     'size': traffic['size'],
                     'format': traffic['format'],
                     'impressions': traffic['impressions'],
                     'spend_usd': traffic['spend_usd'],
-                    'creative_count': creative_sizes[key]['creative_count'],
+                    'creative_count': creative_count,
                     'ctr': (traffic['clicks'] / traffic['impressions'] * 100) if traffic['impressions'] > 0 else 0,
                 })
             else:
                 # This is a gap - traffic but no creatives
-                daily_imps = traffic['impressions'] // max(days, 1)
-                pct_of_total = (traffic['impressions'] / total_impressions * 100) if total_impressions > 0 else 0
+                daily_queries = traffic['reached_queries'] // max(days, 1)
+                pct_of_total = (traffic['reached_queries'] / total_reached * 100) if total_reached > 0 else 0
 
-                # Recommend based on volume
-                if daily_imps > 10000:
+                # Recommend based on daily query volume
+                if daily_queries > 10000:
                     recommendation = "BLOCK_IN_PRETARGETING"
-                elif daily_imps > 1000:
+                elif daily_queries > 1000:
                     recommendation = "CONSIDER_ADDING_CREATIVE"
                 else:
                     recommendation = "LOW_PRIORITY"
@@ -164,9 +202,9 @@ class SizeCoverageAnalyzer:
                 gaps.append(SizeCoverageGap(
                     size=traffic['size'],
                     format=traffic['format'],
-                    queries_received=traffic['impressions'],  # Using impressions as proxy
+                    queries_received=traffic['reached_queries'],
                     impressions_won=traffic['impressions'],
-                    estimated_daily_queries=daily_imps,
+                    estimated_daily_queries=daily_queries,
                     percent_of_total_traffic=pct_of_total,
                     recommendation=recommendation,
                 ))
@@ -182,9 +220,9 @@ class SizeCoverageAnalyzer:
         gaps.sort(key=lambda g: g.queries_received, reverse=True)
         covered_sizes.sort(key=lambda s: s['impressions'], reverse=True)
 
-        # Calculate summary stats
-        covered_impressions = sum(s['impressions'] for s in covered_sizes)
-        coverage_rate = (covered_impressions / total_impressions * 100) if total_impressions > 0 else 0
+        # Calculate summary stats based on reached_queries (QPS metric)
+        covered_queries = total_reached - sum(g.queries_received for g in gaps)
+        coverage_rate = (covered_queries / total_reached * 100) if total_reached > 0 else 0
         wasted_daily = sum(g.estimated_daily_queries for g in gaps)
 
         conn.close()

@@ -1,443 +1,401 @@
-# Cat-Scan AWS Deployment Plan
+# Cat-Scan Cloud Deployment Guide
 
-**Version:** 2.0 | **Created:** December 19, 2025 | **Updated:** December 23, 2025
+**Version:** 3.0 | **Created:** December 19, 2025 | **Updated:** December 25, 2025
 
-This document outlines the complete plan for deploying Cat-Scan Creative Intelligence to AWS with S3 archival and 90-day data retention.
-
----
-
-## Executive Summary
-
-**Goal:** Deploy Cat-Scan to AWS EC2 with automated daily CSV imports and long-term archival.
-
-| Component | Solution | Monthly Cost |
-|-----------|----------|--------------|
-| Compute | EC2 t3.micro (free tier) | $0 (first year), ~$8 after |
-| Storage | 30GB EBS | $0 (free tier) |
-| CSV Archive | S3 with lifecycle | ~$1-3 for 36GB/year |
-| **Total** | | **$0-3/month (year 1)** |
+Production deployment guide for Cat-Scan QPS Optimizer. Supports AWS (primary) with GCP instructions coming soon.
 
 ---
 
-## Architecture Overview
+## Overview
+
+Cat-Scan is deployed as a containerized application with:
+- **Dashboard** (Next.js) - Web UI on port 3000
+- **API** (FastAPI) - Backend on port 8000
+- **Database** (SQLite) - Persistent storage
+- **Authentication** - API key for backend, optional OAuth for dashboard
+
+### Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                       AWS Account (eu-central-1)                    │
-│                           Frankfurt, Germany                        │
-│                                                                     │
-│  ┌─────────────────┐     ┌──────────────────────────────────────┐  │
-│  │   S3 Bucket     │     │         EC2 t3.micro                 │  │
-│  │                 │     │                                      │  │
-│  │ rtbcat-csv-     │◄────│  ┌────────────────────────────────┐  │  │
-│  │ archive-        │     │  │     Cat-Scan FastAPI App       │  │  │
-│  │ frankfurt-*     │     │  │                                │  │  │
-│  │                 │     │  │  - Gmail import (cron: daily)  │  │  │
-│  │ /performance/   │     │  │  - API on port 8000            │  │  │
-│  │ /funnel-geo/    │     │  │  - SQLite (90-day retention)   │  │  │
-│  │ /funnel-pubs/   │     │  │  - S3 archival on import       │  │  │
-│  └─────────────────┘     │  └────────────────────────────────┘  │  │
-│                          │                                      │  │
-│   Lifecycle Policy:      │  Cron Jobs:                          │  │
-│   - 30 days → IA storage │  - 08:00 UTC: Gmail import           │  │
-│   - Unlimited retention  │  - 02:00 UTC: 90-day cleanup         │  │
-│                          │                                      │  │
-│                          └──────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
-
-External:
-  Google Authorized Buyers → Gmail → Cat-Scan imports → S3 archive
+                                    ┌─────────────────────────────────────┐
+                                    │         Cloud Instance              │
+┌──────────────┐                    │                                     │
+│   Browser    │───── HTTPS ───────▶│  ┌─────────────┐  ┌─────────────┐  │
+│   (User)     │        :443        │  │  Dashboard  │  │    API      │  │
+└──────────────┘                    │  │  (Next.js)  │──│  (FastAPI)  │  │
+                                    │  │   :3000     │  │   :8000     │  │
+                                    │  └─────────────┘  └─────────────┘  │
+                                    │         │                │         │
+                                    │         └───────┬────────┘         │
+                                    │                 ▼                  │
+                                    │        ┌─────────────────┐         │
+                                    │        │  SQLite + Data  │         │
+                                    │        │  ~/.catscan/    │         │
+                                    │        └─────────────────┘         │
+                                    └─────────────────────────────────────┘
 ```
 
 ---
 
-## Existing AWS Resources (Frankfurt - eu-central-1)
+## Deployment Options
 
-The following resources exist in the Frankfurt region:
+| Option | Complexity | Cost | Best For |
+|--------|------------|------|----------|
+| **A. Single EC2 + Caddy** | Low | ~$20/mo | Personal/small team |
+| **B. EC2 + ALB + ACM** | Medium | ~$35/mo | Production with AWS-native SSL |
+| **C. ECS Fargate** | High | ~$50/mo | Auto-scaling, enterprise |
 
-| Resource | ID/Name | Purpose |
-|----------|---------|---------|
-| SSH Key Pair | `catscan-frankfurt-key` | SSH access to EC2 |
-| Security Group | *(Frankfurt SG ID)* | Allows SSH + HTTP |
-| VPC | *(Frankfurt default VPC)* | Network |
-| S3 Bucket | `rtbcat-csv-archive-frankfurt-328614522524` | CSV archival |
-
-> **Note:** Security Group and VPC IDs are region-specific. Verify current IDs in the AWS Console for eu-central-1.
+**Recommended:** Option A for most users.
 
 ---
 
-## Component 1: S3 CSV Archival
+## Option A: Single EC2 with Caddy (Recommended)
 
-### Status: COMPLETED
+Caddy provides automatic HTTPS with Let's Encrypt certificates.
 
-**Bucket:** `rtbcat-csv-archive-frankfurt-328614522524`
-**Region:** `eu-central-1` (Frankfurt)
+### Prerequisites
 
-**Structure:**
-```
-s3://rtbcat-csv-archive-frankfurt-328614522524/
-├── performance/
-│   ├── 2025/12/19/catscan-performance-2025-12-19.csv.gz
-│   └── ...
-├── funnel-geo/
-│   ├── 2025/12/19/catscan-funnel-geo-2025-12-19.csv.gz
-│   └── ...
-└── funnel-publishers/
-    ├── 2025/12/19/catscan-funnel-publishers-2025-12-19.csv.gz
-    └── ...
-```
+1. **Domain name** pointed to your server (e.g., `catscan.yourdomain.com`)
+2. **AWS Account** with CLI configured
+3. **Terraform** installed (v1.0+)
 
-**Lifecycle Policy (configured):**
-- Days 0-30: Standard storage ($0.023/GB)
-- Days 30+: Infrequent Access ($0.0125/GB) - 46% cheaper
-- No expiration (keep forever for history reconstruction)
-
-**Cost Estimate:**
-| Data Volume | Monthly Cost |
-|-------------|--------------|
-| 36 GB (1 year) | ~$0.50-0.80 |
-| 100 GB | ~$1.50-2.00 |
-| 365 GB (10 years) | ~$5-6 |
-
----
-
-## Component 2: EC2 Instance
-
-### Configuration
-
-| Setting | Value |
-|---------|-------|
-| Region | `eu-central-1` (Frankfurt) |
-| AMI | Amazon Linux 2023 *(use latest for eu-central-1)* |
-| Instance Type | t3.micro (2 vCPU, 1GB RAM) |
-| Storage | 30 GB gp3 EBS |
-| Key Pair | catscan-frankfurt-key |
-| Security Group | *(Frankfurt SG)* |
-| Subnet | Default VPC public subnet |
-| Public IP | Enabled (Elastic IP recommended) |
-
-> **Note:** AMI IDs are region-specific. Use the AWS Console or CLI to find the latest Amazon Linux 2023 AMI for eu-central-1.
-
-### Security Group Rules Required
-
-| Type | Port | Source | Purpose |
-|------|------|--------|---------|
-| SSH | 22 | Your IP | Server access |
-| HTTP | 8000 | 0.0.0.0/0 (or restricted) | API access |
-| HTTPS | 443 | 0.0.0.0/0 | Future: SSL termination |
-
-### IAM Role for EC2
-
-Create an IAM role with these permissions:
-- `AmazonS3FullAccess` (or scoped to the bucket)
-- Attach to EC2 instance for S3 access without hardcoded credentials
-
----
-
-## Component 3: Code Changes Required
-
-### 3.1 S3 Archival on Import
-
-**File:** `scripts/gmail_import.py`
-
-**Changes:**
-1. After downloading CSV from Gmail, upload to S3 before importing
-2. Compress with gzip before upload
-3. Use date-based path structure
-
-**New Function:**
-```python
-def archive_to_s3(file_path: Path, report_type: str) -> str:
-    """
-    Archive CSV to S3 with gzip compression.
-
-    Args:
-        file_path: Local path to CSV file
-        report_type: One of 'performance', 'funnel-geo', 'funnel-publishers'
-
-    Returns:
-        S3 URI of archived file
-    """
-    # Extract date from filename or use today
-    # Compress file
-    # Upload to s3://rtbcat-csv-archive-frankfurt-328614522524/{report_type}/{year}/{month}/{day}/
-    # Return S3 URI
-```
-
-**Integration Point:**
-- Call `archive_to_s3()` after CSV extraction, before database import
-- Store S3 URI in import_history table for reference
-
-### 3.2 90-Day Data Retention
-
-**New File:** `scripts/cleanup_old_data.py`
-
-**Purpose:** Delete database records older than 90 days while preserving S3 archives.
-
-**Tables to Clean:**
-| Table | Retention | Cleanup Query |
-|-------|-----------|---------------|
-| `rtb_daily` | 90 days | `DELETE FROM rtb_daily WHERE day < date('now', '-90 days')` |
-| `rtb_funnel` | 90 days | `DELETE FROM rtb_funnel WHERE day < date('now', '-90 days')` |
-| `performance_metrics` | 90 days | `DELETE FROM performance_metrics WHERE date < date('now', '-90 days')` |
-| `import_history` | Keep all | No cleanup (small table, useful for auditing) |
-
-**Features:**
-- Dry-run mode to preview deletions
-- Logging of deleted row counts
-- VACUUM after deletion to reclaim space
-
-### 3.3 Configuration Updates
-
-**File:** `config/config_manager.py`
-
-**New Settings:**
-```python
-@dataclass
-class RetentionConfig:
-    database_days: int = 90  # Days to keep in SQLite
-    archive_enabled: bool = True  # Archive to S3 before cleanup
-
-@dataclass
-class S3ArchiveConfig:
-    bucket: str = "rtbcat-csv-archive-frankfurt-328614522524"
-    region: str = "eu-central-1"
-    compress: bool = True  # gzip compression
-```
-
----
-
-## Component 4: Deployment Steps
-
-### Step 1: Prepare the Application
+### Step 1: Deploy Infrastructure
 
 ```bash
-# On local machine
-cd /home/jen/Documents/rtbcat-platform/creative-intelligence
+cd /home/jen/Documents/rtbcat-platform/terraform
 
-# Create deployment package
-tar -czvf catscan-deploy.tar.gz \
-    --exclude='*.pyc' \
-    --exclude='__pycache__' \
-    --exclude='.git' \
-    --exclude='*.db' \
-    .
+# Configure your domain
+cat > terraform.tfvars << 'EOF'
+domain_name = "catscan.yourdomain.com"
+ssh_public_key_path = "~/.ssh/id_ed25519.pub"
+enable_https = true
+EOF
+
+# Deploy
+~/bin/terraform init
+~/bin/terraform plan -out=tfplan
+~/bin/terraform apply tfplan
 ```
 
-### Step 2: Launch EC2 Instance
+### Step 2: Point DNS to Server
+
+After deployment, Terraform outputs the public IP:
 
 ```bash
-# Set region
-export AWS_DEFAULT_REGION=eu-central-1
-
-# Find latest Amazon Linux 2023 AMI for Frankfurt
-AMI_ID=$(aws ec2 describe-images \
-    --owners amazon \
-    --filters "Name=name,Values=al2023-ami-2023*-x86_64" \
-    --query 'sort_by(Images, &CreationDate)[-1].ImageId' \
-    --output text)
-
-# Create instance
-aws ec2 run-instances \
-    --region eu-central-1 \
-    --image-id $AMI_ID \
-    --instance-type t3.micro \
-    --key-name catscan-frankfurt-key \
-    --security-group-ids <frankfurt-sg-id> \
-    --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":30,"VolumeType":"gp3"}}]' \
-    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=catscan-server}]' \
-    --iam-instance-profile Name=catscan-ec2-role
-
-# Allocate Elastic IP (optional but recommended)
-aws ec2 allocate-address --domain vpc --region eu-central-1
-aws ec2 associate-address --instance-id <instance-id> --allocation-id <eip-alloc-id>
+~/bin/terraform output public_ip
+# Example: 18.185.146.184
 ```
 
-### Step 3: Configure EC2 Instance
+Create an A record in your DNS:
+- **Name:** `catscan` (or your subdomain)
+- **Type:** A
+- **Value:** `<public_ip>`
+- **TTL:** 300
+
+### Step 3: Configure Authentication
+
+SSH to the server and set the API key:
 
 ```bash
-# SSH into instance
-ssh -i ~/.ssh/catscan-frankfurt-key.pem ec2-user@<public-ip>
+ssh ec2-user@catscan.yourdomain.com
 
-# Install dependencies
-sudo dnf update -y
-sudo dnf install -y python3.11 python3.11-pip git
+# Generate and set API key
+API_KEY=$(openssl rand -base64 32)
+echo "CATSCAN_API_KEY=$API_KEY" | sudo tee -a /home/catscan/.env
+echo "Your API key: $API_KEY"
 
-# Create app directory
-sudo mkdir -p /opt/catscan
-sudo chown ec2-user:ec2-user /opt/catscan
-
-# Create data directory
-mkdir -p ~/.catscan/credentials
-mkdir -p ~/.catscan/imports
-mkdir -p ~/.catscan/logs
+# Restart containers to pick up the key
+cd /home/catscan/rtbcat-platform
+sudo docker compose restart
 ```
 
-### Step 4: Deploy Application
+Save the API key securely - you'll need it for API access.
+
+### Step 4: Upload Credentials
 
 ```bash
-# From local machine - copy files
-scp -i ~/.ssh/catscan-frankfurt-key.pem catscan-deploy.tar.gz ec2-user@<public-ip>:/opt/catscan/
+# Upload Google Authorized Buyers credentials
+scp google-credentials.json ec2-user@catscan.yourdomain.com:/tmp/
+ssh ec2-user@catscan.yourdomain.com \
+  "sudo mv /tmp/google-credentials.json /home/catscan/.catscan/credentials/ && \
+   sudo chown catscan:catscan /home/catscan/.catscan/credentials/google-credentials.json"
 
-# On EC2 - extract and setup
-cd /opt/catscan
-tar -xzvf catscan-deploy.tar.gz
-python3.11 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+# Upload Gmail OAuth credentials (for auto-import)
+scp ~/.catscan/credentials/gmail-*.json ec2-user@catscan.yourdomain.com:/tmp/
+ssh ec2-user@catscan.yourdomain.com \
+  "sudo mv /tmp/gmail-*.json /home/catscan/.catscan/credentials/ && \
+   sudo chown catscan:catscan /home/catscan/.catscan/credentials/gmail-*.json"
 ```
 
-### Step 5: Copy Credentials
+### Step 5: Access Your Deployment
+
+| Service | URL |
+|---------|-----|
+| Dashboard | `https://catscan.yourdomain.com` |
+| API Docs | `https://catscan.yourdomain.com/api/docs` |
+| Health Check | `https://catscan.yourdomain.com/api/health` |
+
+---
+
+## Security Configuration
+
+### API Key Authentication
+
+The API uses bearer token authentication when `CATSCAN_API_KEY` is set:
 
 ```bash
-# From local machine - copy Gmail credentials
-scp -i ~/.ssh/catscan-frankfurt-key.pem \
-    ~/.catscan/credentials/gmail-oauth-client.json \
-    ~/.catscan/credentials/gmail-token.json \
-    ec2-user@<public-ip>:~/.catscan/credentials/
+# API calls require the Authorization header
+curl -H "Authorization: Bearer $API_KEY" \
+  https://catscan.yourdomain.com/api/health
 
-# Copy service account if used
-scp -i ~/.ssh/catscan-frankfurt-key.pem \
-    ~/.catscan/credentials/*.json \
-    ec2-user@<public-ip>:~/.catscan/credentials/
+# Public endpoints (no auth required):
+# - /api/health
+# - /api/docs
+# - /api/openapi.json
 ```
 
-### Step 6: Setup Systemd Service
+### Dashboard Authentication (Optional)
 
-```bash
-# On EC2
-sudo cp /opt/catscan/catscan-api.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable catscan-api
-sudo systemctl start catscan-api
+For dashboard access control, options include:
 
-# Verify
-sudo systemctl status catscan-api
-curl http://localhost:8000/health
+1. **Basic Auth via Caddy** (simple):
+   ```
+   # In Caddyfile
+   catscan.yourdomain.com {
+     basicauth /* {
+       admin $2a$14$... # bcrypt hash
+     }
+     reverse_proxy dashboard:3000
+   }
+   ```
+
+2. **OAuth/SSO** (enterprise):
+   - Integrate with Google Workspace, Okta, or Auth0
+   - Requires dashboard code changes
+
+3. **VPN/IP Allowlist** (network-level):
+   - Restrict Security Group to office IPs
+   - Use AWS Client VPN
+
+---
+
+## Infrastructure Details
+
+### Terraform Resources Created
+
+| Resource | Purpose |
+|----------|---------|
+| `aws_instance` | EC2 t3.small running Amazon Linux 2023 |
+| `aws_eip` | Static IP address |
+| `aws_security_group` | Firewall (22, 80, 443) |
+| `aws_s3_bucket` | Data backup storage |
+| `aws_key_pair` | SSH access |
+
+### Security Group Rules
+
+| Port | Protocol | Source | Purpose |
+|------|----------|--------|---------|
+| 22 | TCP | Your IP | SSH access |
+| 80 | TCP | 0.0.0.0/0 | HTTP → HTTPS redirect |
+| 443 | TCP | 0.0.0.0/0 | HTTPS access |
+
+### File Locations on Server
+
 ```
-
-### Step 7: Configure Cron Jobs
-
-```bash
-# On EC2 - edit crontab
-crontab -e
-
-# Add these lines:
-# Gmail import at 8:00 AM UTC daily (after Google sends reports)
-0 8 * * * /opt/catscan/venv/bin/python /opt/catscan/scripts/gmail_import.py >> ~/.catscan/logs/gmail-import.log 2>&1
-
-# Database cleanup at 2:00 AM UTC on Sundays
-0 2 * * 0 /opt/catscan/venv/bin/python /opt/catscan/scripts/cleanup_old_data.py >> ~/.catscan/logs/cleanup.log 2>&1
+/home/catscan/
+├── rtbcat-platform/          # Application code
+│   ├── docker-compose.yml
+│   ├── creative-intelligence/
+│   └── dashboard/
+├── .catscan/                  # Data directory
+│   ├── catscan.db            # SQLite database
+│   ├── credentials/          # Google/Gmail creds
+│   └── imports/              # Downloaded CSVs
+└── .env                       # Environment variables
 ```
 
 ---
 
-## Component 5: Data Recovery from S3
+## Operations
 
-If you need to reconstruct historical data beyond the 90-day retention:
+### Daily Gmail Import
+
+Cron job runs daily at 6 AM UTC:
 
 ```bash
-# List available archives
-aws s3 ls s3://rtbcat-csv-archive-frankfurt-328614522524/performance/ --recursive
+# Check cron status
+sudo cat /etc/cron.d/gmail-import
 
-# Download specific date range
-aws s3 cp s3://rtbcat-csv-archive-frankfurt-328614522524/performance/2025/06/ ./recovery/ --recursive
+# Run manually
+sudo docker exec catscan-api python scripts/gmail_import.py
 
-# Decompress and import
-gunzip recovery/*.csv.gz
-python -m qps.smart_importer recovery/*.csv
+# View logs
+sudo tail -f /var/log/gmail-import.log
+```
+
+### Container Management
+
+```bash
+# View status
+sudo docker ps
+
+# View logs
+sudo docker logs -f catscan-api
+sudo docker logs -f catscan-dashboard
+
+# Restart services
+cd /home/catscan/rtbcat-platform
+sudo docker compose restart
+
+# Rebuild after code changes
+sudo docker compose up -d --build
+```
+
+### Database Backup
+
+```bash
+# Manual backup to S3
+sudo docker exec catscan-api python -c "
+import shutil
+import boto3
+from datetime import datetime
+
+# Copy database
+shutil.copy('/home/catscan/.catscan/catscan.db', '/tmp/backup.db')
+
+# Upload to S3
+s3 = boto3.client('s3')
+s3.upload_file('/tmp/backup.db', 'catscan-production-data-xxx',
+               f'backups/catscan-{datetime.now():%Y%m%d-%H%M%S}.db')
+"
+```
+
+### Update Deployment
+
+```bash
+# SSH to server
+ssh ec2-user@catscan.yourdomain.com
+
+# Pull latest code
+cd /home/catscan/rtbcat-platform
+sudo git pull origin unified-platform
+
+# Rebuild and restart
+sudo docker compose up -d --build
 ```
 
 ---
 
-## Monitoring & Maintenance
+## Troubleshooting
 
-### Health Checks
+### Check Service Health
 
-| Check | Command | Frequency |
-|-------|---------|-----------|
-| API Health | `curl http://localhost:8000/health` | Every 5 min |
-| Disk Usage | `df -h /` | Daily |
-| Import Status | `curl http://localhost:8000/gmail/status` | Daily |
+```bash
+# API health
+curl https://catscan.yourdomain.com/api/health
 
-### Log Files
+# Container status
+sudo docker ps -a
 
-| Log | Location | Purpose |
-|-----|----------|---------|
-| API logs | `journalctl -u catscan-api` | Application logs |
-| Gmail import | `~/.catscan/logs/gmail-import.log` | Import history |
-| Cleanup | `~/.catscan/logs/cleanup.log` | Retention cleanup |
+# Container logs
+sudo docker logs catscan-api --tail 100
+sudo docker logs catscan-dashboard --tail 100
+```
 
-### Alerts (Optional - Future)
+### Common Issues
 
-- CloudWatch alarm on disk usage > 80%
-- SNS notification on import failures
-- Weekly cost report
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| 502 Bad Gateway | Container not running | `sudo docker compose up -d` |
+| SSL certificate error | DNS not propagated | Wait 5-10 min, check DNS |
+| API returns 401 | Missing/wrong API key | Check `Authorization: Bearer` header |
+| Dashboard shows no data | API key not set in dashboard env | Set `NEXT_PUBLIC_API_KEY` |
+| Gmail import fails | Token expired | Re-run OAuth flow locally, copy new token |
 
----
+### Reset Everything
 
-## Cost Summary
-
-### Year 1 (Free Tier)
-
-| Resource | Monthly Cost |
-|----------|--------------|
-| EC2 t3.micro | $0 (750 hrs free) |
-| EBS 30GB gp3 | $0 (30GB free) |
-| S3 ~36GB | $0.50-1.00 |
-| Data Transfer | $0 (minimal) |
-| **Total** | **~$1/month** |
-
-### After Free Tier
-
-| Resource | Monthly Cost |
-|----------|--------------|
-| EC2 t3.micro | ~$7.60 |
-| EBS 30GB gp3 | ~$2.40 |
-| S3 ~36GB | ~$0.80 |
-| Data Transfer | ~$1.00 |
-| **Total** | **~$12/month** |
+```bash
+# Nuclear option: destroy and recreate
+cd /home/jen/Documents/rtbcat-platform/terraform
+~/bin/terraform destroy
+~/bin/terraform apply
+```
 
 ---
 
-## Implementation Checklist
+## Cost Breakdown
 
-- [x] Create S3 bucket with lifecycle policy (Frankfurt: `rtbcat-csv-archive-frankfurt-328614522524`)
-- [x] Modify `gmail_import.py` to archive to S3
-- [x] Create `cleanup_old_data.py` script
-- [x] Update config manager with retention settings
-- [ ] Create IAM role for EC2 with S3 access
-- [ ] Launch EC2 instance in eu-central-1
-- [ ] Deploy application to EC2
-- [ ] Copy credentials to EC2
-- [ ] Configure systemd service
-- [ ] Set up cron jobs
-- [ ] Verify Gmail import works
-- [ ] Verify S3 archival works
-- [ ] Test data recovery from S3
+| Component | Monthly Cost |
+|-----------|--------------|
+| EC2 t3.small | ~$15 |
+| EBS 30GB | ~$2.40 |
+| Elastic IP | Free (attached) |
+| S3 storage | ~$1-3 |
+| Data transfer | ~$1-5 |
+| **Total** | **~$20-25/month** |
 
----
+### Cost Optimization
 
-## Rollback Plan
-
-If deployment fails:
-
-1. **EC2 Issues:** Terminate instance, no data loss (S3 has archives)
-2. **Import Issues:** Run import manually from laptop until fixed
-3. **Database Corruption:** Restore from S3 archives
+- **Stop when not in use:** `aws ec2 stop-instances --instance-ids i-xxx`
+- **Use Spot instances:** 60-70% savings (with interruption risk)
+- **Reserved instances:** 30-40% savings for 1-year commitment
 
 ---
 
-## Next Steps
+## GCP Deployment (Coming Soon)
 
-1. Review and approve this plan
-2. Implement code changes (S3 archival, cleanup script)
-3. Execute deployment steps
-4. Verify all systems operational
-5. Monitor for first few days
+GCP deployment will use:
+- **Compute Engine** (equivalent to EC2)
+- **Cloud SQL** or persistent disk for SQLite
+- **Cloud CDN** for static assets
+- **Identity-Aware Proxy** for authentication
+
+See `docs/GCP_DEPLOYMENT_PLAN.md` (to be created).
+
+---
+
+## Migration Notes
+
+### From SSH Tunnel Setup
+
+If migrating from the SSH tunnel approach:
+
+1. **Export data from old deployment:**
+   ```bash
+   ssh ec2-user@old-server "sudo docker exec catscan-api cat /data/catscan.db" > backup.db
+   ```
+
+2. **Import to new deployment:**
+   ```bash
+   scp backup.db ec2-user@new-server:/tmp/
+   ssh ec2-user@new-server "sudo mv /tmp/backup.db /home/catscan/.catscan/catscan.db"
+   ```
+
+3. **Update DNS** to point to new server
+
+4. **Destroy old infrastructure**
+
+---
+
+## Current Deployment Status
+
+### Active Instance
+
+| Property | Value |
+|----------|-------|
+| **IP** | `18.185.146.184` |
+| **Region** | eu-central-1 (Frankfurt) |
+| **Instance** | t3.small |
+| **Status** | Running (SSH tunnel mode - legacy) |
+
+### Pending Migration
+
+- [ ] Register domain or subdomain
+- [ ] Update Terraform for Caddy/HTTPS
+- [ ] Migrate to proper auth
+- [ ] Update dashboard to use API key
 
 ---
 
 *Document maintained by: Claude Code*
-*Last updated: December 23, 2025*
-*Region: eu-central-1 (Frankfurt)*
+*Last updated: December 25, 2025*
