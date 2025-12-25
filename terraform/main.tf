@@ -8,14 +8,6 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
-    cloudflare = {
-      source  = "cloudflare/cloudflare"
-      version = "~> 4.0"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.0"
-    }
   }
 }
 
@@ -57,7 +49,7 @@ resource "aws_security_group" "catscan" {
   description = "Security group for Cat-Scan application"
   vpc_id      = data.aws_vpc.default.id
 
-  # HTTPS mode: Caddy handles SSL on 80/443
+  # HTTPS mode: 80 + 443 via Caddy
   dynamic "ingress" {
     for_each = var.enable_https ? [1] : []
     content {
@@ -80,7 +72,7 @@ resource "aws_security_group" "catscan" {
     }
   }
 
-  # HTTP mode: Direct access (restricted to allowed IPs)
+  # Non-HTTPS mode: Direct access to 3000 + 8000
   dynamic "ingress" {
     for_each = var.enable_https ? [] : [1]
     content {
@@ -88,7 +80,7 @@ resource "aws_security_group" "catscan" {
       from_port   = 3000
       to_port     = 3000
       protocol    = "tcp"
-      cidr_blocks = [var.allowed_ssh_cidr]
+      cidr_blocks = ["0.0.0.0/0"]
     }
   }
 
@@ -99,7 +91,7 @@ resource "aws_security_group" "catscan" {
       from_port   = 8000
       to_port     = 8000
       protocol    = "tcp"
-      cidr_blocks = [var.allowed_ssh_cidr]
+      cidr_blocks = ["0.0.0.0/0"]
     }
   }
 
@@ -241,12 +233,10 @@ resource "aws_instance" "catscan" {
   }
 
   user_data = base64encode(templatefile("${path.module}/user_data.sh", {
-    s3_bucket       = aws_s3_bucket.catscan.id
-    environment     = var.environment
-    domain_name     = var.domain_name
-    enable_https    = var.enable_https
-    basic_auth_user = var.basic_auth_user
-    basic_auth_hash = var.basic_auth_password != "" ? bcrypt(var.basic_auth_password) : ""
+    s3_bucket    = aws_s3_bucket.catscan.id
+    environment  = var.environment
+    domain_name  = var.domain_name
+    enable_https = var.enable_https ? "true" : "false"
   }))
 
   tags = {
