@@ -2,17 +2,17 @@
 
 output "dashboard_url" {
   description = "URL to access the Cat-Scan dashboard"
-  value       = "http://${aws_eip.catscan.public_ip}:3000"
+  value       = var.enable_https ? "https://${var.domain_name}" : "http://${aws_eip.catscan.public_ip}:3000"
 }
 
 output "api_url" {
   description = "URL to access the Cat-Scan API"
-  value       = "http://${aws_eip.catscan.public_ip}:8000"
+  value       = var.enable_https ? "https://${var.domain_name}/api" : "http://${aws_eip.catscan.public_ip}:8000"
 }
 
 output "api_docs_url" {
   description = "URL to access the API documentation"
-  value       = "http://${aws_eip.catscan.public_ip}:8000/docs"
+  value       = var.enable_https ? "https://${var.domain_name}/api/docs" : "http://${aws_eip.catscan.public_ip}:8000/docs"
 }
 
 output "instance_id" {

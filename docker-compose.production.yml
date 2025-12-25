@@ -1,0 +1,79 @@
+version: '3.8'
+
+# Production compose with Caddy reverse proxy for HTTPS
+# Usage: docker compose -f docker-compose.production.yml up -d
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: catscan-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+      - BASIC_AUTH_USER=${BASIC_AUTH_USER:-}
+      - BASIC_AUTH_HASH=${BASIC_AUTH_HASH:-}
+    depends_on:
+      - dashboard
+      - api
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api:
+    build:
+      context: ./creative-intelligence
+      dockerfile: Dockerfile
+    container_name: catscan-api
+    expose:
+      - "8000"
+    volumes:
+      - ${DATA_DIR:-/home/catscan/.catscan}:/home/rtbcat/.catscan
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/home/rtbcat/.catscan/credentials/google-credentials.json
+      - DATABASE_PATH=/home/rtbcat/.catscan/catscan.db
+      - CATSCAN_API_KEY=${CATSCAN_API_KEY:-}
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+      args:
+        - API_HOST=api
+    container_name: catscan-dashboard
+    expose:
+      - "3000"
+    environment:
+      - API_HOST=api
+      - NEXT_PUBLIC_API_KEY=${CATSCAN_API_KEY:-}
+    depends_on:
+      - api
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  caddy-data:
+  caddy-config:
