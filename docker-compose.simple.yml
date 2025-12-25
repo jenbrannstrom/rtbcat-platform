@@ -1,0 +1,41 @@
+version: '3.8'
+
+# Simplified production compose - API + Dashboard only (no cat-scan)
+services:
+  creative-api:
+    build:
+      context: ./creative-intelligence
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - catscan-data:/home/rtbcat/.catscan
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/credentials/google-credentials.json
+      - DATABASE_PATH=/home/rtbcat/.catscan/catscan.db
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - API_HOST=creative-api
+    depends_on:
+      - creative-api
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  catscan-data:
