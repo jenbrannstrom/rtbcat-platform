@@ -23,9 +23,14 @@ Thumbs.db
 docs/*.csv
 data/csv-reports/
 
-# Terraform state
+# Terraform state and user-specific config
 terraform/*.tfstate
 terraform/*.tfstate.backup
 terraform/tfplan
 terraform/.terraform/
 terraform/.terraform.lock.hcl
+terraform/terraform.tfvars
+
+# Claude Code local settings
+.claude/settings.local.json
+**/.claude/settings.local.json
