@@ -1,0 +1,93 @@
+"""API Key authentication for Cat-Scan.
+
+Simple bearer token authentication for securing the API when exposed remotely.
+The API key is read from CATSCAN_API_KEY environment variable.
+
+Usage:
+    # Set the API key on the server
+    export CATSCAN_API_KEY="your-secret-key-here"
+
+    # Client requests must include the header
+    Authorization: Bearer your-secret-key-here
+"""
+
+import os
+import secrets
+from typing import Optional
+
+from fastapi import Request, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from starlette.middleware.base import BaseHTTPMiddleware
+
+# Paths that don't require authentication
+PUBLIC_PATHS = {
+    "/health",
+    "/docs",
+    "/openapi.json",
+    "/redoc",
+}
+
+
+def get_api_key() -> Optional[str]:
+    """Get the API key from environment variable."""
+    return os.environ.get("CATSCAN_API_KEY")
+
+
+def generate_api_key() -> str:
+    """Generate a secure random API key."""
+    return secrets.token_urlsafe(32)
+
+
+def is_public_path(path: str) -> bool:
+    """Check if the path is public (no auth required)."""
+    return path in PUBLIC_PATHS or path.startswith("/docs") or path.startswith("/redoc")
+
+
+class APIKeyAuthMiddleware(BaseHTTPMiddleware):
+    """Middleware to enforce API key authentication.
+
+    If CATSCAN_API_KEY is not set, authentication is disabled (local mode).
+    If set, all requests (except public paths) must include valid Bearer token.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        api_key = get_api_key()
+
+        # If no API key configured, allow all requests (local mode)
+        if not api_key:
+            return await call_next(request)
+
+        # Allow public paths without auth
+        if is_public_path(request.url.path):
+            return await call_next(request)
+
+        # Check for Authorization header
+        auth_header = request.headers.get("Authorization")
+
+        if not auth_header:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Missing Authorization header. Use: Authorization: Bearer <api-key>",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Parse Bearer token
+        parts = auth_header.split()
+        if len(parts) != 2 or parts[0].lower() != "bearer":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Authorization header format. Use: Authorization: Bearer <api-key>",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        token = parts[1]
+
+        # Validate token
+        if not secrets.compare_digest(token, api_key):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid API key",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        return await call_next(request)
