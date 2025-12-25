@@ -1,0 +1,39 @@
+# Cat-Scan Caddyfile
+# Automatic HTTPS with Let's Encrypt + Optional Basic Auth
+
+{$DOMAIN:localhost} {
+    # Basic auth (if BASIC_AUTH_HASH is set)
+    @auth_enabled expression {$BASIC_AUTH_HASH:} != ""
+    basic_auth @auth_enabled {
+        {$BASIC_AUTH_USER:admin} {$BASIC_AUTH_HASH}
+    }
+
+    # API routes - proxy to FastAPI
+    handle /api/* {
+        uri strip_prefix /api
+        reverse_proxy api:8000
+    }
+
+    # Health check (no auth for load balancers)
+    handle /health {
+        reverse_proxy api:8000
+    }
+
+    # Everything else goes to dashboard
+    handle {
+        reverse_proxy dashboard:3000
+    }
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+
+    # Logging
+    log {
+        output stdout
+        format console
+    }
+}
