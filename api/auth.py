@@ -15,9 +15,9 @@ import os
 import secrets
 from typing import Optional
 
-from fastapi import Request, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 # Paths that don't require authentication
 PUBLIC_PATHS = {
@@ -65,18 +65,18 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         auth_header = request.headers.get("Authorization")
 
         if not auth_header:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Missing Authorization header. Use: Authorization: Bearer <api-key>",
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Missing Authorization header. Use: Authorization: Bearer <api-key>"},
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
         # Parse Bearer token
         parts = auth_header.split()
         if len(parts) != 2 or parts[0].lower() != "bearer":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid Authorization header format. Use: Authorization: Bearer <api-key>",
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid Authorization header format. Use: Authorization: Bearer <api-key>"},
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
@@ -84,9 +84,9 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
 
         # Validate token
         if not secrets.compare_digest(token, api_key):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid API key",
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid API key"},
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
