@@ -11,6 +11,7 @@ from typing import Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.auth import APIKeyAuthMiddleware
 from config import ConfigManager
 from storage import SQLiteStore
 from api.campaigns_router import router as campaigns_router
@@ -93,6 +94,9 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # API Key authentication (only enforced if CATSCAN_API_KEY is set)
+    application.add_middleware(APIKeyAuthMiddleware)
 
     return application
 
