@@ -2,9 +2,8 @@
 # Automatic HTTPS with Let's Encrypt + Optional Basic Auth
 
 {$DOMAIN:localhost} {
-    # Basic auth (if BASIC_AUTH_HASH is set)
-    @auth_enabled expression {$BASIC_AUTH_HASH:} != ""
-    basic_auth @auth_enabled {
+    # Basic auth - always enabled when credentials are configured
+    basic_auth {
         {$BASIC_AUTH_USER:admin} {$BASIC_AUTH_HASH}
     }
 

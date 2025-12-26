@@ -8,6 +8,14 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 4.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
   }
 }
 
@@ -233,10 +241,12 @@ resource "aws_instance" "catscan" {
   }
 
   user_data = base64encode(templatefile("${path.module}/user_data.sh", {
-    s3_bucket    = aws_s3_bucket.catscan.id
-    environment  = var.environment
-    domain_name  = var.domain_name
-    enable_https = var.enable_https ? "true" : "false"
+    s3_bucket       = aws_s3_bucket.catscan.id
+    environment     = var.environment
+    domain_name     = var.domain_name
+    enable_https    = var.enable_https ? "true" : "false"
+    basic_auth_user = var.basic_auth_user
+    basic_auth_hash = var.basic_auth_password != "" ? bcrypt(var.basic_auth_password) : ""
   }))
 
   tags = {
