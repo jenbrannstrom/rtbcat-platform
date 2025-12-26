@@ -67,6 +67,15 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 | **Gmail Auto-Import** | Automatic daily report ingestion |
 | **Video Thumbnails** | Extract from VAST XML or generate via ffmpeg |
 
+### Premium Features
+
+| Feature | Description |
+|---------|-------------|
+| **Auto-Adjust Pretargeting** | Automatically optimizes pretargeting settings every 24 hours based on newly uploaded creatives. Opens/closes "valves" to align pretargeting with available creative inventory. |
+| **Pretargeting History** | Full history recording of all pretargeting adjustments for audit and rollback. |
+
+> **Note:** Manual pretargeting optimization is available to all users. Auto-adjust runs on a 24-hour cycle and is a paid feature. The UI displays auto-adjust controls for all users, but they are greyed out for non-paying customers.
+
 ### Dashboard Pages
 
 | Page | URL | Purpose |
