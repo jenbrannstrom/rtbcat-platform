@@ -310,15 +310,55 @@ Detailed phase documentation is archived in `docs/phases/`:
 - Campaign clustering
 - RTB funnel visualization
 - Video thumbnail generation
+- Pretargeting config sync and viewing
+- RTB endpoint monitoring
 
-### Next Steps
+---
 
-1. **Production deployment** - Cloud server, domain, SSL
-2. **Multi-account support** - Account switching in UI
-3. **RTB Troubleshooting API** - Integrate bid metrics
-4. **Performance at scale** - Virtual scrolling, caching
+## QPS Optimization Roadmap
 
-See **[docs/HANDOVER.md](docs/HANDOVER.md)** for complete roadmap.
+Cat-Scan is evolving from a **read-only analytics tool** to a **closed-loop optimization system**.
+
+### Phase 1: Pretargeting Write API (In Progress)
+Push pretargeting changes to Google Authorized Buyers:
+- Add/remove sizes, geos, formats
+- Suspend/activate configurations
+- Dry-run mode with impact preview
+
+### Phase 2: Change History & Rollback
+Full audit trail with point-in-time recovery:
+- Record all configuration changes
+- Snapshot configs before modifications
+- One-click rollback to any previous state
+- Emergency suspend with auto-snapshot
+
+### Phase 3: QPS Adjudication Engine
+Automatic optimization recommendations:
+- Identify sizes with QPS but no creatives
+- Detect geos with poor win rates
+- Calculate optimal config settings
+- Auto-apply high-confidence changes
+
+### Phase 4: AI/MCP Integration
+AI-driven optimization via Model Context Protocol:
+- Claude analyzes waste patterns
+- Proposes optimizations with reasoning
+- Human-in-the-loop for risky changes
+- Continuous learning from results
+
+**See [docs/PRETARGETING_OPTIMIZATION_ROADMAP.md](creative-intelligence/docs/PRETARGETING_OPTIMIZATION_ROADMAP.md) for complete details.**
+
+---
+
+## Documentation
+
+| Document | Purpose |
+|----------|---------|
+| **[INSTALL.md](INSTALL.md)** | Detailed installation guide |
+| **[docs/PRETARGETING_OPTIMIZATION_ROADMAP.md](creative-intelligence/docs/PRETARGETING_OPTIMIZATION_ROADMAP.md)** | QPS optimization roadmap |
+| **[docs/CSV_REPORTS_GUIDE.md](creative-intelligence/docs/CSV_REPORTS_GUIDE.md)** | CSV report setup |
+| **[docs/GMAIL_OAUTH_SETUP.md](creative-intelligence/docs/GMAIL_OAUTH_SETUP.md)** | Gmail auto-import setup |
+| **[docs/AWS_DEPLOYMENT_PLAN.md](creative-intelligence/docs/AWS_DEPLOYMENT_PLAN.md)** | AWS/Terraform deployment |
 
 ---
 
