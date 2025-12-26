@@ -18,6 +18,7 @@ from config import ConfigManager
 from config.config_manager import AuthorizedBuyersConfig, AppConfig
 from api.dependencies import get_config, get_store
 from storage.sqlite_store import SQLiteStore, ServiceAccount
+from collectors import BuyerSeatsClient
 
 logger = logging.getLogger(__name__)
 
@@ -176,12 +177,41 @@ async def add_service_account(
 
         logger.info(f"Service account added: {client_email} (id={account_id})")
 
+        # Automatically discover buyer seats to get the correct bidder ID
+        discovered_bidder_ids = []
+        try:
+            # BuyerSeatsClient.discover_buyer_seats() calls buyers.list() which
+            # doesn't need a specific account_id - it returns all accessible buyers
+            client = BuyerSeatsClient(
+                credentials_path=str(creds_path),
+                account_id="discovery",  # Placeholder - not used by buyers.list()
+            )
+            seats = await client.discover_buyer_seats()
+
+            if seats:
+                for seat in seats:
+                    # Link the discovered seat to this service account
+                    seat.service_account_id = account_id
+                    await store.save_buyer_seat(seat)
+                    discovered_bidder_ids.append(seat.bidder_id)
+                logger.info(f"Discovered {len(seats)} buyer seats for {client_email}: bidders={set(discovered_bidder_ids)}")
+            else:
+                logger.warning(f"No buyer seats discovered for {client_email}")
+        except Exception as e:
+            logger.warning(f"Failed to auto-discover buyer seats for {client_email}: {e}")
+            # Continue without failing - user can manually discover later
+
+        message = "Service account added successfully"
+        if discovered_bidder_ids:
+            unique_bidders = set(discovered_bidder_ids)
+            message += f". Discovered {len(unique_bidders)} bidder account(s): {', '.join(unique_bidders)}"
+
         return CredentialsUploadResponse(
             success=True,
             id=account_id,
             client_email=client_email,
             project_id=project_id,
-            message="Service account added successfully",
+            message=message,
         )
 
     except Exception as e:
@@ -214,6 +244,65 @@ async def get_service_account(
         created_at=str(account.created_at) if account.created_at else None,
         last_used=str(account.last_used) if account.last_used else None,
     )
+
+
+class DiscoveryResponse(BaseModel):
+    """Response model for bidder discovery."""
+    success: bool
+    bidder_ids: List[str] = []
+    buyer_seats_count: int = 0
+    message: str
+
+
+@router.post("/config/service-accounts/{account_id}/discover", response_model=DiscoveryResponse)
+async def discover_bidders_for_account(
+    account_id: str,
+    store: SQLiteStore = Depends(get_store),
+):
+    """Discover bidder accounts accessible by this service account.
+
+    Queries the Google Authorized Buyers API to find all bidder and buyer
+    accounts that this service account has access to. Discovered accounts
+    are saved to the buyer_seats table and linked to this service account.
+    """
+    account = await store.get_service_account(account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Service account not found")
+
+    try:
+        client = BuyerSeatsClient(
+            credentials_path=account.credentials_path,
+            account_id="discovery",  # Placeholder - not used by buyers.list()
+        )
+        seats = await client.discover_buyer_seats()
+
+        if not seats:
+            return DiscoveryResponse(
+                success=True,
+                bidder_ids=[],
+                buyer_seats_count=0,
+                message="No bidder accounts found. Verify the service account has RTB API permissions.",
+            )
+
+        bidder_ids = set()
+        for seat in seats:
+            seat.service_account_id = account_id
+            await store.save_buyer_seat(seat)
+            bidder_ids.add(seat.bidder_id)
+
+        return DiscoveryResponse(
+            success=True,
+            bidder_ids=list(bidder_ids),
+            buyer_seats_count=len(seats),
+            message=f"Discovered {len(seats)} buyer seat(s) under {len(bidder_ids)} bidder account(s)",
+        )
+
+    except Exception as e:
+        logger.error(f"Bidder discovery failed for {account.client_email}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Discovery failed: {str(e)}",
+        )
 
 
 @router.delete("/config/service-accounts/{account_id}", response_model=DeleteResponse)
