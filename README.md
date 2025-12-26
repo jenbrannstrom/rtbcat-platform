@@ -13,13 +13,14 @@ A privacy-first QPS optimization platform for Google Authorized Buyers. Cat-Scan
 **The Problem:** Google Authorized Buyers shows you creative IDs like `cr-12345`, but doesn't tell you:
 - How to improve efficiency of the QPS your bidder consumes
 - What QPS is unused vs what should be increased
-- Which creatives are wasting your budget
+- allow automatic shutting & opening of pre-targeting setings to align with creative sizes that have been uploaded & approved to run
 
 **The Solution:** Cat-Scan automatically:
 1. Fetches all your creatives from Authorized Buyers API
 2. Imports performance data from CSV exports
-3. Identifies size mismatches, config inefficiencies, and fraud signals
+3. Identifies size mismatches, config inefficiencies, wasted QPS (that leads to missed opportunites dueto inefficiencies)
 4. Provides actionable recommendations to reduce waste
+5. allows an automatic "throttle valve" adjusting pretargeting settings based on the creatives ready to serve
 
 **Typical waste reduction: 20-40% of QPS.**
 
@@ -370,4 +371,4 @@ MIT License - see [LICENSE](LICENSE) file
 
 ---
 
-**Built for RTB bidders who want to improve QPS efficiency.**
+**Built for RTB bidders on Google Auth Buyers who want to improve QPS efficiency.**
