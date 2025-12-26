@@ -14,11 +14,14 @@ ENVIRONMENT="${environment}"
 S3_BUCKET="${s3_bucket}"
 DOMAIN_NAME="${domain_name}"
 ENABLE_HTTPS="${enable_https}"
+BASIC_AUTH_USER="${basic_auth_user}"
+BASIC_AUTH_HASH="${basic_auth_hash}"
 
 echo "Environment: $ENVIRONMENT"
 echo "S3 Bucket: $S3_BUCKET"
 echo "Domain: $DOMAIN_NAME"
 echo "HTTPS Enabled: $ENABLE_HTTPS"
+echo "Basic Auth: $([ -n \"$BASIC_AUTH_USER\" ] && echo 'enabled' || echo 'disabled')"
 
 # Update system
 dnf update -y
@@ -73,6 +76,10 @@ DATA_DIR=/home/catscan/.catscan
 
 # API Configuration
 DATABASE_PATH=/home/catscan/.catscan/catscan.db
+
+# Basic Auth for Caddy (password is pre-hashed)
+BASIC_AUTH_USER=$BASIC_AUTH_USER
+BASIC_AUTH_HASH=$BASIC_AUTH_HASH
 
 # API Key (generate one after deployment)
 # CATSCAN_API_KEY=

@@ -10,7 +10,8 @@
 #    cloudflare_zone_id = "your-zone-id"
 
 provider "cloudflare" {
-  api_token = var.cloudflare_api_token
+  # Use dummy token when not configured (resource won't be created due to count=0)
+  api_token = var.cloudflare_api_token != "" ? var.cloudflare_api_token : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 }
 
 # DNS A record pointing to EC2 instance
