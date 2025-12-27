@@ -1450,3 +1450,111 @@ export async function getPretargetingConfigDetail(billingId: string): Promise<Co
     `/settings/pretargeting/${encodeURIComponent(billingId)}/detail`
   );
 }
+
+// =============================================================================
+// Pretargeting Write Operations (Push to Google API)
+// =============================================================================
+
+export interface ApplyChangeResponse {
+  status: string;
+  change_id: number;
+  dry_run: boolean;
+  message: string;
+  updated_config?: PretargetingConfigResponse;
+}
+
+export interface ApplyAllResponse {
+  status: string;
+  dry_run: boolean;
+  changes_applied: number;
+  changes_failed: number;
+  message: string;
+}
+
+export interface SuspendActivateResponse {
+  status: string;
+  billing_id: string;
+  new_state: string;
+  message: string;
+}
+
+export interface RollbackResponse {
+  status: string;
+  dry_run: boolean;
+  snapshot_id: number;
+  changes_made: string[];
+  message: string;
+}
+
+/**
+ * Apply a single pending change to Google Authorized Buyers.
+ * Set dry_run=true (default) to preview without making changes.
+ */
+export async function applyPendingChange(
+  billingId: string,
+  changeId: number,
+  dryRun: boolean = true
+): Promise<ApplyChangeResponse> {
+  return fetchApi<ApplyChangeResponse>(
+    `/settings/pretargeting/${encodeURIComponent(billingId)}/apply`,
+    {
+      method: "POST",
+      body: JSON.stringify({ change_id: changeId, dry_run: dryRun }),
+    }
+  );
+}
+
+/**
+ * Apply all pending changes for a billing_id to Google.
+ * Set dry_run=true (default) to preview without making changes.
+ */
+export async function applyAllPendingChanges(
+  billingId: string,
+  dryRun: boolean = true
+): Promise<ApplyAllResponse> {
+  return fetchApi<ApplyAllResponse>(
+    `/settings/pretargeting/${encodeURIComponent(billingId)}/apply-all?dry_run=${dryRun}`,
+    { method: "POST" }
+  );
+}
+
+/**
+ * Suspend a pretargeting configuration.
+ * Creates an auto-snapshot before suspending for easy rollback.
+ * WARNING: This affects live bidding!
+ */
+export async function suspendPretargeting(billingId: string): Promise<SuspendActivateResponse> {
+  return fetchApi<SuspendActivateResponse>(
+    `/settings/pretargeting/${encodeURIComponent(billingId)}/suspend`,
+    { method: "POST" }
+  );
+}
+
+/**
+ * Activate a suspended pretargeting configuration.
+ * WARNING: This affects live bidding!
+ */
+export async function activatePretargeting(billingId: string): Promise<SuspendActivateResponse> {
+  return fetchApi<SuspendActivateResponse>(
+    `/settings/pretargeting/${encodeURIComponent(billingId)}/activate`,
+    { method: "POST" }
+  );
+}
+
+/**
+ * Rollback a pretargeting config to a previous snapshot state.
+ * Set dry_run=true (default) to preview what would change.
+ */
+export async function rollbackPretargeting(
+  billingId: string,
+  snapshotId: number,
+  dryRun: boolean = true
+): Promise<RollbackResponse> {
+  return fetchApi<RollbackResponse>(
+    `/settings/pretargeting/${encodeURIComponent(billingId)}/rollback`,
+    {
+      method: "POST",
+      body: JSON.stringify({ snapshot_id: snapshotId, dry_run: dryRun }),
+    }
+  );
+}
