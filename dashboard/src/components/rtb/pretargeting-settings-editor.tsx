@@ -8,6 +8,11 @@ import {
   createPendingChange,
   cancelPendingChange,
   markChangeApplied,
+  applyPendingChange,
+  applyAllPendingChanges,
+  suspendPretargeting,
+  activatePretargeting,
+  syncPretargetingConfigs,
   type ConfigDetail,
   type PendingChange,
   type PretargetingHistoryItem,
@@ -28,6 +33,11 @@ import {
   FileType,
   Ban,
   ExternalLink,
+  Upload,
+  Pause,
+  Play,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -294,10 +304,13 @@ export function PretargetingSettingsEditor({
   onClose,
 }: PretargetingSettingsEditorProps) {
   const [showHistory, setShowHistory] = useState(false);
+  const [showConfirmPush, setShowConfirmPush] = useState(false);
+  const [showConfirmSuspend, setShowConfirmSuspend] = useState(false);
+  const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
   const queryClient = useQueryClient();
 
   // Fetch config detail
-  const { data: configDetail, isLoading: configLoading } = useQuery({
+  const { data: configDetail, isLoading: configLoading, refetch: refetchDetail } = useQuery({
     queryKey: ['pretargeting-detail', billing_id],
     queryFn: () => getPretargetingConfigDetail(billing_id),
   });
@@ -331,6 +344,52 @@ export function PretargetingSettingsEditor({
       queryClient.invalidateQueries({ queryKey: ['pretargeting-history', billing_id] });
     },
   });
+
+  // Push to Google mutations
+  const applyAllMutation = useMutation({
+    mutationFn: () => applyAllPendingChanges(billing_id, false),
+    onSuccess: async (data) => {
+      setPushResult({ success: true, message: data.message });
+      // Sync to get updated state from Google
+      await syncPretargetingConfigs();
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-history', billing_id] });
+      setShowConfirmPush(false);
+    },
+    onError: (error: Error) => {
+      setPushResult({ success: false, message: error.message });
+    },
+  });
+
+  const suspendMutation = useMutation({
+    mutationFn: () => suspendPretargeting(billing_id),
+    onSuccess: async (data) => {
+      setPushResult({ success: true, message: data.message });
+      await syncPretargetingConfigs();
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+      setShowConfirmSuspend(false);
+    },
+    onError: (error: Error) => {
+      setPushResult({ success: false, message: error.message });
+    },
+  });
+
+  const activateMutation = useMutation({
+    mutationFn: () => activatePretargeting(billing_id),
+    onSuccess: async (data) => {
+      setPushResult({ success: true, message: data.message });
+      await syncPretargetingConfigs();
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+    },
+    onError: (error: Error) => {
+      setPushResult({ success: false, message: error.message });
+    },
+  });
+
+  const isPushing = applyAllMutation.isPending || suspendMutation.isPending || activateMutation.isPending;
 
   // Get pending changes by type
   const getPendingByType = (changeType: string): string[] => {
@@ -496,33 +555,158 @@ export function PretargetingSettingsEditor({
         </div>
       </div>
 
-      {/* Warning banner */}
-      <div className="px-4 py-2 bg-amber-50 border-b border-amber-200">
-        <div className="flex items-start gap-2 text-xs text-amber-800">
-          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-medium">Changes are staged locally only</p>
-            <p className="mt-0.5">
-              After making changes here, apply them manually in{' '}
-              <a
-                href="https://admanager.google.com/authorizedbuyers"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-amber-700 underline hover:text-amber-900 inline-flex items-center gap-0.5"
-              >
-                Google Authorized Buyers
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            </p>
+      {/* Result notification */}
+      {pushResult && (
+        <div className={cn(
+          "px-4 py-2 border-b flex items-center justify-between",
+          pushResult.success ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
+        )}>
+          <div className="flex items-center gap-2 text-sm">
+            {pushResult.success ? (
+              <Check className="h-4 w-4 text-green-600" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+            )}
+            <span className={pushResult.success ? "text-green-800" : "text-red-800"}>
+              {pushResult.message}
+            </span>
           </div>
+          <button
+            onClick={() => setPushResult(null)}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Status & Actions bar */}
+      <div className="px-4 py-2 bg-gray-50 border-b flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className={cn(
+            "px-2 py-0.5 text-xs font-medium rounded",
+            configDetail.state === 'ACTIVE' ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
+          )}>
+            {configDetail.state}
+          </span>
+          <span className="text-xs text-gray-500">
+            Config: {configDetail.config_id}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {configDetail.state === 'ACTIVE' ? (
+            <button
+              onClick={() => setShowConfirmSuspend(true)}
+              disabled={isPushing}
+              className="flex items-center gap-1 px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 disabled:opacity-50"
+            >
+              <Pause className="h-3 w-3" />
+              Suspend
+            </button>
+          ) : (
+            <button
+              onClick={() => activateMutation.mutate()}
+              disabled={isPushing}
+              className="flex items-center gap-1 px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50"
+            >
+              {activateMutation.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Play className="h-3 w-3" />
+              )}
+              Activate
+            </button>
+          )}
+          <button
+            onClick={() => refetchDetail()}
+            className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+            title="Refresh from Google"
+          >
+            <RefreshCw className="h-3 w-3" />
+          </button>
         </div>
       </div>
+
+      {/* Confirmation dialogs */}
+      {showConfirmPush && (
+        <div className="px-4 py-3 bg-blue-50 border-b border-blue-200">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-5 w-5 text-blue-600 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-blue-900">
+                Push {pendingChanges.length} change(s) to Google?
+              </p>
+              <p className="text-xs text-blue-700 mt-1">
+                This will modify your live pretargeting configuration. Changes take effect immediately.
+              </p>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={() => applyAllMutation.mutate()}
+                  disabled={applyAllMutation.isPending}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {applyAllMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4" />
+                  )}
+                  Yes, Push to Google
+                </button>
+                <button
+                  onClick={() => setShowConfirmPush(false)}
+                  disabled={applyAllMutation.isPending}
+                  className="px-3 py-1.5 bg-white text-gray-700 text-sm rounded border hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showConfirmSuspend && (
+        <div className="px-4 py-3 bg-yellow-50 border-b border-yellow-200">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-yellow-900">
+                Suspend this pretargeting config?
+              </p>
+              <p className="text-xs text-yellow-700 mt-1">
+                This will immediately stop QPS consumption. A snapshot will be saved for easy rollback.
+              </p>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={() => suspendMutation.mutate()}
+                  disabled={suspendMutation.isPending}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700 disabled:opacity-50"
+                >
+                  {suspendMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Pause className="h-4 w-4" />
+                  )}
+                  Yes, Suspend
+                </button>
+                <button
+                  onClick={() => setShowConfirmSuspend(false)}
+                  disabled={suspendMutation.isPending}
+                  className="px-3 py-1.5 bg-white text-gray-700 text-sm rounded border hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="p-4 space-y-4">
         {/* Pending changes section */}
         {hasPendingChanges && (
-          <div className="space-y-2">
+          <div className="space-y-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-medium text-yellow-800 flex items-center gap-2">
                 <Clock className="h-4 w-4" />
@@ -530,13 +714,12 @@ export function PretargetingSettingsEditor({
               </h4>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => {
-                    // Mark all as applied
-                    pendingChanges.forEach(c => markAppliedMutation.mutate(c.id));
-                  }}
-                  className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
+                  onClick={() => setShowConfirmPush(true)}
+                  disabled={isPushing}
+                  className="flex items-center gap-1 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 font-medium"
                 >
-                  Apply All
+                  <Upload className="h-3 w-3" />
+                  Push to Google
                 </button>
                 <button
                   onClick={() => {
@@ -559,6 +742,9 @@ export function PretargetingSettingsEditor({
                 />
               ))}
             </div>
+            <p className="text-xs text-yellow-700 mt-2">
+              Click "Push to Google" to apply these changes to your live pretargeting configuration.
+            </p>
           </div>
         )}
 
