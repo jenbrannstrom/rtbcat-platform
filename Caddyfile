@@ -2,25 +2,44 @@
 # Automatic HTTPS with Let's Encrypt + Optional Basic Auth
 
 {$DOMAIN:localhost} {
-    # Basic auth - always enabled when credentials are configured
-    basic_auth {
-        {$BASIC_AUTH_USER:admin} {$BASIC_AUTH_HASH}
+    # Login page - no auth required
+    handle /login {
+        root * /srv
+        file_server
+        rewrite * /login.html
     }
 
-    # API routes - proxy to FastAPI
-    handle /api/* {
-        uri strip_prefix /api
-        reverse_proxy api:8000
-    }
-
-    # Health check (no auth for load balancers)
+    # Health check - no auth for load balancers
     handle /health {
         reverse_proxy api:8000
     }
 
-    # Everything else goes to dashboard
-    handle {
-        reverse_proxy dashboard:3000
+    # Check for valid auth cookie
+    @authenticated {
+        header_regexp Cookie catscan_auth=19601b5db00786dc44d7fa57fd72298f3bdd9ef54e2233d2547071c7ab45df17
+    }
+
+    # Redirect to login if not authenticated
+    @not_authenticated {
+        not header_regexp Cookie catscan_auth=19601b5db00786dc44d7fa57fd72298f3bdd9ef54e2233d2547071c7ab45df17
+    }
+
+    handle @not_authenticated {
+        redir * /login
+    }
+
+    # Authenticated users get access
+    handle @authenticated {
+        # API routes - proxy to FastAPI
+        handle /api/* {
+            uri strip_prefix /api
+            reverse_proxy api:8000
+        }
+
+        # Dashboard
+        handle {
+            reverse_proxy dashboard:3000
+        }
     }
 
     # Security headers
