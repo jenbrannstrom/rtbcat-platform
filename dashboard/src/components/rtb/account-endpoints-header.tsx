@@ -1,10 +1,11 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { getRTBEndpoints } from '@/lib/api';
-import { Server, AlertTriangle, Globe } from 'lucide-react';
+import { getRTBEndpoints, getPretargetingConfigs } from '@/lib/api';
+import { Server, AlertTriangle, Globe, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAccount } from '@/contexts/account-context';
+import { useState } from 'react';
 
 // Helper to format trading location for display
 function formatLocation(location: string | null): string {
@@ -19,21 +20,28 @@ function formatLocation(location: string | null): string {
   return map[location] || location;
 }
 
-// Helper to format QPS
+// Helper to format QPS - show exact amounts with commas
 function formatQPS(qps: number | null): string {
   if (qps === null) return 'Unlimited';
-  if (qps >= 1000000) return `${(qps / 1000000).toFixed(1)}M`;
-  if (qps >= 1000) return `${(qps / 1000).toFixed(0)}K`;
-  return qps.toString();
+  return qps.toLocaleString();
 }
 
 export function AccountEndpointsHeader() {
   const { selectedServiceAccountId } = useAccount();
+  const [showQpsInfo, setShowQpsInfo] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['rtb-endpoints', selectedServiceAccountId],
     queryFn: () => getRTBEndpoints({ service_account_id: selectedServiceAccountId || undefined }),
   });
+
+  // Also fetch pretargeting configs to count active ones
+  const { data: configsData } = useQuery({
+    queryKey: ['pretargeting-configs', selectedServiceAccountId],
+    queryFn: () => getPretargetingConfigs({ service_account_id: selectedServiceAccountId || undefined }),
+  });
+
+  const activeConfigsCount = configsData?.filter(c => c.state === 'ACTIVE').length || 0;
 
   // Loading skeleton
   if (isLoading) {
@@ -147,7 +155,35 @@ export function AccountEndpointsHeader() {
 
         {/* Right: QPS Summary */}
         <div className="w-64 bg-gray-50 rounded-lg p-4">
-          <div className="text-sm text-gray-500 mb-1">Total QPS Allocated</div>
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-500 mb-1">Total QPS Allocated</div>
+            <div className="relative">
+              <button
+                onClick={() => setShowQpsInfo(!showQpsInfo)}
+                onMouseEnter={() => setShowQpsInfo(true)}
+                onMouseLeave={() => setShowQpsInfo(false)}
+                className="p-1 hover:bg-gray-200 rounded-full transition-colors"
+                aria-label="QPS allocation info"
+              >
+                <Info className="h-4 w-4 text-gray-400" />
+              </button>
+              {showQpsInfo && (
+                <div className="absolute right-0 top-6 w-72 p-3 bg-white border border-gray-200 rounded-lg shadow-lg z-10 text-xs text-gray-600">
+                  <p className="font-medium text-gray-900 mb-1">QPS Allocation</p>
+                  <p className="mb-2">
+                    This is the total QPS your endpoints can handle.
+                    {activeConfigsCount > 0 && (
+                      <> You have <strong>{activeConfigsCount}</strong> active pretargeting config{activeConfigsCount !== 1 ? 's' : ''} competing for this QPS.</>
+                    )}
+                  </p>
+                  <p className="text-yellow-700 bg-yellow-50 p-2 rounded">
+                    <strong>Tip:</strong> If your pretargeting QPS budget exceeds your endpoint allocation,
+                    you may be losing traffic. Check your pretargeting configs.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
           <div className="text-2xl font-bold text-gray-900 mb-3">
             {formatQPS(data.total_qps_allocated)}
           </div>

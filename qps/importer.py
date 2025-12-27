@@ -66,6 +66,8 @@ OPTIONAL_COLUMNS = {
     "publisher_id": ["Publisher ID", "#Publisher ID"],
     "publisher_name": ["Publisher name", "#Publisher name"],
     "publisher_domain": ["Publisher domain", "#Publisher domain"],
+    "bid_requests": ["Bid requests", "#Bid requests"],  # Publisher bids metric
+    "inventory_matches": ["Inventory matches", "#Inventory matches"],  # Pre-filter matches
     "deal_id": ["Deal ID", "#Deal ID"],
     "deal_name": ["Deal name", "#Deal name"],
     "transaction_type": ["Transaction type", "#Transaction type"],
@@ -478,6 +480,10 @@ def import_csv(
                     buyer_account_id = get_opt("buyer_account_id")
                     buyer_account_name = get_opt("buyer_account_name")
 
+                    # Bid funnel metrics
+                    bid_requests = get_opt_int("bid_requests") or 0
+                    inventory_matches = get_opt_int("inventory_matches") or 0
+
                     clicks = get_opt_int("clicks") or 0
                     spend_raw = parse_float(row.get(column_map.get("spend", ""), 0)) or 0
                     spend_micros = int(spend_raw * 1_000_000)
@@ -541,7 +547,7 @@ def import_csv(
                         app_id, app_name, publisher_id, publisher_name, publisher_domain,
                         deal_id, deal_name, transaction_type,
                         advertiser, buyer_account_id, buyer_account_name,
-                        reached, impressions, clicks, spend_micros,
+                        bid_requests, reached, impressions, clicks, spend_micros,
                         video_starts, video_first_quartile, video_midpoint,
                         video_third_quartile, video_completions, vast_errors, engaged_views,
                         active_view_measurable, active_view_viewable,
@@ -615,7 +621,7 @@ def _insert_batch(cursor: sqlite3.Cursor, batch: List[Tuple]) -> Tuple[int, int]
                     app_id, app_name, publisher_id, publisher_name, publisher_domain,
                     deal_id, deal_name, transaction_type,
                     advertiser, buyer_account_id, buyer_account_name,
-                    reached_queries, impressions, clicks, spend_micros,
+                    bids, reached_queries, impressions, clicks, spend_micros,
                     video_starts, video_first_quartile, video_midpoint,
                     video_third_quartile, video_completions, vast_errors, engaged_views,
                     active_view_measurable, active_view_viewable,
@@ -624,7 +630,7 @@ def _insert_batch(cursor: sqlite3.Cursor, batch: List[Tuple]) -> Tuple[int, int]
                     bidder_id
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
             """, row)
             inserted += 1
