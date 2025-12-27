@@ -5,7 +5,8 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   RefreshCw, AlertTriangle, TrendingUp, BarChart3, Globe,
-  Copy, CheckCircle, ArrowRight, Trophy, AlertCircle, Ban, Upload
+  Copy, CheckCircle, ArrowRight, Trophy, AlertCircle, Ban, Upload,
+  ArrowUp, ArrowDown, ChevronsUpDown
 } from "lucide-react";
 import { AccountEndpointsHeader } from "@/components/rtb/account-endpoints-header";
 import { PretargetingConfigCard, type PretargetingConfig } from "@/components/rtb/pretargeting-config-card";
@@ -859,6 +860,21 @@ function WasteAnalysisContent() {
   const [days, setDays] = useState<number>(initialDays);
   const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
 
+  // Sorting state for pretargeting configs
+  type SortColumn = 'name' | 'reached' | 'win_rate' | 'waste_rate';
+  type SortDirection = 'asc' | 'desc';
+  const [sortColumn, setSortColumn] = useState<SortColumn>('waste_rate');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  const handleSort = useCallback((column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('desc'); // Default to descending for new column
+    }
+  }, [sortColumn]);
+
   const updateUrl = useCallback(
     (newDays: number) => {
       const params = new URLSearchParams();
@@ -944,10 +960,41 @@ function WasteAnalysisContent() {
   const configPerformanceMap = new Map<string, { reached: number; impressions: number; win_rate: number; waste_rate: number }>();
   // If we have config-level data from the funnel, use it (placeholder for now)
 
-  // Transform configs for display
-  const displayConfigs = (pretargetingConfigs || []).map(config =>
+  // Transform configs for display and sort
+  const unsortedConfigs = (pretargetingConfigs || []).map(config =>
     transformConfigToProps(config, configPerformanceMap.get(config.billing_id || config.config_id))
   );
+
+  // Sort configs based on current sort settings
+  const displayConfigs = [...unsortedConfigs].sort((a, b) => {
+    let aVal: number | string;
+    let bVal: number | string;
+
+    switch (sortColumn) {
+      case 'name':
+        aVal = a.name.toLowerCase();
+        bVal = b.name.toLowerCase();
+        break;
+      case 'reached':
+        aVal = a.reached;
+        bVal = b.reached;
+        break;
+      case 'win_rate':
+        aVal = a.win_rate;
+        bVal = b.win_rate;
+        break;
+      case 'waste_rate':
+      default:
+        aVal = a.waste_rate;
+        bVal = b.waste_rate;
+        break;
+    }
+
+    if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
+
   const activeConfigsCount = displayConfigs.filter(c => c.state === 'ACTIVE').length;
 
   return (
@@ -1088,6 +1135,46 @@ function WasteAnalysisContent() {
           </div>
         ) : (
           <div className="space-y-2">
+            {/* Sortable Column Headers */}
+            <div className="flex items-center px-4 py-2 bg-gray-100 rounded-t-lg text-xs font-medium text-gray-600 uppercase tracking-wider">
+              <button
+                onClick={() => handleSort('name')}
+                className="flex items-center gap-1 flex-1 hover:text-gray-900"
+              >
+                Name
+                {sortColumn === 'name' ? (
+                  sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                ) : <ChevronsUpDown className="h-3 w-3 text-gray-400" />}
+              </button>
+              <button
+                onClick={() => handleSort('reached')}
+                className="flex items-center gap-1 w-24 justify-end hover:text-gray-900"
+              >
+                Reached
+                {sortColumn === 'reached' ? (
+                  sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                ) : <ChevronsUpDown className="h-3 w-3 text-gray-400" />}
+              </button>
+              <button
+                onClick={() => handleSort('win_rate')}
+                className="flex items-center gap-1 w-24 justify-end hover:text-gray-900"
+              >
+                Win Rate
+                {sortColumn === 'win_rate' ? (
+                  sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                ) : <ChevronsUpDown className="h-3 w-3 text-gray-400" />}
+              </button>
+              <button
+                onClick={() => handleSort('waste_rate')}
+                className="flex items-center gap-1 w-24 justify-end hover:text-gray-900"
+              >
+                Waste
+                {sortColumn === 'waste_rate' ? (
+                  sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                ) : <ChevronsUpDown className="h-3 w-3 text-gray-400" />}
+              </button>
+              <div className="w-8" /> {/* Spacer for expand button */}
+            </div>
             {displayConfigs.map(config => (
               <div key={config.billing_id}>
                 <PretargetingConfigCard
