@@ -46,7 +46,8 @@ function FunnelCard({
   impressions: number;
   days: number;
 }) {
-  const hasFunnelData = bidRequests !== null && reached !== null;
+  // Only require reached to show funnel (bid_requests is optional)
+  const hasFunnelData = reached !== null && reached > 0;
 
   const winRate = reached && impressions ? (impressions / reached * 100) : null;
 
