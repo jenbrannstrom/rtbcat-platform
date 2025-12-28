@@ -207,10 +207,10 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
     <div
       className={cn(
         'border rounded-lg transition-all',
-        config.state === 'SUSPENDED' && 'opacity-60 bg-gray-50',
-        isCriticalWaste && 'border-red-300 bg-red-50/30',
-        isHighWaste && !isCriticalWaste && 'border-orange-300 bg-orange-50/30',
-        !isHighWaste && 'border-gray-200 bg-white'
+        config.state === 'SUSPENDED' && 'opacity-60 bg-gray-50 border-gray-300',
+        config.state === 'ACTIVE' && 'bg-green-50/50 border-green-300',
+        config.state === 'ACTIVE' && isCriticalWaste && 'border-l-4 border-l-red-400',
+        config.state === 'ACTIVE' && isHighWaste && !isCriticalWaste && 'border-l-4 border-l-orange-400'
       )}
     >
       {/* Main row - clickable to expand */}
@@ -291,7 +291,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
         {/* State badge */}
         {config.state === 'SUSPENDED' && (
           <span className="px-2 py-0.5 bg-gray-200 text-gray-600 text-xs rounded">
-            Suspended
+            Paused
           </span>
         )}
 
