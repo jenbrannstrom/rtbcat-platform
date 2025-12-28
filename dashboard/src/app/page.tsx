@@ -14,7 +14,7 @@ import { ConfigBreakdownPanel } from "@/components/rtb/config-breakdown-panel";
 import { RecommendedOptimizationsPanel } from "@/components/rtb/recommended-optimizations-panel";
 import {
   getQPSSummary, getQPSSizeCoverage, getRTBFunnel, getSpendStats,
-  getPretargetingConfigs, syncPretargetingConfigs,
+  getPretargetingConfigs, syncPretargetingConfigs, getRTBFunnelConfigs,
   type PublisherPerformance, type GeoPerformance, type PretargetingConfigResponse
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -934,6 +934,15 @@ function WasteAnalysisContent() {
     queryFn: () => getPretargetingConfigs({ service_account_id: selectedServiceAccountId || undefined }),
   });
 
+  // Fetch config-level performance data
+  const {
+    data: configPerformance,
+    refetch: refetchConfigPerf,
+  } = useQuery({
+    queryKey: ["rtb-funnel-configs", days],
+    queryFn: () => getRTBFunnelConfigs(days),
+  });
+
   // Sync pretargeting mutation
   const syncConfigsMutation = useMutation({
     mutationFn: () => syncPretargetingConfigs({ service_account_id: selectedServiceAccountId || undefined }),
@@ -947,6 +956,7 @@ function WasteAnalysisContent() {
     refetchFunnel();
     refetchSpend();
     refetchConfigs();
+    refetchConfigPerf();
   };
 
   // Use real funnel data if available (has_data can be at top level or in funnel)
@@ -959,9 +969,18 @@ function WasteAnalysisContent() {
   const publishers = rtbFunnel?.publishers || [];
   const geos = rtbFunnel?.geos || [];
 
-  // Build a map of billing_id to performance data from qpsSummary or rtbFunnel
+  // Build a map of billing_id to performance data from config performance API
   const configPerformanceMap = new Map<string, { reached: number; impressions: number; win_rate: number; waste_rate: number }>();
-  // If we have config-level data from the funnel, use it (placeholder for now)
+  if (configPerformance?.configs) {
+    for (const cfg of configPerformance.configs) {
+      configPerformanceMap.set(cfg.billing_id, {
+        reached: cfg.reached_queries || 0,
+        impressions: cfg.impressions || 0,
+        win_rate: cfg.win_rate || 0,
+        waste_rate: 100 - (cfg.win_rate || 0),
+      });
+    }
+  }
 
   // Transform configs for display and sort
   const unsortedConfigs = (pretargetingConfigs || []).map(config =>
