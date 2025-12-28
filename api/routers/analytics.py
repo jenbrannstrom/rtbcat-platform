@@ -732,36 +732,166 @@ async def get_spend_stats(
 
 
 @router.get("/analytics/rtb-funnel", tags=["RTB Analytics"])
-async def get_rtb_funnel():
+async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
     """
-    Get RTB funnel analysis from Google Authorized Buyers data.
+    Get RTB funnel analysis from database.
 
-    Parses the bidding metrics CSVs to provide:
-    - Funnel summary: Bid Requests → Reached Queries → Impressions
+    Provides:
+    - Funnel summary: Reached Queries → Impressions
     - Publisher performance with win rates
     - Geographic breakdown
-    - Creative-level metrics
     """
     try:
-        analyzer = RTBFunnelAnalyzer()
-        return analyzer.get_full_analysis()
+        # Get funnel summary from database
+        funnel_row = await db_query_one("""
+            SELECT
+                SUM(reached_queries) as total_reached,
+                SUM(impressions) as total_impressions,
+                SUM(bids) as total_bids,
+                COUNT(DISTINCT publisher_id) as publisher_count,
+                COUNT(DISTINCT country) as country_count
+            FROM rtb_daily
+            WHERE metric_date >= date('now', ?)
+        """, (f'-{days} days',))
+
+        total_reached = funnel_row["total_reached"] or 0
+        total_impressions = funnel_row["total_impressions"] or 0
+        total_bids = funnel_row["total_bids"] or 0
+
+        win_rate = (total_impressions / total_reached * 100) if total_reached > 0 else 0
+        waste_rate = 100 - win_rate
+
+        # Get top publishers
+        pub_rows = await db_query("""
+            SELECT
+                publisher_id,
+                publisher_name,
+                SUM(reached_queries) as reached,
+                SUM(impressions) as impressions
+            FROM rtb_daily
+            WHERE metric_date >= date('now', ?) AND publisher_id IS NOT NULL
+            GROUP BY publisher_id
+            ORDER BY reached DESC
+            LIMIT 10
+        """, (f'-{days} days',))
+
+        publishers = []
+        for row in pub_rows:
+            reached = row["reached"] or 0
+            imps = row["impressions"] or 0
+            pub_win_rate = (imps / reached * 100) if reached > 0 else 0
+            publishers.append({
+                "publisher_id": row["publisher_id"],
+                "publisher_name": row["publisher_name"] or row["publisher_id"],
+                "reached_queries": reached,
+                "impressions": imps,
+                "win_rate": round(pub_win_rate, 2),
+                "waste_pct": round(100 - pub_win_rate, 2),
+            })
+
+        # Get top geos
+        geo_rows = await db_query("""
+            SELECT
+                country,
+                SUM(reached_queries) as reached,
+                SUM(impressions) as impressions
+            FROM rtb_daily
+            WHERE metric_date >= date('now', ?) AND country IS NOT NULL
+            GROUP BY country
+            ORDER BY reached DESC
+            LIMIT 10
+        """, (f'-{days} days',))
+
+        geos = []
+        for row in geo_rows:
+            reached = row["reached"] or 0
+            imps = row["impressions"] or 0
+            geo_win_rate = (imps / reached * 100) if reached > 0 else 0
+            geos.append({
+                "country": row["country"],
+                "reached_queries": reached,
+                "impressions": imps,
+                "win_rate": round(geo_win_rate, 2),
+                "waste_pct": round(100 - geo_win_rate, 2),
+            })
+
+        return {
+            "has_data": total_reached > 0,
+            "funnel": {
+                "total_reached_queries": total_reached,
+                "total_impressions": total_impressions,
+                "total_bids": total_bids,
+                "win_rate": round(win_rate, 2),
+                "waste_rate": round(waste_rate, 2),
+            },
+            "publishers": publishers,
+            "geos": geos,
+            "data_sources": {
+                "publisher_count": funnel_row["publisher_count"] or 0,
+                "country_count": funnel_row["country_count"] or 0,
+                "period_days": days,
+            }
+        }
     except Exception as e:
         logger.error(f"Failed to get RTB funnel data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/analytics/rtb-funnel/publishers", tags=["RTB Analytics"])
-async def get_rtb_publishers(limit: int = Query(30, ge=1, le=100)):
+async def get_rtb_publishers(
+    limit: int = Query(30, ge=1, le=100),
+    days: int = Query(7, ge=1, le=90)
+):
     """
-    Get publisher performance breakdown.
+    Get publisher performance breakdown from database.
 
     Shows win rates and pretargeting filter rates by publisher.
     """
     try:
-        analyzer = RTBFunnelAnalyzer()
+        # Query publisher data from database
+        rows = await db_query("""
+            SELECT
+                publisher_id,
+                publisher_name,
+                SUM(reached_queries) as total_reached,
+                SUM(impressions) as total_impressions,
+                SUM(bids) as total_bids
+            FROM rtb_daily
+            WHERE metric_date >= date('now', ?)
+            GROUP BY publisher_id, publisher_name
+            ORDER BY total_reached DESC
+            LIMIT ?
+        """, (f'-{days} days', limit))
+
+        # Get total count
+        count_row = await db_query_one("""
+            SELECT COUNT(DISTINCT publisher_id) as total
+            FROM rtb_daily
+            WHERE metric_date >= date('now', ?)
+        """, (f'-{days} days',))
+
+        publishers = []
+        for row in rows:
+            reached = row["total_reached"] or 0
+            imps = row["total_impressions"] or 0
+            bids = row["total_bids"] or 0
+            win_rate = (imps / reached * 100) if reached > 0 else 0
+            bid_rate = (bids / reached * 100) if reached > 0 else 0
+            publishers.append({
+                "publisher_id": row["publisher_id"],
+                "publisher_name": row["publisher_name"] or row["publisher_id"],
+                "reached_queries": reached,
+                "impressions": imps,
+                "bids": bids,
+                "win_rate": round(win_rate, 2),
+                "bid_rate": round(bid_rate, 2),
+                "waste_pct": round(100 - win_rate, 2),
+            })
+
         return {
-            "publishers": analyzer.get_publisher_performance(limit=limit),
-            "count": len(analyzer._publishers) if analyzer._data_loaded else 0,
+            "publishers": publishers,
+            "count": count_row["total"] if count_row else 0,
+            "period_days": days,
         }
     except Exception as e:
         logger.error(f"Failed to get publisher performance: {e}")
@@ -769,17 +899,58 @@ async def get_rtb_publishers(limit: int = Query(30, ge=1, le=100)):
 
 
 @router.get("/analytics/rtb-funnel/geos", tags=["RTB Analytics"])
-async def get_rtb_geos(limit: int = Query(30, ge=1, le=100)):
+async def get_rtb_geos(
+    limit: int = Query(30, ge=1, le=100),
+    days: int = Query(7, ge=1, le=90)
+):
     """
-    Get geographic performance breakdown.
+    Get geographic performance breakdown from database.
 
     Shows win rates and auction participation by country.
     """
     try:
-        analyzer = RTBFunnelAnalyzer()
+        # Query geo data from database
+        rows = await db_query("""
+            SELECT
+                country,
+                SUM(reached_queries) as total_reached,
+                SUM(impressions) as total_impressions,
+                SUM(bids) as total_bids
+            FROM rtb_daily
+            WHERE metric_date >= date('now', ?)
+            GROUP BY country
+            ORDER BY total_reached DESC
+            LIMIT ?
+        """, (f'-{days} days', limit))
+
+        # Get total count
+        count_row = await db_query_one("""
+            SELECT COUNT(DISTINCT country) as total
+            FROM rtb_daily
+            WHERE metric_date >= date('now', ?)
+        """, (f'-{days} days',))
+
+        geos = []
+        for row in rows:
+            reached = row["total_reached"] or 0
+            imps = row["total_impressions"] or 0
+            bids = row["total_bids"] or 0
+            win_rate = (imps / reached * 100) if reached > 0 else 0
+            bid_rate = (bids / reached * 100) if reached > 0 else 0
+            geos.append({
+                "country": row["country"],
+                "reached_queries": reached,
+                "impressions": imps,
+                "bids": bids,
+                "win_rate": round(win_rate, 2),
+                "bid_rate": round(bid_rate, 2),
+                "waste_pct": round(100 - win_rate, 2),
+            })
+
         return {
-            "geos": analyzer.get_geo_performance(limit=limit),
-            "count": len(analyzer._geos) if analyzer._data_loaded else 0,
+            "geos": geos,
+            "count": count_row["total"] if count_row else 0,
+            "period_days": days,
         }
     except Exception as e:
         logger.error(f"Failed to get geo performance: {e}")
