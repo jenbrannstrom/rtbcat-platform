@@ -867,37 +867,39 @@ export async function getSpendStats(days: number = 7, billingId?: string): Promi
 export interface RTBFunnelSummary {
   has_data: boolean;
   message?: string;
-  total_bid_requests: number;
+  total_bid_requests?: number;
   total_reached_queries: number;
-  total_bids: number;
+  total_bids?: number;
   total_impressions: number;
-  pretargeting_filter_rate: number;
-  reach_rate: number;
+  pretargeting_filter_rate?: number;
+  reach_rate?: number;
   win_rate: number;
-  bid_rate: number;
+  bid_rate?: number;
+  waste_rate?: number;
 }
 
 export interface PublisherPerformance {
   publisher_id: string;
   publisher_name: string;
-  bid_requests: number;
+  bid_requests?: number;
   reached_queries: number;
-  bids: number;
+  bids?: number;
   impressions: number;
-  pretargeting_filter_rate: number;
+  pretargeting_filter_rate?: number;
   win_rate: number;
-  bid_rate: number;
+  bid_rate?: number;
 }
 
 export interface GeoPerformance {
   country: string;
-  bids: number;
+  bids?: number;
   reached_queries: number;
-  bids_in_auction: number;
-  auctions_won: number;
+  bids_in_auction?: number;
+  auctions_won?: number;
+  impressions?: number;  // Alternative to auctions_won
   win_rate: number;
-  auction_participation_rate: number;
-  creative_count: number;
+  auction_participation_rate?: number;
+  creative_count?: number;
 }
 
 export interface CreativePerformance {
@@ -911,16 +913,20 @@ export interface CreativePerformance {
 }
 
 export interface RTBFunnelResponse {
+  has_data: boolean;
   funnel: RTBFunnelSummary;
   publishers: PublisherPerformance[];
   geos: GeoPerformance[];
-  creatives: CreativePerformance[];
+  creatives?: CreativePerformance[];
   data_sources: {
-    bids_per_pub_available: boolean;
-    adx_metrics_available: boolean;
-    publishers_count: number;
-    geos_count: number;
-    creatives_count: number;
+    bids_per_pub_available?: boolean;
+    adx_metrics_available?: boolean;
+    publishers_count?: number;
+    geos_count?: number;
+    creatives_count?: number;
+    publisher_count?: number;
+    country_count?: number;
+    period_days?: number;
   };
 }
 
