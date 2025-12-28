@@ -1403,3 +1403,200 @@ async def get_viewability_waste(
     except Exception as e:
         logger.error(f"Failed to get viewability waste: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# Phase 30: App/Publisher Drill-Down Analysis
+# =============================================================================
+
+@router.get("/analytics/app-drilldown", tags=["RTB Analytics"])
+async def get_app_drilldown(
+    app_name: str = Query(..., description="App name to analyze"),
+    billing_id: Optional[str] = Query(None, description="Filter by pretargeting config"),
+    days: int = Query(7, ge=1, le=90),
+):
+    """
+    Get detailed breakdown for a specific app/publisher.
+
+    Returns:
+    - Summary stats
+    - Breakdown by creative size/format (identifies wasteful formats)
+    - Breakdown by country
+    - Breakdown by creative ID (with links to creative details)
+    """
+    try:
+        # Build base WHERE clause
+        where_clauses = ["app_name = ?"]
+        params = [app_name]
+
+        if billing_id:
+            where_clauses.append("billing_id = ?")
+            params.append(billing_id)
+
+        where_clauses.append("metric_date >= date('now', ?)")
+        params.append(f'-{days} days')
+
+        where_sql = " AND ".join(where_clauses)
+
+        # Get summary
+        summary_row = await db_query_one(f"""
+            SELECT
+                app_name,
+                app_id,
+                COUNT(DISTINCT metric_date) as days_with_data,
+                COUNT(DISTINCT creative_id) as creative_count,
+                COUNT(DISTINCT country) as country_count,
+                SUM(reached_queries) as total_reached,
+                SUM(impressions) as total_impressions,
+                SUM(clicks) as total_clicks,
+                SUM(spend_micros) as total_spend_micros
+            FROM rtb_daily
+            WHERE {where_sql}
+        """, tuple(params))
+
+        if not summary_row or not summary_row["total_reached"]:
+            return {
+                "app_name": app_name,
+                "has_data": False,
+                "message": "No data found for this app"
+            }
+
+        total_reached = summary_row["total_reached"] or 0
+        total_impressions = summary_row["total_impressions"] or 0
+        win_rate = (total_impressions / total_reached * 100) if total_reached > 0 else 0
+
+        # Get breakdown by size/format
+        size_rows = await db_query(f"""
+            SELECT
+                creative_size,
+                creative_format,
+                SUM(reached_queries) as reached,
+                SUM(impressions) as impressions,
+                SUM(clicks) as clicks,
+                SUM(spend_micros) as spend_micros
+            FROM rtb_daily
+            WHERE {where_sql}
+            GROUP BY creative_size, creative_format
+            ORDER BY reached DESC
+        """, tuple(params))
+
+        sizes = []
+        for row in size_rows:
+            reached = row["reached"] or 0
+            imps = row["impressions"] or 0
+            size_win_rate = (imps / reached * 100) if reached > 0 else 0
+            # Flag as wasteful if win rate is less than half of overall
+            is_wasteful = size_win_rate < (win_rate * 0.5) and reached > 10000
+            sizes.append({
+                "size": row["creative_size"],
+                "format": row["creative_format"],
+                "reached": reached,
+                "impressions": imps,
+                "clicks": row["clicks"] or 0,
+                "spend_usd": (row["spend_micros"] or 0) / 1_000_000,
+                "win_rate": round(size_win_rate, 1),
+                "waste_pct": round(100 - size_win_rate, 1),
+                "pct_of_traffic": round(reached / total_reached * 100, 1) if total_reached > 0 else 0,
+                "is_wasteful": is_wasteful,
+            })
+
+        # Get breakdown by country
+        country_rows = await db_query(f"""
+            SELECT
+                country,
+                SUM(reached_queries) as reached,
+                SUM(impressions) as impressions,
+                SUM(clicks) as clicks,
+                SUM(spend_micros) as spend_micros
+            FROM rtb_daily
+            WHERE {where_sql}
+            GROUP BY country
+            ORDER BY reached DESC
+        """, tuple(params))
+
+        countries = []
+        for row in country_rows:
+            reached = row["reached"] or 0
+            imps = row["impressions"] or 0
+            country_win_rate = (imps / reached * 100) if reached > 0 else 0
+            countries.append({
+                "country": row["country"],
+                "reached": reached,
+                "impressions": imps,
+                "clicks": row["clicks"] or 0,
+                "spend_usd": (row["spend_micros"] or 0) / 1_000_000,
+                "win_rate": round(country_win_rate, 1),
+                "pct_of_traffic": round(reached / total_reached * 100, 1) if total_reached > 0 else 0,
+            })
+
+        # Get breakdown by creative (top 10)
+        creative_rows = await db_query(f"""
+            SELECT
+                creative_id,
+                creative_size,
+                creative_format,
+                SUM(reached_queries) as reached,
+                SUM(impressions) as impressions,
+                SUM(clicks) as clicks,
+                SUM(spend_micros) as spend_micros
+            FROM rtb_daily
+            WHERE {where_sql}
+            GROUP BY creative_id, creative_size, creative_format
+            ORDER BY reached DESC
+            LIMIT 10
+        """, tuple(params))
+
+        creatives = []
+        for row in creative_rows:
+            reached = row["reached"] or 0
+            imps = row["impressions"] or 0
+            creative_win_rate = (imps / reached * 100) if reached > 0 else 0
+            creatives.append({
+                "creative_id": row["creative_id"],
+                "size": row["creative_size"],
+                "format": row["creative_format"],
+                "reached": reached,
+                "impressions": imps,
+                "clicks": row["clicks"] or 0,
+                "spend_usd": (row["spend_micros"] or 0) / 1_000_000,
+                "win_rate": round(creative_win_rate, 1),
+                "pct_of_traffic": round(reached / total_reached * 100, 1) if total_reached > 0 else 0,
+            })
+
+        # Identify the main waste source
+        wasteful_sizes = [s for s in sizes if s["is_wasteful"]]
+        waste_insight = None
+        if wasteful_sizes:
+            worst = max(wasteful_sizes, key=lambda x: x["reached"])
+            waste_insight = {
+                "type": "size",
+                "value": worst["size"],
+                "message": f"{worst['size']} has only {worst['win_rate']}% win rate but accounts for {worst['pct_of_traffic']}% of traffic",
+                "wasted_queries": int(worst["reached"] * (1 - worst["win_rate"] / 100)),
+                "recommendation": f"Consider removing {worst['size']} from pretargeting for this app"
+            }
+
+        return {
+            "app_name": app_name,
+            "app_id": summary_row["app_id"],
+            "has_data": True,
+            "period_days": days,
+            "summary": {
+                "total_reached": total_reached,
+                "total_impressions": total_impressions,
+                "total_clicks": summary_row["total_clicks"] or 0,
+                "total_spend_usd": (summary_row["total_spend_micros"] or 0) / 1_000_000,
+                "win_rate": round(win_rate, 1),
+                "waste_rate": round(100 - win_rate, 1),
+                "days_with_data": summary_row["days_with_data"],
+                "creative_count": summary_row["creative_count"],
+                "country_count": summary_row["country_count"],
+            },
+            "by_size": sizes,
+            "by_country": countries,
+            "by_creative": creatives,
+            "waste_insight": waste_insight,
+        }
+    except Exception as e:
+        logger.error(f"Failed to get app drilldown: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -4,7 +4,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getConfigBreakdown, type ConfigBreakdownType, type ConfigBreakdownItem } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Loader2, AlertCircle, Check, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertCircle, Check, AlertTriangle, ChevronRight } from 'lucide-react';
+import { AppDrilldownModal } from './app-drilldown-modal';
 
 interface ConfigBreakdownPanelProps {
   billing_id: string;
@@ -69,6 +70,7 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
   const [activeTab, setActiveTab] = useState<ConfigBreakdownType>('size');
   const contentRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
+  const [selectedApp, setSelectedApp] = useState<string | null>(null);
 
   // Query for breakdown data
   const { data, isLoading, error } = useQuery({
@@ -150,21 +152,27 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
             <div className="divide-y divide-gray-100">
               {sortedBreakdown.map((item, index) => {
                 const status = getStatus(item);
+                const isClickable = activeTab === 'publisher';
                 return (
                   <div
                     key={`${item.name}-${index}`}
+                    onClick={() => isClickable && setSelectedApp(item.name)}
                     className={cn(
                       'grid grid-cols-12 gap-2 px-3 py-2 text-sm items-center',
                       'hover:bg-gray-50 transition-colors',
                       status === 'critical' && 'bg-red-50/50',
-                      status === 'warning' && 'bg-orange-50/30'
+                      status === 'warning' && 'bg-orange-50/30',
+                      isClickable && 'cursor-pointer hover:bg-blue-50'
                     )}
                   >
                     <div className="col-span-1">
                       <StatusIndicator status={status} />
                     </div>
-                    <div className="col-span-4 font-medium text-gray-900 truncate" title={item.name}>
+                    <div className="col-span-4 font-medium text-gray-900 truncate flex items-center gap-1" title={item.name}>
                       {item.name}
+                      {isClickable && (
+                        <ChevronRight className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                      )}
                     </div>
                     <div className="col-span-2 text-right text-gray-600 font-mono text-xs">
                       {formatNumber(item.reached)}
@@ -198,6 +206,15 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
               })}
             </div>
           </div>
+        )}
+
+        {/* Drill-down modal */}
+        {selectedApp && (
+          <AppDrilldownModal
+            appName={selectedApp}
+            billingId={billing_id}
+            onClose={() => setSelectedApp(null)}
+          />
         )}
       </div>
     </div>
