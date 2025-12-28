@@ -1564,3 +1564,85 @@ export async function rollbackPretargeting(
     }
   );
 }
+
+// =============================================================================
+// App/Publisher Drill-Down API
+// =============================================================================
+
+export interface AppDrilldownSizeItem {
+  size: string;
+  format: string;
+  reached: number;
+  impressions: number;
+  clicks: number;
+  spend_usd: number;
+  win_rate: number;
+  waste_pct: number;
+  pct_of_traffic: number;
+  is_wasteful: boolean;
+}
+
+export interface AppDrilldownCountryItem {
+  country: string;
+  reached: number;
+  impressions: number;
+  clicks: number;
+  spend_usd: number;
+  win_rate: number;
+  pct_of_traffic: number;
+}
+
+export interface AppDrilldownCreativeItem {
+  creative_id: string;
+  size: string;
+  format: string;
+  reached: number;
+  impressions: number;
+  clicks: number;
+  spend_usd: number;
+  win_rate: number;
+  pct_of_traffic: number;
+}
+
+export interface AppDrilldownWasteInsight {
+  type: string;
+  value: string;
+  message: string;
+  wasted_queries: number;
+  recommendation: string;
+}
+
+export interface AppDrilldownResponse {
+  app_name: string;
+  app_id?: string;
+  has_data: boolean;
+  message?: string;
+  period_days?: number;
+  summary?: {
+    total_reached: number;
+    total_impressions: number;
+    total_clicks: number;
+    total_spend_usd: number;
+    win_rate: number;
+    waste_rate: number;
+    days_with_data: number;
+    creative_count: number;
+    country_count: number;
+  };
+  by_size?: AppDrilldownSizeItem[];
+  by_country?: AppDrilldownCountryItem[];
+  by_creative?: AppDrilldownCreativeItem[];
+  waste_insight?: AppDrilldownWasteInsight;
+}
+
+export async function getAppDrilldown(
+  appName: string,
+  billingId?: string,
+  days: number = 7
+): Promise<AppDrilldownResponse> {
+  const params = new URLSearchParams();
+  params.set("app_name", appName);
+  if (billingId) params.set("billing_id", billingId);
+  params.set("days", days.toString());
+  return fetchApi<AppDrilldownResponse>(`/analytics/app-drilldown?${params.toString()}`);
+}
