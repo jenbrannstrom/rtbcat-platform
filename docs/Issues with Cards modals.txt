@@ -1,0 +1,12 @@
+Issues with Cards/modals data shown:
+1. Spend,imp, clicks, ctr, cpm, cpc: all are aggregated data. This can skew the understanding, because clicks, ctr, cpm, cpc compared to a country is important differentiation.
+We need several grid views in a Card, eg:
+PH country: Spend,imp, clicks, ctr, cpm, cpc
+BR: PH country: Spend,imp, clicks, ctr, cpm, cpc
+etc
+
+2. Dest URL never works, eg: 104416
+https://puzzle.lucky.match.com/
+
+Where are these data being pulled from? There are several places it can be gotten and the Google UI always has at least ONE url that points to a real place
+

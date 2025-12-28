@@ -1,6 +1,6 @@
 # Cat-Scan QPS Optimizer & Creative Intelligence Tool
 
-**Version:** 24.0 | **Phase:** Schema Refactoring | **Last Updated:** December 25, 2025
+**Version:** 24.0 | **Phase:** Schema Refactoring | **Last Updated:** December 11, 2025
 
 A privacy-first QPS optimization platform for Google Authorized Buyers. Cat-Scan helps RTB bidders eliminate wasted QPS by learning which data-streams the bidder likes to bid on.
 
@@ -13,14 +13,13 @@ A privacy-first QPS optimization platform for Google Authorized Buyers. Cat-Scan
 **The Problem:** Google Authorized Buyers shows you creative IDs like `cr-12345`, but doesn't tell you:
 - How to improve efficiency of the QPS your bidder consumes
 - What QPS is unused vs what should be increased
-- allow automatic shutting & opening of pre-targeting setings to align with creative sizes that have been uploaded & approved to run
+- Which creatives are wasting your budget
 
 **The Solution:** Cat-Scan automatically:
 1. Fetches all your creatives from Authorized Buyers API
 2. Imports performance data from CSV exports
-3. Identifies size mismatches, config inefficiencies, wasted QPS (that leads to missed opportunites dueto inefficiencies)
+3. Identifies size mismatches, config inefficiencies, and fraud signals
 4. Provides actionable recommendations to reduce waste
-5. allows an automatic "throttle valve" adjusting pretargeting settings based on the creatives ready to serve
 
 **Typical waste reduction: 20-40% of QPS.**
 
@@ -66,15 +65,6 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 | **CSV Import** | Import performance data from Google reports |
 | **Gmail Auto-Import** | Automatic daily report ingestion |
 | **Video Thumbnails** | Extract from VAST XML or generate via ffmpeg |
-
-### Premium Features
-
-| Feature | Description |
-|---------|-------------|
-| **Auto-Adjust Pretargeting** | Automatically optimizes pretargeting settings every 24 hours based on newly uploaded creatives. Opens/closes "valves" to align pretargeting with available creative inventory. |
-| **Pretargeting History** | Full history recording of all pretargeting adjustments for audit and rollback. |
-
-> **Note:** Manual pretargeting optimization is available to all users. Auto-adjust runs on a 24-hour cycle and is a paid feature. The UI displays auto-adjust controls for all users, but they are greyed out for non-paying customers.
 
 ### Dashboard Pages
 
@@ -310,55 +300,15 @@ Detailed phase documentation is archived in `docs/phases/`:
 - Campaign clustering
 - RTB funnel visualization
 - Video thumbnail generation
-- Pretargeting config sync and viewing
-- RTB endpoint monitoring
 
----
+### Next Steps
 
-## QPS Optimization Roadmap
+1. **Production deployment** - Cloud server, domain, SSL
+2. **Multi-account support** - Account switching in UI
+3. **RTB Troubleshooting API** - Integrate bid metrics
+4. **Performance at scale** - Virtual scrolling, caching
 
-Cat-Scan is evolving from a **read-only analytics tool** to a **closed-loop optimization system**.
-
-### Phase 1: Pretargeting Write API (In Progress)
-Push pretargeting changes to Google Authorized Buyers:
-- Add/remove sizes, geos, formats
-- Suspend/activate configurations
-- Dry-run mode with impact preview
-
-### Phase 2: Change History & Rollback
-Full audit trail with point-in-time recovery:
-- Record all configuration changes
-- Snapshot configs before modifications
-- One-click rollback to any previous state
-- Emergency suspend with auto-snapshot
-
-### Phase 3: QPS Adjudication Engine
-Automatic optimization recommendations:
-- Identify sizes with QPS but no creatives
-- Detect geos with poor win rates
-- Calculate optimal config settings
-- Auto-apply high-confidence changes
-
-### Phase 4: AI/MCP Integration
-AI-driven optimization via Model Context Protocol:
-- Claude analyzes waste patterns
-- Proposes optimizations with reasoning
-- Human-in-the-loop for risky changes
-- Continuous learning from results
-
-**See [docs/PRETARGETING_OPTIMIZATION_ROADMAP.md](creative-intelligence/docs/PRETARGETING_OPTIMIZATION_ROADMAP.md) for complete details.**
-
----
-
-## Documentation
-
-| Document | Purpose |
-|----------|---------|
-| **[INSTALL.md](INSTALL.md)** | Detailed installation guide |
-| **[docs/PRETARGETING_OPTIMIZATION_ROADMAP.md](creative-intelligence/docs/PRETARGETING_OPTIMIZATION_ROADMAP.md)** | QPS optimization roadmap |
-| **[docs/CSV_REPORTS_GUIDE.md](creative-intelligence/docs/CSV_REPORTS_GUIDE.md)** | CSV report setup |
-| **[docs/GMAIL_OAUTH_SETUP.md](creative-intelligence/docs/GMAIL_OAUTH_SETUP.md)** | Gmail auto-import setup |
-| **[docs/AWS_DEPLOYMENT_PLAN.md](creative-intelligence/docs/AWS_DEPLOYMENT_PLAN.md)** | AWS/Terraform deployment |
+See **[docs/HANDOVER.md](docs/HANDOVER.md)** for complete roadmap.
 
 ---
 
@@ -420,4 +370,4 @@ MIT License - see [LICENSE](LICENSE) file
 
 ---
 
-**Built for RTB bidders on Google Auth Buyers who want to improve QPS efficiency.**
+**Built for RTB bidders who want to improve QPS efficiency.**
