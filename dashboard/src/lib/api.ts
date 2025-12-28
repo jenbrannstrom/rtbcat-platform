@@ -292,7 +292,14 @@ export async function importPerformanceData(
     throw new Error(error.detail || error.error || "Import failed");
   }
 
-  const result: ImportResponse = await response.json();
+  const apiResult = await response.json();
+
+  // Map API field names to frontend interface
+  const result: ImportResponse = {
+    ...apiResult,
+    imported: apiResult.rows_imported ?? apiResult.imported,
+    duplicates: apiResult.rows_duplicate ?? apiResult.duplicates,
+  };
 
   if (onProgress) {
     onProgress(100);
@@ -1612,6 +1619,14 @@ export interface AppDrilldownWasteInsight {
   recommendation: string;
 }
 
+export interface AppDrilldownBidFilteringItem {
+  reason: string;
+  bids_filtered: number;
+  bids_passed: number;
+  pct_of_filtered: number;
+  opportunity_cost_usd: number;
+}
+
 export interface AppDrilldownResponse {
   app_name: string;
   app_id?: string;
@@ -1633,6 +1648,7 @@ export interface AppDrilldownResponse {
   by_country?: AppDrilldownCountryItem[];
   by_creative?: AppDrilldownCreativeItem[];
   waste_insight?: AppDrilldownWasteInsight;
+  bid_filtering?: AppDrilldownBidFilteringItem[];
 }
 
 export async function getAppDrilldown(
