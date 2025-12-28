@@ -1,9 +1,10 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { X, Loader2, AlertTriangle, TrendingDown, Globe, Layers, Image } from 'lucide-react';
+import { X, Loader2, AlertTriangle, TrendingDown, Globe, Layers, Image, Info, HelpCircle } from 'lucide-react';
 import { getAppDrilldown, type AppDrilldownResponse } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { useState } from 'react';
 
 interface AppDrilldownModalProps {
   appName: string;
@@ -32,6 +33,30 @@ function WasteBar({ pct, height = 'h-2' }: { pct: number; height?: string }) {
       />
     </div>
   );
+}
+
+function InfoTooltip({ text }: { text: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="relative inline-block">
+      <Info
+        className="h-3.5 w-3.5 text-gray-400 hover:text-gray-600 cursor-help inline ml-1"
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+      />
+      {show && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg">
+          {text}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900" />
+        </div>
+      )}
+    </span>
+  );
+}
+
+function formatCurrency(n: number): string {
+  if (n >= 1000) return `$${(n / 1000).toFixed(1)}K`;
+  return `$${n.toFixed(2)}`;
 }
 
 export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownModalProps) {
@@ -88,33 +113,29 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
           {data && data.has_data && data.summary && (
             <div className="space-y-6">
               {/* Summary Stats */}
-              <div className="grid grid-cols-4 gap-4">
-                <div className="bg-blue-50 rounded-lg p-4 text-center">
-                  <div className="text-2xl font-bold text-blue-700">{formatNumber(data.summary.total_reached)}</div>
-                  <div className="text-xs text-blue-600">Reached</div>
+              <div className="grid grid-cols-5 gap-3">
+                <div className="bg-blue-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-blue-700">{formatNumber(data.summary.total_reached)}</div>
+                  <div className="text-xs text-blue-600">
+                    Reached
+                    <InfoTooltip text="Bid requests that reached your bidder. This is NOT 'people reached' like in Facebook Ads - it's the number of auction opportunities where your bidder was eligible to bid." />
+                  </div>
                 </div>
-                <div className="bg-green-50 rounded-lg p-4 text-center">
-                  <div className="text-2xl font-bold text-green-700">{formatNumber(data.summary.total_impressions)}</div>
+                <div className="bg-green-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-green-700">{formatNumber(data.summary.total_impressions)}</div>
                   <div className="text-xs text-green-600">Impressions</div>
                 </div>
-                <div className="bg-purple-50 rounded-lg p-4 text-center">
-                  <div className="text-2xl font-bold text-purple-700">{data.summary.win_rate}%</div>
+                <div className="bg-purple-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-purple-700">{data.summary.win_rate}%</div>
                   <div className="text-xs text-purple-600">Win Rate</div>
                 </div>
-                <div className={cn(
-                  'rounded-lg p-4 text-center',
-                  data.summary.waste_rate >= 70 ? 'bg-red-50' : 'bg-orange-50'
-                )}>
-                  <div className={cn(
-                    'text-2xl font-bold',
-                    data.summary.waste_rate >= 70 ? 'text-red-700' : 'text-orange-700'
-                  )}>
-                    {data.summary.waste_rate}%
-                  </div>
-                  <div className={cn(
-                    'text-xs',
-                    data.summary.waste_rate >= 70 ? 'text-red-600' : 'text-orange-600'
-                  )}>Waste</div>
+                <div className="bg-cyan-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-cyan-700">{formatNumber(data.summary.total_clicks)}</div>
+                  <div className="text-xs text-cyan-600">Clicks</div>
+                </div>
+                <div className="bg-amber-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-amber-700">{formatCurrency(data.summary.total_spend_usd)}</div>
+                  <div className="text-xs text-amber-600">Spend</div>
                 </div>
               </div>
 
@@ -123,15 +144,40 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
-                    <div>
+                    <div className="flex-1">
                       <h4 className="font-medium text-red-800">Waste Source Identified</h4>
                       <p className="text-sm text-red-700 mt-1">{data.waste_insight.message}</p>
-                      <p className="text-sm text-red-600 mt-2 font-medium">
-                        {data.waste_insight.recommendation}
-                      </p>
                       <p className="text-xs text-red-500 mt-1">
-                        ~{formatNumber(data.waste_insight.wasted_queries)} wasted queries
+                        ~{formatNumber(data.waste_insight.wasted_queries)} bid requests without wins
                       </p>
+
+                      {/* Why are we losing? */}
+                      <div className="mt-3 pt-3 border-t border-red-200">
+                        <h5 className="text-xs font-semibold text-red-800 flex items-center gap-1">
+                          <HelpCircle className="h-3 w-3" />
+                          Why are we losing these auctions?
+                        </h5>
+                        <ul className="mt-2 text-xs text-red-700 space-y-1">
+                          <li className="flex items-start gap-2">
+                            <span className="text-red-400">•</span>
+                            <span><strong>Bid floor:</strong> Publisher minimum bid may be higher than your bid price for this format</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="text-red-400">•</span>
+                            <span><strong>Competition:</strong> Other bidders may be bidding higher for {data.waste_insight.value} inventory</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="text-red-400">•</span>
+                            <span><strong>Creative fit:</strong> Your creative may not match the exact placement requirements</span>
+                          </li>
+                        </ul>
+                      </div>
+
+                      <div className="mt-3 p-2 bg-white/50 rounded border border-red-200">
+                        <p className="text-xs text-red-800 font-medium">
+                          💡 {data.waste_insight.recommendation}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -144,58 +190,73 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
                     <Layers className="h-4 w-4" />
                     By Size/Format
                   </h3>
-                  <div className="bg-white border rounded-lg overflow-hidden">
+                  <div className="bg-white border rounded-lg overflow-hidden overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 border-b">
                         <tr>
-                          <th className="text-left px-4 py-2 font-medium text-gray-600">Size</th>
-                          <th className="text-right px-4 py-2 font-medium text-gray-600">Reached</th>
-                          <th className="text-right px-4 py-2 font-medium text-gray-600">Win Rate</th>
-                          <th className="text-right px-4 py-2 font-medium text-gray-600">% Traffic</th>
-                          <th className="px-4 py-2 font-medium text-gray-600 w-24">Waste</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-600">Size</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">Reached</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">Imps</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">Win %</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">Clicks</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">Spend</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">CPM</th>
+                          <th className="px-3 py-2 font-medium text-gray-600 w-20">Waste</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
-                        {data.by_size.map((item, idx) => (
-                          <tr
-                            key={idx}
-                            className={cn(
-                              'hover:bg-gray-50',
-                              item.is_wasteful && 'bg-red-50'
-                            )}
-                          >
-                            <td className="px-4 py-2">
-                              <span className={cn(
-                                'font-medium',
-                                item.is_wasteful && 'text-red-700'
-                              )}>
-                                {item.size}
-                              </span>
-                              {item.is_wasteful && (
-                                <span className="ml-2 text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">
-                                  WASTEFUL
-                                </span>
+                        {data.by_size.map((item, idx) => {
+                          const cpm = item.impressions > 0 ? (item.spend_usd / item.impressions) * 1000 : 0;
+                          return (
+                            <tr
+                              key={idx}
+                              className={cn(
+                                'hover:bg-gray-50',
+                                item.is_wasteful && 'bg-red-50'
                               )}
-                            </td>
-                            <td className="px-4 py-2 text-right font-mono text-gray-600">
-                              {formatNumber(item.reached)}
-                            </td>
-                            <td className={cn(
-                              'px-4 py-2 text-right font-medium',
-                              item.win_rate >= 40 && 'text-green-600',
-                              item.win_rate >= 20 && item.win_rate < 40 && 'text-yellow-600',
-                              item.win_rate < 20 && 'text-red-600'
-                            )}>
-                              {item.win_rate}%
-                            </td>
-                            <td className="px-4 py-2 text-right text-gray-500">
-                              {item.pct_of_traffic}%
-                            </td>
-                            <td className="px-4 py-2">
-                              <WasteBar pct={item.waste_pct} />
-                            </td>
-                          </tr>
-                        ))}
+                            >
+                              <td className="px-3 py-2">
+                                <span className={cn(
+                                  'font-medium',
+                                  item.is_wasteful && 'text-red-700'
+                                )}>
+                                  {item.size}
+                                </span>
+                                {item.is_wasteful && (
+                                  <span className="ml-1 text-xs bg-red-100 text-red-700 px-1 py-0.5 rounded">
+                                    !
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">
+                                {formatNumber(item.reached)}
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">
+                                {formatNumber(item.impressions)}
+                              </td>
+                              <td className={cn(
+                                'px-3 py-2 text-right font-medium',
+                                item.win_rate >= 40 && 'text-green-600',
+                                item.win_rate >= 20 && item.win_rate < 40 && 'text-yellow-600',
+                                item.win_rate < 20 && 'text-red-600'
+                              )}>
+                                {item.win_rate}%
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">
+                                {formatNumber(item.clicks)}
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">
+                                {item.spend_usd > 0 ? formatCurrency(item.spend_usd) : '-'}
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono text-xs text-gray-500">
+                                {cpm > 0 ? `$${cpm.toFixed(2)}` : '-'}
+                              </td>
+                              <td className="px-3 py-2">
+                                <WasteBar pct={item.waste_pct} />
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -209,36 +270,44 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
                     <Globe className="h-4 w-4" />
                     By Country
                   </h3>
-                  <div className="bg-white border rounded-lg overflow-hidden">
+                  <div className="bg-white border rounded-lg overflow-hidden overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 border-b">
                         <tr>
-                          <th className="text-left px-4 py-2 font-medium text-gray-600">Country</th>
-                          <th className="text-right px-4 py-2 font-medium text-gray-600">Reached</th>
-                          <th className="text-right px-4 py-2 font-medium text-gray-600">Impressions</th>
-                          <th className="text-right px-4 py-2 font-medium text-gray-600">Win Rate</th>
-                          <th className="text-right px-4 py-2 font-medium text-gray-600">% Traffic</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-600">Country</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">Reached</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">Imps</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">Win %</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">Clicks</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">Spend</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">% Traffic</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
                         {data.by_country.map((item, idx) => (
                           <tr key={idx} className="hover:bg-gray-50">
-                            <td className="px-4 py-2 font-medium">{item.country}</td>
-                            <td className="px-4 py-2 text-right font-mono text-gray-600">
+                            <td className="px-3 py-2 font-medium">{item.country}</td>
+                            <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">
                               {formatNumber(item.reached)}
                             </td>
-                            <td className="px-4 py-2 text-right font-mono text-gray-600">
+                            <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">
                               {formatNumber(item.impressions)}
                             </td>
                             <td className={cn(
-                              'px-4 py-2 text-right font-medium',
+                              'px-3 py-2 text-right font-medium',
                               item.win_rate >= 40 && 'text-green-600',
                               item.win_rate >= 20 && item.win_rate < 40 && 'text-yellow-600',
                               item.win_rate < 20 && 'text-red-600'
                             )}>
                               {item.win_rate}%
                             </td>
-                            <td className="px-4 py-2 text-right text-gray-500">
+                            <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">
+                              {formatNumber(item.clicks)}
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">
+                              {item.spend_usd > 0 ? formatCurrency(item.spend_usd) : '-'}
+                            </td>
+                            <td className="px-3 py-2 text-right text-xs text-gray-500">
                               {item.pct_of_traffic}%
                             </td>
                           </tr>
@@ -256,38 +325,57 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
                     <Image className="h-4 w-4" />
                     By Creative (Top 10)
                   </h3>
-                  <div className="bg-white border rounded-lg overflow-hidden">
+                  <div className="bg-white border rounded-lg overflow-hidden overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 border-b">
                         <tr>
-                          <th className="text-left px-4 py-2 font-medium text-gray-600">Creative ID</th>
-                          <th className="text-left px-4 py-2 font-medium text-gray-600">Size</th>
-                          <th className="text-right px-4 py-2 font-medium text-gray-600">Reached</th>
-                          <th className="text-right px-4 py-2 font-medium text-gray-600">Win Rate</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-600">Creative ID</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-600">Size</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">Reached</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">Imps</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">Win %</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">Clicks</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">CTR</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">Spend</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
-                        {data.by_creative.map((item, idx) => (
-                          <tr key={idx} className="hover:bg-gray-50">
-                            <td className="px-4 py-2">
-                              <span className="font-mono text-xs text-gray-600 truncate block max-w-[200px]" title={item.creative_id}>
-                                {item.creative_id.length > 30 ? item.creative_id.slice(0, 30) + '...' : item.creative_id}
-                              </span>
-                            </td>
-                            <td className="px-4 py-2 text-gray-600">{item.size}</td>
-                            <td className="px-4 py-2 text-right font-mono text-gray-600">
-                              {formatNumber(item.reached)}
-                            </td>
-                            <td className={cn(
-                              'px-4 py-2 text-right font-medium',
-                              item.win_rate >= 40 && 'text-green-600',
-                              item.win_rate >= 20 && item.win_rate < 40 && 'text-yellow-600',
-                              item.win_rate < 20 && 'text-red-600'
-                            )}>
-                              {item.win_rate}%
-                            </td>
-                          </tr>
-                        ))}
+                        {data.by_creative.map((item, idx) => {
+                          const ctr = item.impressions > 0 ? (item.clicks / item.impressions) * 100 : 0;
+                          return (
+                            <tr key={idx} className="hover:bg-gray-50">
+                              <td className="px-3 py-2">
+                                <span className="font-mono text-xs text-gray-600 truncate block max-w-[180px]" title={item.creative_id}>
+                                  {item.creative_id.length > 25 ? item.creative_id.slice(0, 25) + '...' : item.creative_id}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-xs text-gray-600">{item.size}</td>
+                              <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">
+                                {formatNumber(item.reached)}
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">
+                                {formatNumber(item.impressions)}
+                              </td>
+                              <td className={cn(
+                                'px-3 py-2 text-right font-medium',
+                                item.win_rate >= 40 && 'text-green-600',
+                                item.win_rate >= 20 && item.win_rate < 40 && 'text-yellow-600',
+                                item.win_rate < 20 && 'text-red-600'
+                              )}>
+                                {item.win_rate}%
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">
+                                {formatNumber(item.clicks)}
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono text-xs text-gray-500">
+                                {ctr > 0 ? `${ctr.toFixed(2)}%` : '-'}
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">
+                                {item.spend_usd > 0 ? formatCurrency(item.spend_usd) : '-'}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
