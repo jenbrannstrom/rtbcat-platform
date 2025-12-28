@@ -957,7 +957,8 @@ function ImportResultCard({
   onReset: () => void;
   onViewCreatives: () => void;
 }) {
-  const success = result.success !== false && (result.imported ?? 0) > 0;
+  // Success if backend says success AND we processed rows (imported or duplicates)
+  const success = result.success !== false && ((result.imported ?? 0) > 0 || (result.duplicates ?? 0) > 0);
 
   return (
     <div className={`rounded-lg p-6 border ${
@@ -973,7 +974,11 @@ function ImportResultCard({
         )}
         <div className="flex-1">
           <h3 className={`font-semibold text-lg mb-4 ${success ? "text-green-900" : "text-red-900"}`}>
-            {success ? "Import Successful" : "Import Failed"}
+            {success
+              ? ((result.imported ?? 0) === 0 && (result.duplicates ?? 0) > 0
+                  ? "Already Imported"
+                  : "Import Successful")
+              : "Import Failed"}
           </h3>
 
           {/* Stats Grid */}
