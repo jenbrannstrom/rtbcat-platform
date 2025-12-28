@@ -236,7 +236,7 @@ function PublisherPerformanceSection({ publishers }: { publishers: PublisherPerf
   const highWinRate = publishers.filter(p => p.win_rate >= 40 && p.impressions > 0);
   const moderateWinRate = publishers.filter(p => p.win_rate >= 20 && p.win_rate < 40 && p.impressions > 0);
   const lowWinRate = publishers.filter(p => p.win_rate < 20 && p.impressions > 0);
-  const blocked = publishers.filter(p => p.reached_queries === 0 && p.bid_requests > 100000);
+  const blocked = publishers.filter(p => p.reached_queries === 0 && (p.bid_requests ?? 0) > 100000);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -691,18 +691,20 @@ function GeoAnalysisSection({ geos }: { geos: GeoPerformance[] }) {
     );
   }
 
-  // Sort by auctions won (wins)
-  const sortedGeos = [...geos].sort((a, b) => b.auctions_won - a.auctions_won);
+  // Sort by wins (auctions_won or impressions)
+  const sortedGeos = [...geos].sort((a, b) =>
+    (b.auctions_won ?? b.impressions ?? 0) - (a.auctions_won ?? a.impressions ?? 0)
+  );
 
   // Categorize by win rate
   const highWinRate = sortedGeos.filter(g => g.win_rate >= 80);
   const goodWinRate = sortedGeos.filter(g => g.win_rate >= 50 && g.win_rate < 80);
-  const lowWinRate = sortedGeos.filter(g => g.win_rate < 50 && g.auctions_won > 0);
+  const lowWinRate = sortedGeos.filter(g => g.win_rate < 50 && (g.auctions_won ?? g.impressions ?? 0) > 0);
 
   // Calculate totals
-  const totalBids = geos.reduce((sum, g) => sum + g.bids, 0);
+  const totalBids = geos.reduce((sum, g) => sum + (g.bids ?? 0), 0);
   const totalReached = geos.reduce((sum, g) => sum + g.reached_queries, 0);
-  const totalWins = geos.reduce((sum, g) => sum + g.auctions_won, 0);
+  const totalWins = geos.reduce((sum, g) => sum + (g.auctions_won ?? g.impressions ?? 0), 0);
   const overallWinRate = totalReached > 0 ? (totalWins / totalReached * 100) : 0;
 
   return (
@@ -756,7 +758,7 @@ function GeoAnalysisSection({ geos }: { geos: GeoPerformance[] }) {
                 <span
                   key={geo.country}
                   className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium"
-                  title={`Reached: ${formatNumber(geo.reached_queries)}, Wins: ${formatNumber(geo.auctions_won)}`}
+                  title={`Reached: ${formatNumber(geo.reached_queries)}, Wins: ${formatNumber(geo.auctions_won ?? geo.impressions ?? 0)}`}
                 >
                   {geo.country} ({geo.win_rate.toFixed(0)}%)
                 </span>
@@ -776,7 +778,7 @@ function GeoAnalysisSection({ geos }: { geos: GeoPerformance[] }) {
                 <span
                   key={geo.country}
                   className="px-2 py-1 bg-orange-100 text-orange-800 rounded text-xs font-medium"
-                  title={`Reached: ${formatNumber(geo.reached_queries)}, Wins: ${formatNumber(geo.auctions_won)}`}
+                  title={`Reached: ${formatNumber(geo.reached_queries)}, Wins: ${formatNumber(geo.auctions_won ?? geo.impressions ?? 0)}`}
                 >
                   {geo.country} ({geo.win_rate.toFixed(0)}%)
                 </span>
@@ -804,9 +806,9 @@ function GeoAnalysisSection({ geos }: { geos: GeoPerformance[] }) {
                 <td className="py-2">
                   <span className="font-medium text-gray-900">{geo.country}</span>
                 </td>
-                <td className="py-2 text-right text-gray-900">{formatNumber(geo.bids)}</td>
+                <td className="py-2 text-right text-gray-900">{formatNumber(geo.bids ?? 0)}</td>
                 <td className="py-2 text-right text-blue-600">{formatNumber(geo.reached_queries)}</td>
-                <td className="py-2 text-right text-green-600">{formatNumber(geo.auctions_won)}</td>
+                <td className="py-2 text-right text-green-600">{formatNumber(geo.auctions_won ?? geo.impressions ?? 0)}</td>
                 <td className={cn(
                   "py-2 text-right font-medium",
                   geo.win_rate < 30 ? "text-red-600" : geo.win_rate >= 60 ? "text-green-600" : "text-gray-900"
@@ -946,11 +948,11 @@ function WasteAnalysisContent() {
     refetchConfigs();
   };
 
-  // Use real funnel data if available
-  const hasFunnelData = rtbFunnel?.funnel?.has_data ?? false;
-  const bidRequests = hasFunnelData ? rtbFunnel!.funnel.total_bid_requests : null;
-  const reached = hasFunnelData ? rtbFunnel!.funnel.total_reached_queries : null;
-  const impressions = hasFunnelData ? rtbFunnel!.funnel.total_impressions : 0;
+  // Use real funnel data if available (has_data can be at top level or in funnel)
+  const hasFunnelData = rtbFunnel?.has_data ?? rtbFunnel?.funnel?.has_data ?? false;
+  const bidRequests = hasFunnelData ? (rtbFunnel?.funnel?.total_bid_requests ?? null) : null;
+  const reached = hasFunnelData ? (rtbFunnel?.funnel?.total_reached_queries ?? null) : null;
+  const impressions = hasFunnelData ? (rtbFunnel?.funnel?.total_impressions ?? 0) : 0;
 
   // Publishers and Geos from RTB data
   const publishers = rtbFunnel?.publishers || [];
