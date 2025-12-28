@@ -105,8 +105,11 @@ class CSVImportResult(BaseModel):
     fix_instructions: Optional[str] = None
     columns_found: Optional[list[str]] = None
     columns_mapped: Optional[dict] = None
+    columns_defaulted: Optional[list[str]] = None  # Fields that used default values
     required_missing: Optional[list[str]] = None
     errors: Optional[list[str]] = None
+    report_type: Optional[str] = None  # Detected report type (e.g., "performance_detail")
+    target_table: Optional[str] = None  # Table data was imported to (e.g., "rtb_daily")
 
 
 class StreamingImportProgress(BaseModel):
