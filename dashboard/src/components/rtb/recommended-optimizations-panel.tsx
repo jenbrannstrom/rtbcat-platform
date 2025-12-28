@@ -348,7 +348,7 @@ export function RecommendedOptimizationsPanel({
           'This config has significantly lower win rate. Consider narrowing geo targeting or reviewing size coverage.',
         data: {
           billing_id: config.billing_id,
-          config_name: config.config_name,
+          config_name: config.config_name ?? undefined,
           current_win_rate: config.win_rate,
           avg_win_rate: avgWinRate,
         },
