@@ -961,11 +961,11 @@ export async function getRTBGeos(
 
 export interface ConfigPerformanceItem {
   billing_id: string;
-  config_name: string | null;
-  reached_queries: number;
+  name: string | null;
+  reached: number;
   impressions: number;
-  win_rate: number;
-  size_count: number;
+  win_rate_pct: number;
+  waste_pct: number;
 }
 
 export interface ConfigPerformanceResponse {
