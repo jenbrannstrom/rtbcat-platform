@@ -333,23 +333,23 @@ export function RecommendedOptimizationsPanel({
   // Config underperforming recommendations
   if (configPerformance?.configs && configPerformance.configs.length > 0) {
     const avgWinRate =
-      configPerformance.configs.reduce((sum: number, c: ConfigPerformanceItem) => sum + (c.win_rate || 0), 0) /
+      configPerformance.configs.reduce((sum: number, c: ConfigPerformanceItem) => sum + (c.win_rate_pct || 0), 0) /
       configPerformance.configs.length;
     const underperforming = configPerformance.configs.filter(
-      (c: ConfigPerformanceItem) => c.win_rate < avgWinRate * 0.7 && c.reached_queries > 1000
+      (c: ConfigPerformanceItem) => c.win_rate_pct < avgWinRate * 0.7 && c.reached > 1000
     );
     for (const config of underperforming.slice(0, 2)) {
       recommendations.push({
         id: `config-underperforming-${config.billing_id}`,
         type: 'config_underperforming',
-        title: `${config.config_name || config.billing_id} performing below threshold`,
-        description: `Win rate ${config.win_rate?.toFixed(1)}% vs account avg ${avgWinRate.toFixed(1)}%`,
+        title: `${config.name || config.billing_id} performing below threshold`,
+        description: `Win rate ${config.win_rate_pct?.toFixed(1)}% vs account avg ${avgWinRate.toFixed(1)}%`,
         reasoning:
           'This config has significantly lower win rate. Consider narrowing geo targeting or reviewing size coverage.',
         data: {
           billing_id: config.billing_id,
-          config_name: config.config_name ?? undefined,
-          current_win_rate: config.win_rate,
+          config_name: config.name ?? undefined,
+          current_win_rate: config.win_rate_pct,
           avg_win_rate: avgWinRate,
         },
       });

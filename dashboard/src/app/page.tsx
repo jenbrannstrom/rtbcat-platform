@@ -974,10 +974,10 @@ function WasteAnalysisContent() {
   if (configPerformance?.configs) {
     for (const cfg of configPerformance.configs) {
       configPerformanceMap.set(cfg.billing_id, {
-        reached: cfg.reached_queries || 0,
+        reached: cfg.reached || 0,
         impressions: cfg.impressions || 0,
-        win_rate: cfg.win_rate || 0,
-        waste_rate: 100 - (cfg.win_rate || 0),
+        win_rate: cfg.win_rate_pct || 0,
+        waste_rate: cfg.waste_pct || 0,
       });
     }
   }
