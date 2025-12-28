@@ -30,6 +30,7 @@ from api.schemas.performance import (
     StreamingImportResult,
 )
 from qps.importer import validate_csv, import_csv
+from qps.unified_importer import unified_import
 from storage import SQLiteStore, PerformanceMetric
 from storage.database import db_execute, db_query_one, db_transaction_async
 
@@ -239,46 +240,35 @@ async def import_performance_csv(
             tmp.write(content)
             tmp_path = tmp.name
 
-        validation = validate_csv(tmp_path)
+        # Try flexible unified importer first - it auto-maps columns
+        result = unified_import(tmp_path)
 
-        if not validation.is_valid:
+        if result.success:
             return CSVImportResult(
-                success=False,
-                error=validation.error_message,
-                fix_instructions=validation.get_fix_instructions(),
-                columns_found=validation.columns_found,
-                columns_mapped=validation.columns_mapped,
-                required_missing=validation.required_missing,
+                success=True,
+                batch_id=result.batch_id,
+                rows_read=result.rows_read,
+                rows_imported=result.rows_imported,
+                rows_duplicate=result.rows_duplicate,
+                rows_skipped=result.rows_skipped,
+                date_range={
+                    "start": result.date_range_start,
+                    "end": result.date_range_end,
+                },
+                columns_imported=list(result.columns_mapped.keys()),
+                columns_mapped=result.columns_mapped,
+                columns_defaulted=result.columns_defaulted,
+                report_type=result.report_type,
+                target_table=result.target_table,
             )
 
-        result = import_csv(tmp_path)
-
-        if not result.success:
-            return CSVImportResult(
-                success=False,
-                error=result.error_message,
-                errors=result.errors,
-            )
-
+        # If unified import failed, return the error with helpful info
         return CSVImportResult(
-            success=True,
-            batch_id=result.batch_id,
-            rows_read=result.rows_read,
-            rows_imported=result.rows_imported,
-            rows_duplicate=result.rows_duplicate,
-            rows_skipped=result.rows_skipped,
-            date_range={
-                "start": result.date_range_start,
-                "end": result.date_range_end,
-            },
-            unique_creatives=result.unique_creatives,
-            unique_sizes=len(result.unique_sizes),
-            unique_countries=len(result.unique_countries),
-            billing_ids=result.unique_billing_ids,
-            total_reached=result.total_reached,
-            total_impressions=result.total_impressions,
-            total_spend_usd=result.total_spend_usd,
-            columns_imported=result.columns_imported,
+            success=False,
+            error=result.error_message,
+            errors=result.errors,
+            columns_mapped=result.columns_mapped,
+            columns_found=list(result.columns_mapped.values()) + result.columns_unmapped,
         )
 
     except Exception as e:
