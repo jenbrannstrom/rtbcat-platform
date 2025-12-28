@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cat Scan – Analytics for AWS RTB Fabric</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #fafafa;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header */
+        header {
+            background: linear-gradient(135deg, #232f3e 0%, #37475a 100%);
+            color: white;
+            padding: 60px 20px;
+            text-align: center;
+        }
+
+        .logo {
+            width: 200px;
+            height: auto;
+            margin-bottom: 20px;
+            border-radius: 12px;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .tagline {
+            font-size: 1.3rem;
+            opacity: 0.95;
+            max-width: 650px;
+            margin: 0 auto 8px;
+        }
+
+        .subtitle {
+            font-size: 1rem;
+            opacity: 0.8;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .badge-row {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .badge-fabric {
+            background: #ff9900;
+            color: #232f3e;
+        }
+
+        .badge-version {
+            background: rgba(255,255,255,0.2);
+            color: white;
+        }
+
+        /* Main content */
+        main {
+            padding: 60px 20px;
+        }
+
+        section {
+            margin-bottom: 50px;
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #232f3e;
+            border-bottom: 2px solid #ff9900;
+            padding-bottom: 10px;
+        }
+
+        /* Feature list */
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .feature {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        }
+
+        .feature h3 {
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+            color: #232f3e;
+        }
+
+        .feature p {
+            font-size: 0.95rem;
+            color: #666;
+        }
+
+        /* Deploy section */
+        .deploy-section {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        .deploy-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .deploy-header h2 {
+            border: none;
+            margin-bottom: 10px;
+        }
+
+        .open-source-note {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1rem;
+            color: #27ae60;
+            font-weight: 500;
+        }
+
+        .deploy-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .deploy-card {
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .deploy-card:hover {
+            border-color: #ff9900;
+            box-shadow: 0 4px 15px rgba(255, 153, 0, 0.15);
+        }
+
+        .deploy-card.featured {
+            border-color: #ff9900;
+            background: linear-gradient(to bottom, #fffbf5 0%, white 100%);
+        }
+
+        .deploy-card h3 {
+            font-size: 1.3rem;
+            margin-bottom: 8px;
+            color: #232f3e;
+        }
+
+        .deploy-card .card-badge {
+            display: inline-block;
+            font-size: 0.75rem;
+            padding: 3px 10px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .deploy-card.featured .card-badge {
+            background: #ff9900;
+            color: #232f3e;
+        }
+
+        .deploy-card:not(.featured) .card-badge {
+            background: #e9ecef;
+            color: #666;
+        }
+
+        .deploy-card p {
+            font-size: 0.95rem;
+            color: #666;
+            margin-bottom: 20px;
+            min-height: 60px;
+        }
+
+        .deploy-card ul {
+            text-align: left;
+            list-style: none;
+            margin-bottom: 25px;
+            font-size: 0.9rem;
+        }
+
+        .deploy-card li {
+            padding: 6px 0;
+            padding-left: 22px;
+            position: relative;
+            color: #555;
+        }
+
+        .deploy-card li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #27ae60;
+            font-weight: bold;
+        }
+
+        .deploy-btn {
+            display: inline-block;
+            padding: 14px 32px;
+            font-size: 1rem;
+            font-weight: 600;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: background 0.2s, transform 0.2s;
+        }
+
+        .deploy-btn-primary {
+            background: #ff9900;
+            color: #232f3e;
+        }
+
+        .deploy-btn-primary:hover {
+            background: #ec7211;
+            transform: translateY(-2px);
+        }
+
+        .deploy-btn-secondary {
+            background: #232f3e;
+            color: white;
+        }
+
+        .deploy-btn-secondary:hover {
+            background: #37475a;
+            transform: translateY(-2px);
+        }
+
+        .deploy-note {
+            margin-top: 12px;
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        /* GitHub box */
+        .github-box {
+            background: linear-gradient(to bottom, #fffbf5 0%, white 100%);
+            border: 2px solid #ff9900;
+            border-radius: 12px;
+            padding: 25px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .github-box-content {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .github-icon {
+            width: 40px;
+            height: 40px;
+        }
+
+        .github-box-text h3 {
+            font-size: 1.1rem;
+            color: #232f3e;
+            margin-bottom: 4px;
+        }
+
+        .github-box-text p {
+            font-size: 0.9rem;
+            color: #666;
+            margin: 0;
+        }
+
+        .github-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: #24292e;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: background 0.2s, transform 0.2s;
+        }
+
+        .github-btn:hover {
+            background: #000;
+            transform: translateY(-2px);
+        }
+
+        .github-btn svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        /* Dev options */
+        .dev-options {
+            margin-top: 25px;
+            text-align: center;
+        }
+
+        .dev-options p {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .dev-options a {
+            color: #ff9900;
+            text-decoration: none;
+        }
+
+        .dev-options a:hover {
+            text-decoration: underline;
+        }
+
+        /* Architecture diagram */
+        .arch-diagram {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            text-align: center;
+            font-family: monospace;
+            font-size: 0.85rem;
+            line-height: 1.4;
+            overflow-x: auto;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        }
+
+        .arch-diagram pre {
+            background: transparent;
+            color: #333;
+            text-align: left;
+            margin: 0;
+            padding: 0;
+        }
+
+        .arch-label {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 8px 16px;
+            background: #fff3e0;
+            border: 1px solid #ff9900;
+            border-radius: 6px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 0.85rem;
+            color: #232f3e;
+        }
+
+        /* Code blocks */
+        pre {
+            background: #232f3e;
+            color: #ecf0f1;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        code {
+            font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
+        }
+
+        /* Footer */
+        footer {
+            background: #232f3e;
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        footer a {
+            color: #ff9900;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        .footer-links {
+            margin-top: 20px;
+        }
+
+        .footer-links a {
+            margin: 0 15px;
+            color: rgba(255,255,255,0.8);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <img src="cat-scanning-stats.webp" alt="Cat Scan Logo" class="logo">
+            <h1>Cat Scan</h1>
+            <p class="tagline">RTB Analytics for AWS Fabric &amp; Beyond</p>
+            <p class="subtitle">See inside your RTB traffic. Find formats you listen to but never bid on. Spot self-inflicted issues.</p>
+            <div class="badge-row">
+                <span class="badge badge-fabric">Built for AWS RTB Fabric</span>
+                <span class="badge badge-version">v0.2.0</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section>
+            <h2>What Cat Scan Does</h2>
+            <div class="features">
+                <div class="feature">
+                    <h3>Format Analysis</h3>
+                    <p>See which ad formats you receive but never bid on. Identify waste in your listening strategy.</p>
+                </div>
+                <div class="feature">
+                    <h3>Problem Detection</h3>
+                    <p>Spot timeouts, below-floor bids, and invalid responses that hurt your performance.</p>
+                </div>
+                <div class="feature">
+                    <h3>Publisher Segments</h3>
+                    <p>Break down stats by publisher and segment to optimize your media buying.</p>
+                </div>
+                <div class="feature">
+                    <h3>Your Data Stays Yours</h3>
+                    <p>Runs entirely in your AWS account. No data leaves your environment.</p>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2>How It Works</h2>
+            <div class="arch-diagram">
+<pre>
+┌─────────────┐                      ┌──────────────┐
+│     SSP     │ ──── OpenRTB ──────► │    Bidder    │
+│  Publisher  │ ◄─── bid/no-bid ──── │    (You)     │
+└──────┬──────┘                      └──────────────┘
+       │
+       │  AWS RTB Fabric logs
+       │  (or any OpenRTB logs)
+       ▼
+┌─────────────┐
+│  S3 Bucket  │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐                      ┌─────────────┐
+│  Cat Scan   │ ──── HTML Report ──► │   Insights  │
+│  (Fargate)  │                      │   (S3)      │
+└─────────────┘                      └─────────────┘
+</pre>
+                <span class="arch-label">Runs scheduled in your AWS account via EventBridge</span>
+            </div>
+
+            <div style="margin-top: 30px;">
+                <h3 style="font-size: 1.1rem; color: #232f3e; margin-bottom: 15px; text-align: center;">What you see:</h3>
+                <iframe src="demo-report.html" style="width: 100%; height: 600px; border: none; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);"></iframe>
+                <p style="margin-top: 15px; text-align: center;">
+                    <a href="demo-report.html" target="_blank" style="color: #ff9900; text-decoration: none; font-weight: 500;">Open Full Report →</a>
+                </p>
+            </div>
+        </section>
+
+        <section class="deploy-section">
+            <div class="deploy-header">
+                <h2>Get Started</h2>
+                <span class="open-source-note">🍺 Open source, free as in beer</span>
+            </div>
+
+            <div class="github-box">
+                <div class="github-box-content">
+                    <svg class="github-icon" viewBox="0 0 24 24" fill="#24292e">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <div class="github-box-text">
+                        <h3>View on GitHub</h3>
+                        <p>Clone, fork, contribute, or run locally</p>
+                    </div>
+                </div>
+                <a href="https://github.com/rtbcat/fabric-module-1" class="github-btn" target="_blank">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    rtbcat/fabric-module-1
+                </a>
+            </div>
+
+            <div style="text-align:center; margin: 30px 0 20px; color: #888; font-size: 0.9rem;">
+                Or deploy directly to your AWS account:
+            </div>
+
+            <div class="deploy-options">
+                <div class="deploy-card featured">
+                    <h3>AWS RTB Fabric</h3>
+                    <span class="card-badge">RECOMMENDED</span>
+                    <p>Purpose-built for AWS RTB Fabric. Reads directly from Fabric's S3 log output.</p>
+                    <ul>
+                        <li>Native Fabric log format support</li>
+                        <li>Scheduled analysis via EventBridge</li>
+                        <li>Reports delivered to S3</li>
+                        <li>One-click CloudFormation deploy</li>
+                    </ul>
+                    <a href="https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?stackName=cat-scan-fabric&templateURL=https://cat-scan-public-templates.s3.eu-west-1.amazonaws.com/main.yaml"
+                       class="deploy-btn deploy-btn-primary"
+                       target="_blank">
+                        Deploy for RTB Fabric
+                    </a>
+                    <p class="deploy-note">Requires RTB Fabric with S3 logging enabled</p>
+                </div>
+
+                <div class="deploy-card">
+                    <h3>Other RTB Sources</h3>
+                    <span class="card-badge">FLEXIBLE</span>
+                    <p>Works with Google Authorized Buyers, OpenX, or any SSP that exports OpenRTB logs to S3.</p>
+                    <ul>
+                        <li>Google Authorized Buyers</li>
+                        <li>OpenX, PubMatic, Index</li>
+                        <li>Any OpenRTB JSONL logs</li>
+                        <li>Custom log formats (configurable)</li>
+                    </ul>
+                    <a href="https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?stackName=cat-scan&templateURL=https://cat-scan-public-templates.s3.eu-west-1.amazonaws.com/main.yaml"
+                       class="deploy-btn deploy-btn-secondary"
+                       target="_blank">
+                        Deploy for Other Sources
+                    </a>
+                    <p class="deploy-note">Point to any S3 bucket with OpenRTB logs</p>
+                </div>
+            </div>
+
+            <div class="dev-options">
+                <p>Prefer to run locally? See <a href="https://github.com/rtbcat/fabric-module-1#-usage">Quick Start</a> or use <a href="https://github.com/rtbcat/fabric-module-1#docker-deployment">Docker</a></p>
+            </div>
+        </section>
+
+        <section>
+            <h2>Sample Output</h2>
+            <p style="margin-bottom:15px;color:#666;">Cat Scan generates an interactive HTML report with:</p>
+            <div class="features">
+                <div class="feature">
+                    <h3>Format Stats</h3>
+                    <p>Requests, bids, bid rate, and average price by ad size. Canonical IAB size bucketing included.</p>
+                </div>
+                <div class="feature">
+                    <h3>Publisher Breakdown</h3>
+                    <p>Per-publisher and per-segment analysis with tabbed navigation.</p>
+                </div>
+                <div class="feature">
+                    <h3>Problem Formats</h3>
+                    <p>Automatic detection of zero-bid formats, non-standard sizes, and low bid rates.</p>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2>Quick Start (Local)</h2>
+            <pre><code># Clone the repo
+git clone https://github.com/rtbcat/fabric-module-1.git
+cd fabric-module-1
+
+# Run the fake bidder (Terminal 1)
+cargo run -p fake_bidder
+
+# Run the fake SSP to generate traffic (Terminal 2)
+cargo run -p fake_ssp
+
+# Analyze the logs (Terminal 3)
+cargo run -p cat_scan -- fake_ssp_logs.jsonl --out ./reports
+
+# Open the report
+open reports/report.html</code></pre>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>Made with 🐱 by <a href="https://rtb.cat">rtb.cat</a></p>
+            <div class="footer-links">
+                <a href="https://github.com/rtbcat/fabric-module-1">GitHub</a>
+                <a href="https://github.com/rtbcat/fabric-module-1/issues">Issues</a>
+                <a href="https://github.com/rtbcat/fabric-module-1/blob/main/README.md">Docs</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
