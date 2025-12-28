@@ -345,7 +345,7 @@ function PublisherPerformanceSection({ publishers }: { publishers: PublisherPerf
                   <span
                     key={pub.publisher_id}
                     className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs"
-                    title={`${formatNumber(pub.bid_requests)} bid requests`}
+                    title={`${formatNumber(pub.bid_requests ?? 0)} bid requests`}
                   >
                     {pub.publisher_name.length > 25 ? pub.publisher_name.slice(0, 25) + '...' : pub.publisher_name}
                   </span>
