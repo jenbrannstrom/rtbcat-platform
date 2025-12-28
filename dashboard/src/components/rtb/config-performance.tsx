@@ -53,7 +53,7 @@ export function ConfigPerformanceSection() {
   const { data, isLoading, error } = useQuery<ConfigPerformanceResponse>({
     queryKey: ['rtb-funnel-configs'],
     queryFn: async () => {
-      const res = await fetch('http://localhost:8000/analytics/rtb-funnel/configs');
+      const res = await fetch('/api/analytics/rtb-funnel/configs');
       if (!res.ok) throw new Error('Failed to fetch');
       return res.json();
     },
