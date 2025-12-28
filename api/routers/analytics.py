@@ -786,7 +786,6 @@ async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
                 "reached_queries": reached,
                 "impressions": imps,
                 "win_rate": round(pub_win_rate, 2),
-                "waste_pct": round(100 - pub_win_rate, 2),
             })
 
         # Get top geos
@@ -812,7 +811,6 @@ async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
                 "reached_queries": reached,
                 "impressions": imps,
                 "win_rate": round(geo_win_rate, 2),
-                "waste_pct": round(100 - geo_win_rate, 2),
             })
 
         return {
