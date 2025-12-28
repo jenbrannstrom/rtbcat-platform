@@ -32,7 +32,7 @@ export default function SettingsPage() {
 
   const { data: thumbnailStatus, isLoading: thumbnailStatusLoading } = useQuery({
     queryKey: ["thumbnailStatus"],
-    queryFn: getThumbnailStatus,
+    queryFn: () => getThumbnailStatus(),
   });
 
   const { data: systemStatus, isLoading: systemStatusLoading } = useQuery({
