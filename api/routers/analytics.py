@@ -1576,6 +1576,53 @@ async def get_app_drilldown(
                 "recommendation": f"Consider removing {worst['size']} from pretargeting for this app"
             }
 
+        # Get bid filtering reasons for creatives used in this app
+        # First get the creative IDs used in this app
+        creative_ids = [c["creative_id"] for c in creatives]
+        bid_filtering = []
+
+        if creative_ids:
+            # Check if bid_filtering table exists and has data
+            try:
+                table_check = await db_query_one("""
+                    SELECT name FROM sqlite_master
+                    WHERE type='table' AND name='rtb_bid_filtering'
+                """)
+
+                if table_check:
+                    # Query bid filtering reasons for these creatives
+                    placeholders = ",".join(["?" for _ in creative_ids])
+                    filtering_params = creative_ids + [f'-{days} days']
+
+                    filtering_rows = await db_query(f"""
+                        SELECT
+                            filtering_reason,
+                            SUM(bids) as total_bids,
+                            SUM(bids_in_auction) as bids_passed,
+                            SUM(opportunity_cost_micros) as opportunity_cost_micros
+                        FROM rtb_bid_filtering
+                        WHERE creative_id IN ({placeholders})
+                          AND metric_date >= date('now', ?)
+                        GROUP BY filtering_reason
+                        ORDER BY total_bids DESC
+                        LIMIT 10
+                    """, tuple(filtering_params))
+
+                    total_filtered_bids = sum(r["total_bids"] or 0 for r in filtering_rows)
+
+                    for row in filtering_rows:
+                        bids = row["total_bids"] or 0
+                        passed = row["bids_passed"] or 0
+                        bid_filtering.append({
+                            "reason": row["filtering_reason"],
+                            "bids_filtered": bids,
+                            "bids_passed": passed,
+                            "pct_of_filtered": round(bids / total_filtered_bids * 100, 1) if total_filtered_bids > 0 else 0,
+                            "opportunity_cost_usd": (row["opportunity_cost_micros"] or 0) / 1_000_000,
+                        })
+            except Exception as e:
+                logger.warning(f"Could not fetch bid filtering data: {e}")
+
         return {
             "app_name": app_name,
             "app_id": summary_row["app_id"],
@@ -1596,6 +1643,7 @@ async def get_app_drilldown(
             "by_country": countries,
             "by_creative": creatives,
             "waste_insight": waste_insight,
+            "bid_filtering": bid_filtering,
         }
     except Exception as e:
         logger.error(f"Failed to get app drilldown: {e}")

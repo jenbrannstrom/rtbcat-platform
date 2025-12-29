@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { X, Loader2, AlertTriangle, TrendingDown, Globe, Layers, Image, Info, HelpCircle } from 'lucide-react';
+import { X, Loader2, AlertTriangle, TrendingDown, Globe, Layers, Image, Info, HelpCircle, Filter, Ban } from 'lucide-react';
 import { getAppDrilldown, type AppDrilldownResponse } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -151,27 +151,52 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
                         ~{formatNumber(data.waste_insight.wasted_queries)} bid requests without wins
                       </p>
 
-                      {/* Why are we losing? */}
-                      <div className="mt-3 pt-3 border-t border-red-200">
-                        <h5 className="text-xs font-semibold text-red-800 flex items-center gap-1">
-                          <HelpCircle className="h-3 w-3" />
-                          Why are we losing these auctions?
-                        </h5>
-                        <ul className="mt-2 text-xs text-red-700 space-y-1">
-                          <li className="flex items-start gap-2">
-                            <span className="text-red-400">•</span>
-                            <span><strong>Bid floor:</strong> Publisher minimum bid may be higher than your bid price for this format</span>
-                          </li>
-                          <li className="flex items-start gap-2">
-                            <span className="text-red-400">•</span>
-                            <span><strong>Competition:</strong> Other bidders may be bidding higher for {data.waste_insight.value} inventory</span>
-                          </li>
-                          <li className="flex items-start gap-2">
-                            <span className="text-red-400">•</span>
-                            <span><strong>Creative fit:</strong> Your creative may not match the exact placement requirements</span>
-                          </li>
-                        </ul>
-                      </div>
+                      {/* Show actual bid filtering reasons if available, otherwise show generic hints */}
+                      {data.bid_filtering && data.bid_filtering.length > 0 ? (
+                        <div className="mt-3 pt-3 border-t border-red-200">
+                          <h5 className="text-xs font-semibold text-red-800 flex items-center gap-1">
+                            <Filter className="h-3 w-3" />
+                            Bid Filtering Reasons (from Google)
+                          </h5>
+                          <div className="mt-2 space-y-1">
+                            {data.bid_filtering.slice(0, 5).map((item, idx) => (
+                              <div key={idx} className="flex items-center justify-between text-xs">
+                                <span className="text-red-700 flex items-center gap-1">
+                                  <Ban className="h-3 w-3 text-red-400" />
+                                  {item.reason}
+                                </span>
+                                <span className="font-mono text-red-600">
+                                  {formatNumber(item.bids_filtered)} ({item.pct_of_filtered}%)
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-3 pt-3 border-t border-red-200">
+                          <h5 className="text-xs font-semibold text-red-800 flex items-center gap-1">
+                            <HelpCircle className="h-3 w-3" />
+                            Why are we losing these auctions?
+                          </h5>
+                          <ul className="mt-2 text-xs text-red-700 space-y-1">
+                            <li className="flex items-start gap-2">
+                              <span className="text-red-400">•</span>
+                              <span><strong>Bid floor:</strong> Publisher minimum bid may be higher than your bid price for this format</span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                              <span className="text-red-400">•</span>
+                              <span><strong>Competition:</strong> Other bidders may be bidding higher for {data.waste_insight.value} inventory</span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                              <span className="text-red-400">•</span>
+                              <span><strong>Creative fit:</strong> Your creative may not match the exact placement requirements</span>
+                            </li>
+                          </ul>
+                          <p className="mt-2 text-xs text-red-500 italic">
+                            Upload a "Bid Filtering" CSV report for exact reasons from Google.
+                          </p>
+                        </div>
+                      )}
 
                       <div className="mt-3 p-2 bg-white/50 rounded border border-red-200">
                         <p className="text-xs text-red-800 font-medium">
@@ -179,6 +204,60 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
                         </p>
                       </div>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Bid Filtering Full Breakdown */}
+              {data.bid_filtering && data.bid_filtering.length > 0 && (
+                <div>
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
+                    <Filter className="h-4 w-4" />
+                    Why Bids Are Filtered
+                    <InfoTooltip text="Data from Google's Bid Filtering report. Shows WHY bids didn't enter the auction - bid floor, publisher controls, creative policies, etc." />
+                  </h3>
+                  <div className="bg-white border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 border-b">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium text-gray-600">Filtering Reason</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">Bids Filtered</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">% of Total</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">Lost Spend</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {data.bid_filtering.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-gray-50">
+                            <td className="px-3 py-2">
+                              <span className="flex items-center gap-2">
+                                <Ban className="h-3.5 w-3.5 text-red-400" />
+                                <span className="font-medium text-gray-800">{item.reason}</span>
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">
+                              {formatNumber(item.bids_filtered)}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-red-400"
+                                    style={{ width: `${Math.min(item.pct_of_filtered, 100)}%` }}
+                                  />
+                                </div>
+                                <span className="font-mono text-xs text-gray-600 w-12 text-right">
+                                  {item.pct_of_filtered}%
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono text-xs text-red-600">
+                              {item.opportunity_cost_usd > 0 ? formatCurrency(item.opportunity_cost_usd) : '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
