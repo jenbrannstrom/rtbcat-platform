@@ -20,8 +20,10 @@ node_modules/
 Thumbs.db
 
 # Data files (user-specific RTB exports)
-docs/*.csv
 data/csv-reports/
+
+# Documentation with sensitive deployment info (keep in private wiki/Notion instead)
+docs/
 
 # Terraform state and user-specific config
 terraform/*.tfstate
