@@ -90,7 +90,7 @@ This guide explains how to set up Gmail OAuth credentials for automated CSV impo
 
 ```bash
 # Copy the OAuth client file to the server
-scp ~/Downloads/gmail-oauth-client.json ec2-user@63.176.52.250:~/.catscan/credentials/
+scp ~/Downloads/gmail-oauth-client.json ec2-user@18.185.146.184:~/.catscan/credentials/
 ```
 
 ---
@@ -99,7 +99,7 @@ scp ~/Downloads/gmail-oauth-client.json ec2-user@63.176.52.250:~/.catscan/creden
 
 ```bash
 # SSH to the server
-ssh ec2-user@63.176.52.250
+ssh ec2-user@18.185.146.184
 
 # Activate the virtual environment
 cd /opt/catscan && source venv/bin/activate
