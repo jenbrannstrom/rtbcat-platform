@@ -410,7 +410,7 @@ async def get_config_performance(
 @router.get("/analytics/rtb-funnel/configs/{billing_id}/breakdown", tags=["RTB Analytics"])
 async def get_config_breakdown(
     billing_id: str,
-    by: str = Query("size", regex="^(size|geo|publisher|creative)$"),
+    by: str = Query("size", pattern="^(size|geo|publisher|creative)$"),
     days: int = Query(7, ge=1, le=30),
 ):
     """

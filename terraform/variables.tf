@@ -75,3 +75,9 @@ variable "basic_auth_password" {
   default     = ""
   sensitive   = true
 }
+
+variable "catscan_auth_cookie" {
+  description = "Authentication cookie hash for Caddy. Generate with: echo -n 'user:pass' | sha256sum"
+  type        = string
+  sensitive   = true
+}
