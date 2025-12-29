@@ -25,37 +25,38 @@ This document outlines the complete plan for deploying Cat-Scan Creative Intelli
 
 | Property | Value |
 |----------|-------|
-| **Public IP** | `63.176.52.250` |
+| **Domain** | `scan.rtb.cat` |
+| **Public IP** | `18.185.146.184` |
 | **Region** | `eu-central-1` (Frankfurt) |
-| **Instance ID** | `i-018d0db64128c2bd3` |
+| **Instance ID** | `i-08758180a9d369fb7` |
 | **Instance Type** | t3.micro (2 vCPU, 1GB RAM) |
 | **OS** | Amazon Linux 2023 |
-| **API Port** | 8000 |
+| **HTTPS** | Port 443 (via Caddy) |
 
 ### SSH Access
 
 ```bash
 # Connect to the server (uses your local ~/.ssh/id_ed25519 key)
-ssh ec2-user@63.176.52.250
+ssh ec2-user@18.185.146.184
 
 # Or explicitly specify the key
-ssh -i ~/.ssh/id_ed25519 ec2-user@63.176.52.250
+ssh -i ~/.ssh/id_ed25519 ec2-user@18.185.146.184
 ```
 
 ### API Access
 
 ```bash
-# Health check
-curl http://63.176.52.250:8000/health
+# Health check (via HTTPS domain)
+curl https://scan.rtb.cat/health
 
 # API documentation (Swagger UI)
-# Open in browser: http://63.176.52.250:8000/docs
+# Open in browser: https://scan.rtb.cat/docs
 
 # Import status
-curl http://63.176.52.250:8000/gmail/status
+curl https://scan.rtb.cat/gmail/status
 
 # List recent imports
-curl http://63.176.52.250:8000/uploads/history
+curl https://scan.rtb.cat/uploads/history
 ```
 
 ### Service Management (on server)
@@ -93,7 +94,7 @@ sudo systemctl start catscan-api
 
 ```bash
 # SSH into server first
-ssh ec2-user@63.176.52.250
+ssh ec2-user@18.185.146.184
 
 # Activate virtual environment
 cd /opt/catscan && source venv/bin/activate
@@ -137,10 +138,10 @@ gunzip catscan-performance-2025-12-21.csv.gz
 # On local machine - create package and upload
 cd /home/jen/Documents/rtbcat-platform/creative-intelligence
 tar -czf /tmp/catscan-deploy.tar.gz --exclude='*.pyc' --exclude='__pycache__' --exclude='.git' --exclude='*.db' --exclude='venv' .
-scp /tmp/catscan-deploy.tar.gz ec2-user@63.176.52.250:/tmp/
+scp /tmp/catscan-deploy.tar.gz ec2-user@18.185.146.184:/tmp/
 
 # On server - extract and restart
-ssh ec2-user@63.176.52.250
+ssh ec2-user@18.185.146.184
 cd /opt/catscan
 tar -xzf /tmp/catscan-deploy.tar.gz
 sudo systemctl restart catscan-api
@@ -148,14 +149,14 @@ sudo systemctl restart catscan-api
 
 ### AWS Console Access
 
-- **EC2 Console:** https://eu-central-1.console.aws.amazon.com/ec2/home?region=eu-central-1#Instances:instanceId=i-018d0db64128c2bd3
+- **EC2 Console:** https://eu-central-1.console.aws.amazon.com/ec2/home?region=eu-central-1#Instances:instanceId=i-08758180a9d369fb7
 - **S3 Console:** https://s3.console.aws.amazon.com/s3/buckets/rtbcat-csv-archive-frankfurt-328614522524?region=eu-central-1
 
 ### Troubleshooting
 
 ```bash
 # Check if API is responding
-curl -v http://63.176.52.250:8000/health
+curl -v https://scan.rtb.cat/health
 
 # Check disk space
 df -h
@@ -170,8 +171,8 @@ ps aux | grep python
 sudo ss -tlnp | grep 8000
 
 # Check security group allows traffic (from local)
-nc -zv 63.176.52.250 8000
-nc -zv 63.176.52.250 22
+nc -zv 18.185.146.184 443
+nc -zv 18.185.146.184 22
 ```
 
 ---
@@ -214,11 +215,11 @@ The following resources exist in the Frankfurt region:
 | Resource | ID/Name | Purpose |
 |----------|---------|---------|
 | SSH Key Pair | `catscan-frankfurt-key` | SSH access to EC2 (uses local ~/.ssh/id_ed25519) |
-| Security Group | `sg-00367df5f7826fd77` (catscan-sg) | Allows SSH (22) + HTTP (8000) |
+| Security Group | `sg-00367df5f7826fd77` (catscan-sg) | Allows SSH (22) + HTTPS (443) |
 | VPC | `vpc-05cc8303080eb9fa3` (default) | Network |
 | S3 Bucket | `rtbcat-csv-archive-frankfurt-328614522524` | CSV archival with lifecycle |
 | IAM Role | `catscan-ec2-role` | EC2 access to S3 |
-| EC2 Instance | `i-018d0db64128c2bd3` (catscan-server) | Running at 63.176.52.250 |
+| EC2 Instance | `i-08758180a9d369fb7` (catscan-production) | Running at 18.185.146.184, domain: scan.rtb.cat |
 
 ---
 
@@ -268,16 +269,16 @@ s3://rtbcat-csv-archive-frankfurt-328614522524/
 | Key Pair | catscan-frankfurt-key |
 | Security Group | catscan-sg (sg-00367df5f7826fd77) |
 | Subnet | Default VPC public subnet |
-| Public IP | 63.176.52.250 |
-| Instance ID | i-018d0db64128c2bd3 |
+| Public IP | 18.185.146.184 |
+| Instance ID | i-08758180a9d369fb7 |
 
 ### Security Group Rules Required
 
 | Type | Port | Source | Purpose |
 |------|------|--------|---------|
 | SSH | 22 | Your IP | Server access |
-| HTTP | 8000 | 0.0.0.0/0 (or restricted) | API access |
-| HTTPS | 443 | 0.0.0.0/0 | Future: SSL termination |
+| HTTP | 80 | 0.0.0.0/0 | Redirect to HTTPS |
+| HTTPS | 443 | 0.0.0.0/0 | Dashboard & API (via Caddy) |
 
 ### IAM Role for EC2
 
@@ -546,7 +547,7 @@ python -m qps.smart_importer recovery/*.csv
 
 - [x] Create S3 bucket with lifecycle policy (Frankfurt: rtbcat-csv-archive-frankfurt-328614522524)
 - [x] Create IAM role for EC2 with S3 access (catscan-ec2-role with AmazonS3FullAccess)
-- [x] Launch EC2 instance (i-018d0db64128c2bd3 at 63.176.52.250)
+- [x] Launch EC2 instance (i-08758180a9d369fb7 at 18.185.146.184, scan.rtb.cat)
 - [x] Modify `gmail_import.py` to archive to S3
 - [x] Create `cleanup_old_data.py` script
 - [x] Update config manager with retention settings
@@ -554,7 +555,7 @@ python -m qps.smart_importer recovery/*.csv
 - [x] Copy credentials to EC2
 - [x] Configure systemd service (catscan-api.service)
 - [x] Set up cron jobs (8:00 UTC daily import, 2:00 UTC Sunday cleanup)
-- [x] Verify API works (http://63.176.52.250:8000/health)
+- [x] Verify API works (https://scan.rtb.cat/health)
 - [x] Verify S3 archival works (tested 2025-12-21)
 - [ ] Test data recovery from S3
 - [ ] Set up Gmail OAuth on EC2 (requires browser-based auth)
@@ -586,7 +587,7 @@ Gmail OAuth requires browser-based authentication. To complete setup:
 
 ```bash
 # SSH to server
-ssh ec2-user@63.176.52.250
+ssh ec2-user@18.185.146.184
 
 # Run the import script interactively
 cd /opt/catscan && source venv/bin/activate
@@ -600,5 +601,5 @@ python scripts/gmail_import.py
 ---
 
 *Document maintained by: Claude Code*
-*Last updated: December 21, 2025*
-*Deployment completed: December 21, 2025 (Frankfurt, eu-central-1)*
+*Last updated: December 29, 2025*
+*Production deployment: scan.rtb.cat (18.185.146.184, Frankfurt, eu-central-1)*
