@@ -49,11 +49,27 @@ mkdir -p /home/catscan/.catscan/imports
 chown -R catscan:catscan /home/catscan/.catscan
 chmod -R 777 /home/catscan/.catscan
 
-# Clone repository
+# Setup SSH for GitHub deploy key
+mkdir -p /home/catscan/.ssh
+chmod 700 /home/catscan/.ssh
+
+# Fetch deploy key from AWS Secrets Manager
+aws secretsmanager get-secret-value \
+    --secret-id catscan-deploy-key \
+    --region eu-central-1 \
+    --query SecretString \
+    --output text > /home/catscan/.ssh/id_ed25519
+chmod 600 /home/catscan/.ssh/id_ed25519
+chown -R catscan:catscan /home/catscan/.ssh
+
+# Add GitHub to known hosts
+ssh-keyscan github.com >> /home/catscan/.ssh/known_hosts 2>/dev/null
+chown catscan:catscan /home/catscan/.ssh/known_hosts
+
+# Clone repository via SSH (using deploy key)
 cd /home/catscan
 if [ ! -d "rtbcat-platform" ]; then
-    git clone https://github.com/rtbcat/catscan.git rtbcat-platform
-    chown -R catscan:catscan rtbcat-platform
+    sudo -u catscan git clone git@github.com:jenbrannstrom/rtbcat-platform.git rtbcat-platform
 fi
 
 cd rtbcat-platform
@@ -76,6 +92,9 @@ DATA_DIR=/home/catscan/.catscan
 
 # API Configuration
 DATABASE_PATH=/home/catscan/.catscan/catscan.db
+
+# Authentication cookie for Caddy (required)
+CATSCAN_AUTH_COOKIE=${catscan_auth_cookie}
 
 # Basic Auth for Caddy (password is pre-hashed)
 BASIC_AUTH_USER=$BASIC_AUTH_USER
