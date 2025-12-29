@@ -177,6 +177,27 @@ resource "aws_iam_role_policy" "s3_access" {
   })
 }
 
+# Secrets Manager policy for deploy key
+resource "aws_iam_role_policy" "secrets_access" {
+  name = "${var.app_name}-secrets-access"
+  role = aws_iam_role.catscan.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = [
+          "arn:aws:secretsmanager:${var.aws_region}:*:secret:catscan-deploy-key-*"
+        ]
+      }
+    ]
+  })
+}
+
 resource "aws_iam_instance_profile" "catscan" {
   name = "${var.app_name}-${var.environment}-profile"
   role = aws_iam_role.catscan.name
@@ -241,12 +262,13 @@ resource "aws_instance" "catscan" {
   }
 
   user_data = base64encode(templatefile("${path.module}/user_data.sh", {
-    s3_bucket       = aws_s3_bucket.catscan.id
-    environment     = var.environment
-    domain_name     = var.domain_name
-    enable_https    = var.enable_https ? "true" : "false"
-    basic_auth_user = var.basic_auth_user
-    basic_auth_hash = var.basic_auth_password != "" ? bcrypt(var.basic_auth_password) : ""
+    s3_bucket            = aws_s3_bucket.catscan.id
+    environment          = var.environment
+    domain_name          = var.domain_name
+    enable_https         = var.enable_https ? "true" : "false"
+    basic_auth_user      = var.basic_auth_user
+    basic_auth_hash      = var.basic_auth_password != "" ? bcrypt(var.basic_auth_password) : ""
+    catscan_auth_cookie  = var.catscan_auth_cookie
   }))
 
   tags = {
