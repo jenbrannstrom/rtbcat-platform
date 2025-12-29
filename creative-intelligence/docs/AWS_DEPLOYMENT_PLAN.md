@@ -241,8 +241,7 @@ The following resources exist in the Frankfurt region:
 | VPC | `vpc-05cc8303080eb9fa3` (default) | Network |
 | S3 Bucket | `rtbcat-csv-archive-frankfurt-328614522524` | CSV archival with lifecycle |
 | IAM Role | `catscan-ec2-role` | EC2 access to S3 |
-| EC2 Instance (Production) | `i-08758180a9d369fb7` (catscan-production) | Running at 18.185.146.184, domain: csan.rtb.cat |
-| EC2 Instance (Dev/Old) | `i-018d0db64128c2bd3` (catscan-server) | Running at 63.176.52.250 (legacy) |
+| EC2 Instance | `i-08758180a9d369fb7` (catscan-production) | Running at 18.185.146.184, domain: csan.rtb.cat |
 
 ---
 
