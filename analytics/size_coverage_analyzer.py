@@ -164,7 +164,8 @@ class SizeCoverageAnalyzer:
             size_only = traffic['size']
 
             # Check if we have this size (try exact key first, then just size)
-            has_creative = key in creative_sizes or size_only in creative_size_only
+            # IMPORTANT: If impressions > 0, we're serving this size (HTML5/video are flexible)
+            has_creative = key in creative_sizes or size_only in creative_size_only or traffic['impressions'] > 0
 
             if has_creative:
                 # We have creatives for this size
