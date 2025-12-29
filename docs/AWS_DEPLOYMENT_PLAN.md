@@ -25,7 +25,7 @@ This document outlines the complete plan for deploying Cat-Scan Creative Intelli
 
 | Property | Value |
 |----------|-------|
-| **Domain** | `csan.rtb.cat` |
+| **Domain** | `scan.rtb.cat` |
 | **Public IP** | `18.185.146.184` |
 | **Region** | `eu-central-1` (Frankfurt) |
 | **Instance ID** | `i-08758180a9d369fb7` |
@@ -47,16 +47,16 @@ ssh -i ~/.ssh/id_ed25519 ec2-user@18.185.146.184
 
 ```bash
 # Health check (via HTTPS domain)
-curl https://csan.rtb.cat/health
+curl https://scan.rtb.cat/health
 
 # API documentation (Swagger UI)
-# Open in browser: https://csan.rtb.cat/docs
+# Open in browser: https://scan.rtb.cat/docs
 
 # Import status
-curl https://csan.rtb.cat/gmail/status
+curl https://scan.rtb.cat/gmail/status
 
 # List recent imports
-curl https://csan.rtb.cat/uploads/history
+curl https://scan.rtb.cat/uploads/history
 ```
 
 ### Service Management (on server)
@@ -156,7 +156,7 @@ sudo systemctl restart catscan-api
 
 ```bash
 # Check if API is responding
-curl -v https://csan.rtb.cat/health
+curl -v https://scan.rtb.cat/health
 
 # Check disk space
 df -h
@@ -219,7 +219,7 @@ The following resources exist in the Frankfurt region:
 | VPC | `vpc-05cc8303080eb9fa3` (default) | Network |
 | S3 Bucket | `rtbcat-csv-archive-frankfurt-328614522524` | CSV archival with lifecycle |
 | IAM Role | `catscan-ec2-role` | EC2 access to S3 |
-| EC2 Instance | `i-08758180a9d369fb7` (catscan-production) | Running at 18.185.146.184, domain: csan.rtb.cat |
+| EC2 Instance | `i-08758180a9d369fb7` (catscan-production) | Running at 18.185.146.184, domain: scan.rtb.cat |
 
 ---
 
@@ -547,7 +547,7 @@ python -m qps.smart_importer recovery/*.csv
 
 - [x] Create S3 bucket with lifecycle policy (Frankfurt: rtbcat-csv-archive-frankfurt-328614522524)
 - [x] Create IAM role for EC2 with S3 access (catscan-ec2-role with AmazonS3FullAccess)
-- [x] Launch EC2 instance (i-08758180a9d369fb7 at 18.185.146.184, csan.rtb.cat)
+- [x] Launch EC2 instance (i-08758180a9d369fb7 at 18.185.146.184, scan.rtb.cat)
 - [x] Modify `gmail_import.py` to archive to S3
 - [x] Create `cleanup_old_data.py` script
 - [x] Update config manager with retention settings
@@ -555,7 +555,7 @@ python -m qps.smart_importer recovery/*.csv
 - [x] Copy credentials to EC2
 - [x] Configure systemd service (catscan-api.service)
 - [x] Set up cron jobs (8:00 UTC daily import, 2:00 UTC Sunday cleanup)
-- [x] Verify API works (https://csan.rtb.cat/health)
+- [x] Verify API works (https://scan.rtb.cat/health)
 - [x] Verify S3 archival works (tested 2025-12-21)
 - [ ] Test data recovery from S3
 - [ ] Set up Gmail OAuth on EC2 (requires browser-based auth)
@@ -602,4 +602,4 @@ python scripts/gmail_import.py
 
 *Document maintained by: Claude Code*
 *Last updated: December 29, 2025*
-*Production deployment: csan.rtb.cat (18.185.146.184, Frankfurt, eu-central-1)*
+*Production deployment: scan.rtb.cat (18.185.146.184, Frankfurt, eu-central-1)*
