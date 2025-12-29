@@ -21,7 +21,6 @@ from api.routers import (
     seats_router,
     settings_router,
     uploads_router,
-    analytics_router,
     config_router,
     gmail_router,
     recommendations_router,
@@ -30,6 +29,12 @@ from api.routers import (
     performance_router,
     troubleshooting_router,
     collect_router,
+    # Analytics sub-routers (refactored from monolithic analytics.py)
+    waste_router,
+    rtb_funnel_router,
+    analytics_qps_router,
+    traffic_router,
+    spend_router,
 )
 from api.dependencies import set_store, set_config_manager, startup_event
 
@@ -119,8 +124,12 @@ app.include_router(campaigns_router)
 app.include_router(settings_router)
 app.include_router(config_router)
 
-# Analytics and optimization
-app.include_router(analytics_router)
+# Analytics and optimization (refactored into sub-routers)
+app.include_router(waste_router)
+app.include_router(rtb_funnel_router)
+app.include_router(analytics_qps_router)
+app.include_router(traffic_router)
+app.include_router(spend_router)
 app.include_router(qps_router)
 app.include_router(recommendations_router)
 
