@@ -25,94 +25,100 @@ This document outlines the complete plan for deploying Cat-Scan Creative Intelli
 
 | Property | Value |
 |----------|-------|
-| **Public IP** | `63.176.52.250` |
+| **Domain** | `csan.rtb.cat` |
+| **Public IP** | `18.185.146.184` |
 | **Region** | `eu-central-1` (Frankfurt) |
-| **Instance ID** | `i-018d0db64128c2bd3` |
-| **Instance Type** | t3.micro (2 vCPU, 1GB RAM) |
+| **Instance ID** | `i-08758180a9d369fb7` |
+| **Instance Name** | `catscan-production` |
+| **Instance Type** | t3.small (2 vCPU, 2GB RAM) |
 | **OS** | Amazon Linux 2023 |
-| **API Port** | 8000 |
+| **Deployment** | Docker Compose with Caddy reverse proxy |
+| **HTTPS** | Yes (via Caddy automatic TLS) |
 
 ### SSH Access
 
 ```bash
 # Connect to the server (uses your local ~/.ssh/id_ed25519 key)
-ssh ec2-user@63.176.52.250
+ssh ec2-user@18.185.146.184
 
 # Or explicitly specify the key
-ssh -i ~/.ssh/id_ed25519 ec2-user@63.176.52.250
+ssh -i ~/.ssh/id_ed25519 ec2-user@18.185.146.184
 ```
 
-### API Access
+### Web Access
 
 ```bash
-# Health check
-curl http://63.176.52.250:8000/health
+# Dashboard (HTTPS)
+https://csan.rtb.cat
 
 # API documentation (Swagger UI)
-# Open in browser: http://63.176.52.250:8000/docs
+https://csan.rtb.cat/api/docs
+```
+
+### API Access (from server)
+
+```bash
+# SSH into server first, then:
+# Health check
+curl http://localhost:8000/health
 
 # Import status
-curl http://63.176.52.250:8000/gmail/status
+curl http://localhost:8000/gmail/status
 
 # List recent imports
-curl http://63.176.52.250:8000/uploads/history
+curl http://localhost:8000/uploads/history
 ```
 
 ### Service Management (on server)
 
 ```bash
-# Check service status
-sudo systemctl status catscan-api
+# Check container status
+docker ps
 
 # View logs (live)
-sudo journalctl -u catscan-api -f
+docker logs -f catscan-api
 
 # View recent logs
-sudo journalctl -u catscan-api -n 100
+docker logs catscan-api --tail 100
 
-# Restart service
-sudo systemctl restart catscan-api
+# Restart API service
+docker restart catscan-api
 
-# Stop/Start service
-sudo systemctl stop catscan-api
-sudo systemctl start catscan-api
+# Restart all services
+docker compose restart
+
+# View all logs
+docker compose logs -f
 ```
 
 ### File Locations (on server)
 
 | Path | Contents |
 |------|----------|
-| `/opt/catscan/` | Application code |
-| `/opt/catscan/venv/` | Python virtual environment |
-| `~/.catscan/catscan.db` | SQLite database |
-| `~/.catscan/credentials/` | API credentials (service accounts) |
-| `~/.catscan/imports/` | Downloaded CSV files |
-| `~/.catscan/logs/` | Cron job logs |
+| `/home/catscan/.catscan/` | Persistent data directory (mounted in containers) |
+| `/home/catscan/.catscan/catscan.db` | SQLite database |
+| `/home/catscan/.catscan/credentials/` | API credentials (service accounts) |
+| `/home/catscan/.catscan/imports/` | Downloaded CSV files |
+| `/home/catscan/.catscan/logs/` | Cron job logs |
 
 ### Manual Operations
 
 ```bash
 # SSH into server first
-ssh ec2-user@63.176.52.250
+ssh ec2-user@18.185.146.184
 
-# Activate virtual environment
-cd /opt/catscan && source venv/bin/activate
-
-# Run Gmail import manually
-python scripts/gmail_import.py
+# Run Gmail import manually (inside container)
+docker exec catscan-api python scripts/gmail_import.py
 
 # Run cleanup manually (dry-run first)
-python scripts/cleanup_old_data.py --dry-run
-python scripts/cleanup_old_data.py
-
-# Check cron jobs
-crontab -l
+docker exec catscan-api python scripts/cleanup_old_data.py --dry-run
+docker exec catscan-api python scripts/cleanup_old_data.py
 
 # View import log
-tail -100 ~/.catscan/logs/gmail-import.log
+cat /home/catscan/.catscan/logs/gmail-import.log | tail -100
 
 # View cleanup log
-tail -100 ~/.catscan/logs/cleanup.log
+cat /home/catscan/.catscan/logs/cleanup.log | tail -100
 ```
 
 ### S3 Archive Access
@@ -134,28 +140,52 @@ gunzip catscan-performance-2025-12-21.csv.gz
 ### Redeploy Application
 
 ```bash
-# On local machine - create package and upload
-cd /home/jen/Documents/rtbcat-platform/creative-intelligence
-tar -czf /tmp/catscan-deploy.tar.gz --exclude='*.pyc' --exclude='__pycache__' --exclude='.git' --exclude='*.db' --exclude='venv' .
-scp /tmp/catscan-deploy.tar.gz ec2-user@63.176.52.250:/tmp/
+# On local machine - rebuild and push Docker images
+cd /home/jen/Documents/rtbcat-platform
+docker compose build
+docker save rtbcat-platform-api | gzip > /tmp/api-image.tar.gz
+docker save rtbcat-platform-dashboard | gzip > /tmp/dashboard-image.tar.gz
+scp /tmp/api-image.tar.gz /tmp/dashboard-image.tar.gz ec2-user@18.185.146.184:/tmp/
 
-# On server - extract and restart
-ssh ec2-user@63.176.52.250
-cd /opt/catscan
-tar -xzf /tmp/catscan-deploy.tar.gz
-sudo systemctl restart catscan-api
+# On server - load images and restart
+ssh ec2-user@18.185.146.184
+docker load < /tmp/api-image.tar.gz
+docker load < /tmp/dashboard-image.tar.gz
+docker compose down && docker compose up -d
+```
+
+### Quick Fix (single file update)
+
+```bash
+# For quick hotfixes without full redeploy:
+scp /path/to/fixed_file.py ec2-user@18.185.146.184:/tmp/
+ssh ec2-user@18.185.146.184 "docker cp /tmp/fixed_file.py catscan-api:/app/path/to/file.py && docker restart catscan-api"
 ```
 
 ### AWS Console Access
 
-- **EC2 Console:** https://eu-central-1.console.aws.amazon.com/ec2/home?region=eu-central-1#Instances:instanceId=i-018d0db64128c2bd3
+- **EC2 Console:** https://eu-central-1.console.aws.amazon.com/ec2/home?region=eu-central-1#Instances:instanceId=i-08758180a9d369fb7
 - **S3 Console:** https://s3.console.aws.amazon.com/s3/buckets/rtbcat-csv-archive-frankfurt-328614522524?region=eu-central-1
 
 ### Troubleshooting
 
 ```bash
-# Check if API is responding
-curl -v http://63.176.52.250:8000/health
+# Check if dashboard is responding
+curl -I https://csan.rtb.cat
+
+# SSH into server
+ssh ec2-user@18.185.146.184
+
+# Check container status
+docker ps
+
+# Check API health (from inside server)
+curl http://localhost:8000/health
+
+# Check container logs
+docker logs catscan-api --tail 50
+docker logs catscan-dashboard --tail 50
+docker logs catscan-caddy --tail 50
 
 # Check disk space
 df -h
@@ -163,15 +193,8 @@ df -h
 # Check memory usage
 free -m
 
-# Check running processes
-ps aux | grep python
-
-# Check if port 8000 is listening
-sudo ss -tlnp | grep 8000
-
-# Check security group allows traffic (from local)
-nc -zv 63.176.52.250 8000
-nc -zv 63.176.52.250 22
+# Restart all services
+docker compose restart
 ```
 
 ---
@@ -214,11 +237,12 @@ The following resources exist in the Frankfurt region:
 | Resource | ID/Name | Purpose |
 |----------|---------|---------|
 | SSH Key Pair | `catscan-frankfurt-key` | SSH access to EC2 (uses local ~/.ssh/id_ed25519) |
-| Security Group | `sg-00367df5f7826fd77` (catscan-sg) | Allows SSH (22) + HTTP (8000) |
+| Security Group | `sg-00367df5f7826fd77` (catscan-sg) | Allows SSH (22), HTTP (80), HTTPS (443) |
 | VPC | `vpc-05cc8303080eb9fa3` (default) | Network |
 | S3 Bucket | `rtbcat-csv-archive-frankfurt-328614522524` | CSV archival with lifecycle |
 | IAM Role | `catscan-ec2-role` | EC2 access to S3 |
-| EC2 Instance | `i-018d0db64128c2bd3` (catscan-server) | Running at 63.176.52.250 |
+| EC2 Instance (Production) | `i-08758180a9d369fb7` (catscan-production) | Running at 18.185.146.184, domain: csan.rtb.cat |
+| EC2 Instance (Dev/Old) | `i-018d0db64128c2bd3` (catscan-server) | Running at 63.176.52.250 (legacy) |
 
 ---
 
@@ -258,26 +282,28 @@ s3://rtbcat-csv-archive-frankfurt-328614522524/
 
 ## Component 2: EC2 Instance
 
-### Configuration (Frankfurt)
+### Configuration (Frankfurt - Production)
 
 | Setting | Value |
 |---------|-------|
-| AMI | Amazon Linux 2023 (ami-0b9f50ee4cf81e8d8) |
-| Instance Type | t3.micro (2 vCPU, 1GB RAM) |
+| AMI | Amazon Linux 2023 |
+| Instance Type | t3.small (2 vCPU, 2GB RAM) |
 | Storage | 30 GB gp3 EBS |
 | Key Pair | catscan-frankfurt-key |
 | Security Group | catscan-sg (sg-00367df5f7826fd77) |
 | Subnet | Default VPC public subnet |
-| Public IP | 63.176.52.250 |
-| Instance ID | i-018d0db64128c2bd3 |
+| Public IP | 18.185.146.184 |
+| Domain | csan.rtb.cat |
+| Instance ID | i-08758180a9d369fb7 |
+| Instance Name | catscan-production |
 
 ### Security Group Rules Required
 
 | Type | Port | Source | Purpose |
 |------|------|--------|---------|
 | SSH | 22 | Your IP | Server access |
-| HTTP | 8000 | 0.0.0.0/0 (or restricted) | API access |
-| HTTPS | 443 | 0.0.0.0/0 | Future: SSL termination |
+| HTTP | 80 | 0.0.0.0/0 | Redirect to HTTPS |
+| HTTPS | 443 | 0.0.0.0/0 | Dashboard & API (via Caddy) |
 
 ### IAM Role for EC2
 
@@ -546,15 +572,15 @@ python -m qps.smart_importer recovery/*.csv
 
 - [x] Create S3 bucket with lifecycle policy (Frankfurt: rtbcat-csv-archive-frankfurt-328614522524)
 - [x] Create IAM role for EC2 with S3 access (catscan-ec2-role with AmazonS3FullAccess)
-- [x] Launch EC2 instance (i-018d0db64128c2bd3 at 63.176.52.250)
+- [x] Launch EC2 instance (i-08758180a9d369fb7 at 18.185.146.184, csan.rtb.cat)
 - [x] Modify `gmail_import.py` to archive to S3
 - [x] Create `cleanup_old_data.py` script
 - [x] Update config manager with retention settings
 - [x] Deploy application to EC2
 - [x] Copy credentials to EC2
-- [x] Configure systemd service (catscan-api.service)
+- [x] Configure Docker Compose services (api, dashboard, caddy)
 - [x] Set up cron jobs (8:00 UTC daily import, 2:00 UTC Sunday cleanup)
-- [x] Verify API works (http://63.176.52.250:8000/health)
+- [x] Verify API works (https://csan.rtb.cat/api/health)
 - [x] Verify S3 archival works (tested 2025-12-21)
 - [ ] Test data recovery from S3
 - [ ] Set up Gmail OAuth on EC2 (requires browser-based auth)
@@ -586,19 +612,18 @@ Gmail OAuth requires browser-based authentication. To complete setup:
 
 ```bash
 # SSH to server
-ssh ec2-user@63.176.52.250
+ssh ec2-user@18.185.146.184
 
-# Run the import script interactively
-cd /opt/catscan && source venv/bin/activate
-python scripts/gmail_import.py
+# Run the import script interactively (inside container)
+docker exec -it catscan-api python scripts/gmail_import.py
 
 # This will print a URL - open it in your browser
 # Complete the OAuth flow and paste the authorization code
-# The token will be saved to ~/.catscan/credentials/gmail-token.json
+# The token will be saved to /home/catscan/.catscan/credentials/gmail-token.json
 ```
 
 ---
 
 *Document maintained by: Claude Code*
-*Last updated: December 21, 2025*
-*Deployment completed: December 21, 2025 (Frankfurt, eu-central-1)*
+*Last updated: December 29, 2025*
+*Production deployment: csan.rtb.cat (18.185.146.184, Frankfurt, eu-central-1)*
