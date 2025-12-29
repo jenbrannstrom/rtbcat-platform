@@ -17,6 +17,7 @@ services:
       - caddy-config:/config
     environment:
       - DOMAIN=${DOMAIN:-localhost}
+      - CATSCAN_AUTH_COOKIE=${CATSCAN_AUTH_COOKIE:?CATSCAN_AUTH_COOKIE is required}
       - BASIC_AUTH_USER=${BASIC_AUTH_USER:-}
       - BASIC_AUTH_HASH=${BASIC_AUTH_HASH:-}
     depends_on:

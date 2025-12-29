@@ -103,8 +103,8 @@
             return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
         }
 
-        // Expected hash of credentials
-        const VALID_HASH = 'REMOVED_CADDY_AUTH_TOKEN';
+        // Expected hash of credentials (set via build or keep in sync with CATSCAN_AUTH_COOKIE env var)
+        const VALID_HASH = 'f9c53442ca089dcdfe16cb1e7f574fd03146c4211e7bd5be104b8b43c8b30e4f';
 
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
