@@ -14,14 +14,14 @@
         reverse_proxy api:8000
     }
 
-    # Check for valid auth cookie
+    # Check for valid auth cookie (set CATSCAN_AUTH_COOKIE env var)
     @authenticated {
-        header_regexp Cookie catscan_auth=19601b5db00786dc44d7fa57fd72298f3bdd9ef54e2233d2547071c7ab45df17
+        header_regexp Cookie catscan_auth={$CATSCAN_AUTH_COOKIE}
     }
 
     # Redirect to login if not authenticated
     @not_authenticated {
-        not header_regexp Cookie catscan_auth=19601b5db00786dc44d7fa57fd72298f3bdd9ef54e2233d2547071c7ab45df17
+        not header_regexp Cookie catscan_auth={$CATSCAN_AUTH_COOKIE}
     }
 
     handle @not_authenticated {
