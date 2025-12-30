@@ -7,7 +7,7 @@ import { Sidebar } from "@/components/sidebar";
 import { FirstRunCheck } from "@/components/first-run-check";
 
 // Paths that should not show the sidebar
-const PUBLIC_PATHS = ["/login", "/setup"];
+const PUBLIC_PATHS = ["/login"];
 
 interface AuthenticatedLayoutProps {
   children: ReactNode;
