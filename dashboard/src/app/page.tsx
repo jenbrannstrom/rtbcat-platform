@@ -19,6 +19,7 @@ import {
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAccount } from "@/contexts/account-context";
+import { useTranslation } from "@/contexts/i18n-context";
 
 const PERIOD_OPTIONS = [
   { value: 7, label: "7 days" },
@@ -858,6 +859,7 @@ function WasteAnalysisContent() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { selectedServiceAccountId } = useAccount();
+  const { t } = useTranslation();
 
   const initialDays = parseInt(searchParams.get("days") || "7", 10);
   const [days, setDays] = useState<number>(initialDays);
@@ -1024,9 +1026,9 @@ function WasteAnalysisContent() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Waste Optimizer</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t.dashboard.title}</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Understand your RTB funnel and optimize QPS waste
+            {t.dashboard.subtitle}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -1055,7 +1057,7 @@ function WasteAnalysisContent() {
 
           {/* Period Selector */}
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">Period:</span>
+            <span className="text-sm text-gray-600">{t.dashboard.period}</span>
             <div className="flex rounded-lg border border-gray-300 overflow-hidden">
               {PERIOD_OPTIONS.map((option) => (
                 <button
@@ -1068,7 +1070,7 @@ function WasteAnalysisContent() {
                       : "bg-white text-gray-700 hover:bg-gray-50"
                   )}
                 >
-                  {option.label}
+                  {option.value} {t.dashboard.days}
                 </button>
               ))}
             </div>
@@ -1086,7 +1088,7 @@ function WasteAnalysisContent() {
             )}
           >
             <RefreshCw className={cn("h-4 w-4", (summaryLoading || funnelLoading) && "animate-spin")} />
-            Refresh
+            {t.common.refresh}
           </button>
         </div>
       </div>
@@ -1125,7 +1127,7 @@ function WasteAnalysisContent() {
       <section>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-gray-900">
-            Pretargeting Configs ({activeConfigsCount} active)
+            {t.pretargeting.configs} ({activeConfigsCount} {t.pretargeting.active})
           </h2>
           <button
             onClick={() => syncConfigsMutation.mutate()}
@@ -1137,7 +1139,7 @@ function WasteAnalysisContent() {
             )}
           >
             <RefreshCw className={cn("h-4 w-4", syncConfigsMutation.isPending && "animate-spin")} />
-            {syncConfigsMutation.isPending ? "Syncing..." : "Sync from Google"}
+            {syncConfigsMutation.isPending ? t.common.syncing : t.pretargeting.syncFromGoogle}
           </button>
         </div>
 
@@ -1150,9 +1152,9 @@ function WasteAnalysisContent() {
         ) : displayConfigs.length === 0 ? (
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
             <AlertTriangle className="h-8 w-8 text-yellow-500 mx-auto mb-3" />
-            <h3 className="font-medium text-yellow-800 mb-2">No Pretargeting Configs</h3>
+            <h3 className="font-medium text-yellow-800 mb-2">{t.pretargeting.noPretargetingConfigs}</h3>
             <p className="text-sm text-yellow-700 mb-4">
-              Click "Sync from Google" to fetch your pretargeting configurations from the Authorized Buyers API.
+              {t.pretargeting.clickSyncToFetch}
             </p>
           </div>
         ) : (
@@ -1163,7 +1165,7 @@ function WasteAnalysisContent() {
                 onClick={() => handleSort('name')}
                 className="flex items-center gap-1 flex-1 hover:text-gray-900"
               >
-                Name
+                {t.common.name}
                 {sortColumn === 'name' ? (
                   sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
                 ) : <ChevronsUpDown className="h-3 w-3 text-gray-400" />}
@@ -1172,7 +1174,7 @@ function WasteAnalysisContent() {
                 onClick={() => handleSort('reached')}
                 className="flex items-center gap-1 w-24 justify-end hover:text-gray-900"
               >
-                Reached
+                {t.dashboard.reached}
                 {sortColumn === 'reached' ? (
                   sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
                 ) : <ChevronsUpDown className="h-3 w-3 text-gray-400" />}
@@ -1181,7 +1183,7 @@ function WasteAnalysisContent() {
                 onClick={() => handleSort('win_rate')}
                 className="flex items-center gap-1 w-24 justify-end hover:text-gray-900"
               >
-                Win Rate
+                {t.dashboard.winRate}
                 {sortColumn === 'win_rate' ? (
                   sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
                 ) : <ChevronsUpDown className="h-3 w-3 text-gray-400" />}
@@ -1190,7 +1192,7 @@ function WasteAnalysisContent() {
                 onClick={() => handleSort('waste_rate')}
                 className="flex items-center gap-1 w-24 justify-end hover:text-gray-900"
               >
-                Waste
+                {t.pretargeting.waste}
                 {sortColumn === 'waste_rate' ? (
                   sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
                 ) : <ChevronsUpDown className="h-3 w-3 text-gray-400" />}

@@ -5,9 +5,11 @@ import { Users, Shield, Activity, Settings } from "lucide-react";
 import Link from "next/link";
 import { getAdminStats, getSystemSettings } from "@/lib/api";
 import { useAuth, withAdminAuth } from "@/contexts/auth-context";
+import { useTranslation } from "@/contexts/i18n-context";
 
 function AdminDashboard() {
   const { user } = useAuth();
+  const { t } = useTranslation();
 
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ["admin-stats"],
@@ -23,21 +25,21 @@ function AdminDashboard() {
 
   const statCards = [
     {
-      name: "Total Users",
+      name: t.admin.totalUsers,
       value: stats?.total_users ?? 0,
       icon: Users,
       href: "/admin/users",
       color: "bg-blue-500",
     },
     {
-      name: "Active Users",
+      name: t.admin.activeUsers,
       value: stats?.active_users ?? 0,
       icon: Activity,
       href: "/admin/users?active_only=true",
       color: "bg-green-500",
     },
     {
-      name: "Admin Users",
+      name: t.admin.adminUsers,
       value: stats?.admin_users ?? 0,
       icon: Shield,
       href: "/admin/users?role=admin",
@@ -46,11 +48,11 @@ function AdminDashboard() {
   ];
 
   const retentionOptions = [
-    { value: "0", label: "Unlimited" },
-    { value: "30", label: "30 days" },
-    { value: "60", label: "60 days" },
-    { value: "90", label: "90 days" },
-    { value: "120", label: "120 days" },
+    { value: "0", label: t.admin.unlimited },
+    { value: "30", label: "30 " + t.dashboard.days },
+    { value: "60", label: "60 " + t.dashboard.days },
+    { value: "90", label: "90 " + t.dashboard.days },
+    { value: "120", label: "120 " + t.dashboard.days },
   ];
 
   const currentRetention = settings?.audit_retention_days ?? "60";
@@ -60,9 +62,9 @@ function AdminDashboard() {
     <div className="p-6 max-w-6xl mx-auto">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t.admin.dashboard}</h1>
         <p className="mt-1 text-gray-600">
-          Manage users, permissions, and system settings.
+          {t.admin.manageUsers}
         </p>
       </div>
 
@@ -94,7 +96,7 @@ function AdminDashboard() {
         {/* User Management */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            User Management
+            {t.admin.userManagement}
           </h2>
           <div className="space-y-3">
             <Link
@@ -133,7 +135,7 @@ function AdminDashboard() {
         {/* System Settings */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            System Settings
+            {t.admin.systemSettings}
           </h2>
           <div className="space-y-4">
             {/* Multi-User Mode */}

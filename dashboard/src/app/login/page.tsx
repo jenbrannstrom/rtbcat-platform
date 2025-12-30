@@ -3,9 +3,11 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, Lock, Mail, Eye, EyeOff } from "lucide-react";
+import { useTranslation } from "@/contexts/i18n-context";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -28,7 +30,7 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.detail || "Login failed. Please check your credentials.");
+        setError(data.detail || t.auth.loginFailed);
         return;
       }
 
@@ -36,7 +38,7 @@ export default function LoginPage() {
       router.push("/");
       router.refresh();
     } catch (err) {
-      setError("Cannot connect to server. Please try again.");
+      setError(t.auth.cannotConnectToServer);
     } finally {
       setIsLoading(false);
     }
@@ -50,17 +52,17 @@ export default function LoginPage() {
           <div className="mx-auto w-20 h-20 rounded-2xl bg-white shadow-lg flex items-center justify-center mb-4">
             <img
               src="/cat-scanning-stats.webp"
-              alt="Cat-Scan"
+              alt={t.auth.catScan}
               className="w-16 h-16 rounded-xl"
             />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900">Cat-Scan</h1>
-          <p className="mt-2 text-gray-600">Creative Intelligence Dashboard</p>
+          <h1 className="text-3xl font-bold text-gray-900">{t.auth.catScan}</h1>
+          <p className="mt-2 text-gray-600">{t.auth.creativeIntelligenceDashboard}</p>
         </div>
 
         {/* Login Form */}
         <div className="bg-white rounded-xl shadow-lg p-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Sign in to your account</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">{t.auth.signInToYourAccount}</h2>
 
           {error && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
@@ -73,7 +75,7 @@ export default function LoginPage() {
             {/* Email Field */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                Email address
+                {t.auth.emailAddress}
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -96,7 +98,7 @@ export default function LoginPage() {
             {/* Password Field */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                Password
+                {t.auth.password}
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -111,7 +113,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="block w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="Enter your password"
+                  placeholder={t.auth.enterYourPassword}
                 />
                 <button
                   type="button"
@@ -136,10 +138,10 @@ export default function LoginPage() {
               {isLoading ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                  Signing in...
+                  {t.auth.signingIn}
                 </>
               ) : (
-                "Sign in"
+                t.auth.signIn
               )}
             </button>
           </form>
@@ -147,7 +149,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="mt-6 text-center text-sm text-gray-500">
-          Contact your administrator if you need access.
+          {t.auth.contactAdministrator}
         </p>
       </div>
     </div>
