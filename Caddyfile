@@ -1,45 +1,35 @@
 # Cat-Scan Caddyfile
-# Automatic HTTPS with Let's Encrypt + Optional Basic Auth
+# Automatic HTTPS with Let's Encrypt
+# Authentication is handled by the backend via session cookies
 
 {$DOMAIN:localhost} {
-    # Login page - no auth required
-    handle /login {
-        root * /srv
-        file_server
-        rewrite * /login.html
-    }
-
     # Health check - no auth for load balancers
     handle /health {
         reverse_proxy api:8000
     }
 
-    # Check for valid auth cookie (set CATSCAN_AUTH_COOKIE env var)
-    @authenticated {
-        header_regexp Cookie catscan_auth={$CATSCAN_AUTH_COOKIE}
+    # API docs - publicly accessible
+    handle /docs* {
+        reverse_proxy api:8000
+    }
+    handle /openapi.json {
+        reverse_proxy api:8000
+    }
+    handle /redoc* {
+        reverse_proxy api:8000
     }
 
-    # Redirect to login if not authenticated
-    @not_authenticated {
-        not header_regexp Cookie catscan_auth={$CATSCAN_AUTH_COOKIE}
+    # API routes - proxy to FastAPI (includes /api/auth/* endpoints)
+    # Backend handles authentication via session cookies
+    handle /api/* {
+        uri strip_prefix /api
+        reverse_proxy api:8000
     }
 
-    handle @not_authenticated {
-        redir * /login
-    }
-
-    # Authenticated users get access
-    handle @authenticated {
-        # API routes - proxy to FastAPI
-        handle /api/* {
-            uri strip_prefix /api
-            reverse_proxy api:8000
-        }
-
-        # Dashboard
-        handle {
-            reverse_proxy dashboard:3000
-        }
+    # Dashboard - all routes go to Next.js (including /login)
+    # Frontend handles redirects based on auth state
+    handle {
+        reverse_proxy dashboard:3000
     }
 
     # Security headers
