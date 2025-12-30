@@ -36,7 +36,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 // Public paths that don't require authentication
-const PUBLIC_PATHS = ["/login", "/setup"];
+const PUBLIC_PATHS = ["/login"];
 
 // ==================== Provider ====================
 
