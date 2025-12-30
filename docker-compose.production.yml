@@ -10,7 +10,6 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./login.html:/srv/login.html:ro
       - caddy-data:/data
       - caddy-config:/config
     environment:
@@ -41,6 +40,8 @@ services:
       - GOOGLE_APPLICATION_CREDENTIALS=/home/rtbcat/.catscan/credentials/google-credentials.json
       - DATABASE_PATH=/home/rtbcat/.catscan/catscan.db
       - CATSCAN_API_KEY=${CATSCAN_API_KEY:-}
+      - RTBCAT_ADMIN_EMAIL=${RTBCAT_ADMIN_EMAIL:-}
+      - RTBCAT_ADMIN_PASSWORD=${RTBCAT_ADMIN_PASSWORD:-}
     restart: always
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
