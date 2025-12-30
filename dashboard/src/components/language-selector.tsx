@@ -1,0 +1,113 @@
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+import { Globe, ChevronDown, Check } from "lucide-react";
+import { useLanguage } from "@/contexts/i18n-context";
+import { availableLanguages, type Language } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
+
+interface LanguageSelectorProps {
+  collapsed?: boolean;
+}
+
+export function LanguageSelector({ collapsed = false }: LanguageSelectorProps) {
+  const { language, setLanguage } = useLanguage();
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const currentLanguage = availableLanguages.find((l) => l.code === language);
+
+  const handleLanguageSelect = (langCode: Language) => {
+    setLanguage(langCode);
+    setIsOpen(false);
+  };
+
+  if (collapsed) {
+    return (
+      <div className="relative" ref={dropdownRef}>
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className={cn(
+            "flex items-center justify-center w-full p-2 rounded-md",
+            "text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+          )}
+          title="Language"
+        >
+          <Globe className="h-5 w-5" />
+        </button>
+
+        {isOpen && (
+          <div className="absolute bottom-full left-0 mb-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+            {availableLanguages.map((lang) => (
+              <button
+                key={lang.code}
+                onClick={() => handleLanguageSelect(lang.code)}
+                className={cn(
+                  "w-full flex items-center justify-between px-3 py-2 text-sm text-left",
+                  "hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg",
+                  language === lang.code && "bg-primary-50 text-primary-700"
+                )}
+              >
+                <span>{lang.nativeName}</span>
+                {language === lang.code && <Check className="h-4 w-4 text-primary-600" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          "flex items-center w-full px-3 py-2 rounded-md",
+          "text-sm font-medium text-gray-600",
+          "hover:bg-gray-50 hover:text-gray-900 transition-colors"
+        )}
+      >
+        <Globe className="mr-3 h-5 w-5 text-gray-400" />
+        <span className="flex-1 text-left">{currentLanguage?.nativeName || "English"}</span>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 text-gray-400 transition-transform",
+            isOpen && "rotate-180"
+          )}
+        />
+      </button>
+
+      {isOpen && (
+        <div className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+          {availableLanguages.map((lang) => (
+            <button
+              key={lang.code}
+              onClick={() => handleLanguageSelect(lang.code)}
+              className={cn(
+                "w-full flex items-center justify-between px-3 py-2 text-sm text-left",
+                "hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg",
+                language === lang.code && "bg-primary-50 text-primary-700"
+              )}
+            >
+              <span>{lang.nativeName}</span>
+              {language === lang.code && <Check className="h-4 w-4 text-primary-600" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
