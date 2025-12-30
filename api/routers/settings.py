@@ -134,7 +134,18 @@ async def sync_rtb_endpoints(
         "SELECT bidder_id FROM buyer_seats WHERE service_account_id = ? LIMIT 1",
         (service_account.id,)
     )
-    account_id = bidder_row["bidder_id"] if bidder_row else service_account.project_id
+    if not bidder_row:
+        # Fallback: Get any buyer_seat (single-account scenario)
+        bidder_row = await db_query_one(
+            "SELECT bidder_id FROM buyer_seats LIMIT 1"
+        )
+    if not bidder_row:
+        raise HTTPException(
+            status_code=400,
+            detail="No buyer seats discovered. Use /seats/discover first."
+        )
+    account_id = bidder_row["bidder_id"]
+    logger.info(f"Using bidder_id: {account_id} for RTB endpoints sync")
 
     try:
         client = EndpointsClient(
@@ -208,6 +219,15 @@ async def get_rtb_endpoints(
                 )
                 if bidder_row:
                     bidder_id = bidder_row["bidder_id"]
+
+        # Fallback: Get any buyer_seat if service_account_id lookup failed
+        if not bidder_id:
+            bidder_row = await db_query_one(
+                "SELECT bidder_id FROM buyer_seats LIMIT 1"
+            )
+            if bidder_row:
+                bidder_id = bidder_row["bidder_id"]
+                logger.info(f"Using fallback bidder_id: {bidder_id} for endpoints list")
 
         # Filter by bidder_id if we have one (account-specific)
         if bidder_id:
@@ -290,7 +310,18 @@ async def sync_pretargeting_configs(
         "SELECT bidder_id FROM buyer_seats WHERE service_account_id = ? LIMIT 1",
         (service_account.id,)
     )
-    account_id = bidder_row["bidder_id"] if bidder_row else service_account.project_id
+    if not bidder_row:
+        # Fallback: Get any buyer_seat (single-account scenario)
+        bidder_row = await db_query_one(
+            "SELECT bidder_id FROM buyer_seats LIMIT 1"
+        )
+    if not bidder_row:
+        raise HTTPException(
+            status_code=400,
+            detail="No buyer seats discovered. Use /seats/discover first."
+        )
+    account_id = bidder_row["bidder_id"]
+    logger.info(f"Using bidder_id: {account_id} for pretargeting sync")
 
     try:
         client = PretargetingClient(
@@ -393,6 +424,15 @@ async def get_pretargeting_configs(
                 )
                 if bidder_row:
                     current_bidder_id = bidder_row["bidder_id"]
+
+        # Fallback: Get any buyer_seat if service_account_id lookup failed
+        if not current_bidder_id:
+            bidder_row = await db_query_one(
+                "SELECT bidder_id FROM buyer_seats LIMIT 1"
+            )
+            if bidder_row:
+                current_bidder_id = bidder_row["bidder_id"]
+                logger.info(f"Using fallback bidder_id: {current_bidder_id} for pretargeting list")
 
         if current_bidder_id:
             # Filter by current account's bidder_id
