@@ -25,31 +25,20 @@ import { cn } from "@/lib/utils";
 import { getSeats, syncSeat } from "@/lib/api";
 import { useAccount } from "@/contexts/account-context";
 import { useAuth } from "@/contexts/auth-context";
+import { useTranslation } from "@/contexts/i18n-context";
+import { LanguageSelector } from "@/components/language-selector";
 
 const SIDEBAR_COLLAPSED_KEY = "rtbcat-sidebar-collapsed";
 
-const navigation = [
-  { name: "Waste Optimizer", href: "/", icon: TrendingDown },
-  { name: "Creatives", href: "/creatives", icon: Image },
-  { name: "Campaigns", href: "/campaigns", icon: FolderKanban },
-  { name: "Change History", href: "/history", icon: History },
-  { name: "Import", href: "/import", icon: RefreshCw },
-  { name: "Setup", href: "/setup", icon: Settings },
+// Navigation items with translation keys
+const navigationItems = [
+  { key: "wasteOptimizer" as const, href: "/", icon: TrendingDown },
+  { key: "creatives" as const, href: "/creatives", icon: Image },
+  { key: "campaigns" as const, href: "/campaigns", icon: FolderKanban },
+  { key: "changeHistory" as const, href: "/history", icon: History },
+  { key: "import" as const, href: "/import", icon: RefreshCw },
+  { key: "setup" as const, href: "/setup", icon: Settings },
 ];
-
-function formatRelativeTime(dateString: string | null): string {
-  if (!dateString) return "Never";
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return `${diffDays}d ago`;
-}
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -57,6 +46,22 @@ export function Sidebar() {
   const queryClient = useQueryClient();
   const { selectedBuyerId, setSelectedBuyerId } = useAccount();
   const { user, isAdmin, logout } = useAuth();
+  const { t } = useTranslation();
+
+  // Helper for relative time formatting with translations
+  const formatRelativeTime = (dateString: string | null): string => {
+    if (!dateString) return t.common.never;
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffMins < 1) return t.relativeTime.justNow;
+    if (diffMins < 60) return `${diffMins}${t.relativeTime.minutesAgo}`;
+    if (diffHours < 24) return `${diffHours}${t.relativeTime.hoursAgo}`;
+    return `${diffDays}${t.relativeTime.daysAgo}`;
+  };
 
   const [collapsed, setCollapsed] = useState(false);
   const [seatDropdownOpen, setSeatDropdownOpen] = useState(false);
@@ -87,14 +92,14 @@ export function Sidebar() {
   const syncMutation = useMutation({
     mutationFn: (buyerId: string) => syncSeat(buyerId),
     onSuccess: (data) => {
-      setSyncMessage({ type: "success", text: "Synced!" });
+      setSyncMessage({ type: "success", text: t.common.synced });
       queryClient.invalidateQueries({ queryKey: ["creatives"] });
       queryClient.invalidateQueries({ queryKey: ["seats"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       setTimeout(() => setSyncMessage(null), 3000);
     },
     onError: (error) => {
-      setSyncMessage({ type: "error", text: "Failed" });
+      setSyncMessage({ type: "error", text: t.common.failed });
       setTimeout(() => setSyncMessage(null), 3000);
     },
   });
@@ -147,8 +152,8 @@ export function Sidebar() {
         ) : !seats || seats.length === 0 ? (
           /* No seats - show connect message */
           <div className="text-sm text-gray-500 text-center py-2">
-            <p className="font-medium text-gray-700">No seats connected</p>
-            <p className="text-xs mt-1">Go to Settings to connect</p>
+            <p className="font-medium text-gray-700">{t.sidebar.noSeatsConnected}</p>
+            <p className="text-xs mt-1">{t.sidebar.goToSettingsToConnect}</p>
           </div>
         ) : seats.length === 1 ? (
           /* Single seat - show as title with sync button */
@@ -156,10 +161,10 @@ export function Sidebar() {
             <div className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
               <div className="min-w-0 flex-1">
                 <div className="font-medium text-sm text-gray-700 truncate">
-                  {seats[0].display_name || `Buyer ${seats[0].buyer_id}`}
+                  {seats[0].display_name || `${t.sidebar.buyer} ${seats[0].buyer_id}`}
                 </div>
                 <div className="text-xs text-gray-500">
-                  {seats[0].creative_count} creatives
+                  {seats[0].creative_count} {t.sidebar.creatives}
                 </div>
               </div>
               <button
@@ -169,7 +174,7 @@ export function Sidebar() {
                   "p-1.5 rounded-md text-gray-500 hover:text-primary-600 hover:bg-primary-50",
                   "disabled:opacity-50 flex-shrink-0"
                 )}
-                title="Sync creatives"
+                title={t.sidebar.syncCreatives}
               >
                 <RefreshCw className={cn("h-4 w-4", syncMutation.isPending && "animate-spin")} />
               </button>
@@ -197,7 +202,7 @@ export function Sidebar() {
               )}
             >
               <span className="truncate">
-                {selectedSeat ? selectedSeat.display_name || `Buyer ${selectedSeat.buyer_id}` : "All Seats"}
+                {selectedSeat ? selectedSeat.display_name || `${t.sidebar.buyer} ${selectedSeat.buyer_id}` : t.sidebar.allSeats}
               </span>
               <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform flex-shrink-0", seatDropdownOpen && "rotate-180")} />
             </button>
@@ -212,8 +217,8 @@ export function Sidebar() {
                   )}
                 >
                   <div>
-                    <div className="font-medium">All Seats</div>
-                    <div className="text-xs text-gray-500">{totalCreatives} creatives</div>
+                    <div className="font-medium">{t.sidebar.allSeats}</div>
+                    <div className="text-xs text-gray-500">{totalCreatives} {t.sidebar.creatives}</div>
                   </div>
                   {!currentBuyerId && <Check className="h-4 w-4 text-primary-600" />}
                 </button>
@@ -227,7 +232,7 @@ export function Sidebar() {
                     )}
                   >
                     <div>
-                      <div className="font-medium">{seat.display_name || `Buyer ${seat.buyer_id}`}</div>
+                      <div className="font-medium">{seat.display_name || `${t.sidebar.buyer} ${seat.buyer_id}`}</div>
                       <div className="text-xs text-gray-500">
                         {seat.creative_count} · {formatRelativeTime(seat.last_synced)}
                       </div>
@@ -250,7 +255,7 @@ export function Sidebar() {
                 )}
               >
                 <RefreshCw className={cn("h-3.5 w-3.5", syncMutation.isPending && "animate-spin")} />
-                {syncMutation.isPending ? "Syncing..." : "Sync"}
+                {syncMutation.isPending ? t.common.syncing : t.common.sync}
               </button>
             )}
 
@@ -269,14 +274,15 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-2 py-4 space-y-1">
-        {navigation.map((item) => {
+        {navigationItems.map((item) => {
           // Handle exact match for home, prefix match for other routes
           const isActive = item.href === "/"
             ? pathname === "/"
             : pathname.startsWith(item.href);
+          const itemName = t.navigation[item.key];
           return (
             <Link
-              key={item.name}
+              key={item.key}
               href={item.href}
               className={cn(
                 "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
@@ -285,7 +291,7 @@ export function Sidebar() {
                   : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
                 collapsed && "justify-center px-2"
               )}
-              title={collapsed ? item.name : undefined}
+              title={collapsed ? itemName : undefined}
             >
               <item.icon
                 className={cn(
@@ -294,7 +300,7 @@ export function Sidebar() {
                   !collapsed && "mr-3"
                 )}
               />
-              {!collapsed && item.name}
+              {!collapsed && itemName}
             </Link>
           );
         })}
@@ -314,7 +320,7 @@ export function Sidebar() {
             )}
           >
             <Shield className="mr-3 h-5 w-5 text-gray-400" />
-            Admin
+            {t.navigation.admin}
           </Link>
         )}
 
@@ -327,9 +333,12 @@ export function Sidebar() {
             className="flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:text-primary-600 rounded-md hover:bg-gray-50 transition-colors"
           >
             <ExternalLink className="mr-3 h-5 w-5 text-gray-400" />
-            Docs
+            {t.navigation.docs}
           </a>
         )}
+
+        {/* Language selector */}
+        <LanguageSelector collapsed={collapsed} />
 
         {/* Logout button */}
         <button
@@ -338,10 +347,10 @@ export function Sidebar() {
             "flex items-center w-full px-3 py-2 text-sm font-medium text-gray-600 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors",
             collapsed && "justify-center px-2"
           )}
-          title={collapsed ? "Logout" : undefined}
+          title={collapsed ? t.navigation.logout : undefined}
         >
           <LogOut className={cn("h-5 w-5 text-gray-400", !collapsed && "mr-3")} />
-          {!collapsed && "Logout"}
+          {!collapsed && t.navigation.logout}
         </button>
 
         {/* Collapse toggle */}
@@ -351,14 +360,14 @@ export function Sidebar() {
             "flex items-center w-full px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 rounded-md hover:bg-gray-50 transition-colors",
             collapsed && "justify-center px-2"
           )}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? t.navigation.expand : t.navigation.collapse}
         >
           {collapsed ? (
             <ChevronRight className="h-5 w-5 text-gray-400" />
           ) : (
             <>
               <ChevronLeft className="mr-3 h-5 w-5 text-gray-400" />
-              Collapse
+              {t.navigation.collapse}
             </>
           )}
         </button>
@@ -371,7 +380,7 @@ export function Sidebar() {
                 {user.display_name || user.email}
               </p>
             )}
-            <p className="text-xs text-gray-400">v0.1.0</p>
+            <p className="text-xs text-gray-400">{t.common.version}</p>
           </div>
         )}
       </div>
