@@ -12,6 +12,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.auth import APIKeyAuthMiddleware
+from api.session_middleware import SessionAuthMiddleware
+from api.auth_v2 import router as auth_router, ensure_admin_exists, cleanup_sessions
 from config import ConfigManager
 from storage import SQLiteStore
 from api.campaigns_router import router as campaigns_router
@@ -29,6 +31,7 @@ from api.routers import (
     performance_router,
     troubleshooting_router,
     collect_router,
+    admin_router,
     # Analytics sub-routers (refactored from monolithic analytics.py)
     waste_router,
     rtb_funnel_router,
@@ -70,6 +73,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Failed to auto-populate buyer seats: {e}")
 
+    # Ensure initial admin user exists (from env vars)
+    try:
+        await ensure_admin_exists()
+    except Exception as e:
+        logger.warning(f"Failed to check/create admin user: {e}")
+
+    # Cleanup expired sessions on startup
+    try:
+        cleanup_result = await cleanup_sessions()
+        if cleanup_result.get("sessions_deleted", 0) > 0:
+            logger.info(f"Cleaned up {cleanup_result['sessions_deleted']} expired sessions")
+    except Exception as e:
+        logger.warning(f"Failed to cleanup sessions: {e}")
+
     logger.info("Cat-Scan API started")
 
     yield
@@ -100,7 +117,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # API Key authentication (only enforced if CATSCAN_API_KEY is set)
+    # Session-based authentication (multi-user mode)
+    application.add_middleware(SessionAuthMiddleware)
+
+    # API Key authentication fallback (only enforced if CATSCAN_API_KEY is set)
     application.add_middleware(APIKeyAuthMiddleware)
 
     return application
@@ -111,6 +131,9 @@ app = create_app()
 # =============================================================================
 # Router Registration
 # =============================================================================
+
+# Authentication routes (must be first for login/logout)
+app.include_router(auth_router)
 
 # System routes (health, thumbnails, stats, sizes)
 app.include_router(system_router)
@@ -142,3 +165,6 @@ app.include_router(collect_router)
 app.include_router(gmail_router)
 app.include_router(retention_router)
 app.include_router(troubleshooting_router)
+
+# Admin routes (user management, audit logs)
+app.include_router(admin_router)
