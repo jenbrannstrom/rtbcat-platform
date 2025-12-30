@@ -83,3 +83,24 @@ git push origin unified-platform
 4. `api/routers/analytics/rtb_funnel.py` - Changed `regex=` to `pattern=`
 5. `login.html` - Updated auth hash for new credentials
 6. `terraform/terraform.tfvars` - Updated auth cookie hash
+7. `storage/database.py` - Removed embedded schema, now uses migrations as single source of truth
+8. `migrations/007_pretargeting_pending_changes.sql` - Renamed to `010_` to fix duplicate version conflict
+
+---
+
+## Root Cause Analysis: Schema Mismatch
+
+### Problem
+The app had TWO separate schema systems that were out of sync:
+1. **Embedded Schema** in `storage/database.py` (SCHEMA_SQL) - outdated, missing columns
+2. **Migration Files** in `migrations/*.sql` - correct schema, but never ran
+
+### Why Migrations Didn't Run
+- `init_database()` used embedded SCHEMA_SQL instead of calling migration runner
+- Migrations were designed but never wired into startup
+
+### Solution Applied
+- Modified `init_database()` to run `migrations/runner.py` instead of embedded SQL
+- Removed 300+ lines of outdated embedded schema
+- Migrations are now the single source of truth
+- Fixed duplicate migration version (two 007_*.sql files)
