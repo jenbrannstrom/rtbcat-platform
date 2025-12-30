@@ -1,9 +1,10 @@
 """Shared dependencies for API routers."""
 
-from typing import Optional
-from fastapi import HTTPException
+from typing import Optional, List
+from fastapi import HTTPException, Request, Depends
 from storage import SQLiteStore
-from storage.database import init_database
+from storage.database import init_database, DB_PATH
+from storage.repositories.user_repository import UserRepository, User
 from config import ConfigManager
 
 # Global instances - set by main.py lifespan
@@ -47,3 +48,117 @@ async def startup_event():
     Initializes the v40 database schema if needed.
     """
     await init_database()
+
+
+# ==================== User Authentication Dependencies ====================
+
+def _get_user_repo() -> UserRepository:
+    """Get the user repository instance."""
+    return UserRepository(DB_PATH)
+
+
+async def get_current_user(request: Request) -> User:
+    """Get the currently authenticated user from request state.
+
+    The SessionAuthMiddleware attaches the user to request.state.user
+    after validating the session cookie.
+
+    Raises:
+        HTTPException: If user is not authenticated.
+    """
+    user = getattr(request.state, "user", None)
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Not authenticated. Please log in.",
+        )
+
+    return user
+
+
+async def get_current_user_optional(request: Request) -> Optional[User]:
+    """Get the current user if authenticated, or None.
+
+    Useful for endpoints that work for both authenticated and anonymous users.
+    """
+    return getattr(request.state, "user", None)
+
+
+async def require_admin(user: User = Depends(get_current_user)) -> User:
+    """Require the current user to have admin role.
+
+    Args:
+        user: Current authenticated user.
+
+    Returns:
+        The admin user.
+
+    Raises:
+        HTTPException: If user is not an admin.
+    """
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required.",
+        )
+    return user
+
+
+async def get_user_service_accounts(
+    user: User = Depends(get_current_user),
+) -> List[str]:
+    """Get list of service account IDs the user can access.
+
+    Admins can access all service accounts.
+    Regular users can only access accounts they have permissions for.
+
+    Args:
+        user: Current authenticated user.
+
+    Returns:
+        List of service account IDs the user can access.
+    """
+    if user.role == "admin":
+        # Admins can access all service accounts
+        return []  # Empty list means "all accounts"
+
+    repo = _get_user_repo()
+    return await repo.get_user_service_account_ids(user.id)
+
+
+async def check_service_account_access(
+    service_account_id: str,
+    user: User = Depends(get_current_user),
+    required_level: str = "read",
+) -> bool:
+    """Check if user has access to a specific service account.
+
+    Args:
+        service_account_id: Service account to check.
+        user: Current authenticated user.
+        required_level: Required permission level (read, write, admin).
+
+    Returns:
+        True if user has access.
+
+    Raises:
+        HTTPException: If user doesn't have access.
+    """
+    if user.role == "admin":
+        return True
+
+    repo = _get_user_repo()
+    has_access = await repo.check_user_permission(
+        user.id,
+        service_account_id,
+        required_level,
+    )
+
+    if not has_access:
+        raise HTTPException(
+            status_code=403,
+            detail=f"You don't have {required_level} access to this service account.",
+        )
+
+    return True
