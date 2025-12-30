@@ -96,8 +96,8 @@ function SettingsPage() {
                 Multi-User Mode
               </h2>
               <p className="mt-1 text-sm text-gray-500">
-                Enable multi-user authentication and authorization. Disable for
-                single-user/open-source deployments.
+                Allow creating additional user accounts. When disabled, only the
+                admin account can access the system.
               </p>
             </div>
             <button
@@ -119,9 +119,9 @@ function SettingsPage() {
           <div className="mt-4 p-3 bg-blue-50 rounded-lg flex items-start gap-2">
             <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
             <p className="text-sm text-blue-700">
-              When disabled, the application runs in single-user mode without
-              requiring login. This is ideal for personal or open-source
-              deployments.
+              Login is always required. This setting controls whether you can
+              add more user accounts beyond the admin. Enable for team access,
+              disable for personal use.
             </p>
           </div>
         </div>
