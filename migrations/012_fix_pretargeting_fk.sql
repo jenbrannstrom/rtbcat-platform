@@ -4,6 +4,9 @@
 -- Disable FK checks for this migration
 PRAGMA foreign_keys = OFF;
 
+-- Drop views that reference these tables (will recreate after)
+DROP VIEW IF EXISTS v_pending_changes_summary;
+
 -- Recreate pretargeting_pending_changes without the broken FK
 DROP TABLE IF EXISTS pretargeting_pending_changes_old;
 ALTER TABLE pretargeting_pending_changes RENAME TO pretargeting_pending_changes_old;
@@ -72,3 +75,16 @@ CREATE INDEX IF NOT EXISTS idx_pending_changes_billing ON pretargeting_pending_c
 CREATE INDEX IF NOT EXISTS idx_pending_changes_config ON pretargeting_pending_changes(config_id);
 CREATE INDEX IF NOT EXISTS idx_history_config ON pretargeting_history(config_id);
 CREATE INDEX IF NOT EXISTS idx_history_bidder ON pretargeting_history(bidder_id);
+
+-- Recreate the view that was dropped
+CREATE VIEW IF NOT EXISTS v_pending_changes_summary AS
+SELECT
+    billing_id,
+    COUNT(*) as pending_count,
+    SUM(CASE WHEN change_type LIKE 'remove_%' THEN estimated_qps_impact ELSE 0 END) as total_qps_reduction,
+    GROUP_CONCAT(DISTINCT change_type) as change_types,
+    MIN(created_at) as first_change,
+    MAX(created_at) as last_change
+FROM pretargeting_pending_changes
+WHERE status = 'pending'
+GROUP BY billing_id;
