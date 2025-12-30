@@ -5,6 +5,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { Sidebar } from "@/components/sidebar";
 import { FirstRunCheck } from "@/components/first-run-check";
+import { AuthenticatedLayout } from "@/components/authenticated-layout";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -42,14 +43,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <Providers>
-          <FirstRunCheck>
-            <div className="flex h-screen bg-gray-50">
-              <Suspense fallback={<SidebarFallback />}>
-                <Sidebar />
-              </Suspense>
-              <main className="flex-1 overflow-auto">{children}</main>
-            </div>
-          </FirstRunCheck>
+          <AuthenticatedLayout sidebarFallback={<SidebarFallback />}>
+            {children}
+          </AuthenticatedLayout>
         </Providers>
       </body>
     </html>
