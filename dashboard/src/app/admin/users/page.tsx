@@ -24,11 +24,13 @@ import {
   type CreateUserRequest,
 } from "@/lib/api";
 import { withAdminAuth } from "@/contexts/auth-context";
+import { useTranslation } from "@/contexts/i18n-context";
 import { cn } from "@/lib/utils";
 
 function UsersPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   const [showCreateModal, setShowCreateModal] = useState(
     searchParams.get("action") === "create"
@@ -116,11 +118,13 @@ function UsersPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Users</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t.admin.users}</h1>
           <p className="mt-1 text-gray-600">
-            {users?.length ?? 0} user{users?.length !== 1 ? "s" : ""}
-            {activeOnly && " (active only)"}
-            {roleFilter && ` with ${roleFilter} role`}
+            {users?.length !== 1
+              ? t.admin.usersCountPlural.replace("{count}", String(users?.length ?? 0))
+              : t.admin.usersCount.replace("{count}", String(users?.length ?? 0))}
+            {activeOnly && ` ${t.admin.activeOnly}`}
+            {roleFilter && ` ${t.admin.withRole.replace("{role}", roleFilter)}`}
           </p>
         </div>
         <button
@@ -128,7 +132,7 @@ function UsersPage() {
           className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
         >
           <Plus className="h-5 w-5 mr-2" />
-          Create User
+          {t.admin.createUser}
         </button>
       </div>
 
@@ -137,34 +141,34 @@ function UsersPage() {
         {isLoading ? (
           <div className="p-12 text-center">
             <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="mt-4 text-gray-600">Loading users...</p>
+            <p className="mt-4 text-gray-600">{t.admin.loadingUsers}</p>
           </div>
         ) : users?.length === 0 ? (
           <div className="p-12 text-center">
             <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600">No users found</p>
+            <p className="text-gray-600">{t.admin.noUsersFound}</p>
           </div>
         ) : (
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  User
+                  {t.admin.user}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Role
+                  {t.admin.role}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
+                  {t.admin.status}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Last Login
+                  {t.admin.lastLogin}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Created
+                  {t.admin.created}
                 </th>
                 <th className="relative px-6 py-3">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t.common.actions}</span>
                 </th>
               </tr>
             </thead>
@@ -218,7 +222,7 @@ function UsersPage() {
                           : "bg-red-100 text-red-800"
                       )}
                     >
-                      {user.is_active ? "Active" : "Inactive"}
+                      {user.is_active ? t.admin.active : t.admin.inactive}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -247,7 +251,7 @@ function UsersPage() {
                               className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                             >
                               <Key className="h-4 w-4 mr-3 text-gray-400" />
-                              Reset Password
+                              {t.admin.resetPassword}
                             </button>
                             {user.is_active && (
                               <button
@@ -255,7 +259,7 @@ function UsersPage() {
                                 className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                               >
                                 <XCircle className="h-4 w-4 mr-3" />
-                                Deactivate
+                                {t.admin.deactivate}
                               </button>
                             )}
                           </div>
@@ -275,7 +279,7 @@ function UsersPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              Create New User
+              {t.admin.createNewUser}
             </h2>
 
             {error && (
@@ -288,7 +292,7 @@ function UsersPage() {
             <form onSubmit={handleCreateUser} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email Address
+                  {t.admin.emailAddress}
                 </label>
                 <input
                   type="email"
@@ -300,7 +304,7 @@ function UsersPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Display Name (optional)
+                  {t.admin.displayNameOptional}
                 </label>
                 <input
                   type="text"
@@ -311,19 +315,19 @@ function UsersPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Role
+                  {t.admin.role}
                 </label>
                 <select
                   name="role"
                   defaultValue="user"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 >
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
+                  <option value="user">{t.admin.userRole}</option>
+                  <option value="admin">{t.admin.adminRole}</option>
                 </select>
               </div>
               <p className="text-sm text-gray-500">
-                A secure password will be automatically generated.
+                {t.admin.passwordGenerated}
               </p>
               <div className="flex gap-3 pt-2">
                 <button
@@ -334,14 +338,14 @@ function UsersPage() {
                   }}
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
                 >
-                  Cancel
+                  {t.common.cancel}
                 </button>
                 <button
                   type="submit"
                   disabled={createMutation.isPending}
                   className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
                 >
-                  {createMutation.isPending ? "Creating..." : "Create User"}
+                  {createMutation.isPending ? t.admin.creating : t.admin.createUser}
                 </button>
               </div>
             </form>
@@ -358,20 +362,20 @@ function UsersPage() {
                 <Check className="h-6 w-6 text-green-600" />
               </div>
               <h2 className="text-xl font-semibold text-gray-900">
-                User Created Successfully
+                {t.admin.userCreatedSuccessfully}
               </h2>
               <p className="mt-2 text-gray-600">
-                Share these credentials securely with the user.
+                {t.admin.shareCredentials}
               </p>
             </div>
 
             <div className="bg-gray-50 rounded-lg p-4 mb-4">
               <div className="mb-3">
-                <p className="text-sm font-medium text-gray-500">Email</p>
+                <p className="text-sm font-medium text-gray-500">{t.admin.email}</p>
                 <p className="text-gray-900">{showPasswordModal.email}</p>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500">Password</p>
+                <p className="text-sm font-medium text-gray-500">{t.admin.password}</p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 bg-white px-3 py-2 rounded border font-mono text-sm">
                     {showPasswordModal.password}
@@ -379,7 +383,7 @@ function UsersPage() {
                   <button
                     onClick={() => copyPassword(showPasswordModal.password)}
                     className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
-                    title="Copy password"
+                    title={t.common.copy}
                   >
                     {copied ? (
                       <Check className="h-5 w-5 text-green-600" />
@@ -392,14 +396,14 @@ function UsersPage() {
             </div>
 
             <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg mb-4">
-              This password will only be shown once. Make sure to save it securely.
+              {t.admin.passwordOnlyShownOnce}
             </p>
 
             <button
               onClick={() => setShowPasswordModal(null)}
               className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
             >
-              Done
+              {t.admin.done}
             </button>
           </div>
         </div>

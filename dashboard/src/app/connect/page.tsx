@@ -18,6 +18,7 @@ import {
 import { getHealth, getSeats, syncSeat, getCredentialsStatus, uploadCredentials, discoverSeats, getSystemStatus } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { BuyerSeat } from "@/types/api";
+import { useTranslation } from "@/contexts/i18n-context";
 
 type SetupStep = 1 | 2 | 3;
 
@@ -56,6 +57,7 @@ function StepIndicator({ currentStep, totalSteps }: { currentStep: SetupStep; to
 }
 
 export default function ConnectPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -242,9 +244,9 @@ export default function ConnectPage() {
   if (isConfigured && hasSyncedCreatives) currentStep = 3;
 
   const stepTitles = [
-    "Upload Credentials",
-    "Sync Creatives",
-    "Ready to Go"
+    t.connect.uploadCredentials,
+    t.connect.syncCreatives,
+    t.connect.readyToGo
   ];
 
   return (
@@ -252,12 +254,12 @@ export default function ConnectPage() {
       {/* Header */}
       <div className="text-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">
-          {currentStep === 3 ? "Setup Complete!" : "Set Up Cat-Scan"}
+          {currentStep === 3 ? t.connect.setupComplete : t.connect.setUpCatScan}
         </h1>
         <p className="mt-1 text-sm text-gray-500">
           {currentStep === 3
-            ? "Your account is connected and ready to analyze"
-            : `Step ${currentStep} of 3: ${stepTitles[currentStep - 1]}`}
+            ? t.connect.accountConnectedReady
+            : t.connect.stepOf.replace('{current}', String(currentStep)).replace('{total}', '3').replace('{title}', stepTitles[currentStep - 1])}
         </p>
       </div>
 
@@ -267,9 +269,9 @@ export default function ConnectPage() {
       {/* Requirements Notice */}
       {systemStatus && !systemStatus.ffmpeg_available && (
         <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <h3 className="font-medium text-yellow-800 mb-1">Optional: Install ffmpeg</h3>
+          <h3 className="font-medium text-yellow-800 mb-1">{t.connect.optionalInstallFfmpeg}</h3>
           <p className="text-sm text-yellow-700 mb-2">
-            ffmpeg is required for video thumbnail generation. Without it, video creatives will show placeholder icons instead of preview frames.
+            {t.connect.ffmpegRequired}
           </p>
           <code className="block bg-yellow-100 p-2 rounded text-sm font-mono text-yellow-900">
             sudo apt install ffmpeg
@@ -322,7 +324,7 @@ export default function ConnectPage() {
             </div>
             <div className="flex items-center">
               <Shield className="h-5 w-5 text-gray-400 mr-2" />
-              <h2 className="text-lg font-medium text-gray-900">Google Credentials</h2>
+              <h2 className="text-lg font-medium text-gray-900">{t.connect.googleCredentials}</h2>
             </div>
           </div>
 
@@ -332,9 +334,9 @@ export default function ConnectPage() {
                 <div className="flex items-center">
                   <CheckCircle className="h-5 w-5 text-green-500 mr-3" />
                   <div>
-                    <p className="font-medium text-green-800">Connected</p>
+                    <p className="font-medium text-green-800">{t.connect.connected}</p>
                     <p className="text-sm text-green-600">
-                      {credentialsStatus?.client_email || "Service account configured"}
+                      {credentialsStatus?.client_email || t.connect.serviceAccountConfigured}
                     </p>
                   </div>
                 </div>
@@ -342,7 +344,7 @@ export default function ConnectPage() {
                   onClick={() => fileInputRef.current?.click()}
                   className="text-sm text-green-700 hover:text-green-800 underline"
                 >
-                  Change
+                  {t.connect.change}
                 </button>
               </div>
               <input
@@ -372,7 +374,7 @@ export default function ConnectPage() {
                 {uploadMutation.isPending ? (
                   <>
                     <Loader2 className="h-10 w-10 text-primary-600 mx-auto mb-3 animate-spin" />
-                    <p className="font-medium text-gray-700">Uploading...</p>
+                    <p className="font-medium text-gray-700">{t.connect.uploading}</p>
                   </>
                 ) : (
                   <>
@@ -381,10 +383,10 @@ export default function ConnectPage() {
                       isDragging ? "text-primary-600" : "text-gray-400"
                     )} />
                     <p className="font-medium text-gray-700">
-                      {isDragging ? "Drop file here" : "Upload Service Account JSON"}
+                      {isDragging ? t.connect.dropFileHere : t.connect.uploadServiceAccountJson}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
-                      Drag and drop or click to browse
+                      {t.connect.dragAndDropOrClick}
                     </p>
                   </>
                 )}
@@ -401,7 +403,7 @@ export default function ConnectPage() {
               {/* Collapsible Help Section */}
               <details className="border border-gray-200 rounded-lg">
                 <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg">
-                  How to get a service account key
+                  {t.connect.howToGetServiceAccountKey}
                 </summary>
                 <div className="px-4 pb-4 text-sm text-gray-600 space-y-3">
                   <ol className="list-decimal list-inside space-y-2">
@@ -462,7 +464,7 @@ export default function ConnectPage() {
             </div>
             <div className="flex items-center">
               <Database className="h-5 w-5 text-gray-400 mr-2" />
-              <h2 className="text-lg font-medium text-gray-900">Sync Creatives</h2>
+              <h2 className="text-lg font-medium text-gray-900">{t.connect.syncCreatives}</h2>
             </div>
           </div>
 
@@ -480,11 +482,11 @@ export default function ConnectPage() {
                   >
                     <div>
                       <p className="font-medium text-gray-900">
-                        {seat.display_name || `Account ${seat.buyer_id}`}
+                        {seat.display_name || `${t.connect.account} ${seat.buyer_id}`}
                       </p>
                       <p className="text-sm text-gray-500">
-                        {seat.creative_count} creatives
-                        {seat.last_synced && ` · Last synced ${new Date(seat.last_synced).toLocaleDateString()}`}
+                        {seat.creative_count} {t.connect.creatives}
+                        {seat.last_synced && ` · ${t.connect.lastSynced} ${new Date(seat.last_synced).toLocaleDateString()}`}
                       </p>
                     </div>
                     <button
@@ -497,7 +499,7 @@ export default function ConnectPage() {
                       )}
                     >
                       <RefreshCw className={cn("h-4 w-4", syncingId === seat.buyer_id && "animate-spin")} />
-                      {syncingId === seat.buyer_id ? "Syncing..." : "Sync Now"}
+                      {syncingId === seat.buyer_id ? t.connect.syncing : t.connect.syncNow}
                     </button>
                   </div>
                 ))}
@@ -505,13 +507,13 @@ export default function ConnectPage() {
             ) : isConfigured ? (
               <div className="text-center py-6">
                 <Users className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">No buyer seats found</p>
+                <p className="text-gray-500">{t.connect.noBuyerSeatsFound}</p>
                 <p className="text-sm text-gray-400 mt-1">
-                  Make sure the service account has access to your Authorized Buyers account
+                  {t.connect.makeSureServiceAccountHasAccess}
                 </p>
               </div>
             ) : (
-              <p className="text-gray-500 py-4">Complete step 1 to sync your creatives</p>
+              <p className="text-gray-500 py-4">{t.connect.completeStep1}</p>
             )}
 
           </div>
@@ -529,30 +531,30 @@ export default function ConnectPage() {
             )}>
               {currentStep === 3 ? <CheckCircle className="w-5 h-5" /> : "3"}
             </div>
-            <h2 className="text-lg font-medium text-gray-900">Ready to Analyze</h2>
+            <h2 className="text-lg font-medium text-gray-900">{t.connect.readyToAnalyze}</h2>
           </div>
 
           <div className="ml-11">
             {currentStep === 3 ? (
               <div className="space-y-4">
                 <p className="text-gray-600">
-                  Your account is set up and creatives are synced. You can now:
+                  {t.connect.accountSetUpCreativesSynced}
                 </p>
                 <ul className="text-sm text-gray-600 space-y-2 ml-4">
-                  <li>• View creative status and approvals</li>
-                  <li>• Import RTB performance data</li>
-                  <li>• Analyze QPS waste and optimization opportunities</li>
+                  <li>• {t.connect.viewCreativeStatus}</li>
+                  <li>• {t.connect.importRtbPerformance}</li>
+                  <li>• {t.connect.analyzeQpsWaste}</li>
                 </ul>
                 <button
                   onClick={() => router.push("/")}
                   className="mt-4 flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
                 >
-                  Go to Dashboard
+                  {t.connect.goToDashboard}
                   <ArrowRight className="h-5 w-5" />
                 </button>
               </div>
             ) : (
-              <p className="text-gray-500 py-4">Complete steps 1 and 2 to continue</p>
+              <p className="text-gray-500 py-4">{t.connect.completeSteps1And2}</p>
             )}
           </div>
         </div>

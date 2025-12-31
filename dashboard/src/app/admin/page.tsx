@@ -105,7 +105,7 @@ function AdminDashboard() {
             >
               <div className="flex items-center">
                 <Users className="h-5 w-5 text-gray-500 mr-3" />
-                <span className="text-gray-700">Manage Users</span>
+                <span className="text-gray-700">{t.admin.manageUsersLink}</span>
               </div>
               <span className="text-gray-400">&rarr;</span>
             </Link>
@@ -115,7 +115,7 @@ function AdminDashboard() {
             >
               <div className="flex items-center">
                 <Shield className="h-5 w-5 text-primary-600 mr-3" />
-                <span className="text-primary-700">Create New User</span>
+                <span className="text-primary-700">{t.admin.createNewUser}</span>
               </div>
               <span className="text-primary-400">&rarr;</span>
             </Link>
@@ -125,7 +125,7 @@ function AdminDashboard() {
             >
               <div className="flex items-center">
                 <Activity className="h-5 w-5 text-gray-500 mr-3" />
-                <span className="text-gray-700">View Audit Log</span>
+                <span className="text-gray-700">{t.admin.viewAuditLog}</span>
               </div>
               <span className="text-gray-400">&rarr;</span>
             </Link>
@@ -141,11 +141,11 @@ function AdminDashboard() {
             {/* Multi-User Mode */}
             <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
               <div>
-                <p className="font-medium text-gray-700">Multi-User Mode</p>
+                <p className="font-medium text-gray-700">{t.admin.multiUserMode}</p>
                 <p className="text-sm text-gray-500">
                   {multiUserEnabled
-                    ? "Multiple users can access the system"
-                    : "Single-user mode (open-source)"}
+                    ? t.admin.multipleUsersCanAccess
+                    : t.admin.singleUserMode}
                 </p>
               </div>
               <span
@@ -155,21 +155,21 @@ function AdminDashboard() {
                     : "bg-gray-200 text-gray-600"
                 }`}
               >
-                {multiUserEnabled ? "Enabled" : "Disabled"}
+                {multiUserEnabled ? t.admin.enabled : t.admin.disabled}
               </span>
             </div>
 
             {/* Audit Log Retention */}
             <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
               <div>
-                <p className="font-medium text-gray-700">Audit Log Retention</p>
+                <p className="font-medium text-gray-700">{t.admin.auditLogRetention}</p>
                 <p className="text-sm text-gray-500">
-                  How long to keep audit logs
+                  {t.admin.howLongToKeep}
                 </p>
               </div>
               <span className="px-3 py-1 text-sm font-medium rounded-full bg-blue-100 text-blue-700">
                 {retentionOptions.find((o) => o.value === currentRetention)
-                  ?.label ?? `${currentRetention} days`}
+                  ?.label ?? `${currentRetention} ${t.dashboard.days}`}
               </span>
             </div>
 
@@ -180,7 +180,7 @@ function AdminDashboard() {
             >
               <div className="flex items-center">
                 <Settings className="h-5 w-5 text-gray-500 mr-3" />
-                <span className="text-gray-700">All Settings</span>
+                <span className="text-gray-700">{t.admin.allSettings}</span>
               </div>
               <span className="text-gray-400">&rarr;</span>
             </Link>
@@ -191,27 +191,27 @@ function AdminDashboard() {
       {/* Current User Info */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          Your Account
+          {t.admin.yourAccount}
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <p className="text-sm text-gray-500">Email</p>
+            <p className="text-sm text-gray-500">{t.admin.email}</p>
             <p className="font-medium text-gray-900">{user?.email}</p>
           </div>
           <div>
-            <p className="text-sm text-gray-500">Display Name</p>
+            <p className="text-sm text-gray-500">{t.admin.displayName}</p>
             <p className="font-medium text-gray-900">
               {user?.display_name || "-"}
             </p>
           </div>
           <div>
-            <p className="text-sm text-gray-500">Role</p>
+            <p className="text-sm text-gray-500">{t.admin.role}</p>
             <p className="font-medium text-gray-900 capitalize">{user?.role}</p>
           </div>
           <div>
-            <p className="text-sm text-gray-500">Status</p>
+            <p className="text-sm text-gray-500">{t.admin.status}</p>
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-              Active
+              {t.admin.active}
             </span>
           </div>
         </div>
