@@ -47,17 +47,19 @@ import type { ServiceAccount } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/contexts/i18n-context";
 import type { BuyerSeat } from "@/types/api";
 
 type SetupTab = "api" | "gmail" | "system";
 
-const TABS: { id: SetupTab; label: string; icon: React.ElementType; description: string }[] = [
-  { id: "api", label: "Connect API", icon: Link2, description: "Google Authorized Buyers" },
-  { id: "gmail", label: "Gmail Reports", icon: Mail, description: "Auto-fetch scheduled reports" },
-  { id: "system", label: "System", icon: Settings, description: "Status & settings" },
-];
-
 export default function SetupPage() {
+  const { t } = useTranslation();
+
+  const TABS: { id: SetupTab; label: string; icon: React.ElementType; description: string }[] = [
+    { id: "api", label: t.setup.connectApi, icon: Link2, description: t.setup.googleAuthorizedBuyers },
+    { id: "gmail", label: t.setup.gmailReports, icon: Mail, description: t.setup.autoFetchReports },
+    { id: "system", label: t.setup.system, icon: Settings, description: t.setup.statusAndSettings },
+  ];
   const [activeTab, setActiveTab] = useState<SetupTab>("api");
   const queryClient = useQueryClient();
 
@@ -101,9 +103,9 @@ export default function SetupPage() {
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Setup</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t.setup.title}</h1>
         <p className="text-gray-600 mt-1">
-          Configure data sources and system settings
+          {t.setup.configureDataSources}
         </p>
       </div>
 
@@ -117,7 +119,7 @@ export default function SetupPage() {
                 isConfigured ? "bg-green-500" : "bg-yellow-500"
               )} />
               <span className="text-sm text-gray-600">
-                API: {isConfigured ? "Connected" : "Not connected"}
+                API: {isConfigured ? t.setup.connected : t.setup.notConnected}
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -126,7 +128,7 @@ export default function SetupPage() {
                 isGmailAuthorized ? "bg-green-500" : isGmailConfigured ? "bg-yellow-500" : "bg-gray-400"
               )} />
               <span className="text-sm text-gray-600">
-                Gmail: {isGmailAuthorized ? "Connected" : isGmailConfigured ? "Not authorized" : "Not configured"}
+                Gmail: {isGmailAuthorized ? t.setup.connected : isGmailConfigured ? t.setup.notAuthorized : t.setup.notConfigured}
               </span>
             </div>
           </div>
@@ -134,7 +136,7 @@ export default function SetupPage() {
             href="/waste-analysis"
             className="text-sm text-blue-600 hover:text-blue-800 font-medium"
           >
-            Go to Waste Optimizer →
+            {t.setup.goToWasteOptimizer} →
           </a>
         </div>
       </div>

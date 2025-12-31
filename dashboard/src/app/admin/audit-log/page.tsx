@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Activity, Filter, ChevronDown } from "lucide-react";
 import { getAuditLogs, type AuditLogEntry } from "@/lib/api";
 import { withAdminAuth } from "@/contexts/auth-context";
+import { useTranslation } from "@/contexts/i18n-context";
 import { cn } from "@/lib/utils";
 
 const ACTION_COLORS: Record<string, string> = {
@@ -24,6 +25,7 @@ const ACTION_COLORS: Record<string, string> = {
 };
 
 function AuditLogPage() {
+  const { t } = useTranslation();
   const [days, setDays] = useState(7);
   const [actionFilter, setActionFilter] = useState<string | undefined>();
   const [showFilters, setShowFilters] = useState(false);
@@ -68,10 +70,14 @@ function AuditLogPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Audit Log</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t.admin.auditLog}</h1>
           <p className="mt-1 text-gray-600">
-            {logs?.length ?? 0} event{logs?.length !== 1 ? "s" : ""} in the last{" "}
-            {days} day{days !== 1 ? "s" : ""}
+            {logs?.length !== 1
+              ? t.admin.eventsCountPlural.replace("{count}", String(logs?.length ?? 0))
+              : t.admin.eventsCount.replace("{count}", String(logs?.length ?? 0))}{" "}
+            {days !== 1
+              ? t.admin.inLastDays.replace("{days}", String(days))
+              : t.admin.inLastDay}
           </p>
         </div>
         <button
@@ -79,7 +85,7 @@ function AuditLogPage() {
           className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
         >
           <Filter className="h-5 w-5 mr-2 text-gray-500" />
-          Filters
+          {t.admin.filters}
           <ChevronDown
             className={cn(
               "h-4 w-4 ml-2 text-gray-500 transition-transform",
@@ -95,30 +101,30 @@ function AuditLogPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Time Range
+                {t.admin.timeRange}
               </label>
               <select
                 value={days}
                 onChange={(e) => setDays(Number(e.target.value))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
-                <option value={1}>Last 24 hours</option>
-                <option value={7}>Last 7 days</option>
-                <option value={30}>Last 30 days</option>
-                <option value={60}>Last 60 days</option>
-                <option value={90}>Last 90 days</option>
+                <option value={1}>{t.admin.last24Hours}</option>
+                <option value={7}>{t.admin.last7Days}</option>
+                <option value={30}>{t.admin.last30Days}</option>
+                <option value={60}>{t.admin.last60Days}</option>
+                <option value={90}>{t.admin.last90Days}</option>
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Action Type
+                {t.admin.actionType}
               </label>
               <select
                 value={actionFilter || ""}
                 onChange={(e) => setActionFilter(e.target.value || undefined)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
-                <option value="">All actions</option>
+                <option value="">{t.admin.allActions}</option>
                 {uniqueActions.map((action) => (
                   <option key={action} value={action}>
                     {action.replace(/_/g, " ")}
@@ -135,12 +141,12 @@ function AuditLogPage() {
         {isLoading ? (
           <div className="p-12 text-center">
             <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="mt-4 text-gray-600">Loading audit logs...</p>
+            <p className="mt-4 text-gray-600">{t.admin.loadingAuditLogs}</p>
           </div>
         ) : logs?.length === 0 ? (
           <div className="p-12 text-center">
             <Activity className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600">No audit log entries found</p>
+            <p className="text-gray-600">{t.admin.noAuditLogs}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -148,19 +154,19 @@ function AuditLogPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Timestamp
+                    {t.admin.timestamp}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Action
+                    {t.admin.action}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Resource
+                    {t.admin.resource}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Details
+                    {t.admin.details}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    IP Address
+                    {t.admin.ipAddress}
                   </th>
                 </tr>
               </thead>
