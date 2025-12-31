@@ -12,25 +12,22 @@ import { ErrorPage } from "@/components/error";
 import type { Creative, PerformancePeriod, CreativePerformanceSummary } from "@/types/api";
 import { cn, getFormatLabel } from "@/lib/utils";
 import { useAccount } from "@/contexts/account-context";
+import { useTranslation } from "@/contexts/i18n-context";
 
-// Sort options for the dropdown
-const SORT_OPTIONS: { value: PerformancePeriod | "none"; label: string }[] = [
-  { value: "none", label: "Default Order" },
-  { value: "yesterday", label: "Spend (Yesterday)" },
-  { value: "7d", label: "Spend (7 Days)" },
-  { value: "30d", label: "Spend (30 Days)" },
-  { value: "all_time", label: "Spend (All Time)" },
-];
+// Sort options - labels will be translated in the component
+type SortOptionValue = PerformancePeriod | "none";
+const SORT_OPTION_VALUES: SortOptionValue[] = ["none", "yesterday", "7d", "30d", "all_time"];
 
 // Performance tiers
 type PerformanceTier = "high" | "medium" | "low" | "no_data";
 
-const TIER_OPTIONS: { value: PerformanceTier | "all"; label: string; color: string }[] = [
-  { value: "all", label: "All", color: "bg-gray-100 text-gray-600" },
-  { value: "high", label: "High", color: "bg-green-100 text-green-700" },
-  { value: "medium", label: "Medium", color: "bg-yellow-100 text-yellow-700" },
-  { value: "low", label: "Low", color: "bg-red-100 text-red-700" },
-  { value: "no_data", label: "No Data", color: "bg-gray-100 text-gray-500" },
+type TierOptionValue = PerformanceTier | "all";
+const TIER_OPTION_VALUES: { value: TierOptionValue; color: string }[] = [
+  { value: "all", color: "bg-gray-100 text-gray-600" },
+  { value: "high", color: "bg-green-100 text-green-700" },
+  { value: "medium", color: "bg-yellow-100 text-yellow-700" },
+  { value: "low", color: "bg-red-100 text-red-700" },
+  { value: "no_data", color: "bg-gray-100 text-gray-500" },
 ];
 
 // Calculate performance tiers based on spend percentiles
@@ -79,15 +76,17 @@ const GAP = 16;
 
 // Format filters - map API formats to display labels
 // Note: HTML and IMAGE both map to "Display" in the UI
-const FORMAT_FILTERS: { value: string; label: string; formats: string[] }[] = [
-  { value: "VIDEO", label: "Video", formats: ["VIDEO"] },
-  { value: "DISPLAY", label: "Display", formats: ["HTML", "IMAGE"] },
-  { value: "NATIVE", label: "Native", formats: ["NATIVE"] },
+// Labels will be translated in the component
+const FORMAT_FILTER_VALUES: { value: string; formats: string[] }[] = [
+  { value: "VIDEO", formats: ["VIDEO"] },
+  { value: "DISPLAY", formats: ["HTML", "IMAGE"] },
+  { value: "NATIVE", formats: ["NATIVE"] },
 ];
 const COLUMNS = 4; // Fixed 4 columns for simplicity
 
 // Thumbnail Generation Banner Component
 function ThumbnailGenerationBanner({ buyerId }: { buyerId?: string | null }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
 
   const { data: status, refetch: refetchStatus } = useQuery({
@@ -143,20 +142,20 @@ function ThumbnailGenerationBanner({ buyerId }: { buyerId?: string | null }) {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="font-medium text-gray-900 flex items-center gap-2">
-            Video Thumbnails
+            {t.creatives.videoThumbnails}
             <span className="text-sm font-normal text-gray-500">
-              {status.with_thumbnails} of {status.total_videos} generated
+              {status.with_thumbnails} {t.creatives.ofGenerated.replace('{total}', String(status.total_videos))}
             </span>
           </h3>
 
           {!isGenerating && (
             <p className="text-sm text-gray-500 mt-1">
               {hasPending && (
-                <span className="text-yellow-600">{pending} pending</span>
+                <span className="text-yellow-600">{pending} {t.creatives.pending}</span>
               )}
               {hasPending && hasFailed && ' · '}
               {hasFailed && (
-                <span className="text-red-600">{status.failed} failed</span>
+                <span className="text-red-600">{status.failed} {t.creatives.failed}</span>
               )}
             </p>
           )}
@@ -185,12 +184,12 @@ function ThumbnailGenerationBanner({ buyerId }: { buyerId?: string | null }) {
               {isGenerating || autoGenerate ? (
                 <>
                   <Square className="h-4 w-4" />
-                  Stop
+                  {t.creatives.stop}
                 </>
               ) : (
                 <>
                   <Play className="h-4 w-4" />
-                  Generate All ({pending})
+                  {t.creatives.generateAll} ({pending})
                 </>
               )}
             </button>
@@ -199,15 +198,15 @@ function ThumbnailGenerationBanner({ buyerId }: { buyerId?: string | null }) {
             <button
               onClick={() => generateMutation.mutate({ force: true, limit: 10 })}
               className="flex items-center gap-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm transition"
-              title="Retry failed thumbnail generation"
+              title={t.creatives.retryFailed}
             >
-              Retry Failed ({status.failed})
+              {t.creatives.retryFailed} ({status.failed})
             </button>
           )}
           {isGenerating && (
             <span className="flex items-center gap-2 text-sm text-gray-500">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Processing batch...
+              {t.creatives.processingBatch}
             </span>
           )}
         </div>
@@ -223,7 +222,7 @@ function ThumbnailGenerationBanner({ buyerId }: { buyerId?: string | null }) {
             />
           </div>
           <p className="text-xs text-gray-500 mt-1">
-            {status.coverage_percent.toFixed(0)}% coverage
+            {status.coverage_percent.toFixed(0)}% {t.creatives.coverage}
           </p>
         </div>
       )}
@@ -233,8 +232,8 @@ function ThumbnailGenerationBanner({ buyerId }: { buyerId?: string | null }) {
         <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
           <div>
-            <span className="text-yellow-800">ffmpeg not detected in API environment. </span>
-            <span className="text-yellow-700">If generation fails, install with: </span>
+            <span className="text-yellow-800">{t.creatives.ffmpegNotDetected} </span>
+            <span className="text-yellow-700">{t.creatives.ifGenerationFails} </span>
             <code className="bg-yellow-100 px-1 rounded text-yellow-900">sudo apt install ffmpeg</code>
           </div>
         </div>
@@ -313,6 +312,7 @@ function VirtualizedGrid({
 }
 
 function CreativesContent() {
+  const { t } = useTranslation();
   const { selectedBuyerId } = useAccount();
 
   // Get buyer_id from context (persistent across pages)
@@ -401,7 +401,7 @@ function CreativesContent() {
       // Format filter - check if creative's format matches any selected filter group
       if (selectedFormats.size > 0) {
         const matchesFormat = Array.from(selectedFormats).some((filterValue) => {
-          const filter = FORMAT_FILTERS.find((f) => f.value === filterValue);
+          const filter = FORMAT_FILTER_VALUES.find((f) => f.value === filterValue);
           return filter?.formats.includes(c.format);
         });
         if (!matchesFormat) return false;
@@ -485,7 +485,7 @@ function CreativesContent() {
       <div className="mb-4 flex flex-wrap items-center gap-4">
         {/* Title */}
         <div className="flex-shrink-0">
-          <h1 className="text-xl font-bold text-gray-900">Creatives</h1>
+          <h1 className="text-xl font-bold text-gray-900">{t.creatives.title}</h1>
         </div>
 
         {/* Search - 35% width */}
@@ -493,7 +493,7 @@ function CreativesContent() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search ID, name, advertiser..."
+            placeholder={t.creatives.searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="input pl-9 pr-8 py-1.5 w-full text-sm"
@@ -510,7 +510,7 @@ function CreativesContent() {
 
         {/* Format Filters - horizontal */}
         <div className="flex items-center gap-1">
-          {FORMAT_FILTERS.map((filter) => (
+          {FORMAT_FILTER_VALUES.map((filter) => (
             <button
               key={filter.value}
               onClick={() => toggleFormat(filter.value)}
@@ -521,7 +521,9 @@ function CreativesContent() {
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               )}
             >
-              {filter.label}
+              {filter.value === 'VIDEO' ? t.creatives.video :
+               filter.value === 'DISPLAY' ? t.creatives.display :
+               t.creatives.native}
             </button>
           ))}
         </div>
@@ -529,8 +531,8 @@ function CreativesContent() {
         {/* Tier Filter - only show when performance data is available */}
         {sortBy !== "none" && performanceData && (
           <div className="flex items-center gap-1">
-            <span className="text-xs text-gray-500 mr-1">Tier:</span>
-            {TIER_OPTIONS.map((tier) => (
+            <span className="text-xs text-gray-500 mr-1">{t.creatives.tier}</span>
+            {TIER_OPTION_VALUES.map((tier) => (
               <button
                 key={tier.value}
                 onClick={() => setTierFilter(tier.value)}
@@ -541,7 +543,11 @@ function CreativesContent() {
                     : tier.color + " hover:opacity-80"
                 )}
               >
-                {tier.label}
+                {tier.value === 'all' ? t.creatives.all :
+                 tier.value === 'high' ? t.creatives.high :
+                 tier.value === 'medium' ? t.creatives.medium :
+                 tier.value === 'low' ? t.creatives.low :
+                 t.creatives.noData}
               </button>
             ))}
           </div>
@@ -557,7 +563,7 @@ function CreativesContent() {
               }}
               className="input py-1.5 pr-8 text-sm min-w-[100px]"
             >
-              <option value="">All Sizes</option>
+              <option value="">{t.creatives.allSizes}</option>
               {availableSizes.filter(s => s !== "0x0").map((size) => (
                 <option key={size} value={size}>{size}</option>
               ))}
@@ -573,9 +579,13 @@ function CreativesContent() {
             onChange={(e) => setSortBy(e.target.value as PerformancePeriod | "none")}
             className="input py-1.5 pr-8 text-sm min-w-[140px]"
           >
-            {SORT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
+            {SORT_OPTION_VALUES.map((value) => (
+              <option key={value} value={value}>
+                {value === 'none' ? t.creatives.defaultOrder :
+                 value === 'yesterday' ? t.creatives.spendYesterday :
+                 value === '7d' ? t.creatives.spend7Days :
+                 value === '30d' ? t.creatives.spend30Days :
+                 t.creatives.spendAllTime}
               </option>
             ))}
           </select>
@@ -591,13 +601,13 @@ function CreativesContent() {
             className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
           >
             <X className="h-3.5 w-3.5" />
-            Clear
+            {t.creatives.clear}
           </button>
         )}
 
         {/* Count */}
         <div className="ml-auto text-sm text-gray-500">
-          {filteredCreatives?.length ?? 0} of {creatives?.length ?? 0}
+          {t.creatives.countOf.replace('{count}', String(filteredCreatives?.length ?? 0)).replace('{total}', String(creatives?.length ?? 0))}
         </div>
       </div>
 
@@ -612,19 +622,19 @@ function CreativesContent() {
         <div className="text-center py-12">
           <p className="text-gray-500">
             {hasActiveFilters
-              ? "No creatives match your filters"
+              ? t.creatives.noCreativesMatchFilters
               : selectedSeatId
-              ? "No creatives found for this seat"
-              : "No creatives found"}
+              ? t.creatives.noCreativesForSeat
+              : t.creatives.noCreativesFound}
           </p>
           {!hasActiveFilters && !selectedSeatId && (
             <a href="/connect" className="btn-primary mt-4 inline-flex">
-              Connect Account
+              {t.creatives.connectAccount}
             </a>
           )}
           {!hasActiveFilters && selectedSeatId && (
             <p className="mt-2 text-sm text-gray-400">
-              Try syncing this seat or select a different one
+              {t.creatives.trySyncingOrSelect}
             </p>
           )}
         </div>

@@ -24,9 +24,11 @@ import { ListItem } from '@/components/campaigns/list-item';
 import { PreviewModal } from '@/components/preview-modal';
 import { cn } from '@/lib/utils';
 import { useAccount } from '@/contexts/account-context';
+import { useTranslation } from '@/contexts/i18n-context';
 
 // Droppable zone to create a new campaign on drop (Grid view)
 function NewCampaignDropZone({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({
     id: 'new-campaign',
   });
@@ -43,9 +45,9 @@ function NewCampaignDropZone({ onClick }: { onClick: () => void }) {
       )}
     >
       <span className="text-4xl">+</span>
-      <span>{isOver ? "Drop to create campaign" : "New Campaign"}</span>
+      <span>{isOver ? t.campaigns.dropToCreateCampaign : t.campaigns.newCampaign}</span>
       {isOver && (
-        <span className="text-sm text-blue-500">Release to create with selected items</span>
+        <span className="text-sm text-blue-500">{t.campaigns.releaseToCreate}</span>
       )}
     </div>
   );
@@ -53,6 +55,7 @@ function NewCampaignDropZone({ onClick }: { onClick: () => void }) {
 
 // Droppable zone to create a new campaign on drop (List view)
 function NewCampaignDropZoneList({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({
     id: 'new-campaign',
   });
@@ -70,9 +73,9 @@ function NewCampaignDropZoneList({ onClick }: { onClick: () => void }) {
       style={{ maxHeight: '70vh', minHeight: '200px' }}
     >
       <span className="text-4xl">+</span>
-      <span className="text-sm">{isOver ? "Drop to create" : "New Campaign"}</span>
+      <span className="text-sm">{isOver ? t.campaigns.dropToCreate : t.campaigns.newCampaign}</span>
       {isOver && (
-        <span className="text-xs text-blue-500">Release to create</span>
+        <span className="text-xs text-blue-500">{t.campaigns.releaseToCreateShort}</span>
       )}
     </div>
   );
@@ -285,6 +288,7 @@ async function deleteCampaign(id: string): Promise<void> {
 // =============================================================================
 
 export default function CampaignsPage() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { selectedBuyerId } = useAccount();
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -787,9 +791,9 @@ export default function CampaignsPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Campaigns</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t.campaigns.title}</h1>
           <p className="mt-1 text-sm text-gray-500">
-            {campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''} · {unclustered?.count || 0} unclustered · {creativesMap.size} creatives loaded
+            {campaigns.length} {campaigns.length !== 1 ? t.campaigns.campaignCountPlural.replace('{count}', '') : t.campaigns.campaignCount.replace('{count}', '')} · {unclustered?.count || 0} {t.campaigns.unclustered} · {creativesMap.size} {t.campaigns.creativesLoaded}
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -803,7 +807,7 @@ export default function CampaignsPage() {
                   ? "bg-white shadow-sm text-blue-600"
                   : "text-gray-500 hover:text-gray-700"
               )}
-              title="Grid view"
+              title={t.campaigns.gridView}
             >
               <LayoutGrid className="h-4 w-4" />
             </button>
@@ -815,7 +819,7 @@ export default function CampaignsPage() {
                   ? "bg-white shadow-sm text-blue-600"
                   : "text-gray-500 hover:text-gray-700"
               )}
-              title="List view"
+              title={t.campaigns.listView}
             >
               <List className="h-4 w-4" />
             </button>
@@ -831,12 +835,12 @@ export default function CampaignsPage() {
               {autoClusterMutation.isPending ? (
                 <>
                   <RefreshCw className="h-4 w-4 animate-spin" />
-                  Analyzing...
+                  {t.campaigns.analyzing}
                 </>
               ) : (
                 <>
                   <Sparkles className="h-4 w-4" />
-                  Cluster by URL
+                  {t.campaigns.clusterByUrl}
                 </>
               )}
             </button>
@@ -845,7 +849,7 @@ export default function CampaignsPage() {
               className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
             >
               <Plus className="h-4 w-4" />
-              New Campaign
+              {t.campaigns.newCampaign}
             </button>
           </div>
         </div>
@@ -856,13 +860,13 @@ export default function CampaignsPage() {
         <div className="mb-8 bg-purple-50/50 border border-purple-200 rounded-xl p-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-purple-900">
-              Suggested Clusters ({suggestions.length})
+              {t.campaigns.suggestedClusters} ({suggestions.length})
             </h2>
             <button
               onClick={() => setShowSuggestions(false)}
               className="text-sm text-purple-600 hover:text-purple-800"
             >
-              Dismiss
+              {t.campaigns.dismiss}
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -890,7 +894,7 @@ export default function CampaignsPage() {
                     {isCreated ? (
                       <span className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg flex items-center gap-1">
                         <Check className="h-3 w-3" />
-                        Created
+                        {t.campaigns.created}
                       </span>
                     ) : (
                       <button
@@ -898,12 +902,12 @@ export default function CampaignsPage() {
                         disabled={isApplying}
                         className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50"
                       >
-                        {isApplying ? 'Creating...' : 'Create'}
+                        {isApplying ? t.campaigns.creating : t.campaigns.create}
                       </button>
                     )}
                   </div>
                   <p className={`text-sm ${isCreated ? 'text-green-700' : 'text-purple-700'}`}>
-                    {suggestion.creative_ids.length} creative{suggestion.creative_ids.length !== 1 ? 's' : ''}
+                    {suggestion.creative_ids.length} {suggestion.creative_ids.length !== 1 ? t.campaigns.creativeCountPlural.replace('{count}', '') : t.campaigns.creativeCount.replace('{count}', '')}
                   </p>
                 </div>
               );
@@ -914,7 +918,7 @@ export default function CampaignsPage() {
               onClick={() => setShowAllSuggestions(!showAllSuggestions)}
               className="mt-3 text-sm text-purple-600 hover:text-purple-800 text-center w-full"
             >
-              {showAllSuggestions ? 'Show less' : `+${suggestions.length - 9} more suggestions`}
+              {showAllSuggestions ? t.campaigns.showLess : t.campaigns.moreSuggestions.replace('{count}', String(suggestions.length - 9))}
             </button>
           )}
         </div>
@@ -922,7 +926,7 @@ export default function CampaignsPage() {
 
       {/* Page-level Sort/Filter Controls (Phase 23) */}
       <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-gray-50 rounded-lg">
-        <span className="text-sm text-gray-600 font-medium">Sort:</span>
+        <span className="text-sm text-gray-600 font-medium">{t.campaigns.sort}</span>
         {(['spend', 'impressions', 'clicks', 'creatives', 'name'] as const).map(field => (
           <button
             key={field}
@@ -941,7 +945,11 @@ export default function CampaignsPage() {
                 : "hover:bg-gray-200 text-gray-600"
             )}
           >
-            {field.charAt(0).toUpperCase() + field.slice(1)}
+            {field === 'spend' ? t.campaigns.spend :
+             field === 'impressions' ? t.campaigns.impressions :
+             field === 'clicks' ? t.campaigns.clicks :
+             field === 'creatives' ? t.creatives.title :
+             t.campaigns.name}
             {pageSortField === field && (
               pageSortDir === 'desc' ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />
             )}
@@ -957,14 +965,14 @@ export default function CampaignsPage() {
               onChange={e => setCountryFilter(e.target.value || null)}
               className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">All Countries</option>
+              <option value="">{t.campaigns.allCountries}</option>
               {allCountries.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             {countryFilter && (
               <button
                 onClick={() => setCountryFilter(null)}
                 className="p-1 text-gray-400 hover:text-gray-600"
-                title="Clear filter"
+                title={t.campaigns.clearFilter}
               >
                 <X className="h-4 w-4" />
               </button>
