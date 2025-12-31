@@ -1,164 +1,121 @@
-# Plan: Show Endpoints and Pretargeting on Setup Page
+# Plan: Auto-Sync Endpoints and Pretargeting After Seat Discovery
 
 ## Problem
-The setup page shows Connected Accounts and Buyer Seats, but does NOT show:
-- **RTB Endpoints** (URL, QPS, trading location, protocol)
-- **Pretargeting Configurations** (targeting rules, state, formats, platforms, sizes, geos)
 
-These are critical configuration items that users expect to see when they have 22 creatives synced. The data exists in the database and APIs work - it's just not integrated into the setup page UI.
+The main dashboard shows "No RTB Endpoints Configured" even though:
+- Service account is connected
+- 22 creatives synced
+- Buyer seats discovered
 
-## Current State
+**Root Cause:** Endpoints and pretargeting configs are **never auto-synced**. The setup page auto-discovers buyer seats after adding an account, but does NOT trigger endpoint/pretargeting sync.
 
-### Setup Page Structure (`/setup/page.tsx`)
-- Tab 1: **Connect API** - Service accounts + Buyer seats
-- Tab 2: **Gmail Reports** - Gmail integration
-- Tab 3: **System** - Database stats, thumbnails
+## Current Flow (Broken)
 
-### Existing Components (on main dashboard, NOT setup)
-- `AccountEndpointsHeader` - Shows RTB endpoints with URLs, QPS, protocols
-- `PretargetingConfigCard` - Shows pretargeting configs with targeting settings
+1. User uploads service account JSON → ✅
+2. `discoverSeats()` is called automatically → ✅ seats discovered
+3. User syncs creatives manually → ✅ 22 creatives
+4. **Endpoints never synced** → ❌ `rtb_endpoints` table is empty
+5. **Pretargeting never synced** → ❌ `pretargeting_configs` table may be empty
 
-### Available APIs
-- `getRTBEndpoints()` / `syncRTBEndpoints()` - Endpoint management
-- `getPretargetingConfigs()` / `syncPretargetingConfigs()` - Pretargeting management
-
----
+The `AccountEndpointsHeader` component on the main page queries `getRTBEndpoints()`, which returns empty because no one called `syncRTBEndpoints()`.
 
 ## Solution
 
-Add two new sections to the **API Connection Tab** (below Buyer Seats):
+**Option A: Auto-sync after seat discovery (Recommended)**
 
-### 1. RTB Endpoints Section
-**Location:** After "Buyer Seats" in `ApiConnectionTab`
+Modify the seat discovery success handler in `setup/page.tsx` to also trigger:
+1. `syncRTBEndpoints()` - sync endpoints from Google
+2. `syncPretargetingConfigs()` - sync pretargeting from Google
 
-**Display:**
-- List all RTB endpoints showing:
-  - Trading location (US West, US East, Europe, Asia)
-  - Endpoint URL
-  - Max QPS
-  - Bid protocol (OpenRTB 2.5, etc.)
-- Total QPS allocated across all endpoints
-- "Sync Endpoints" button to refresh from Google API
-- Last synced timestamp
+This mirrors the existing auto-discovery pattern and ensures data is populated immediately.
 
-**Empty state:** "No endpoints configured. Endpoints will sync automatically when you add a service account."
+**Option B: Add sync buttons to setup page**
 
-### 2. Pretargeting Configurations Section
-**Location:** After RTB Endpoints
+Add explicit "Sync Endpoints" and "Sync Pretargeting" buttons to the setup page's API tab so users can manually trigger syncs.
 
-**Display:**
-- List all pretargeting configs showing:
-  - Config name (display_name or billing_id)
-  - State badge (ACTIVE/SUSPENDED)
-  - Format targets (HTML, VAST, etc.)
-  - Platform targets (PHONE, TABLET, DESKTOP)
-  - Size targets (300x250, 320x50, etc.)
-  - Geo targets (country codes)
-- "Sync Configs" button to refresh from Google API
-- Last synced timestamp
-
-**Empty state:** "No pretargeting configurations found. These will appear after syncing your endpoints."
-
----
-
-## Implementation Steps
+## Implementation (Option A - Auto-sync)
 
 ### Step 1: Add imports to setup page
-Add API imports for:
-- `getRTBEndpoints`, `syncRTBEndpoints`
-- `getPretargetingConfigs`, `syncPretargetingConfigs`
-- Types: `RTBEndpointsResponse`, `PretargetingConfigResponse`
 
-### Step 2: Create RTBEndpointsSection component
-New component inside setup/page.tsx that:
-- Fetches endpoints with `useQuery`
-- Shows endpoint list with location, URL, QPS, protocol
-- Has sync button with `useMutation`
-- Shows total QPS summary
-- Handles loading/error/empty states
-
-### Step 3: Create PretargetingSection component
-New component inside setup/page.tsx that:
-- Fetches pretargeting configs with `useQuery`
-- Shows config list with name, state, targeting summary
-- Has sync button with `useMutation`
-- Handles loading/error/empty states
-
-### Step 4: Integrate into ApiConnectionTab
-Add both sections after the Buyer Seats section:
 ```tsx
-{/* Buyer Seats Section */}
-<div>...</div>
-
-{/* RTB Endpoints Section */}
-<RTBEndpointsSection />
-
-{/* Pretargeting Configs Section */}
-<PretargetingSection />
+// In dashboard/src/app/setup/page.tsx
+import {
+  // ... existing imports ...
+  syncRTBEndpoints,
+  syncPretargetingConfigs,
+} from "@/lib/api";
 ```
 
-### Step 5: Add icons
-Import additional icons: `Globe`, `Target`, `Zap` (or similar for endpoints/pretargeting)
+### Step 2: Chain syncs after seat discovery
 
----
+Modify the `discoverMutation` success handler:
 
-## UI Design
+```tsx
+const discoverMutation = useMutation({
+  mutationFn: (bidderId: string) => discoverSeats({ bidder_id: bidderId }),
+  onSuccess: async (data) => {
+    setMessage({ type: "success", text: `Discovered ${data.seats_discovered} buyer seat(s)` });
+    queryClient.invalidateQueries({ queryKey: ["seats"] });
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Connected Accounts                                    [Add] │
-│ ✓ adx-service-mingle-mobyoung                       Remove │
-│   mobyoung-adx-bidder-access@...                           │
-│   1 buyer seat discovered                                   │
-└─────────────────────────────────────────────────────────────┘
+    // Also sync endpoints and pretargeting automatically
+    try {
+      await syncRTBEndpoints();
+      queryClient.invalidateQueries({ queryKey: ["rtb-endpoints"] });
+    } catch (e) {
+      console.error("Failed to sync endpoints:", e);
+    }
 
-┌─────────────────────────────────────────────────────────────┐
-│ Buyer Seats                                                 │
-│ [Discover: adx-service-mingle-mobyoung]                    │
-│ ┌─────────────────────────────────────────────────────┐    │
-│ │ Amazing MobYoung                                     │    │
-│ │ 22 creatives · Last synced 30/12/2025   [Sync Now] │    │
-│ └─────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────┘
+    try {
+      await syncPretargetingConfigs();
+      queryClient.invalidateQueries({ queryKey: ["pretargeting-configs"] });
+    } catch (e) {
+      console.error("Failed to sync pretargeting:", e);
+    }
 
-┌─────────────────────────────────────────────────────────────┐
-│ RTB Endpoints                                    [Sync Now] │
-│ ┌─────────────────────────────────────────────────────┐    │
-│ │ 🌐 US West    rtb.google.com/bidder/...   5,000 QPS │    │
-│ │ 🌐 Europe     rtb-eu.google.com/...       3,000 QPS │    │
-│ └─────────────────────────────────────────────────────┘    │
-│ Total: 8,000 QPS allocated · Last synced: 30/12/2025       │
-└─────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────┐
-│ Pretargeting Configurations                      [Sync Now] │
-│ ┌─────────────────────────────────────────────────────┐    │
-│ │ Config: Mobile Video US          [ACTIVE]           │    │
-│ │ Formats: VAST · Platforms: PHONE, TABLET           │    │
-│ │ Sizes: 320x480 · Geos: USA, CAN, MEX              │    │
-│ └─────────────────────────────────────────────────────┘    │
-│ ┌─────────────────────────────────────────────────────┐    │
-│ │ Config: Desktop Display EU       [SUSPENDED]        │    │
-│ │ Formats: HTML · Platforms: DESKTOP                 │    │
-│ │ Sizes: 300x250, 728x90 · Geos: DEU, FRA, GBR      │    │
-│ └─────────────────────────────────────────────────────┘    │
-│ Last synced: 30/12/2025                                    │
-└─────────────────────────────────────────────────────────────┘
+    setTimeout(() => setMessage(null), 5000);
+  },
+  // ... rest unchanged
+});
 ```
 
----
+### Step 3: Also trigger sync when syncing individual seats
+
+When a user clicks "Sync Now" on a buyer seat, also refresh endpoints/pretargeting:
+
+```tsx
+const syncMutation = useMutation({
+  mutationFn: (buyerId: string) => syncSeat(buyerId),
+  onSuccess: async (data) => {
+    setMessage({ type: "success", text: `Synced ${data.creatives_synced} creatives` });
+    queryClient.invalidateQueries({ queryKey: ["creatives"] });
+    queryClient.invalidateQueries({ queryKey: ["seats"] });
+    queryClient.invalidateQueries({ queryKey: ["stats"] });
+    queryClient.invalidateQueries({ queryKey: ["rtb-endpoints"] });
+    queryClient.invalidateQueries({ queryKey: ["pretargeting-configs"] });
+    setSyncingId(null);
+    setTimeout(() => setMessage(null), 5000);
+  },
+  // ...
+});
+```
 
 ## Files to Modify
 
 1. **`dashboard/src/app/setup/page.tsx`**
-   - Add imports for endpoint/pretargeting APIs
-   - Add `RTBEndpointsSection` component
-   - Add `PretargetingSection` component
-   - Integrate sections into `ApiConnectionTab`
+   - Import `syncRTBEndpoints`, `syncPretargetingConfigs`
+   - Call them in `discoverMutation.onSuccess`
+   - Invalidate related query caches
 
----
+## Testing
 
-## Estimated Changes
-- ~150-200 lines of new code for two new sections
-- No new files needed - all additions to existing setup page
-- Reuses existing API functions and types
+After implementation:
+1. Go to Setup page
+2. If seats already exist, click "Discover seats for: [project]" button
+3. Check main dashboard - endpoints should now appear
+4. Pretargeting configs section should also be populated
+
+## Alternative: Force sync on first load
+
+Could also add a one-time sync check in the main page's `useEffect`:
+- If endpoints query returns empty but seats exist → trigger sync
+- This handles cases where user already has seats but never synced endpoints
