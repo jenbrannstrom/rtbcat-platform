@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getPretargetingHistory, type PretargetingHistoryItem } from '@/lib/api';
+import { useTranslation } from '@/contexts/i18n-context';
 
 // Rollback modal component
 function RollbackModal({
@@ -32,6 +33,7 @@ function RollbackModal({
   onCancel: () => void;
   isLoading: boolean;
 }) {
+  const { t } = useTranslation();
   const [reason, setReason] = useState('');
 
   return (
@@ -40,7 +42,7 @@ function RollbackModal({
         <div className="px-6 py-4 border-b flex items-center justify-between">
           <div className="flex items-center gap-2">
             <RotateCcw className="h-5 w-5 text-orange-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Rollback Change</h2>
+            <h2 className="text-lg font-semibold text-gray-900">{t.history.rollbackChange}</h2>
           </div>
           <button onClick={onCancel} className="text-gray-400 hover:text-gray-600">
             <X className="h-5 w-5" />
@@ -48,27 +50,27 @@ function RollbackModal({
         </div>
 
         <div className="p-6 space-y-4">
-          <p className="text-gray-600">You are about to rollback:</p>
+          <p className="text-gray-600">{t.history.aboutToRollback}</p>
 
           <div className="bg-gray-50 rounded-lg p-4 space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Config:</span>
+              <span className="text-gray-500">{t.history.config}</span>
               <span className="font-medium text-gray-900">{change.config_id}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Field:</span>
+              <span className="text-gray-500">{t.history.field}</span>
               <span className="font-medium text-gray-900">{change.field_changed}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Current:</span>
+              <span className="text-gray-500">{t.history.current}</span>
               <span className="font-mono text-sm text-gray-900 truncate max-w-[200px]">
-                {change.new_value || '(empty)'}
+                {change.new_value || t.history.empty}
               </span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Restore to:</span>
+              <span className="text-gray-500">{t.history.restoreTo}</span>
               <span className="font-mono text-sm text-blue-600 truncate max-w-[200px]">
-                {change.old_value || '(empty)'}
+                {change.old_value || t.history.empty}
               </span>
             </div>
           </div>
@@ -76,20 +78,19 @@ function RollbackModal({
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
             <p className="text-sm text-amber-800">
-              This will restore the previous setting. You'll need to apply the change manually in
-              Google Authorized Buyers.
+              {t.history.rollbackWarning}
             </p>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Reason for rollback
+              {t.history.reasonForRollback}
             </label>
             <input
               type="text"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Why are you rolling back this change?"
+              placeholder={t.history.whyRollingBack}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -101,7 +102,7 @@ function RollbackModal({
             disabled={isLoading}
             className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            Cancel
+            {t.history.cancel}
           </button>
           <button
             onClick={() => onConfirm(reason)}
@@ -116,7 +117,7 @@ function RollbackModal({
             ) : (
               <RotateCcw className="h-4 w-4" />
             )}
-            Rollback Now
+            {t.history.rollbackNow}
           </button>
         </div>
       </div>
@@ -159,6 +160,7 @@ function HistoryCard({
   entry: PretargetingHistoryItem;
   onRollback: () => void;
 }) {
+  const { t } = useTranslation();
   const isAI = entry.change_source?.includes('ai') || entry.changed_by?.includes('ai');
   const isRollback = entry.change_type === 'rollback';
   const isAdd = entry.change_type.includes('add');
@@ -199,7 +201,7 @@ function HistoryCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-medium text-gray-900">{entry.change_type}</span>
-              <span className="text-gray-400">on</span>
+              <span className="text-gray-400">{t.history.on}</span>
               <span className="font-mono text-sm text-gray-600">{entry.field_changed}</span>
             </div>
 
@@ -211,7 +213,7 @@ function HistoryCard({
 
             {entry.new_value && (
               <div className="mt-2 text-sm">
-                <span className="text-gray-500">Value: </span>
+                <span className="text-gray-500">{t.history.value} </span>
                 <span className="font-mono text-gray-900 truncate">{entry.new_value}</span>
               </div>
             )}
@@ -223,7 +225,7 @@ function HistoryCard({
               </span>
               <span className="flex items-center gap-1">
                 {isAI ? <Bot className="h-3 w-3" /> : <User className="h-3 w-3" />}
-                {entry.change_source || 'manual'}
+                {entry.change_source || t.history.manual}
               </span>
             </div>
           </div>
@@ -237,7 +239,7 @@ function HistoryCard({
               className="flex items-center gap-1 px-2 py-1 text-xs text-orange-600 hover:bg-orange-50 rounded transition-colors"
             >
               <RotateCcw className="h-3 w-3" />
-              Rollback
+              {t.history.rollback}
             </button>
           )}
         </div>
@@ -247,6 +249,7 @@ function HistoryCard({
 }
 
 export default function HistoryPage() {
+  const { t } = useTranslation();
   const [days, setDays] = useState(30);
   const [billingIdFilter, setBillingIdFilter] = useState<string>('');
   const [changeTypeFilter, setChangeTypeFilter] = useState<string>('');
@@ -297,15 +300,15 @@ export default function HistoryPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <History className="h-6 w-6 text-blue-600" />
-            Change History
+            {t.history.changeHistory}
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Track and rollback pretargeting configuration changes
+            {t.history.trackAndRollback}
           </p>
         </div>
         <button className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
           <Download className="h-4 w-4" />
-          Export
+          {t.history.export}
         </button>
       </div>
 
@@ -314,33 +317,33 @@ export default function HistoryPage() {
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-gray-400" />
-            <span className="text-sm font-medium text-gray-700">Filters:</span>
+            <span className="text-sm font-medium text-gray-700">{t.history.filters}</span>
           </div>
 
           {/* Days filter */}
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">Period:</span>
+            <span className="text-sm text-gray-500">{t.history.period}</span>
             <select
               value={days}
               onChange={(e) => setDays(Number(e.target.value))}
               className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value={7}>Last 7 days</option>
-              <option value={14}>Last 14 days</option>
-              <option value={30}>Last 30 days</option>
-              <option value={90}>Last 90 days</option>
+              <option value={7}>{t.history.lastDays.replace('{count}', '7')}</option>
+              <option value={14}>{t.history.lastDays.replace('{count}', '14')}</option>
+              <option value={30}>{t.history.lastDays.replace('{count}', '30')}</option>
+              <option value={90}>{t.history.lastDays.replace('{count}', '90')}</option>
             </select>
           </div>
 
           {/* Billing ID filter */}
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">Config:</span>
+            <span className="text-sm text-gray-500">{t.history.config}</span>
             <select
               value={billingIdFilter}
               onChange={(e) => setBillingIdFilter(e.target.value)}
               className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">All configs</option>
+              <option value="">{t.history.allConfigs}</option>
               {uniqueBillingIds.map((id) => (
                 <option key={id} value={id}>
                   {id}
@@ -351,13 +354,13 @@ export default function HistoryPage() {
 
           {/* Change type filter */}
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">Type:</span>
+            <span className="text-sm text-gray-500">{t.history.type}</span>
             <select
               value={changeTypeFilter}
               onChange={(e) => setChangeTypeFilter(e.target.value)}
               className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">All types</option>
+              <option value="">{t.history.allTypes}</option>
               {uniqueChangeTypes.map((type) => (
                 <option key={type} value={type}>
                   {type}
@@ -374,7 +377,7 @@ export default function HistoryPage() {
               }}
               className="text-sm text-blue-600 hover:text-blue-800"
             >
-              Clear filters
+              {t.history.clearFilters}
             </button>
           )}
         </div>
@@ -391,18 +394,19 @@ export default function HistoryPage() {
         ) : filteredHistory.length === 0 ? (
           <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
             <History className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-            <h3 className="font-medium text-gray-900 mb-2">No changes found</h3>
+            <h3 className="font-medium text-gray-900 mb-2">{t.history.noChangesFound}</h3>
             <p className="text-sm text-gray-500">
               {billingIdFilter || changeTypeFilter
-                ? 'Try adjusting your filters.'
-                : 'Configuration changes will appear here.'}
+                ? t.history.tryAdjustingFilters
+                : t.history.changesWillAppear}
             </p>
           </div>
         ) : (
           <>
             <div className="text-sm text-gray-500 mb-2">
-              Showing {filteredHistory.length} change{filteredHistory.length !== 1 ? 's' : ''}{' '}
-              from the last {days} days
+              {filteredHistory.length !== 1
+                ? t.history.showingChangesPlural.replace('{count}', String(filteredHistory.length)).replace('{days}', String(days))
+                : t.history.showingChanges.replace('{count}', String(filteredHistory.length)).replace('{days}', String(days))}
             </div>
             {filteredHistory.map((entry) => (
               <HistoryCard
