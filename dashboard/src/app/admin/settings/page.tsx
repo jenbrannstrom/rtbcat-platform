@@ -5,20 +5,22 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Settings, Check, AlertCircle, Info } from "lucide-react";
 import { getSystemSettings, updateSystemSetting } from "@/lib/api";
 import { withAdminAuth } from "@/contexts/auth-context";
+import { useTranslation } from "@/contexts/i18n-context";
 import { cn } from "@/lib/utils";
-
-const RETENTION_OPTIONS = [
-  { value: "0", label: "Unlimited", description: "Keep audit logs forever" },
-  { value: "30", label: "30 days", description: "Delete logs older than 30 days" },
-  { value: "60", label: "60 days", description: "Delete logs older than 60 days (recommended)" },
-  { value: "90", label: "90 days", description: "Delete logs older than 90 days" },
-  { value: "120", label: "120 days", description: "Delete logs older than 120 days" },
-];
 
 function SettingsPage() {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const RETENTION_OPTIONS = [
+    { value: "0", label: t.admin.retentionUnlimited, description: t.admin.retentionUnlimitedDesc },
+    { value: "30", label: t.admin.retention30, description: t.admin.retention30Desc },
+    { value: "60", label: t.admin.retention60, description: t.admin.retention60Desc },
+    { value: "90", label: t.admin.retention90, description: t.admin.retention90Desc },
+    { value: "120", label: t.admin.retention120, description: t.admin.retention120Desc },
+  ];
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ["system-settings"],
@@ -30,7 +32,7 @@ function SettingsPage() {
       updateSystemSetting(key, value),
     onSuccess: (_, { key }) => {
       queryClient.invalidateQueries({ queryKey: ["system-settings"] });
-      setSuccessMessage(`Setting "${key}" updated successfully`);
+      setSuccessMessage(t.admin.settingUpdated.replace("{key}", key));
       setErrorMessage(null);
       setTimeout(() => setSuccessMessage(null), 3000);
     },
@@ -66,9 +68,9 @@ function SettingsPage() {
     <div className="p-6 max-w-4xl mx-auto">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">System Settings</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t.admin.systemSettings}</h1>
         <p className="mt-1 text-gray-600">
-          Configure system-wide settings and features.
+          {t.admin.configureSettings}
         </p>
       </div>
 
@@ -93,11 +95,10 @@ function SettingsPage() {
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">
-                Multi-User Mode
+                {t.admin.multiUserMode}
               </h2>
               <p className="mt-1 text-sm text-gray-500">
-                Allow creating additional user accounts. When disabled, only the
-                admin account can access the system.
+                {t.admin.multiUserDescription}
               </p>
             </div>
             <button
@@ -119,9 +120,7 @@ function SettingsPage() {
           <div className="mt-4 p-3 bg-blue-50 rounded-lg flex items-start gap-2">
             <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
             <p className="text-sm text-blue-700">
-              Login is always required. This setting controls whether you can
-              add more user accounts beyond the admin. Enable for team access,
-              disable for personal use.
+              {t.admin.multiUserInfo}
             </p>
           </div>
         </div>
@@ -129,11 +128,10 @@ function SettingsPage() {
         {/* Audit Log Retention */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900">
-            Audit Log Retention
+            {t.admin.auditLogRetention}
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Configure how long to keep audit log entries before automatic
-            cleanup.
+            {t.admin.retentionDescription}
           </p>
 
           <div className="mt-4 space-y-3">
@@ -170,34 +168,34 @@ function SettingsPage() {
         {/* Session Settings (Read-only info) */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900">
-            Session Settings
+            {t.admin.sessionSettings}
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Default session and security settings.
+            {t.admin.sessionSettingsDesc}
           </p>
 
           <div className="mt-4 grid grid-cols-2 gap-4">
             <div className="p-3 bg-gray-50 rounded-lg">
               <p className="text-sm font-medium text-gray-500">
-                Session Duration
+                {t.admin.sessionDuration}
               </p>
               <p className="text-lg font-semibold text-gray-900">30 days</p>
             </div>
             <div className="p-3 bg-gray-50 rounded-lg">
               <p className="text-sm font-medium text-gray-500">
-                Login Attempts Before Lockout
+                {t.admin.loginAttempts}
               </p>
               <p className="text-lg font-semibold text-gray-900">5 attempts</p>
             </div>
             <div className="p-3 bg-gray-50 rounded-lg">
               <p className="text-sm font-medium text-gray-500">
-                Lockout Duration
+                {t.admin.lockoutDuration}
               </p>
               <p className="text-lg font-semibold text-gray-900">1 hour</p>
             </div>
             <div className="p-3 bg-gray-50 rounded-lg">
               <p className="text-sm font-medium text-gray-500">
-                Password Hashing
+                {t.admin.passwordHashing}
               </p>
               <p className="text-lg font-semibold text-gray-900">bcrypt</p>
             </div>
@@ -206,9 +204,9 @@ function SettingsPage() {
 
         {/* All Settings (Debug view) */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900">All Settings</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{t.admin.allSettings}</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Raw view of all system settings.
+            {t.admin.rawSettingsView}
           </p>
 
           <div className="mt-4 overflow-x-auto">
@@ -216,10 +214,10 @@ function SettingsPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                    Key
+                    {t.admin.key}
                   </th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                    Value
+                    {t.admin.value}
                   </th>
                 </tr>
               </thead>
