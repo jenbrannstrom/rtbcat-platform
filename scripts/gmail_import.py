@@ -394,28 +394,39 @@ def mark_as_read(service, message_id: str):
 
 def import_to_catscan(filepath: Path) -> bool:
     """
-    Import the CSV into Cat-Scan database via API.
+    Import the CSV into Cat-Scan database directly using the unified importer.
     Returns True if successful.
     """
-    import requests
-
     try:
-        with open(filepath, 'rb') as f:
-            response = requests.post(
-                'http://localhost:8000/performance/import-csv',
-                files={'file': (filepath.name, f, 'text/csv')}
-            )
+        from qps.unified_importer import unified_import
 
-        if response.status_code == 200:
-            result = response.json()
-            print(f"  Imported: {result.get('imported', 0)} rows")
+        result = unified_import(str(filepath))
+
+        if result.success:
+            print(f"  Imported: {result.rows_imported} rows ({result.report_type})")
             return True
         else:
-            print(f"  Import failed: {response.text}")
+            print(f"  Import failed: {result.error}")
             return False
-    except requests.exceptions.ConnectionError:
-        print(f"  Warning: Cat-Scan API not running. File saved to {filepath}")
-        return False
+    except ImportError as e:
+        # Fall back to HTTP API if running standalone
+        import requests
+        try:
+            with open(filepath, 'rb') as f:
+                response = requests.post(
+                    'http://localhost:8000/performance/import-csv',
+                    files={'file': (filepath.name, f, 'text/csv')}
+                )
+            if response.status_code == 200:
+                result = response.json()
+                print(f"  Imported: {result.get('rows_imported', 0)} rows")
+                return True
+            else:
+                print(f"  Import failed: {response.text}")
+                return False
+        except requests.exceptions.ConnectionError:
+            print(f"  Warning: Cat-Scan API not running. File saved to {filepath}")
+            return False
     except Exception as e:
         print(f"  Import error: {e}")
         return False
