@@ -15,6 +15,7 @@ export interface Translations {
     filter: string;
     refresh: string;
     sync: string;
+    syncAll: string;
     syncing: string;
     synced: string;
     failed: string;
@@ -162,6 +163,7 @@ export interface Translations {
     syncFromGoogle: string;
     noPretargetingConfigs: string;
     clickSyncToFetch: string;
+    useSyncAllToFetch: string;
     waste: string;
     suspended: string;
   };

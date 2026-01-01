@@ -5,6 +5,8 @@ Supports multi-account credentials for different buyer seats.
 """
 
 import logging
+from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -13,7 +15,8 @@ from pydantic import BaseModel
 from config import ConfigManager
 from storage import SQLiteStore, creative_dicts_to_storage
 from api.dependencies import get_store, get_config
-from collectors import BuyerSeatsClient, CreativesClient
+from collectors import BuyerSeatsClient, CreativesClient, EndpointsClient, PretargetingClient
+from storage.database import db_query_one, db_execute
 
 logger = logging.getLogger(__name__)
 
@@ -87,14 +90,7 @@ class DiscoverSeatsRequest(BaseModel):
     """Request model for discovering buyer seats."""
     bidder_id: str
     service_account_id: Optional[str] = None  # Multi-account: specify which credentials to use
-
-
-class DiscoverSeatsResponse(BaseModel):
-    """Response model for seat discovery."""
-    status: str
-    bidder_id: str
-    seats_discovered: int
-    seats: list[BuyerSeatResponse]
+    auto_sync: bool = True  # Automatically sync data after discovery
 
 
 class SyncSeatResponse(BaseModel):
@@ -103,6 +99,27 @@ class SyncSeatResponse(BaseModel):
     buyer_id: str
     creatives_synced: int
     message: str
+
+
+class SyncAllResponse(BaseModel):
+    """Response model for sync all operation."""
+    status: str
+    creatives_synced: int
+    seats_synced: int
+    endpoints_synced: int
+    pretargeting_synced: int
+    message: str
+    last_synced: Optional[str] = None
+
+
+class DiscoverSeatsResponse(BaseModel):
+    """Response model for seat discovery."""
+    status: str
+    bidder_id: str
+    seats_discovered: int
+    seats: list[BuyerSeatResponse]
+    # Auto-sync results (if enabled)
+    sync_result: Optional[SyncAllResponse] = None
 
 
 class UpdateSeatRequest(BaseModel):
@@ -229,6 +246,16 @@ async def discover_seats(
                 seat.service_account_id = service_account_id
             await store.save_buyer_seat(seat)
 
+        # Auto-sync data if requested (default: True)
+        sync_result = None
+        if request.auto_sync and seats:
+            try:
+                logger.info("Auto-syncing data after seat discovery...")
+                sync_result = await sync_all_data(store=store, config=config)
+            except Exception as e:
+                logger.warning(f"Auto-sync failed (discovery still successful): {e}")
+                # Don't fail the whole discovery if auto-sync fails
+
         return DiscoverSeatsResponse(
             status="completed",
             bidder_id=request.bidder_id,
@@ -245,6 +272,7 @@ async def discover_seats(
                 )
                 for s in seats
             ],
+            sync_result=sync_result,
         )
 
     except HTTPException:
@@ -353,3 +381,185 @@ async def populate_seats_from_creatives(
     except Exception as e:
         logger.error(f"Seat population failed: {e}")
         raise HTTPException(status_code=500, detail=f"Seat population failed: {str(e)}")
+
+
+@router.post("/seats/sync-all", response_model=SyncAllResponse)
+async def sync_all_data(
+    store: SQLiteStore = Depends(get_store),
+    config: ConfigManager = Depends(get_config),
+):
+    """Sync all data: creatives, RTB endpoints, and pretargeting configs.
+
+    This is a unified sync operation that:
+    1. Syncs creatives for all active buyer seats
+    2. Syncs RTB endpoints from Google API
+    3. Syncs pretargeting configurations from Google API
+
+    Returns aggregated counts of all synced items.
+    """
+    total_creatives = 0
+    seats_synced = 0
+    endpoints_synced = 0
+    pretargeting_synced = 0
+    errors = []
+
+    # Get all active buyer seats
+    seats = await store.get_buyer_seats(active_only=True)
+
+    if not seats:
+        raise HTTPException(
+            status_code=400,
+            detail="No buyer seats found. Discover seats first via /seats/discover.",
+        )
+
+    # Get service account for API access
+    service_accounts = await store.get_service_accounts(active_only=True)
+    if not service_accounts:
+        raise HTTPException(
+            status_code=400,
+            detail="No service account configured. Add a service account in Setup.",
+        )
+    service_account = service_accounts[0]
+    creds_path = Path(service_account.credentials_path).expanduser()
+    if not creds_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail="Service account credentials file not found.",
+        )
+
+    # 1. Sync creatives for each buyer seat
+    for seat in seats:
+        try:
+            credentials_path = await get_credentials_for_seat(store, seat, config)
+            client = CreativesClient(
+                credentials_path=credentials_path,
+                account_id=seat.bidder_id,
+            )
+            api_creatives = await client.fetch_all_creatives(buyer_id=seat.buyer_id)
+            storage_creatives = creative_dicts_to_storage(api_creatives)
+            count = await store.save_creatives(storage_creatives)
+            total_creatives += count
+            seats_synced += 1
+
+            # Update seat metadata
+            await store.update_seat_creative_count(seat.buyer_id)
+            await store.update_seat_sync_time(seat.buyer_id)
+        except Exception as e:
+            logger.error(f"Failed to sync creatives for seat {seat.buyer_id}: {e}")
+            errors.append(f"Creatives for {seat.buyer_id}: {str(e)}")
+
+    # Get bidder_id for endpoints and pretargeting
+    bidder_row = await db_query_one(
+        "SELECT bidder_id FROM buyer_seats WHERE service_account_id = ? LIMIT 1",
+        (service_account.id,)
+    )
+    if not bidder_row:
+        bidder_row = await db_query_one("SELECT bidder_id FROM buyer_seats LIMIT 1")
+
+    if bidder_row:
+        account_id = bidder_row["bidder_id"]
+
+        # 2. Sync RTB endpoints
+        try:
+            endpoints_client = EndpointsClient(
+                credentials_path=str(creds_path),
+                account_id=account_id,
+            )
+            endpoints = await endpoints_client.list_endpoints()
+
+            for ep in endpoints:
+                await db_execute(
+                    """
+                    INSERT OR REPLACE INTO rtb_endpoints
+                    (bidder_id, endpoint_id, url, maximum_qps, trading_location, bid_protocol, synced_at)
+                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    (
+                        account_id,
+                        ep["endpointId"],
+                        ep["url"],
+                        ep.get("maximumQps"),
+                        ep.get("tradingLocation"),
+                        ep.get("bidProtocol"),
+                    ),
+                )
+            endpoints_synced = len(endpoints)
+        except Exception as e:
+            logger.error(f"Failed to sync RTB endpoints: {e}")
+            errors.append(f"RTB endpoints: {str(e)}")
+
+        # 3. Sync pretargeting configs
+        try:
+            import json
+            pretargeting_client = PretargetingClient(
+                credentials_path=str(creds_path),
+                account_id=account_id,
+            )
+            configs = await pretargeting_client.fetch_all_pretargeting_configs()
+
+            for cfg in configs:
+                sizes = []
+                for dim in cfg.get("includedCreativeDimensions", []):
+                    if dim.get("width") and dim.get("height"):
+                        sizes.append(f"{dim['width']}x{dim['height']}")
+
+                geo_targeting = cfg.get("geoTargeting", {}) or {}
+                included_geos = geo_targeting.get("includedIds", [])
+                excluded_geos = geo_targeting.get("excludedIds", [])
+
+                await db_execute(
+                    """
+                    INSERT INTO pretargeting_configs
+                    (bidder_id, config_id, billing_id, display_name, state,
+                     included_formats, included_platforms, included_sizes,
+                     included_geos, excluded_geos, raw_config, synced_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(bidder_id, config_id) DO UPDATE SET
+                        billing_id = excluded.billing_id,
+                        display_name = excluded.display_name,
+                        state = excluded.state,
+                        included_formats = excluded.included_formats,
+                        included_platforms = excluded.included_platforms,
+                        included_sizes = excluded.included_sizes,
+                        included_geos = excluded.included_geos,
+                        excluded_geos = excluded.excluded_geos,
+                        raw_config = excluded.raw_config,
+                        synced_at = CURRENT_TIMESTAMP
+                    """,
+                    (
+                        account_id,
+                        cfg["configId"],
+                        cfg.get("billingId"),
+                        cfg.get("displayName"),
+                        cfg.get("state", "ACTIVE"),
+                        json.dumps(cfg.get("includedFormats", [])),
+                        json.dumps(cfg.get("includedPlatforms", [])),
+                        json.dumps(sizes),
+                        json.dumps(included_geos),
+                        json.dumps(excluded_geos),
+                        json.dumps(cfg),
+                    ),
+                )
+            pretargeting_synced = len(configs)
+        except Exception as e:
+            logger.error(f"Failed to sync pretargeting configs: {e}")
+            errors.append(f"Pretargeting: {str(e)}")
+
+    # Build response message
+    sync_time = datetime.utcnow().isoformat() + "Z"
+    if errors:
+        message = f"Sync completed with errors: {'; '.join(errors)}"
+        status = "partial"
+    else:
+        message = f"Successfully synced {total_creatives} creatives from {seats_synced} seats, {endpoints_synced} endpoints, and {pretargeting_synced} pretargeting configs."
+        status = "completed"
+
+    return SyncAllResponse(
+        status=status,
+        creatives_synced=total_creatives,
+        seats_synced=seats_synced,
+        endpoints_synced=endpoints_synced,
+        pretargeting_synced=pretargeting_synced,
+        message=message,
+        last_synced=sync_time,
+    )

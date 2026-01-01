@@ -22,7 +22,7 @@ import {
   Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getSeats, syncSeat } from "@/lib/api";
+import { getSeats, syncAllData } from "@/lib/api";
 import { useAccount } from "@/contexts/account-context";
 import { useAuth } from "@/contexts/auth-context";
 import { useTranslation } from "@/contexts/i18n-context";
@@ -90,13 +90,16 @@ export function Sidebar() {
   });
 
   const syncMutation = useMutation({
-    mutationFn: (buyerId: string) => syncSeat(buyerId),
+    mutationFn: () => syncAllData(),
     onSuccess: (data) => {
-      setSyncMessage({ type: "success", text: t.common.synced });
+      const msg = `${data.creatives_synced} creatives, ${data.endpoints_synced} endpoints, ${data.pretargeting_synced} configs`;
+      setSyncMessage({ type: "success", text: msg });
       queryClient.invalidateQueries({ queryKey: ["creatives"] });
       queryClient.invalidateQueries({ queryKey: ["seats"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
-      setTimeout(() => setSyncMessage(null), 3000);
+      queryClient.invalidateQueries({ queryKey: ["rtbEndpoints"] });
+      queryClient.invalidateQueries({ queryKey: ["pretargetingConfigs"] });
+      setTimeout(() => setSyncMessage(null), 5000);
     },
     onError: (error) => {
       setSyncMessage({ type: "error", text: t.common.failed });
@@ -156,7 +159,7 @@ export function Sidebar() {
             <p className="text-xs mt-1">{t.sidebar.goToSettingsToConnect}</p>
           </div>
         ) : seats.length === 1 ? (
-          /* Single seat - show as title with sync button */
+          /* Single seat - show as title with sync all button */
           <div>
             <div className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
               <div className="min-w-0 flex-1">
@@ -168,13 +171,13 @@ export function Sidebar() {
                 </div>
               </div>
               <button
-                onClick={() => syncMutation.mutate(seats[0].buyer_id)}
+                onClick={() => syncMutation.mutate()}
                 disabled={syncMutation.isPending}
                 className={cn(
                   "p-1.5 rounded-md text-gray-500 hover:text-primary-600 hover:bg-primary-50",
                   "disabled:opacity-50 flex-shrink-0"
                 )}
-                title={t.sidebar.syncCreatives}
+                title={t.common.syncAll || "Sync All Data"}
               >
                 <RefreshCw className={cn("h-4 w-4", syncMutation.isPending && "animate-spin")} />
               </button>
@@ -243,21 +246,19 @@ export function Sidebar() {
               </div>
             )}
 
-            {/* Sync button when seat is selected */}
-            {currentBuyerId && (
-              <button
-                onClick={() => syncMutation.mutate(currentBuyerId)}
-                disabled={syncMutation.isPending}
-                className={cn(
-                  "mt-2 w-full flex items-center justify-center gap-2 px-3 py-1.5",
-                  "bg-primary-600 text-white rounded-md text-sm font-medium",
-                  "hover:bg-primary-700 disabled:opacity-50"
-                )}
-              >
-                <RefreshCw className={cn("h-3.5 w-3.5", syncMutation.isPending && "animate-spin")} />
-                {syncMutation.isPending ? t.common.syncing : t.common.sync}
-              </button>
-            )}
+            {/* Sync All button - always visible when seats exist */}
+            <button
+              onClick={() => syncMutation.mutate()}
+              disabled={syncMutation.isPending}
+              className={cn(
+                "mt-2 w-full flex items-center justify-center gap-2 px-3 py-1.5",
+                "bg-primary-600 text-white rounded-md text-sm font-medium",
+                "hover:bg-primary-700 disabled:opacity-50"
+              )}
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", syncMutation.isPending && "animate-spin")} />
+              {syncMutation.isPending ? t.common.syncing : (t.common.syncAll || "Sync All")}
+            </button>
 
             {syncMessage && (
               <div className={cn(
