@@ -14,7 +14,7 @@ import { ConfigBreakdownPanel } from "@/components/rtb/config-breakdown-panel";
 import { RecommendedOptimizationsPanel } from "@/components/rtb/recommended-optimizations-panel";
 import {
   getQPSSummary, getQPSSizeCoverage, getRTBFunnel, getSpendStats,
-  getPretargetingConfigs, syncPretargetingConfigs, getRTBFunnelConfigs,
+  getPretargetingConfigs, getRTBFunnelConfigs,
   type PublisherPerformance, type GeoPerformance, type PretargetingConfigResponse
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -945,14 +945,6 @@ function WasteAnalysisContent() {
     queryFn: () => getRTBFunnelConfigs(days),
   });
 
-  // Sync pretargeting mutation
-  const syncConfigsMutation = useMutation({
-    mutationFn: () => syncPretargetingConfigs({ service_account_id: selectedServiceAccountId || undefined }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pretargeting-configs", selectedServiceAccountId] });
-    },
-  });
-
   const handleRefresh = () => {
     refetchSummary();
     refetchFunnel();
@@ -1129,18 +1121,6 @@ function WasteAnalysisContent() {
           <h2 className="text-lg font-semibold text-gray-900">
             {t.pretargeting.configs} ({activeConfigsCount} {t.pretargeting.active})
           </h2>
-          <button
-            onClick={() => syncConfigsMutation.mutate()}
-            disabled={syncConfigsMutation.isPending}
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md",
-              "bg-gray-100 text-gray-700 hover:bg-gray-200",
-              "disabled:opacity-50 disabled:cursor-not-allowed"
-            )}
-          >
-            <RefreshCw className={cn("h-4 w-4", syncConfigsMutation.isPending && "animate-spin")} />
-            {syncConfigsMutation.isPending ? t.common.syncing : t.pretargeting.syncFromGoogle}
-          </button>
         </div>
 
         {configsLoading ? (
@@ -1154,7 +1134,7 @@ function WasteAnalysisContent() {
             <AlertTriangle className="h-8 w-8 text-yellow-500 mx-auto mb-3" />
             <h3 className="font-medium text-yellow-800 mb-2">{t.pretargeting.noPretargetingConfigs}</h3>
             <p className="text-sm text-yellow-700 mb-4">
-              {t.pretargeting.clickSyncToFetch}
+              {t.pretargeting.useSyncAllToFetch || "Use \"Sync All\" in the sidebar to fetch pretargeting configs."}
             </p>
           </div>
         ) : (

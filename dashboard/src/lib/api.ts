@@ -210,6 +210,23 @@ export async function populateSeatsFromCreatives(): Promise<{
   });
 }
 
+// Unified Sync All API
+export interface SyncAllResponse {
+  status: string;
+  creatives_synced: number;
+  seats_synced: number;
+  endpoints_synced: number;
+  pretargeting_synced: number;
+  message: string;
+  last_synced: string | null;
+}
+
+export async function syncAllData(): Promise<SyncAllResponse> {
+  return fetchApi<SyncAllResponse>("/seats/sync-all", {
+    method: "POST",
+  });
+}
+
 // Waste Analysis API
 
 export async function getWasteReport(params?: {
