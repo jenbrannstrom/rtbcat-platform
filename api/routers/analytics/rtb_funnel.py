@@ -302,7 +302,33 @@ async def get_config_performance(
             """, (f'-{days} days',))
 
         if not rows:
-            # No data in database
+            # No per-config data in rtb_daily - fall back to aggregate from rtb_funnel
+            # This happens when the imported CSVs don't have billing_id breakdown
+            funnel_agg = await db_query_one("""
+                SELECT
+                    SUM(reached_queries) as total_reached,
+                    SUM(impressions) as total_impressions
+                FROM rtb_funnel
+                WHERE metric_date >= date('now', ?)
+            """, (f'-{days} days',))
+
+            if funnel_agg and (funnel_agg["total_reached"] or 0) > 0:
+                total_reached = funnel_agg["total_reached"] or 0
+                total_impressions = funnel_agg["total_impressions"] or 0
+                win_rate = (total_impressions / total_reached * 100) if total_reached > 0 else 0
+
+                return {
+                    "period_days": days,
+                    "data_source": "rtb_funnel_aggregate",
+                    "message": "Per-config breakdown not available. Showing aggregate funnel data.",
+                    "configs": [],
+                    "total_reached": total_reached,
+                    "total_impressions": total_impressions,
+                    "overall_win_rate_pct": round(win_rate, 1),
+                    "overall_waste_pct": round(100 - win_rate, 1),
+                }
+
+            # No data at all
             return {
                 "period_days": days,
                 "data_source": "database",
