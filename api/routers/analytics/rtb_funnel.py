@@ -265,6 +265,8 @@ async def get_config_performance(
         valid_billing_ids = await get_valid_billing_ids()
 
         # Query aggregated data by billing_id from rtb_daily
+        # Use bids_in_auction/auctions_won as they're populated by bids-in-auction CSV
+        # Fall back to reached_queries/impressions if bids data not available
         if valid_billing_ids:
             placeholders = ",".join("?" * len(valid_billing_ids))
             rows = await db_query(f"""
@@ -274,8 +276,8 @@ async def get_config_performance(
                     creative_format,
                     country,
                     platform,
-                    SUM(reached_queries) as total_reached,
-                    SUM(impressions) as total_impressions
+                    COALESCE(SUM(bids_in_auction), SUM(reached_queries), 0) as total_reached,
+                    COALESCE(SUM(auctions_won), SUM(impressions), 0) as total_impressions
                 FROM rtb_daily
                 WHERE metric_date >= date('now', ?)
                   AND billing_id IN ({placeholders})
@@ -291,8 +293,8 @@ async def get_config_performance(
                     creative_format,
                     country,
                     platform,
-                    SUM(reached_queries) as total_reached,
-                    SUM(impressions) as total_impressions
+                    COALESCE(SUM(bids_in_auction), SUM(reached_queries), 0) as total_reached,
+                    COALESCE(SUM(auctions_won), SUM(impressions), 0) as total_impressions
                 FROM rtb_daily
                 WHERE metric_date >= date('now', ?)
                 GROUP BY billing_id, creative_size, creative_format, country, platform
@@ -433,11 +435,12 @@ async def get_config_breakdown(
 
     try:
         # Query aggregated data for this billing_id
+        # Use bids_in_auction/auctions_won as primary metrics
         rows = await db_query(f"""
             SELECT
                 {group_col} as name,
-                SUM(reached_queries) as total_reached,
-                SUM(impressions) as total_impressions
+                COALESCE(SUM(bids_in_auction), SUM(reached_queries), 0) as total_reached,
+                COALESCE(SUM(auctions_won), SUM(impressions), 0) as total_impressions
             FROM rtb_daily
             WHERE billing_id = ?
               AND metric_date >= date('now', ?)
