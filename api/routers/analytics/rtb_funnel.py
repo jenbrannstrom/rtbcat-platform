@@ -142,7 +142,7 @@ async def get_rtb_publishers(
                 SUM(reached_queries) as total_reached,
                 SUM(impressions) as total_impressions,
                 SUM(bids) as total_bids
-            FROM rtb_daily
+            FROM rtb_funnel
             WHERE metric_date >= date('now', ?)
             GROUP BY publisher_id, publisher_name
             ORDER BY total_reached DESC
@@ -152,7 +152,7 @@ async def get_rtb_publishers(
         # Get total count
         count_row = await db_query_one("""
             SELECT COUNT(DISTINCT publisher_id) as total
-            FROM rtb_daily
+            FROM rtb_funnel
             WHERE metric_date >= date('now', ?)
         """, (f'-{days} days',))
 
@@ -202,7 +202,7 @@ async def get_rtb_geos(
                 SUM(reached_queries) as total_reached,
                 SUM(impressions) as total_impressions,
                 SUM(bids) as total_bids
-            FROM rtb_daily
+            FROM rtb_funnel
             WHERE metric_date >= date('now', ?)
             GROUP BY country
             ORDER BY total_reached DESC
@@ -212,7 +212,7 @@ async def get_rtb_geos(
         # Get total count
         count_row = await db_query_one("""
             SELECT COUNT(DISTINCT country) as total
-            FROM rtb_daily
+            FROM rtb_funnel
             WHERE metric_date >= date('now', ?)
         """, (f'-{days} days',))
 
