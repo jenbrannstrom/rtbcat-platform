@@ -42,6 +42,8 @@ import {
   getServiceAccounts,
   addServiceAccount,
   deleteServiceAccount,
+  syncRTBEndpoints,
+  syncPretargetingConfigs,
 } from "@/lib/api";
 import type { ServiceAccount } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
@@ -213,9 +215,26 @@ function ApiConnectionTab() {
 
   const discoverMutation = useMutation({
     mutationFn: (bidderId: string) => discoverSeats({ bidder_id: bidderId }),
-    onSuccess: (data) => {
-      setMessage({ type: "success", text: `Discovered ${data.seats_discovered} buyer seat(s)` });
+    onSuccess: async (data) => {
+      setMessage({ type: "success", text: `Discovered ${data.seats_discovered} buyer seat(s). Syncing endpoints...` });
       queryClient.invalidateQueries({ queryKey: ["seats"] });
+
+      // Auto-sync endpoints and pretargeting after seat discovery
+      try {
+        await syncRTBEndpoints();
+        queryClient.invalidateQueries({ queryKey: ["rtb-endpoints"] });
+      } catch (e) {
+        console.error("Failed to sync endpoints:", e);
+      }
+
+      try {
+        await syncPretargetingConfigs();
+        queryClient.invalidateQueries({ queryKey: ["pretargeting-configs"] });
+      } catch (e) {
+        console.error("Failed to sync pretargeting:", e);
+      }
+
+      setMessage({ type: "success", text: `Discovered ${data.seats_discovered} seat(s) and synced endpoints` });
       setTimeout(() => setMessage(null), 5000);
     },
     onError: (error) => {
