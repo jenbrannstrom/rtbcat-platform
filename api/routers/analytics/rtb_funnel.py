@@ -30,7 +30,7 @@ async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
     - Geographic breakdown
     """
     try:
-        # Get funnel summary from database
+        # Get funnel summary from database - use rtb_funnel for pipeline metrics
         funnel_row = await db_query_one("""
             SELECT
                 SUM(reached_queries) as total_reached,
@@ -38,7 +38,7 @@ async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
                 SUM(bids) as total_bids,
                 COUNT(DISTINCT publisher_id) as publisher_count,
                 COUNT(DISTINCT country) as country_count
-            FROM rtb_daily
+            FROM rtb_funnel
             WHERE metric_date >= date('now', ?)
         """, (f'-{days} days',))
 
@@ -56,7 +56,7 @@ async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
                 publisher_name,
                 SUM(reached_queries) as reached,
                 SUM(impressions) as impressions
-            FROM rtb_daily
+            FROM rtb_funnel
             WHERE metric_date >= date('now', ?) AND publisher_id IS NOT NULL
             GROUP BY publisher_id
             ORDER BY reached DESC
@@ -82,7 +82,7 @@ async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
                 country,
                 SUM(reached_queries) as reached,
                 SUM(impressions) as impressions
-            FROM rtb_daily
+            FROM rtb_funnel
             WHERE metric_date >= date('now', ?) AND country IS NOT NULL
             GROUP BY country
             ORDER BY reached DESC
