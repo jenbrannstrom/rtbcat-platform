@@ -2,34 +2,54 @@
 
 **Version:** 24.0 | **Phase:** Schema Refactoring | **Last Updated:** December 11, 2025
 
-A privacy-first QPS optimization platform for Google Authorized Buyers. Cat-Scan helps RTB bidders eliminate wasted QPS by learning which data-streams the bidder likes to bid on.
+A QPS optimization tool for Google Authorized Buyers. Cat-Scan helps RTB bidders eliminate wasted QPS by learning which data-streams the bidder likes to bid on, as well as fine-tune Pretargeting to allow more bid-requests to come through to the bidder for those placements/apps that the bidder prefers.
 
-> **Philosophy:** Intelligence without assumptions. Facts that drive action.
+It has a free version that allows pretargeting settings to be edited based on the efficiency findings, and a paid-for upgrade that auto-adjusts Pretargeting settings based on new creatives tha get uploaded and approved to the Google AB seat, so it is effectively hands-free.
 
 ---
 
 ## What This Solves
 
-**The Problem:** Google Authorized Buyers shows you creative IDs like `cr-12345`, but doesn't tell you:
+**The Problem:** Google Authorized Buyers provides a bulk waterfall of over 400 Billion QPS per 24 hours, it allows 10 pretargeting settings to adjust signal. shows you creative IDs like `cr-12345`, but doesn't tell you:
+
 - How to improve efficiency of the QPS your bidder consumes
 - What QPS is unused vs what should be increased
-- Which creatives are wasting your budget
+- Which creatives are wasting your QPS ingress, and blocking out potentially other signal tha tcould be more worthwile
 
 **The Solution:** Cat-Scan automatically:
+
 1. Fetches all your creatives from Authorized Buyers API
 2. Imports performance data from CSV exports
-3. Identifies size mismatches, config inefficiencies, and fraud signals
-4. Provides actionable recommendations to reduce waste
+3. Identifies size mismatches, config inefficiencies,
+4. Provides actionable recommendations to reduce waste; improve efficiency
+5. allows improvements in Pretargeting configs to be pushed to the google account
+6. provides a rollback and historical tracking of the config changes
+7. allows MCP to connect to the DB and its "algo engine" to let ai make improvements or simply collect insights for canmpaign performance.
 
-**Typical waste reduction: 20-40% of QPS.**
+**Typical waste reduction: unknown at this time of QPS. We are starting to test and need data storage to understand the % improvement**
+
+It is important to understand the echelon of where Cat-Scan sits: it is not the bidder, and so does not always have insight into what the media buyer is aiming to achieve. Cat-Scan sits next to the Google seat, extracting data from there via API and CSV exports (since there is no reporting API for a Google AB seat, we need to compile these from CSV exports sent to a dedicated GMail address, which is then parsed and input to the DB. The db schema then normalizes the various CSV Daily reports for a dataset that can be evalutated).
+
+Because of this limited data the insight is limited to simple QPS optimisation. We deduce what the media buyer is trying to achieve based on the creatives' targeting, spend, CPM and clicks.
+We are only trying to achieve QPS optimisation, as that will assist the media buyer in his goal.
+
+
+
+**Campaign Clustering**
+
+By Clustering is meant grouping the various creatives together based on logic from what we can deduce. It also allows manual sorting. The purpose is to reveal insight on further QPS optimisation.
+
+It works by autmatically grouping creatives based on same/similar destination URL. This could be augnmented with AI image recignition to see what language the image/HTML/Video/Natvie ads have and groupig them by langiage, or alerting that a wrong langiage creartive is being used for a particualr country taregting.
+
+
 
 ---
 
-## Quick Start
+## Quick Start (in question)
 
 ```bash
-# 1. Clone and setup
-git clone https://github.com/yourorg/rtbcat-platform.git
+# 1. fork
+git clone https://github.com/rtbcat/rtbcat-platform.git
 cd rtbcat-platform
 ./setup.sh
 
@@ -61,12 +81,12 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 | **Multi-Seat Support** | Manage multiple buyer accounts under one bidder |
 | **Waste Analysis** | Identify size gaps, inefficient configs, fraud signals |
 | **RTB Funnel** | Visualize reached queries → bids → impressions |
-| **Campaign Clustering** | AI-powered grouping by URL, advertiser, language |
-| **CSV Import** | Import performance data from Google reports |
-| **Gmail Auto-Import** | Automatic daily report ingestion |
-| **Video Thumbnails** | Extract from VAST XML or generate via ffmpeg |
+| **Campaign Clustering** | AI-powered grouping by destination URL, country, advertiser, language. USe your own ai |
+| **CSV Import** | auto-import performance data from Google reports |
+| MCP support | has API's to enable MCP access for a users own choice of ai |
+| **Video Thumbnails** | visualise the creatives clearly: Extract from VAST XML or generate via ffmpeg. The purpose of this visualization is to facilitate correct clustering/grouping. The grouping is needed because there usually is no knowledge on what the bidder is attemting to achieve, and we are inducing it's intent to enable QPS optimisation |
 
-### Dashboard Pages
+### Dashboard Pages(in question)
 
 | Page | URL | Purpose |
 |------|-----|---------|
@@ -79,7 +99,7 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 
 ---
 
-## Architecture
+## Architecture(in question)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -112,7 +132,7 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 └──────────────────────────┘    └──────────────────────────┘
 ```
 
-### Database Schema
+### Database Schema (in question)
 
 | Table | Purpose |
 |-------|---------|
@@ -131,7 +151,7 @@ Cat-Scan requires **3 separate CSV reports** from Google Authorized Buyers due t
 
 > **See [docs/CSV_REPORTS_GUIDE.md](docs/CSV_REPORTS_GUIDE.md) for complete setup instructions.**
 
-### The 3 Required Reports
+### The Required Reports (in question)
 
 | Report | Purpose | Key Fields | Table |
 |--------|---------|------------|-------|
@@ -139,7 +159,7 @@ Cat-Scan requires **3 separate CSV reports** from Google Authorized Buyers due t
 | **RTB Funnel (Geo)** | Bid pipeline by country | Bid requests, Bids, Auctions won | `rtb_funnel` |
 | **RTB Funnel (Publishers)** | Bid pipeline by publisher | Publisher ID + Bid metrics | `rtb_funnel` |
 
-### Why 3 Reports?
+### Why 3 Reports? (in question)
 
 Google's limitation: *"Mobile app ID is not compatible with [Bid requests]..."*
 
@@ -147,7 +167,7 @@ Google's limitation: *"Mobile app ID is not compatible with [Bid requests]..."*
 - To get **Bid request metrics** → you lose App/Creative detail
 - Cat-Scan **joins them** by date + country to give you the full picture
 
-### Quick Reference
+### Quick Reference (in question)
 
 **Report 1 - Performance Detail:**
 ```
@@ -171,7 +191,7 @@ Metrics: Same as Report 2
 
 ---
 
-## CLI Commands
+## CLI Commands (in question)
 
 ```bash
 cd creative-intelligence
@@ -203,7 +223,7 @@ cd creative-intelligence
 
 ---
 
-## API Endpoints
+## API Endpoints (in question)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -219,9 +239,9 @@ Full API docs: http://localhost:8000/docs
 
 ---
 
-## Services
+## Services (in question)
 
-### Systemd (Recommended for Production)
+### Systemd (Recommended for Production) (in question)
 
 ```bash
 # Start services
@@ -236,7 +256,7 @@ sudo lsof -ti:8000 | xargs -r sudo kill -9
 sudo systemctl restart rtbcat-api
 ```
 
-### Docker
+### Docker (in question)
 
 ```bash
 docker compose build api
@@ -258,7 +278,7 @@ docker compose up -d api
     └── google-credentials.json
 ```
 
-### Environment Variables
+### Environment Variables (in question)
 
 Create `/creative-intelligence/.env`:
 
@@ -276,9 +296,9 @@ DATABASE_PATH=~/.catscan/catscan.db
 | **[docs/HANDOVER.md](docs/HANDOVER.md)** | Complete project handover with next steps |
 | **[INSTALL.md](INSTALL.md)** | Detailed installation guide |
 | **[docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md)** | Google API setup instructions |
-| **[docs/RTB_FRAUD_SIGNALS_REFERENCE.md](docs/RTB_FRAUD_SIGNALS_REFERENCE.md)** | Fraud detection reference |
+|                                                |                                           |
 
-### Historical Development Phases
+### Historical Development Phases 
 
 Detailed phase documentation is archived in `docs/phases/`:
 - Phase 11: Decision Intelligence
@@ -288,7 +308,7 @@ Detailed phase documentation is archived in `docs/phases/`:
 
 ---
 
-## Project Status
+## Project Status (in question)
 
 ### What Works (Production Ready)
 
@@ -305,8 +325,9 @@ Detailed phase documentation is archived in `docs/phases/`:
 
 1. **Production deployment** - Cloud server, domain, SSL
 2. **Multi-account support** - Account switching in UI
-3. **RTB Troubleshooting API** - Integrate bid metrics
-4. **Performance at scale** - Virtual scrolling, caching
+3. multi-seat and multi account feature
+4. **RTB Troubleshooting API** - Integrate bid metrics
+5. **Performance at scale** - Virtual scrolling, caching
 
 See **[docs/HANDOVER.md](docs/HANDOVER.md)** for complete roadmap.
 
@@ -321,7 +342,7 @@ See **[docs/HANDOVER.md](docs/HANDOVER.md)** for complete roadmap.
 | Dashboard not updating | Run `npm run build` |
 | uvicorn "module not found" | Use `./venv/bin/python -m uvicorn` instead of `uvicorn` directly |
 
-### API Startup (Manual Method)
+### API Startup (Manual Method) (in question)
 
 If `./run.sh` doesn't work, start the services manually:
 
@@ -339,7 +360,7 @@ npm run dev
 
 ---
 
-## Development
+## Development (in question)
 
 ```bash
 cd creative-intelligence

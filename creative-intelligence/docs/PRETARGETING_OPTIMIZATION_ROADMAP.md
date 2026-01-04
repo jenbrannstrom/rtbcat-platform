@@ -244,10 +244,10 @@ const tools = [
 
 | Guardrail | Implementation |
 |-----------|----------------|
-| **Spend cap** | Never increase potential spend by >10% |
+| **Spend cap** | the app has no access to spend settings |
 | **QPS floor** | Maintain minimum QPS for A/B testing |
 | **Rollback window** | Auto-rollback if performance drops 20% in 24h |
-| **Human approval** | Changes >$1K/day impact require confirmation |
+| **Human approval** | Changes require confirmation |
 | **Audit trail** | All AI decisions logged with reasoning |
 
 ### 4.4 MCP Endpoints
@@ -368,8 +368,8 @@ Content-Type: application/json
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
-| QPS waste reduction | >25% | Before/after comparison |
-| Time to optimize | <5 min | From analysis to applied |
+| QPS waste reduction | >5% | Before/after comparison |
+| Time to optimize | <15 min | From analysis to applied |
 | Rollback success rate | 100% | All rollbacks restore previous state |
 | AI recommendation accuracy | >85% | Applied recommendations improve metrics |
 | System uptime | 99.9% | No optimization causes outage |
