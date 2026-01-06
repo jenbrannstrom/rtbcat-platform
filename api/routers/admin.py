@@ -649,3 +649,191 @@ async def reset_user_password(
         "new_password": new_password,  # Only shown once!
         "message": "Password reset. Share the new password securely.",
     }
+
+
+# ==================== Diagnostic Endpoint ====================
+
+@router.get("/diagnostics")
+async def get_diagnostics(
+    admin: User = Depends(require_admin),
+):
+    """Get diagnostic information for debugging data issues.
+
+    Requires admin role. Returns:
+    - All buyer seats (including inactive)
+    - Campaign-creative mapping status
+    - Thumbnail generation status
+    - Import history by account
+
+    Use this to investigate Phase 3B issues:
+    - Issue 1: Campaigns tab empty (creative_id mismatch)
+    - Issue 2: Missing third account (is_active check)
+    - Issue 3: Thumbnail placeholders
+    - Issue 5: CSV import account mismatch
+    """
+    from api.dependencies import get_store
+    from storage.sqlite_store import SQLiteStore
+
+    store: SQLiteStore = get_store()
+
+    diagnostics = {
+        "buyer_seats": [],
+        "campaigns_status": {},
+        "thumbnail_status": {},
+        "import_history": {},
+    }
+
+    async with store._connection() as conn:
+        import asyncio
+        loop = asyncio.get_event_loop()
+
+        def _run_diagnostics():
+            results = {}
+
+            # 1. All buyer seats (including inactive)
+            cursor = conn.execute("""
+                SELECT bs.buyer_id, bs.bidder_id, bs.display_name, bs.active,
+                       COALESCE(c.cnt, 0) as creative_count,
+                       bs.last_synced, bs.service_account_id
+                FROM buyer_seats bs
+                LEFT JOIN (
+                    SELECT account_id, COUNT(*) as cnt FROM creatives GROUP BY account_id
+                ) c ON c.account_id = bs.buyer_id
+                ORDER BY bs.display_name, bs.buyer_id
+            """)
+            results["buyer_seats"] = [
+                {
+                    "buyer_id": row[0],
+                    "bidder_id": row[1],
+                    "display_name": row[2],
+                    "active": bool(row[3]),
+                    "creative_count": row[4],
+                    "last_synced": row[5],
+                    "service_account_id": row[6],
+                }
+                for row in cursor.fetchall()
+            ]
+
+            # 2. Campaigns with creative_id counts
+            cursor = conn.execute("""
+                SELECT
+                    c.id,
+                    c.name,
+                    c.creative_ids,
+                    (SELECT COUNT(*) FROM creatives cr WHERE cr.id IN (
+                        SELECT value FROM json_each(c.creative_ids)
+                    )) as found_in_creatives
+                FROM campaigns c
+                LIMIT 20
+            """)
+            campaigns_data = []
+            for row in cursor.fetchall():
+                creative_ids_raw = row[2] or "[]"
+                try:
+                    import json as json_mod
+                    creative_ids = json_mod.loads(creative_ids_raw) if isinstance(creative_ids_raw, str) else creative_ids_raw
+                except:
+                    creative_ids = []
+                campaigns_data.append({
+                    "id": row[0],
+                    "name": row[1],
+                    "creative_ids_count": len(creative_ids) if creative_ids else 0,
+                    "found_in_creatives_table": row[3],
+                    "sample_ids": creative_ids[:5] if creative_ids else [],
+                })
+            results["campaigns_status"] = {
+                "campaigns": campaigns_data,
+                "total_campaigns": len(campaigns_data),
+            }
+
+            # 3. Thumbnail status summary
+            cursor = conn.execute("""
+                SELECT
+                    format,
+                    COUNT(*) as total,
+                    SUM(CASE WHEN thumbnail_url IS NOT NULL AND thumbnail_url != '' THEN 1 ELSE 0 END) as with_thumbnail
+                FROM creatives
+                GROUP BY format
+            """)
+            thumbnail_data = {}
+            for row in cursor.fetchall():
+                thumbnail_data[row[0] or "UNKNOWN"] = {
+                    "total": row[1],
+                    "with_thumbnail": row[2],
+                    "missing_thumbnail": row[1] - row[2],
+                }
+            results["thumbnail_status"] = thumbnail_data
+
+            # 4. Import history by account
+            cursor = conn.execute("""
+                SELECT
+                    buyer_id,
+                    COUNT(*) as import_count,
+                    MAX(imported_at) as last_import,
+                    SUM(records_imported) as total_records
+                FROM import_history
+                GROUP BY buyer_id
+                ORDER BY last_import DESC
+            """)
+            import_data = []
+            for row in cursor.fetchall():
+                import_data.append({
+                    "buyer_id": row[0],
+                    "import_count": row[1],
+                    "last_import": row[2],
+                    "total_records": row[3],
+                })
+            results["import_history"] = import_data
+
+            # 5. Creative ID type check (are they stored as strings or integers?)
+            cursor = conn.execute("""
+                SELECT id, typeof(id), account_id FROM creatives LIMIT 5
+            """)
+            results["creative_id_samples"] = [
+                {"id": row[0], "type": row[1], "account_id": row[2]}
+                for row in cursor.fetchall()
+            ]
+
+            return results
+
+        diagnostics = await loop.run_in_executor(None, _run_diagnostics)
+
+    return diagnostics
+
+
+@router.post("/diagnostics/fix-inactive-seats")
+async def fix_inactive_seats(
+    admin: User = Depends(require_admin),
+):
+    """Activate all inactive buyer seats.
+
+    Use this to fix Issue 2: Missing third account showing only 2 of 3 accounts.
+    Sets active=1 for all buyer_seats entries.
+    """
+    from api.dependencies import get_store
+    from storage.sqlite_store import SQLiteStore
+
+    store: SQLiteStore = get_store()
+
+    async with store._connection() as conn:
+        import asyncio
+        loop = asyncio.get_event_loop()
+
+        def _fix():
+            # Count inactive before
+            cursor = conn.execute("SELECT COUNT(*) FROM buyer_seats WHERE active = 0")
+            inactive_count = cursor.fetchone()[0]
+
+            # Activate all
+            conn.execute("UPDATE buyer_seats SET active = 1 WHERE active = 0")
+            conn.commit()
+
+            return inactive_count
+
+        fixed_count = await loop.run_in_executor(None, _fix)
+
+    return {
+        "status": "success",
+        "message": f"Activated {fixed_count} buyer seat(s)",
+        "seats_activated": fixed_count,
+    }
