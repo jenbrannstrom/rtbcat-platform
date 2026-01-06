@@ -20,6 +20,11 @@ import {
   LogOut,
   Users,
   Shield,
+  Link2,
+  Clock,
+  Activity,
+  FileText,
+  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getSeats, syncAllData } from "@/lib/api";
@@ -29,15 +34,31 @@ import { useTranslation } from "@/contexts/i18n-context";
 import { LanguageSelector } from "@/components/language-selector";
 
 const SIDEBAR_COLLAPSED_KEY = "rtbcat-sidebar-collapsed";
+const SIDEBAR_SETTINGS_EXPANDED_KEY = "rtbcat-sidebar-settings-expanded";
+const SIDEBAR_ADMIN_EXPANDED_KEY = "rtbcat-sidebar-admin-expanded";
 
-// Navigation items with translation keys
+// Main navigation items
 const navigationItems = [
   { key: "wasteOptimizer" as const, href: "/", icon: TrendingDown },
   { key: "creatives" as const, href: "/creatives", icon: Image },
   { key: "campaigns" as const, href: "/campaigns", icon: FolderKanban },
   { key: "changeHistory" as const, href: "/history", icon: History },
   { key: "import" as const, href: "/import", icon: RefreshCw },
-  { key: "setup" as const, href: "/setup", icon: Settings },
+];
+
+// Settings sub-navigation
+const settingsItems = [
+  { key: "connectedAccounts" as const, href: "/settings/accounts", icon: Link2 },
+  { key: "buyerSeats" as const, href: "/settings/seats", icon: Users },
+  { key: "dataRetention" as const, href: "/settings/retention", icon: Clock },
+  { key: "systemStatus" as const, href: "/settings/system", icon: Activity },
+];
+
+// Admin sub-navigation
+const adminItems = [
+  { key: "users" as const, href: "/admin/users", icon: Users },
+  { key: "configuration" as const, href: "/admin/configuration", icon: Wrench },
+  { key: "auditLog" as const, href: "/admin/audit-log", icon: FileText },
 ];
 
 export function Sidebar() {
@@ -66,22 +87,60 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [seatDropdownOpen, setSeatDropdownOpen] = useState(false);
   const [syncMessage, setSyncMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [settingsExpanded, setSettingsExpanded] = useState(false);
+  const [adminExpanded, setAdminExpanded] = useState(false);
 
   // Use context for buyer_id (persistent across pages)
   const currentBuyerId = selectedBuyerId;
 
-  // Load collapsed state from localStorage
+  // Check if current path is in settings or admin section
+  const isInSettings = pathname?.startsWith("/settings");
+  const isInAdmin = pathname?.startsWith("/admin");
+
+  // Load collapsed and expanded states from localStorage
   useEffect(() => {
     const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
     if (stored !== null) {
       setCollapsed(stored === "true");
     }
+    const settingsStored = localStorage.getItem(SIDEBAR_SETTINGS_EXPANDED_KEY);
+    if (settingsStored !== null) {
+      setSettingsExpanded(settingsStored === "true");
+    }
+    const adminStored = localStorage.getItem(SIDEBAR_ADMIN_EXPANDED_KEY);
+    if (adminStored !== null) {
+      setAdminExpanded(adminStored === "true");
+    }
   }, []);
+
+  // Auto-expand sections when navigating to them
+  useEffect(() => {
+    if (isInSettings && !settingsExpanded) {
+      setSettingsExpanded(true);
+      localStorage.setItem(SIDEBAR_SETTINGS_EXPANDED_KEY, "true");
+    }
+    if (isInAdmin && !adminExpanded) {
+      setAdminExpanded(true);
+      localStorage.setItem(SIDEBAR_ADMIN_EXPANDED_KEY, "true");
+    }
+  }, [pathname]);
 
   const toggleCollapsed = () => {
     const newValue = !collapsed;
     setCollapsed(newValue);
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(newValue));
+  };
+
+  const toggleSettingsExpanded = () => {
+    const newValue = !settingsExpanded;
+    setSettingsExpanded(newValue);
+    localStorage.setItem(SIDEBAR_SETTINGS_EXPANDED_KEY, String(newValue));
+  };
+
+  const toggleAdminExpanded = () => {
+    const newValue = !adminExpanded;
+    setAdminExpanded(newValue);
+    localStorage.setItem(SIDEBAR_ADMIN_EXPANDED_KEY, String(newValue));
   };
 
   const { data: seats } = useQuery({
@@ -274,9 +333,9 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-2 py-4 space-y-1">
+      <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
+        {/* Main navigation items */}
         {navigationItems.map((item) => {
-          // Handle exact match for home, prefix match for other routes
           const isActive = item.href === "/"
             ? pathname === "/"
             : pathname.startsWith(item.href);
@@ -305,26 +364,150 @@ export function Sidebar() {
             </Link>
           );
         })}
+
+        {/* Settings Section */}
+        <div className="pt-4">
+          {!collapsed && (
+            <div className="px-3 mb-1">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                {t.navigation.settings}
+              </span>
+            </div>
+          )}
+          <button
+            onClick={toggleSettingsExpanded}
+            className={cn(
+              "flex items-center w-full px-3 py-2 text-sm font-medium rounded-md transition-colors",
+              isInSettings
+                ? "bg-primary-50 text-primary-700"
+                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
+              collapsed && "justify-center px-2"
+            )}
+            title={collapsed ? t.navigation.settings : undefined}
+          >
+            <Settings
+              className={cn(
+                "h-5 w-5 flex-shrink-0",
+                isInSettings ? "text-primary-600" : "text-gray-400",
+                !collapsed && "mr-3"
+              )}
+            />
+            {!collapsed && (
+              <>
+                <span className="flex-1 text-left">{t.navigation.settings}</span>
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 text-gray-400 transition-transform",
+                    settingsExpanded && "rotate-180"
+                  )}
+                />
+              </>
+            )}
+          </button>
+          {settingsExpanded && !collapsed && (
+            <div className="mt-1 ml-4 space-y-1">
+              {settingsItems.map((item) => {
+                const isActive = pathname === item.href;
+                const itemName = t.settingsNav?.[item.key] || item.key;
+                return (
+                  <Link
+                    key={item.key}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center px-3 py-2 text-sm rounded-md transition-colors",
+                      isActive
+                        ? "bg-primary-50 text-primary-700 font-medium"
+                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    )}
+                  >
+                    <item.icon
+                      className={cn(
+                        "h-4 w-4 flex-shrink-0 mr-3",
+                        isActive ? "text-primary-600" : "text-gray-400"
+                      )}
+                    />
+                    {itemName}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Admin Section (only for admins) */}
+        {isAdmin && (
+          <div className="pt-2">
+            {!collapsed && (
+              <div className="px-3 mb-1">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                  {t.navigation.admin}
+                </span>
+              </div>
+            )}
+            <button
+              onClick={toggleAdminExpanded}
+              className={cn(
+                "flex items-center w-full px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                isInAdmin
+                  ? "bg-primary-50 text-primary-700"
+                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
+                collapsed && "justify-center px-2"
+              )}
+              title={collapsed ? t.navigation.admin : undefined}
+            >
+              <Shield
+                className={cn(
+                  "h-5 w-5 flex-shrink-0",
+                  isInAdmin ? "text-primary-600" : "text-gray-400",
+                  !collapsed && "mr-3"
+                )}
+              />
+              {!collapsed && (
+                <>
+                  <span className="flex-1 text-left">{t.navigation.admin}</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 text-gray-400 transition-transform",
+                      adminExpanded && "rotate-180"
+                    )}
+                  />
+                </>
+              )}
+            </button>
+            {adminExpanded && !collapsed && (
+              <div className="mt-1 ml-4 space-y-1">
+                {adminItems.map((item) => {
+                  const isActive = pathname === item.href;
+                  const itemName = t.adminNav?.[item.key] || item.key;
+                  return (
+                    <Link
+                      key={item.key}
+                      href={item.href}
+                      className={cn(
+                        "flex items-center px-3 py-2 text-sm rounded-md transition-colors",
+                        isActive
+                          ? "bg-primary-50 text-primary-700 font-medium"
+                          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                      )}
+                    >
+                      <item.icon
+                        className={cn(
+                          "h-4 w-4 flex-shrink-0 mr-3",
+                          isActive ? "text-primary-600" : "text-gray-400"
+                        )}
+                      />
+                      {itemName}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </nav>
 
-      {/* Footer with user info, admin link, and logout */}
+      {/* Footer with user info and logout */}
       <div className="px-2 py-4 border-t border-gray-200 space-y-1">
-        {/* Admin link (only for admins) */}
-        {isAdmin && !collapsed && (
-          <Link
-            href="/admin"
-            className={cn(
-              "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
-              pathname?.startsWith("/admin")
-                ? "bg-primary-50 text-primary-700"
-                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-            )}
-          >
-            <Shield className="mr-3 h-5 w-5 text-gray-400" />
-            {t.navigation.admin}
-          </Link>
-        )}
-
         {/* Docs link */}
         {!collapsed && (
           <a
