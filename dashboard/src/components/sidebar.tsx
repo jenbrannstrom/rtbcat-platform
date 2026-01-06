@@ -546,7 +546,7 @@ export function Sidebar() {
               </p>
             )}
             <div className="flex items-center gap-2 text-xs text-gray-400">
-              <span>v0.9.0</span>
+              <span>v{process.env.NEXT_PUBLIC_APP_VERSION || "0.9.0"}</span>
               <span>·</span>
               <a
                 href="https://docs.rtb.cat"
