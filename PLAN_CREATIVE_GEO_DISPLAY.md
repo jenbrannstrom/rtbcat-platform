@@ -2,7 +2,7 @@
 
 ## Business Context
 
-This feature helps advertisers ensure their localized creatives are serving to the correct markets - a standard quality assurance practice in digital advertising. For example, detecting when a Spanish-language ad is accidentally serving in Germany helps advertisers fix targeting configuration errors and improve campaign effectiveness.
+This feature helps advertisers verify their localized creatives are serving to the intended markets - a standard quality assurance practice in digital advertising. For example, identifying when a Spanish-language ad is serving in Germany helps advertisers correct targeting configuration and improve campaign effectiveness.
 
 **Use Case:** An advertiser uploads a creative showing "AED 0" (UAE currency) with a Spanish "instalar" button. Without visibility into where this creative is actually serving, the advertiser cannot identify and correct this localization configuration issue.
 
@@ -10,7 +10,7 @@ This feature helps advertisers ensure their localized creatives are serving to t
 
 ## Problem Statement
 
-Creatives can have localization configuration issues - e.g., a creative showing "AED0" (UAE currency) with a Spanish "instalar" button. Without seeing where the creative is actually serving, these geo/language configuration gaps go unnoticed.
+Creatives can have localization configuration issues - e.g., a creative showing "AED 0" (UAE currency) with a Spanish "instalar" button. Without seeing where the creative is actually serving, these geo/language configuration gaps go unnoticed.
 
 **Goal:** Surface country data in the creative detail modal so advertisers can verify their localization is correctly configured.
 
@@ -441,20 +441,20 @@ In the `PreviewModal` component, add the CountrySection to the right column:
 
 ---
 
-## Future Enhancement: Localization Quality Assistance
+## Future Enhancement: Localization Quality Tools
 
-Once this foundation is in place, a future phase could add localization quality tools:
+Once this foundation is in place, a future phase could add localization quality tools to help advertisers optimize multi-market campaigns:
 
 1. **Creative Content Analysis**
    - Extract visible text from creative assets
    - Identify language and regional indicators (currency symbols, date formats)
 
-2. **Localization Quality Notes**
+2. **Localization Review Notes**
    - Compare creative content language with primary serving countries
    - Surface helpful notes like: "Creative appears to contain Spanish text - currently serving primarily in DE (Germany). Consider reviewing targeting configuration."
-   - Note: "AED currency symbol detected - 80% of impressions in US market. Verify this aligns with campaign intent."
+   - Note: "AED currency symbol visible - 80% of impressions in US market. Verify this aligns with campaign intent."
 
-3. **Quality Dashboard**
+3. **Localization Review Dashboard**
    - Add informational badges to creative cards for localization review
    - Add "Needs Localization Review" filter option
    - Summary page for creatives that may benefit from localization adjustments
@@ -462,7 +462,7 @@ Once this foundation is in place, a future phase could add localization quality 
 **Benefits for Advertisers:**
 - Improve campaign ROI by ensuring ads reach the intended audience
 - Better user experience through properly localized content
-- Reduce wasted spend on misconfigured geo-targeting
+- Reduce inefficient spend on misconfigured geo-targeting
 - Streamline QA process for multi-market campaigns
 
 ---
