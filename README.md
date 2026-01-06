@@ -30,13 +30,13 @@ It has a free version that allows pretargeting settings to be edited based on ef
 
 Cat-Scan sits next to the Google seat, extracting data via API and CSV exports (since there is no reporting API for a Google AB seat, we compile data from CSV exports sent to a dedicated Gmail address, which is then parsed and stored in the DB. The schema normalizes the various CSV daily reports for a dataset that can be evaluated).
 
-Because of this limited data, the insight is limited to QPS optimization. We deduce what the media buyer is trying to achieve based on the creatives' targeting, spend, CPM and clicks. The goal is QPS optimization, which assists the media buyer in achieving their objectives.
+Because of this limited data, the insight is limited to QPS optimization. We deduce what the media buyer is trying to achieve based on the creatives' settings, spend, CPM and clicks. The goal is QPS optimization, which assists the media buyer in achieving their objectives.
 
 **Campaign Clustering**
 
 Clustering means grouping creatives together based on deduced logic. It also allows manual sorting. The purpose is to reveal insights for further QPS optimization.
 
-It works by automatically grouping creatives based on same/similar destination URL. This could be augmented with AI image recognition to identify creative language (image/HTML/Video/Native ads) and group them by language, or surface when a creative's language doesn't match its country targeting configuration.
+It works by automatically grouping creatives based on same/similar destination URL. This could be augmented with AI image recognition to identify creative language (image/HTML/Video/Native ads) and group them by language, or surface localization configuration issues.
 
 ---
 
@@ -76,7 +76,7 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 | **Multi-Seat Support** | Manage multiple buyer accounts under one bidder |
 | **Efficiency Analysis** | Identify size gaps, config inefficiencies, optimization opportunities |
 | **RTB Funnel** | Visualize reached queries → bids → impressions |
-| **Campaign Clustering** | AI-powered grouping by destination URL, country, advertiser, language |
+| **Campaign Clustering** | AI-powered grouping by destination URL, region, advertiser, language |
 | **CSV Import** | Auto-import performance data from Google reports |
 | **MCP Support** | APIs to enable MCP access for your own choice of AI |
 | **Video Thumbnails** | Visualize creatives clearly: extract from VAST XML or generate via ffmpeg |
@@ -156,7 +156,7 @@ Cat-Scan requires **3 separate CSV reports** from Google Authorized Buyers due t
 | Report | Purpose | Key Fields | Table |
 |--------|---------|------------|-------|
 | **Performance Detail** | Creative/Size/App data | Creative ID, Size, App ID, Publisher | `rtb_daily` |
-| **RTB Funnel (Geo)** | Bid pipeline by country | Bid requests, Bids, Auctions won | `rtb_funnel` |
+| **RTB Funnel (Regional)** | Bid pipeline by region | Bid requests, Bids, Auctions won | `rtb_funnel` |
 | **RTB Funnel (Publishers)** | Bid pipeline by publisher | Publisher ID + Bid metrics | `rtb_funnel` |
 
 ### Why 3 Reports?
@@ -165,25 +165,25 @@ Google's limitation: *"Mobile app ID is not compatible with [Bid requests]..."*
 
 - To get **App/Creative detail** → you lose Bid request metrics
 - To get **Bid request metrics** → you lose App/Creative detail
-- Cat-Scan **joins them** by date + country to give you the full picture
+- Cat-Scan **joins them** by date + region to give you the full picture
 
 ### Quick Reference
 
 **Report 1 - Performance Detail:**
 ```
-Dimensions: Day, Billing ID, Creative ID, Creative size, Country, Publisher ID, Mobile app ID
+Dimensions: Day, Billing ID, Creative ID, Creative size, Region, Publisher ID, Mobile app ID
 Metrics: Reached queries, Impressions, Clicks, Spend
 ```
 
-**Report 2 - RTB Funnel (Geo):**
+**Report 2 - RTB Funnel (Regional):**
 ```
-Dimensions: Day, Country, Buyer account ID
+Dimensions: Day, Region, Buyer account ID
 Metrics: Bid requests, Inventory matches, Reached queries, Bids, Bids in auction, Auctions won, Impressions
 ```
 
 **Report 3 - RTB Funnel (Publishers):**
 ```
-Dimensions: Day, Country, Buyer account ID, Publisher ID, Publisher name
+Dimensions: Day, Region, Buyer account ID, Publisher ID, Publisher name
 Metrics: Same as Report 2
 ```
 
@@ -329,6 +329,7 @@ Detailed phase documentation is archived in `docs/phases/`:
 3. **RTB Troubleshooting API** - Integrate bid metrics
 4. **Performance at scale** - Virtual scrolling, caching
 5. **Auto-optimization (paid)** - Hands-free pretargeting adjustments
+6. **Creative modal enhancements** - Additional data in creative details
 
 See **[docs/HANDOVER.md](docs/HANDOVER.md)** for complete roadmap.
 
