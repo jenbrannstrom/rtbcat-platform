@@ -243,7 +243,7 @@ Gmail (scheduled reports)          Manual Upload
 |----------|--------|---------|
 | **Creative Management** | creatives, clusters, thumbnail_status | Store creative metadata and thumbnails |
 | **Campaign Management** | campaigns, ai_campaigns, creative_campaigns, campaign_creatives, campaign_daily_summary | Organize creatives into campaigns |
-| **Service Accounts & Seats** | service_accounts, buyer_seats, seats | Multi-account support |
+| **Service Accounts & Seats** | service_accounts, buyer_seats, seats | Multi-account/multi-seat support (4 seats across 2 accounts) |
 | **RTB Performance** | rtb_daily, rtb_funnel, rtb_bid_filtering, rtb_quality | CSV import data |
 | **Pretargeting** | pretargeting_configs, pretargeting_history, pretargeting_snapshots, pretargeting_pending_changes | Pretargeting management |
 | **Import Tracking** | import_history, daily_upload_summary, import_anomalies | Track CSV imports |
@@ -366,13 +366,18 @@ Two authentication modes:
 
 ## Key Design Decisions
 
-### 1. SQLite over PostgreSQL
+### 1. SQLite with Multi-Account Support
 
-**Why:** Cat-Scan is designed for single-tenant deployment (one RTB bidder per instance). SQLite provides:
+**Why:** Cat-Scan uses SQLite with a multi-account architecture supporting multiple Google Authorized Buyers accounts and buyer seats within a single deployment. SQLite provides:
 - Zero configuration
 - Single-file database for easy backup
 - WAL mode for concurrent reads
-- Sufficient for 600+ creatives and millions of daily rows
+- Sufficient for multiple accounts with 600+ creatives each and millions of daily rows
+
+**Multi-Account Model:**
+- **Service Accounts**: Multiple Google service account credentials can be configured
+- **Buyer Seats**: Each service account can access multiple buyer seats (bidder accounts)
+- **Data Isolation**: All data (creatives, imports, performance metrics) is tagged with `bidder_id` for per-account querying
 
 ### 2. Modular Router Architecture
 
@@ -427,6 +432,71 @@ Two authentication modes:
 
 ---
 
+## Account & Seat Hierarchy
+
+Cat-Scan supports multiple Google Authorized Buyers accounts with multiple buyer seats per account.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          MULTI-ACCOUNT ARCHITECTURE                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                      SERVICE ACCOUNTS                                │   │
+│  │                   (Google API Credentials)                           │   │
+│  ├─────────────────────────────────────────────────────────────────────┤   │
+│  │  Account A                     │  Account B                         │   │
+│  │  (service-a@project.iam...)    │  (service-b@project.iam...)        │   │
+│  └────────────┬───────────────────┴────────────┬───────────────────────┘   │
+│               │                                │                            │
+│               ▼                                ▼                            │
+│  ┌────────────────────────────┐   ┌────────────────────────────┐           │
+│  │       BUYER SEATS          │   │       BUYER SEATS          │           │
+│  │   (bidder_id = Account A)  │   │   (bidder_id = Account B)  │           │
+│  ├────────────────────────────┤   ├────────────────────────────┤           │
+│  │  Seat 1 (buyer_id: 12345)  │   │  Seat 3 (buyer_id: 67890)  │           │
+│  │  Seat 2 (buyer_id: 12346)  │   │  Seat 4 (buyer_id: 67891)  │           │
+│  └────────────┬───────────────┘   └────────────┬───────────────┘           │
+│               │                                │                            │
+│               ▼                                ▼                            │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                           DATA LAYER                                 │   │
+│  ├─────────────────────────────────────────────────────────────────────┤   │
+│  │  creatives (account_id, buyer_id)                                    │   │
+│  │  rtb_daily (bidder_id)                                               │   │
+│  │  import_history (bidder_id)                                          │   │
+│  │  pretargeting_configs (bidder_id, billing_id)                        │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Components
+
+| Component | Table | Purpose |
+|-----------|-------|---------|
+| **Service Account** | `service_accounts` | Google API credentials (JSON key file) |
+| **Buyer Seat** | `buyer_seats` | Individual bidder accounts under a service account |
+| **Account Mapper** | `pretargeting_configs` | Maps `billing_id` → `bidder_id` for CSV imports |
+
+### Implementation Files
+
+| Purpose | File |
+|---------|------|
+| Account/Seat Repository | `storage/repositories/account_repository.py` |
+| Billing → Bidder Mapping | `qps/account_mapper.py` |
+| Frontend Context | `dashboard/src/contexts/account-context.tsx` |
+| Multi-account Migration | `migrations/007_multi_account_tracking.sql` |
+
+### Data Flow
+
+1. **Credential Setup**: Service account JSON uploaded → stored in `service_accounts`
+2. **Seat Discovery**: API sync discovers buyer seats → stored in `buyer_seats` with `bidder_id`
+3. **CSV Import**: Billing ID extracted → `AccountMapper` resolves `bidder_id` → data tagged
+4. **Querying**: Frontend selects buyer/account → queries filter by `bidder_id`
+
+---
+
 ## Future Architecture Considerations
 
 1. **Auto-Optimization Service:**
@@ -434,13 +504,11 @@ Two authentication modes:
    - Confidence scoring for auto-apply decisions
    - Learning from outcomes
 
-2. **Multi-Tenant Support:**
-   - Database per tenant or row-level security
-   - Tenant isolation for service accounts
-
-3. **Real-Time Updates:**
+2. **Real-Time Updates:**
    - WebSocket for live dashboard updates
    - Event-driven architecture for notifications
+
+> **Note:** Multi-account/multi-seat support has been implemented. See "Account & Seat Hierarchy" section below.
 
 ---
 
