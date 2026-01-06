@@ -657,8 +657,8 @@ export default function CampaignsPage() {
   async function handleApplySuggestion(suggestion: ClusterSuggestion) {
     setApplyingId(suggestion.suggested_name);
     try {
-      // Use the helper to generate a clean name
-      const cleanName = generateClusterName(suggestion.domain) || suggestion.suggested_name;
+      // Use the API-provided name (real app name) first, fall back to domain parsing
+      const cleanName = suggestion.suggested_name || generateClusterName(suggestion.domain);
       await createMutation.mutateAsync({
         name: cleanName,
         creative_ids: suggestion.creative_ids,
@@ -887,7 +887,7 @@ export default function CampaignsPage() {
             {(showAllSuggestions ? suggestions : suggestions.slice(0, 9)).map((suggestion, index) => {
               const isCreated = createdSuggestions.has(suggestion.suggested_name);
               const isApplying = applyingId === suggestion.suggested_name;
-              const displayName = generateClusterName(suggestion.domain) || suggestion.suggested_name;
+              const displayName = suggestion.suggested_name || generateClusterName(suggestion.domain);
 
               return (
                 <div
