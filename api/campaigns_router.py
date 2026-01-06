@@ -84,6 +84,13 @@ class CampaignUpdateRequest(BaseModel):
     status: Optional[str] = None
 
 
+class CampaignPatchRequest(BaseModel):
+    """Request for patching campaign (add/remove creatives)."""
+    name: Optional[str] = None
+    add_creative_ids: Optional[list[str]] = None
+    remove_creative_ids: Optional[list[str]] = None
+
+
 class AssignCreativesRequest(BaseModel):
     """Request for assigning creatives."""
     creative_ids: list[str]
@@ -258,6 +265,48 @@ async def auto_cluster_creatives(request: AutoClusterRequest):
     except Exception as e:
         logger.error(f"Auto-clustering failed: {e}")
         raise HTTPException(status_code=500, detail=f"Clustering failed: {str(e)}")
+
+
+@router.get("/unclustered")
+async def get_unclustered_creatives(
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer_id"),
+):
+    """
+    Get all creatives that are not assigned to any campaign.
+
+    Returns:
+        creative_ids: List of creative IDs not in any campaign
+        count: Total number of unclustered creatives
+    """
+    try:
+        if buyer_id:
+            rows = await db_query("""
+                SELECT c.id as creative_id
+                FROM creatives c
+                LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
+                WHERE cc.creative_id IS NULL
+                  AND c.buyer_id = ?
+                ORDER BY c.id
+            """, (buyer_id,))
+        else:
+            rows = await db_query("""
+                SELECT c.id as creative_id
+                FROM creatives c
+                LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
+                WHERE cc.creative_id IS NULL
+                ORDER BY c.id
+            """)
+
+        creative_ids = [str(row['creative_id']) for row in rows]
+
+        return {
+            "creative_ids": creative_ids,
+            "count": len(creative_ids),
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get unclustered creatives: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 def _generate_name_from_domain(domain: str) -> str:
@@ -495,6 +544,71 @@ async def update_campaign(campaign_id: str, request: CampaignUpdateRequest):
         raise
     except Exception as e:
         logger.error(f"Failed to update campaign: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/{campaign_id}", response_model=AICampaignResponse)
+async def patch_campaign(campaign_id: str, request: CampaignPatchRequest):
+    """
+    Patch campaign: update name, add creatives, or remove creatives.
+
+    This is the main endpoint used by the drag-and-drop UI for moving creatives.
+    """
+    try:
+        def _patch_campaign(conn):
+            repo = CampaignRepository(conn)
+
+            # Check campaign exists
+            campaign = repo.get_campaign(campaign_id)
+            if not campaign:
+                return None
+
+            # Update name if provided
+            if request.name is not None:
+                repo.update_campaign(campaign_id=campaign_id, name=request.name)
+
+            # Remove creatives if provided
+            if request.remove_creative_ids:
+                for creative_id in request.remove_creative_ids:
+                    repo.remove_creative_from_campaign(creative_id)
+
+            # Add creatives if provided
+            if request.add_creative_ids:
+                repo.assign_creatives_batch(
+                    creative_ids=request.add_creative_ids,
+                    campaign_id=campaign_id,
+                    assigned_by="user",
+                    manually_assigned=True,
+                )
+
+            # Fetch updated campaign
+            campaign = repo.get_campaign(campaign_id)
+            creative_ids = repo.get_campaign_creatives(campaign_id)
+
+            return {
+                "id": campaign.id,
+                "seat_id": campaign.seat_id,
+                "name": campaign.name,
+                "description": campaign.description,
+                "ai_generated": campaign.ai_generated,
+                "ai_confidence": campaign.ai_confidence,
+                "clustering_method": campaign.clustering_method,
+                "status": campaign.status,
+                "creative_count": len(creative_ids),
+                "creative_ids": creative_ids,
+            }
+
+        campaign_data = await db_transaction_async(_patch_campaign)
+
+        if not campaign_data:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+
+        return AICampaignResponse(**campaign_data)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to patch campaign: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
