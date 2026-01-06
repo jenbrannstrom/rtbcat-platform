@@ -225,12 +225,14 @@ async def auto_cluster_creatives(request: AutoClusterRequest):
         cluster_data: dict[str, dict] = defaultdict(lambda: {'name': '', 'domain': '', 'creative_ids': []})
 
         for row in rows:
-            creative_id = str(row['creative_id'])
-            final_url = row['final_url'] or ''
-            app_id = row.get('app_id')
-            app_name = row.get('app_name')
-            app_store = row.get('app_store')
-            advertiser_name = row.get('advertiser_name')
+            # Convert sqlite3.Row to dict for .get() access
+            row_dict = dict(row)
+            creative_id = str(row_dict['creative_id'])
+            final_url = row_dict.get('final_url') or ''
+            app_id = row_dict.get('app_id')
+            app_name = row_dict.get('app_name')
+            app_store = row_dict.get('app_store')
+            advertiser_name = row_dict.get('advertiser_name')
 
             # Phase 29: Priority order for cluster key/name:
             # 1. Use pre-stored app_name if available
