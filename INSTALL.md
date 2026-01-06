@@ -83,8 +83,7 @@ This starts both the API (port 8000) and Dashboard (port 3000).
 
 **Manual startup (if run.sh doesn't work):**
 ```bash
-# Terminal 1: API
-cd creative-intelligence
+# Terminal 1: API (from project root)
 ./venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 
 # Terminal 2: Dashboard
@@ -105,7 +104,7 @@ If the setup script doesn't work for your system:
 ### Backend (Python)
 
 ```bash
-cd creative-intelligence
+# From project root directory
 
 # Create virtual environment
 python3.11 -m venv venv
@@ -526,9 +525,8 @@ chmod +x scripts/gmail_import.py
 **If running on your PC (has a browser):**
 
 ```bash
-cd creative-intelligence
-source venv/bin/activate
-python scripts/gmail_import.py
+# From project root
+./venv/bin/python scripts/gmail_import.py
 ```
 
 This will:
@@ -577,7 +575,7 @@ crontab -e
 
 Add this line (runs daily at 7:00 AM, adjust the path):
 ```cron
-0 7 * * * cd /home/ubuntu/rtbcat-platform/creative-intelligence && ./venv/bin/python scripts/gmail_import.py >> /home/ubuntu/.catscan/logs/gmail_import.log 2>&1
+0 7 * * * cd /home/ubuntu/rtbcat-platform && ./venv/bin/python scripts/gmail_import.py >> /home/ubuntu/.catscan/logs/gmail_import.log 2>&1
 ```
 
 **On Mac (if running on your laptop):**
@@ -587,7 +585,7 @@ crontab -e
 
 Add:
 ```cron
-0 7 * * * cd /Users/yourname/rtbcat-platform/creative-intelligence && ./venv/bin/python scripts/gmail_import.py >> ~/.catscan/logs/gmail_import.log 2>&1
+0 7 * * * cd /Users/yourname/rtbcat-platform && ./venv/bin/python scripts/gmail_import.py >> ~/.catscan/logs/gmail_import.log 2>&1
 ```
 
 Create the logs directory:
@@ -673,7 +671,7 @@ systemctl status cron
 grep CRON /var/log/syslog | tail -20
 
 # Test the script manually first
-cd /path/to/creative-intelligence
+cd /path/to/rtbcat-platform
 ./venv/bin/python scripts/gmail_import.py
 ```
 
@@ -698,9 +696,9 @@ After=network.target
 [Service]
 Type=simple
 User=$USER
-WorkingDirectory=$(pwd)/creative-intelligence
-Environment=PATH=$(pwd)/creative-intelligence/venv/bin
-ExecStart=$(pwd)/creative-intelligence/venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+WorkingDirectory=$(pwd)
+Environment=PATH=$(pwd)/venv/bin
+ExecStart=$(pwd)/venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=10
 
