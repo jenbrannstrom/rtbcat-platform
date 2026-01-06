@@ -235,14 +235,18 @@ async def auto_cluster_creatives(request: AutoClusterRequest):
             advertiser_name = row_dict.get('advertiser_name')
 
             # Phase 29: Priority order for cluster key/name:
-            # 1. Use pre-stored app_name if available
+            # 1. Use pre-stored app_name if available (from backfill or sync)
             # 2. Fall back to URL parsing
-            if app_id and app_name:
-                # Use stored app info
-                cluster_key = f"app:{app_id}"
+            if app_name:
+                # Use stored app name - it was fetched from the store/website
+                if app_id:
+                    cluster_key = f"app:{app_id}"
+                else:
+                    # Website destination - use app_name as key
+                    cluster_key = f"name:{app_name.lower().replace(' ', '_')[:50]}"
                 display_name = app_name
             else:
-                # Fall back to URL parsing
+                # Fall back to URL parsing (should be rare after backfill)
                 cluster_key, display_name = _extract_cluster_key_and_name(final_url)
                 # If still unknown, try advertiser name
                 if cluster_key == 'unknown' and advertiser_name:
