@@ -463,11 +463,11 @@ function ApiConnectionTab() {
             {serviceAccounts.map((account: ServiceAccount) => (
               <div
                 key={account.id}
-                className="flex items-center justify-between py-4 px-4 bg-green-50 rounded-lg border border-green-200"
+                className="flex items-center justify-between py-4 px-4 bg-green-50 rounded-lg border border-green-200 overflow-hidden"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
                   <CheckCircle className="h-6 w-6 text-green-500 flex-shrink-0" />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="font-medium text-green-900 truncate">
                       {account.display_name || account.client_email}
                     </p>
