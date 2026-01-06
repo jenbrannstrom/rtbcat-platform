@@ -1,35 +1,33 @@
 # Phase 3 Investigation Report
 
 **Date:** January 6, 2026
-**Status:** Investigation Complete - Plan Ready
+**Status:** Partial Fixes Applied - Data Investigation Pending
+
+**Latest Update:** January 6, 2026
+- ✅ Part A (Navigation Corrections): All fixes implemented
+- ✅ Issue 4 (URL Tooltips): Fixed with title attributes and copy buttons
+- ⏳ Issues 1, 2, 3, 5: Data investigation required
 
 ---
 
-## Part A: Navigation Corrections (Option C Implementation Fixes)
+## Part A: Navigation Corrections (Option C Implementation Fixes) ✅ COMPLETE
 
-### Current State Analysis
+**Status:** Fixed on January 6, 2026
 
-The bottom-left navigation footer in `sidebar.tsx` currently shows:
-1. Docs link (pointing to "https://rtb.cat")
-2. Language selector (full component with text)
-3. Logout button (with text)
-4. Collapse toggle (with "Collapse" text when expanded)
-5. User info + version (v0.9.0)
+### Changes Made
 
-### Required Changes
+| Item | Change |
+|------|--------|
+| **Docs** | ✅ Moved next to version (v0.9.0 · Docs), URL updated to `docs.rtb.cat` |
+| **Language Selector** | ✅ Moved to header bar as compact flag emoji button |
+| **Logout** | ✅ Moved to bottom of main nav (after Admin section) |
+| **Collapse** | ✅ Simplified to just `<` / `>` icon |
 
-| Item | Current | Required |
-|------|---------|----------|
-| **Docs** | Separate row with icon + "Docs" text | Next to v0.9.0 in small type, URL: `docs.rtb.cat` |
-| **Language Selector** | Bottom footer area | Small flag icon, top-right of header (above refresh button) |
-| **Logout** | In footer group | Bottom entry of main left nav (after Settings/Admin sections) |
-| **Collapse** | `< Collapse` text | Just `<` icon, no text |
+### Files Modified
 
-### Files to Modify
-
-1. **`sidebar.tsx`** - Restructure footer, move logout to nav, move collapse button
-2. **`language-selector.tsx`** - Create compact flag-only variant for header
-3. **`authenticated-layout.tsx`** or create new **`header-bar.tsx`** - Add language selector to top-right
+1. **`sidebar.tsx`** - Restructured footer, moved logout to nav, simplified collapse
+2. **`language-selector.tsx`** - Added `compact` prop with flag emoji variant
+3. **`authenticated-layout.tsx`** - Added header bar with language selector
 
 ---
 
@@ -130,41 +128,18 @@ The bottom-left navigation footer in `sidebar.tsx` currently shows:
 
 ---
 
-### Issue 4: Tracking URLs Curtailed in Modal (Need Full on Hover, Clickable)
+### Issue 4: Tracking URLs Curtailed in Modal (Need Full on Hover, Clickable) ✅ FIXED
 
-**Root Cause Analysis:**
+**Status:** Fixed on January 6, 2026
 
-1. **Current Implementation** (`preview-modal.tsx`):
+**Changes Made:**
+1. Added `title={url.url}` attribute to destination URLs for full hover reveal
+2. Added `title={value}` to tracking parameter values
+3. Added copy buttons to both destination URLs and tracking parameter values
+4. Improved layout with flex-shrink-0 for proper icon alignment
 
-   **Destination URLs** (lines 700-720):
-   ```typescript
-   <a
-     href={url.url}
-     className="text-primary-600 hover:text-primary-700 truncate flex-1 text-xs"
-   >
-     {getUrlDisplayText(url)}
-   </a>
-   ```
-   - Uses `truncate` which cuts off text with ellipsis
-   - No `title` attribute for hover tooltip
-
-   **Tracking Parameters** (lines 730-734):
-   ```typescript
-   <span className="text-gray-700 truncate max-w-[150px]">{value}</span>
-   ```
-   - Hard limit of 150px width
-   - No hover reveal
-   - Values are not clickable
-
-2. **Required Behavior**:
-   - Show full URL on hover (title tooltip)
-   - Make URLs clickable (already are for destinations, not for tracking params)
-   - Consider expandable section for very long URLs
-
-**Fix Required**:
-- Add `title={url.url}` attribute to show full URL on hover
-- For tracking params, add `title={value}` and optionally make them copyable
-- Consider adding a "Show full URL" toggle or expand button
+**Files Modified:**
+- `dashboard/src/components/preview-modal.tsx`
 
 ---
 
