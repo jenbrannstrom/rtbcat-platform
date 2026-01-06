@@ -5,6 +5,12 @@ on:
     branches:
       - unified-platform
 
+# Prevent concurrent deployments - only one deploy can run at a time
+# If a new deploy is triggered while one is running, the old one is cancelled
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
