@@ -16,7 +16,7 @@ from storage.database import db_query, db_transaction_async, DB_PATH
 from storage.campaign_repository import CampaignRepository, AICampaign
 from api.clustering.rule_based import pre_cluster_creatives, merge_small_clusters
 from api.clustering.ai_clusterer import AICampaignClusterer, apply_ai_suggestions
-from utils.app_parser import get_app_name, parse_app_store_url
+from utils.app_parser import format_package_id_as_name, parse_app_store_url
 
 logger = logging.getLogger(__name__)
 
@@ -448,13 +448,13 @@ def _extract_cluster_key_and_name(url: str) -> tuple[str, str]:
 def _format_bundle_id(bundle_id: str) -> str:
     """Format a bundle ID like com.example.myapp into 'Example Myapp'.
 
-    Uses the KNOWN_APPS lookup table for popular apps, falls back to auto-formatting.
+    Uses centralized formatting from app_parser.
     """
     if not bundle_id:
         return 'Unknown'
 
-    # Phase 29: Use centralized app name lookup
-    return get_app_name(bundle_id)
+    # Phase 29: Use centralized package ID formatting
+    return format_package_id_as_name(bundle_id)
 
 
 def _generate_name_from_domain(domain: str) -> str:
