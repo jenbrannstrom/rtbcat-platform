@@ -2,9 +2,9 @@
 
 ## Problem Statement
 
-Creatives can have localization mismatches - e.g., a creative showing "AED0" (UAE currency) with a Spanish "instalar" button. Without seeing where the creative is actually serving, these geo/language mismatches go unnoticed.
+Creatives can have localization issues - e.g., a creative showing "AED0" (UAE currency) with a Spanish "instalar" button. Without seeing where the creative is actually serving, these geo/language inconsistencies go unnoticed.
 
-**Goal:** Surface country data in the creative detail modal so users can spot geo/language mismatches.
+**Goal:** Surface country data in the creative detail modal so users can review geo/language alignment.
 
 ---
 
@@ -131,7 +131,7 @@ async def get_creative_countries(
 
     Returns all countries where this creative has served,
     with spend, impressions, and clicks per country.
-    Useful for detecting geo/language mismatches.
+    Useful for reviewing geo/language alignment.
     """
     # Verify creative exists
     creative = await store.get_creative(creative_id)
@@ -439,17 +439,17 @@ Once this foundation is in place, the next phase adds:
 
 1. **Image Recognition via MCP**
    - Extract text from creative images (OCR)
-   - Detect language, currency symbols, phone formats
+   - Identify language, currency symbols, phone formats
 
-2. **Mismatch Detection**
-   - Compare detected language vs. serving countries
-   - Alert: "Spanish text detected but serving in Germany (DE)"
-   - Alert: "AED currency but 80% traffic from US"
+2. **Localization Review**
+   - Compare identified language vs. serving countries
+   - Show notification: "Spanish text identified but serving in Germany (DE)"
+   - Show notification: "AED currency but 80% traffic from US"
 
-3. **Dashboard Alerts**
-   - Add warning badges to creative cards
-   - Add "Potential Mismatch" filter
-   - Bulk review page for flagged creatives
+3. **Dashboard Indicators**
+   - Add review badges to creative cards
+   - Add "Needs Localization Review" filter
+   - Bulk review page for creatives needing attention
 
 ---
 
@@ -458,7 +458,7 @@ Once this foundation is in place, the next phase adds:
 - [ ] API returns correct country breakdown
 - [ ] Empty state displays properly
 - [ ] 50+ countries handled gracefully
-- [ ] Modal loads countries without blocking render
+- [ ] Modal loads countries without rendering delay
 - [ ] Country percentages sum to ~100%
 - [ ] Unknown country codes display raw code
 - [ ] Performance acceptable (query <100ms)
