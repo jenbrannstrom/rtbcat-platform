@@ -26,6 +26,21 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["System"])
 
 
+def get_version() -> str:
+    """Get app version from VERSION file or environment variable."""
+    # First check environment variable (set in Docker)
+    if version := os.environ.get("APP_VERSION"):
+        return version
+
+    # Try to read from VERSION file (for local development)
+    version_file = Path(__file__).parent.parent.parent / "VERSION"
+    if version_file.exists():
+        return version_file.read_text().strip()
+
+    # Fallback
+    return "0.9.0"
+
+
 # =============================================================================
 # Pydantic Models
 # =============================================================================
@@ -242,7 +257,7 @@ async def health_check(
 
     return HealthResponse(
         status="healthy",
-        version="0.9.0",
+        version=get_version(),
         configured=configured,
         has_credentials=has_credentials,
         database_exists=db_path.exists(),

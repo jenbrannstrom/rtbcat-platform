@@ -14,6 +14,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Version passed as build arg, exposed to Next.js at build time
+ARG APP_VERSION=0.9.0
+ENV NEXT_PUBLIC_APP_VERSION=${APP_VERSION}
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build

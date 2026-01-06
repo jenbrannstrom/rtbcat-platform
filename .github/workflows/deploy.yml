@@ -27,6 +27,8 @@ jobs:
               cd ~/rtbcat-platform
               git fetch origin
               git reset --hard origin/unified-platform
+              export APP_VERSION=$(cat VERSION)
+              echo "Building version: $APP_VERSION"
               docker compose -f docker-compose.production.yml build
               docker compose -f docker-compose.production.yml up -d
             '

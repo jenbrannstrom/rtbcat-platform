@@ -5,10 +5,29 @@ All route handlers are organized in the api/routers/ directory.
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI
+
+
+def get_version() -> str:
+    """Get app version from VERSION file or environment variable."""
+    # First check environment variable (set in Docker)
+    if version := os.environ.get("APP_VERSION"):
+        return version
+
+    # Try to read from VERSION file (for local development)
+    version_file = Path(__file__).parent.parent / "VERSION"
+    if version_file.exists():
+        return version_file.read_text().strip()
+
+    # Fallback
+    return "0.9.0"
+
+
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.auth import APIKeyAuthMiddleware
@@ -104,7 +123,7 @@ def create_app() -> FastAPI:
     application = FastAPI(
         title="Cat-Scan Creative Intelligence",
         description="API for collecting and analyzing Authorized Buyers creative data",
-        version="0.9.0",
+        version=get_version(),
         lifespan=lifespan,
     )
 
