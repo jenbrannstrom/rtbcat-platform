@@ -11,7 +11,7 @@
 
 **Answer:** **Yes, for binary optimization decisions. No, for bid price optimization.**
 
-The data model is well-designed for **pretargeting optimization** (what to block/include). It correctly handles Google's field incompatibility constraints and joins multiple reports to reconstruct the full funnel.
+The data model is well-designed for **pretargeting optimization** (what to include/exclude). It correctly handles Google's field incompatibility constraints and joins multiple reports to reconstruct the full funnel.
 
 However, the app **cannot** optimize **bid prices** because Google's CSV exports don't include bid amounts—only bid counts. This is a fundamental platform limitation, not an app deficiency.
 
@@ -23,7 +23,7 @@ However, the app **cannot** optimize **bid prices** because Google's CSV exports
 
 **Goal:** Maximize value extracted from limited QPS (Queries Per Second).
 
-**The Constraint:** Google sends you N bid requests/second. You pay for processing capacity. Not all requests lead to wins. Waste = requests that never become revenue.
+**The Constraint:** Google sends you N bid requests/second. You pay for processing capacity. Not all requests lead to wins. Inefficiency = requests that never become revenue.
 
 **Optimization Levers:**
 1. **Pretargeting** - Tell Google which traffic to send (geos, sizes, formats, platforms)
@@ -63,9 +63,9 @@ However, the app **cannot** optimize **bid prices** because Google's CSV exports
 |--------|-------|-------------|---------------------------|
 | Performance Detail | `rtb_daily` | Reached, Impressions, Clicks, Spend | ✅ Yes - revenue attribution |
 | RTB Funnel (Geo) | `rtb_funnel` | Full bid pipeline by country | ✅ Yes - funnel analysis |
-| RTB Funnel (Publisher) | `rtb_funnel` | Full bid pipeline by publisher | ✅ Yes - publisher blocking |
+| RTB Funnel (Publisher) | `rtb_funnel` | Full bid pipeline by publisher | ✅ Yes - publisher quality review |
 | Bid Filtering | `rtb_bid_filtering` | Why bids filtered | ⚠️ Optional - policy debugging |
-| Quality Signals | `rtb_quality` | IVT rate, viewability | ⚠️ Optional - fraud detection |
+| Quality Signals | `rtb_quality` | Non-human traffic rate, viewability | ⚠️ Optional - traffic quality review |
 
 **Verdict:** ✅ Complete - All 5 report types are supported.
 
@@ -127,10 +127,10 @@ impressions, spend                      inventory_matches
 
 | Decision | Required Metrics | Available? | Source |
 |----------|------------------|------------|--------|
-| Block publisher X | Publisher win rate, IVT rate, viewability | ✅ Yes | rtb_funnel + rtb_quality |
-| Block geo X | Geo win rate, spend efficiency | ✅ Yes | rtb_funnel + rtb_daily |
+| Exclude publisher X | Publisher win rate, traffic quality, viewability | ✅ Yes | rtb_funnel + rtb_quality |
+| Exclude geo X | Geo win rate, spend efficiency | ✅ Yes | rtb_funnel + rtb_daily |
 | Add creative size X | Size request volume, coverage gap | ✅ Yes | rtb_daily |
-| Block size X | Size waste rate | ✅ Yes | rtb_daily |
+| Remove size X | Size inefficiency rate | ✅ Yes | rtb_daily |
 | Pause creative X | Creative impressions = 0 with reached > 0 | ✅ Yes | rtb_daily |
 | Hour dayparting | Hourly bid/win patterns | ✅ Yes | rtb_funnel (with Hour) |
 | Platform optimization | Platform win rate | ⚠️ Partial | Needs Platform dimension |
@@ -143,20 +143,20 @@ impressions, spend                      inventory_matches
 ```
 PRETARGETING DECISIONS (Binary: Include/Exclude)
 ════════════════════════════════════════════════
-✅ Publisher blocking     → Full data available
-✅ Geo exclusion         → Full data available
-✅ Size management       → Full data available
-✅ Creative pausing      → Full data available
-✅ Fraud detection       → Full data available
-✅ Viewability filtering → Full data available
-⚠️ Platform targeting   → Partial (add dimension)
-⚠️ Environment (App/Web) → Partial (add dimension)
+✅ Publisher quality filtering  → Full data available
+✅ Geo exclusion               → Full data available
+✅ Size management             → Full data available
+✅ Creative pausing            → Full data available
+✅ Traffic quality review      → Full data available
+✅ Viewability filtering       → Full data available
+⚠️ Platform targeting         → Partial (add dimension)
+⚠️ Environment (App/Web)      → Partial (add dimension)
 
 BIDDING DECISIONS (Continuous: How much to bid)
 ════════════════════════════════════════════════
-❌ CPM optimization      → No bid price data
-❌ Price elasticity      → No bid price data
-❌ Bid shading          → No bid price data
+❌ CPM optimization           → No bid price data
+❌ Price elasticity           → No bid price data
+❌ Bid shading               → No bid price data
 ```
 
 ---
@@ -229,20 +229,20 @@ BIDDING DECISIONS (Continuous: How much to bid)
 | `WasteAnalyzer` | Size coverage gaps | creatives + traffic | ✅ Excellent |
 | `RecommendationEngine` | Generate actionable recs | All sources | ✅ Excellent |
 | `PretargetingRecommender` | Optimal config generation | creatives + performance | ✅ Good |
-| `FraudAnalyzer` | IVT/fraud detection | rtb_quality | ✅ Good |
+| `TrafficQualityAnalyzer` | Non-human traffic identification | rtb_quality | ✅ Good |
 
 ### QPSOptimizer Methods
 
 | Method | What It Does | Business Value |
 |--------|--------------|----------------|
-| `get_publisher_waste_ranking` | Ranks publishers by waste % | Block high-waste publishers |
+| `get_publisher_inefficiency_ranking` | Ranks publishers by inefficiency % | Identify low-performing publishers |
 | `get_platform_efficiency` | Compares Desktop/Mobile/Tablet | Platform targeting |
 | `get_hourly_patterns` | 24-hour bid/win analysis | Dayparting decisions |
 | `get_size_coverage_gaps` | Finds unserved size demand | Creative production priorities |
 | `get_pretargeting_efficiency` | Inventory match rates by geo | Pretargeting tuning |
 | `get_bid_filtering_analysis` | Filtering reasons breakdown | Policy compliance |
-| `get_fraud_risk_publishers` | High-IVT publishers | Fraud blocking |
-| `get_viewability_waste` | Low-viewability publishers | Quality blocking |
+| `get_traffic_quality_publishers` | High non-human-traffic publishers | Traffic quality review |
+| `get_viewability_inefficiency` | Low-viewability publishers | Quality filtering |
 | `get_full_optimization_report` | Everything combined | Complete assessment |
 
 **Verdict:** ✅ Analysis engines are comprehensive and well-designed.
@@ -274,7 +274,7 @@ BIDDING DECISIONS (Continuous: How much to bid)
 
 5. **Historical trend analysis**
    - Add week-over-week change metrics to recommendations
-   - Detect performance degradation
+   - Identify performance changes
 
 ### Long-Term (If Building Custom Bidder)
 
@@ -305,27 +305,27 @@ The only additions recommended are extra dimensions (Platform, Environment, Tran
 
 ---
 
-## Part 9: Auto-Optimization Feasibility
+## Part 9: Automated Configuration Feasibility
 
 ### The Chicken-and-Egg Problem
 
-**Critical insight:** CSV data cannot detect blocked opportunities.
+**Critical insight:** CSV data cannot identify excluded opportunities.
 
-If a creative size (e.g., 320x50) is blocked in pretargeting, then:
+If a creative size (e.g., 320x50) is excluded in pretargeting, then:
 - Google sends **zero** bid requests for that size
 - CSV reports show **zero** traffic
 - Analysis engines see **no signal to optimize**
 
-**This means:** You cannot use CSV data alone to detect new creative opportunities.
+**This means:** You cannot use CSV data alone to identify new creative opportunities.
 
-### Two Types of Auto-Optimization
+### Two Types of Automated Updates
 
 | Type | Trigger | Data Source | Purpose |
 |------|---------|-------------|---------|
 | **Proactive** | New creative approved | API (creatives) | Enable traffic for new sizes |
-| **Reactive** | Performance issues | CSV (daily reports) | Block bad publishers/geos |
+| **Reactive** | Performance issues | CSV (daily reports) | Exclude low-performing publishers/geos |
 
-### Proactive Optimization (API-Driven)
+### Proactive Updates (API-Driven)
 
 **Solution:** Use the creative data from the API directly.
 
@@ -354,16 +354,16 @@ Traffic now flows for that size
 
 **Existing code support:** `collectors/pretargeting/client.py:264` - `add_sizes_to_config()`
 
-No CSV analysis needed. No complex detection logic. Just use the API data.
+No CSV analysis needed. No complex identification logic. Just use the API data.
 
-### Reactive Optimization (CSV-Driven)
+### Reactive Updates (CSV-Driven)
 
 For ongoing performance optimization, CSV data is appropriate:
 
-1. ✅ Detect high-waste publishers → Auto-add to exclusion list
-2. ✅ Detect high-IVT publishers → Auto-block for fraud
-3. ✅ Detect underperforming geos → Auto-exclude
-4. ✅ Detect problematic creatives → Auto-pause
+1. ✅ Identify high-inefficiency publishers → Add to exclusion list
+2. ✅ Identify high non-human-traffic publishers → Exclude for quality
+3. ✅ Identify underperforming geos → Exclude
+4. ✅ Identify problematic creatives → Pause
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -375,15 +375,15 @@ For ongoing performance optimization, CSV data is appropriate:
 │                    │                                            │
 │                    ▼                                            │
 │  2. ANALYSIS ENGINES                                            │
-│     QPSOptimizer, WasteAnalyzer, FraudAnalyzer                  │
+│     QPSOptimizer, WasteAnalyzer, TrafficQualityAnalyzer         │
 │                    │                                            │
 │                    ▼                                            │
 │  3. RECOMMENDATION ENGINE                                       │
 │     Generate recommendations with confidence scores             │
 │                    │                                            │
 │                    ▼                                            │
-│  4. AUTO-APPLY (if confidence > threshold)                      │
-│     patch_pretargeting() to exclude bad actors                  │
+│  4. APPLY CHANGES (if confidence > threshold)                   │
+│     patch_pretargeting() to exclude low-performers              │
 │                    │                                            │
 │                    ▼                                            │
 │  5. MONITOR OUTCOMES                                            │
@@ -392,7 +392,7 @@ For ongoing performance optimization, CSV data is appropriate:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### What's Missing for Auto-Optimization
+### What's Missing for Automated Updates
 
 **Proactive (API-driven):**
 
@@ -401,17 +401,17 @@ For ongoing performance optimization, CSV data is appropriate:
 | Creative data sync | ✅ Complete | `collectors/creatives/client.py` |
 | Pretargeting API client | ✅ Complete | `collectors/pretargeting/client.py` |
 | Add sizes helper | ✅ Complete | `add_sizes_to_config()` |
-| **Trigger on approval** | ❌ Missing | Watch for status change to APPROVED |
-| **Auto-apply to config** | ❌ Missing | Call `add_sizes_to_config()` automatically |
+| **On-approval workflow** | ❌ Missing | Watch for status change to APPROVED |
+| **Automated config update** | ❌ Missing | Call `add_sizes_to_config()` automatically |
 
 **Reactive (CSV-driven):**
 
 | Component | Status | Needed |
 |-----------|--------|--------|
-| Detection logic | ✅ Complete | QPSOptimizer, WasteAnalyzer |
+| Identification logic | ✅ Complete | QPSOptimizer, WasteAnalyzer |
 | Recommendation engine | ✅ Complete | RecommendationEngine |
 | Confidence scoring | ⚠️ Partial | Add statistical confidence intervals |
-| Auto-apply logic | ❌ Missing | Build the automation loop |
+| Update logic | ❌ Missing | Build the optimization loop |
 | Outcome tracking | ⚠️ Partial | Add before/after comparison |
 
 ---
@@ -446,9 +446,9 @@ The Cat-Scan data model is **well-designed and sufficient** for its purpose: opt
 - Cannot get exact creative-level funnel (Google constraint)
 
 **Next Steps:**
-1. Build proactive optimization: trigger `add_sizes_to_config()` when creatives are approved (high priority)
+1. Build proactive optimization: enable `add_sizes_to_config()` when creatives are approved (high priority)
 2. Add Platform/Environment/Transaction Type dimensions to CSV reports (low effort)
-3. Build reactive optimization loop for publisher/geo blocking (medium effort)
+3. Build reactive optimization loop for publisher/geo exclusions (medium effort)
 4. Add outcome tracking and learning (medium effort)
 
 ---

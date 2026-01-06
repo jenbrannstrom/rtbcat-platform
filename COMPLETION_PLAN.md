@@ -13,7 +13,7 @@ Cat-Scan is significantly more complete than the documentation suggests. The cod
 This plan addresses:
 1. **Documentation accuracy** - Update README and docs to reflect actual state
 2. **Missing local dev scripts** - Create setup.sh and run.sh
-3. **Paid feature roadmap** - Document the auto-optimization feature for open source
+3. **Paid feature roadmap** - Document the automated configuration feature for open source
 4. **Data science documentation** - Document available metrics and analyses
 
 ---
@@ -135,33 +135,33 @@ wait
 
 ---
 
-## Part 3: Paid Feature - Auto-Optimization
+## Part 3: Paid Feature - Automated Configuration
 
 ### 3.1 Current State
 
 The README describes the paid feature as:
-> "a paid-for upgrade that auto-adjusts Pretargeting settings based on new creatives that get uploaded and approved to the Google AB seat, so it is effectively hands-free"
+> "a paid-for upgrade that adjusts Pretargeting settings based on new creatives that get uploaded and approved to the Google AB seat, so it is effectively hands-free"
 
 ### 3.2 Components Needed
 
-1. **Creative Change Detection**
+1. **Creative Change Monitoring**
    - Monitor for newly approved creatives via API
    - Compare to current pretargeting configs
-   - Trigger optimization workflow
+   - Initiate optimization workflow
 
 2. **Optimization Engine**
    - Analyze performance data for new creatives
    - Calculate optimal pretargeting adjustments
    - Generate pending changes with estimated impact
 
-3. **Auto-Apply Logic**
-   - Apply changes automatically when confidence > threshold
+3. **Automated Update Logic**
+   - Apply changes when confidence > threshold
    - Track outcomes for learning
    - Support rollback if performance degrades
 
 4. **Billing Integration** (for paid tier)
    - User subscription management
-   - Feature gating for auto-apply
+   - Feature gating for automated updates
    - Usage metering
 
 ### 3.3 Existing Foundation
@@ -177,9 +177,9 @@ Already implemented that supports this:
 
 | Phase | Feature | Complexity |
 |-------|---------|------------|
-| 1 | Creative change detection webhook | Low |
+| 1 | Creative change monitoring webhook | Low |
 | 2 | Automated recommendation generation | Medium |
-| 3 | Auto-apply with confidence scoring | Medium |
+| 3 | Confidence-based updates | Medium |
 | 4 | Learning from outcomes | High |
 | 5 | Billing/subscription system | High |
 
@@ -203,16 +203,16 @@ Already implemented that supports this:
 | Funnel (Geo) | Bid requests, Bids, Auctions won | Geo targeting efficiency |
 | Funnel (Publishers) | Same + Publisher dimension | Publisher quality scoring |
 | Bid Filtering | Filtering reasons, Lost bids | Policy compliance |
-| Quality Signals | IVT rate, Viewability | Fraud detection |
+| Quality Signals | Non-human traffic rate, Viewability | Traffic quality review |
 
 ### 4.2 Available Analyses
 
 | Analysis | Endpoint | Data Science Value |
 |----------|----------|-------------------|
 | Size Coverage | `/analytics/size-coverage` | Identify inventory gaps |
-| Geo Waste | `/analytics/geo-waste` | Optimize geo targeting |
-| Publisher Waste | `/analytics/publisher-waste` | Blocklist candidates |
-| Fraud Risk | `/analytics/fraud-risk` | IVT/fraud detection |
+| Geo Inefficiency | `/analytics/geo-waste` | Optimize geo targeting |
+| Publisher Inefficiency | `/analytics/publisher-waste` | Exclusion candidates |
+| Traffic Quality | `/analytics/traffic-quality` | Non-human traffic review |
 | Platform Efficiency | `/analytics/platform-efficiency` | App vs Web strategy |
 | Hourly Patterns | `/analytics/hourly-patterns` | Dayparting optimization |
 | Config Performance | `/qps/config-performance` | A/B testing configs |
@@ -224,7 +224,7 @@ Already implemented that supports this:
 |--------|---------|--------|
 | Bid Rate | Bids / Reached Queries | Maximize |
 | Win Rate | Auctions Won / Bids in Auction | Optimize by segment |
-| Waste Rate | (Reached - Impressions) / Reached | Minimize |
+| Inefficiency Rate | (Reached - Impressions) / Reached | Minimize |
 | QPS Efficiency | Impressions / Bid Requests | Maximize |
 | Revenue per QPS | Spend / Bid Requests | Maximize |
 
@@ -233,8 +233,8 @@ Already implemented that supports this:
 ## Part 5: Implementation Steps
 
 ### Phase 1: Quick Wins (Day 1)
-- [ ] Create `setup.sh`
-- [ ] Create `run.sh`
+- [x] Create `setup.sh`
+- [x] Create `run.sh`
 - [ ] Update README.md "(in question)" sections
 - [ ] Commit and push
 
@@ -252,7 +252,7 @@ Already implemented that supports this:
 - [ ] Document any issues found
 
 ### Phase 4: Paid Feature Design (Week 2+)
-- [ ] Design auto-optimization architecture
+- [ ] Design automated configuration architecture
 - [ ] Create feature specification
 - [ ] Plan billing integration
 - [ ] Create roadmap for implementation
@@ -273,13 +273,14 @@ Already implemented that supports this:
 | Uploads | `/uploads` | Upload tracking | Implemented |
 | History | `/history` | Import history | Implemented |
 | Waste Analysis | `/waste-analysis` | Waste signal dashboard | Implemented |
-| Connect | `/connect` | API credential setup | Implemented |
-| Settings | `/settings` | General settings | Implemented |
+| Settings | `/settings` | Settings hub | Implemented |
+| Connected Accounts | `/settings/accounts` | API credential setup | Implemented |
 | Seats | `/settings/seats` | Buyer seat management | Implemented |
 | Retention | `/settings/retention` | Data retention policies | Implemented |
+| System Status | `/settings/system` | System diagnostics | Implemented |
 | Admin | `/admin` | Admin dashboard | Implemented |
 | Users | `/admin/users` | User management | Implemented |
-| Admin Settings | `/admin/settings` | System settings | Implemented |
+| Configuration | `/admin/configuration` | System settings | Implemented |
 | Audit Log | `/admin/audit-log` | Action audit trail | Implemented |
 
 ---
