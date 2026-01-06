@@ -228,6 +228,10 @@ def parse_app_store_url(url: str) -> Optional[dict]:
         return None
 
     try:
+        # Normalize URL - add protocol if missing
+        if not url.startswith(('http://', 'https://')):
+            url = 'https://' + url
+
         decoded = unquote(url)
 
         # Google Play Store
@@ -379,6 +383,15 @@ def get_app_name_sync(app_id: str, store: str) -> Optional[str]:
         return asyncio.run(get_app_name(app_id, store))
 
 
+def _normalize_url(url: str) -> str:
+    """Normalize URL by adding https:// if no protocol is present."""
+    if not url:
+        return url
+    if not url.startswith(('http://', 'https://')):
+        return 'https://' + url
+    return url
+
+
 def format_package_id_as_name(package_id: str) -> str:
     """
     Fallback: Format package ID as readable name.
@@ -441,6 +454,10 @@ async def extract_app_info_from_creative(
         "app_store": None,
     }
 
+    # Normalize final_url
+    if final_url:
+        final_url = _normalize_url(final_url)
+
     # Collect all URLs to check
     urls_to_check: list[str] = []
 
@@ -448,7 +465,7 @@ async def extract_app_info_from_creative(
         urls_to_check.extend(extract_urls_from_html_snippet(html_snippet))
 
     if declared_urls:
-        urls_to_check.extend(declared_urls)
+        urls_to_check.extend([_normalize_url(u) for u in declared_urls])
 
     if final_url:
         urls_to_check.append(final_url)
@@ -516,13 +533,17 @@ def extract_app_info_from_creative_sync(
         "app_store": None,
     }
 
+    # Normalize final_url
+    if final_url:
+        final_url = _normalize_url(final_url)
+
     urls_to_check: list[str] = []
 
     if html_snippet:
         urls_to_check.extend(extract_urls_from_html_snippet(html_snippet))
 
     if declared_urls:
-        urls_to_check.extend(declared_urls)
+        urls_to_check.extend([_normalize_url(u) for u in declared_urls])
 
     if final_url:
         urls_to_check.append(final_url)
