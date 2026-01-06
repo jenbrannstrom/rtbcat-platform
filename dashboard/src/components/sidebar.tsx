@@ -564,7 +564,7 @@ export function Sidebar() {
                 {user.display_name || user.email}
               </p>
             )}
-            <p className="text-xs text-gray-400">{t.common.version}</p>
+            <p className="text-xs text-gray-400">v0.9.0</p>
           </div>
         )}
       </div>

@@ -104,7 +104,7 @@ def create_app() -> FastAPI:
     application = FastAPI(
         title="Cat-Scan Creative Intelligence",
         description="API for collecting and analyzing Authorized Buyers creative data",
-        version="0.1.0",
+        version="0.9.0",
         lifespan=lifespan,
     )
 

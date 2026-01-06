@@ -242,7 +242,7 @@ async def health_check(
 
     return HealthResponse(
         status="healthy",
-        version="0.1.0",
+        version="0.9.0",
         configured=configured,
         has_credentials=has_credentials,
         database_exists=db_path.exists(),
