@@ -14,7 +14,7 @@ import {
 } from '@dnd-kit/core';
 // import { createSnapModifier } from '@dnd-kit/modifiers';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Sparkles, RefreshCw, Check, LayoutGrid, List, ArrowDown, ArrowUp, Globe, X } from 'lucide-react';
+import { Plus, Sparkles, RefreshCw, Check, LayoutGrid, List, ArrowDown, ArrowUp, Globe, X, AlertTriangle } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
 import { ClusterCard } from '@/components/campaigns/cluster-card';
 import { UnassignedPool } from '@/components/campaigns/unassigned-pool';
@@ -93,6 +93,9 @@ interface Campaign {
   creative_ids: string[];
   created_at: string | null;
   updated_at: string | null;
+  // Phase 29: Disapproval tracking
+  disapproved_count?: number;
+  has_disapproved?: boolean;
 }
 
 interface Creative {
@@ -110,6 +113,12 @@ interface Creative {
     total_clicks?: number;
   };
   waste_flags?: { broken_video?: boolean; zero_engagement?: boolean };
+  // Phase 29: App info and disapproval tracking
+  app_id?: string;
+  app_name?: string;
+  is_disapproved?: boolean;
+  disapproval_reasons?: Array<{ reason: string; details?: string }>;
+  serving_restrictions?: Array<{ restriction: string; contexts?: string[] }>;
 }
 
 interface ClusterSuggestion {
@@ -305,6 +314,8 @@ export default function CampaignsPage() {
   const [pageSortField, setPageSortField] = useState<'spend' | 'impressions' | 'clicks' | 'creatives' | 'name'>('spend');
   const [pageSortDir, setPageSortDir] = useState<'asc' | 'desc'>('desc');
   const [countryFilter, setCountryFilter] = useState<string | null>(null);
+  // Phase 29: Issues filter
+  const [showIssuesOnly, setShowIssuesOnly] = useState(false);
 
   // Preview modal state (Phase 24)
   const [previewCreativeId, setPreviewCreativeId] = useState<string | null>(null);
@@ -708,11 +719,14 @@ export default function CampaignsPage() {
     // Filter out campaigns with no matching creatives:
     // - When buyer is selected: only show campaigns with creatives from that buyer
     // - When country filter is active: only show campaigns with creatives from that country
+    // - Phase 29: When issues filter is active, only show campaigns with disapproved creatives
     let filtered = campaignsWithTotals.filter(c => {
       // If a buyer is selected, filter to campaigns with creatives from that buyer
       if (selectedBuyerId && !c._hasBuyerCreatives) return false;
       // If country filter active, filter by country
       if (countryFilter && !c._hasFilteredCreatives) return false;
+      // Phase 29: If issues filter active, only show campaigns with disapproved creatives
+      if (showIssuesOnly && !c.has_disapproved) return false;
       return true;
     });
 
@@ -751,7 +765,7 @@ export default function CampaignsPage() {
     });
 
     return filtered;
-  }, [campaigns, getCampaignCreatives, pageSortField, pageSortDir, countryFilter, selectedBuyerId]);
+  }, [campaigns, getCampaignCreatives, pageSortField, pageSortDir, countryFilter, selectedBuyerId, showIssuesOnly]);
 
   // Debug: Log when data changes
   useEffect(() => {
@@ -955,6 +969,21 @@ export default function CampaignsPage() {
             )}
           </button>
         ))}
+
+        {/* Phase 29: Issues filter */}
+        <button
+          onClick={() => setShowIssuesOnly(!showIssuesOnly)}
+          className={cn(
+            "px-3 py-1 text-sm rounded flex items-center gap-1 transition-colors",
+            showIssuesOnly
+              ? "bg-red-100 text-red-700 font-medium"
+              : "hover:bg-gray-200 text-gray-600"
+          )}
+          title={showIssuesOnly ? "Showing campaigns with issues" : "Filter to campaigns with disapproved creatives"}
+        >
+          <AlertTriangle className="h-3 w-3" />
+          Issues
+        </button>
 
         {/* Country filter */}
         {allCountries.length > 0 && (
