@@ -64,6 +64,19 @@ export interface Translations {
     settings: string;
   };
 
+  settingsNav: {
+    connectedAccounts: string;
+    buyerSeats: string;
+    dataRetention: string;
+    systemStatus: string;
+  };
+
+  adminNav: {
+    users: string;
+    configuration: string;
+    auditLog: string;
+  };
+
   sidebar: {
     noSeatsConnected: string;
     goToSettingsToConnect: string;

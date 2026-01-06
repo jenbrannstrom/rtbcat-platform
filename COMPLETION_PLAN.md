@@ -10,14 +10,11 @@
 
 Cat-Scan is a QPS optimization platform for Google Authorized Buyers. The codebase has **118 API endpoints**, **17+ dashboard pages**, and **41 database tables**. The app is deployed at `scan.rtb.cat` on AWS.
 
-This master plan consolidates all development efforts:
-
-| Plan | Focus | Status |
-|------|-------|--------|
-| **This Document** | Overall completion roadmap | Active |
-| [PLAN_CREATIVE_GEO_DISPLAY.md](./PLAN_CREATIVE_GEO_DISPLAY.md) | Country data in creative modal | Ready |
-| [NAVIGATION_REORGANIZATION_PLAN.md](./NAVIGATION_REORGANIZATION_PLAN.md) | Sidebar & routing restructure | Ready |
-| [DATA_SCIENCE_EVALUATION.md](./DATA_SCIENCE_EVALUATION.md) | Data model & optimization feasibility | Complete |
+This plan addresses:
+1. **Documentation accuracy** - Update README and docs to reflect actual state
+2. **Missing local dev scripts** - Create setup.sh and run.sh
+3. **Paid feature roadmap** - Document the automated configuration feature for open source
+4. **Data science documentation** - Document available metrics and analyses
 
 ---
 
@@ -145,15 +142,21 @@ wait
 
 ---
 
-## Part 4: Implementation Phases
+## Part 3: Paid Feature - Automated Configuration
 
-### Phase 1: Quick Wins (1-2 days)
+### 3.1 Current State
+
+The README describes the paid feature as:
+> "a paid-for upgrade that adjusts Pretargeting settings based on new creatives that get uploaded and approved to the Google AB seat, so it is effectively hands-free"
 
 - [ ] Create `setup.sh` and `run.sh`
 - [ ] Update README.md "(in question)" sections
 - [ ] Implement Creative Geo Display feature
 
-### Phase 2: Navigation (3-5 days)
+1. **Creative Change Monitoring**
+   - Monitor for newly approved creatives via API
+   - Compare to current pretargeting configs
+   - Initiate optimization workflow
 
 - [ ] Create `/pretargeting` pages
 - [ ] Create `/analytics` hub
@@ -161,12 +164,15 @@ wait
 - [ ] Add route redirects for backwards compatibility
 - [ ] Update translations
 
-### Phase 3: Documentation (2-3 days)
+3. **Automated Update Logic**
+   - Apply changes when confidence > threshold
+   - Track outcomes for learning
+   - Support rollback if performance degrades
 
-- [ ] Create ARCHITECTURE.md
-- [ ] Create MCP_INTEGRATION.md
-- [ ] Update INSTALL.md
-- [ ] Merge AWS docs into repo
+4. **Billing Integration** (for paid tier)
+   - User subscription management
+   - Feature gating for automated updates
+   - Usage metering
 
 ### Phase 4: Auto-Optimization (1-2 weeks)
 
@@ -177,43 +183,113 @@ wait
 
 ---
 
-## Appendix A: Dashboard Pages (17+)
-
-| Page | URL | Status |
-|------|-----|--------|
-| Home/QPS Dashboard | `/` | ✅ |
-| Login | `/login` | ✅ |
-| Setup | `/setup` | ✅ |
-| Campaigns | `/campaigns` | ✅ |
-| Campaign Detail | `/campaigns/[id]` | ✅ |
-| Creatives | `/creatives` | ✅ |
-| Import | `/import` | ✅ |
-| History | `/history` | ✅ |
-| Waste Analysis | `/waste-analysis` | ✅ |
-| Connect | `/connect` | ✅ |
-| Settings | `/settings` | ✅ |
-| Seats | `/settings/seats` | ✅ |
-| Retention | `/settings/retention` | ✅ |
-| Pretargeting | `/settings/pretargeting` | ✅ |
-| Admin | `/admin` | ✅ |
-| Users | `/admin/users` | ✅ |
-| Audit Log | `/admin/audit-log` | ✅ |
+| Phase | Feature | Complexity |
+|-------|---------|------------|
+| 1 | Creative change monitoring webhook | Low |
+| 2 | Automated recommendation generation | Medium |
+| 3 | Confidence-based updates | Medium |
+| 4 | Learning from outcomes | High |
+| 5 | Billing/subscription system | High |
 
 ---
 
-## Appendix B: Database Tables (41)
+## Part 4: Data Science Documentation
+
+### 4.1 Available Data Sources
+
+**From Google RTB API:**
+- Creatives (format, size, approval status, URLs)
+- Pretargeting configs (geos, formats, platforms, sizes)
+- RTB endpoints (QPS limits, trading locations)
+- Buyer seats (account hierarchy)
+
+**From CSV Reports (5 types):**
+
+| Report | Key Metrics | Analysis Use |
+|--------|-------------|--------------|
+| Performance Detail | Reached queries, Impressions, Clicks, Spend | Creative ROI, Size efficiency |
+| Funnel (Geo) | Bid requests, Bids, Auctions won | Geo targeting efficiency |
+| Funnel (Publishers) | Same + Publisher dimension | Publisher quality scoring |
+| Bid Filtering | Filtering reasons, Lost bids | Policy compliance |
+| Quality Signals | Non-human traffic rate, Viewability | Traffic quality review |
+
+### 4.2 Available Analyses
+
+| Analysis | Endpoint | Data Science Value |
+|----------|----------|-------------------|
+| Size Coverage | `/analytics/size-coverage` | Identify inventory gaps |
+| Geo Inefficiency | `/analytics/geo-waste` | Optimize geo targeting |
+| Publisher Inefficiency | `/analytics/publisher-waste` | Exclusion candidates |
+| Traffic Quality | `/analytics/traffic-quality` | Non-human traffic review |
+| Platform Efficiency | `/analytics/platform-efficiency` | App vs Web strategy |
+| Hourly Patterns | `/analytics/hourly-patterns` | Dayparting optimization |
+| Config Performance | `/qps/config-performance` | A/B testing configs |
+| Bid Filtering | `/analytics/bid-filtering` | Policy optimization |
+
+### 4.3 Key Metrics for Optimization
+
+| Metric | Formula | Target |
+|--------|---------|--------|
+| Bid Rate | Bids / Reached Queries | Maximize |
+| Win Rate | Auctions Won / Bids in Auction | Optimize by segment |
+| Inefficiency Rate | (Reached - Impressions) / Reached | Minimize |
+| QPS Efficiency | Impressions / Bid Requests | Maximize |
+| Revenue per QPS | Spend / Bid Requests | Maximize |
 
 **Creative Management (3):** creatives, clusters, thumbnail_status
 
 **Campaign Management (5):** campaigns, ai_campaigns, creative_campaigns, campaign_creatives, campaign_daily_summary
 
-**Buyer Seats (3):** service_accounts, buyer_seats, seats
+### Phase 1: Quick Wins (Day 1)
+- [x] Create `setup.sh`
+- [x] Create `run.sh`
+- [ ] Update README.md "(in question)" sections
+- [ ] Commit and push
 
-**RTB Performance (8):** performance_metrics, daily_creative_summary, video_metrics, rtb_daily, rtb_funnel, rtb_bid_filtering, rtb_traffic, rtb_quality
+### Phase 2: Documentation (Days 2-3)
+- [ ] Create ARCHITECTURE.md
+- [ ] Create MCP_INTEGRATION.md
+- [ ] Create METRICS_GUIDE.md
+- [ ] Update INSTALL.md for current workflow
+- [ ] Merge AWS_DEPLOYMENT.md into docs/
+
+### Phase 3: Verify Deployment (Day 4)
+- [ ] Test live app at scan.rtb.cat
+- [ ] Verify all endpoints working
+- [ ] Test CSV import flow
+- [ ] Document any issues found
+
+### Phase 4: Paid Feature Design (Week 2+)
+- [ ] Design automated configuration architecture
+- [ ] Create feature specification
+- [ ] Plan billing integration
+- [ ] Create roadmap for implementation
 
 **Pretargeting (7):** pretargeting_configs, pretargeting_history, pretargeting_snapshots, snapshot_comparisons, pretargeting_pending_changes, pretargeting_change_log, rtb_endpoints
 
-**Import Tracking (4):** import_history, daily_upload_summary, account_daily_upload_summary, import_anomalies
+## Appendix A: Accurate Dashboard Pages
+
+| Page | URL | Purpose | Status |
+|------|-----|---------|--------|
+| Home | `/` | Main dashboard with stats | Implemented |
+| Login | `/login` | User authentication | Implemented |
+| Setup | `/setup` | Initial configuration | Implemented |
+| Campaigns | `/campaigns` | Campaign listing | Implemented |
+| Campaign Detail | `/campaigns/[id]` | Campaign details & creatives | Implemented |
+| Creatives | `/creatives` | Creative browser | Implemented |
+| Import | `/import` | CSV upload interface | Implemented |
+| Uploads | `/uploads` | Upload tracking | Implemented |
+| History | `/history` | Import history | Implemented |
+| Waste Analysis | `/waste-analysis` | Waste signal dashboard | Implemented |
+| Settings | `/settings` | Settings hub | Implemented |
+| Connected Accounts | `/settings/accounts` | API credential setup | Implemented |
+| Seats | `/settings/seats` | Buyer seat management | Implemented |
+| Retention | `/settings/retention` | Data retention policies | Implemented |
+| System Status | `/settings/system` | System diagnostics | Implemented |
+| Admin | `/admin` | Admin dashboard | Implemented |
+| Users | `/admin/users` | User management | Implemented |
+| Configuration | `/admin/configuration` | System settings | Implemented |
+| Audit Log | `/admin/audit-log` | Action audit trail | Implemented |
 
 **User Auth (6):** users, user_sessions, user_service_account_permissions, login_attempts, audit_log, system_settings
 
