@@ -173,9 +173,9 @@ function AdminDashboard() {
               </span>
             </div>
 
-            {/* Link to settings page */}
+            {/* Link to configuration page */}
             <Link
-              href="/admin/settings"
+              href="/admin/configuration"
               className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
             >
               <div className="flex items-center">

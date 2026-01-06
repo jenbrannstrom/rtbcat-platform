@@ -54,12 +54,25 @@ export const en: Translations = {
     changeHistory: 'Change History',
     import: 'Import',
     setup: 'Setup',
-    admin: 'Admin',
+    admin: 'Administration',
     docs: 'Docs',
     logout: 'Logout',
     collapse: 'Collapse',
     expand: 'Expand',
     settings: 'Settings',
+  },
+
+  settingsNav: {
+    connectedAccounts: 'Connected Accounts',
+    buyerSeats: 'Buyer Seats',
+    dataRetention: 'Data Retention',
+    systemStatus: 'System Status',
+  },
+
+  adminNav: {
+    users: 'Users',
+    configuration: 'Configuration',
+    auditLog: 'Audit Log',
   },
 
   sidebar: {
