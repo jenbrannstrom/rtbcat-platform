@@ -261,7 +261,7 @@ export const en: Translations = {
     unclustered: 'unclustered',
     creativesLoaded: 'creatives loaded',
     analyzing: 'Analyzing...',
-    clusterByUrl: 'Cluster by URL',
+    clusterByUrl: 'Auto-Cluster',
     suggestedClusters: 'Suggested Clusters',
     dismiss: 'Dismiss',
     created: 'Created',
