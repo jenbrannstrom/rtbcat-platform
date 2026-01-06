@@ -189,3 +189,21 @@ export interface BatchPerformanceResponse {
 }
 
 export type PerformancePeriod = "yesterday" | "7d" | "30d" | "all_time";
+
+// Country Breakdown Types
+
+export interface CreativeCountryMetrics {
+  country_code: string;
+  country_name: string;
+  spend_micros: number;
+  impressions: number;
+  clicks: number;
+  spend_percent: number;
+}
+
+export interface CreativeCountryBreakdown {
+  creative_id: string;
+  countries: CreativeCountryMetrics[];
+  total_countries: number;
+  period_days: number;
+}

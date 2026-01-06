@@ -135,6 +135,24 @@ class NewlyUploadedCreativesResponse(BaseModel):
     period_end: str
 
 
+class CreativeCountryMetrics(BaseModel):
+    """Country-level metrics for a creative."""
+    country_code: str
+    country_name: str  # Human-readable name
+    spend_micros: int
+    impressions: int
+    clicks: int
+    spend_percent: float  # % of total spend for this creative
+
+
+class CreativeCountryBreakdownResponse(BaseModel):
+    """Response for creative country breakdown."""
+    creative_id: str
+    countries: list[CreativeCountryMetrics]
+    total_countries: int
+    period_days: int
+
+
 # =============================================================================
 # Helper Functions
 # =============================================================================
@@ -400,6 +418,49 @@ async def _get_primary_countries_for_creatives(
     except Exception as e:
         # performance_metrics table may not exist or have geography data
         logger.debug(f"Could not fetch country data: {e}")
+
+    return result
+
+
+async def _get_country_breakdown_for_creative(
+    store: SQLiteStore,
+    creative_id: str,
+    days: int = 7,
+) -> list[dict]:
+    """Get country breakdown with spend/impressions for a single creative.
+
+    Returns list of {country_code, spend_micros, impressions, clicks}
+    sorted by spend descending.
+    """
+    result = []
+    try:
+        async with store._connection() as conn:
+            import asyncio
+            loop = asyncio.get_event_loop()
+
+            def _query():
+                cursor = conn.execute(
+                    """
+                    SELECT
+                        country as country_code,
+                        SUM(spend_micros) as spend_micros,
+                        SUM(impressions) as impressions,
+                        SUM(clicks) as clicks
+                    FROM rtb_daily
+                    WHERE creative_id = ?
+                      AND country IS NOT NULL
+                      AND country != ''
+                      AND metric_date >= date('now', ? || ' days')
+                    GROUP BY country
+                    ORDER BY spend_micros DESC
+                    """,
+                    (creative_id, f"-{days}"),
+                )
+                return [dict(row) for row in cursor.fetchall()]
+
+            result = await loop.run_in_executor(None, _query)
+    except Exception as e:
+        logger.debug(f"Could not fetch country breakdown: {e}")
 
     return result
 
@@ -793,3 +854,48 @@ async def remove_from_campaign(
 
     await store.update_creative_campaign(creative_id, None)
     return {"status": "removed", "creative_id": creative_id}
+
+
+@router.get("/creatives/{creative_id}/countries", response_model=CreativeCountryBreakdownResponse)
+async def get_creative_countries(
+    creative_id: str,
+    days: int = Query(7, ge=1, le=90, description="Days to look back"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get country breakdown for a specific creative.
+
+    Returns all countries where this creative has served,
+    with spend, impressions, and clicks per country.
+    Useful for verifying localization configuration.
+    """
+    # Verify creative exists
+    creative = await store.get_creative(creative_id)
+    if not creative:
+        raise HTTPException(status_code=404, detail="Creative not found")
+
+    breakdown = await _get_country_breakdown_for_creative(store, creative_id, days)
+
+    # Calculate total spend for percentage calculation
+    total_spend = sum(c.get("spend_micros", 0) or 0 for c in breakdown)
+
+    # Map country codes to names
+    from utils.country_codes import get_country_name
+
+    countries = [
+        CreativeCountryMetrics(
+            country_code=c["country_code"],
+            country_name=get_country_name(c["country_code"]),
+            spend_micros=c.get("spend_micros", 0) or 0,
+            impressions=c.get("impressions", 0) or 0,
+            clicks=c.get("clicks", 0) or 0,
+            spend_percent=round((c.get("spend_micros", 0) or 0) / total_spend * 100, 1) if total_spend > 0 else 0,
+        )
+        for c in breakdown
+    ]
+
+    return CreativeCountryBreakdownResponse(
+        creative_id=creative_id,
+        countries=countries,
+        total_countries=len(countries),
+        period_days=days,
+    )
