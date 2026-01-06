@@ -144,7 +144,7 @@ The README describes the paid feature as:
 
 ### 3.2 Components Needed
 
-1. **Creative Change Detection**
+1. **Creative Change Monitoring**
    - Monitor for newly approved creatives via API
    - Compare to current pretargeting configs
    - Trigger optimization workflow
@@ -177,7 +177,7 @@ Already implemented that supports this:
 
 | Phase | Feature | Complexity |
 |-------|---------|------------|
-| 1 | Creative change detection webhook | Low |
+| 1 | Creative change monitoring webhook | Low |
 | 2 | Automated recommendation generation | Medium |
 | 3 | Auto-apply with confidence scoring | Medium |
 | 4 | Learning from outcomes | High |
@@ -191,7 +191,7 @@ Already implemented that supports this:
 
 **From Google RTB API:**
 - Creatives (format, size, approval status, URLs)
-- Pretargeting configs (geos, formats, platforms, sizes)
+- Pretargeting configs (regions, formats, platforms, sizes)
 - RTB endpoints (QPS limits, trading locations)
 - Buyer seats (account hierarchy)
 
@@ -200,7 +200,7 @@ Already implemented that supports this:
 | Report | Key Metrics | Analysis Use |
 |--------|-------------|--------------|
 | Performance Detail | Reached queries, Impressions, Clicks, Spend | Creative ROI, Size efficiency |
-| Funnel (Geo) | Bid requests, Bids, Auctions won | Geo targeting efficiency |
+| Funnel (by region) | Bid requests, Bids, Auctions won | Regional efficiency |
 | Funnel (Publishers) | Same + Publisher dimension | Publisher quality scoring |
 | Bid Filtering | Filtering reasons, Lost bids | Policy compliance |
 | Quality Metrics | IVT rate, Viewability | Traffic quality assessment |
@@ -210,7 +210,7 @@ Already implemented that supports this:
 | Analysis | Endpoint | Data Science Value |
 |----------|----------|-------------------|
 | Size Coverage | `/analytics/size-coverage` | Identify inventory gaps |
-| Geo Efficiency | `/analytics/geo-efficiency` | Optimize geo targeting |
+| Regional Efficiency | `/analytics/regional-efficiency` | Optimize regional config |
 | Publisher Efficiency | `/analytics/publisher-efficiency` | Blocklist candidates |
 | Traffic Quality | `/analytics/traffic-quality` | IVT assessment |
 | Platform Efficiency | `/analytics/platform-efficiency` | App vs Web strategy |
@@ -220,7 +220,7 @@ Already implemented that supports this:
 
 ### 4.3 Key Metrics for Optimization
 
-| Metric | Formula | Target |
+| Metric | Formula | Goal |
 |--------|---------|--------|
 | Bid Rate | Bids / Reached Queries | Maximize |
 | Win Rate | Auctions Won / Bids in Auction | Optimize by segment |
@@ -256,6 +256,11 @@ Already implemented that supports this:
 - [ ] Create feature specification
 - [ ] Plan billing integration
 - [ ] Create roadmap for implementation
+
+### Phase 5: Modal Enhancements (Week 3+)
+- [ ] Add country breakdown to creative modal (backend)
+- [ ] Add country breakdown to creative modal (frontend)
+- [ ] Testing and refinement
 
 ---
 
@@ -300,7 +305,7 @@ Already implemented that supports this:
 
 **User Authentication (6):** users, user_sessions, user_service_account_permissions, login_attempts, audit_log, system_settings
 
-**Lookup Tables (6):** apps, publishers, geographies, billing_accounts, recommendations, retention_config
+**Lookup Tables (6):** apps, publishers, regions, billing_accounts, recommendations, retention_config
 
 **Quality & Efficiency (2):** anomaly_signals, inefficiency_signals
 
