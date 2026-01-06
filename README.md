@@ -1,56 +1,60 @@
 # Cat-Scan QPS Optimizer & Creative Intelligence Tool
 
-**Version:** 25.0 | **Status:** Production | **Last Updated:** January 2026
+**Version:** 24.0 | **Phase:** Schema Refactoring | **Last Updated:** January 2026
 
-A QPS optimization tool for Google Authorized Buyers. Cat-Scan helps RTB bidders eliminate wasted QPS by learning which data-streams the bidder likes to bid on, as well as fine-tune Pretargeting to allow more bid-requests to come through to the bidder for those placements/apps that the bidder prefers.
+A QPS optimization tool for Google Authorized Buyers. Cat-Scan helps RTB bidders improve QPS efficiency by learning which data-streams the bidder prefers to bid on, and fine-tune Pretargeting to allow more bid-requests through to the bidder for preferred placements/apps.
 
-It has a free version that allows pretargeting settings to be edited based on the efficiency findings, and a paid-for upgrade that adjusts Pretargeting settings based on new creatives that get uploaded and approved to the Google AB seat, so it is effectively hands-free.
-
-**Live:** [scan.rtb.cat](https://scan.rtb.cat)
+It has a free version that allows pretargeting settings to be edited based on efficiency findings, and a paid-for upgrade that auto-adjusts Pretargeting settings based on new creatives that get uploaded and approved to the Google AB seat, making it effectively hands-free.
 
 ---
 
 ## What This Solves
 
-**The Problem:** Google Authorized Buyers provides a bulk waterfall of over 400 Billion QPS per 24 hours, it allows 10 pretargeting settings to adjust signal, but doesn't tell you:
+**The Problem:** Google Authorized Buyers provides a bulk waterfall of over 400 Billion QPS per 24 hours. It allows 10 pretargeting settings to adjust signal, shows you creative IDs like `cr-12345`, but doesn't tell you:
 
 - How to improve efficiency of the QPS your bidder consumes
 - What QPS is unused vs what should be increased
-- Which creatives are wasting your QPS ingress, and blocking out potentially other signal that could be more worthwhile
+- Which creatives are underperforming and blocking potentially better signal
 
 **The Solution:** Cat-Scan automatically:
 
 1. Fetches all your creatives from Authorized Buyers API
-2. Imports performance data from CSV exports (5 report types)
-3. Identifies size mismatches, config inefficiencies, traffic quality issues
-4. Provides actionable recommendations to reduce waste and improve efficiency
+2. Imports performance data from CSV exports
+3. Identifies size gaps and configuration inefficiencies
+4. Provides actionable recommendations to improve efficiency
 5. Allows improvements in Pretargeting configs to be pushed to the Google account
 6. Provides rollback and historical tracking of config changes
-7. Allows MCP to connect to the DB and its "algo engine" to let AI make improvements or collect insights for campaign performance
+7. Allows MCP to connect to the DB and its "algo engine" to let AI make improvements or simply collect insights for campaign performance
 
-**Typical waste reduction:** Testing in progress - collecting data to understand % improvement.
+**Typical efficiency improvement:** Unknown at this time. We are starting to test and need data to understand the % improvement.
 
-Cat-Scan sits next to the Google seat, extracting data via API and CSV exports (since there is no reporting API for a Google AB seat, we compile these from CSV exports sent to a dedicated Gmail address, which is then parsed and input to the DB).
+Cat-Scan sits next to the Google seat, extracting data via API and CSV exports (since there is no reporting API for a Google AB seat, we compile data from CSV exports sent to a dedicated Gmail address, which is then parsed and stored in the DB. The schema normalizes the various CSV daily reports for a dataset that can be evaluated).
+
+Because of this limited data, the insight is limited to QPS optimization. We deduce what the media buyer is trying to achieve based on the creatives' targeting, spend, CPM and clicks. The goal is QPS optimization, which assists the media buyer in achieving their objectives.
+
+**Campaign Clustering**
+
+Clustering means grouping creatives together based on deduced logic. It also allows manual sorting. The purpose is to reveal insights for further QPS optimization.
+
+It works by automatically grouping creatives based on same/similar destination URL. This could be augmented with AI image recognition to identify creative language (image/HTML/Video/Native ads) and group them by language, or surface when a creative's language doesn't match its country targeting configuration.
 
 ---
 
 ## Quick Start
 
 ```bash
-# 1. Clone
+# 1. Clone the repository
 git clone https://github.com/rtbcat/rtbcat-platform.git
 cd rtbcat-platform
-
-# 2. Setup (creates venv, installs dependencies)
 ./setup.sh
 
-# 3. Start services
+# 2. Start services (from terminal)
 ./run.sh
 
-# 4. Open http://localhost:3000
+# 3. Open http://localhost:3000
 ```
 
-> **Note:** On Linux, run `./run.sh` from a terminal, not by double-clicking in the file manager.
+> **Note:** On Linux (Zorin, Ubuntu, etc.), run `./run.sh` from a terminal, not by double-clicking in the file manager. If double-clicking doesn't work, right-click → "Open With Terminal" or run from command line.
 
 ### Requirements
 
@@ -70,33 +74,27 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 |---------|-------------|
 | **Creative Sync** | Fetch all creatives from Google Authorized Buyers API |
 | **Multi-Seat Support** | Manage multiple buyer accounts under one bidder |
-| **Waste Analysis** | Identify size gaps, inefficient configs, traffic quality signals |
+| **Efficiency Analysis** | Identify size gaps, config inefficiencies, optimization opportunities |
 | **RTB Funnel** | Visualize reached queries → bids → impressions |
 | **Campaign Clustering** | AI-powered grouping by destination URL, country, advertiser, language |
-| **CSV Import** | Auto-import performance data from Google reports (5 report types) |
-| **MCP Support** | APIs to enable MCP access for your choice of AI |
-| **Video Thumbnails** | Extract from VAST XML or generate via ffmpeg |
-| **User Authentication** | Multi-user support with role-based access |
-| **Audit Logging** | Complete audit trail of all changes |
+| **CSV Import** | Auto-import performance data from Google reports |
+| **MCP Support** | APIs to enable MCP access for your own choice of AI |
+| **Video Thumbnails** | Visualize creatives clearly: extract from VAST XML or generate via ffmpeg |
 
 ### Dashboard Pages
 
 | Page | URL | Purpose |
 |------|-----|---------|
-| **Waste Optimizer** | `/` | Main analysis dashboard with stats |
-| **Creatives** | `/creatives` | Browse and search synced creatives |
-| **Campaigns** | `/campaigns` | AI-clustered campaign groups |
-| **Change History** | `/history` | Import history and audit trail |
-| **Import** | `/import` | CSV upload interface |
-| **Settings Hub** | `/settings` | All settings in one place |
-| ↳ Connected Accounts | `/settings/accounts` | API credential setup |
-| ↳ Buyer Seats | `/settings/seats` | Buyer seat management |
-| ↳ Data Retention | `/settings/retention` | Data retention policies |
-| ↳ System Status | `/settings/system` | System diagnostics & thumbnails |
-| **Admin Hub** | `/admin` | Administration dashboard |
-| ↳ Users | `/admin/users` | User management |
-| ↳ Configuration | `/admin/configuration` | System settings |
-| ↳ Audit Log | `/admin/audit-log` | Action audit trail |
+| Home | `/` | Main dashboard with stats |
+| Setup | `/setup` | Connect API, Gmail, configure retention |
+| Efficiency Analysis | `/efficiency-analysis` | Size coverage, config performance |
+| Creatives | `/creatives` | Browse synced creatives |
+| Campaigns | `/campaigns` | AI-clustered campaign groups |
+| Import | `/import` | Manual CSV upload |
+| History | `/history` | Import history |
+| Settings | `/settings` | General settings |
+| Seats | `/settings/seats` | Buyer seat management |
+| Admin | `/admin` | Admin dashboard |
 
 ---
 
@@ -111,66 +109,57 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │         FastAPI Backend (Port 8000)                          │
-│         118 API Endpoints                                    │
 │                                                              │
 │         Modular Router Architecture:                         │
 │         • system      - Health, stats, thumbnails            │
 │         • creatives   - Creative management & sync           │
 │         • seats       - Buyer seat discovery                 │
 │         • settings    - RTB endpoints, pretargeting          │
-│         • analytics   - Waste analysis, RTB funnel           │
+│         • analytics   - Efficiency analysis, RTB funnel      │
 │         • config      - Configuration & credentials          │
 │         • gmail       - Auto-import from Gmail               │
 │         • recommendations - AI recommendations               │
 │         • retention   - Data retention policies              │
 │         • uploads     - CSV file uploads                     │
-│         • auth        - User authentication                  │
-│         • admin       - User & system management             │
 └─────────────────────────────────────────────────────────────┘
               │                               │
               ▼                               ▼
 ┌──────────────────────────┐    ┌──────────────────────────┐
 │ SQLite Database          │    │ Google Authorized        │
 │ ~/.catscan/catscan.db    │    │ Buyers API               │
-│ (41 tables)              │    │                          │
 └──────────────────────────┘    └──────────────────────────┘
 ```
 
-### Database Schema
+### Database Schema (Key Tables)
 
-The database contains **41 tables** organized into logical groups:
+| Table | Purpose |
+|-------|---------|
+| `rtb_daily` | The fact table - all CSV imports |
+| `creatives` | Creative inventory from API |
+| `campaigns` | User-defined campaign groupings |
+| `buyer_seats` | Buyer accounts under a bidder |
+| `anomaly_signals` | Unusual patterns in traffic or performance |
+| `inefficiency_signals` | QPS optimization opportunities |
 
-| Group | Tables | Purpose |
-|-------|--------|---------|
-| **Creative Management** | 3 | creatives, clusters, thumbnail_status |
-| **Campaign Management** | 5 | campaigns, ai_campaigns, creative_campaigns, etc. |
-| **RTB Performance** | 7 | rtb_daily, rtb_funnel, rtb_quality, etc. |
-| **Pretargeting** | 7 | pretargeting_configs, pretargeting_history, etc. |
-| **User Auth** | 6 | users, user_sessions, audit_log, etc. |
-| **Import Tracking** | 4 | import_history, daily_upload_summary, etc. |
-| **Lookup Tables** | 6 | apps, publishers, geographies, etc. |
-
-See **[DATA_MODEL.md](DATA_MODEL.md)** for complete schema documentation.
+See **[DATA_MODEL.md](DATA_MODEL.md)** for the complete 41-table schema.
 
 ---
 
 ## CSV Format Requirements
 
-Cat-Scan supports **5 CSV report types** from Google Authorized Buyers. Due to field incompatibilities in Google's reporting system, multiple reports are needed to get the full picture.
+Cat-Scan requires **3 separate CSV reports** from Google Authorized Buyers due to field incompatibilities in Google's reporting system.
 
 > **See [docs/CSV_REPORTS_GUIDE.md](docs/CSV_REPORTS_GUIDE.md) for complete setup instructions.**
 
-### The 5 Report Types
+### The Required Reports
 
-| Report | Purpose | Key Fields | Required? |
-|--------|---------|------------|-----------|
-| **Performance Detail** | Creative/Size/App data | Creative ID, Size, App ID, Publisher | ✅ Yes |
-| **RTB Funnel (Geo)** | Bid pipeline by country | Bid requests, Bids, Auctions won | ✅ Yes |
-| **RTB Funnel (Publishers)** | Bid pipeline by publisher | Publisher ID + Bid metrics | ✅ Yes |
-| **Bid Filtering** | Why bids were filtered | Filtering reasons, Lost bids | Optional |
-| **Quality Signals** | Traffic quality data | Non-human traffic rate, Viewability | Optional |
+| Report | Purpose | Key Fields | Table |
+|--------|---------|------------|-------|
+| **Performance Detail** | Creative/Size/App data | Creative ID, Size, App ID, Publisher | `rtb_daily` |
+| **RTB Funnel (Geo)** | Bid pipeline by country | Bid requests, Bids, Auctions won | `rtb_funnel` |
+| **RTB Funnel (Publishers)** | Bid pipeline by publisher | Publisher ID + Bid metrics | `rtb_funnel` |
 
-### Why Multiple Reports?
+### Why 3 Reports?
 
 Google's limitation: *"Mobile app ID is not compatible with [Bid requests]..."*
 
@@ -198,7 +187,7 @@ Dimensions: Day, Country, Buyer account ID, Publisher ID, Publisher name
 Metrics: Same as Report 2
 ```
 
-> **Waste Calculation:** `(Reached Queries - Impressions) / Reached Queries`
+> **Efficiency Calculation:** `Impressions / Reached Queries`
 
 ---
 
@@ -223,7 +212,7 @@ Metrics: Same as Report 2
 # View database summary
 ./venv/bin/python cli/qps_analyzer.py summary
 
-# Generate waste analysis report
+# Generate efficiency analysis report
 ./venv/bin/python cli/qps_analyzer.py full-report --days 7
 
 # Generate video thumbnails
@@ -234,36 +223,23 @@ Metrics: Same as Report 2
 
 ## API Endpoints
 
-Cat-Scan provides **118 API endpoints** across multiple routers. Key endpoints include:
-
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/health` | Health check |
-| GET | `/creatives` | List creatives with filtering |
+| GET | `/creatives` | List creatives |
 | POST | `/collect/sync` | Sync from Google API |
 | GET | `/campaigns` | List campaigns |
 | POST | `/campaigns/auto-cluster` | AI clustering |
-| GET | `/analytics/waste` | Waste analysis |
-| GET | `/analytics/size-coverage` | Size coverage gaps |
-| GET | `/analytics/publisher-waste` | Publisher inefficiency |
+| GET | `/analytics/efficiency` | Efficiency analysis |
 | POST | `/performance/import-csv` | Import CSV |
-| GET | `/settings/pretargeting` | Get pretargeting configs |
-| PATCH | `/settings/pretargeting/{id}` | Update pretargeting |
 
-**Full API documentation:** http://localhost:8000/docs (Swagger UI)
+Full API docs: http://localhost:8000/docs (118 endpoints total)
 
 ---
 
 ## Services
 
-### Docker (Recommended)
-
-```bash
-docker compose build
-docker compose up -d
-```
-
-### Systemd (Production)
+### Systemd (Recommended for Production)
 
 ```bash
 # Start services
@@ -278,14 +254,11 @@ sudo lsof -ti:8000 | xargs -r sudo kill -9
 sudo systemctl restart catscan-api
 ```
 
-### Manual Startup
+### Docker
 
 ```bash
-# Terminal 1: API
-./venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
-
-# Terminal 2: Dashboard
-cd dashboard && npm run dev
+docker compose build api
+docker compose up -d api
 ```
 
 ---
@@ -305,7 +278,7 @@ cd dashboard && npm run dev
 
 ### Environment Variables
 
-Create `.env` in project root:
+Create `.env` in the project root:
 
 ```bash
 GOOGLE_APPLICATION_CREDENTIALS=~/.catscan/credentials/google-credentials.json
@@ -318,35 +291,46 @@ DATABASE_PATH=~/.catscan/catscan.db
 
 | Document | Purpose |
 |----------|---------|
+| **[docs/HANDOVER.md](docs/HANDOVER.md)** | Complete project handover with next steps |
 | **[INSTALL.md](INSTALL.md)** | Detailed installation guide |
+| **[docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md)** | Google API setup instructions |
 | **[DATA_MODEL.md](DATA_MODEL.md)** | Complete database schema (41 tables) |
 | **[docs/CSV_REPORTS_GUIDE.md](docs/CSV_REPORTS_GUIDE.md)** | CSV report setup |
-| **[docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md)** | Google API setup |
-| **[COMPLETION_PLAN.md](COMPLETION_PLAN.md)** | Project roadmap |
+
+### Historical Development Phases
+
+Detailed phase documentation is archived in `docs/phases/`:
+- Phase 11: Decision Intelligence
+- Phase 12: Schema Cleanup
+- Phase 21: RTB Funnel Analysis
+- Phase 22: Unified Dashboard
 
 ---
 
 ## Project Status
 
-### Production Ready ✅
+**Deployed:** Live at `scan.rtb.cat` on AWS
 
-- **Live deployment** at [scan.rtb.cat](https://scan.rtb.cat) on AWS
+### What Works (Production Ready)
+
 - Creative sync from Google API (600+ creatives)
 - Multi-seat buyer account support
-- Waste analysis with recommendations
-- CSV import (CLI, UI, and Gmail auto-import)
+- Efficiency analysis with recommendations
+- CSV import (CLI and UI)
+- Gmail auto-import (daily cron)
 - Campaign clustering
 - RTB funnel visualization
 - Video thumbnail generation
-- User authentication with role-based access
-- Audit logging
 
 ### Roadmap
 
-1. **Automated Configuration** - Paid feature for hands-free pretargeting updates
-2. **Enhanced Analytics** - Platform/Environment dimension support
-3. **MCP Integration Guide** - Documentation for AI tool integration
-4. **Performance at Scale** - Virtual scrolling, caching improvements
+1. **Multi-account support** - Account switching in UI
+2. **Multi-seat improvements** - Enhanced seat management
+3. **RTB Troubleshooting API** - Integrate bid metrics
+4. **Performance at scale** - Virtual scrolling, caching
+5. **Auto-optimization (paid)** - Hands-free pretargeting adjustments
+
+See **[docs/HANDOVER.md](docs/HANDOVER.md)** for complete roadmap.
 
 ---
 
@@ -356,8 +340,23 @@ DATABASE_PATH=~/.catscan/catscan.db
 |-------|------------|
 | Port 8000 stuck | `sudo lsof -ti:8000 \| xargs -r sudo kill -9` |
 | No video thumbnails | Run `./venv/bin/python cli/qps_analyzer.py generate-thumbnails` |
-| Dashboard not updating | Run `npm run build` in dashboard/ |
+| Dashboard not updating | Run `npm run build` |
 | uvicorn "module not found" | Use `./venv/bin/python -m uvicorn` instead of `uvicorn` directly |
+
+### API Startup (Manual Method)
+
+If `./run.sh` doesn't work, start the services manually:
+
+```bash
+# Terminal 1: API
+./venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+# Terminal 2: Dashboard
+cd dashboard
+npm run dev
+```
+
+**Why use `./venv/bin/python -m uvicorn`?** Running `uvicorn` directly after `source venv/bin/activate` can fail in some environments (Flatpak, certain shells). Using the venv's Python directly is more reliable.
 
 ---
 
