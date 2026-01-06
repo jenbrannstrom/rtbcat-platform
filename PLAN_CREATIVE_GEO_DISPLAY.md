@@ -1,10 +1,18 @@
 # Plan: Display Country Targeting Data in Creative Detail Modal
 
+## Business Context
+
+This feature helps advertisers ensure their localized creatives are serving to the correct markets - a standard quality assurance practice in digital advertising. For example, detecting when a Spanish-language ad is accidentally serving in Germany helps advertisers fix targeting configuration errors and improve campaign effectiveness.
+
+**Use Case:** An advertiser uploads a creative showing "AED 0" (UAE currency) with a Spanish "instalar" button. Without visibility into where this creative is actually serving, the advertiser cannot identify and correct this localization configuration issue.
+
+---
+
 ## Problem Statement
 
-Creatives can have localization issues - e.g., a creative showing "AED0" (UAE currency) with a Spanish "instalar" button. Without seeing where the creative is actually serving, these geo/language inconsistencies go unnoticed.
+Creatives can have localization configuration issues - e.g., a creative showing "AED0" (UAE currency) with a Spanish "instalar" button. Without seeing where the creative is actually serving, these geo/language configuration gaps go unnoticed.
 
-**Goal:** Surface country data in the creative detail modal so users can review geo/language alignment.
+**Goal:** Surface country data in the creative detail modal so advertisers can verify their localization is correctly configured.
 
 ---
 
@@ -131,7 +139,7 @@ async def get_creative_countries(
 
     Returns all countries where this creative has served,
     with spend, impressions, and clicks per country.
-    Useful for reviewing geo/language alignment.
+    Useful for verifying localization configuration.
     """
     # Verify creative exists
     creative = await store.get_creative(creative_id)
@@ -433,23 +441,29 @@ In the `PreviewModal` component, add the CountrySection to the right column:
 
 ---
 
-## Future: MCP + AI Image Recognition
+## Future Enhancement: Localization Quality Assistance
 
-Once this foundation is in place, the next phase adds:
+Once this foundation is in place, a future phase could add localization quality tools:
 
-1. **Image Recognition via MCP**
-   - Extract text from creative images (OCR)
-   - Identify language, currency symbols, phone formats
+1. **Creative Content Analysis**
+   - Extract visible text from creative assets
+   - Identify language and regional indicators (currency symbols, date formats)
 
-2. **Localization Review**
-   - Compare identified language vs. serving countries
-   - Show notification: "Spanish text identified but serving in Germany (DE)"
-   - Show notification: "AED currency but 80% traffic from US"
+2. **Localization Quality Notes**
+   - Compare creative content language with primary serving countries
+   - Surface helpful notes like: "Creative appears to contain Spanish text - currently serving primarily in DE (Germany). Consider reviewing targeting configuration."
+   - Note: "AED currency symbol detected - 80% of impressions in US market. Verify this aligns with campaign intent."
 
-3. **Dashboard Indicators**
-   - Add review badges to creative cards
-   - Add "Needs Localization Review" filter
-   - Bulk review page for creatives needing attention
+3. **Quality Dashboard**
+   - Add informational badges to creative cards for localization review
+   - Add "Needs Localization Review" filter option
+   - Summary page for creatives that may benefit from localization adjustments
+
+**Benefits for Advertisers:**
+- Improve campaign ROI by ensuring ads reach the intended audience
+- Better user experience through properly localized content
+- Reduce wasted spend on misconfigured geo-targeting
+- Streamline QA process for multi-market campaigns
 
 ---
 
@@ -458,7 +472,7 @@ Once this foundation is in place, the next phase adds:
 - [ ] API returns correct country breakdown
 - [ ] Empty state displays properly
 - [ ] 50+ countries handled gracefully
-- [ ] Modal loads countries without rendering delay
+- [ ] Modal loads countries without blocking render
 - [ ] Country percentages sum to ~100%
 - [ ] Unknown country codes display raw code
 - [ ] Performance acceptable (query <100ms)
