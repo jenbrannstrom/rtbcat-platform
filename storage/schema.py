@@ -28,6 +28,11 @@ CREATE TABLE IF NOT EXISTS creatives (
     campaign_id TEXT,
     cluster_id TEXT,
     raw_data TEXT,
+    app_id TEXT,
+    app_name TEXT,
+    app_store TEXT,
+    disapproval_reasons TEXT,
+    serving_restrictions TEXT,
     first_seen_at TIMESTAMP,
     first_import_batch_id TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -92,6 +97,8 @@ CREATE INDEX IF NOT EXISTS idx_creatives_canonical_size ON creatives(canonical_s
 CREATE INDEX IF NOT EXISTS idx_creatives_size_category ON creatives(size_category);
 CREATE INDEX IF NOT EXISTS idx_creatives_buyer ON creatives(buyer_id);
 CREATE INDEX IF NOT EXISTS idx_creatives_first_seen ON creatives(first_seen_at DESC);
+CREATE INDEX IF NOT EXISTS idx_creatives_app_id ON creatives(app_id);
+CREATE INDEX IF NOT EXISTS idx_creatives_app_name ON creatives(app_name);
 CREATE INDEX IF NOT EXISTS idx_buyer_seats_bidder ON buyer_seats(bidder_id);
 
 CREATE TABLE IF NOT EXISTS rtb_traffic (
@@ -898,4 +905,13 @@ MIGRATIONS = [
     "CREATE INDEX IF NOT EXISTS idx_pending_changes_billing ON pretargeting_pending_changes(billing_id)",
     "CREATE INDEX IF NOT EXISTS idx_pending_changes_status ON pretargeting_pending_changes(status)",
     "CREATE INDEX IF NOT EXISTS idx_pending_changes_created ON pretargeting_pending_changes(created_at DESC)",
+
+    # App info and disapproval tracking (Phase 29)
+    "ALTER TABLE creatives ADD COLUMN app_id TEXT",
+    "ALTER TABLE creatives ADD COLUMN app_name TEXT",
+    "ALTER TABLE creatives ADD COLUMN app_store TEXT",
+    "ALTER TABLE creatives ADD COLUMN disapproval_reasons TEXT",
+    "ALTER TABLE creatives ADD COLUMN serving_restrictions TEXT",
+    "CREATE INDEX IF NOT EXISTS idx_creatives_app_id ON creatives(app_id)",
+    "CREATE INDEX IF NOT EXISTS idx_creatives_app_name ON creatives(app_name)",
 ]

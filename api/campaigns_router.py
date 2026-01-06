@@ -16,6 +16,7 @@ from storage.database import db_query, db_transaction_async, DB_PATH
 from storage.campaign_repository import CampaignRepository, AICampaign
 from api.clustering.rule_based import pre_cluster_creatives, merge_small_clusters
 from api.clustering.ai_clusterer import AICampaignClusterer, apply_ai_suggestions
+from utils.app_parser import get_app_name, parse_app_store_url
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,9 @@ class AICampaignResponse(BaseModel):
     creative_ids: list[str] = []  # Added for frontend compatibility
     country_breakdown: Optional[dict[str, CountryBreakdownEntry]] = None  # Phase 22
     performance: Optional[dict] = None
+    # Phase 29: Disapproval tracking
+    disapproved_count: int = 0
+    has_disapproved: bool = False
 
 
 class AutoClusterRequest(BaseModel):
@@ -186,9 +190,11 @@ async def auto_cluster_creatives(request: AutoClusterRequest):
     """
     try:
         # Build query for unclustered creatives, optionally filtered by buyer_id
+        # Phase 29: Include app info fields for better clustering
         if request.buyer_id:
             rows = await db_query("""
-                SELECT c.id as creative_id, c.final_url, c.buyer_id
+                SELECT c.id as creative_id, c.final_url, c.buyer_id,
+                       c.app_id, c.app_name, c.app_store, c.advertiser_name
                 FROM creatives c
                 LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
                 WHERE cc.creative_id IS NULL
@@ -197,7 +203,8 @@ async def auto_cluster_creatives(request: AutoClusterRequest):
             """, (request.buyer_id,))
         else:
             rows = await db_query("""
-                SELECT c.id as creative_id, c.final_url, c.buyer_id
+                SELECT c.id as creative_id, c.final_url, c.buyer_id,
+                       c.app_id, c.app_name, c.app_store, c.advertiser_name
                 FROM creatives c
                 LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
                 WHERE cc.creative_id IS NULL
@@ -220,9 +227,25 @@ async def auto_cluster_creatives(request: AutoClusterRequest):
         for row in rows:
             creative_id = str(row['creative_id'])
             final_url = row['final_url'] or ''
+            app_id = row.get('app_id')
+            app_name = row.get('app_name')
+            app_store = row.get('app_store')
+            advertiser_name = row.get('advertiser_name')
 
-            # Extract cluster key and name from URL
-            cluster_key, display_name = _extract_cluster_key_and_name(final_url)
+            # Phase 29: Priority order for cluster key/name:
+            # 1. Use pre-stored app_name if available
+            # 2. Fall back to URL parsing
+            if app_id and app_name:
+                # Use stored app info
+                cluster_key = f"app:{app_id}"
+                display_name = app_name
+            else:
+                # Fall back to URL parsing
+                cluster_key, display_name = _extract_cluster_key_and_name(final_url)
+                # If still unknown, try advertiser name
+                if cluster_key == 'unknown' and advertiser_name:
+                    cluster_key = f"advertiser:{advertiser_name.lower().replace(' ', '_')}"
+                    display_name = advertiser_name
 
             # Store the data
             if not cluster_data[cluster_key]['name']:
@@ -423,29 +446,15 @@ def _extract_cluster_key_and_name(url: str) -> tuple[str, str]:
 
 
 def _format_bundle_id(bundle_id: str) -> str:
-    """Format a bundle ID like com.example.myapp into 'Example Myapp'."""
+    """Format a bundle ID like com.example.myapp into 'Example Myapp'.
+
+    Uses the KNOWN_APPS lookup table for popular apps, falls back to auto-formatting.
+    """
     if not bundle_id:
         return 'Unknown'
 
-    # Split by dots and take meaningful parts (skip com/org/io prefix)
-    parts = bundle_id.split('.')
-    if len(parts) > 2 and parts[0] in ('com', 'org', 'io', 'net', 'app'):
-        parts = parts[1:]  # Skip the prefix
-
-    # Take up to 2 most meaningful parts
-    relevant_parts = parts[-2:] if len(parts) > 2 else parts
-
-    formatted = []
-    for part in relevant_parts:
-        # Split camelCase
-        import re
-        words = re.sub(r'([a-z])([A-Z])', r'\1 \2', part)
-        # Replace separators
-        words = words.replace('_', ' ').replace('-', ' ')
-        # Title case
-        formatted.append(words.title())
-
-    return ' '.join(formatted) or bundle_id
+    # Phase 29: Use centralized app name lookup
+    return get_app_name(bundle_id)
 
 
 def _generate_name_from_domain(domain: str) -> str:
@@ -500,6 +509,22 @@ async def list_campaigns(
                 # Get creative IDs for this campaign
                 creative_ids = repo.get_campaign_creatives(campaign.id)
 
+                # Phase 29: Count disapproved creatives in this campaign
+                disapproved_count = 0
+                if creative_ids:
+                    placeholders = ",".join("?" * len(creative_ids))
+                    cursor = conn.cursor()
+                    cursor.execute(f"""
+                        SELECT COUNT(*) as count
+                        FROM creatives
+                        WHERE id IN ({placeholders})
+                          AND (approval_status = 'DISAPPROVED'
+                               OR disapproval_reasons IS NOT NULL
+                               OR serving_restrictions IS NOT NULL)
+                    """, creative_ids)
+                    row = cursor.fetchone()
+                    disapproved_count = row['count'] if row else 0
+
                 campaign_data = {
                     "id": campaign.id,
                     "seat_id": campaign.seat_id,
@@ -513,6 +538,9 @@ async def list_campaigns(
                     "creative_ids": creative_ids,
                     "performance": None,
                     "country_breakdown": None,
+                    # Phase 29: Disapproval tracking
+                    "disapproved_count": disapproved_count,
+                    "has_disapproved": disapproved_count > 0,
                 }
 
                 if include_performance:
@@ -614,6 +642,22 @@ async def get_campaign(
             # Get creative IDs for this campaign
             creative_ids = repo.get_campaign_creatives(campaign_id)
 
+            # Phase 29: Count disapproved creatives
+            disapproved_count = 0
+            if creative_ids:
+                placeholders = ",".join("?" * len(creative_ids))
+                cursor = conn.cursor()
+                cursor.execute(f"""
+                    SELECT COUNT(*) as count
+                    FROM creatives
+                    WHERE id IN ({placeholders})
+                      AND (approval_status = 'DISAPPROVED'
+                           OR disapproval_reasons IS NOT NULL
+                           OR serving_restrictions IS NOT NULL)
+                """, creative_ids)
+                row = cursor.fetchone()
+                disapproved_count = row['count'] if row else 0
+
             return {
                 "id": campaign.id,
                 "seat_id": campaign.seat_id,
@@ -625,6 +669,9 @@ async def get_campaign(
                 "status": campaign.status,
                 "creative_count": campaign.creative_count,
                 "creative_ids": creative_ids,
+                # Phase 29: Disapproval tracking
+                "disapproved_count": disapproved_count,
+                "has_disapproved": disapproved_count > 0,
             }
 
         campaign_data = await db_transaction_async(_get_campaign)

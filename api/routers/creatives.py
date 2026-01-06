@@ -103,6 +103,13 @@ class CreativeResponse(BaseModel):
     # Phase 10.4: Thumbnail status and waste detection
     thumbnail_status: Optional[ThumbnailStatusResponse] = None
     waste_flags: Optional[WasteFlagsResponse] = None
+    # Phase 29: App info and disapproval tracking
+    app_id: Optional[str] = None
+    app_name: Optional[str] = None
+    app_store: Optional[str] = None
+    is_disapproved: bool = False
+    disapproval_reasons: Optional[list] = None
+    serving_restrictions: Optional[list] = None
 
 
 class ClusterAssignment(BaseModel):
@@ -556,6 +563,13 @@ async def list_creatives(
             country=country_data.get(c.id),
             thumbnail_status=thumbnail_statuses.get(c.id),
             waste_flags=waste_flags.get(c.id),
+            # Phase 29: App info and disapproval
+            app_id=c.app_id,
+            app_name=c.app_name,
+            app_store=c.app_store,
+            is_disapproved=c.approval_status == "DISAPPROVED",
+            disapproval_reasons=c.disapproval_reasons,
+            serving_restrictions=c.serving_restrictions,
             **_extract_preview_data(
                 c,
                 slim=slim,
@@ -659,6 +673,13 @@ async def list_creatives_paginated(
             country=country_data.get(c.id),
             thumbnail_status=thumbnail_statuses.get(c.id),
             waste_flags=waste_flags.get(c.id),
+            # Phase 29: App info and disapproval
+            app_id=c.app_id,
+            app_name=c.app_name,
+            app_store=c.app_store,
+            is_disapproved=c.approval_status == "DISAPPROVED",
+            disapproval_reasons=c.disapproval_reasons,
+            serving_restrictions=c.serving_restrictions,
             **_extract_preview_data(
                 c,
                 slim=slim,
@@ -810,6 +831,13 @@ async def get_creative(
         seat_name=creative.seat_name,
         thumbnail_status=thumbnail_statuses.get(creative_id),
         waste_flags=waste_flags.get(creative_id),
+        # Phase 29: App info and disapproval
+        app_id=creative.app_id,
+        app_name=creative.app_name,
+        app_store=creative.app_store,
+        is_disapproved=creative.approval_status == "DISAPPROVED",
+        disapproval_reasons=creative.disapproval_reasons,
+        serving_restrictions=creative.serving_restrictions,
         **_extract_preview_data(
             creative,
             html_thumbnail_url=thumbnail_statuses.get(creative_id).thumbnail_url if thumbnail_statuses.get(creative_id) else None

@@ -85,6 +85,13 @@ def creative_dict_to_storage(data: "CreativeDict") -> Creative:
         advertiser_name=data.get("advertiserName"),
         campaign_id=None,  # Set later by clustering
         cluster_id=None,  # Set later by clustering
+        # App info (Phase 29)
+        app_id=data.get("appId"),
+        app_name=data.get("appName"),
+        app_store=data.get("appStore"),
+        # Disapproval details (Phase 29)
+        disapproval_reasons=data.get("disapprovalReasons"),
+        serving_restrictions=data.get("servingRestrictions"),
         raw_data={
             "declaredClickThroughUrls": data.get("declaredClickThroughUrls", []),
             "apiUpdateTime": data.get("apiUpdateTime"),
@@ -93,6 +100,9 @@ def creative_dict_to_storage(data: "CreativeDict") -> Creative:
             "html": data.get("html"),
             "video": data.get("video"),
             "native": data.get("native"),
+            # Include disapproval details in raw_data for reference
+            "disapprovalReasons": data.get("disapprovalReasons"),
+            "servingRestrictions": data.get("servingRestrictions"),
         },
     )
 

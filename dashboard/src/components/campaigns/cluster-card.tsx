@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
-import { Pencil, Trash2, ArrowDown, ArrowUp, ZoomIn, ZoomOut, Check } from 'lucide-react';
+import { Pencil, Trash2, ArrowDown, ArrowUp, ZoomIn, ZoomOut, Check, AlertTriangle } from 'lucide-react';
 import { DraggableCreative } from './draggable-creative';
 import { cn } from '@/lib/utils';
 
@@ -22,6 +22,9 @@ interface Campaign {
   id: string;
   name: string;
   creative_ids: string[];
+  // Phase 29: Disapproval tracking
+  disapproved_count?: number;
+  has_disapproved?: boolean;
 }
 
 interface Creative {
@@ -222,30 +225,43 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
-        {isEditing ? (
-          <input
-            ref={inputRef}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onBlur={handleSave}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleSave();
-              if (e.key === 'Escape') {
-                setName(campaign.name);
-                setIsEditing(false);
-              }
-            }}
-            className="text-lg font-semibold w-full border-b-2 border-blue-500 outline-none bg-transparent"
-          />
-        ) : (
-          <h3
-            className="text-lg font-semibold flex items-center gap-2 cursor-pointer hover:text-blue-600 group"
-            onDoubleClick={() => setIsEditing(true)}
-          >
-            {campaign.name}
-            <Pencil className="h-4 w-4 opacity-0 group-hover:opacity-50 transition-opacity" />
-          </h3>
-        )}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {isEditing ? (
+            <input
+              ref={inputRef}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={handleSave}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSave();
+                if (e.key === 'Escape') {
+                  setName(campaign.name);
+                  setIsEditing(false);
+                }
+              }}
+              className="text-lg font-semibold w-full border-b-2 border-blue-500 outline-none bg-transparent"
+            />
+          ) : (
+            <h3
+              className="text-lg font-semibold flex items-center gap-2 cursor-pointer hover:text-blue-600 group truncate"
+              onDoubleClick={() => setIsEditing(true)}
+            >
+              {campaign.name}
+              <Pencil className="h-4 w-4 opacity-0 group-hover:opacity-50 transition-opacity flex-shrink-0" />
+            </h3>
+          )}
+
+          {/* Phase 29: Disapproval badge */}
+          {campaign.has_disapproved && campaign.disapproved_count && campaign.disapproved_count > 0 && (
+            <div
+              className="flex items-center gap-1 bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full flex-shrink-0"
+              title={`${campaign.disapproved_count} disapproved creative${campaign.disapproved_count !== 1 ? 's' : ''}`}
+            >
+              <AlertTriangle className="h-3 w-3" />
+              <span>{campaign.disapproved_count}</span>
+            </div>
+          )}
+        </div>
 
         <div className="flex items-center gap-1">
           {/* Sort button */}
