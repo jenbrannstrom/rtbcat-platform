@@ -211,46 +211,43 @@ async def auto_cluster_creatives(request: AutoClusterRequest):
 
         logger.info(f"Found {unclustered_count} unclustered creatives for buyer_id={request.buyer_id}")
 
-        # Group by final_url (domain extraction)
-        from urllib.parse import urlparse
+        # Group by cluster key (app ID for app stores, domain for others)
         from collections import defaultdict
 
-        url_groups: dict[str, list[str]] = defaultdict(list)
+        # Maps cluster_key -> (display_name, domain, [creative_ids])
+        cluster_data: dict[str, dict] = defaultdict(lambda: {'name': '', 'domain': '', 'creative_ids': []})
 
         for row in rows:
             creative_id = str(row['creative_id'])
             final_url = row['final_url'] or ''
 
-            # Extract domain from URL
-            domain = None
-            if final_url:
+            # Extract cluster key and name from URL
+            cluster_key, display_name = _extract_cluster_key_and_name(final_url)
+
+            # Store the data
+            if not cluster_data[cluster_key]['name']:
+                cluster_data[cluster_key]['name'] = display_name
+                # Extract domain for reference
+                from urllib.parse import urlparse
                 try:
                     parsed = urlparse(final_url)
-                    domain = parsed.netloc or parsed.path.split('/')[0]
-                    # Clean up domain
-                    domain = domain.replace('www.', '').lower()
+                    cluster_data[cluster_key]['domain'] = (parsed.netloc or '').replace('www.', '').lower()
                 except Exception:
-                    domain = final_url[:50]
+                    cluster_data[cluster_key]['domain'] = cluster_key
 
-            if not domain:
-                domain = 'unknown'
-
-            url_groups[domain].append(creative_id)
+            cluster_data[cluster_key]['creative_ids'].append(creative_id)
 
         # Generate cluster suggestions
         suggestions: list[ClusterSuggestion] = []
 
-        for domain, creative_ids in url_groups.items():
-            if len(creative_ids) < 1:
+        for cluster_key, data in cluster_data.items():
+            if len(data['creative_ids']) < 1:
                 continue
 
-            # Generate a clean name from domain
-            suggested_name = _generate_name_from_domain(domain)
-
             suggestions.append(ClusterSuggestion(
-                suggested_name=suggested_name,
-                creative_ids=creative_ids,
-                domain=domain,
+                suggested_name=data['name'],
+                creative_ids=data['creative_ids'],
+                domain=data['domain'] or cluster_key,
                 country=None,  # Could be populated if by_country is True
             ))
 
@@ -309,43 +306,169 @@ async def get_unclustered_creatives(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _extract_cluster_key_and_name(url: str) -> tuple[str, str]:
+    """
+    Extract a unique cluster key and display name from a URL.
+
+    For app store URLs, extracts the app identifier.
+    For other URLs, uses the domain.
+
+    Returns:
+        (cluster_key, display_name) tuple
+    """
+    from urllib.parse import urlparse, parse_qs
+
+    if not url:
+        return ('unknown', 'Unknown')
+
+    try:
+        parsed = urlparse(url)
+        domain = (parsed.netloc or '').replace('www.', '').lower()
+        path = parsed.path or ''
+        query = parsed.query or ''
+
+        # Google Play Store: play.google.com/store/apps/details?id=com.example.app
+        if 'play.google.com' in domain and '/store/apps/details' in path:
+            params = parse_qs(query)
+            app_id = params.get('id', [''])[0]
+            if app_id:
+                name = _format_bundle_id(app_id)
+                return (f'play:{app_id}', f'{name} (Play Store)')
+
+        # Apple App Store: apps.apple.com/us/app/app-name/id123456789
+        if 'apps.apple.com' in domain or 'itunes.apple.com' in domain:
+            # Extract app name and ID from path like /us/app/app-name/id123456789
+            parts = path.strip('/').split('/')
+            app_name = None
+            app_id = None
+            for i, part in enumerate(parts):
+                if part == 'app' and i + 2 < len(parts):
+                    app_name = parts[i + 1]
+                    app_id = parts[i + 2]
+                    break
+                elif part.startswith('id') and part[2:].isdigit():
+                    app_id = part
+
+            if app_id:
+                if app_name:
+                    name = app_name.replace('-', ' ').title()
+                    return (f'appstore:{app_id}', f'{name} (App Store)')
+                return (f'appstore:{app_id}', f'App {app_id} (App Store)')
+
+        # Apple Music: music.apple.com/us/album/album-name/123456789
+        if 'music.apple.com' in domain:
+            parts = path.strip('/').split('/')
+            content_type = None
+            content_name = None
+            content_id = None
+            for i, part in enumerate(parts):
+                if part in ('album', 'artist', 'playlist') and i + 2 < len(parts):
+                    content_type = part
+                    content_name = parts[i + 1]
+                    content_id = parts[i + 2]
+                    break
+
+            if content_id:
+                name = content_name.replace('-', ' ').title() if content_name else content_id
+                type_label = content_type.title() if content_type else 'Music'
+                return (f'applemusic:{content_type}:{content_id}', f'{name} (Apple {type_label})')
+
+        # AppsFlyer tracking URLs: app.appsflyer.com/com.example.app?...
+        if 'appsflyer.com' in domain:
+            # App ID is often in the path
+            parts = path.strip('/').split('/')
+            for part in parts:
+                if '.' in part and (part.startswith('com.') or part.startswith('org.') or part.startswith('io.')):
+                    name = _format_bundle_id(part)
+                    return (f'appsflyer:{part}', f'{name} (AppsFlyer)')
+            # Fallback - check for bundle ID in query params
+            params = parse_qs(query)
+            for key in ['app_id', 'af_dp', 'pid']:
+                if key in params and params[key][0]:
+                    val = params[key][0]
+                    if '.' in val:
+                        name = _format_bundle_id(val)
+                        return (f'appsflyer:{val}', f'{name} (AppsFlyer)')
+
+        # Adjust tracking URLs
+        if 'adjust.com' in domain or 'adj.st' in domain:
+            params = parse_qs(query)
+            # Try to find campaign or app identifier
+            for key in ['campaign', 'adgroup', 'label']:
+                if key in params and params[key][0]:
+                    name = params[key][0].replace('_', ' ').replace('-', ' ').title()
+                    return (f'adjust:{params[key][0]}', f'{name} (Adjust)')
+            # Fallback to path-based extraction
+            if path and len(path) > 1:
+                tracker = path.strip('/').split('/')[0]
+                return (f'adjust:{tracker}', f'Adjust Campaign {tracker[:8]}')
+
+        # Firebase Dynamic Links: *.page.link
+        if '.page.link' in domain:
+            params = parse_qs(query)
+            link = params.get('link', [''])[0]
+            if link:
+                # Recursively extract from the actual destination
+                return _extract_cluster_key_and_name(link)
+            # Use the subdomain as identifier
+            subdomain = domain.split('.page.link')[0]
+            return (f'firebase:{subdomain}', f'{subdomain.title()} (Firebase)')
+
+        # Default: domain-based clustering
+        return (domain, _generate_name_from_domain(domain))
+
+    except Exception as e:
+        logger.warning(f"Failed to parse URL '{url[:100]}': {e}")
+        return ('unknown', 'Unknown')
+
+
+def _format_bundle_id(bundle_id: str) -> str:
+    """Format a bundle ID like com.example.myapp into 'Example Myapp'."""
+    if not bundle_id:
+        return 'Unknown'
+
+    # Split by dots and take meaningful parts (skip com/org/io prefix)
+    parts = bundle_id.split('.')
+    if len(parts) > 2 and parts[0] in ('com', 'org', 'io', 'net', 'app'):
+        parts = parts[1:]  # Skip the prefix
+
+    # Take up to 2 most meaningful parts
+    relevant_parts = parts[-2:] if len(parts) > 2 else parts
+
+    formatted = []
+    for part in relevant_parts:
+        # Split camelCase
+        import re
+        words = re.sub(r'([a-z])([A-Z])', r'\1 \2', part)
+        # Replace separators
+        words = words.replace('_', ' ').replace('-', ' ')
+        # Title case
+        formatted.append(words.title())
+
+    return ' '.join(formatted) or bundle_id
+
+
 def _generate_name_from_domain(domain: str) -> str:
     """Generate a clean campaign name from a domain."""
     if not domain or domain == 'unknown':
         return 'Unknown'
 
-    # Handle app store URLs
-    if 'play.google.com' in domain:
-        return 'Google Play'
-    if 'apps.apple.com' in domain or 'itunes.apple.com' in domain:
-        return 'App Store'
-    if 'app.appsflyer.com' in domain:
-        return 'AppsFlyer'
-    if 'app.adjust.com' in domain or 'adjust.com' in domain:
-        return 'Adjust'
-
     # Handle bundle IDs (com.example.app)
     if domain.startswith('com.') or domain.startswith('org.') or domain.startswith('io.'):
-        parts = domain.split('.')
-        if len(parts) >= 3:
-            # Take the last two meaningful parts
-            name_parts = parts[-2:]
-            name = ' '.join(p.replace('_', ' ').replace('-', ' ').title() for p in name_parts)
-            return name
-        return domain.split('.')[-1].title()
+        return _format_bundle_id(domain)
 
-    # Clean up domain
-    # Remove common TLDs
-    for tld in ['.com', '.io', '.app', '.net', '.org', '.co', '.me']:
-        if domain.endswith(tld):
-            domain = domain[:-len(tld)]
+    # Clean up domain - remove common TLDs
+    clean_domain = domain
+    for tld in ['.com', '.io', '.app', '.net', '.org', '.co', '.me', '.tv', '.gg']:
+        if clean_domain.endswith(tld):
+            clean_domain = clean_domain[:-len(tld)]
             break
 
     # Convert to title case, replace separators with spaces
-    name = domain.replace('.', ' ').replace('-', ' ').replace('_', ' ')
-    name = ' '.join(word.capitalize() for word in name.split())
+    name = clean_domain.replace('.', ' ').replace('-', ' ').replace('_', ' ')
+    name = ' '.join(word.capitalize() for word in name.split() if word)
 
-    return name or 'Unknown'
+    return name or domain
 
 
 # ============================================
