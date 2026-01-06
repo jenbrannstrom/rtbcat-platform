@@ -1,10 +1,69 @@
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { AlertTriangle, Copy, Check } from 'lucide-react';
 import { cn, getFormatLabel } from '@/lib/utils';
+
+/**
+ * Parse app info from destination URL
+ * Returns { appId, appName } or null if not a recognized app store URL
+ */
+function parseAppFromUrl(url: string | undefined): { appId: string; appName: string } | null {
+  if (!url) return null;
+
+  try {
+    const decoded = decodeURIComponent(url);
+
+    // Play Store: https://play.google.com/store/apps/details?id=com.zhiliaoapp.musically
+    const playStoreMatch = decoded.match(/play\.google\.com\/store\/apps\/details\?id=([a-zA-Z0-9._-]+)/);
+    if (playStoreMatch) {
+      const appId = playStoreMatch[1];
+      // Format bundle ID: com.zhiliaoapp.musically -> "Zhiliaoapp Musically"
+      const parts = appId.split('.');
+      const relevantParts = parts.length > 2 ? parts.slice(-2) : parts.slice(-1);
+      const appName = relevantParts
+        .map(part =>
+          part
+            .replace(/([a-z])([A-Z])/g, '$1 $2')
+            .replace(/[_-]/g, ' ')
+            .replace(/\b\w/g, c => c.toUpperCase())
+        )
+        .join(' ');
+      return { appId, appName };
+    }
+
+    // App Store: https://apps.apple.com/app/app-name/id123456789
+    const appStoreMatch = decoded.match(/apps\.apple\.com\/[^/]+\/app\/([^/]+)\/id(\d+)/);
+    if (appStoreMatch) {
+      const appName = appStoreMatch[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      const appId = `id${appStoreMatch[2]}`;
+      return { appId, appName };
+    }
+
+    // AppsFlyer: https://app.appsflyer.com/com.example.app?...
+    const appsFlyerMatch = decoded.match(/app\.appsflyer\.com\/([a-zA-Z0-9._-]+)/);
+    if (appsFlyerMatch) {
+      const appId = appsFlyerMatch[1];
+      const parts = appId.split('.');
+      const relevantParts = parts.length > 2 ? parts.slice(-2) : parts.slice(-1);
+      const appName = relevantParts
+        .map(part =>
+          part
+            .replace(/([a-z])([A-Z])/g, '$1 $2')
+            .replace(/[_-]/g, ' ')
+            .replace(/\b\w/g, c => c.toUpperCase())
+        )
+        .join(' ');
+      return { appId, appName };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 interface Creative {
   id: string;
@@ -65,8 +124,30 @@ export function DraggableCreative({
   onOpenPreview,
 }: DraggableCreativeProps) {
   const wasDraggingRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [tooltipAlign, setTooltipAlign] = useState<'left' | 'center' | 'right'>('center');
+
+  // Calculate tooltip alignment based on element position
+  const updateTooltipPosition = useCallback(() => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const tooltipWidth = 280; // matches w-[280px]
+    const halfTooltip = tooltipWidth / 2;
+
+    // Check if tooltip would overflow left edge
+    if (rect.left + rect.width / 2 < halfTooltip + 8) {
+      setTooltipAlign('left');
+    }
+    // Check if tooltip would overflow right edge
+    else if (window.innerWidth - (rect.left + rect.width / 2) < halfTooltip + 8) {
+      setTooltipAlign('right');
+    }
+    else {
+      setTooltipAlign('center');
+    }
+  }, []);
 
   const {
     attributes,
@@ -142,20 +223,34 @@ export function DraggableCreative({
     ? "col-span-2 row-span-2"
     : "";
 
+  // Parse app info from URL
+  const appInfo = parseAppFromUrl(creative.final_url);
+
   return (
     <div
+      ref={containerRef}
       className={cn(
         "relative",
         gridClass,
         isDragOverlay ? "w-14 h-14" : "w-full h-full"
       )}
-      onMouseEnter={() => !isDragOverlay && setIsHovered(true)}
+      onMouseEnter={() => {
+        if (!isDragOverlay) {
+          updateTooltipPosition();
+          setIsHovered(true);
+        }
+      }}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Popup - shows on hover or click */}
       {showTooltip && (
         <div
-          className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-[280px] max-w-[300px] bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl"
+          className={cn(
+            "absolute z-50 bottom-full mb-2 w-[280px] bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl",
+            tooltipAlign === 'left' && "left-0",
+            tooltipAlign === 'center' && "left-1/2 -translate-x-1/2",
+            tooltipAlign === 'right' && "right-0"
+          )}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Creative ID with copy button */}
@@ -173,6 +268,19 @@ export function DraggableCreative({
               )}
             </button>
           </div>
+
+          {/* App info - shown prominently if detected */}
+          {appInfo && (
+            <div className="mb-2 pb-2 border-b border-gray-700">
+              <div className="flex justify-between items-start">
+                <span className="text-gray-400">App:</span>
+                <div className="text-right flex-1 ml-2 min-w-0">
+                  <div className="text-white font-medium">{appInfo.appName}</div>
+                  <div className="text-gray-400 text-[10px] font-mono truncate select-all">{appInfo.appId}</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-1 text-gray-300">
             <div className="flex justify-between">
@@ -202,12 +310,17 @@ export function DraggableCreative({
           {creative.final_url && (
             <div className="mt-2 pt-2 border-t border-gray-700">
               <div className="text-gray-400 text-[10px] mb-0.5">Destination:</div>
-              <div className="text-blue-300 truncate text-[11px] select-all">{creative.final_url}</div>
+              <div className="text-blue-300 text-[11px] select-all break-all">{creative.final_url}</div>
             </div>
           )}
 
-          {/* Arrow */}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-gray-900" />
+          {/* Arrow - positioned based on alignment */}
+          <div className={cn(
+            "absolute top-full border-8 border-transparent border-t-gray-900",
+            tooltipAlign === 'left' && "left-4",
+            tooltipAlign === 'center' && "left-1/2 -translate-x-1/2",
+            tooltipAlign === 'right' && "right-4"
+          )} />
         </div>
       )}
 
