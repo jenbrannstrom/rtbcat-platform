@@ -700,15 +700,17 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                   <div className="space-y-2 text-sm">
                     {parsedUrls.slice(0, 4).map((url, i) => (
                       <div key={i} className="flex items-start gap-2">
-                        <span className="text-gray-400">→</span>
+                        <span className="text-gray-400 flex-shrink-0">→</span>
                         <a
                           href={url.url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-primary-600 hover:text-primary-700 truncate flex-1 text-xs"
+                          title={url.url}
                         >
                           {getUrlDisplayText(url)}
                         </a>
+                        <CopyButton text={url.url} className="flex-shrink-0" />
                       </div>
                     ))}
                     {parsedUrls.length > 4 && (
@@ -728,9 +730,17 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                 {hasTrackingParams ? (
                   <div className="space-y-1 text-sm">
                     {Object.entries(trackingParams).map(([key, value]) => (
-                      <div key={key} className="flex justify-between text-xs">
-                        <span className="text-gray-500 font-mono">{key}</span>
-                        <span className="text-gray-700 truncate max-w-[150px]">{value}</span>
+                      <div key={key} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="text-gray-500 font-mono flex-shrink-0">{key}</span>
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span
+                            className="text-gray-700 truncate"
+                            title={value}
+                          >
+                            {value}
+                          </span>
+                          <CopyButton text={value} className="flex-shrink-0" />
+                        </div>
                       </div>
                     ))}
                   </div>
