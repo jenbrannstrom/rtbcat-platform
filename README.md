@@ -376,6 +376,21 @@ npm run dev
 
 ---
 
+## Versioning
+
+The app version is managed via a single `VERSION` file at the repository root.
+
+**To bump the version:**
+1. Edit the `VERSION` file with the new version (e.g., `0.9.1`)
+2. Commit and push - deployment automatically uses the new version
+
+The version is displayed in:
+- API health endpoint (`/health`)
+- API docs (`/docs`)
+- Dashboard sidebar footer
+
+---
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) file

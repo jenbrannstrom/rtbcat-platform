@@ -37,10 +37,12 @@ COPY --chown=rtbcat:rtbcat . .
 # Create data directory
 RUN mkdir -p /data && chown rtbcat:rtbcat /data
 
-# Set environment variables
+# Read version from VERSION file and set environment variables
+ARG APP_VERSION=0.9.0
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    RTBCAT_CONFIG_DIR=/data/.rtbcat
+    RTBCAT_CONFIG_DIR=/data/.rtbcat \
+    APP_VERSION=${APP_VERSION}
 
 # Switch to non-root user
 USER rtbcat
