@@ -119,6 +119,11 @@ class CreativeDict(TypedDict, total=False):
         source: Data source identifier (always 'authorized_buyers_api').
         canonical_size: Normalized IAB standard size (e.g., "300x250 (Medium Rectangle)").
         size_category: Size category ("IAB Standard", "Video", "Adaptive", "Non-Standard").
+        appId: App package ID (e.g., "com.example.app").
+        appName: Human-readable app name (e.g., "TikTok").
+        appStore: App store identifier ("play_store", "app_store", etc.).
+        disapprovalReasons: List of disapproval reason objects.
+        servingRestrictions: List of serving restriction objects.
     """
 
     creativeId: str
@@ -139,3 +144,10 @@ class CreativeDict(TypedDict, total=False):
     source: Literal["authorized_buyers_api"]
     canonical_size: str
     size_category: str
+    # App info (Phase 29)
+    appId: Optional[str]
+    appName: Optional[str]
+    appStore: Optional[str]
+    # Disapproval details (Phase 29)
+    disapprovalReasons: Optional[list]
+    servingRestrictions: Optional[list]

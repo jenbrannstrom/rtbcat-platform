@@ -7,7 +7,7 @@ side effects or API calls.
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
 from collectors.creatives.schemas import (
@@ -20,6 +20,7 @@ from collectors.creatives.schemas import (
     UtmParams,
     VideoCreativeData,
 )
+from utils.app_parser import extract_app_info_from_creative
 
 logger = logging.getLogger(__name__)
 
@@ -192,6 +193,47 @@ def _get_approval_status(creative_data: dict) -> ApprovalStatus:
     return "UNKNOWN"
 
 
+def _get_approval_details(creative_data: dict) -> dict[str, Any]:
+    """Extract full approval/disapproval details from creativeServingDecision.
+
+    Extracts disapproval reasons and serving restrictions that are not
+    captured by the simpler _get_approval_status function.
+
+    Args:
+        creative_data: The creative resource dictionary from API.
+
+    Returns:
+        Dict with:
+        - disapproval_reasons: List of reason objects
+        - serving_restrictions: List of restriction objects
+    """
+    serving_decision = creative_data.get("creativeServingDecision", {})
+    network_compliance = serving_decision.get("networkPolicyCompliance", {})
+
+    # Extract disapproval reasons
+    # Format: [{"reason": "UNACCEPTABLE_CONTENT_SOFTWARE", "details": "..."}]
+    disapproval_reasons = network_compliance.get("disapprovalReasons", [])
+
+    # Extract serving restrictions
+    # Format: [{"restriction": "RESTRICTED_AUDIENCE", "contexts": [...]}]
+    serving_restrictions = serving_decision.get("servingRestrictions", [])
+
+    # Also check for policy topics which provide more detail
+    policy_topics = serving_decision.get("policyTopics", [])
+    if policy_topics and not disapproval_reasons:
+        # Convert policy topics to disapproval reason format
+        disapproval_reasons = [
+            {"reason": topic.get("policyTopic", "UNKNOWN"), "details": None}
+            for topic in policy_topics
+            if topic.get("helpCenterUrl")  # Indicates a policy violation
+        ]
+
+    return {
+        "disapproval_reasons": disapproval_reasons,
+        "serving_restrictions": serving_restrictions,
+    }
+
+
 def _get_dest_url(
     creative_data: dict, creative_format: CreativeFormat
 ) -> Optional[str]:
@@ -231,6 +273,8 @@ def parse_creative_response(
     - Format-specific nested data (only one of html/video/native)
     - Extracted UTM parameters
     - Approval status from networkPolicyCompliance
+    - App info extracted from URLs/HTML snippets
+    - Disapproval reasons and serving restrictions
 
     Args:
         creative_data: A creative resource from the API response.
@@ -264,6 +308,23 @@ def parse_creative_response(
     # Get declared click-through URLs
     click_urls = creative_data.get("declaredClickThroughUrls", [])
 
+    # Extract format-specific data
+    html_data = _extract_html_data(creative_data)
+    video_data = _extract_video_data(creative_data)
+    native_data = _extract_native_data(creative_data)
+
+    # Extract app info from URLs and HTML snippets
+    html_snippet = html_data.get("snippet") if html_data else None
+    app_info = extract_app_info_from_creative(
+        final_url=dest_url,
+        declared_urls=click_urls,
+        html_snippet=html_snippet,
+        advertiser_name=creative_data.get("advertiserName"),
+    )
+
+    # Extract disapproval details
+    approval_details = _get_approval_details(creative_data)
+
     # Build the normalized response
     result: CreativeDict = {
         "creativeId": creative_id,
@@ -279,11 +340,18 @@ def parse_creative_response(
         "apiUpdateTime": creative_data.get("apiUpdateTime"),
         "collectedAt": datetime.now(timezone.utc).isoformat(),
         "source": "authorized_buyers_api",
+        # App info (Phase 29)
+        "appId": app_info.get("app_id"),
+        "appName": app_info.get("app_name"),
+        "appStore": app_info.get("app_store"),
+        # Disapproval details (Phase 29)
+        "disapprovalReasons": approval_details.get("disapproval_reasons"),
+        "servingRestrictions": approval_details.get("serving_restrictions"),
     }
 
     # Add format-specific data (only one will be non-None)
-    result["html"] = _extract_html_data(creative_data)
-    result["video"] = _extract_video_data(creative_data)
-    result["native"] = _extract_native_data(creative_data)
+    result["html"] = html_data
+    result["video"] = video_data
+    result["native"] = native_data
 
     return result

@@ -40,6 +40,13 @@ class CreativeResponse(BaseModel):
     native: Optional[NativePreview] = None
     thumbnail_status: Optional[ThumbnailStatusResponse] = None
     waste_flags: Optional[WasteFlagsResponse] = None
+    # Phase 29: App info and disapproval tracking
+    app_id: Optional[str] = None
+    app_name: Optional[str] = None
+    app_store: Optional[str] = None
+    is_disapproved: bool = False
+    disapproval_reasons: Optional[list] = None
+    serving_restrictions: Optional[list] = None
 
 
 class ClusterAssignment(BaseModel):

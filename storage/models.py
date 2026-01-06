@@ -36,6 +36,11 @@ class Creative:
         campaign_id: Assigned campaign ID (from clustering).
         cluster_id: Assigned cluster ID (from AI clustering).
         raw_data: Full API response and format-specific data as JSON.
+        app_id: App package ID (e.g., "com.example.app").
+        app_name: Human-readable app name (e.g., "TikTok").
+        app_store: App store identifier ("play_store", "app_store", etc.).
+        disapproval_reasons: JSON list of disapproval reason objects.
+        serving_restrictions: JSON list of serving restriction objects.
         created_at: Record creation timestamp.
         updated_at: Last update timestamp.
     """
@@ -62,6 +67,13 @@ class Creative:
     cluster_id: Optional[str] = None
     seat_name: Optional[str] = None
     raw_data: dict = field(default_factory=dict)
+    # App info (Phase 29)
+    app_id: Optional[str] = None
+    app_name: Optional[str] = None
+    app_store: Optional[str] = None
+    # Disapproval details (Phase 29)
+    disapproval_reasons: Optional[list] = None
+    serving_restrictions: Optional[list] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

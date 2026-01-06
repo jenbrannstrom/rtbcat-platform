@@ -56,8 +56,10 @@ class CreativeRepository(BaseRepository[Creative]):
                         utm_source, utm_medium, utm_campaign,
                         utm_content, utm_term, advertiser_name,
                         campaign_id, cluster_id, raw_data,
+                        app_id, app_name, app_store,
+                        disapproval_reasons, serving_restrictions,
                         updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
                     (
                         creative.id,
@@ -81,6 +83,11 @@ class CreativeRepository(BaseRepository[Creative]):
                         creative.campaign_id,
                         creative.cluster_id,
                         json.dumps(creative.raw_data),
+                        creative.app_id,
+                        creative.app_name,
+                        creative.app_store,
+                        json.dumps(creative.disapproval_reasons) if creative.disapproval_reasons else None,
+                        json.dumps(creative.serving_restrictions) if creative.serving_restrictions else None,
                     ),
                 ),
             )
@@ -113,6 +120,9 @@ class CreativeRepository(BaseRepository[Creative]):
                 c.utm_source, c.utm_medium, c.utm_campaign,
                 c.utm_content, c.utm_term, c.advertiser_name,
                 c.campaign_id, c.cluster_id, json.dumps(c.raw_data),
+                c.app_id, c.app_name, c.app_store,
+                json.dumps(c.disapproval_reasons) if c.disapproval_reasons else None,
+                json.dumps(c.serving_restrictions) if c.serving_restrictions else None,
             )
             for c in creatives
         ]
@@ -130,8 +140,10 @@ class CreativeRepository(BaseRepository[Creative]):
                         utm_source, utm_medium, utm_campaign,
                         utm_content, utm_term, advertiser_name,
                         campaign_id, cluster_id, raw_data,
+                        app_id, app_name, app_store,
+                        disapproval_reasons, serving_restrictions,
                         updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
                     data,
                 ),
@@ -443,6 +455,21 @@ class CreativeRepository(BaseRepository[Creative]):
             canonical = compute_canonical_size(width, height)
             category = get_size_category(canonical)
 
+        # Parse JSON fields for disapproval data
+        disapproval_reasons = None
+        if row_dict.get("disapproval_reasons"):
+            try:
+                disapproval_reasons = json.loads(row_dict["disapproval_reasons"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        serving_restrictions = None
+        if row_dict.get("serving_restrictions"):
+            try:
+                serving_restrictions = json.loads(row_dict["serving_restrictions"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+
         return Creative(
             id=row_dict["id"],
             name=row_dict["name"],
@@ -466,6 +493,13 @@ class CreativeRepository(BaseRepository[Creative]):
             cluster_id=row_dict.get("cluster_id"),
             seat_name=row_dict.get("seat_name"),
             raw_data=raw_data,
+            # App info (Phase 29)
+            app_id=row_dict.get("app_id"),
+            app_name=row_dict.get("app_name"),
+            app_store=row_dict.get("app_store"),
+            # Disapproval details (Phase 29)
+            disapproval_reasons=disapproval_reasons,
+            serving_restrictions=serving_restrictions,
             created_at=row_dict.get("created_at"),
             updated_at=row_dict.get("updated_at"),
         )

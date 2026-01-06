@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AlertTriangle, Copy, Check } from 'lucide-react';
+import { AlertTriangle, Copy, Check, XCircle } from 'lucide-react';
 import { cn, getFormatLabel } from '@/lib/utils';
 
 /**
@@ -79,6 +79,12 @@ interface Creative {
     date_range?: { start: string; end: string };
   };
   waste_flags?: { broken_video?: boolean; zero_engagement?: boolean };
+  // Phase 29: App info and disapproval tracking
+  app_id?: string;
+  app_name?: string;
+  is_disapproved?: boolean;
+  disapproval_reasons?: Array<{ reason: string; details?: string }>;
+  serving_restrictions?: Array<{ restriction: string; contexts?: string[] }>;
 }
 
 interface DraggableCreativeProps {
@@ -213,6 +219,12 @@ export function DraggableCreative({
   const countries = perf?.countries || [];
   const isBrokenVideo = creative.waste_flags?.broken_video;
 
+  // Phase 29: Disapproval tracking
+  const isDisapproved = creative.is_disapproved ||
+    (creative.disapproval_reasons && creative.disapproval_reasons.length > 0) ||
+    (creative.serving_restrictions && creative.serving_restrictions.length > 0);
+  const disapprovalReasons = creative.disapproval_reasons || [];
+
   // Show popup on click (persistent) or on hover (transient)
   const showTooltip = (isPopupOpen || isHovered) && !isDragging && !isDragOverlay;
 
@@ -223,8 +235,10 @@ export function DraggableCreative({
     ? "col-span-2 row-span-2"
     : "";
 
-  // Parse app info from URL
-  const appInfo = parseAppFromUrl(creative.final_url);
+  // Phase 29: Use stored app_name first, fallback to URL parsing
+  const appInfo = creative.app_name && creative.app_id
+    ? { appId: creative.app_id, appName: creative.app_name }
+    : parseAppFromUrl(creative.final_url);
 
   return (
     <div
@@ -314,6 +328,28 @@ export function DraggableCreative({
             </div>
           )}
 
+          {/* Phase 29: Disapproval details */}
+          {isDisapproved && (
+            <div className="mt-2 pt-2 border-t border-red-700 bg-red-900/20 -mx-3 px-3 pb-1 rounded-b-lg">
+              <div className="flex items-center gap-1 text-red-400 font-medium text-[11px]">
+                <XCircle className="h-3 w-3" />
+                <span>Disapproved</span>
+              </div>
+              {disapprovalReasons.length > 0 && (
+                <div className="text-red-300 text-[10px] mt-1">
+                  {disapprovalReasons.map((r, i) => (
+                    <div key={i}>{r.reason.replace(/_/g, ' ').toLowerCase()}</div>
+                  ))}
+                </div>
+              )}
+              {creative.serving_restrictions && creative.serving_restrictions.length > 0 && (
+                <div className="text-red-300 text-[10px] mt-1">
+                  Restricted: {creative.serving_restrictions.map(r => r.restriction).join(', ')}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Arrow - positioned based on alignment */}
           <div className={cn(
             "absolute top-full border-8 border-transparent border-t-gray-900",
@@ -337,6 +373,8 @@ export function DraggableCreative({
           isDragOverlay && "ring-2 ring-blue-500 shadow-lg",
           isSelected && !isDragOverlay && "ring-2 ring-blue-500",
           isPopupOpen && !isDragOverlay && "ring-2 ring-blue-400",
+          // Phase 29: Red border for disapproved creatives
+          isDisapproved && !isSelected && !isPopupOpen && "border-2 border-red-500 ring-2 ring-red-200",
         )}
       >
         {/* Thumbnail */}
@@ -356,8 +394,15 @@ export function DraggableCreative({
           </div>
         )}
 
+        {/* Phase 29: Disapproval badge */}
+        {isDisapproved && (
+          <div className="absolute top-0.5 left-0.5 bg-red-500 text-white rounded-full p-0.5" title="Disapproved">
+            <XCircle className="h-2.5 w-2.5" />
+          </div>
+        )}
+
         {/* Warning badge for broken videos */}
-        {isBrokenVideo && (
+        {isBrokenVideo && !isDisapproved && (
           <div className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full p-0.5">
             <AlertTriangle className="h-2.5 w-2.5" />
           </div>
