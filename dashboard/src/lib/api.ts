@@ -15,6 +15,7 @@ import type {
   ImportTrafficResponse,
   BatchPerformanceResponse,
   PerformancePeriod,
+  CreativeCountryBreakdown,
 } from "@/types/api";
 import type { ImportResponse } from "@/lib/types/import";
 
@@ -102,6 +103,15 @@ export async function getCreatives(params?: {
 
 export async function getCreative(id: string): Promise<Creative> {
   return fetchApi<Creative>(`/creatives/${encodeURIComponent(id)}`);
+}
+
+export async function getCreativeCountries(
+  creativeId: string,
+  days: number = 7
+): Promise<CreativeCountryBreakdown> {
+  return fetchApi<CreativeCountryBreakdown>(
+    `/creatives/${encodeURIComponent(creativeId)}/countries?days=${days}`
+  );
 }
 
 export async function deleteCreative(id: string): Promise<void> {
