@@ -43,10 +43,16 @@ from utils.app_parser import (
 
 
 def get_db_path() -> Path:
-    """Get the database path from environment or default."""
+    """Get the database path from environment or default.
+
+    Default location is ~/.catscan/catscan.db (same as storage/database.py).
+    """
     import os
-    db_path = os.environ.get("DATABASE_PATH", "data/catscan.db")
-    return project_root / db_path
+    db_path = os.environ.get("DATABASE_PATH")
+    if db_path:
+        return Path(db_path)
+    # Default: ~/.catscan/catscan.db (consistent with storage/database.py)
+    return Path.home() / ".catscan" / "catscan.db"
 
 
 async def backfill_app_info(db_path: Path, dry_run: bool = False, limit: int = None) -> dict:
