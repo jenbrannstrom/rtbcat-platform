@@ -307,65 +307,112 @@ The only additions recommended are extra dimensions (Platform, Environment, Tran
 
 ## Part 9: Auto-Optimization Feasibility
 
-### Can the App Auto-Optimize Effectively?
+### The Chicken-and-Egg Problem
 
-**Yes, for pretargeting decisions.** The data is sufficient to:
+**Critical insight:** CSV data cannot detect blocked opportunities.
+
+If a creative size (e.g., 320x50) is blocked in pretargeting, then:
+- Google sends **zero** bid requests for that size
+- CSV reports show **zero** traffic
+- Analysis engines see **no signal to optimize**
+
+**This means:** You cannot use CSV data alone to detect new creative opportunities.
+
+### Two Types of Auto-Optimization
+
+| Type | Trigger | Data Source | Purpose |
+|------|---------|-------------|---------|
+| **Proactive** | New creative approved | API (creatives) | Enable traffic for new sizes |
+| **Reactive** | Performance issues | CSV (daily reports) | Block bad publishers/geos |
+
+### Proactive Optimization (API-Driven)
+
+**Solution:** Use the creative data from the API directly.
+
+When you sync creatives via `buyers.creatives.list`, each creative record contains:
+- `creative_id`
+- `creative_size` (e.g., "300x250")
+- `creative_format` (DISPLAY, VIDEO, NATIVE)
+- `status` (APPROVED, PENDING_REVIEW, DISAPPROVED)
+
+**The simple flow:**
+```
+Creative approved (API sync)
+        │
+        ▼
+Read size/format from creative data
+        │
+        ▼
+Check pretargeting config
+        │
+        ▼
+Size missing? ──► Add via add_sizes_to_config()
+        │
+        ▼
+Traffic now flows for that size
+```
+
+**Existing code support:** `collectors/pretargeting/client.py:264` - `add_sizes_to_config()`
+
+No CSV analysis needed. No complex detection logic. Just use the API data.
+
+### Reactive Optimization (CSV-Driven)
+
+For ongoing performance optimization, CSV data is appropriate:
 
 1. ✅ Detect high-waste publishers → Auto-add to exclusion list
 2. ✅ Detect high-IVT publishers → Auto-block for fraud
 3. ✅ Detect underperforming geos → Auto-exclude
-4. ✅ Detect size coverage gaps → Auto-alert for creative production
-5. ✅ Detect problematic creatives → Auto-pause
-
-### Auto-Optimization Architecture Needed
+4. ✅ Detect problematic creatives → Auto-pause
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     AUTO-OPTIMIZATION LOOP                      │
+│                  REACTIVE OPTIMIZATION LOOP                      │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  1. DETECT                                                      │
-│     ┌─────────────────────┐                                     │
-│     │ Daily CSV Import    │──► Analysis Engines                 │
-│     └─────────────────────┘         │                           │
-│                                     ▼                           │
-│  2. RECOMMEND                                                   │
-│     ┌─────────────────────┐                                     │
-│     │ Recommendation      │──► Confidence Score                 │
-│     │ Engine              │    Impact Estimate                  │
-│     └─────────────────────┘         │                           │
-│                                     ▼                           │
-│  3. DECIDE (Confidence Threshold)                               │
-│     ┌─────────────────────┐                                     │
-│     │ If confidence > 80% │──► Auto-apply                       │
-│     │ If confidence < 80% │──► Queue for human review           │
-│     └─────────────────────┘         │                           │
-│                                     ▼                           │
-│  4. APPLY                                                       │
-│     ┌─────────────────────┐                                     │
-│     │ Pretargeting API    │──► Add to pending_changes           │
-│     │ patch_pretargeting  │    Log to pretargeting_history      │
-│     └─────────────────────┘         │                           │
-│                                     ▼                           │
-│  5. MONITOR (Next Day)                                          │
-│     ┌─────────────────────┐                                     │
-│     │ Compare before/after│──► Update confidence model          │
-│     │ performance metrics │    Learn from outcomes              │
-│     └─────────────────────┘                                     │
+│  1. DAILY CSV IMPORT                                            │
+│     Performance + Funnel + Quality reports                      │
+│                    │                                            │
+│                    ▼                                            │
+│  2. ANALYSIS ENGINES                                            │
+│     QPSOptimizer, WasteAnalyzer, FraudAnalyzer                  │
+│                    │                                            │
+│                    ▼                                            │
+│  3. RECOMMENDATION ENGINE                                       │
+│     Generate recommendations with confidence scores             │
+│                    │                                            │
+│                    ▼                                            │
+│  4. AUTO-APPLY (if confidence > threshold)                      │
+│     patch_pretargeting() to exclude bad actors                  │
+│                    │                                            │
+│                    ▼                                            │
+│  5. MONITOR OUTCOMES                                            │
+│     Compare before/after, adjust thresholds                     │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ### What's Missing for Auto-Optimization
 
+**Proactive (API-driven):**
+
 | Component | Status | Needed |
 |-----------|--------|--------|
-| Detection logic | ✅ Complete | - |
-| Recommendation engine | ✅ Complete | - |
+| Creative data sync | ✅ Complete | `collectors/creatives/client.py` |
+| Pretargeting API client | ✅ Complete | `collectors/pretargeting/client.py` |
+| Add sizes helper | ✅ Complete | `add_sizes_to_config()` |
+| **Trigger on approval** | ❌ Missing | Watch for status change to APPROVED |
+| **Auto-apply to config** | ❌ Missing | Call `add_sizes_to_config()` automatically |
+
+**Reactive (CSV-driven):**
+
+| Component | Status | Needed |
+|-----------|--------|--------|
+| Detection logic | ✅ Complete | QPSOptimizer, WasteAnalyzer |
+| Recommendation engine | ✅ Complete | RecommendationEngine |
 | Confidence scoring | ⚠️ Partial | Add statistical confidence intervals |
 | Auto-apply logic | ❌ Missing | Build the automation loop |
 | Outcome tracking | ⚠️ Partial | Add before/after comparison |
-| Learning from outcomes | ❌ Missing | Adjust thresholds based on results |
 
 ---
 
@@ -399,10 +446,11 @@ The Cat-Scan data model is **well-designed and sufficient** for its purpose: opt
 - Cannot get exact creative-level funnel (Google constraint)
 
 **Next Steps:**
-1. Add Platform/Environment/Transaction Type dimensions to reports (low effort)
-2. Build the auto-optimization loop (medium effort)
-3. Add outcome tracking and learning (medium effort)
+1. Build proactive optimization: trigger `add_sizes_to_config()` when creatives are approved (high priority)
+2. Add Platform/Environment/Transaction Type dimensions to CSV reports (low effort)
+3. Build reactive optimization loop for publisher/geo blocking (medium effort)
+4. Add outcome tracking and learning (medium effort)
 
 ---
 
-*This evaluation was conducted on January 4, 2026 based on comprehensive codebase analysis.*
+*This evaluation was conducted on January 4-5, 2026 based on comprehensive codebase analysis.*
