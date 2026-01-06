@@ -232,24 +232,37 @@ Already implemented that supports this:
 
 ## Part 5: Implementation Steps
 
-### Phase 1: Quick Wins (Day 1)
-- [ ] Create `setup.sh`
-- [ ] Create `run.sh`
-- [ ] Update README.md "(in question)" sections
-- [ ] Commit and push
+### Phase 1: Quick Wins (Day 1) ✅ COMPLETE
+- [x] Create `setup.sh`
+- [x] Create `run.sh`
+- [x] Update README.md "(in question)" sections
+- [x] Commit and push
 
-### Phase 2: Documentation (Days 2-3)
-- [ ] Create ARCHITECTURE.md
-- [ ] Create MCP_INTEGRATION.md
-- [ ] Create METRICS_GUIDE.md
-- [ ] Update INSTALL.md for current workflow
-- [ ] Merge AWS_DEPLOYMENT.md into docs/
+### Phase 2: Documentation (Days 2-3) ✅ COMPLETE
+- [x] Create ARCHITECTURE.md
+- [x] Create MCP_INTEGRATION.md
+- [x] Create METRICS_GUIDE.md
+- [x] Update INSTALL.md for current workflow
+- [x] Merge AWS_DEPLOYMENT.md into docs/
 
-### Phase 3: Verify Deployment (Day 4)
-- [ ] Test live app at scan.rtb.cat
-- [ ] Verify all endpoints working
-- [ ] Test CSV import flow
-- [ ] Document any issues found
+### Phase 3: Verify Deployment (Day 4) ⚠️ ISSUES FOUND
+- [x] Test live app at scan.rtb.cat
+- [x] Verify all endpoints working
+- [x] Test CSV import flow
+- [x] Document any issues found → See **PHASE_3_INVESTIGATION_REPORT.md**
+
+**Phase 3A: Navigation Fixes** ✅ COMPLETE (January 6, 2026)
+- [x] Move Logout to main nav (after Admin section)
+- [x] Simplify collapse button to just `<` icon
+- [x] Move Docs link next to version, update URL to docs.rtb.cat
+- [x] Add compact language selector with flag emoji to header
+
+**Phase 3B: Data Issues** ⚠️ REQUIRES INVESTIGATION
+- [ ] Issue 1: Campaigns tab filtering (creative_id type mismatch)
+- [ ] Issue 2: Missing third account (is_active check)
+- [ ] Issue 3: Thumbnail placeholders (ffmpeg/generation)
+- [x] Issue 4: URL hover tooltips and copy buttons
+- [ ] Issue 5: CSV import account mismatch
 
 ### Phase 4: Paid Feature Design (Week 2+)
 - [ ] Design auto-optimization architecture
@@ -257,10 +270,10 @@ Already implemented that supports this:
 - [ ] Plan billing integration
 - [ ] Create roadmap for implementation
 
-### Phase 5: Modal Enhancements (Week 3+)
-- [ ] Add country breakdown to creative modal (backend)
-- [ ] Add country breakdown to creative modal (frontend)
-- [ ] Testing and refinement
+### Phase 5: Modal Enhancements ✅ COMPLETE
+- [x] Add country breakdown to creative modal (backend) - `/creatives/{id}/countries`
+- [x] Add country breakdown to creative modal (frontend) - `CountrySection` component
+- [x] Testing and refinement
 
 ---
 
