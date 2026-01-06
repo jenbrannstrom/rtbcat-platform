@@ -3,25 +3,29 @@
 Backfill script to populate app_id and app_name for existing creatives.
 
 This script parses existing creatives' URLs and HTML snippets to extract
-app information and update the database. Run this after:
+app information and fetch real app names from the stores.
+
+Run this after:
 1. Deploying the new schema with app_id, app_name, app_store columns
 2. Running schema migrations
 3. Syncing creatives from the Google API (optional - will work on existing data)
 
 Usage:
-    python scripts/backfill_app_info.py [--dry-run]
+    python scripts/backfill_app_info.py [--dry-run] [--limit N]
 
 Options:
     --dry-run    Don't actually update the database, just show what would change
+    --limit N    Only process N creatives (for testing)
 
 The script will:
 1. Find all creatives without app_name set
 2. Parse their URLs and HTML snippets for app store links
-3. Extract app IDs and names using the KNOWN_APPS lookup table
+3. Fetch actual app names from Google Play Store and Apple App Store
 4. Update the database with the extracted information
 """
 
 import argparse
+import asyncio
 import json
 import sqlite3
 import sys
@@ -45,13 +49,14 @@ def get_db_path() -> Path:
     return project_root / db_path
 
 
-def backfill_app_info(db_path: Path, dry_run: bool = False) -> dict:
+async def backfill_app_info(db_path: Path, dry_run: bool = False, limit: int = None) -> dict:
     """
     Backfill app_id and app_name for creatives that don't have them.
 
     Args:
         db_path: Path to the SQLite database
         dry_run: If True, don't actually update the database
+        limit: Maximum number of creatives to process
 
     Returns:
         Dict with statistics about the backfill
@@ -70,22 +75,28 @@ def backfill_app_info(db_path: Path, dry_run: bool = False) -> dict:
     try:
         # Get all creatives that don't have app_name set
         cursor = conn.cursor()
-        cursor.execute("""
+        query = """
             SELECT id, final_url, advertiser_name, raw_data
             FROM creatives
             WHERE app_name IS NULL OR app_name = ''
-        """)
+        """
+        if limit:
+            query += f" LIMIT {limit}"
 
+        cursor.execute(query)
         creatives_to_update = cursor.fetchall()
         stats["total_checked"] = len(creatives_to_update)
 
         print(f"Found {len(creatives_to_update)} creatives without app info")
 
-        for row in creatives_to_update:
+        for i, row in enumerate(creatives_to_update):
             creative_id = row["id"]
             final_url = row["final_url"]
             advertiser_name = row["advertiser_name"]
             raw_data_str = row["raw_data"]
+
+            if (i + 1) % 10 == 0:
+                print(f"  Processing {i + 1}/{len(creatives_to_update)}...")
 
             try:
                 # Parse raw_data to get HTML snippet
@@ -93,12 +104,13 @@ def backfill_app_info(db_path: Path, dry_run: bool = False) -> dict:
                 html_snippet = raw_data.get("html", {}).get("snippet") if raw_data.get("html") else None
                 declared_urls = raw_data.get("declaredClickThroughUrls", [])
 
-                # Extract app info
-                app_info = extract_app_info_from_creative(
+                # Extract app info (async - fetches from stores)
+                app_info = await extract_app_info_from_creative(
                     final_url=final_url,
                     declared_urls=declared_urls,
                     html_snippet=html_snippet,
                     advertiser_name=advertiser_name,
+                    fetch_names=True,  # Fetch real names from stores
                 )
 
                 if app_info.get("app_id") or app_info.get("app_name"):
@@ -114,7 +126,7 @@ def backfill_app_info(db_path: Path, dry_run: bool = False) -> dict:
                             creative_id,
                         ))
                     stats["updated"] += 1
-                    print(f"  [{creative_id}] -> {app_info.get('app_name')} ({app_info.get('app_store', 'unknown')})")
+                    print(f"  [{creative_id}] -> {app_info.get('app_name')} ({app_info.get('app_store') or 'website'})")
                 else:
                     stats["no_app_found"] += 1
 
@@ -143,6 +155,12 @@ def main():
         action="store_true",
         help="Don't actually update the database, just show what would be updated",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of creatives to process (for testing)",
+    )
     args = parser.parse_args()
 
     db_path = get_db_path()
@@ -152,9 +170,12 @@ def main():
 
     print(f"Database: {db_path}")
     print(f"Dry run: {args.dry_run}")
+    if args.limit:
+        print(f"Limit: {args.limit}")
     print()
 
-    stats = backfill_app_info(db_path, dry_run=args.dry_run)
+    # Run the async backfill
+    stats = asyncio.run(backfill_app_info(db_path, dry_run=args.dry_run, limit=args.limit))
 
     print()
     print("=" * 40)

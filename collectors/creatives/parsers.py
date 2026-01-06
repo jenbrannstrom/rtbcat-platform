@@ -20,7 +20,7 @@ from collectors.creatives.schemas import (
     UtmParams,
     VideoCreativeData,
 )
-from utils.app_parser import extract_app_info_from_creative
+from utils.app_parser import extract_app_info_from_creative_sync
 
 logger = logging.getLogger(__name__)
 
@@ -313,9 +313,9 @@ def parse_creative_response(
     video_data = _extract_video_data(creative_data)
     native_data = _extract_native_data(creative_data)
 
-    # Extract app info from URLs and HTML snippets
+    # Extract app info from URLs and HTML snippets (sync version for parsing context)
     html_snippet = html_data.get("snippet") if html_data else None
-    app_info = extract_app_info_from_creative(
+    app_info = extract_app_info_from_creative_sync(
         final_url=dest_url,
         declared_urls=click_urls,
         html_snippet=html_snippet,
