@@ -1,14 +1,14 @@
 # Cat-Scan Platform Completion Plan
 
 **Created:** January 4, 2026
-**Author:** Claude Code
-**Status:** Ready for Review
+**Updated:** January 6, 2026
+**Status:** Active Development
 
 ---
 
 ## Executive Summary
 
-Cat-Scan is significantly more complete than the documentation suggests. The codebase has **118 API endpoints**, **17+ dashboard pages**, and **41 database tables**, while the README describes only a fraction of this. The app is already deployed at `scan.rtb.cat` on AWS.
+Cat-Scan is a QPS optimization platform for Google Authorized Buyers. The codebase has **118 API endpoints**, **17+ dashboard pages**, and **41 database tables**. The app is deployed at `scan.rtb.cat` on AWS.
 
 This plan addresses:
 1. **Documentation accuracy** - Update README and docs to reflect actual state
@@ -18,118 +18,125 @@ This plan addresses:
 
 ---
 
-## Part 1: Documentation Updates
+## Part 1: Feature Development
 
-### 1.1 README.md Overhaul
+### 1.1 Creative Geo Display (High Priority)
+
+**Problem:** Creatives can have localization mismatches (Spanish text in German market) that go unnoticed.
+
+**Solution:** Add "Serving Countries" section to creative detail modal showing where creative actually serves with spend breakdown.
+
+**Details:** See [PLAN_CREATIVE_GEO_DISPLAY.md](./PLAN_CREATIVE_GEO_DISPLAY.md)
+
+| Component | Change |
+|-----------|--------|
+| Backend | New endpoint `GET /creatives/{id}/countries` |
+| Frontend | New section in `preview-modal.tsx` |
+| Data | Already exists in `rtb_daily` table |
+
+**Estimate:** ~235 lines of code
+
+### 1.2 Navigation Reorganization (Medium Priority)
+
+**Problem:** Current navigation doesn't reflect Cat-Scan's purpose as a QPS optimization tool. "Waste Optimizer" is confusing, Pretargeting is buried.
+
+**Solution:** Restructure navigation around user tasks: Monitor → Optimize → Configure.
+
+**Details:** See [NAVIGATION_REORGANIZATION_PLAN.md](./NAVIGATION_REORGANIZATION_PLAN.md)
+
+| Current | Proposed |
+|---------|----------|
+| Waste Optimizer | QPS Dashboard |
+| (buried) | Pretargeting |
+| Creatives | Creatives |
+| Campaigns | (demoted) |
+| Change History | (moved to Pretargeting) |
+| Import | Import |
+| Setup | Settings |
+
+### 1.3 Auto-Optimization (Paid Feature)
+
+**Problem:** Manual pretargeting adjustments are time-consuming and reactive.
+
+**Solution:** Automatically adjust pretargeting when new creatives are approved.
+
+**Details:** See [DATA_SCIENCE_EVALUATION.md](./DATA_SCIENCE_EVALUATION.md) Part 9
+
+**Two-tier approach:**
+1. **Proactive (API-driven):** When creative approved → add size to pretargeting
+2. **Reactive (CSV-driven):** Block bad publishers/geos based on performance
+
+| Component | Status |
+|-----------|--------|
+| Creative sync | ✅ Complete |
+| Pretargeting API | ✅ Complete |
+| Trigger on approval | ❌ Missing |
+| Auto-apply | ❌ Missing |
+| Outcome tracking | ⚠️ Partial |
+
+---
+
+## Part 2: Documentation Updates
+
+### 2.1 README.md Overhaul
 
 **Current issues with "(in question)" sections:**
 
 | Section | Issue | Fix |
 |---------|-------|-----|
-| Quick Start | References non-existent `setup.sh`/`run.sh` | Create these scripts |
-| Dashboard Pages | Lists 6 pages | Update to show all 17+ pages |
-| Architecture | Simplified view | Update with accurate component diagram |
-| Database Schema | Shows 6 tables | Reference DATA_MODEL.md for full 41-table schema |
+| Quick Start | References non-existent scripts | Create `setup.sh`/`run.sh` |
+| Dashboard Pages | Lists 6 pages | Update to 17+ pages |
+| Database Schema | Shows 6 tables | Reference DATA_MODEL.md |
 | CSV Format | Says 3 reports | Update to 5 report types |
-| CLI Commands | Wrong paths (creative-intelligence/) | Update to root paths |
-| API Endpoints | Lists ~7 | Reference /docs for full 118 endpoints |
-| Services | Says `rtbcat-api` | Change to `catscan-api` |
-| Project Status | Says "Next: Production deployment" | Update - already deployed! |
+| API Endpoints | Lists ~7 | Reference /docs for 118 endpoints |
+| Project Status | Says "Next: deployment" | Update - already deployed |
 
-### 1.2 Files to Update
+### 2.2 New Documentation
 
-1. **README.md** - Complete rewrite of "(in question)" sections
-2. **INSTALL.md** - Update for Docker-first workflow
-3. **DATA_MODEL.md** - Already comprehensive, link from README
-4. **docs/CSV_REPORTS_GUIDE.md** - Already accurate
-5. **docs/AWS_DEPLOYMENT.md** - User-provided, needs merge into repo
-
-### 1.3 New Documentation Needed
-
-1. **ARCHITECTURE.md** - Detailed system architecture
-2. **API_REFERENCE.md** - Or just point to /docs Swagger UI
-3. **MCP_INTEGRATION.md** - How to connect AI tools to Cat-Scan
-4. **METRICS_GUIDE.md** - Data science perspective on available data
+| Document | Purpose | Status |
+|----------|---------|--------|
+| DATA_MODEL.md | Full 41-table schema | ✅ Exists |
+| DATA_SCIENCE_EVALUATION.md | Metrics & optimization analysis | ✅ Exists |
+| CSV_REPORTS_GUIDE.md | Report setup instructions | ✅ Exists |
+| ARCHITECTURE.md | System architecture | ❌ Needed |
+| MCP_INTEGRATION.md | AI tool integration | ❌ Needed |
 
 ---
 
-## Part 2: Missing Development Scripts
+## Part 3: Development Scripts
 
-### 2.1 Create setup.sh
+### 3.1 Create setup.sh
 
 ```bash
 #!/bin/bash
-# Cat-Scan Setup Script
-# Creates Python venv, installs dependencies, initializes database
-
 set -e
-
 echo "=== Cat-Scan Setup ==="
 
-# Check requirements
-command -v python3 >/dev/null 2>&1 || { echo "Python 3 required"; exit 1; }
-command -v node >/dev/null 2>&1 || { echo "Node.js required"; exit 1; }
-
-# Python setup
-echo "Setting up Python environment..."
+# Python
 python3 -m venv venv
-./venv/bin/pip install --upgrade pip
 ./venv/bin/pip install -r requirements.txt
 
-# Node setup
-echo "Setting up Node.js dependencies..."
+# Node
 cd dashboard && npm install && cd ..
 
-# Database init
-echo "Initializing database..."
+# Database
 ./venv/bin/python -c "from storage.sqlite_store import SQLiteStore; SQLiteStore()"
-sqlite3 ~/.catscan/catscan.db "PRAGMA journal_mode=WAL;" >/dev/null 2>&1 || true
 
-echo ""
-echo "=== Setup Complete ==="
-echo "Run ./run.sh to start the application"
+echo "=== Setup Complete. Run ./run.sh ==="
 ```
 
-### 2.2 Create run.sh
+### 3.2 Create run.sh
 
 ```bash
 #!/bin/bash
-# Cat-Scan Run Script
-# Starts API and Dashboard concurrently
-
 set -e
-
 echo "=== Starting Cat-Scan ==="
 
-# Start API in background
-echo "Starting API server on http://localhost:8000..."
-./venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 &
-API_PID=$!
-
-# Wait for API to be ready
-for i in {1..30}; do
-    if curl -s http://localhost:8000/health > /dev/null 2>&1; then
-        echo "API ready!"
-        break
-    fi
-    sleep 1
-done
-
-# Start Dashboard
-echo "Starting Dashboard on http://localhost:3000..."
+./venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000 &
 cd dashboard && npm run dev &
-DASH_PID=$!
 
-echo ""
-echo "=== Cat-Scan Running ==="
 echo "Dashboard: http://localhost:3000"
-echo "API:       http://localhost:8000"
-echo "API Docs:  http://localhost:8000/docs"
-echo ""
-echo "Press Ctrl+C to stop all services"
-
-# Handle shutdown
-trap "kill $API_PID $DASH_PID 2>/dev/null" EXIT
+echo "API: http://localhost:8000"
 wait
 ```
 
@@ -142,17 +149,20 @@ wait
 The README describes the paid feature as:
 > "a paid-for upgrade that adjusts Pretargeting settings based on new creatives that get uploaded and approved to the Google AB seat, so it is effectively hands-free"
 
-### 3.2 Components Needed
+- [ ] Create `setup.sh` and `run.sh`
+- [ ] Update README.md "(in question)" sections
+- [ ] Implement Creative Geo Display feature
 
 1. **Creative Change Monitoring**
    - Monitor for newly approved creatives via API
    - Compare to current pretargeting configs
    - Initiate optimization workflow
 
-2. **Optimization Engine**
-   - Analyze performance data for new creatives
-   - Calculate optimal pretargeting adjustments
-   - Generate pending changes with estimated impact
+- [ ] Create `/pretargeting` pages
+- [ ] Create `/analytics` hub
+- [ ] Update sidebar navigation
+- [ ] Add route redirects for backwards compatibility
+- [ ] Update translations
 
 3. **Automated Update Logic**
    - Apply changes when confidence > threshold
@@ -164,16 +174,14 @@ The README describes the paid feature as:
    - Feature gating for automated updates
    - Usage metering
 
-### 3.3 Existing Foundation
+### Phase 4: Auto-Optimization (1-2 weeks)
 
-Already implemented that supports this:
-- `pretargeting_pending_changes` table - Queue for changes
-- `pretargeting_snapshots` - Before/after comparison
-- `pretargeting_history` - Audit trail
-- `recommendations` table - AI recommendations
-- `/settings/pretargeting/{billing_id}/apply` endpoint
+- [ ] Implement creative approval trigger
+- [ ] Build auto-apply logic with confidence thresholds
+- [ ] Add outcome tracking
+- [ ] Design billing/subscription system
 
-### 3.4 Implementation Roadmap
+---
 
 | Phase | Feature | Complexity |
 |-------|---------|------------|
@@ -228,9 +236,9 @@ Already implemented that supports this:
 | QPS Efficiency | Impressions / Bid Requests | Maximize |
 | Revenue per QPS | Spend / Bid Requests | Maximize |
 
----
+**Creative Management (3):** creatives, clusters, thumbnail_status
 
-## Part 5: Implementation Steps
+**Campaign Management (5):** campaigns, ai_campaigns, creative_campaigns, campaign_creatives, campaign_daily_summary
 
 ### Phase 1: Quick Wins (Day 1)
 - [x] Create `setup.sh`
@@ -257,7 +265,7 @@ Already implemented that supports this:
 - [ ] Plan billing integration
 - [ ] Create roadmap for implementation
 
----
+**Pretargeting (7):** pretargeting_configs, pretargeting_history, pretargeting_snapshots, snapshot_comparisons, pretargeting_pending_changes, pretargeting_change_log, rtb_endpoints
 
 ## Appendix A: Accurate Dashboard Pages
 
@@ -283,26 +291,39 @@ Already implemented that supports this:
 | Configuration | `/admin/configuration` | System settings | Implemented |
 | Audit Log | `/admin/audit-log` | Action audit trail | Implemented |
 
----
+**User Auth (6):** users, user_sessions, user_service_account_permissions, login_attempts, audit_log, system_settings
 
-## Appendix B: Database Tables (41 Total)
-
-**Creative Management (3):** creatives, clusters, thumbnail_status
-
-**Campaign Management (5):** campaigns, ai_campaigns, creative_campaigns, campaign_creatives, campaign_daily_summary
-
-**Service Accounts & Seats (3):** service_accounts, buyer_seats, seats
-
-**RTB Performance (7):** performance_metrics, daily_creative_summary, video_metrics, rtb_daily, rtb_funnel, rtb_bid_filtering, rtb_traffic, rtb_quality
-
-**Pretargeting (7):** pretargeting_configs, pretargeting_history, pretargeting_snapshots, snapshot_comparisons, pretargeting_pending_changes, pretargeting_change_log, rtb_endpoints
-
-**Import Tracking (4):** import_history, daily_upload_summary, account_daily_upload_summary, import_anomalies
-
-**User Authentication (6):** users, user_sessions, user_service_account_permissions, login_attempts, audit_log, system_settings
-
-**Lookup Tables (6):** apps, publishers, geographies, billing_accounts, recommendations, retention_config
+**Lookup Tables (5):** apps, publishers, geographies, billing_accounts, recommendations
 
 ---
 
-*This plan was generated based on comprehensive codebase analysis on January 4, 2026.*
+## Appendix C: Related Plans
+
+### PLAN_CREATIVE_GEO_DISPLAY.md
+
+Adds country serving data to the creative detail modal:
+- Shows all countries where creative served
+- Displays spend/impressions per country
+- Enables detection of geo/language mismatches
+- Foundation for future MCP-based image recognition alerts
+
+### NAVIGATION_REORGANIZATION_PLAN.md
+
+Restructures dashboard navigation:
+- Renames "Waste Optimizer" → "QPS Dashboard"
+- Promotes Pretargeting to main nav
+- Creates Analytics hub
+- Consolidates Settings
+- Improves discoverability of optimization tools
+
+### DATA_SCIENCE_EVALUATION.md
+
+Comprehensive analysis of optimization capabilities:
+- Data model score: 9.5/10
+- Identifies chicken-and-egg problem for blocked creatives
+- Documents proactive vs reactive optimization approaches
+- Lists missing components for auto-optimization
+
+---
+
+*This plan consolidates all Cat-Scan development work. Updated January 6, 2026.*
