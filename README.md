@@ -2,9 +2,9 @@
 
 **Version:** 24.0 | **Phase:** Schema Refactoring | **Last Updated:** January 2026
 
-A QPS optimization tool for Google Authorized Buyers. Cat-Scan helps RTB bidders improve QPS efficiency by learning which data-streams the bidder prefers to bid on, and fine-tune Pretargeting to allow more bid-requests through to the bidder for preferred placements/apps.
+An **open-source** QPS optimization tool for Google Authorized Buyers. Cat-Scan helps RTB bidders improve QPS efficiency by learning which data-streams the bidder prefers to bid on, and fine-tune Pretargeting to allow more bid-requests through to the bidder for preferred placements/apps.
 
-It has a free version that allows pretargeting settings to be edited based on efficiency findings, and a paid-for upgrade that auto-adjusts Pretargeting settings based on new creatives that get uploaded and approved to the Google AB seat, making it effectively hands-free.
+**100% free and open source.** Self-host on your own infrastructure or use our hosted version at scan.rtb.cat.
 
 ---
 
@@ -309,7 +309,7 @@ Detailed phase documentation is archived in `docs/phases/`:
 
 ## Project Status
 
-**Deployed:** Live at `scan.rtb.cat` on AWS
+**Deployed:** Live at `scan.rtb.cat` on GCP (Google Cloud Platform)
 
 ### What Works (Production Ready)
 
