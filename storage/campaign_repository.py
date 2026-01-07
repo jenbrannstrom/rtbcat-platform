@@ -107,7 +107,7 @@ class CampaignRepository:
 
         cursor = self.db.cursor()
         cursor.execute("""
-            INSERT INTO campaigns
+            INSERT INTO ai_campaigns
             (id, seat_id, name, description, ai_generated, ai_confidence,
              clustering_method, status, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -130,7 +130,7 @@ class CampaignRepository:
         cursor.execute("""
             SELECT c.*,
                    (SELECT COUNT(*) FROM creative_campaigns WHERE campaign_id = c.id) as computed_count
-            FROM campaigns c
+            FROM ai_campaigns c
             WHERE c.id = ?
         """, (str(campaign_id),))
         row = cursor.fetchone()
@@ -176,7 +176,7 @@ class CampaignRepository:
         cursor.execute(f"""
             SELECT c.*,
                    (SELECT COUNT(*) FROM creative_campaigns WHERE campaign_id = c.id) as computed_count
-            FROM campaigns c
+            FROM ai_campaigns c
             WHERE {where_clause}
             ORDER BY c.updated_at DESC
             LIMIT ? OFFSET ?
@@ -222,7 +222,7 @@ class CampaignRepository:
 
         cursor = self.db.cursor()
         cursor.execute(
-            f"UPDATE campaigns SET {', '.join(updates)} WHERE id = ?",
+            f"UPDATE ai_campaigns SET {', '.join(updates)} WHERE id = ?",
             params
         )
         self.db.commit()
@@ -249,7 +249,7 @@ class CampaignRepository:
 
         # Delete campaign
         cursor.execute(
-            "DELETE FROM campaigns WHERE id = ?",
+            "DELETE FROM ai_campaigns WHERE id = ?",
             (campaign_id,)
         )
 
