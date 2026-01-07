@@ -471,4 +471,199 @@ sudo systemctl enable catscan-api catscan-dashboard
 
 ---
 
+## Debugging Session Summary (2026-01-07)
+
+### Issue: Blank Dashboard After Fresh Install
+
+**Symptom:** Dashboard at `http://104.199.91.219:3000` loads but shows blank content.
+
+**Root Cause:** Multi-user authentication was enabled (`multi_user_enabled=1`) but no users existed in the database. The API returned "Authentication required" for all data endpoints.
+
+**Diagnosis steps:**
+```bash
+# Check if services are running
+ssh jen@104.199.91.219 "sudo systemctl status catscan-api catscan-dashboard"
+
+# Test API authentication
+curl -s http://104.199.91.219:8000/stats
+# Returns: {"detail": "Authentication required. Please log in."}
+
+# Check database settings
+ssh jen@104.199.91.219 "sqlite3 ~/.catscan/catscan.db 'SELECT * FROM system_settings;'"
+# Shows: multi_user_enabled|1
+
+# Check if users exist
+ssh jen@104.199.91.219 "sqlite3 ~/.catscan/catscan.db 'SELECT * FROM users;'"
+# Returns empty - no users!
+```
+
+**Quick Fix (for development/testing):**
+```bash
+ssh jen@104.199.91.219 "sqlite3 ~/.catscan/catscan.db \"UPDATE system_settings SET value='0' WHERE key='multi_user_enabled';\""
+sudo systemctl restart catscan-api
+```
+
+**Production Fix:** Create default admin user (see "First Run Setup" section below).
+
+### Data Verification
+
+After fixing auth, verified data pipeline is working:
+
+```bash
+# Check database has data
+sqlite3 ~/.catscan/catscan.db "SELECT COUNT(*) FROM rtb_daily;"
+# Result: 46,346 rows
+
+# Check Gmail import status
+cat ~/.catscan/gmail_import_status.json
+# Shows: 43 files imported successfully
+
+# Check imports folder
+ls ~/.catscan/imports/ | wc -l
+# Result: 1,232 CSV files
+```
+
+### SSH Connection Issues
+
+If SSH fails with "Connection closed by remote host":
+```bash
+# Reset the VM (fixes systemd user session issues)
+gcloud compute instances reset catscan-prod --zone=europe-west1-b
+sleep 45
+ssh jen@104.199.91.219 "uptime"
+```
+
+---
+
+## First Run Setup (Production)
+
+For new installations, Cat-Scan should use a secure first-run flow:
+
+### Default Credentials
+- **Username:** `admin`
+- **Password:** `admin`
+
+### Security Requirements
+1. On first login with default credentials, user MUST change password
+2. Credentials cannot be uploaded until password is changed
+3. Multi-user mode is enabled by default for security
+
+### Setup Steps (Post-Installation)
+
+1. **Access the dashboard:** `http://YOUR_IP:3000`
+2. **Login with:** `admin` / `admin`
+3. **Change password immediately** (system enforces this)
+4. **Only then:** Upload Google credentials via Settings → Credentials
+
+This ensures no sensitive API keys can be added until the installation is secured.
+
+---
+
+## TO BE DONE: Secure First-Run Implementation
+
+**Status:** Not yet implemented. Currently multi-user mode must be manually disabled or admin user manually created.
+
+### Implementation Tasks
+
+#### 1. Database Migration (014_first_run_admin.sql)
+```sql
+-- Add must_change_password column to users table
+ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0;
+
+-- Index for quick lookup
+CREATE INDEX IF NOT EXISTS idx_users_must_change_password ON users(must_change_password);
+```
+
+#### 2. Default Admin Creation (api/auth_v2.py)
+On startup, if no users exist:
+- Create user: `admin@local` with password: `admin`
+- Set `must_change_password=1`
+- Set `role='admin'`
+
+```python
+async def ensure_default_admin():
+    """Create default admin if no users exist."""
+    repo = _get_user_repo()
+    user_count = await repo.count_users()
+
+    if user_count == 0:
+        user_id = str(uuid.uuid4())
+        password_hash = hash_password("admin")
+        await repo.create_user(
+            user_id=user_id,
+            email="admin@local",
+            password_hash=password_hash,
+            display_name="Administrator",
+            role="admin",
+            must_change_password=True,
+        )
+```
+
+#### 3. Update User Model (storage/repositories/user_repository.py)
+- Add `must_change_password: bool = False` to `User` dataclass
+- Update all SELECT queries to include `must_change_password`
+- Update `create_user()` to accept `must_change_password` parameter
+
+#### 4. Auth Flow Changes (api/auth_v2.py)
+After successful login:
+```python
+return LoginResponse(
+    status="success",
+    user={...},
+    must_change_password=user.must_change_password,  # NEW
+    message="Login successful",
+)
+```
+
+Update `change_password()` endpoint to clear the flag:
+```python
+await repo.update_user(user.id, password_hash=new_hash, must_change_password=False)
+```
+
+#### 5. Block Credentials Upload (api/dependencies.py)
+New dependency:
+```python
+async def require_password_changed(user: User = Depends(get_current_user)) -> User:
+    """Block sensitive operations until password is changed."""
+    if user.must_change_password:
+        raise HTTPException(
+            status_code=403,
+            detail="Please change your default password before adding credentials.",
+        )
+    return user
+```
+
+Apply to `api/routers/config.py`:
+```python
+@router.post("/config/service-accounts", response_model=CredentialsUploadResponse)
+async def add_service_account(
+    request: CredentialsUploadRequest,
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(require_password_changed),  # NEW
+):
+```
+
+#### 6. Frontend Changes (dashboard)
+- Check `must_change_password` in login response
+- If true, redirect to `/change-password` page
+- Block navigation to Settings → Credentials until password changed
+
+### Files to Modify
+- `migrations/014_first_run_admin.sql` (new)
+- `storage/repositories/user_repository.py`
+- `api/auth_v2.py`
+- `api/dependencies.py`
+- `api/routers/config.py`
+- `dashboard/src/app/login/page.tsx`
+- `dashboard/src/components/ProtectedRoute.tsx`
+
+### Testing Checklist
+- [ ] Fresh install creates admin@local with admin/admin
+- [ ] Login with admin/admin shows must_change_password=true
+- [ ] Cannot access /config/service-accounts until password changed
+- [ ] After password change, must_change_password=false
+- [ ] Credentials upload works after password change
+
+---
+
 *See also: [GCP_MIGRATION_PLAN.md](GCP_MIGRATION_PLAN.md)*
