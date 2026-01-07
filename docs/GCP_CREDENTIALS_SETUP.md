@@ -503,7 +503,43 @@ ssh jen@104.199.91.219 "sqlite3 ~/.catscan/catscan.db \"UPDATE system_settings S
 sudo systemctl restart catscan-api
 ```
 
-**Production Fix:** Create default admin user (see "First Run Setup" section below).
+**Production Fix:** Create default admin user (see "Fresh Install Workaround" below).
+
+### Fresh Install Workaround (Until Secure First-Run is Implemented)
+
+On fresh installs, multi-user mode is enabled but no users exist. Apply this workaround:
+
+**Option A: Disable multi-user mode (single-user/development)**
+```bash
+ssh jen@104.199.91.219 "sqlite3 ~/.catscan/catscan.db \"UPDATE system_settings SET value='0' WHERE key='multi_user_enabled';\""
+sudo systemctl restart catscan-api
+```
+
+**Option B: Create admin user manually (recommended for production)**
+```bash
+ssh jen@104.199.91.219 "~/rtbcat-platform/venv/bin/python3 -c \"
+import sqlite3, uuid, os, hashlib
+
+db_path = os.path.expanduser('~/.catscan/catscan.db')
+conn = sqlite3.connect(db_path)
+
+# Check if admin exists
+if conn.execute('SELECT COUNT(*) FROM users WHERE email=?', ('admin@local',)).fetchone()[0] > 0:
+    print('Admin already exists')
+else:
+    # Use sha256 hash (auth_v2.py fallback format)
+    password_hash = 'sha256:' + hashlib.sha256('admin'.encode()).hexdigest()
+    user_id = str(uuid.uuid4())
+    conn.execute('INSERT INTO users (id, email, password_hash, display_name, role, is_active) VALUES (?,?,?,?,?,?)',
+        (user_id, 'admin@local', password_hash, 'Administrator', 'admin', 1))
+    conn.commit()
+    print(f'Created: admin@local / admin')
+conn.close()
+\""
+ssh jen@104.199.91.219 "sudo systemctl restart catscan-api"
+```
+
+After login with admin/admin, immediately change the password via the UI.
 
 ### Data Verification
 
