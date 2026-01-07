@@ -1,6 +1,6 @@
 # Cat-Scan QPS Optimizer & Creative Intelligence Tool
 
-**Version:** 24.0 | **Phase:** Schema Refactoring | **Last Updated:** January 2026
+**Version:** 0.9.0 | **Phase:** Production | **Last Updated:** January 2026
 
 An **open-source** QPS optimization tool for Google Authorized Buyers. Cat-Scan helps RTB bidders improve QPS efficiency by learning which data-streams the bidder prefers to bid on, and fine-tune Pretargeting to allow more bid-requests through to the bidder for preferred placements/apps.
 
@@ -101,34 +101,43 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│           Next.js Dashboard (Port 3000)                      │
-│           /dashboard                                         │
-└─────────────────────────────────────────────────────────────┘
-                              │ HTTP/JSON
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│         FastAPI Backend (Port 8000)                          │
-│                                                              │
-│         Modular Router Architecture:                         │
-│         • system      - Health, stats, thumbnails            │
-│         • creatives   - Creative management & sync           │
-│         • seats       - Buyer seat discovery                 │
-│         • settings    - RTB endpoints, pretargeting          │
-│         • analytics   - Efficiency analysis, RTB funnel      │
-│         • config      - Configuration & credentials          │
-│         • gmail       - Auto-import from Gmail               │
-│         • recommendations - AI recommendations               │
-│         • retention   - Data retention policies              │
-│         • uploads     - CSV file uploads                     │
-└─────────────────────────────────────────────────────────────┘
-              │                               │
-              ▼                               ▼
-┌──────────────────────────┐    ┌──────────────────────────┐
-│ SQLite Database          │    │ Google Authorized        │
-│ ~/.catscan/catscan.db    │    │ Buyers API               │
-└──────────────────────────┘    └──────────────────────────┘
+                         ┌─────────────────────────────────────┐
+                         │         Nginx Reverse Proxy         │
+                         │         (Port 443 - HTTPS)          │
+                         │         SSL via Let's Encrypt       │
+                         └─────────────────────────────────────┘
+                                          │
+                    ┌─────────────────────┴─────────────────────┐
+                    │                                           │
+                    ▼                                           ▼
+┌─────────────────────────────────────┐    ┌─────────────────────────────────────┐
+│   Next.js Dashboard (Port 3000)     │    │     FastAPI Backend (Port 8000)     │
+│   /                                 │    │     /api/*                          │
+└─────────────────────────────────────┘    └─────────────────────────────────────┘
+                                                      │
+                         ┌────────────────────────────┴────────────────────────────┐
+                         │                                                         │
+                         ▼                                                         ▼
+          ┌──────────────────────────────┐                      ┌──────────────────────────────┐
+          │ SQLite Database              │                      │ Google Authorized            │
+          │ ~/.catscan/catscan.db        │                      │ Buyers API                   │
+          └──────────────────────────────┘                      └──────────────────────────────┘
 ```
+
+### API Routers
+
+| Router | Purpose |
+|--------|---------|
+| `system` | Health, stats, thumbnails |
+| `creatives` | Creative management & sync |
+| `seats` | Buyer seat discovery |
+| `settings` | RTB endpoints, pretargeting |
+| `analytics` | Efficiency analysis, RTB funnel |
+| `config` | Configuration & credentials |
+| `gmail` | Auto-import from Gmail |
+| `recommendations` | AI recommendations |
+| `retention` | Data retention policies |
+| `uploads` | CSV file uploads |
 
 ### Database Schema (Key Tables)
 
@@ -239,12 +248,70 @@ Full API docs: http://localhost:8000/docs (118 endpoints total)
 
 ## Services
 
-### Systemd (Recommended for Production)
+### Production Deployment (Nginx + SSL)
+
+For production, use nginx as a reverse proxy with Let's Encrypt SSL:
+
+```
+Internet → nginx (443/HTTPS) → Dashboard (3000) + API (8000)
+```
+
+**Setup:**
+```bash
+# Install nginx and certbot
+sudo apt install -y nginx certbot python3-certbot-nginx
+
+# Create nginx config
+sudo nano /etc/nginx/sites-available/catscan
+```
+
+**Nginx config (`/etc/nginx/sites-available/catscan`):**
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    # API routes
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Cookie $http_cookie;
+        proxy_pass_header Set-Cookie;
+    }
+
+    # Dashboard (default)
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+**Enable and get SSL:**
+```bash
+sudo ln -s /etc/nginx/sites-available/catscan /etc/nginx/sites-enabled/
+sudo rm /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+
+# Get SSL certificate
+sudo certbot --nginx -d your-domain.com
+```
+
+See **[docs/GCP_CREDENTIALS_SETUP.md](docs/GCP_CREDENTIALS_SETUP.md)** for complete GCP deployment instructions.
+
+### Systemd Services
 
 ```bash
 # Start services
-sudo systemctl start catscan-api
-sudo systemctl status catscan-api
+sudo systemctl start catscan-api catscan-dashboard
+sudo systemctl status catscan-api catscan-dashboard
 
 # View logs
 sudo journalctl -u catscan-api -f
@@ -293,6 +360,7 @@ DATABASE_PATH=~/.catscan/catscan.db
 |----------|---------|
 | **[docs/HANDOVER.md](docs/HANDOVER.md)** | Complete project handover with next steps |
 | **[INSTALL.md](INSTALL.md)** | Detailed installation guide |
+| **[docs/GCP_CREDENTIALS_SETUP.md](docs/GCP_CREDENTIALS_SETUP.md)** | GCP VM deployment with nginx + SSL |
 | **[docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md)** | Google API setup instructions |
 | **[DATA_MODEL.md](DATA_MODEL.md)** | Complete database schema (41 tables) |
 | **[docs/CSV_REPORTS_GUIDE.md](docs/CSV_REPORTS_GUIDE.md)** | CSV report setup |
@@ -313,7 +381,7 @@ Detailed phase documentation is archived in `docs/phases/`:
 
 ### What Works (Production Ready)
 
-- Creative sync from Google API (600+ creatives)
+- Creative sync from Google API
 - Multi-seat buyer account support
 - Efficiency analysis with recommendations
 - CSV import (CLI and UI)
