@@ -22,8 +22,8 @@ Thumbs.db
 # Data files (user-specific RTB exports)
 data/csv-reports/
 
-# Documentation with sensitive deployment info (keep in private wiki/Notion instead)
-docs/
+# Documentation - NOTE: docs/ is tracked in git (removed from gitignore)
+# Sensitive deployment info should use environment variables, not hardcoded in docs
 
 # Terraform state and user-specific config
 terraform/*.tfstate
