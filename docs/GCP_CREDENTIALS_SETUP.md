@@ -12,6 +12,13 @@ Cat-Scan uses ONE GCP project with:
 1. **Service Account** - for Authorized Buyers API (all AB accounts)
 2. **OAuth Client** - for Gmail API (report import)
 3. **Compute Engine VM** - to host the application
+4. **Nginx** - reverse proxy with SSL termination
+5. **Let's Encrypt** - free SSL certificates (auto-renewal)
+
+**Architecture:**
+```
+Internet → nginx (443/HTTPS) → Dashboard (3000) + API (8000)
+```
 
 Credentials are stored in `~/.catscan/credentials/` (outside git).
 
@@ -374,17 +381,101 @@ sudo systemctl enable catscan-api catscan-dashboard
 sudo systemctl start catscan-api catscan-dashboard
 ```
 
-### Step 8: Verify Deployment
+### Step 8: Set Up Nginx Reverse Proxy
 
-**Check service status:**
+Next.js standalone mode doesn't support rewrites, so nginx handles routing `/api/*` to the backend.
+
+**Install nginx:**
 ```bash
-sudo systemctl status catscan-api
-sudo systemctl status catscan-dashboard
+sudo apt install -y nginx
 ```
 
-**Test API health:**
+**Create nginx config:**
 ```bash
-curl http://localhost:8000/health
+sudo tee /etc/nginx/sites-available/catscan << 'EOF'
+server {
+    listen 80;
+    server_name scan.rtb.cat 104.199.91.219;
+
+    # API routes - strip /api prefix
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Cookie $http_cookie;
+        proxy_pass_header Set-Cookie;
+    }
+
+    # Thumbnails
+    location /thumbnails/ {
+        proxy_pass http://127.0.0.1:8000/thumbnails/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
+
+    # Dashboard (default)
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+EOF
+```
+
+**Enable the site:**
+```bash
+sudo ln -s /etc/nginx/sites-available/catscan /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### Step 9: Set Up SSL with Let's Encrypt
+
+**Install certbot:**
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+```
+
+**Get SSL certificate:**
+```bash
+sudo certbot --nginx -d scan.rtb.cat
+```
+
+Follow the prompts:
+- Enter email for renewal notices
+- Agree to terms
+- Choose whether to redirect HTTP to HTTPS (recommended: yes)
+
+Certbot automatically:
+- Obtains the certificate
+- Modifies nginx config for HTTPS
+- Sets up auto-renewal via systemd timer
+
+**Verify auto-renewal:**
+```bash
+sudo systemctl status certbot.timer
+sudo certbot renew --dry-run
+```
+
+### Step 10: Verify Deployment
+
+**Check all services:**
+```bash
+sudo systemctl status nginx catscan-api catscan-dashboard
+```
+
+**Test via HTTPS:**
+```bash
+curl -s https://scan.rtb.cat/api/health
 ```
 
 Expected response:
@@ -392,10 +483,10 @@ Expected response:
 {"status":"healthy","version":"0.9.0","configured":true,"has_credentials":true,"database_exists":true}
 ```
 
-**Test external access:**
+**Test dashboard:**
 ```bash
-curl http://104.199.91.219:8000/health
-curl http://104.199.91.219:3000
+curl -s https://scan.rtb.cat/ | grep -o '<title>[^<]*</title>'
+# Expected: <title>Cat-Scan Dashboard</title>
 ```
 
 ---
@@ -425,14 +516,19 @@ When the GCP VM or your local machine reboots:
    # Wait 30 seconds, try SSH again
    ```
 
-5. **Verify services are running:**
+5. **Verify all services are running:**
    ```bash
-   ssh jen@104.199.91.219 "sudo systemctl status catscan-api catscan-dashboard"
+   ssh jen@104.199.91.219 "sudo systemctl status nginx catscan-api catscan-dashboard"
    ```
 
-6. **Check health:**
+6. **Check health via HTTPS:**
    ```bash
-   curl https://scan.rtb.cat/api/health
+   curl -s https://scan.rtb.cat/api/health
+   ```
+
+7. **Check SSL certificate expiry:**
+   ```bash
+   ssh jen@104.199.91.219 "sudo certbot certificates"
    ```
 
 ---
@@ -461,12 +557,39 @@ gcloud auth login
 
 Check if services are enabled:
 ```bash
-sudo systemctl is-enabled catscan-api catscan-dashboard
+sudo systemctl is-enabled nginx catscan-api catscan-dashboard
 ```
 
 If not, enable them:
 ```bash
-sudo systemctl enable catscan-api catscan-dashboard
+sudo systemctl enable nginx catscan-api catscan-dashboard
+```
+
+### Nginx returns 502 Bad Gateway
+
+Backend services aren't running. Check:
+```bash
+sudo systemctl status catscan-api catscan-dashboard
+sudo journalctl -u catscan-api -n 50
+```
+
+### SSL certificate expired
+
+Certbot auto-renewal should handle this. If not:
+```bash
+sudo certbot renew
+sudo systemctl reload nginx
+```
+
+### Dashboard shows blank page
+
+If multi-user mode is enabled but no users exist:
+```bash
+# Option A: Disable multi-user mode
+sqlite3 ~/.catscan/catscan.db "UPDATE system_settings SET value='0' WHERE key='multi_user_enabled';"
+sudo systemctl restart catscan-api
+
+# Option B: Create admin user (see "Fresh Install Workaround" below)
 ```
 
 ---
