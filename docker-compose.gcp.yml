@@ -1,0 +1,53 @@
+# GCP deployment: API + Dashboard only
+# Nginx + OAuth2 Proxy handle SSL and authentication externally
+#
+# Usage: docker compose -f docker-compose.gcp.yml up -d
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - APP_VERSION=${APP_VERSION:-0.9.0}
+    container_name: catscan-api
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ${DATA_DIR:-/home/catscan/.catscan}:/home/rtbcat/.catscan
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/home/rtbcat/.catscan/credentials/google-credentials.json
+      - DATABASE_PATH=/home/rtbcat/.catscan/catscan.db
+    restart: always
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+      args:
+        - API_HOST=api
+        - APP_VERSION=${APP_VERSION:-0.9.0}
+    container_name: catscan-dashboard
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - API_HOST=api
+    depends_on:
+      - api
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

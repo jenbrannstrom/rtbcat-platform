@@ -85,3 +85,36 @@ variable "cloudflare_zone_id" {
   type        = string
   default     = ""
 }
+
+# =============================================================================
+# OAuth2 Proxy - Google Authentication (REQUIRED)
+# =============================================================================
+# All users must authenticate with Google before accessing the app.
+# Create OAuth credentials at: https://console.cloud.google.com/apis/credentials
+
+variable "google_oauth_client_id" {
+  description = "Google OAuth Client ID (from GCP Console → APIs & Services → Credentials)"
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]+-[a-z0-9]+\\.apps\\.googleusercontent\\.com$", var.google_oauth_client_id))
+    error_message = "Google OAuth Client ID must be in format: 123456789-xxxxx.apps.googleusercontent.com"
+  }
+}
+
+variable "google_oauth_client_secret" {
+  description = "Google OAuth Client Secret"
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = length(var.google_oauth_client_secret) > 10
+    error_message = "Google OAuth Client Secret must not be empty"
+  }
+}
+
+variable "allowed_email_domains" {
+  description = "Email domains allowed to access (e.g., ['rtb.cat', 'company.com']). Empty list = any Google account."
+  type        = list(string)
+  default     = []
+}
