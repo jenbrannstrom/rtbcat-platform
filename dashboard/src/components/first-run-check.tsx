@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
-const SETUP_PATHS = ['/connect', '/setup', '/initial-setup', '/login', '/change-password'];
+const SETUP_PATHS = ['/connect', '/setup', '/initial-setup', '/login', '/change-password', '/settings'];
 
 export function FirstRunCheck({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -11,7 +11,7 @@ export function FirstRunCheck({ children }: { children: React.ReactNode }) {
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    // Don't redirect if already on setup/auth pages
+    // Don't redirect if already on setup/auth/settings pages
     if (SETUP_PATHS.some(p => pathname?.startsWith(p))) {
       setChecked(true);
       return;
@@ -20,7 +20,19 @@ export function FirstRunCheck({ children }: { children: React.ReactNode }) {
     // Check if initial setup is required (no users exist)
     async function checkSetup() {
       try {
-        // First check if initial setup is needed
+        // First check auth status - if using OAuth2 Proxy, skip credential check
+        const authRes = await fetch('/api/auth/check');
+        if (authRes.ok) {
+          const authData = await authRes.json();
+          // If authenticated via OAuth2 Proxy (GCP), don't require credential upload
+          // GCP deployments use the VM's attached service account via ADC
+          if (authData.auth_method === 'oauth2_proxy') {
+            setChecked(true);
+            return;
+          }
+        }
+
+        // For non-GCP deployments, check if initial setup is needed
         const setupRes = await fetch('/api/auth/setup/status');
         if (setupRes.ok) {
           const setupData = await setupRes.json();
