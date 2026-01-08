@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-# Variables from Terraform
+# Variables from Terraform (injected at deploy time)
 APP_NAME="${app_name}"
 ENVIRONMENT="${environment}"
 DOMAIN_NAME="${domain_name}"
@@ -120,13 +120,13 @@ chown catscan:catscan "$APP_DIR/docker-compose.override.yml"
 # -----------------------------------------------------------------------------
 echo ">>> Configuring nginx..."
 
-cat > /etc/nginx/sites-available/catscan << EOF
+cat > /etc/nginx/sites-available/catscan << NGINXEOF
 # Cat-Scan Nginx Configuration
 # SECURITY: This is the ONLY external entry point
 
 server {
     listen 80;
-    server_name ${DOMAIN_NAME:-_};
+    server_name $DOMAIN_NAME;
 
     # API routes
     location /api/ {
@@ -167,7 +167,7 @@ server {
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 }
-EOF
+NGINXEOF
 
 # Enable site
 ln -sf /etc/nginx/sites-available/catscan /etc/nginx/sites-enabled/
@@ -231,26 +231,27 @@ systemctl restart fail2ban
 # -----------------------------------------------------------------------------
 echo ">>> Setting up backup script..."
 
-cat > /usr/local/bin/catscan-backup << EOF
+cat > /usr/local/bin/catscan-backup << 'BACKUPEOF'
 #!/bin/bash
 # Daily backup of SQLite database to GCS
 
 set -euo pipefail
 
-BACKUP_FILE="/tmp/catscan-backup-\$(date +%Y%m%d-%H%M%S).db"
-GCS_PATH="gs://${GCS_BUCKET}/backups/\$(date +%Y/%m)/catscan-\$(date +%Y%m%d).db"
+DATA_DIR="/home/catscan/.catscan"
+BACKUP_FILE="/tmp/catscan-backup-$(date +%Y%m%d-%H%M%S).db"
+GCS_PATH="gs://${gcs_bucket}/backups/$(date +%Y/%m)/catscan-$(date +%Y%m%d).db"
 
 # Create backup using SQLite's backup command (safe for concurrent access)
-sqlite3 "$DATA_DIR/catscan.db" ".backup '\$BACKUP_FILE'"
+sqlite3 "$DATA_DIR/catscan.db" ".backup '$BACKUP_FILE'"
 
 # Upload to GCS
-gsutil cp "\$BACKUP_FILE" "\$GCS_PATH"
+gsutil cp "$BACKUP_FILE" "$GCS_PATH"
 
 # Cleanup local backup
-rm -f "\$BACKUP_FILE"
+rm -f "$BACKUP_FILE"
 
-echo "Backup completed: \$GCS_PATH"
-EOF
+echo "Backup completed: $GCS_PATH"
+BACKUPEOF
 
 chmod +x /usr/local/bin/catscan-backup
 
@@ -262,7 +263,7 @@ echo "0 3 * * * root /usr/local/bin/catscan-backup >> /var/log/catscan-backup.lo
 # -----------------------------------------------------------------------------
 echo ">>> Creating systemd service..."
 
-cat > /etc/systemd/system/catscan.service << EOF
+cat > /etc/systemd/system/catscan.service << SERVICEEOF
 [Unit]
 Description=Cat-Scan Application
 After=docker.service
@@ -279,7 +280,7 @@ RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
-EOF
+SERVICEEOF
 
 systemctl daemon-reload
 systemctl enable catscan
@@ -322,7 +323,7 @@ netstat -tlnp | grep '0.0.0.0' || echo "No public listeners"
 echo ""
 echo "=== Cat-Scan Setup Complete: $(date) ==="
 echo ""
-echo "Access: http://${DOMAIN_NAME:-$(curl -s ifconfig.me)}"
+echo "Access: http://$DOMAIN_NAME"
 if [ "$ENABLE_HTTPS" = "true" ] && [ -n "$DOMAIN_NAME" ]; then
     echo "HTTPS:  https://$DOMAIN_NAME"
 fi
