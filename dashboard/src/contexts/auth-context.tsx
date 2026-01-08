@@ -18,6 +18,7 @@ interface User {
   display_name: string | null;
   role: string;
   is_admin: boolean;
+  must_change_password?: boolean;
 }
 
 interface AuthContextValue {
@@ -36,7 +37,10 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 // Public paths that don't require authentication
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/initial-setup"];
+
+// Paths allowed even if password change is required
+const PASSWORD_CHANGE_ALLOWED_PATHS = ["/change-password", "/login", "/initial-setup"];
 
 // ==================== Provider ====================
 
@@ -114,8 +118,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setPermissions(meData.permissions || []);
       }
 
-      // Redirect to home
-      router.push("/");
+      // Redirect to password change if required, otherwise home
+      if (data.user?.must_change_password) {
+        router.push("/change-password");
+      } else {
+        router.push("/");
+      }
     },
     [router]
   );
@@ -162,7 +170,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!initialized || isLoading) return;
 
     if (user && pathname === "/login") {
-      router.push("/");
+      // If must change password, go to change-password page
+      if (user.must_change_password) {
+        router.push("/change-password");
+      } else {
+        router.push("/");
+      }
+    }
+  }, [initialized, isLoading, user, pathname, router]);
+
+  // Redirect to password change if required and not on allowed path
+  useEffect(() => {
+    if (!initialized || isLoading) return;
+
+    if (user?.must_change_password) {
+      const isAllowedPath = PASSWORD_CHANGE_ALLOWED_PATHS.some(
+        (p) => pathname?.startsWith(p)
+      );
+      if (!isAllowedPath) {
+        router.push("/change-password");
+      }
     }
   }, [initialized, isLoading, user, pathname, router]);
 

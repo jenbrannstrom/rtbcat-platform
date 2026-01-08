@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
-const SETUP_PATHS = ['/connect', '/setup'];
+const SETUP_PATHS = ['/connect', '/setup', '/initial-setup', '/login', '/change-password'];
 
 export function FirstRunCheck({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -11,15 +11,26 @@ export function FirstRunCheck({ children }: { children: React.ReactNode }) {
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    // Don't redirect if already on setup page
+    // Don't redirect if already on setup/auth pages
     if (SETUP_PATHS.some(p => pathname?.startsWith(p))) {
       setChecked(true);
       return;
     }
 
-    // Check if configured
-    async function checkConfig() {
+    // Check if initial setup is required (no users exist)
+    async function checkSetup() {
       try {
+        // First check if initial setup is needed
+        const setupRes = await fetch('/api/auth/setup/status');
+        if (setupRes.ok) {
+          const setupData = await setupRes.json();
+          if (setupData.setup_required) {
+            router.push('/initial-setup');
+            return;
+          }
+        }
+
+        // Then check if API is configured (has credentials)
         const res = await fetch('/api/health');
         const data = await res.json();
 
@@ -30,20 +41,20 @@ export function FirstRunCheck({ children }: { children: React.ReactNode }) {
         }
       } catch (e) {
         // API not running - let the page handle the error
-        console.error('API health check failed:', e);
+        console.error('API check failed:', e);
       } finally {
         setChecked(true);
       }
     }
 
-    checkConfig();
+    checkSetup();
   }, [pathname, router]);
 
   // Show loading while checking (prevents flash)
   if (!checked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="text-gray-400">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-gray-500">Loading...</div>
       </div>
     );
   }

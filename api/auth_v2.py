@@ -128,6 +128,20 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=8, description="New password (min 8 characters)")
 
 
+class SetupRequest(BaseModel):
+    """Initial setup request to create first admin."""
+    email: str = Field(..., description="Admin email address")
+    password: str = Field(..., min_length=8, description="Admin password (min 8 characters)")
+    display_name: str = Field(default="Administrator", description="Display name")
+
+
+class SetupStatusResponse(BaseModel):
+    """Setup status response."""
+    setup_required: bool
+    setup_completed: bool
+    has_users: bool
+
+
 # ==================== Helper Functions ====================
 
 def _get_user_repo() -> UserRepository:
@@ -321,6 +335,7 @@ async def login(
             "display_name": user.display_name,
             "role": user.role,
             "is_admin": user.role == "admin",
+            "must_change_password": user.must_change_password,
         },
         message="Login successful",
     )
@@ -427,9 +442,9 @@ async def change_password(
         )
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
-    # Hash new password and update
+    # Hash new password and update (also clears must_change_password flag)
     new_hash = hash_password(password_request.new_password)
-    await repo.update_user(user.id, password_hash=new_hash)
+    await repo.update_user(user.id, password_hash=new_hash, must_change_password=False)
 
     # Log password change
     await repo.log_audit(
@@ -476,6 +491,103 @@ async def check_auth_status(request: Request):
             "display_name": user.display_name,
             "role": user.role,
             "is_admin": user.role == "admin",
+            "must_change_password": user.must_change_password,
+        },
+    }
+
+
+# ==================== Setup Endpoints ====================
+
+@router.get("/setup/status", response_model=SetupStatusResponse)
+async def get_setup_status():
+    """Check if initial setup is required.
+
+    Returns whether setup has been completed and if any users exist.
+    This endpoint is always accessible, even without authentication.
+    """
+    repo = _get_user_repo()
+
+    # Check if any users exist
+    user_count = await repo.count_users()
+    has_users = user_count > 0
+
+    # Check if setup_completed setting exists and is true
+    setup_completed_str = await repo.get_setting("setup_completed")
+    setup_completed = setup_completed_str == "1" if setup_completed_str else False
+
+    # Setup is required if no users exist
+    setup_required = not has_users
+
+    return SetupStatusResponse(
+        setup_required=setup_required,
+        setup_completed=setup_completed,
+        has_users=has_users,
+    )
+
+
+@router.post("/setup")
+async def initial_setup(request: Request, setup_request: SetupRequest):
+    """Create the first admin user during initial setup.
+
+    This endpoint only works if no users exist in the system.
+    The created user will have must_change_password=True, requiring
+    them to change their password before accessing sensitive features.
+
+    - **email**: Admin email address
+    - **password**: Admin password (minimum 8 characters)
+    - **display_name**: Display name for the admin
+    """
+    repo = _get_user_repo()
+    ip_address = _get_client_ip(request)
+
+    # Check if users already exist
+    user_count = await repo.count_users()
+    if user_count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Setup already completed. Users already exist in the system.",
+        )
+
+    # Validate email format (basic check)
+    email = setup_request.email.lower().strip()
+    if "@" not in email or "." not in email:
+        raise HTTPException(status_code=400, detail="Invalid email format")
+
+    # Create the admin user with must_change_password=True
+    user_id = str(uuid.uuid4())
+    password_hash = hash_password(setup_request.password)
+
+    user = await repo.create_user(
+        user_id=user_id,
+        email=email,
+        password_hash=password_hash,
+        display_name=setup_request.display_name,
+        role="admin",
+        must_change_password=True,  # Force password change on first login
+    )
+
+    # Mark setup as completed
+    await repo.set_setting("setup_completed", "1")
+
+    # Log the setup
+    await repo.log_audit(
+        audit_id=str(uuid.uuid4()),
+        action="initial_setup",
+        user_id=user_id,
+        resource_type="system",
+        resource_id="setup",
+        details=json.dumps({"email": email}),
+        ip_address=ip_address,
+    )
+
+    return {
+        "status": "success",
+        "message": "Initial setup completed. Please log in and change your password.",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "display_name": user.display_name,
+            "role": user.role,
         },
     }
 
