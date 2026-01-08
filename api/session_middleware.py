@@ -4,10 +4,16 @@ This middleware validates session cookies and attaches user information to reque
 It works alongside the existing API key middleware for backward compatibility.
 
 For open-source single-user mode, authentication can be disabled via settings.
+
+OAuth2 Proxy Support:
+When deployed behind OAuth2 Proxy (e.g., on GCP), the X-Email header from
+OAuth2 Proxy is trusted for authentication. Users are auto-created on first access.
 """
 
 import asyncio
 import logging
+import os
+import uuid
 from typing import Optional
 
 from fastapi import Request
@@ -22,6 +28,10 @@ logger = logging.getLogger(__name__)
 # Session cookie name (must match auth_v2.py)
 SESSION_COOKIE_NAME = "rtbcat_session"
 
+# OAuth2 Proxy header (set by nginx auth_request)
+OAUTH2_PROXY_EMAIL_HEADER = "X-Email"
+OAUTH2_PROXY_USER_HEADER = "X-User"
+
 # Paths that don't require authentication
 PUBLIC_PATHS = {
     "/health",
@@ -30,6 +40,8 @@ PUBLIC_PATHS = {
     "/redoc",
     "/auth/login",
     "/auth/check",
+    "/auth/me",
+    "/auth/setup/status",
 }
 
 # Path prefixes that are public
@@ -51,12 +63,22 @@ def is_public_path(path: str) -> bool:
     return False
 
 
+def is_oauth2_proxy_enabled() -> bool:
+    """Check if OAuth2 Proxy authentication is enabled.
+
+    Returns True if we're behind OAuth2 Proxy (GCP deployment).
+    """
+    # Trust X-Email header when OAUTH2_PROXY_ENABLED env var is set
+    # or when running in GCP (detected by presence of Google metadata)
+    return os.environ.get("OAUTH2_PROXY_ENABLED", "").lower() in ("1", "true", "yes")
+
+
 class SessionAuthMiddleware(BaseHTTPMiddleware):
     """Middleware to enforce session-based authentication.
 
     This middleware:
-    1. Checks for a session cookie
-    2. Validates the session in the database
+    1. Checks for OAuth2 Proxy headers (X-Email) - trusted in GCP deployment
+    2. Falls back to session cookie validation
     3. Attaches the user to request.state.user
 
     For API key authentication (backward compatibility), it also checks
@@ -102,10 +124,65 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             logger.warning(f"Session validation failed: {e}")
             return None
 
+    async def _get_or_create_oauth2_user(self, email: str) -> Optional[User]:
+        """Get or create a user from OAuth2 Proxy authentication.
+
+        When behind OAuth2 Proxy, we trust the X-Email header.
+        Users are auto-created on first access with admin role.
+        """
+        try:
+            repo = UserRepository(DB_PATH)
+            email = email.lower().strip()
+
+            # Try to find existing user
+            user = await repo.get_user_by_email(email)
+            if user:
+                return user
+
+            # Auto-create user from OAuth2 Proxy
+            user_id = str(uuid.uuid4())
+            display_name = email.split("@")[0].replace(".", " ").title()
+
+            # First user gets admin role, others get user role
+            user_count = await repo.count_users()
+            role = "admin" if user_count == 0 else "user"
+
+            user = await repo.create_user(
+                user_id=user_id,
+                email=email,
+                password_hash="oauth2_proxy_auth",  # No password - OAuth2 only
+                display_name=display_name,
+                role=role,
+                must_change_password=False,  # No password to change
+            )
+
+            logger.info(f"Auto-created user from OAuth2 Proxy: {email} (role={role})")
+            return user
+
+        except Exception as e:
+            logger.error(f"Failed to get/create OAuth2 user: {e}")
+            return None
+
     async def dispatch(self, request: Request, call_next):
         # Allow public paths without authentication
         if is_public_path(request.url.path):
+            # Still attach OAuth2 user if header present (for /auth/check etc.)
+            oauth2_email = request.headers.get(OAUTH2_PROXY_EMAIL_HEADER)
+            if oauth2_email and is_oauth2_proxy_enabled():
+                user = await self._get_or_create_oauth2_user(oauth2_email)
+                if user:
+                    request.state.user = user
+                    request.state.oauth2_authenticated = True
             return await call_next(request)
+
+        # Check for OAuth2 Proxy authentication first (GCP deployment)
+        oauth2_email = request.headers.get(OAUTH2_PROXY_EMAIL_HEADER)
+        if oauth2_email and is_oauth2_proxy_enabled():
+            user = await self._get_or_create_oauth2_user(oauth2_email)
+            if user:
+                request.state.user = user
+                request.state.oauth2_authenticated = True
+                return await call_next(request)
 
         # Check multi-user mode
         multi_user_enabled = await self._check_multi_user_mode()

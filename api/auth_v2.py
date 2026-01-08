@@ -383,7 +383,23 @@ async def get_current_user_info(request: Request):
     """Get current authenticated user information.
 
     Returns user details and their permissions (service account access).
+    Supports both session-based auth and OAuth2 Proxy authentication.
     """
+    # Check for OAuth2 Proxy user (set by middleware)
+    if hasattr(request.state, "user") and request.state.user:
+        user = request.state.user
+        repo = _get_user_repo()
+        permissions = await repo.get_user_service_account_ids(user.id)
+        return UserInfo(
+            id=user.id,
+            email=user.email,
+            display_name=user.display_name,
+            role=user.role,
+            is_admin=user.role == "admin",
+            permissions=permissions,
+        )
+
+    # Fall back to session cookie check
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
 
     if not session_id:
@@ -465,7 +481,27 @@ async def check_auth_status(request: Request):
 
     Returns authentication status and user info if authenticated.
     Useful for frontend to check session validity without full user data.
+
+    Supports both session-based auth and OAuth2 Proxy authentication.
     """
+    # Check for OAuth2 Proxy user (set by middleware)
+    if hasattr(request.state, "user") and request.state.user:
+        user = request.state.user
+        is_oauth2 = getattr(request.state, "oauth2_authenticated", False)
+        return {
+            "authenticated": True,
+            "auth_method": "oauth2_proxy" if is_oauth2 else "session",
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "display_name": user.display_name,
+                "role": user.role,
+                "is_admin": user.role == "admin",
+                "must_change_password": False if is_oauth2 else user.must_change_password,
+            },
+        }
+
+    # Fall back to session cookie check
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
 
     if not session_id:
@@ -485,6 +521,7 @@ async def check_auth_status(request: Request):
 
     return {
         "authenticated": True,
+        "auth_method": "session",
         "user": {
             "id": user.id,
             "email": user.email,
