@@ -186,17 +186,45 @@ Gmail tokens auto-refresh. If issues persist, re-run `python scripts/gmail_auth.
 
 ## Deploying to GCP VM
 
-This section covers deploying Cat-Scan to a Google Cloud Compute Engine VM.
+> **IMPORTANT: Use Terraform for deployment!**
+>
+> Manual `gcloud` commands led to a **security breach** in January 2026.
+> The old firewall rule exposed ports 3000/8000 directly, enabling a Next.js RCE attack.
+>
+> **Use `terraform/gcp/` instead.** See [GCP_MIGRATION_PLAN.md](GCP_MIGRATION_PLAN.md) for instructions.
+
+---
+
+### TODO: Streamline Installation
+
+The current installation process requires too many manual steps:
+- Terraform deployment
+- Credential upload via SCP
+- Manual database user creation
+- Gmail OAuth flow
+
+**Future improvement needed:**
+1. Single `terraform apply` should create everything
+2. First-run web UI should handle admin creation and credential upload
+3. OAuth flows should work from the web UI (not CLI)
+4. Consider a setup wizard for fresh installations
+
+See "TO BE DONE: Secure First-Run Implementation" section below for partial implementation plan.
+
+---
+
+### DEPRECATED: Manual Deployment (Security Risk)
+
+The manual steps below are **deprecated** and kept only for reference. They contain known security issues.
 
 ### Current Production Setup
 
 | Property | Value |
 |----------|-------|
-| Project ID | `augmented-vim-427407-t8` |
-| VM Name | `catscan-prod` |
+| Project ID | `(use new project for billing)` |
+| VM Name | `catscan-production` |
 | Zone | `europe-west1-b` |
 | Machine Type | `e2-medium` |
-| External IP | `104.199.91.219` |
 | Domain | `scan.rtb.cat` |
 
 ### Step 1: Authenticate gcloud
@@ -217,6 +245,16 @@ gcloud config get-value project
 
 ### Step 2: Create or Check VM
 
+**RECOMMENDED: Use Terraform instead:**
+```bash
+cd terraform/gcp
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with your project ID
+terraform init && terraform apply
+```
+
+**Legacy manual method (NOT RECOMMENDED):**
+
 **List existing VMs:**
 ```bash
 gcloud compute instances list
@@ -227,19 +265,32 @@ gcloud compute instances list
 gcloud compute instances create catscan-prod \
   --zone=europe-west1-b \
   --machine-type=e2-medium \
-  --image-family=debian-12 \
-  --image-project=debian-cloud \
+  --image-family=ubuntu-2404-lts-amd64 \
+  --image-project=ubuntu-os-cloud \
   --boot-disk-size=20GB \
   --tags=http-server,https-server
 ```
 
-**Create firewall rules:**
+**Create firewall rules - SECURE VERSION:**
 ```bash
-# Allow HTTP/HTTPS
-gcloud compute firewall-rules create allow-http \
-  --allow=tcp:80,tcp:443,tcp:3000,tcp:8000 \
-  --target-tags=http-server,https-server
+# SECURITY: Only expose 80/443 - NEVER 3000/8000!
+# The old rule (tcp:80,tcp:443,tcp:3000,tcp:8000) caused the January 2026 breach.
+
+gcloud compute firewall-rules create allow-web \
+  --allow=tcp:80,tcp:443 \
+  --target-tags=http-server,https-server \
+  --description="Allow HTTP/HTTPS only - ports 3000/8000 blocked"
+
+# Allow IAP for secure SSH (no SSH port exposed)
+gcloud compute firewall-rules create allow-iap-ssh \
+  --allow=tcp:22 \
+  --source-ranges=35.235.240.0/20 \
+  --target-tags=http-server,https-server \
+  --description="SSH via Identity-Aware Proxy only"
 ```
+
+> **WARNING:** Never create a firewall rule that includes ports 3000 or 8000.
+> These ports should ONLY be accessible via localhost (nginx proxies to them).
 
 ### Step 3: SSH to VM
 

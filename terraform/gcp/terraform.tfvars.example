@@ -1,0 +1,37 @@
+# Cat-Scan GCP Terraform Variables
+# Copy this file to terraform.tfvars and fill in your values
+#
+# terraform.tfvars is gitignored - never commit credentials
+
+# Required: Your GCP Project ID
+gcp_project = "your-project-id"
+
+# Region and zone (europe-west1 recommended for Google API proximity)
+gcp_region = "europe-west1"
+gcp_zone   = "europe-west1-b"
+
+# Application settings
+app_name    = "catscan"
+environment = "production"
+
+# VM size (e2-medium is good for moderate load)
+machine_type   = "e2-medium"
+boot_disk_size = 30
+
+# Domain name (required for HTTPS)
+domain_name  = "scan.rtb.cat"
+enable_https = true
+
+# SSH access (leave empty for IAP-only access - more secure)
+# Only add your IP if you need direct SSH access
+allowed_ssh_cidrs = []
+# allowed_ssh_cidrs = ["1.2.3.4/32"]  # Your IP only
+
+# GitHub repository
+github_repo   = "https://github.com/jenbrannstrom/rtbcat-platform.git"
+github_branch = "unified-platform"
+
+# Optional: Cloudflare DNS management
+# Leave empty if managing DNS manually
+cloudflare_api_token = ""
+cloudflare_zone_id   = ""
