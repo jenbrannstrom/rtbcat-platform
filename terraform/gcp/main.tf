@@ -15,10 +15,11 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.0"
     }
-    cloudflare = {
-      source  = "cloudflare/cloudflare"
-      version = "~> 4.0"
-    }
+    # Cloudflare provider commented out - uncomment if needed for DNS management
+    # cloudflare = {
+    #   source  = "cloudflare/cloudflare"
+    #   version = "~> 4.0"
+    # }
   }
 }
 
@@ -263,18 +264,20 @@ resource "google_compute_instance" "catscan" {
 # =============================================================================
 # DNS - Cloudflare (Optional)
 # =============================================================================
-
-provider "cloudflare" {
-  api_token = var.cloudflare_api_token != "" ? var.cloudflare_api_token : null
-}
-
-resource "cloudflare_record" "catscan" {
-  count = var.cloudflare_api_token != "" && var.cloudflare_zone_id != "" ? 1 : 0
-
-  zone_id = var.cloudflare_zone_id
-  name    = var.domain_name
-  content = google_compute_address.catscan.address
-  type    = "A"
-  ttl     = 1  # Auto
-  proxied = false  # Direct to GCP for SSL
-}
+# NOTE: Cloudflare provider removed to avoid initialization errors when not used.
+# If you want to manage DNS via Terraform, uncomment and configure cloudflare_api_token.
+# For now, manage DNS manually in your DNS provider.
+#
+# provider "cloudflare" {
+#   api_token = var.cloudflare_api_token
+# }
+#
+# resource "cloudflare_record" "catscan" {
+#   count   = var.cloudflare_api_token != "" && var.cloudflare_zone_id != "" ? 1 : 0
+#   zone_id = var.cloudflare_zone_id
+#   name    = var.domain_name
+#   content = google_compute_address.catscan.address
+#   type    = "A"
+#   ttl     = 1
+#   proxied = false
+# }
