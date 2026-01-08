@@ -2,6 +2,10 @@
 
 This module provides the base class with authentication, service initialization,
 and retry logic that is shared across all specialized clients.
+
+Supports two authentication modes:
+1. Service account JSON file (explicit credentials_path)
+2. Application Default Credentials (ADC) - used on GCP VMs with attached service accounts
 """
 
 import asyncio
@@ -9,6 +13,7 @@ import logging
 import time
 from typing import Callable, Optional, TypeVar
 
+import google.auth
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -54,7 +59,7 @@ class BaseAuthorizedBuyersClient:
 
     def __init__(
         self,
-        credentials_path: str,
+        credentials_path: Optional[str],
         account_id: str,
         page_size: int = DEFAULT_PAGE_SIZE,
         max_retries: int = MAX_RETRIES,
@@ -64,6 +69,8 @@ class BaseAuthorizedBuyersClient:
 
         Args:
             credentials_path: Path to service account JSON credentials file.
+                If None, uses Application Default Credentials (ADC) - suitable
+                for GCP VMs with attached service accounts.
             account_id: Authorized Buyers bidder account ID.
             page_size: Number of results per API page (1-100).
             max_retries: Maximum retry attempts for rate-limited requests.
@@ -85,6 +92,9 @@ class BaseAuthorizedBuyersClient:
     def _get_service(self):
         """Lazy initialization of the RTB API service.
 
+        Uses explicit service account file if credentials_path is provided,
+        otherwise falls back to Application Default Credentials (ADC).
+
         Returns:
             Google API client service object for realtimebidding v1.
 
@@ -92,10 +102,19 @@ class BaseAuthorizedBuyersClient:
             google.auth.exceptions.DefaultCredentialsError: If credentials invalid.
         """
         if self._service is None:
-            credentials = service_account.Credentials.from_service_account_file(
-                self._credentials_path,
-                scopes=[AUTHORIZED_BUYERS_SCOPE],
-            )
+            if self._credentials_path:
+                # Explicit service account file
+                credentials = service_account.Credentials.from_service_account_file(
+                    self._credentials_path,
+                    scopes=[AUTHORIZED_BUYERS_SCOPE],
+                )
+            else:
+                # Application Default Credentials (GCP VM attached service account)
+                credentials, project = google.auth.default(
+                    scopes=[AUTHORIZED_BUYERS_SCOPE]
+                )
+                logger.info(f"Using ADC credentials from project: {project}")
+
             self._service = build(
                 self.API_SERVICE_NAME,
                 self.API_VERSION,
