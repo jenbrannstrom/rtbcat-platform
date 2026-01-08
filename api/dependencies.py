@@ -57,6 +57,45 @@ def _get_user_repo() -> UserRepository:
     return UserRepository(DB_PATH)
 
 
+# ==================== OAuth2 Proxy Authentication ====================
+# When OAuth2 Proxy is enabled, nginx passes the authenticated user's email
+# via the X-Email header. This is the primary authentication method.
+
+
+async def get_google_user_email(request: Request) -> Optional[str]:
+    """Get the authenticated user's email from OAuth2 Proxy header.
+
+    OAuth2 Proxy sets X-Email header after validating the Google OAuth session.
+    This is guaranteed to be set when running behind OAuth2 Proxy with nginx.
+
+    Returns:
+        The authenticated user's email, or None if not authenticated via OAuth2 Proxy.
+    """
+    return request.headers.get("X-Email")
+
+
+async def require_google_auth(request: Request) -> str:
+    """Require OAuth2 Proxy authentication.
+
+    Use this dependency for endpoints that require Google authentication.
+    When running behind OAuth2 Proxy, this will always succeed (proxy blocks
+    unauthenticated requests). When running locally without proxy, this will fail.
+
+    Returns:
+        The authenticated user's email.
+
+    Raises:
+        HTTPException: If X-Email header is not present.
+    """
+    email = await get_google_user_email(request)
+    if not email:
+        raise HTTPException(
+            status_code=401,
+            detail="Not authenticated. OAuth2 Proxy authentication required.",
+        )
+    return email
+
+
 async def get_current_user(request: Request) -> User:
     """Get the currently authenticated user from request state.
 

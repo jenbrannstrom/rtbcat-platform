@@ -19,6 +19,11 @@ GITHUB_REPO="${github_repo}"
 GITHUB_BRANCH="${github_branch}"
 GCS_BUCKET="${gcs_bucket}"
 
+# OAuth2 Proxy - Google Authentication (REQUIRED)
+GOOGLE_OAUTH_CLIENT_ID="${google_oauth_client_id}"
+GOOGLE_OAUTH_CLIENT_SECRET="${google_oauth_client_secret}"
+ALLOWED_EMAIL_DOMAINS='${jsonencode(allowed_email_domains)}'
+
 # Paths
 APP_DIR="/opt/catscan"
 DATA_DIR="/home/catscan/.catscan"
@@ -57,6 +62,83 @@ apt-get install -y \
     fail2ban
 
 # -----------------------------------------------------------------------------
+# 1b. Install OAuth2 Proxy (Google Authentication)
+# -----------------------------------------------------------------------------
+echo ">>> Installing OAuth2 Proxy..."
+
+OAUTH2_PROXY_VERSION="7.6.0"
+wget -q "https://github.com/oauth2-proxy/oauth2-proxy/releases/download/v$${OAUTH2_PROXY_VERSION}/oauth2-proxy-v$${OAUTH2_PROXY_VERSION}.linux-amd64.tar.gz" -O /tmp/oauth2-proxy.tar.gz
+tar -xzf /tmp/oauth2-proxy.tar.gz -C /tmp
+mv /tmp/oauth2-proxy-v$${OAUTH2_PROXY_VERSION}.linux-amd64/oauth2-proxy /usr/local/bin/
+chmod +x /usr/local/bin/oauth2-proxy
+rm -rf /tmp/oauth2-proxy*
+
+# Generate cookie secret (random 32 bytes)
+COOKIE_SECRET=$(openssl rand -base64 32 | tr -d '\n')
+
+# Determine email domains config
+if [ "$ALLOWED_EMAIL_DOMAINS" = "[]" ] || [ -z "$ALLOWED_EMAIL_DOMAINS" ]; then
+    EMAIL_DOMAINS_CONFIG='email_domains = ["*"]'
+else
+    # Convert JSON array to oauth2-proxy format
+    EMAIL_DOMAINS_CONFIG="email_domains = $ALLOWED_EMAIL_DOMAINS"
+fi
+
+# Create OAuth2 Proxy config
+cat > /etc/oauth2-proxy.cfg << OAUTHEOF
+# OAuth2 Proxy Configuration for Cat-Scan
+# All requests require Google authentication
+
+provider = "google"
+client_id = "$GOOGLE_OAUTH_CLIENT_ID"
+client_secret = "$GOOGLE_OAUTH_CLIENT_SECRET"
+cookie_secret = "$COOKIE_SECRET"
+cookie_secure = true
+cookie_name = "_catscan_oauth"
+
+# Redirect URL after authentication
+redirect_url = "https://$DOMAIN_NAME/oauth2/callback"
+
+# Listen on localhost only (nginx proxies to us)
+http_address = "127.0.0.1:4180"
+
+# Email domain restrictions
+$EMAIL_DOMAINS_CONFIG
+
+# Session settings
+cookie_expire = "168h"  # 7 days
+cookie_refresh = "1h"
+
+# Skip authentication for health check
+skip_auth_routes = ["/health"]
+
+# Pass user info to upstream
+set_xauthrequest = true
+pass_user_headers = true
+OAUTHEOF
+
+chmod 600 /etc/oauth2-proxy.cfg
+
+# Create OAuth2 Proxy systemd service
+cat > /etc/systemd/system/oauth2-proxy.service << 'SERVICEEOF'
+[Unit]
+Description=OAuth2 Proxy
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/oauth2-proxy --config=/etc/oauth2-proxy.cfg
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
+
+systemctl daemon-reload
+systemctl enable oauth2-proxy
+
+# -----------------------------------------------------------------------------
 # 2. Create Application User
 # -----------------------------------------------------------------------------
 echo ">>> Creating catscan user..."
@@ -72,7 +154,37 @@ mkdir -p "$APP_DIR" "$DATA_DIR/credentials" "$DATA_DIR/thumbnails" "$DATA_DIR/im
 chown -R catscan:catscan "$APP_DIR" "$DATA_DIR"
 
 # -----------------------------------------------------------------------------
-# 3. Clone Repository
+# 3. Setup SSH Deploy Key (for private GitHub repo)
+# -----------------------------------------------------------------------------
+echo ">>> Setting up GitHub deploy key..."
+
+# Create SSH directory for catscan user
+mkdir -p /home/catscan/.ssh
+chmod 700 /home/catscan/.ssh
+
+# Fetch deploy key from GCP Secret Manager
+gcloud secrets versions access latest --secret=catscan-deploy-key \
+    --project="$(curl -s http://metadata.google.internal/computeMetadata/v1/project/project-id -H 'Metadata-Flavor: Google')" \
+    > /home/catscan/.ssh/id_ed25519 2>/dev/null
+
+if [ -s /home/catscan/.ssh/id_ed25519 ]; then
+    chmod 600 /home/catscan/.ssh/id_ed25519
+    chown -R catscan:catscan /home/catscan/.ssh
+
+    # Add GitHub to known hosts
+    ssh-keyscan github.com >> /home/catscan/.ssh/known_hosts 2>/dev/null
+    chown catscan:catscan /home/catscan/.ssh/known_hosts
+
+    # Convert HTTPS URL to SSH URL for private repo
+    GITHUB_SSH_URL=$(echo "$GITHUB_REPO" | sed 's|https://github.com/|git@github.com:|')
+    echo "Using SSH URL: $GITHUB_SSH_URL"
+else
+    echo "WARNING: No deploy key found in Secret Manager, using HTTPS (will fail for private repos)"
+    GITHUB_SSH_URL="$GITHUB_REPO"
+fi
+
+# -----------------------------------------------------------------------------
+# 3b. Clone Repository
 # -----------------------------------------------------------------------------
 echo ">>> Cloning repository..."
 
@@ -82,7 +194,7 @@ if [ -d "$APP_DIR/.git" ]; then
     sudo -u catscan git checkout "$GITHUB_BRANCH"
     sudo -u catscan git pull origin "$GITHUB_BRANCH"
 else
-    sudo -u catscan git clone -b "$GITHUB_BRANCH" "$GITHUB_REPO" "$APP_DIR"
+    sudo -u catscan git clone -b "$GITHUB_BRANCH" "$GITHUB_SSH_URL" "$APP_DIR"
 fi
 
 # -----------------------------------------------------------------------------
@@ -120,23 +232,59 @@ chown catscan:catscan "$APP_DIR/docker-compose.override.yml"
 # -----------------------------------------------------------------------------
 echo ">>> Configuring nginx..."
 
-cat > /etc/nginx/sites-available/catscan << NGINXEOF
+cat > /etc/nginx/sites-available/catscan << 'NGINXEOF'
 # Cat-Scan Nginx Configuration
-# SECURITY: This is the ONLY external entry point
+# SECURITY: OAuth2 Proxy handles authentication before any request reaches the app
 
 server {
     listen 80;
-    server_name $DOMAIN_NAME;
+    server_name DOMAIN_PLACEHOLDER;
 
-    # API routes
+    # OAuth2 Proxy endpoints (handles Google login flow)
+    location /oauth2/ {
+        proxy_pass http://127.0.0.1:4180;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Auth-Request-Redirect $request_uri;
+    }
+
+    # OAuth2 Proxy auth check (internal)
+    location = /oauth2/auth {
+        proxy_pass http://127.0.0.1:4180;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Content-Length "";
+        proxy_pass_request_body off;
+    }
+
+    # Health check (no auth required - for load balancers/monitoring)
+    location /health {
+        proxy_pass http://127.0.0.1:8000/health;
+        proxy_set_header Host $host;
+    }
+
+    # API routes - require Google authentication
     location /api/ {
+        auth_request /oauth2/auth;
+        error_page 401 = /oauth2/sign_in;
+
+        # Pass authenticated user info to backend
+        auth_request_set $user $upstream_http_x_auth_request_user;
+        auth_request_set $email $upstream_http_x_auth_request_email;
+        proxy_set_header X-User $user;
+        proxy_set_header X-Email $email;
+
         proxy_pass http://127.0.0.1:8000/;
         proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header Cookie \$http_cookie;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Cookie $http_cookie;
         proxy_pass_header Set-Cookie;
 
         # Timeouts for long operations
@@ -144,21 +292,25 @@ server {
         proxy_connect_timeout 75s;
     }
 
-    # Health check (direct to API)
-    location /health {
-        proxy_pass http://127.0.0.1:8000/health;
-    }
-
-    # Dashboard (Next.js)
+    # Dashboard - require Google authentication
     location / {
+        auth_request /oauth2/auth;
+        error_page 401 = /oauth2/sign_in;
+
+        # Pass authenticated user info to frontend
+        auth_request_set $user $upstream_http_x_auth_request_user;
+        auth_request_set $email $upstream_http_x_auth_request_email;
+        proxy_set_header X-User $user;
+        proxy_set_header X-Email $email;
+
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     # Security headers
@@ -169,9 +321,17 @@ server {
 }
 NGINXEOF
 
+# Replace domain placeholder (avoiding variable expansion issues)
+sed -i "s/DOMAIN_PLACEHOLDER/$DOMAIN_NAME/g" /etc/nginx/sites-available/catscan
+
 # Enable site
 ln -sf /etc/nginx/sites-available/catscan /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
+
+# Start OAuth2 Proxy (must be running before nginx uses auth_request)
+echo ">>> Starting OAuth2 Proxy..."
+systemctl start oauth2-proxy
+sleep 2  # Wait for OAuth2 Proxy to be ready
 
 # Test and reload nginx
 nginx -t && systemctl reload nginx
@@ -273,8 +433,8 @@ Requires=docker.service
 Type=simple
 User=catscan
 WorkingDirectory=$APP_DIR
-ExecStart=/usr/bin/docker-compose -f docker-compose.yml -f docker-compose.override.yml up
-ExecStop=/usr/bin/docker-compose -f docker-compose.yml -f docker-compose.override.yml down
+ExecStart=/usr/bin/docker-compose -f docker-compose.gcp.yml up
+ExecStop=/usr/bin/docker-compose -f docker-compose.gcp.yml down
 Restart=always
 RestartSec=10
 
@@ -293,7 +453,7 @@ echo ">>> Building application..."
 cd "$APP_DIR"
 
 # Build Docker images
-sudo -u catscan docker-compose build
+sudo -u catscan docker-compose -f docker-compose.gcp.yml build
 
 # Start services
 systemctl start catscan
@@ -317,19 +477,29 @@ fi
 echo "Public listeners (should only be nginx on 80/443):"
 netstat -tlnp | grep '0.0.0.0' || echo "No public listeners"
 
+# Verify OAuth2 Proxy is running
+echo "OAuth2 Proxy status:"
+systemctl status oauth2-proxy --no-pager || echo "WARNING: OAuth2 Proxy not running"
+
 # -----------------------------------------------------------------------------
 # Complete
 # -----------------------------------------------------------------------------
 echo ""
 echo "=== Cat-Scan Setup Complete: $(date) ==="
 echo ""
-echo "Access: http://$DOMAIN_NAME"
+echo "AUTHENTICATION: Google OAuth via OAuth2 Proxy"
+echo "All users must sign in with their Google account to access the app."
+echo ""
 if [ "$ENABLE_HTTPS" = "true" ] && [ -n "$DOMAIN_NAME" ]; then
-    echo "HTTPS:  https://$DOMAIN_NAME"
+    echo "Access: https://$DOMAIN_NAME"
+    echo "        (You will be redirected to Google for authentication)"
+else
+    echo "Access: http://$DOMAIN_NAME"
 fi
 echo ""
 echo "Next steps:"
-echo "1. Upload Google credentials to $DATA_DIR/credentials/google-credentials.json"
-echo "2. Configure Gmail OAuth tokens"
-echo "3. Run initial creative sync from the dashboard"
+echo "1. Visit the URL above and sign in with your Google account"
+echo "2. Upload Google Authorized Buyers credentials via the Settings page"
+echo "3. Configure Gmail OAuth tokens for CSV import"
+echo "4. Run initial creative sync from the dashboard"
 echo ""
