@@ -9,16 +9,22 @@
 ## Overview
 
 Cat-Scan uses ONE GCP project with:
-1. **Service Account** - for Authorized Buyers API (all AB accounts)
-2. **OAuth Client** - for Gmail API (report import)
-3. **Compute Engine VM** - to host the application
-4. **Nginx** - reverse proxy with SSL termination
-5. **Let's Encrypt** - free SSL certificates (auto-renewal)
+1. **OAuth2 Proxy** - for user authentication via Google (replaces custom auth)
+2. **Service Account** - for Authorized Buyers API (all AB accounts)
+3. **OAuth Client (Gmail)** - for Gmail API (report import)
+4. **Compute Engine VM** - to host the application
+5. **Nginx** - reverse proxy with SSL termination
+6. **Let's Encrypt** - free SSL certificates (auto-renewal)
 
-**Architecture:**
+**Architecture (with OAuth2 Proxy):**
 ```
-Internet → nginx (443/HTTPS) → Dashboard (3000) + API (8000)
+Internet → nginx (443/HTTPS) → OAuth2 Proxy (4180) → Dashboard (3000) + API (8000)
+                                    ↓
+                            Google OAuth
+                       (validates user login)
 ```
+
+**Security:** All users must authenticate with their Google account before accessing any part of the application. No default passwords, no custom auth - Google handles everything.
 
 Credentials are stored in `~/.catscan/credentials/` (outside git).
 
@@ -58,6 +64,38 @@ gcloud services enable \
   secretmanager.googleapis.com \
   storage.googleapis.com
 ```
+
+---
+
+## Step 1b: OAuth Credentials (User Authentication)
+
+Create OAuth credentials for OAuth2 Proxy (user login):
+
+1. Go to https://console.cloud.google.com/apis/credentials
+2. **+ CREATE CREDENTIALS** → **OAuth client ID**
+3. If prompted, configure OAuth consent screen first:
+   - User Type: **External** (or Internal for Workspace orgs)
+   - App name: `Cat-Scan`
+   - Support email: your email
+   - Developer contact: your email
+   - Scopes: Add `email`, `profile`, `openid`
+4. Create OAuth client:
+   - Type: **Web application**
+   - Name: `Cat-Scan User Login`
+   - Authorized redirect URIs: `https://YOUR_DOMAIN/oauth2/callback`
+5. Copy the **Client ID** and **Client Secret**
+
+Add to `terraform/gcp/terraform.tfvars`:
+```hcl
+google_oauth_client_id     = "123456789-xxxxx.apps.googleusercontent.com"
+google_oauth_client_secret = "GOCSPX-xxxxx"
+
+# Optional: Restrict to specific domains
+allowed_email_domains = []  # Empty = any Google account
+# allowed_email_domains = ["company.com"]  # Restrict to company.com
+```
+
+**Note:** This is different from the Gmail OAuth client (Step 3). This one is for user login, that one is for CSV import.
 
 ---
 
@@ -186,36 +224,51 @@ Gmail tokens auto-refresh. If issues persist, re-run `python scripts/gmail_auth.
 
 ## Deploying to GCP VM
 
-> **IMPORTANT: Use Terraform for deployment!**
->
-> Manual `gcloud` commands led to a **security breach** in January 2026.
-> The old firewall rule exposed ports 3000/8000 directly, enabling a Next.js RCE attack.
->
-> **Use `terraform/gcp/` instead.** See [GCP_MIGRATION_PLAN.md](GCP_MIGRATION_PLAN.md) for instructions.
+### Quick Start (Terraform)
+
+1. **Complete Steps 1, 1b, 2, and 3** above (create OAuth credentials, service account, Gmail OAuth)
+
+2. **Configure Terraform:**
+   ```bash
+   cd terraform/gcp
+   cp terraform.tfvars.example terraform.tfvars
+   # Edit terraform.tfvars with your values (especially OAuth credentials)
+   ```
+
+3. **Deploy:**
+   ```bash
+   terraform init
+   terraform apply
+   ```
+
+4. **Access the app:**
+   - Visit `https://your-domain.com`
+   - You'll be redirected to Google login
+   - After authentication, you can access the dashboard
+
+5. **Upload Authorized Buyers credentials** via Settings → Credentials
+
+**That's it!** No default passwords, no manual user creation. OAuth2 Proxy handles all authentication.
 
 ---
 
-### TODO: Streamline Installation
+### Security Features (Automatic)
 
-The current installation process requires too many manual steps:
-- Terraform deployment
-- Credential upload via SCP
-- Manual database user creation
-- Gmail OAuth flow
-
-**Future improvement needed:**
-1. Single `terraform apply` should create everything
-2. First-run web UI should handle admin creation and credential upload
-3. OAuth flows should work from the web UI (not CLI)
-4. Consider a setup wizard for fresh installations
-
-See "TO BE DONE: Secure First-Run Implementation" section below for partial implementation plan.
+The Terraform deployment automatically configures:
+- **OAuth2 Proxy** - All users must authenticate with Google
+- **Nginx reverse proxy** - SSL termination, security headers
+- **Fail2ban** - Brute force protection
+- **Automatic updates** - Security patches applied daily
+- **Firewall rules** - Only ports 80/443 exposed (no 3000/8000)
+- **Let's Encrypt SSL** - Auto-renewed certificates
 
 ---
 
 ### DEPRECATED: Manual Deployment (Security Risk)
 
 The manual steps below are **deprecated** and kept only for reference. They contain known security issues.
+
+> **WARNING:** Manual deployment bypasses OAuth2 Proxy and may expose the app with default credentials.
 
 ### Current Production Setup
 

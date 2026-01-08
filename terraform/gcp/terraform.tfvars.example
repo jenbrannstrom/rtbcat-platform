@@ -35,3 +35,25 @@ github_branch = "unified-platform"
 # Leave empty if managing DNS manually
 cloudflare_api_token = ""
 cloudflare_zone_id   = ""
+
+# =============================================================================
+# REQUIRED: Google OAuth Authentication
+# =============================================================================
+# All users must authenticate with Google before accessing Cat-Scan.
+# This eliminates default passwords and leverages Google's security.
+#
+# Setup instructions:
+# 1. Go to https://console.cloud.google.com/apis/credentials
+# 2. Click "+ CREATE CREDENTIALS" → "OAuth client ID"
+# 3. Application type: "Web application"
+# 4. Name: "Cat-Scan"
+# 5. Authorized redirect URIs: https://YOUR_DOMAIN/oauth2/callback
+# 6. Copy the Client ID and Client Secret below
+
+google_oauth_client_id     = "123456789-xxxxxxxxxx.apps.googleusercontent.com"
+google_oauth_client_secret = "GOCSPX-xxxxxxxxxx"
+
+# Optional: Restrict access to specific email domains
+# Leave empty to allow any Google account
+# Example: ["company.com", "partner.org"]
+allowed_email_domains = []
