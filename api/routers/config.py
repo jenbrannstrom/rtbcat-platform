@@ -52,6 +52,14 @@ class GCPDiscoverRequest(BaseModel):
     bidder_id: str = Field(..., description="Your Authorized Buyers bidder account ID")
 
 
+class DiscoveryResponse(BaseModel):
+    """Response model for bidder discovery."""
+    success: bool
+    bidder_ids: List[str] = []
+    buyer_seats_count: int = 0
+    message: str
+
+
 @router.get("/config/gcp-status", response_model=GCPStatusResponse)
 async def get_gcp_status():
     """Get GCP deployment mode status.
@@ -371,14 +379,6 @@ async def get_service_account(
         created_at=str(account.created_at) if account.created_at else None,
         last_used=str(account.last_used) if account.last_used else None,
     )
-
-
-class DiscoveryResponse(BaseModel):
-    """Response model for bidder discovery."""
-    success: bool
-    bidder_ids: List[str] = []
-    buyer_seats_count: int = 0
-    message: str
 
 
 @router.post("/config/service-accounts/{account_id}/discover", response_model=DiscoveryResponse)
