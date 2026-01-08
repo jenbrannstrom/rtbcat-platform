@@ -19,6 +19,10 @@ ARG APP_VERSION=0.9.0
 ENV NEXT_PUBLIC_APP_VERSION=${APP_VERSION}
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# OAuth2 Proxy mode - disables API rewrites so requests go through nginx
+ARG OAUTH2_PROXY_MODE=false
+ENV OAUTH2_PROXY_MODE=${OAUTH2_PROXY_MODE}
+
 RUN npm run build
 
 # Production image, copy all the files and run next
