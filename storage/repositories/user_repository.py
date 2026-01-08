@@ -32,6 +32,8 @@ class User:
         created_at: Account creation timestamp.
         updated_at: Last update timestamp.
         last_login_at: Last successful login timestamp.
+        must_change_password: If True, user must change password before accessing sensitive features.
+        password_changed_at: When password was last changed.
     """
 
     id: str
@@ -43,6 +45,8 @@ class User:
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     last_login_at: Optional[str] = None
+    must_change_password: bool = False
+    password_changed_at: Optional[str] = None
 
 
 @dataclass
@@ -135,6 +139,7 @@ class UserRepository(BaseRepository[User]):
         password_hash: str,
         display_name: Optional[str] = None,
         role: str = "user",
+        must_change_password: bool = False,
     ) -> User:
         """Create a new user.
 
@@ -144,6 +149,7 @@ class UserRepository(BaseRepository[User]):
             password_hash: bcrypt password hash.
             display_name: Optional display name.
             role: User role ('admin' or 'user').
+            must_change_password: If True, user must change password on first login.
 
         Returns:
             Created User object.
@@ -155,10 +161,10 @@ class UserRepository(BaseRepository[User]):
             def _create():
                 conn.execute(
                     """
-                    INSERT INTO users (id, email, password_hash, display_name, role, is_active, created_at)
-                    VALUES (?, ?, ?, ?, ?, 1, ?)
+                    INSERT INTO users (id, email, password_hash, display_name, role, is_active, created_at, must_change_password)
+                    VALUES (?, ?, ?, ?, ?, 1, ?, ?)
                     """,
-                    (user_id, email, password_hash, display_name, role, now),
+                    (user_id, email, password_hash, display_name, role, now, 1 if must_change_password else 0),
                 )
                 conn.commit()
 
@@ -172,6 +178,7 @@ class UserRepository(BaseRepository[User]):
             role=role,
             is_active=True,
             created_at=now,
+            must_change_password=must_change_password,
         )
 
     async def get_user_by_id(self, user_id: str) -> Optional[User]:
@@ -190,7 +197,8 @@ class UserRepository(BaseRepository[User]):
                 cursor = conn.execute(
                     """
                     SELECT id, email, password_hash, display_name, role,
-                           is_active, created_at, updated_at, last_login_at
+                           is_active, created_at, updated_at, last_login_at,
+                           must_change_password, password_changed_at
                     FROM users
                     WHERE id = ?
                     """,
@@ -211,6 +219,8 @@ class UserRepository(BaseRepository[User]):
                     created_at=row[6],
                     updated_at=row[7],
                     last_login_at=row[8],
+                    must_change_password=bool(row[9]) if row[9] is not None else False,
+                    password_changed_at=row[10],
                 )
             return None
 
@@ -230,7 +240,8 @@ class UserRepository(BaseRepository[User]):
                 cursor = conn.execute(
                     """
                     SELECT id, email, password_hash, display_name, role,
-                           is_active, created_at, updated_at, last_login_at
+                           is_active, created_at, updated_at, last_login_at,
+                           must_change_password, password_changed_at
                     FROM users
                     WHERE email = ?
                     """,
@@ -251,6 +262,8 @@ class UserRepository(BaseRepository[User]):
                     created_at=row[6],
                     updated_at=row[7],
                     last_login_at=row[8],
+                    must_change_password=bool(row[9]) if row[9] is not None else False,
+                    password_changed_at=row[10],
                 )
             return None
 
@@ -286,7 +299,8 @@ class UserRepository(BaseRepository[User]):
                 cursor = conn.execute(
                     f"""
                     SELECT id, email, password_hash, display_name, role,
-                           is_active, created_at, updated_at, last_login_at
+                           is_active, created_at, updated_at, last_login_at,
+                           must_change_password, password_changed_at
                     FROM users
                     WHERE {where_clause}
                     ORDER BY created_at DESC
@@ -308,6 +322,8 @@ class UserRepository(BaseRepository[User]):
                 created_at=row[6],
                 updated_at=row[7],
                 last_login_at=row[8],
+                must_change_password=bool(row[9]) if row[9] is not None else False,
+                password_changed_at=row[10],
             )
             for row in rows
         ]
@@ -319,6 +335,7 @@ class UserRepository(BaseRepository[User]):
         role: Optional[str] = None,
         is_active: Optional[bool] = None,
         password_hash: Optional[str] = None,
+        must_change_password: Optional[bool] = None,
     ) -> bool:
         """Update a user's fields.
 
@@ -328,6 +345,7 @@ class UserRepository(BaseRepository[User]):
             role: New role.
             is_active: New active status.
             password_hash: New password hash.
+            must_change_password: Whether user must change password.
 
         Returns:
             True if user was updated, False if not found.
@@ -347,6 +365,12 @@ class UserRepository(BaseRepository[User]):
         if password_hash is not None:
             updates.append("password_hash = ?")
             params.append(password_hash)
+            # Also update password_changed_at when password is changed
+            updates.append("password_changed_at = ?")
+            params.append(datetime.utcnow().isoformat())
+        if must_change_password is not None:
+            updates.append("must_change_password = ?")
+            params.append(1 if must_change_password else 0)
 
         if not updates:
             return False
