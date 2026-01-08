@@ -1933,3 +1933,37 @@ export async function resetUserPassword(
     { method: "POST" }
   );
 }
+
+// =============================================================================
+// GCP / ADC Mode API
+// =============================================================================
+
+export interface GCPStatusResponse {
+  gcp_mode: boolean;
+  adc_available: boolean;
+  service_account_email: string | null;
+  project_id: string | null;
+  message: string;
+}
+
+export interface GCPDiscoveryRequest {
+  bidder_id: string;
+}
+
+export interface GCPDiscoveryResponse {
+  success: boolean;
+  bidder_ids: string[];
+  buyer_seats_count: number;
+  message: string;
+}
+
+export async function getGCPStatus(): Promise<GCPStatusResponse> {
+  return fetchApi<GCPStatusResponse>("/config/gcp-status");
+}
+
+export async function discoverViaADC(bidderId: string): Promise<GCPDiscoveryResponse> {
+  return fetchApi<GCPDiscoveryResponse>("/config/gcp-discover", {
+    method: "POST",
+    body: JSON.stringify({ bidder_id: bidderId }),
+  });
+}

@@ -14,8 +14,9 @@ import {
   X,
   ArrowRight,
   Database,
+  Cloud,
 } from "lucide-react";
-import { getHealth, getSeats, syncSeat, getCredentialsStatus, uploadCredentials, discoverSeats, getSystemStatus } from "@/lib/api";
+import { getHealth, getSeats, syncSeat, getCredentialsStatus, uploadCredentials, discoverSeats, getSystemStatus, getGCPStatus, discoverViaADC } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { BuyerSeat } from "@/types/api";
 import { useTranslation } from "@/contexts/i18n-context";
@@ -63,6 +64,7 @@ export default function ConnectPage() {
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [bidderId, setBidderId] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -72,6 +74,12 @@ export default function ConnectPage() {
     queryFn: getHealth,
   });
 
+  // Check GCP mode status
+  const { data: gcpStatus, isLoading: gcpLoading } = useQuery({
+    queryKey: ["gcpStatus"],
+    queryFn: getGCPStatus,
+  });
+
   // Get credentials details
   const { data: credentialsStatus } = useQuery({
     queryKey: ["credentialsStatus"],
@@ -79,11 +87,11 @@ export default function ConnectPage() {
     enabled: health?.configured === true,
   });
 
-  // Get seats if configured
+  // Get seats if configured (or in GCP mode with ADC)
   const { data: seats, isLoading: seatsLoading } = useQuery({
     queryKey: ["seats"],
     queryFn: () => getSeats({ active_only: false }),
-    enabled: health?.configured === true,
+    enabled: health?.configured === true || (gcpStatus?.gcp_mode === true && gcpStatus?.adc_available === true),
   });
 
   // Check system requirements
@@ -95,7 +103,7 @@ export default function ConnectPage() {
   // Track if we've attempted discovery
   const [discoveryAttempted, setDiscoveryAttempted] = useState(false);
 
-  // Discover seats mutation
+  // Discover seats mutation (for uploaded credentials)
   const discoverMutation = useMutation({
     mutationFn: (bidderId: string) => discoverSeats({ bidder_id: bidderId }),
     onSuccess: (data) => {
@@ -112,6 +120,28 @@ export default function ConnectPage() {
         text: error instanceof Error ? error.message : "Failed to discover seats"
       });
       setTimeout(() => setMessage(null), 5000);
+    },
+  });
+
+  // GCP ADC discovery mutation (uses VM's attached service account)
+  const gcpDiscoverMutation = useMutation({
+    mutationFn: (bidderId: string) => discoverViaADC(bidderId),
+    onSuccess: (data) => {
+      setMessage({
+        type: "success",
+        text: data.message
+      });
+      queryClient.invalidateQueries({ queryKey: ["seats"] });
+      queryClient.invalidateQueries({ queryKey: ["health"] });
+      setBidderId("");
+      setTimeout(() => setMessage(null), 5000);
+    },
+    onError: (error) => {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to discover seats via GCP"
+      });
+      setTimeout(() => setMessage(null), 8000);
     },
   });
 
@@ -227,7 +257,7 @@ export default function ConnectPage() {
     }
   }, [handleFileSelect]);
 
-  if (healthLoading) {
+  if (healthLoading || gcpLoading) {
     return (
       <div className="p-8 flex items-center justify-center min-h-[400px]">
         <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
@@ -235,7 +265,9 @@ export default function ConnectPage() {
     );
   }
 
-  const isConfigured = health?.configured === true;
+  const isGCPMode = gcpStatus?.gcp_mode === true;
+  const hasADC = gcpStatus?.adc_available === true;
+  const isConfigured = health?.configured === true || (isGCPMode && hasADC);
   const hasSeats = seats && seats.length > 0;
   const hasSyncedCreatives = seats?.some((s: BuyerSeat) => s.creative_count > 0);
 
@@ -334,20 +366,30 @@ export default function ConnectPage() {
             <div className="ml-11 space-y-3">
               <div className="flex items-center justify-between py-3 px-4 bg-green-50 rounded-lg border border-green-200">
                 <div className="flex items-center">
-                  <CheckCircle className="h-5 w-5 text-green-500 mr-3" />
+                  {isGCPMode ? (
+                    <Cloud className="h-5 w-5 text-green-500 mr-3" />
+                  ) : (
+                    <CheckCircle className="h-5 w-5 text-green-500 mr-3" />
+                  )}
                   <div>
-                    <p className="font-medium text-green-800">{t.connect.connected}</p>
+                    <p className="font-medium text-green-800">
+                      {isGCPMode ? "GCP Connected" : t.connect.connected}
+                    </p>
                     <p className="text-sm text-green-600">
-                      {credentialsStatus?.client_email || t.connect.serviceAccountConfigured}
+                      {isGCPMode
+                        ? gcpStatus?.service_account_email || "Using VM service account (ADC)"
+                        : credentialsStatus?.client_email || t.connect.serviceAccountConfigured}
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="text-sm text-green-700 hover:text-green-800 underline"
-                >
-                  {t.connect.change}
-                </button>
+                {!isGCPMode && (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-sm text-green-700 hover:text-green-800 underline"
+                  >
+                    {t.connect.change}
+                  </button>
+                )}
               </div>
               <input
                 ref={fileInputRef}
@@ -356,6 +398,99 @@ export default function ConnectPage() {
                 onChange={handleInputChange}
                 className="hidden"
               />
+            </div>
+          ) : isGCPMode && hasADC && !hasSeats ? (
+            /* GCP Mode: Enter bidder ID to discover seats */
+            <div className="ml-11 space-y-4">
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-start">
+                  <Cloud className="h-5 w-5 text-blue-500 mt-0.5 mr-3" />
+                  <div>
+                    <p className="font-medium text-blue-800">GCP Mode Active</p>
+                    <p className="text-sm text-blue-700 mt-1">
+                      Using VM service account: <code className="bg-blue-100 px-1 rounded">{gcpStatus?.service_account_email}</code>
+                    </p>
+                    <p className="text-sm text-blue-600 mt-2">
+                      Enter your Authorized Buyers bidder ID to discover your buyer seats.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-gray-700">
+                  Bidder Account ID
+                </label>
+                <div className="flex gap-3">
+                  <input
+                    type="text"
+                    value={bidderId}
+                    onChange={(e) => setBidderId(e.target.value)}
+                    placeholder="e.g., 12345678"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                  <button
+                    onClick={() => gcpDiscoverMutation.mutate(bidderId)}
+                    disabled={!bidderId || gcpDiscoverMutation.isPending}
+                    className={cn(
+                      "px-6 py-2 rounded-lg font-medium",
+                      "bg-primary-600 text-white hover:bg-primary-700",
+                      "disabled:opacity-50 disabled:cursor-not-allowed",
+                      "flex items-center gap-2"
+                    )}
+                  >
+                    {gcpDiscoverMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Discovering...
+                      </>
+                    ) : (
+                      "Discover Seats"
+                    )}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Find your bidder ID in the{" "}
+                  <a
+                    href="https://authorizedbuyers.google.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary-600 underline"
+                  >
+                    Authorized Buyers Console
+                  </a>
+                  {" "}under Account Settings.
+                </p>
+              </div>
+
+              <details className="border border-gray-200 rounded-lg">
+                <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg">
+                  How to grant access to the service account
+                </summary>
+                <div className="px-4 pb-4 text-sm text-gray-600 space-y-3">
+                  <ol className="list-decimal list-inside space-y-2">
+                    <li>
+                      Go to the{" "}
+                      <a
+                        href="https://authorizedbuyers.google.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary-600 underline"
+                      >
+                        Authorized Buyers Console
+                      </a>
+                    </li>
+                    <li>Navigate to <strong>Account Settings</strong> → <strong>Users</strong></li>
+                    <li>Click <strong>+ Add User</strong></li>
+                    <li>
+                      Enter the service account email:{" "}
+                      <code className="bg-gray-100 px-1 rounded">{gcpStatus?.service_account_email}</code>
+                    </li>
+                    <li>Grant <strong>RTB Read-Only</strong> or <strong>RTB Read/Write</strong> access</li>
+                    <li>Click <strong>Save</strong></li>
+                  </ol>
+                </div>
+              </details>
             </div>
           ) : (
             <div className="ml-11 space-y-4">
