@@ -2,9 +2,15 @@
 
 Handles discovery, sync, and management of Google Authorized Buyers seats.
 Supports multi-account credentials for different buyer seats.
+
+Credential modes:
+1. Multi-account: Explicit service account JSON files uploaded via UI
+2. Legacy: ConfigManager service account file
+3. ADC (GCP): Application Default Credentials from VM's attached service account
 """
 
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -21,21 +27,29 @@ from storage.database import db_query_one, db_execute
 logger = logging.getLogger(__name__)
 
 
+def is_gcp_mode() -> bool:
+    """Check if running in GCP mode with ADC (OAuth2 Proxy enabled)."""
+    return os.environ.get("OAUTH2_PROXY_ENABLED", "").lower() in ("1", "true", "yes")
+
+
 async def get_credentials_for_seat(
     store: SQLiteStore,
     seat,
     config: ConfigManager,
-) -> str:
+) -> Optional[str]:
     """Get credentials path for a buyer seat.
 
-    Tries multi-account credentials first (via service_account_id),
-    falls back to legacy ConfigManager credentials.
+    Tries credentials in this order:
+    1. Multi-account credentials (via service_account_id)
+    2. First available service account
+    3. Legacy ConfigManager credentials
+    4. ADC (GCP mode) - returns None to trigger Application Default Credentials
 
     Returns:
-        Path to service account JSON file.
+        Path to service account JSON file, or None for ADC mode.
 
     Raises:
-        HTTPException: If no valid credentials found.
+        HTTPException: If no valid credentials found and not in GCP mode.
     """
     # Try multi-account: seat has service_account_id linked
     if seat.service_account_id:
@@ -62,6 +76,11 @@ async def get_credentials_for_seat(
             return str(config.get_service_account_path())
         except Exception:
             pass
+
+    # GCP mode: use Application Default Credentials (VM's attached service account)
+    if is_gcp_mode():
+        logger.info("Using ADC (Application Default Credentials) for GCP mode")
+        return None
 
     raise HTTPException(
         status_code=400,
@@ -193,6 +212,7 @@ async def discover_seats(
     """
     credentials_path: Optional[str] = None
     service_account_id: Optional[str] = request.service_account_id
+    use_adc = False
 
     # Try to get credentials from multi-account system
     if service_account_id:
@@ -223,7 +243,12 @@ async def discover_seats(
             except Exception:
                 pass
 
-    if not credentials_path:
+    # GCP mode: use Application Default Credentials
+    if not credentials_path and is_gcp_mode():
+        logger.info("Using ADC (Application Default Credentials) for seat discovery")
+        use_adc = True
+
+    if not credentials_path and not use_adc:
         raise HTTPException(
             status_code=400,
             detail="No service account credentials configured. Add a service account in Setup.",
@@ -412,19 +437,25 @@ async def sync_all_data(
             detail="No buyer seats found. Discover seats first via /seats/discover.",
         )
 
-    # Get service account for API access
+    # Get service account for API access (or use ADC in GCP mode)
+    creds_path: Optional[str] = None
+    use_adc = False
+
     service_accounts = await store.get_service_accounts(active_only=True)
-    if not service_accounts:
+    if service_accounts:
+        service_account = service_accounts[0]
+        expanded_path = Path(service_account.credentials_path).expanduser()
+        if expanded_path.exists():
+            creds_path = str(expanded_path)
+
+    if not creds_path and is_gcp_mode():
+        logger.info("Using ADC (Application Default Credentials) for sync-all")
+        use_adc = True
+
+    if not creds_path and not use_adc:
         raise HTTPException(
             status_code=400,
             detail="No service account configured. Add a service account in Setup.",
-        )
-    service_account = service_accounts[0]
-    creds_path = Path(service_account.credentials_path).expanduser()
-    if not creds_path.exists():
-        raise HTTPException(
-            status_code=400,
-            detail="Service account credentials file not found.",
         )
 
     # 1. Sync creatives for each buyer seat
@@ -449,12 +480,7 @@ async def sync_all_data(
             errors.append(f"Creatives for {seat.buyer_id}: {str(e)}")
 
     # Get bidder_id for endpoints and pretargeting
-    bidder_row = await db_query_one(
-        "SELECT bidder_id FROM buyer_seats WHERE service_account_id = ? LIMIT 1",
-        (service_account.id,)
-    )
-    if not bidder_row:
-        bidder_row = await db_query_one("SELECT bidder_id FROM buyer_seats LIMIT 1")
+    bidder_row = await db_query_one("SELECT bidder_id FROM buyer_seats LIMIT 1")
 
     if bidder_row:
         account_id = bidder_row["bidder_id"]
@@ -462,7 +488,7 @@ async def sync_all_data(
         # 2. Sync RTB endpoints
         try:
             endpoints_client = EndpointsClient(
-                credentials_path=str(creds_path),
+                credentials_path=creds_path,  # None for ADC mode
                 account_id=account_id,
             )
             endpoints = await endpoints_client.list_endpoints()
@@ -492,7 +518,7 @@ async def sync_all_data(
         try:
             import json
             pretargeting_client = PretargetingClient(
-                credentials_path=str(creds_path),
+                credentials_path=creds_path,  # None for ADC mode
                 account_id=account_id,
             )
             configs = await pretargeting_client.fetch_all_pretargeting_configs()

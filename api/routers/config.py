@@ -2,6 +2,9 @@
 
 Handles Google service account credentials upload, status, and deletion.
 Supports multiple service accounts for multi-account setups.
+
+In GCP mode (OAuth2 Proxy enabled), supports Application Default Credentials (ADC)
+which uses the VM's attached service account automatically.
 """
 
 import json
@@ -11,6 +14,7 @@ import uuid
 from pathlib import Path
 from typing import List, Optional
 
+import google.auth
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -22,7 +26,130 @@ from collectors import BuyerSeatsClient
 
 logger = logging.getLogger(__name__)
 
+
+def is_gcp_mode() -> bool:
+    """Check if running in GCP mode with ADC (OAuth2 Proxy enabled)."""
+    return os.environ.get("OAUTH2_PROXY_ENABLED", "").lower() in ("1", "true", "yes")
+
 router = APIRouter(tags=["Configuration"])
+
+
+# =============================================================================
+# GCP / ADC Mode Endpoints
+# =============================================================================
+
+class GCPStatusResponse(BaseModel):
+    """Response model for GCP mode status."""
+    gcp_mode: bool
+    adc_available: bool
+    service_account_email: Optional[str] = None
+    project_id: Optional[str] = None
+    message: str
+
+
+class GCPDiscoverRequest(BaseModel):
+    """Request model for GCP-native seat discovery."""
+    bidder_id: str = Field(..., description="Your Authorized Buyers bidder account ID")
+
+
+@router.get("/config/gcp-status", response_model=GCPStatusResponse)
+async def get_gcp_status():
+    """Get GCP deployment mode status.
+
+    Returns information about whether the app is running in GCP mode
+    with Application Default Credentials (ADC) from the VM's attached
+    service account.
+    """
+    if not is_gcp_mode():
+        return GCPStatusResponse(
+            gcp_mode=False,
+            adc_available=False,
+            message="Not running in GCP mode. Upload service account credentials manually.",
+        )
+
+    # Try to get ADC credentials
+    try:
+        credentials, project = google.auth.default()
+
+        # Get service account email if available
+        service_account_email = None
+        if hasattr(credentials, 'service_account_email'):
+            service_account_email = credentials.service_account_email
+
+        return GCPStatusResponse(
+            gcp_mode=True,
+            adc_available=True,
+            service_account_email=service_account_email,
+            project_id=project,
+            message="GCP mode active. Using VM's attached service account via ADC.",
+        )
+    except Exception as e:
+        logger.warning(f"ADC not available: {e}")
+        return GCPStatusResponse(
+            gcp_mode=True,
+            adc_available=False,
+            message=f"GCP mode active but ADC not available: {str(e)}",
+        )
+
+
+@router.post("/config/gcp-discover", response_model=DiscoveryResponse)
+async def discover_via_adc(
+    request: GCPDiscoverRequest,
+    store: SQLiteStore = Depends(get_store),
+):
+    """Discover buyer seats using GCP Application Default Credentials.
+
+    This endpoint uses the VM's attached service account to discover
+    buyer seats without requiring manual credential upload.
+
+    The service account must have been added to the Authorized Buyers
+    account in the RTB API Console.
+    """
+    if not is_gcp_mode():
+        raise HTTPException(
+            status_code=400,
+            detail="Not running in GCP mode. Use /config/service-accounts to upload credentials.",
+        )
+
+    try:
+        # Use ADC (credentials_path=None triggers ADC in the client)
+        client = BuyerSeatsClient(
+            credentials_path=None,  # ADC mode
+            account_id=request.bidder_id,
+        )
+        seats = await client.discover_buyer_seats()
+
+        if not seats:
+            return DiscoveryResponse(
+                success=True,
+                bidder_ids=[],
+                buyer_seats_count=0,
+                message=(
+                    "No buyer seats found. Ensure the VM's service account "
+                    f"has been added to bidder {request.bidder_id} in the RTB API Console."
+                ),
+            )
+
+        bidder_ids = set()
+        for seat in seats:
+            # Mark as using ADC (no service_account_id)
+            seat.service_account_id = None
+            await store.save_buyer_seat(seat)
+            bidder_ids.add(seat.bidder_id)
+
+        return DiscoveryResponse(
+            success=True,
+            bidder_ids=list(bidder_ids),
+            buyer_seats_count=len(seats),
+            message=f"Discovered {len(seats)} buyer seat(s) under {len(bidder_ids)} bidder account(s) using ADC",
+        )
+
+    except Exception as e:
+        logger.error(f"GCP ADC discovery failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Discovery failed: {str(e)}. Ensure the VM's service account has RTB API access.",
+        )
 
 
 # =============================================================================
