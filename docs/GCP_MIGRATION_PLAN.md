@@ -368,114 +368,165 @@ Phase 3: Cloud Run + Cloud SQL (Serverless)
 
 ---
 
-## Implementation Steps
+## Implementation Steps (Terraform - Recommended)
 
-### Phase 1: GCP Setup (Day 1)
+> **IMPORTANT:** Use Terraform for deployment. Manual `gcloud` commands led to security misconfiguration (ports 3000/8000 exposed) that enabled the January 2026 breach.
 
-1. **Create GCP Project** (or use existing)
+### Prerequisites
+
+1. **Install Terraform** (if not already installed)
    ```bash
-   gcloud projects create catscan-prod --name="Cat-Scan Production"
-   gcloud config set project catscan-prod
+   # Ubuntu/Debian
+   wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+   echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+   sudo apt update && sudo apt install terraform
    ```
 
-2. **Enable Required APIs**
+2. **Authenticate with GCP**
+   ```bash
+   gcloud auth login
+   gcloud auth application-default login
+   ```
+
+3. **Enable Required APIs** (one-time)
    ```bash
    gcloud services enable \
      compute.googleapis.com \
-     cloudscheduler.googleapis.com \
-     secretmanager.googleapis.com \
      storage.googleapis.com \
-     authorizedbuyersmarketplace.googleapis.com \
-     gmail.googleapis.com
+     iap.googleapis.com
    ```
 
-3. **Create Service Account**
-   ```bash
-   gcloud iam service-accounts create catscan-api \
-     --display-name="Cat-Scan API Service Account"
-   ```
+### Step 1: Configure Terraform Variables
 
-4. **Create GCE Instance**
-   ```bash
-   gcloud compute instances create catscan-prod \
-     --zone=europe-west1-b \
-     --machine-type=e2-medium \
-     --image-family=debian-12 \
-     --image-project=debian-cloud \
-     --boot-disk-size=50GB \
-     --boot-disk-type=pd-ssd \
-     --tags=http-server,https-server \
-     --service-account=catscan-api@catscan-prod.iam.gserviceaccount.com \
-     --scopes=cloud-platform
-   ```
+```bash
+cd terraform/gcp
+cp terraform.tfvars.example terraform.tfvars
 
-### Phase 2: Application Deployment (Day 1-2)
+# Edit with your values
+nano terraform.tfvars
+```
 
-1. **Install Docker on GCE**
-   ```bash
-   sudo apt-get update
-   sudo apt-get install -y docker.io docker-compose
-   sudo usermod -aG docker $USER
-   ```
+Required settings in `terraform.tfvars`:
+```hcl
+gcp_project  = "your-new-project-id"  # Your new GCP project
+gcp_region   = "europe-west1"
+domain_name  = "scan.rtb.cat"
+enable_https = true
+```
 
-2. **Clone Repository**
-   ```bash
-   git clone https://github.com/your-repo/rtbcat-platform.git
-   cd rtbcat-platform
-   ```
+### Step 2: Deploy Infrastructure
 
-3. **Copy SQLite Database**
-   ```bash
-   # From local machine:
-   scp ~/.catscan/catscan.db user@GCE_IP:~/.catscan/
-   ```
+```bash
+# Initialize Terraform
+terraform init
 
-4. **Deploy with Docker Compose**
-   ```bash
-   docker-compose -f docker-compose.production.yml up -d
-   ```
+# Preview changes
+terraform plan
 
-### Phase 3: DNS & SSL (Day 2)
+# Deploy (creates VM, firewall rules, storage bucket, service account)
+terraform apply
+```
 
-1. **Reserve Static IP**
-   ```bash
-   gcloud compute addresses create catscan-ip --region=europe-west1
-   ```
+This creates:
+- GCE VM with hardened startup script
+- **Secure firewall**: Only ports 80/443 exposed (NOT 3000/8000)
+- Cloud Storage bucket for backups
+- Service account with minimal permissions
+- Static IP address
 
-2. **Update DNS** (scan.rtb.cat → new IP)
+### Step 3: Wait for Startup Script
 
-3. **Set up HTTPS** (managed SSL via Load Balancer or Caddy)
+```bash
+# SSH via IAP (secure - no SSH port exposed)
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
 
-### Phase 4: Gmail Integration (Day 2-3)
+# Check startup progress
+sudo tail -f /var/log/catscan-setup.log
+```
 
-1. **Configure Service Account for Gmail**
-   - Option A: Domain-wide delegation (requires Workspace admin)
-   - Option B: OAuth with refresh token (current approach)
+### Step 4: Upload Credentials
 
-2. **Set up Cloud Scheduler**
-   ```bash
-   gcloud scheduler jobs create http gmail-import \
-     --location=europe-west1 \
-     --schedule="0 8 * * *" \
-     --uri="https://scan.rtb.cat/gmail/import" \
-     --http-method=POST \
-     --oidc-service-account-email=catscan-api@catscan-prod.iam.gserviceaccount.com
-   ```
+```bash
+# Upload Google API credentials
+gcloud compute scp ~/.catscan/credentials/google-credentials.json \
+  catscan-production:/tmp/ --zone=europe-west1-b
 
-### Phase 5: Backup Strategy (Day 3)
+gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+  "sudo mv /tmp/google-credentials.json /home/catscan/.catscan/credentials/"
+```
 
-1. **Daily SQLite Backup to GCS**
-   ```bash
-   # Cron job or Cloud Scheduler
-   sqlite3 ~/.catscan/catscan.db ".backup /tmp/backup.db"
-   gsutil cp /tmp/backup.db gs://catscan-backups/$(date +%Y-%m-%d).db
-   ```
+### Step 5: Migrate Database (Optional)
 
-2. **Retention Policy**
-   ```bash
-   gsutil lifecycle set lifecycle.json gs://catscan-backups/
-   # Keep 30 days of daily backups
-   ```
+```bash
+# If you have an existing database to migrate:
+gcloud compute scp ~/.catscan/catscan.db \
+  catscan-production:/tmp/ --zone=europe-west1-b
+
+gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+  "sudo mv /tmp/catscan.db /home/catscan/.catscan/ && sudo chown catscan:catscan /home/catscan/.catscan/catscan.db"
+```
+
+### Step 6: Update DNS
+
+Point your domain's A record to the static IP shown in Terraform output:
+```bash
+terraform output public_ip
+```
+
+### Step 7: Verify Security
+
+```bash
+# SSH into the VM
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
+
+# Verify ports 3000/8000 are NOT publicly accessible
+sudo netstat -tlnp | grep -E '(3000|8000)'
+# Should show 127.0.0.1:3000 and 127.0.0.1:8000 (localhost only)
+
+# Test from outside (should fail)
+curl http://YOUR_IP:3000  # Should timeout/refuse
+curl http://YOUR_IP:8000  # Should timeout/refuse
+```
+
+---
+
+## Security: What Terraform Prevents
+
+| Issue | Manual Setup | Terraform Setup |
+|-------|--------------|-----------------|
+| Port 3000 exposed | **YES** (caused breach) | **NO** (blocked) |
+| Port 8000 exposed | **YES** (caused breach) | **NO** (blocked) |
+| SSH from anywhere | Often yes | IAP only (requires Google auth) |
+| Services on 0.0.0.0 | Default | Bound to 127.0.0.1 |
+| Firewall misconfiguration | Easy to make | Prevented by code |
+
+---
+
+## Gmail Integration (Post-Deploy)
+
+**Set up Cloud Scheduler** (after VM is running):
+```bash
+gcloud scheduler jobs create http gmail-import \
+  --location=europe-west1 \
+  --schedule="0 8 * * *" \
+  --uri="https://scan.rtb.cat/api/gmail/import" \
+  --http-method=POST \
+  --oidc-service-account-email=$(terraform output -raw service_account_email)
+```
+
+---
+
+## Backup Strategy
+
+Backups are **automatically configured** by the startup script:
+- Daily backup at 3 AM to Cloud Storage
+- 30-day retention policy
+- Bucket name: `terraform output gcs_bucket`
+
+Manual backup:
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "sudo /usr/local/bin/catscan-backup"
+```
 
 ---
 
