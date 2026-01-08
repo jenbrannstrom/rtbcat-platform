@@ -1,18 +1,27 @@
 "use client";
 
-import { useState, FormEvent } from "react";
-import { useRouter } from "next/navigation";
-import { AlertCircle, Lock, Mail, Eye, EyeOff } from "lucide-react";
+import { useState, useEffect, FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AlertCircle, Lock, Mail, Eye, EyeOff, CheckCircle } from "lucide-react";
 import { useTranslation } from "@/contexts/i18n-context";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Check for success messages from URL params
+  useEffect(() => {
+    if (searchParams?.get("setup") === "complete") {
+      setSuccessMessage("Account created successfully! Please sign in.");
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -34,8 +43,12 @@ export default function LoginPage() {
         return;
       }
 
-      // Redirect to home on success
-      router.push("/");
+      // Check if password change is required
+      if (data.user?.must_change_password) {
+        router.push("/change-password");
+      } else {
+        router.push("/");
+      }
       router.refresh();
     } catch (err) {
       setError(t.auth.cannotConnectToServer);
@@ -63,6 +76,13 @@ export default function LoginPage() {
         {/* Login Form */}
         <div className="bg-white rounded-xl shadow-lg p-8">
           <h2 className="text-xl font-semibold text-gray-900 mb-6">{t.auth.signInToYourAccount}</h2>
+
+          {successMessage && (
+            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
+              <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-green-700">{successMessage}</p>
+            </div>
+          )}
 
           {error && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">

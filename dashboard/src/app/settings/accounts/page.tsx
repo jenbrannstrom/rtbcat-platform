@@ -19,6 +19,7 @@ import { getHealth, getSeats, syncSeat, getCredentialsStatus, uploadCredentials,
 import { cn } from "@/lib/utils";
 import type { BuyerSeat } from "@/types/api";
 import { useTranslation } from "@/contexts/i18n-context";
+import { SensitiveRouteGuard } from "@/components/sensitive-route-guard";
 
 type SetupStep = 1 | 2 | 3;
 
@@ -250,6 +251,7 @@ export default function ConnectPage() {
   ];
 
   return (
+    <SensitiveRouteGuard featureName="account credentials">
     <div className="p-8 max-w-3xl mx-auto">
       {/* Header */}
       <div className="text-center mb-6">
@@ -560,5 +562,6 @@ export default function ConnectPage() {
         </div>
       </div>
     </div>
+    </SensitiveRouteGuard>
   );
 }

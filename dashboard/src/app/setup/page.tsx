@@ -48,6 +48,7 @@ import {
 import type { ServiceAccount } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
+import { SensitiveRouteGuard } from "@/components/sensitive-route-guard";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/contexts/i18n-context";
 import type { BuyerSeat } from "@/types/api";
@@ -102,6 +103,7 @@ export default function SetupPage() {
   const isGmailConfigured = gmailStatus?.configured === true;
 
   return (
+    <SensitiveRouteGuard featureName="API credentials and account settings">
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="mb-6">
@@ -175,6 +177,7 @@ export default function SetupPage() {
         {activeTab === "system" && <SystemTab />}
       </div>
     </div>
+    </SensitiveRouteGuard>
   );
 }
 
