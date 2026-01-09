@@ -22,7 +22,7 @@ from config import ConfigManager
 from storage import SQLiteStore, creative_dicts_to_storage
 from api.dependencies import get_store, get_config
 from collectors import BuyerSeatsClient, CreativesClient, EndpointsClient, PretargetingClient
-from storage.database import db_query_one, db_execute
+from storage.database import db_query, db_query_one, db_execute
 
 logger = logging.getLogger(__name__)
 
@@ -484,13 +484,16 @@ async def sync_all_data(
             logger.error(f"Failed to sync creatives for seat {seat.buyer_id}: {e}")
             errors.append(f"Creatives for {seat.buyer_id}: {str(e)}")
 
-    # Get bidder_id for endpoints and pretargeting
-    bidder_row = await db_query_one("SELECT bidder_id FROM buyer_seats LIMIT 1")
+    # Get all unique bidder_ids for endpoints and pretargeting sync
+    # Each bidder may have different endpoints and pretargeting configs
+    bidder_rows = await db_query("SELECT DISTINCT bidder_id FROM buyer_seats")
+    import json
 
-    if bidder_row:
+    for bidder_row in bidder_rows:
         account_id = bidder_row["bidder_id"]
+        logger.info(f"Syncing endpoints and pretargeting for bidder {account_id}")
 
-        # 2. Sync RTB endpoints
+        # 2. Sync RTB endpoints for this bidder
         try:
             endpoints_client = EndpointsClient(
                 credentials_path=creds_path,  # None for ADC mode
@@ -514,14 +517,14 @@ async def sync_all_data(
                         ep.get("bidProtocol"),
                     ),
                 )
-            endpoints_synced = len(endpoints)
+            endpoints_synced += len(endpoints)
+            logger.info(f"Synced {len(endpoints)} endpoints for bidder {account_id}")
         except Exception as e:
-            logger.error(f"Failed to sync RTB endpoints: {e}")
-            errors.append(f"RTB endpoints: {str(e)}")
+            logger.error(f"Failed to sync RTB endpoints for bidder {account_id}: {e}")
+            errors.append(f"RTB endpoints for {account_id}: {str(e)}")
 
-        # 3. Sync pretargeting configs
+        # 3. Sync pretargeting configs for this bidder
         try:
-            import json
             pretargeting_client = PretargetingClient(
                 credentials_path=creds_path,  # None for ADC mode
                 account_id=account_id,
@@ -571,10 +574,11 @@ async def sync_all_data(
                         json.dumps(cfg),
                     ),
                 )
-            pretargeting_synced = len(configs)
+            pretargeting_synced += len(configs)
+            logger.info(f"Synced {len(configs)} pretargeting configs for bidder {account_id}")
         except Exception as e:
-            logger.error(f"Failed to sync pretargeting configs: {e}")
-            errors.append(f"Pretargeting: {str(e)}")
+            logger.error(f"Failed to sync pretargeting configs for bidder {account_id}: {e}")
+            errors.append(f"Pretargeting for {account_id}: {str(e)}")
 
     # Build response message
     sync_time = datetime.utcnow().isoformat() + "Z"
