@@ -738,6 +738,7 @@ export interface SizeGap {
 export interface CoveredSize {
   size: string;
   format: string;
+  reached_queries: number;
   impressions: number;
   spend_usd: number;
   creative_count: number;
