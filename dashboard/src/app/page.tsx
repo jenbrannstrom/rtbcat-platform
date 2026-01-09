@@ -858,7 +858,7 @@ function WasteAnalysisContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const { selectedServiceAccountId } = useAccount();
+  const { selectedBuyerId } = useAccount();
   const { t } = useTranslation();
 
   const initialDays = parseInt(searchParams.get("days") || "7", 10);
@@ -932,8 +932,8 @@ function WasteAnalysisContent() {
     isLoading: configsLoading,
     refetch: refetchConfigs,
   } = useQuery({
-    queryKey: ["pretargeting-configs", selectedServiceAccountId],
-    queryFn: () => getPretargetingConfigs({ service_account_id: selectedServiceAccountId || undefined }),
+    queryKey: ["pretargeting-configs", selectedBuyerId],
+    queryFn: () => getPretargetingConfigs({ buyer_id: selectedBuyerId || undefined }),
   });
 
   // Fetch config-level performance data

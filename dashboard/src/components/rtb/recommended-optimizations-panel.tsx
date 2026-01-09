@@ -378,12 +378,12 @@ export function RecommendedOptimizationsPanel({
     }
   }
 
-  const { selectedServiceAccountId } = useAccount();
+  const { selectedBuyerId } = useAccount();
 
   // Fetch configs for the dropdown
   const { data: configs } = useQuery({
-    queryKey: ['pretargeting-configs', selectedServiceAccountId],
-    queryFn: () => getPretargetingConfigs({ service_account_id: selectedServiceAccountId || undefined }),
+    queryKey: ['pretargeting-configs', selectedBuyerId],
+    queryFn: () => getPretargetingConfigs({ buyer_id: selectedBuyerId || undefined }),
   });
 
   // Mutation to apply recommendation
