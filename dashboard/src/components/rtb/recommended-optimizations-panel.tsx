@@ -472,12 +472,10 @@ export function RecommendedOptimizationsPanel({
           ))}
         </div>
       ) : visibleRecs.length === 0 ? (
-        <div className="text-center py-8">
-          <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-3" />
-          <p className="text-gray-600 font-medium">No optimization recommendations</p>
-          <p className="text-sm text-gray-500 mt-1">
-            Your pretargeting configs are performing well based on {days}-day analysis.
-          </p>
+        // Collapsed state when no recommendations - just show success indicator
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <CheckCircle className="h-4 w-4 text-green-500" />
+          <span>No optimization recommendations needed ({days}d analysis)</span>
         </div>
       ) : (
         <div className="space-y-3">

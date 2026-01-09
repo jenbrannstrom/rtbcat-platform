@@ -182,6 +182,7 @@ class SizeCoverageAnalyzer:
                 covered_sizes.append({
                     'size': traffic['size'],
                     'format': traffic['format'],
+                    'reached_queries': traffic['reached_queries'],
                     'impressions': traffic['impressions'],
                     'spend_usd': traffic['spend_usd'],
                     'creative_count': creative_count,
