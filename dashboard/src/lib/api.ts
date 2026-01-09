@@ -966,8 +966,8 @@ export interface RTBFunnelResponse {
   };
 }
 
-export async function getRTBFunnel(): Promise<RTBFunnelResponse> {
-  return fetchApi<RTBFunnelResponse>("/analytics/rtb-funnel");
+export async function getRTBFunnel(days: number = 7): Promise<RTBFunnelResponse> {
+  return fetchApi<RTBFunnelResponse>(`/analytics/rtb-funnel?days=${days}`);
 }
 
 export async function getRTBPublishers(

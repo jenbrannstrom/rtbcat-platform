@@ -2,10 +2,10 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRTBEndpoints, getPretargetingConfigs, syncRTBEndpoints } from '@/lib/api';
-import { Server, AlertTriangle, Globe, Info, RefreshCw } from 'lucide-react';
+import { Server, AlertTriangle, Globe, Info, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAccount } from '@/contexts/account-context';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 // Helper to format trading location for display
 function formatLocation(location: string | null): string {
@@ -52,6 +52,15 @@ export function AccountEndpointsHeader() {
     },
   });
 
+  // Auto-sync endpoints on mount if none exist
+  const hasSynced = useRef(false);
+  useEffect(() => {
+    if (!isLoading && !hasSynced.current && data && !data.endpoints?.length && selectedServiceAccountId) {
+      hasSynced.current = true;
+      syncMutation.mutate();
+    }
+  }, [isLoading, data, selectedServiceAccountId]);
+
   const activeConfigsCount = configsData?.filter(c => c.state === 'ACTIVE').length || 0;
 
   // Loading skeleton
@@ -95,37 +104,53 @@ export function AccountEndpointsHeader() {
     );
   }
 
-  // No endpoints warning
+  // No endpoints - show syncing state or error
   if (!data?.endpoints?.length) {
-    return (
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
-            <div className="flex-1">
-              <h3 className="font-medium text-yellow-800">RTB Endpoints Not Synced</h3>
-              <p className="text-sm text-yellow-700 mt-1">
-                Endpoints need to be synced from Google Authorized Buyers API. Click "Sync" to fetch your bidder's endpoint configuration.
+    // If syncing, show loading indicator
+    if (syncMutation.isPending) {
+      return (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+            <div>
+              <h3 className="font-medium text-blue-800">Syncing RTB Endpoints</h3>
+              <p className="text-sm text-blue-700 mt-1">
+                Fetching endpoint configuration from Google Authorized Buyers API...
               </p>
-              {syncMutation.isError && (
-                <p className="text-sm text-red-600 mt-2">
-                  Failed to sync: {syncMutation.error instanceof Error ? syncMutation.error.message : 'Unknown error'}
-                </p>
-              )}
             </div>
           </div>
-          <button
-            onClick={() => syncMutation.mutate()}
-            disabled={syncMutation.isPending}
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors",
-              "bg-yellow-600 text-white hover:bg-yellow-700",
-              "disabled:opacity-50 disabled:cursor-not-allowed"
-            )}
-          >
-            <RefreshCw className={cn("h-4 w-4", syncMutation.isPending && "animate-spin")} />
-            {syncMutation.isPending ? "Syncing..." : "Sync"}
-          </button>
+        </div>
+      );
+    }
+
+    // If sync failed, show error
+    if (syncMutation.isError) {
+      return (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
+            <div>
+              <h3 className="font-medium text-red-800">Failed to Sync Endpoints</h3>
+              <p className="text-sm text-red-700 mt-1">
+                {syncMutation.error instanceof Error ? syncMutation.error.message : 'Could not fetch endpoint configuration. Check your service account credentials.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // No endpoints and not syncing - probably no service account configured
+    return (
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <Server className="h-5 w-5 text-gray-400 mt-0.5" />
+          <div>
+            <h3 className="font-medium text-gray-700">No RTB Endpoints</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              Endpoints will sync automatically when a service account is configured.
+            </p>
+          </div>
         </div>
       </div>
     );

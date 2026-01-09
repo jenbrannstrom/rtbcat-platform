@@ -913,8 +913,8 @@ function WasteAnalysisContent() {
     isLoading: funnelLoading,
     refetch: refetchFunnel,
   } = useQuery({
-    queryKey: ["rtb-funnel"],
-    queryFn: () => getRTBFunnel(),
+    queryKey: ["rtb-funnel", days],
+    queryFn: () => getRTBFunnel(days),
   });
 
   // Fetch spend stats for CPM display (filtered by expanded config if selected)
