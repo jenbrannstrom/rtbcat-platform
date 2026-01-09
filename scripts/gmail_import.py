@@ -253,19 +253,31 @@ def get_gmail_service():
 
 
 def find_report_emails(service):
-    """Find unread emails from Google Authorized Buyers."""
+    """Find all unread emails from Google Authorized Buyers (with pagination)."""
     query = (
         'from:noreply-google-display-ads-managed-reports@google.com '
         'is:unread'
     )
 
-    results = service.users().messages().list(
-        userId='me',
-        q=query,
-        maxResults=50
-    ).execute()
+    all_messages = []
+    page_token = None
 
-    return results.get('messages', [])
+    while True:
+        results = service.users().messages().list(
+            userId='me',
+            q=query,
+            maxResults=100,
+            pageToken=page_token
+        ).execute()
+
+        messages = results.get('messages', [])
+        all_messages.extend(messages)
+
+        page_token = results.get('nextPageToken')
+        if not page_token:
+            break
+
+    return all_messages
 
 
 def extract_download_url(body: str) -> Optional[str]:
