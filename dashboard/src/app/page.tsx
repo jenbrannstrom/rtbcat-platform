@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, Suspense } from "react";
+import { useState, useCallback, Suspense, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -14,7 +14,7 @@ import { ConfigBreakdownPanel } from "@/components/rtb/config-breakdown-panel";
 import { RecommendedOptimizationsPanel } from "@/components/rtb/recommended-optimizations-panel";
 import {
   getQPSSummary, getQPSSizeCoverage, getRTBFunnel, getSpendStats,
-  getPretargetingConfigs, getRTBFunnelConfigs,
+  getPretargetingConfigs, getRTBFunnelConfigs, getSeats,
   type PublisherPerformance, type GeoPerformance, type PretargetingConfigResponse
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -858,11 +858,24 @@ function WasteAnalysisContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const { selectedBuyerId } = useAccount();
+  const { selectedBuyerId, setSelectedBuyerId } = useAccount();
   const { t } = useTranslation();
 
   const initialDays = parseInt(searchParams.get("days") || "7", 10);
   const [days, setDays] = useState<number>(initialDays);
+
+  // Fetch seats to auto-select first one if none selected
+  const { data: seats } = useQuery({
+    queryKey: ["seats"],
+    queryFn: () => getSeats({ active_only: true }),
+  });
+
+  // Auto-select first seat if none selected (removes "All Seats" from Waste Analyzer)
+  useEffect(() => {
+    if (!selectedBuyerId && seats && seats.length > 0) {
+      setSelectedBuyerId(seats[0].buyer_id);
+    }
+  }, [selectedBuyerId, seats, setSelectedBuyerId]);
   const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
 
   // Sorting state for pretargeting configs
