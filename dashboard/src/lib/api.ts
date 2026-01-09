@@ -1036,9 +1036,11 @@ export interface SyncEndpointsResponse {
 }
 
 export async function getRTBEndpoints(params?: {
-  service_account_id?: string;
+  buyer_id?: string;
+  service_account_id?: string;  // Deprecated, use buyer_id
 }): Promise<RTBEndpointsResponse> {
   const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
   if (params?.service_account_id) searchParams.set("service_account_id", params.service_account_id);
   const query = searchParams.toString();
   return fetchApi<RTBEndpointsResponse>(`/settings/endpoints${query ? `?${query}` : ""}`);
@@ -1079,9 +1081,11 @@ export interface SyncPretargetingResponse {
 }
 
 export async function getPretargetingConfigs(params?: {
-  service_account_id?: string;
+  buyer_id?: string;
+  service_account_id?: string;  // Deprecated, use buyer_id
 }): Promise<PretargetingConfigResponse[]> {
   const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
   if (params?.service_account_id) searchParams.set("service_account_id", params.service_account_id);
   const query = searchParams.toString();
   return fetchApi<PretargetingConfigResponse[]>(`/settings/pretargeting${query ? `?${query}` : ""}`);
