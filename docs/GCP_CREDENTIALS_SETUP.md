@@ -211,6 +211,48 @@ The OOB flow is deprecated. Use `run_local_server()` which redirects to localhos
 ### Token expired
 Gmail tokens auto-refresh. If issues persist, re-run `python scripts/gmail_auth.py`
 
+### "No buyer seats discovered" / 0 seats found
+
+The service account can authenticate but doesn't have access to any Authorized Buyers accounts.
+
+**How to fix:**
+
+1. Go to https://authorizedbuyers.google.com
+2. Select your account from the dropdown (top left)
+3. Go to **Settings → User management** (or **Service accounts**)
+4. Add your service account email: `catscan-api@YOUR-PROJECT.iam.gserviceaccount.com`
+5. Select role: **Account Manager** or **RTB Troubleshooter** (not just Viewer)
+6. Click Save
+7. Wait 5-10 minutes for permissions to propagate
+8. Click "Discover Buyer Seats" in Cat-Scan Setup
+
+**Verify API access directly:**
+
+```bash
+# SSH to server and test
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
+
+sudo docker exec catscan-api python3 -c "
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+
+creds = service_account.Credentials.from_service_account_file(
+    '/home/rtbcat/.catscan/credentials/google-credentials.json',
+    scopes=['https://www.googleapis.com/auth/realtime-bidding']
+)
+service = build('realtimebidding', 'v1', credentials=creds)
+response = service.buyers().list().execute()
+print('Buyers found:', response)
+"
+```
+
+**Expected output:** A list of buyer accounts like:
+```json
+{'buyers': [{'name': 'buyers/123456789', 'displayName': 'Your Company', ...}]}
+```
+
+If the list is empty, the service account doesn't have access to any accounts yet
+
 ---
 
 ## Security Notes
@@ -270,15 +312,46 @@ The manual steps below are **deprecated** and kept only for reference. They cont
 
 > **WARNING:** Manual deployment bypasses OAuth2 Proxy and may expose the app with default credentials.
 
-### Current Production Setup
+### Current Production Setup (Updated January 2026)
 
 | Property | Value |
 |----------|-------|
-| Project ID | `(use new project for billing)` |
+| Project ID | `catscan-prod-202601` |
 | VM Name | `catscan-production` |
 | Zone | `europe-west1-b` |
 | Machine Type | `e2-medium` |
+| External IP | `35.205.211.184` |
 | Domain | `scan.rtb.cat` |
+| SSL Certificate | Let's Encrypt (auto-renewed) |
+
+**Note:** The old project was `augmented-vim-427407-t8` with IP `104.199.91.219`.
+The new deployment uses Terraform in project `catscan-prod-202601`.
+
+### SSH Host Key Change After VM Recreation
+
+When the VM is recreated (via Terraform or manually), SSH host keys change. This triggers a warning:
+```
+WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!
+```
+
+**This is expected after VM recreation, not a security breach.** To fix:
+
+```bash
+# Remove old host key
+ssh-keygen -f ~/.ssh/known_hosts -R scan.rtb.cat
+ssh-keygen -f ~/.ssh/known_hosts -R 35.205.211.184
+
+# Add new host key
+ssh-keyscan -H scan.rtb.cat >> ~/.ssh/known_hosts
+
+# Verify connection
+ssh -o StrictHostKeyChecking=accept-new catscan@scan.rtb.cat "hostname"
+```
+
+**How to verify it's not a hack:**
+1. Check SSL certificate: `openssl s_client -connect scan.rtb.cat:443 | openssl x509 -noout -dates`
+2. Check GCP VMs: `gcloud compute instances list --project=catscan-prod-202601`
+3. Verify IP matches: `host scan.rtb.cat` should show `35.205.211.184`
 
 ### Step 1: Authenticate gcloud
 

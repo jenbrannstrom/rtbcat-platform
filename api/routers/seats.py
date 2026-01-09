@@ -106,8 +106,13 @@ class BuyerSeatResponse(BaseModel):
 
 
 class DiscoverSeatsRequest(BaseModel):
-    """Request model for discovering buyer seats."""
-    bidder_id: str
+    """Request model for discovering buyer seats.
+
+    Note: bidder_id is optional because buyers.list() returns ALL accessible
+    buyers regardless of what ID is passed. The field is kept for backwards
+    compatibility but is not actually used by the discovery logic.
+    """
+    bidder_id: Optional[str] = None  # Optional - buyers.list() returns all accessible buyers
     service_account_id: Optional[str] = None  # Multi-account: specify which credentials to use
     auto_sync: bool = True  # Automatically sync data after discovery
 
@@ -134,7 +139,7 @@ class SyncAllResponse(BaseModel):
 class DiscoverSeatsResponse(BaseModel):
     """Response model for seat discovery."""
     status: str
-    bidder_id: str
+    bidder_id: Optional[str] = None  # May be None if auto-discovery was used
     seats_discovered: int
     seats: list[BuyerSeatResponse]
     # Auto-sync results (if enabled)

@@ -217,8 +217,16 @@ function ApiConnectionTab() {
   const [discoveryAttempted, setDiscoveryAttempted] = useState(false);
 
   const discoverMutation = useMutation({
-    mutationFn: (bidderId: string) => discoverSeats({ bidder_id: bidderId }),
+    mutationFn: () => discoverSeats({ bidder_id: "auto" }), // API's buyers.list() returns all accessible buyers
     onSuccess: async (data) => {
+      if (data.seats_discovered === 0) {
+        setMessage({
+          type: "error",
+          text: "No buyer seats found. Make sure the service account email is added to your Authorized Buyers accounts with 'Account Manager' or 'RTB Troubleshooter' role."
+        });
+        setTimeout(() => setMessage(null), 10000);
+        return;
+      }
       setMessage({ type: "success", text: `Discovered ${data.seats_discovered} buyer seat(s). Syncing endpoints...` });
       queryClient.invalidateQueries({ queryKey: ["seats"] });
 
@@ -237,29 +245,25 @@ function ApiConnectionTab() {
         console.error("Failed to sync pretargeting:", e);
       }
 
-      setMessage({ type: "success", text: `Discovered ${data.seats_discovered} seat(s) and synced endpoints` });
+      setMessage({ type: "success", text: `Discovered ${data.seats_discovered} seat(s) and synced ${data.sync_result?.creatives_synced || 0} creatives` });
       setTimeout(() => setMessage(null), 5000);
     },
     onError: (error) => {
       setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to discover seats" });
-      setTimeout(() => setMessage(null), 5000);
+      setTimeout(() => setMessage(null), 8000);
     },
   });
 
-  // Auto-discover seats when first account is added
+  // Auto-discover seats when first account is added and no seats exist
   useEffect(() => {
     const noSeats = seats !== undefined && seats.length === 0;
     const notLoading = !seatsLoading && !discoverMutation.isPending;
 
     if (hasAccounts && noSeats && notLoading && !discoveryAttempted) {
-      // Try to discover using the first service account's project_id
-      const firstAccount = serviceAccounts[0];
-      if (firstAccount?.project_id) {
-        setDiscoveryAttempted(true);
-        discoverMutation.mutate(firstAccount.project_id);
-      }
+      setDiscoveryAttempted(true);
+      discoverMutation.mutate();
     }
-  }, [hasAccounts, seats, seatsLoading, discoveryAttempted, serviceAccounts, discoverMutation]);
+  }, [hasAccounts, seats, seatsLoading, discoveryAttempted, discoverMutation]);
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -661,32 +665,32 @@ function ApiConnectionTab() {
             </div>
           ) : isConfigured ? (
             <div className="space-y-4">
-              {/* Per-account discover buttons */}
-              {serviceAccounts.length > 0 && (
-                <div className="flex flex-wrap gap-2 pb-2 border-b border-gray-200">
-                  <span className="text-sm text-gray-500 py-1">Discover seats for:</span>
-                  {serviceAccounts.map((account: ServiceAccount) => (
-                    <button
-                      key={account.id}
-                      onClick={() => account.project_id && discoverMutation.mutate(account.project_id)}
-                      disabled={discoverMutation.isPending || !account.project_id}
-                      className={cn(
-                        "px-3 py-1 rounded-md text-sm font-medium",
-                        "bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50"
-                      )}
-                    >
-                      {discoverMutation.isPending ? (
-                        <span className="flex items-center gap-1">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          Discovering...
-                        </span>
-                      ) : (
-                        account.project_id || account.client_email.split("@")[0]
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {/* Prominent Discover button */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => discoverMutation.mutate()}
+                  disabled={discoverMutation.isPending}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium",
+                    "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                  )}
+                >
+                  {discoverMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Discovering...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4" />
+                      Discover Buyer Seats
+                    </>
+                  )}
+                </button>
+                <span className="text-sm text-gray-500">
+                  Scans your connected accounts for buyer seats
+                </span>
+              </div>
 
               {/* Seats list */}
               {hasSeats ? (
@@ -715,12 +719,21 @@ function ApiConnectionTab() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-6">
-                  <Users className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500">No buyer seats found</p>
-                  <p className="text-sm text-gray-400 mt-1">
-                    Click a project above to discover buyer seats
-                  </p>
+                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-yellow-800">No buyer seats discovered yet</p>
+                      <p className="text-sm text-yellow-700 mt-1">
+                        If discovery returns no seats, verify that you've added the service account email
+                        to your <a href="https://authorizedbuyers.google.com" target="_blank" rel="noopener noreferrer" className="underline">Authorized Buyers</a> account
+                        with <strong>Account Manager</strong> or <strong>RTB Troubleshooter</strong> role.
+                      </p>
+                      <p className="text-sm text-yellow-700 mt-2">
+                        Service account to add: <code className="bg-yellow-100 px-1 rounded text-xs">{serviceAccounts[0]?.client_email}</code>
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

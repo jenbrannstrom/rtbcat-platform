@@ -1,9 +1,10 @@
 # GCP Migration Plan for Cat-Scan
 
 **Created:** January 6, 2026
-**Status:** Planning
-**Current State:** AWS EC2 (Frankfurt) with SQLite
-**Target State:** GCP (europe-west1) with native Google integration
+**Updated:** January 9, 2026
+**Status:** Deployed (with OAuth2 Proxy)
+**Current State:** GCP VM (europe-west1-b) with SQLite + Docker
+**Production URL:** https://scan.rtb.cat
 
 ---
 
@@ -585,3 +586,126 @@ Before proceeding, confirm:
 ---
 
 *Plan created by Claude Code based on current architecture analysis.*
+
+---
+
+## Deployment Log (January 2026)
+
+### January 8, 2026 - Initial Deployment
+
+Deployed using Terraform + manual fixes:
+- VM: `catscan-production` in `europe-west1-b`
+- Project: `catscan-prod-202601`
+- Domain: `scan.rtb.cat`
+- Auth: OAuth2 Proxy (Google login required)
+
+### January 9, 2026 - Credential & Permission Fixes
+
+#### Issue: Service Account Credentials Not Working
+
+**Problem**: API showed `has_credentials: false` despite JSON file being present.
+
+**Root Cause**: The multi-account system requires service accounts to be registered in the database via the API, not just exist as files on disk.
+
+**Solution**:
+
+1. **Create credentials directory with correct ownership**:
+   ```bash
+   # Container runs as UID 999 (rtbcat), not UID 1002 (catscan)
+   sudo mkdir -p /home/catscan/.catscan/credentials
+   sudo chown 999:999 /home/catscan/.catscan/credentials
+   sudo chmod 700 /home/catscan/.catscan/credentials
+   ```
+
+2. **Upload service account JSON**:
+   ```bash
+   gcloud compute scp ~/.catscan/credentials/catscan-service-account.json \
+     catscan-production:/tmp/google-credentials.json \
+     --zone=europe-west1-b --project=catscan-prod-202601 --tunnel-through-iap
+
+   gcloud compute ssh catscan-production ... --command="
+     sudo mv /tmp/google-credentials.json /home/catscan/.catscan/credentials/
+     sudo chown 999:999 /home/catscan/.catscan/credentials/google-credentials.json
+     sudo chmod 644 /home/catscan/.catscan/credentials/google-credentials.json
+   "
+   ```
+
+3. **Fix database file permissions** (required for container writes):
+   ```bash
+   sudo chown 999:999 /home/catscan/.catscan/catscan.db
+   sudo chown 999:999 /home/catscan/.catscan/catscan.db-shm
+   sudo chown 999:999 /home/catscan/.catscan/catscan.db-wal
+   ```
+
+4. **Register service account via API**:
+   ```bash
+   # Create payload
+   cat /home/catscan/.catscan/credentials/google-credentials.json | \
+     jq -Rs '{service_account_json: .}' > /tmp/payload.json
+
+   # Call API (X-Email header trusted when OAuth2 Proxy enabled)
+   curl -X POST http://localhost:8000/config/service-accounts \
+     -H 'Content-Type: application/json' \
+     -H 'X-Email: your@email.com' \
+     -d @/tmp/payload.json
+   ```
+
+#### Key Insight: Container UID Mapping
+
+The docker-compose.gcp.yml mounts host directories into the container:
+```yaml
+volumes:
+  - ${DATA_DIR:-/home/catscan/.catscan}:/home/rtbcat/.catscan
+```
+
+**UID mapping**:
+| Host | Container | Notes |
+|------|-----------|-------|
+| UID 999 (dnsmasq on host) | UID 999 (rtbcat in container) | Container user |
+| UID 1002 (catscan on host) | N/A | Host user, can't write in container |
+
+**Files that need UID 999 ownership**:
+- `/home/catscan/.catscan/catscan.db*` - Database files
+- `/home/catscan/.catscan/credentials/*` - Credentials directory
+
+#### Verification
+
+```bash
+# Health check should show configured=true, has_credentials=true
+curl http://localhost:8000/health
+# {"status":"healthy","version":"0.9.0","configured":true,"has_credentials":true,"database_exists":true}
+
+# List registered service accounts
+curl http://localhost:8000/config/service-accounts -H 'X-Email: your@email.com'
+```
+
+#### Remaining Step: Add Service Account to Authorized Buyers
+
+The service account `catscan-api@augmented-vim-427407-t8.iam.gserviceaccount.com` must be added to each Authorized Buyers account:
+
+1. Go to https://realtimebidding.google.com/
+2. Select buyer account → Settings → Service Accounts
+3. Add: `catscan-api@augmented-vim-427407-t8.iam.gserviceaccount.com`
+
+Until this is done, seat discovery returns empty results.
+
+---
+
+## File Ownership Reference
+
+After a fresh deployment or reboot, verify these permissions:
+
+```bash
+# Check .catscan directory
+sudo ls -la /home/catscan/.catscan/
+
+# Expected ownership (UID 999 for container access):
+# drwx------ 2 999 999 credentials/
+# -rw-r--r-- 1 999 999 catscan.db
+# -rw-r--r-- 1 999 999 catscan.db-shm
+# -rw-r--r-- 1 999 999 catscan.db-wal
+
+# Fix if wrong:
+sudo chown -R 999:999 /home/catscan/.catscan/credentials
+sudo chown 999:999 /home/catscan/.catscan/catscan.db*
+```
