@@ -179,6 +179,9 @@ export function Sidebar() {
     queryClient.invalidateQueries({ queryKey: ["thumbnailStatus"] });
     queryClient.invalidateQueries({ queryKey: ["all-creatives"] });
     queryClient.invalidateQueries({ queryKey: ["unclustered"] });
+    // Also invalidate RTB-related queries since they depend on seat/bidder
+    queryClient.invalidateQueries({ queryKey: ["rtb-endpoints"] });
+    queryClient.invalidateQueries({ queryKey: ["pretargeting-configs"] });
   };
 
   return (

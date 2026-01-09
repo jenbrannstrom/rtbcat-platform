@@ -27,18 +27,19 @@ function formatQPS(qps: number | null): string {
 }
 
 export function AccountEndpointsHeader() {
-  const { selectedServiceAccountId } = useAccount();
+  const { selectedBuyerId, selectedServiceAccountId } = useAccount();
   const [showQpsInfo, setShowQpsInfo] = useState(false);
 
+  // Use buyer_id for filtering - RTB endpoints are looked up via buyer -> bidder mapping
   const { data, isLoading, error } = useQuery({
-    queryKey: ['rtb-endpoints', selectedServiceAccountId],
-    queryFn: () => getRTBEndpoints({ service_account_id: selectedServiceAccountId || undefined }),
+    queryKey: ['rtb-endpoints', selectedBuyerId],
+    queryFn: () => getRTBEndpoints({ buyer_id: selectedBuyerId || undefined }),
   });
 
   // Also fetch pretargeting configs to count active ones
   const { data: configsData } = useQuery({
-    queryKey: ['pretargeting-configs', selectedServiceAccountId],
-    queryFn: () => getPretargetingConfigs({ service_account_id: selectedServiceAccountId || undefined }),
+    queryKey: ['pretargeting-configs', selectedBuyerId],
+    queryFn: () => getPretargetingConfigs({ buyer_id: selectedBuyerId || undefined }),
   });
 
   const activeConfigsCount = configsData?.filter(c => c.state === 'ACTIVE').length || 0;

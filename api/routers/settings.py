@@ -185,20 +185,36 @@ async def sync_rtb_endpoints(
 
 @router.get("/settings/endpoints", response_model=RTBEndpointsResponse)
 async def get_rtb_endpoints(
-    service_account_id: Optional[str] = Query(None, description="Service account ID to filter by"),
+    buyer_id: Optional[str] = Query(None, description="Buyer/seat ID to get endpoints for"),
+    service_account_id: Optional[str] = Query(None, description="Service account ID (deprecated, use buyer_id)"),
     store: SQLiteStore = Depends(get_store),
 ):
     """Get stored RTB endpoints with aggregated QPS data.
 
     Returns all RTB endpoints that have been synced from the Google API,
     along with total allocated QPS and current usage.
+
+    Note: RTB endpoints are configured at the bidder level, not the buyer/seat level.
+    When a buyer_id is provided, we look up its parent bidder_id to filter endpoints.
     """
     try:
-        # Get credentials for bidder_id from new multi-account system
+        # Get bidder_id for filtering
         bidder_id = ""
         account_name = None
 
-        if service_account_id:
+        # Priority 1: Use buyer_id to look up bidder_id
+        if buyer_id:
+            bidder_row = await db_query_one(
+                "SELECT bidder_id, display_name FROM buyer_seats WHERE buyer_id = ?",
+                (buyer_id,)
+            )
+            if bidder_row:
+                bidder_id = bidder_row["bidder_id"]
+                account_name = bidder_row["display_name"]
+                logger.debug(f"Found bidder_id {bidder_id} for buyer_id {buyer_id}")
+
+        # Priority 2: Fall back to service_account_id (legacy support)
+        if not bidder_id and service_account_id:
             service_account = await store.get_service_account(service_account_id)
             if service_account:
                 account_name = service_account.display_name
@@ -208,11 +224,14 @@ async def get_rtb_endpoints(
                 )
                 if bidder_row:
                     bidder_id = bidder_row["bidder_id"]
-        else:
+
+        # Priority 3: Fall back to first active service account
+        if not bidder_id:
             accounts = await store.get_service_accounts(active_only=True)
             if accounts:
                 service_account = accounts[0]
-                account_name = service_account.display_name
+                if not account_name:
+                    account_name = service_account.display_name
                 bidder_row = await db_query_one(
                     "SELECT bidder_id FROM buyer_seats WHERE service_account_id = ? LIMIT 1",
                     (service_account.id,)
@@ -220,7 +239,7 @@ async def get_rtb_endpoints(
                 if bidder_row:
                     bidder_id = bidder_row["bidder_id"]
 
-        # Fallback: Get any buyer_seat if service_account_id lookup failed
+        # Priority 4: Fallback to any buyer_seat
         if not bidder_id:
             bidder_row = await db_query_one(
                 "SELECT bidder_id FROM buyer_seats LIMIT 1"
@@ -390,7 +409,8 @@ async def sync_pretargeting_configs(
 
 @router.get("/settings/pretargeting", response_model=list[PretargetingConfigResponse])
 async def get_pretargeting_configs(
-    service_account_id: Optional[str] = Query(None, description="Service account ID to filter by"),
+    buyer_id: Optional[str] = Query(None, description="Buyer/seat ID to get configs for"),
+    service_account_id: Optional[str] = Query(None, description="Service account ID (deprecated, use buyer_id)"),
     store: SQLiteStore = Depends(get_store),
 ):
     """Get stored pretargeting configs for the current account.
@@ -399,13 +419,27 @@ async def get_pretargeting_configs(
     for the currently configured account (bidder_id). This prevents cross-account
     data mixing when multiple accounts have been synced.
 
+    Note: Pretargeting configs are per-bidder. When buyer_id is provided, we look up
+    its parent bidder_id to filter configs.
+
     Includes user-defined names if set.
     """
     try:
-        # Get the current account's bidder_id from new multi-account system
+        # Get the current account's bidder_id
         current_bidder_id = None
 
-        if service_account_id:
+        # Priority 1: Use buyer_id to look up bidder_id
+        if buyer_id:
+            bidder_row = await db_query_one(
+                "SELECT bidder_id FROM buyer_seats WHERE buyer_id = ?",
+                (buyer_id,)
+            )
+            if bidder_row:
+                current_bidder_id = bidder_row["bidder_id"]
+                logger.debug(f"Found bidder_id {current_bidder_id} for buyer_id {buyer_id}")
+
+        # Priority 2: Fall back to service_account_id (legacy support)
+        if not current_bidder_id and service_account_id:
             service_account = await store.get_service_account(service_account_id)
             if service_account:
                 bidder_row = await db_query_one(
@@ -414,7 +448,9 @@ async def get_pretargeting_configs(
                 )
                 if bidder_row:
                     current_bidder_id = bidder_row["bidder_id"]
-        else:
+
+        # Priority 3: Fall back to first active service account
+        if not current_bidder_id:
             accounts = await store.get_service_accounts(active_only=True)
             if accounts:
                 service_account = accounts[0]
@@ -425,7 +461,7 @@ async def get_pretargeting_configs(
                 if bidder_row:
                     current_bidder_id = bidder_row["bidder_id"]
 
-        # Fallback: Get any buyer_seat if service_account_id lookup failed
+        # Priority 4: Fallback to any buyer_seat
         if not current_bidder_id:
             bidder_row = await db_query_one(
                 "SELECT bidder_id FROM buyer_seats LIMIT 1"
