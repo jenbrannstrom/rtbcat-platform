@@ -679,15 +679,57 @@ curl http://localhost:8000/health
 curl http://localhost:8000/config/service-accounts -H 'X-Email: your@email.com'
 ```
 
-#### Remaining Step: Add Service Account to Authorized Buyers
+#### Seat Discovery Working
 
-The service account `catscan-api@augmented-vim-427407-t8.iam.gserviceaccount.com` must be added to each Authorized Buyers account:
+After adding the service account to Authorized Buyers, seat discovery found:
+- **Amazing Design Tools LLC** (buyer ID: 1487810529) - 266 creatives
+- **Amazing MobYoung** (buyer ID: 6634662463) - 22 creatives
 
-1. Go to https://realtimebidding.google.com/
-2. Select buyer account → Settings → Service Accounts
-3. Add: `catscan-api@augmented-vim-427407-t8.iam.gserviceaccount.com`
+### January 9, 2026 - Seat Discovery Workflow Fix
 
-Until this is done, seat discovery returns empty results.
+#### Issue: "No seats connected" Despite Credentials Configured
+
+**Symptoms:**
+- UI showed "No seats connected - Go to Settings to connect"
+- 0 creatives displayed
+- Service account was registered but discovery returned empty
+
+**Root Cause Analysis:**
+
+The `buyers.list()` API returns ALL accessible buyers - no bidder ID is needed. The UI was passing the wrong ID (GCP project_id) but this was a red herring since the API ignores it anyway.
+
+The actual issue was that the service account needed to be added to Authorized Buyers with proper permissions (Account Manager or RTB Troubleshooter role, not just Viewer).
+
+**Verification Command:**
+```bash
+# Test API access directly on server
+sudo docker exec catscan-api python3 -c "
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+
+creds = service_account.Credentials.from_service_account_file(
+    '/home/rtbcat/.catscan/credentials/google-credentials.json',
+    scopes=['https://www.googleapis.com/auth/realtime-bidding']
+)
+service = build('realtimebidding', 'v1', credentials=creds)
+response = service.buyers().list().execute()
+print('Buyers found:', response)
+"
+```
+
+**UI Improvements Deployed:**
+
+1. **Prominent "Discover Buyer Seats" button** - Always visible in Setup page
+2. **Better error messaging** - Shows service account email to add when no seats found
+3. **Made `bidder_id` optional in API** - It wasn't actually used by `buyers.list()`
+4. **Removed confusing per-project buttons** - Were showing project_id which confused users
+
+**Files Changed:**
+- `dashboard/src/app/setup/page.tsx` - UI improvements
+- `api/routers/seats.py` - Made bidder_id optional
+- `docs/GCP_CREDENTIALS_SETUP.md` - Added troubleshooting section
+
+**Commit:** `218163b` - "Fix seat discovery workflow and improve Setup UI"
 
 ---
 
