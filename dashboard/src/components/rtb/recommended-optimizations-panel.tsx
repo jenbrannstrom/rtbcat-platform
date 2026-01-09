@@ -450,6 +450,11 @@ export function RecommendedOptimizationsPanel({
     name: c.user_name || c.display_name || `Config ${c.billing_id || c.config_id}`,
   }));
 
+  // Hide panel entirely when no recommendations and not loading
+  if (!recsLoading && visibleRecs.length === 0) {
+    return null;
+  }
+
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-6">
       <div className="flex items-center justify-between mb-4">
@@ -470,12 +475,6 @@ export function RecommendedOptimizationsPanel({
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-24 bg-gray-100 rounded-lg animate-pulse" />
           ))}
-        </div>
-      ) : visibleRecs.length === 0 ? (
-        // Collapsed state when no recommendations - just show success indicator
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <CheckCircle className="h-4 w-4 text-green-500" />
-          <span>No optimization recommendations needed ({days}d analysis)</span>
         </div>
       ) : (
         <div className="space-y-3">

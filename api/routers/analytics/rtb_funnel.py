@@ -70,8 +70,9 @@ async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
             imps = row["impressions"] or 0
             bids = row["total_bids"] or 0
             pub_win_rate = (imps / reached * 100) if reached > 0 else 0
-            # Handle both NULL and empty string for publisher_name
-            pub_name = row["publisher_name"] if row["publisher_name"] else row["publisher_id"]
+            # Handle NULL, empty string, and whitespace-only for publisher_name
+            raw_name = row["publisher_name"]
+            pub_name = raw_name.strip() if raw_name and raw_name.strip() else row["publisher_id"]
             publishers.append({
                 "publisher_id": row["publisher_id"],
                 "publisher_name": pub_name,
@@ -171,8 +172,9 @@ async def get_rtb_publishers(
             bids = row["total_bids"] or 0
             win_rate = (imps / reached * 100) if reached > 0 else 0
             bid_rate = (bids / reached * 100) if reached > 0 else 0
-            # Handle both NULL and empty string for publisher_name
-            pub_name = row["publisher_name"] if row["publisher_name"] else row["publisher_id"]
+            # Handle NULL, empty string, and whitespace-only for publisher_name
+            raw_name = row["publisher_name"]
+            pub_name = raw_name.strip() if raw_name and raw_name.strip() else row["publisher_id"]
             publishers.append({
                 "publisher_id": row["publisher_id"],
                 "publisher_name": pub_name,

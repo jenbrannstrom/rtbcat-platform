@@ -18,3 +18,6 @@ When using MCP chrome-devtools for browser interaction:
 - Production: https://scan.rtb.cat
 - Local Dashboard: http://localhost:3000
 - Local API: http://localhost:8000
+
+
+There is a Deploy key on github, so never make a tarball and upload directly from local to github
