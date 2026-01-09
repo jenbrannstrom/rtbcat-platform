@@ -61,6 +61,7 @@ async def get_size_coverage(
                 {
                     "size": s["size"],
                     "format": s["format"],
+                    "reached_queries": s["reached_queries"],
                     "impressions": s["impressions"],
                     "spend_usd": round(s["spend_usd"], 2),
                     "creative_count": s["creative_count"],

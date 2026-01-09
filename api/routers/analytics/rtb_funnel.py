@@ -55,7 +55,8 @@ async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
                 publisher_id,
                 publisher_name,
                 SUM(reached_queries) as reached,
-                SUM(impressions) as impressions
+                SUM(impressions) as impressions,
+                SUM(bids) as total_bids
             FROM rtb_funnel
             WHERE metric_date >= date('now', ?) AND publisher_id IS NOT NULL
             GROUP BY publisher_id
@@ -67,11 +68,15 @@ async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
         for row in pub_rows:
             reached = row["reached"] or 0
             imps = row["impressions"] or 0
+            bids = row["total_bids"] or 0
             pub_win_rate = (imps / reached * 100) if reached > 0 else 0
+            # Handle both NULL and empty string for publisher_name
+            pub_name = row["publisher_name"] if row["publisher_name"] else row["publisher_id"]
             publishers.append({
                 "publisher_id": row["publisher_id"],
-                "publisher_name": row["publisher_name"] or row["publisher_id"],
+                "publisher_name": pub_name,
                 "reached_queries": reached,
+                "bids": bids,
                 "impressions": imps,
                 "win_rate": round(pub_win_rate, 2),
             })
@@ -81,7 +86,8 @@ async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
             SELECT
                 country,
                 SUM(reached_queries) as reached,
-                SUM(impressions) as impressions
+                SUM(impressions) as impressions,
+                SUM(bids) as total_bids
             FROM rtb_funnel
             WHERE metric_date >= date('now', ?) AND country IS NOT NULL
             GROUP BY country
@@ -93,10 +99,12 @@ async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
         for row in geo_rows:
             reached = row["reached"] or 0
             imps = row["impressions"] or 0
+            bids = row["total_bids"] or 0
             geo_win_rate = (imps / reached * 100) if reached > 0 else 0
             geos.append({
                 "country": row["country"],
                 "reached_queries": reached,
+                "bids": bids,
                 "impressions": imps,
                 "win_rate": round(geo_win_rate, 2),
             })
@@ -163,9 +171,11 @@ async def get_rtb_publishers(
             bids = row["total_bids"] or 0
             win_rate = (imps / reached * 100) if reached > 0 else 0
             bid_rate = (bids / reached * 100) if reached > 0 else 0
+            # Handle both NULL and empty string for publisher_name
+            pub_name = row["publisher_name"] if row["publisher_name"] else row["publisher_id"]
             publishers.append({
                 "publisher_id": row["publisher_id"],
-                "publisher_name": row["publisher_name"] or row["publisher_id"],
+                "publisher_name": pub_name,
                 "reached_queries": reached,
                 "impressions": imps,
                 "bids": bids,

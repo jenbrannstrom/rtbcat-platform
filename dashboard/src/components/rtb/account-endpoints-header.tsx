@@ -1,8 +1,8 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { getRTBEndpoints, getPretargetingConfigs } from '@/lib/api';
-import { Server, AlertTriangle, Globe, Info } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getRTBEndpoints, getPretargetingConfigs, syncRTBEndpoints } from '@/lib/api';
+import { Server, AlertTriangle, Globe, Info, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAccount } from '@/contexts/account-context';
 import { useState } from 'react';
@@ -29,9 +29,10 @@ function formatQPS(qps: number | null): string {
 export function AccountEndpointsHeader() {
   const { selectedBuyerId, selectedServiceAccountId } = useAccount();
   const [showQpsInfo, setShowQpsInfo] = useState(false);
+  const queryClient = useQueryClient();
 
   // Use buyer_id for filtering - RTB endpoints are looked up via buyer -> bidder mapping
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['rtb-endpoints', selectedBuyerId],
     queryFn: () => getRTBEndpoints({ buyer_id: selectedBuyerId || undefined }),
   });
@@ -40,6 +41,15 @@ export function AccountEndpointsHeader() {
   const { data: configsData } = useQuery({
     queryKey: ['pretargeting-configs', selectedBuyerId],
     queryFn: () => getPretargetingConfigs({ buyer_id: selectedBuyerId || undefined }),
+  });
+
+  // Mutation to sync endpoints from Google API
+  const syncMutation = useMutation({
+    mutationFn: () => syncRTBEndpoints({ service_account_id: selectedServiceAccountId || undefined }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rtb-endpoints'] });
+      refetch();
+    },
   });
 
   const activeConfigsCount = configsData?.filter(c => c.state === 'ACTIVE').length || 0;
@@ -89,14 +99,33 @@ export function AccountEndpointsHeader() {
   if (!data?.endpoints?.length) {
     return (
       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
-          <div className="flex-1">
-            <h3 className="font-medium text-yellow-800">No RTB Endpoints Configured</h3>
-            <p className="text-sm text-yellow-700 mt-1">
-              RTB endpoints will be synced automatically when you configure your service account credentials.
-            </p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-medium text-yellow-800">RTB Endpoints Not Synced</h3>
+              <p className="text-sm text-yellow-700 mt-1">
+                Endpoints need to be synced from Google Authorized Buyers API. Click "Sync" to fetch your bidder's endpoint configuration.
+              </p>
+              {syncMutation.isError && (
+                <p className="text-sm text-red-600 mt-2">
+                  Failed to sync: {syncMutation.error instanceof Error ? syncMutation.error.message : 'Unknown error'}
+                </p>
+              )}
+            </div>
           </div>
+          <button
+            onClick={() => syncMutation.mutate()}
+            disabled={syncMutation.isPending}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors",
+              "bg-yellow-600 text-white hover:bg-yellow-700",
+              "disabled:opacity-50 disabled:cursor-not-allowed"
+            )}
+          >
+            <RefreshCw className={cn("h-4 w-4", syncMutation.isPending && "animate-spin")} />
+            {syncMutation.isPending ? "Syncing..." : "Sync"}
+          </button>
         </div>
       </div>
     );

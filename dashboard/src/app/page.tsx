@@ -463,7 +463,7 @@ function SizeAnalysisSection({ days, billingId }: { days: number; billingId?: st
   const gaps = data.gaps || [];
 
   const allSizes = [
-    ...coveredSizes.map(s => ({ ...s, hasCreative: true, requests: s.impressions * 2 })),
+    ...coveredSizes.map(s => ({ ...s, hasCreative: true, requests: s.reached_queries || s.impressions })),
     ...gaps.map(g => ({
       size: g.size,
       format: g.format,
@@ -1036,7 +1036,7 @@ function WasteAnalysisContent() {
                 "text-xs uppercase tracking-wide",
                 expandedConfigId ? "text-blue-600" : "text-green-600"
               )}>
-                {expandedConfigId ? "Config CPM" : "Avg CPM"}
+                {expandedConfigId ? `Config CPM (${days}d)` : `Avg CPM (${days}d)`}
               </span>
               <span className={cn(
                 "ml-2 text-sm font-bold",
