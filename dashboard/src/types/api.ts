@@ -110,6 +110,11 @@ export interface DiscoverSeatsResponse {
   bidder_id: string;
   seats_discovered: number;
   seats: BuyerSeat[];
+  sync_result?: {
+    creatives_synced: number;
+    endpoints_synced: number;
+    pretargeting_synced: number;
+  };
 }
 
 export interface SyncSeatResponse {
