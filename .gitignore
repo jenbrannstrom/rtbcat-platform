@@ -19,8 +19,8 @@ node_modules/
 .DS_Store
 Thumbs.db
 
-# Data files (user-specific RTB exports)
-data/csv-reports/
+# Data files (local development only - production uses ~/.catscan/)
+data/
 
 # Documentation - NOTE: docs/ is tracked in git (removed from gitignore)
 # Sensitive deployment info should use environment variables, not hardcoded in docs
