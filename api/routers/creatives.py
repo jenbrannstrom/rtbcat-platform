@@ -1036,7 +1036,7 @@ async def analyze_creative_language(
             detail=f"Language analyzer not available: {e}"
         )
 
-    analyzer = GeminiLanguageAnalyzer()
+    analyzer = GeminiLanguageAnalyzer(db_path=store.db_path)
 
     if not analyzer.is_configured:
         # Save error to database
@@ -1046,11 +1046,11 @@ async def analyze_creative_language(
             detected_language_code=None,
             language_confidence=None,
             language_source="gemini",
-            language_analysis_error="GEMINI_API_KEY not configured",
+            language_analysis_error="Gemini API key not configured",
         )
         raise HTTPException(
             status_code=503,
-            detail="GEMINI_API_KEY environment variable not set. Language analysis unavailable."
+            detail="Gemini API key not configured. Set it in Settings > Connected Accounts."
         )
 
     # Run language detection

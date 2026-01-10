@@ -547,6 +547,36 @@ export async function deleteServiceAccount(accountId: string): Promise<{ success
   );
 }
 
+// Gemini API Key Management
+
+export interface GeminiKeyStatus {
+  configured: boolean;
+  masked_key: string | null;
+  message: string;
+}
+
+export interface GeminiKeyUpdateResponse {
+  success: boolean;
+  message: string;
+}
+
+export async function getGeminiKeyStatus(): Promise<GeminiKeyStatus> {
+  return fetchApi<GeminiKeyStatus>("/config/gemini-key");
+}
+
+export async function updateGeminiKey(apiKey: string): Promise<GeminiKeyUpdateResponse> {
+  return fetchApi<GeminiKeyUpdateResponse>("/config/gemini-key", {
+    method: "PUT",
+    body: JSON.stringify({ api_key: apiKey }),
+  });
+}
+
+export async function deleteGeminiKey(): Promise<GeminiKeyUpdateResponse> {
+  return fetchApi<GeminiKeyUpdateResponse>("/config/gemini-key", {
+    method: "DELETE",
+  });
+}
+
 // Thumbnail Generation API
 
 export interface ThumbnailStatusSummary {
