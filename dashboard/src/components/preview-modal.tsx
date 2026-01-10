@@ -240,7 +240,7 @@ function VideoPreviewPlayer({ creative }: { creative: Creative }) {
   );
 }
 
-function HtmlPreviewFrame({ creative }: { creative: Creative }) {
+function HtmlPreviewFrame({ creative, destinationUrl }: { creative: Creative; destinationUrl?: string }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Get declared dimensions from creative
@@ -299,24 +299,42 @@ function HtmlPreviewFrame({ creative }: { creative: Creative }) {
   const displayWidth = Math.round(creativeWidth * scale);
   const displayHeight = Math.round(creativeHeight * scale);
 
+  const handleClick = () => {
+    if (destinationUrl) {
+      window.open(destinationUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   return (
     <div className="flex flex-col items-center p-4 bg-gray-100">
       <div
-        className="border border-gray-300 bg-white overflow-hidden"
+        className={cn(
+          "border border-gray-300 bg-white overflow-hidden relative",
+          destinationUrl && "cursor-pointer group"
+        )}
         style={{ width: displayWidth, height: displayHeight }}
+        onClick={handleClick}
+        title={destinationUrl ? "Click to open destination" : undefined}
       >
         <iframe
           ref={iframeRef}
           title={`Creative ${creative.id}`}
           width={creativeWidth}
           height={creativeHeight}
-          className="border-0"
+          className="border-0 pointer-events-none"
           style={{
             transform: scale < 1 ? `scale(${scale})` : undefined,
             transformOrigin: 'top left',
           }}
           sandbox="allow-scripts allow-same-origin"
         />
+        {destinationUrl && (
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+            <span className="opacity-0 group-hover:opacity-100 bg-white/90 text-gray-700 text-xs px-2 py-1 rounded shadow transition-opacity">
+              Click to open destination
+            </span>
+          </div>
+        )}
       </div>
       <div className="mt-2 text-xs text-gray-500">
         {creativeWidth} × {creativeHeight}
@@ -382,10 +400,73 @@ function NativePreviewCard({ creative }: { creative: Creative }) {
 // Country Section Component
 // ============================================================================
 
-function CountrySection({ creativeId }: { creativeId: string }) {
+// Language to country mapping for frontend (subset of backend mapping)
+const LANGUAGE_TO_COUNTRIES: Record<string, string[]> = {
+  "en": ["US", "GB", "CA", "AU", "NZ", "IE", "ZA", "SG", "IN", "PH", "NG", "KE", "GH"],
+  "de": ["DE", "AT", "CH", "LI", "LU", "BE"],
+  "fr": ["FR", "BE", "CH", "CA", "LU", "MC", "SN", "CI", "ML", "BF", "NE", "TG", "BJ", "MG"],
+  "es": ["ES", "MX", "AR", "CO", "PE", "VE", "CL", "EC", "GT", "CU", "DO", "BO", "HN", "PY", "SV", "NI", "CR", "PA", "UY", "PR"],
+  "it": ["IT", "CH", "SM", "VA"],
+  "pt": ["PT", "BR", "AO", "MZ", "CV", "GW", "ST", "TL", "MO"],
+  "nl": ["NL", "BE", "SR", "CW", "AW", "SX"],
+  "pl": ["PL"],
+  "ru": ["RU", "BY", "KZ", "KG"],
+  "ja": ["JP"],
+  "ko": ["KR", "KP"],
+  "zh": ["CN", "TW", "HK", "MO", "SG"],
+  "ar": ["SA", "EG", "AE", "IQ", "JO", "KW", "LB", "LY", "MA", "OM", "QA", "SD", "SY", "TN", "YE", "DZ", "BH"],
+  "hi": ["IN"],
+  "tr": ["TR", "CY"],
+  "th": ["TH"],
+  "vi": ["VN"],
+  "id": ["ID"],
+  "ms": ["MY", "SG", "BN"],
+  "sv": ["SE", "FI"],
+  "da": ["DK", "GL", "FO"],
+  "no": ["NO"],
+  "fi": ["FI"],
+  "cs": ["CZ"],
+  "el": ["GR", "CY"],
+  "he": ["IL"],
+  "hu": ["HU"],
+  "ro": ["RO", "MD"],
+  "uk": ["UA"],
+  "bg": ["BG"],
+};
+
+function checkLanguageCountryMatch(languageCode: string | null, countryCodes: string[]): {
+  isMatch: boolean;
+  matchingCountries: string[];
+  mismatchedCountries: string[];
+} {
+  if (!languageCode || countryCodes.length === 0) {
+    return { isMatch: true, matchingCountries: [], mismatchedCountries: [] };
+  }
+
+  const expectedCountries = new Set(LANGUAGE_TO_COUNTRIES[languageCode.toLowerCase()] || []);
+  const servingCountries = new Set(countryCodes.map(c => c.toUpperCase()));
+
+  const matching = [...servingCountries].filter(c => expectedCountries.has(c));
+  const mismatched = [...servingCountries].filter(c => !expectedCountries.has(c));
+
+  return {
+    isMatch: matching.length > 0 || mismatched.length === 0,
+    matchingCountries: matching,
+    mismatchedCountries: mismatched,
+  };
+}
+
+interface CountrySectionProps {
+  creativeId: string;
+  detectedLanguage?: string | null;
+  detectedLanguageCode?: string | null;
+}
+
+function CountrySection({ creativeId, detectedLanguage, detectedLanguageCode }: CountrySectionProps) {
   const [countryData, setCountryData] = useState<CreativeCountryBreakdown | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mismatchDismissed, setMismatchDismissed] = useState(false);
 
   useEffect(() => {
     setIsLoading(true);
@@ -438,17 +519,85 @@ function CountrySection({ creativeId }: { creativeId: string }) {
     return `$${dollars.toFixed(2)}`;
   };
 
+  // Check language match
+  const servingCountryCodes = countryData.countries.map(c => c.country_code);
+  const langMatch = checkLanguageCountryMatch(detectedLanguageCode || null, servingCountryCodes);
+  const showMismatchAlert = !langMatch.isMatch && langMatch.mismatchedCountries.length > 0 && !mismatchDismissed;
+
+  const handleDismissMismatch = () => {
+    setMismatchDismissed(true);
+    // Log dismissal (in a real app this would call an API)
+    console.log(`Geo mismatch dismissed for creative ${creativeId} at ${new Date().toISOString()}`);
+  };
+
   return (
     <div className="bg-gray-50 rounded-lg p-3">
       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
         Country Targeting ({countryData.total_countries})
       </h4>
+
+      {/* Language Match Status */}
+      {detectedLanguage && (
+        <div className={cn(
+          "flex items-center justify-between text-xs mb-2 pb-2 border-b border-gray-200",
+        )}>
+          <div className="flex items-center gap-1.5">
+            <span className="text-gray-500">Creative Language:</span>
+            <span className="font-medium text-gray-700">{detectedLanguage}</span>
+            {detectedLanguageCode && (
+              <span className="text-gray-400 font-mono">({detectedLanguageCode})</span>
+            )}
+          </div>
+          {langMatch.isMatch ? (
+            <div className="flex items-center gap-1 text-green-600">
+              <CheckCircle className="h-3.5 w-3.5" />
+              <span>Match</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 text-amber-600">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              <span>Mismatch</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Mismatch Alert */}
+      {showMismatchAlert && (
+        <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div className="text-amber-800">
+                <span className="font-medium">Geo Mismatch:</span>{" "}
+                Creative in {detectedLanguage} serving in {langMatch.mismatchedCountries.slice(0, 3).join(", ")}
+                {langMatch.mismatchedCountries.length > 3 && ` +${langMatch.mismatchedCountries.length - 3} more`}
+              </div>
+            </div>
+            <button
+              onClick={handleDismissMismatch}
+              className="text-amber-600 hover:text-amber-800 p-0.5"
+              title="Dismiss this alert"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-1.5">
         {countryData.countries.slice(0, 5).map((country) => (
           <div key={country.country_code} className="flex items-center justify-between text-xs">
             <div className="flex items-center gap-1.5">
               <span className="font-mono text-gray-400">{country.country_code}</span>
               <span className="text-gray-700">{country.country_name}</span>
+              {/* Show mismatch indicator per country */}
+              {detectedLanguageCode && langMatch.mismatchedCountries.includes(country.country_code) && (
+                <span className="text-amber-500" title="Language mismatch">⚠</span>
+              )}
+              {detectedLanguageCode && langMatch.matchingCountries.includes(country.country_code) && (
+                <span className="text-green-500" title="Language match">✓</span>
+              )}
             </div>
             <div className="flex items-center gap-2 text-gray-500">
               <span>{formatSpendUsd(country.spend_micros)}</span>
@@ -813,7 +962,10 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                   Loading HTML preview...
                 </div>
               ) : (
-                <HtmlPreviewFrame creative={creative} />
+                <HtmlPreviewFrame
+                  creative={creative}
+                  destinationUrl={parsedUrls.find(u => u.isPrimary)?.url}
+                />
               ))}
             {creative.format === "NATIVE" && (
               <div className="p-4">
@@ -900,28 +1052,12 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                 </div>
               </div>
 
-              {/* Technical IDs */}
+              {/* Technical IDs - Creative ID already shown in header */}
               <div className="bg-gray-50 rounded-lg p-3">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                  Technical IDs
+                  Account Info
                 </h4>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between items-center gap-2">
-                    <span className="text-gray-500 flex-shrink-0">Creative ID</span>
-                    <div className="flex items-center gap-1 min-w-0">
-                      <span className="font-mono text-xs truncate" title={creative.id}>{creative.id}</span>
-                      <CopyButton text={creative.id} className="flex-shrink-0" />
-                    </div>
-                  </div>
-                  {creative.account_id && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-500">Account ID</span>
-                      <div className="flex items-center gap-1">
-                        <span className="font-mono text-xs">{creative.account_id}</span>
-                        <CopyButton text={creative.account_id} />
-                      </div>
-                    </div>
-                  )}
                   {creative.buyer_id && (
                     <div className="flex justify-between items-center">
                       <span className="text-gray-500">Buyer ID</span>
@@ -929,6 +1065,12 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                         <span className="font-mono text-xs">{creative.buyer_id}</span>
                         <CopyButton text={creative.buyer_id} />
                       </div>
+                    </div>
+                  )}
+                  {creative.seat_name && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Buyer Name</span>
+                      <span className="text-xs text-gray-700">{creative.seat_name}</span>
                     </div>
                   )}
                   {bundleId && (
@@ -952,20 +1094,26 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                   Destination
                 </h4>
                 {parsedUrls.length > 0 ? (
-                  <div className="space-y-2 text-sm">
+                  <div className="space-y-3">
                     {parsedUrls.slice(0, 4).map((url, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <span className="text-gray-400 flex-shrink-0">→</span>
-                        <a
-                          href={url.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary-600 hover:text-primary-700 truncate flex-1 text-xs"
-                          title={url.url}
-                        >
-                          {getUrlDisplayText(url)}
-                        </a>
-                        <CopyButton text={url.url} className="flex-shrink-0" />
+                      <div key={i} className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-gray-500">{url.label}</span>
+                          {url.isPrimary && (
+                            <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Primary</span>
+                          )}
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <a
+                            href={url.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary-600 hover:text-primary-700 text-[11px] font-mono break-all leading-relaxed"
+                          >
+                            {url.url}
+                          </a>
+                          <CopyButton text={url.url} className="flex-shrink-0 mt-0.5" />
+                        </div>
                       </div>
                     ))}
                     {parsedUrls.length > 4 && (
@@ -1005,7 +1153,11 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
               </div>
 
               {/* Country Targeting */}
-              <CountrySection creativeId={creative.id} />
+              <CountrySection
+                creativeId={creative.id}
+                detectedLanguage={creative.detected_language}
+                detectedLanguageCode={creative.detected_language_code}
+              />
 
               {/* Language Detection */}
               <LanguageSection

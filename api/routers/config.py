@@ -469,6 +469,139 @@ async def delete_service_account(
 
 
 # =============================================================================
+# Gemini API Key Endpoints
+# =============================================================================
+
+class GeminiKeyStatusResponse(BaseModel):
+    """Response model for Gemini API key status."""
+    configured: bool
+    masked_key: Optional[str] = None  # e.g., "AIza...x7Qm"
+    message: str
+
+
+class GeminiKeyUpdateRequest(BaseModel):
+    """Request to update Gemini API key."""
+    api_key: str = Field(..., min_length=10, description="Gemini API key")
+
+
+class GeminiKeyUpdateResponse(BaseModel):
+    """Response after updating Gemini API key."""
+    success: bool
+    message: str
+
+
+def _mask_api_key(key: str) -> str:
+    """Mask API key for display, showing first 4 and last 4 chars."""
+    if len(key) <= 10:
+        return "*" * len(key)
+    return f"{key[:4]}...{key[-4:]}"
+
+
+@router.get("/config/gemini-key", response_model=GeminiKeyStatusResponse)
+async def get_gemini_key_status(
+    store: SQLiteStore = Depends(get_store),
+):
+    """Get Gemini API key configuration status.
+
+    The key is used for AI-powered language detection in creatives.
+    Returns masked key for security.
+    """
+    from storage.repositories.user_repository import UserRepository
+
+    # Check database setting first
+    repo = UserRepository(store.db_path)
+    stored_key = await repo.get_system_setting("gemini_api_key")
+
+    if stored_key:
+        return GeminiKeyStatusResponse(
+            configured=True,
+            masked_key=_mask_api_key(stored_key),
+            message="Gemini API key configured from database",
+        )
+
+    # Fall back to environment variable
+    env_key = os.environ.get("GEMINI_API_KEY")
+    if env_key:
+        return GeminiKeyStatusResponse(
+            configured=True,
+            masked_key=_mask_api_key(env_key),
+            message="Gemini API key configured from environment variable",
+        )
+
+    return GeminiKeyStatusResponse(
+        configured=False,
+        message="Gemini API key not configured. Language detection is disabled.",
+    )
+
+
+@router.put("/config/gemini-key", response_model=GeminiKeyUpdateResponse)
+async def update_gemini_key(
+    request: GeminiKeyUpdateRequest,
+    store: SQLiteStore = Depends(get_store),
+):
+    """Update Gemini API key.
+
+    The key is stored securely in the database and used for AI-powered
+    language detection in creatives.
+    """
+    from storage.repositories.user_repository import UserRepository
+
+    try:
+        # Validate key format (basic check)
+        api_key = request.api_key.strip()
+        if not api_key.startswith("AIza"):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid API key format. Gemini API keys typically start with 'AIza'.",
+            )
+
+        # Store in database
+        repo = UserRepository(store.db_path)
+        await repo.set_system_setting("gemini_api_key", api_key, updated_by="api")
+
+        logger.info("Gemini API key updated")
+        return GeminiKeyUpdateResponse(
+            success=True,
+            message="Gemini API key saved successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to save Gemini API key: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save API key: {str(e)}",
+        )
+
+
+@router.delete("/config/gemini-key", response_model=GeminiKeyUpdateResponse)
+async def delete_gemini_key(
+    store: SQLiteStore = Depends(get_store),
+):
+    """Delete Gemini API key from database.
+
+    Note: If GEMINI_API_KEY environment variable is set, it will be used as fallback.
+    """
+    from storage.repositories.user_repository import UserRepository
+
+    try:
+        repo = UserRepository(store.db_path)
+        await repo.set_system_setting("gemini_api_key", "", updated_by="api")
+
+        logger.info("Gemini API key removed")
+        return GeminiKeyUpdateResponse(
+            success=True,
+            message="Gemini API key removed",
+        )
+    except Exception as e:
+        logger.error(f"Failed to delete Gemini API key: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete API key: {str(e)}",
+        )
+
+
+# =============================================================================
 # Legacy Single-Account Endpoints (Deprecated but kept for compatibility)
 # =============================================================================
 
