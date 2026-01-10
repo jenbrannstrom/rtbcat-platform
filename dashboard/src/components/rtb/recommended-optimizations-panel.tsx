@@ -290,10 +290,11 @@ export function RecommendedOptimizationsPanel({
     enabled: aiMode !== 'manual',
   });
 
-  // Fetch config performance for underperforming recommendations
+  // Fetch config performance for underperforming recommendations (filtered by selected buyer)
+  const { selectedBuyerId: buyerId } = useAccount();
   const { data: configPerformance, isLoading: configPerfLoading } = useQuery({
-    queryKey: ['rtb-funnel-configs', days],
-    queryFn: () => getRTBFunnelConfigs(days),
+    queryKey: ['rtb-funnel-configs', days, buyerId],
+    queryFn: () => getRTBFunnelConfigs(days, buyerId || undefined),
     enabled: aiMode !== 'manual',
   });
 

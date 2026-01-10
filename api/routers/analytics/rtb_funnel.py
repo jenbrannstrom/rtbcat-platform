@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from storage.database import db_query, db_query_one
 from analytics.rtb_funnel_analyzer import RTBFunnelAnalyzer
-from .common import get_valid_billing_ids
+from .common import get_valid_billing_ids, get_valid_billing_ids_for_buyer
 
 logger = logging.getLogger(__name__)
 
@@ -258,6 +258,7 @@ async def get_rtb_geos(
 @router.get("/analytics/rtb-funnel/configs", tags=["RTB Analytics"])
 async def get_config_performance(
     days: int = Query(7, ge=1, le=30),
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
 ):
     """
     Get performance breakdown by pretargeting config (billing_id).
@@ -269,12 +270,16 @@ async def get_config_performance(
     - Win rate vs waste percentages
     - Settings derived from the data (format, geos, platforms)
 
-    Only returns data for billing_ids that belong to the current account
-    (those synced in pretargeting_configs table).
+    Only returns data for billing_ids that belong to the specified buyer seat
+    (or current account if not specified).
+
+    Args:
+        days: Number of days to analyze (default 7, max 30)
+        buyer_id: Optional buyer seat ID to filter results
     """
     try:
-        # Get valid billing IDs for current account to prevent cross-account data mixing
-        valid_billing_ids = await get_valid_billing_ids()
+        # Get valid billing IDs for the specified buyer seat (or all if not specified)
+        valid_billing_ids = await get_valid_billing_ids_for_buyer(buyer_id)
 
         # Query aggregated data by billing_id from rtb_daily
         # Use bids_in_auction/auctions_won as they're populated by bids-in-auction CSV
