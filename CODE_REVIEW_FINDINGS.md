@@ -131,8 +131,18 @@ rtbcat-platform/
 - [x] Audit for other debug statements (2 more files cleaned)
 - [ ] Remove unused imports and variables (deferred to Phase 3)
 
-### Phase 3: Large File Refactoring
-- [ ] Split `api.ts` (2,047 lines) into domain modules
+### Phase 3: Large File Refactoring - **IN PROGRESS**
+- [x] Create modular API structure (`dashboard/src/lib/api/`)
+  - [x] `core.ts` - fetchApi, health, stats, system
+  - [x] `auth.ts` - login, logout, session management
+  - [x] `index.ts` - backward-compatible re-exports
+  - [ ] `creatives.ts` - creative CRUD, thumbnails, language
+  - [ ] `campaigns.ts` - campaigns, AI campaigns
+  - [ ] `seats.ts` - buyer seats, discovery
+  - [ ] `analytics.ts` - waste, performance, QPS, funnel
+  - [ ] `settings.ts` - RTB endpoints, pretargeting, configs
+  - [ ] `admin.ts` - user management, audit logs
+  - [ ] `integrations.ts` - credentials, Gmail, GCP
 - [ ] Split `settings.py` (1,846 lines) into sub-routers
 - [ ] Split `accounts/page.tsx` (1,621 lines) into components
 - [ ] Complete repository migration in `sqlite_store.py`
