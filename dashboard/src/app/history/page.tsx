@@ -268,9 +268,8 @@ export default function HistoryPage() {
 
   // Rollback mutation (placeholder - needs backend endpoint)
   const rollbackMutation = useMutation({
-    mutationFn: async ({ changeId, reason }: { changeId: number; reason: string }) => {
+    mutationFn: async ({ changeId: _changeId, reason: _reason }: { changeId: number; reason: string }) => {
       // TODO: Implement rollback endpoint
-      console.log('Rolling back change', changeId, 'with reason:', reason);
       return { success: true };
     },
     onSuccess: () => {
