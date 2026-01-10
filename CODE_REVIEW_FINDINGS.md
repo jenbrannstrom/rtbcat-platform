@@ -143,7 +143,16 @@ rtbcat-platform/
   - [x] `analytics.ts` - waste, QPS, RTB funnel, performance (290 lines)
   - [x] `index.ts` - backward-compatible re-exports
   - [ ] Remaining in legacy: recommendations, settings, snapshots, history
-- [ ] Split `settings.py` (1,846 lines) into sub-routers
+- [x] Start `settings.py` refactoring (1,846 lines)
+  - [x] Create `api/routers/settings/` package structure
+  - [x] Extract models to `settings/models.py` (210 lines)
+  - [x] Create `settings/__init__.py` with re-exports
+  - [x] Rename original to `settings_legacy.py` with migration notes
+  - [ ] Extract endpoints routes (~200 lines)
+  - [ ] Extract pretargeting routes (~300 lines)
+  - [ ] Extract snapshots routes (~200 lines)
+  - [ ] Extract changes routes (~350 lines)
+  - [ ] Extract actions routes (~350 lines)
 - [ ] Split `accounts/page.tsx` (1,621 lines) into components
 - [ ] Complete repository migration in `sqlite_store.py`
 - [ ] Split remaining large files
