@@ -23,7 +23,10 @@ export * from "./core";
 export * from "./auth";
 export * from "./creatives";
 export * from "./campaigns";
+export * from "./seats";
+export * from "./admin";
+export * from "./integrations";
 
-// TODO: Migrate remaining functions to modules, then remove this re-export
-// For now, re-export everything from the legacy file
+// TODO: Migrate remaining functions to modules (analytics, settings),
+// then remove this re-export from the legacy file
 export * from "../api";
