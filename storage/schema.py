@@ -33,6 +33,12 @@ CREATE TABLE IF NOT EXISTS creatives (
     app_store TEXT,
     disapproval_reasons TEXT,
     serving_restrictions TEXT,
+    detected_language TEXT,
+    detected_language_code TEXT,
+    language_confidence REAL,
+    language_source TEXT,
+    language_analyzed_at TIMESTAMP,
+    language_analysis_error TEXT,
     first_seen_at TIMESTAMP,
     first_import_batch_id TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -914,4 +920,14 @@ MIGRATIONS = [
     "ALTER TABLE creatives ADD COLUMN serving_restrictions TEXT",
     "CREATE INDEX IF NOT EXISTS idx_creatives_app_id ON creatives(app_id)",
     "CREATE INDEX IF NOT EXISTS idx_creatives_app_name ON creatives(app_name)",
+
+    # Language detection (Creative geo display feature)
+    "ALTER TABLE creatives ADD COLUMN detected_language TEXT",
+    "ALTER TABLE creatives ADD COLUMN detected_language_code TEXT",
+    "ALTER TABLE creatives ADD COLUMN language_confidence REAL",
+    "ALTER TABLE creatives ADD COLUMN language_source TEXT",
+    "ALTER TABLE creatives ADD COLUMN language_analyzed_at TIMESTAMP",
+    "ALTER TABLE creatives ADD COLUMN language_analysis_error TEXT",
+    "CREATE INDEX IF NOT EXISTS idx_creatives_language_analyzed ON creatives(language_analyzed_at)",
+    "CREATE INDEX IF NOT EXISTS idx_creatives_detected_language ON creatives(detected_language_code)",
 ]

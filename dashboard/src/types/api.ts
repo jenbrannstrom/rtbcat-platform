@@ -50,6 +50,13 @@ export interface Creative {
   video: VideoPreview | null;
   html: HtmlPreview | null;
   native: NativePreview | null;
+  // Language detection (Creative geo display)
+  detected_language: string | null;
+  detected_language_code: string | null;
+  language_confidence: number | null;
+  language_source: string | null;
+  language_analyzed_at: string | null;
+  language_analysis_error: string | null;
 }
 
 export interface Campaign {
@@ -211,4 +218,38 @@ export interface CreativeCountryBreakdown {
   countries: CreativeCountryMetrics[];
   total_countries: number;
   period_days: number;
+}
+
+// Language Detection Types
+
+export interface LanguageDetectionResponse {
+  creative_id: string;
+  detected_language: string | null;
+  detected_language_code: string | null;
+  language_confidence: number | null;
+  language_source: string | null;
+  language_analyzed_at: string | null;
+  language_analysis_error: string | null;
+  success: boolean;
+}
+
+export interface GeoMismatchAlert {
+  severity: string;
+  language: string;
+  language_code: string;
+  mismatched_countries: string[];
+  expected_countries: string[];
+  message: string;
+}
+
+export interface GeoMismatchResponse {
+  creative_id: string;
+  has_mismatch: boolean;
+  alert: GeoMismatchAlert | null;
+  serving_countries: string[];
+}
+
+export interface ManualLanguageUpdate {
+  detected_language: string;
+  detected_language_code: string;
 }
