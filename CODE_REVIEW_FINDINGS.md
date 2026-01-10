@@ -20,7 +20,7 @@ Comprehensive code review of the Cat-Scan/RTB platform identifying security vuln
 | ~~`dashboard/src/app/settings/accounts/page.tsx`~~ | ~~1,621~~ → 143 | **REFACTORED** | Split into 4 components in `components/` folder |
 | `storage/sqlite_store.py` | 1,384 | Pending | Complete migration to repository pattern |
 | ~~`storage/sqlite_store_new.py`~~ | ~~1,373~~ | **DELETED** | Was dead code - never imported |
-| `dashboard/src/app/page.tsx` | 1,254 | Pending | Extract `FunnelCard`, `PublisherPerformance`, `GeoPerformance`, `SpendStats` |
+| ~~`dashboard/src/app/page.tsx`~~ | ~~1,254~~ → 459 | **REFACTORED** | Split into 4 components in `components/waste-analyzer/` |
 | `storage/repositories/user_repository.py` | 1,188 | Pending | Split into `auth_repo`, `permissions_repo`, `audit_repo` |
 | `api/routers/creatives.py` | 1,181 | Pending | Extract language detection, preview generation logic |
 | `dashboard/src/components/preview-modal.tsx` | 1,179 | Pending | Extract `VideoPreview`, `HtmlPreview`, `NativePreview`, `PreviewMetadata` |
@@ -158,6 +158,12 @@ rtbcat-platform/
   - [x] `GeminiApiKeySection.tsx` - AI language detection config (~210 lines)
   - [x] `GmailReportsTab.tsx` - Gmail auto-import config (~330 lines)
   - [x] `SystemTab.tsx` - System status and thumbnails (~200 lines)
+  - [x] `index.ts` - Component exports
+- [x] Split `page.tsx` (1,254 → 459 lines) into waste-analyzer components
+  - [x] `FunnelCard.tsx` - RTB funnel visualization (~160 lines)
+  - [x] `PublisherPerformanceSection.tsx` - Publisher win rates (~200 lines)
+  - [x] `SizeAnalysisSection.tsx` - Size coverage analysis (~275 lines)
+  - [x] `GeoAnalysisSection.tsx` - Geographic performance (~200 lines)
   - [x] `index.ts` - Component exports
 - [ ] Complete repository migration in `sqlite_store.py`
 - [ ] Split remaining large files
