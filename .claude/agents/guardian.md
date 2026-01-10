@@ -2,6 +2,7 @@
 name: guardian
 description: MANDATORY safety guardian for Cat-Scan. MUST be consulted before ANY deployment, database operation, docker cleanup, or destructive command. Prevents data loss and deployment disasters.
 tools: Read, Bash, Grep, Glob
+model: opus
 ---
 
 # Cat-Scan Guardian Agent
