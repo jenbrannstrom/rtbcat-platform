@@ -1,10 +1,10 @@
 name: Deploy to GCP
 
+# MANUAL TRIGGER ONLY - Do NOT add push triggers!
+# Auto-deploy on push caused incidents (Jan 2026) when it competed
+# with manual SSH deployments, corrupting containers and losing data.
 on:
-  push:
-    branches:
-      - unified-platform
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:  # Manual trigger only - click "Run workflow" in GitHub
 
 # Prevent concurrent deployments
 concurrency:
@@ -59,6 +59,11 @@ jobs:
 
               # Build and start (using cache for faster builds)
               sudo docker-compose -f docker-compose.gcp.yml up -d --build --force-recreate
+
+              # Clean up old docker images to prevent disk filling up
+              # SAFE: only removes unused images, never volumes
+              sudo docker image prune -f
+              sudo docker container prune -f
 
               echo 'Deployment complete!'
             "
