@@ -500,6 +500,142 @@ class CreativeRepository(BaseRepository[Creative]):
             # Disapproval details (Phase 29)
             disapproval_reasons=disapproval_reasons,
             serving_restrictions=serving_restrictions,
+            # Language detection
+            detected_language=row_dict.get("detected_language"),
+            detected_language_code=row_dict.get("detected_language_code"),
+            language_confidence=row_dict.get("language_confidence"),
+            language_source=row_dict.get("language_source"),
+            language_analyzed_at=row_dict.get("language_analyzed_at"),
+            language_analysis_error=row_dict.get("language_analysis_error"),
             created_at=row_dict.get("created_at"),
             updated_at=row_dict.get("updated_at"),
         )
+
+    async def update_language_detection(
+        self,
+        creative_id: str,
+        detected_language: Optional[str],
+        detected_language_code: Optional[str],
+        language_confidence: Optional[float],
+        language_source: str,
+        language_analysis_error: Optional[str] = None,
+    ) -> bool:
+        """Update language detection results for a creative.
+
+        Args:
+            creative_id: The creative ID.
+            detected_language: Full language name (e.g., "German").
+            detected_language_code: ISO 639-1 code (e.g., "de").
+            language_confidence: Confidence score 0.0 to 1.0.
+            language_source: Detection source ("gemini" or "manual").
+            language_analysis_error: Error message if detection failed.
+
+        Returns:
+            True if updated, False if creative not found.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _update():
+                cursor = conn.execute(
+                    """
+                    UPDATE creatives
+                    SET detected_language = ?,
+                        detected_language_code = ?,
+                        language_confidence = ?,
+                        language_source = ?,
+                        language_analyzed_at = CURRENT_TIMESTAMP,
+                        language_analysis_error = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (
+                        detected_language,
+                        detected_language_code,
+                        language_confidence,
+                        language_source,
+                        language_analysis_error,
+                        creative_id,
+                    ),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+
+            return await loop.run_in_executor(None, _update)
+
+    async def get_creatives_needing_language_analysis(
+        self,
+        buyer_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> list[Creative]:
+        """Get creatives that haven't been analyzed for language yet.
+
+        Args:
+            buyer_id: Optional filter by buyer ID.
+            limit: Maximum number of results.
+
+        Returns:
+            List of Creative objects needing analysis.
+        """
+        conditions = ["language_analyzed_at IS NULL"]
+        params: list[Any] = []
+
+        if buyer_id:
+            conditions.append("account_id = ?")
+            params.append(buyer_id)
+
+        where_clause = " AND ".join(conditions)
+        params.append(limit)
+
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _query():
+                cursor = conn.execute(
+                    f"""
+                    SELECT c.*, bs.display_name as seat_name
+                    FROM creatives c
+                    LEFT JOIN buyer_seats bs ON c.account_id = bs.buyer_id
+                    WHERE {where_clause}
+                    ORDER BY c.updated_at DESC
+                    LIMIT ?
+                    """,
+                    params,
+                )
+                return cursor.fetchall()
+
+            rows = await loop.run_in_executor(None, _query)
+
+        return [self._row_to_creative(row) for row in rows]
+
+    async def clear_language_analysis(self, creative_id: str) -> bool:
+        """Clear language analysis results for a creative (for re-analysis).
+
+        Args:
+            creative_id: The creative ID.
+
+        Returns:
+            True if updated, False if creative not found.
+        """
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _update():
+                cursor = conn.execute(
+                    """
+                    UPDATE creatives
+                    SET detected_language = NULL,
+                        detected_language_code = NULL,
+                        language_confidence = NULL,
+                        language_source = NULL,
+                        language_analyzed_at = NULL,
+                        language_analysis_error = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (creative_id,),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+
+            return await loop.run_in_executor(None, _update)

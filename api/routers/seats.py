@@ -87,6 +87,91 @@ async def get_credentials_for_seat(
         detail="No service account credentials configured. Add a service account in Setup.",
     )
 
+
+async def _trigger_background_language_analysis(
+    store: SQLiteStore,
+    limit: int = 50,
+) -> int:
+    """Trigger background language analysis for unanalyzed creatives.
+
+    This runs analysis on creatives that haven't been analyzed yet.
+    It's designed to be non-blocking and fail gracefully.
+
+    Args:
+        store: SQLite store instance.
+        limit: Maximum number of creatives to analyze per batch.
+
+    Returns:
+        Number of creatives successfully analyzed.
+    """
+    # Check if Gemini API is configured
+    import os
+    if not os.environ.get("GEMINI_API_KEY"):
+        logger.debug("GEMINI_API_KEY not configured, skipping language analysis")
+        return 0
+
+    try:
+        from api.analysis.language_analyzer import GeminiLanguageAnalyzer
+    except ImportError as e:
+        logger.warning(f"Language analyzer not available: {e}")
+        return 0
+
+    analyzer = GeminiLanguageAnalyzer()
+    if not analyzer.is_configured:
+        return 0
+
+    # Get creatives needing analysis
+    creatives = await store.creative_repository.get_creatives_needing_language_analysis(
+        limit=limit
+    )
+
+    if not creatives:
+        logger.debug("No creatives need language analysis")
+        return 0
+
+    logger.info(f"Starting background language analysis for {len(creatives)} creatives")
+    analyzed_count = 0
+
+    for creative in creatives:
+        try:
+            result = await analyzer.analyze_creative(
+                creative_id=creative.id,
+                raw_data=creative.raw_data,
+                creative_format=creative.format,
+            )
+
+            await store.creative_repository.update_language_detection(
+                creative_id=creative.id,
+                detected_language=result.language,
+                detected_language_code=result.language_code,
+                language_confidence=result.confidence,
+                language_source=result.source,
+                language_analysis_error=result.error,
+            )
+
+            if result.success:
+                analyzed_count += 1
+                logger.debug(
+                    f"Detected language for creative {creative.id}: "
+                    f"{result.language} ({result.language_code})"
+                )
+
+        except Exception as e:
+            logger.warning(f"Failed to analyze language for creative {creative.id}: {e}")
+            # Save the error to database
+            await store.creative_repository.update_language_detection(
+                creative_id=creative.id,
+                detected_language=None,
+                detected_language_code=None,
+                language_confidence=None,
+                language_source="gemini",
+                language_analysis_error=str(e),
+            )
+
+    logger.info(f"Background language analysis complete: {analyzed_count}/{len(creatives)} successful")
+    return analyzed_count
+
+
 router = APIRouter(tags=["Buyer Seats"])
 
 
@@ -579,6 +664,13 @@ async def sync_all_data(
         except Exception as e:
             logger.error(f"Failed to sync pretargeting configs for bidder {account_id}: {e}")
             errors.append(f"Pretargeting for {account_id}: {str(e)}")
+
+    # 4. Trigger background language analysis for new creatives (non-blocking)
+    try:
+        await _trigger_background_language_analysis(store)
+    except Exception as e:
+        logger.warning(f"Background language analysis failed (non-critical): {e}")
+        # Don't add to errors - this is optional and non-blocking
 
     # Build response message
     sync_time = datetime.utcnow().isoformat() + "Z"

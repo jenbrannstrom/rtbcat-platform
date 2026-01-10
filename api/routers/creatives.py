@@ -110,6 +110,49 @@ class CreativeResponse(BaseModel):
     is_disapproved: bool = False
     disapproval_reasons: Optional[list] = None
     serving_restrictions: Optional[list] = None
+    # Language detection (Creative geo display)
+    detected_language: Optional[str] = None
+    detected_language_code: Optional[str] = None
+    language_confidence: Optional[float] = None
+    language_source: Optional[str] = None
+    language_analyzed_at: Optional[str] = None
+    language_analysis_error: Optional[str] = None
+
+
+class LanguageDetectionResponse(BaseModel):
+    """Response model for language detection."""
+    creative_id: str
+    detected_language: Optional[str] = None
+    detected_language_code: Optional[str] = None
+    language_confidence: Optional[float] = None
+    language_source: Optional[str] = None
+    language_analyzed_at: Optional[str] = None
+    language_analysis_error: Optional[str] = None
+    success: bool = False
+
+
+class GeoMismatchAlert(BaseModel):
+    """Response model for geo-language mismatch alert."""
+    severity: str  # "warning"
+    language: str
+    language_code: str
+    mismatched_countries: list[str]
+    expected_countries: list[str]
+    message: str
+
+
+class GeoMismatchResponse(BaseModel):
+    """Response for geo-mismatch check."""
+    creative_id: str
+    has_mismatch: bool
+    alert: Optional[GeoMismatchAlert] = None
+    serving_countries: list[str] = []
+
+
+class ManualLanguageUpdate(BaseModel):
+    """Request model for manual language update."""
+    detected_language: str = Field(..., min_length=1, description="Language name (e.g., 'German')")
+    detected_language_code: str = Field(..., min_length=2, max_length=3, description="ISO 639-1 code (e.g., 'de')")
 
 
 class ClusterAssignment(BaseModel):
@@ -570,6 +613,13 @@ async def list_creatives(
             is_disapproved=c.approval_status == "DISAPPROVED",
             disapproval_reasons=c.disapproval_reasons,
             serving_restrictions=c.serving_restrictions,
+            # Language detection
+            detected_language=c.detected_language,
+            detected_language_code=c.detected_language_code,
+            language_confidence=c.language_confidence,
+            language_source=c.language_source,
+            language_analyzed_at=c.language_analyzed_at.isoformat() if c.language_analyzed_at else None,
+            language_analysis_error=c.language_analysis_error,
             **_extract_preview_data(
                 c,
                 slim=slim,
@@ -680,6 +730,13 @@ async def list_creatives_paginated(
             is_disapproved=c.approval_status == "DISAPPROVED",
             disapproval_reasons=c.disapproval_reasons,
             serving_restrictions=c.serving_restrictions,
+            # Language detection
+            detected_language=c.detected_language,
+            detected_language_code=c.detected_language_code,
+            language_confidence=c.language_confidence,
+            language_source=c.language_source,
+            language_analyzed_at=c.language_analyzed_at.isoformat() if c.language_analyzed_at else None,
+            language_analysis_error=c.language_analysis_error,
             **_extract_preview_data(
                 c,
                 slim=slim,
@@ -838,6 +895,13 @@ async def get_creative(
         is_disapproved=creative.approval_status == "DISAPPROVED",
         disapproval_reasons=creative.disapproval_reasons,
         serving_restrictions=creative.serving_restrictions,
+        # Language detection
+        detected_language=creative.detected_language,
+        detected_language_code=creative.detected_language_code,
+        language_confidence=creative.language_confidence,
+        language_source=creative.language_source,
+        language_analyzed_at=creative.language_analyzed_at.isoformat() if creative.language_analyzed_at else None,
+        language_analysis_error=creative.language_analysis_error,
         **_extract_preview_data(
             creative,
             html_thumbnail_url=thumbnail_statuses.get(creative_id).thumbnail_url if thumbnail_statuses.get(creative_id) else None
@@ -926,4 +990,192 @@ async def get_creative_countries(
         countries=countries,
         total_countries=len(countries),
         period_days=days,
+    )
+
+
+# =============================================================================
+# Language Detection Endpoints
+# =============================================================================
+
+@router.post("/creatives/{creative_id}/analyze-language", response_model=LanguageDetectionResponse)
+async def analyze_creative_language(
+    creative_id: str,
+    force: bool = Query(False, description="Force re-analysis even if already analyzed"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Analyze a creative's content to detect its language.
+
+    Uses Gemini API to detect language from HTML, VAST, or Native content.
+    Set force=true to re-analyze even if previously analyzed.
+
+    Requires GEMINI_API_KEY environment variable to be set.
+    """
+    creative = await store.get_creative(creative_id)
+    if not creative:
+        raise HTTPException(status_code=404, detail="Creative not found")
+
+    # Check if already analyzed (unless force=True)
+    if not force and creative.language_analyzed_at:
+        return LanguageDetectionResponse(
+            creative_id=creative_id,
+            detected_language=creative.detected_language,
+            detected_language_code=creative.detected_language_code,
+            language_confidence=creative.language_confidence,
+            language_source=creative.language_source,
+            language_analyzed_at=creative.language_analyzed_at.isoformat() if creative.language_analyzed_at else None,
+            language_analysis_error=creative.language_analysis_error,
+            success=creative.detected_language is not None,
+        )
+
+    # Import analyzer
+    try:
+        from api.analysis.language_analyzer import GeminiLanguageAnalyzer
+    except ImportError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Language analyzer not available: {e}"
+        )
+
+    analyzer = GeminiLanguageAnalyzer()
+
+    if not analyzer.is_configured:
+        # Save error to database
+        await store.creative_repository.update_language_detection(
+            creative_id=creative_id,
+            detected_language=None,
+            detected_language_code=None,
+            language_confidence=None,
+            language_source="gemini",
+            language_analysis_error="GEMINI_API_KEY not configured",
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="GEMINI_API_KEY environment variable not set. Language analysis unavailable."
+        )
+
+    # Run language detection
+    result = await analyzer.analyze_creative(
+        creative_id=creative_id,
+        raw_data=creative.raw_data,
+        creative_format=creative.format,
+    )
+
+    # Save results to database
+    await store.creative_repository.update_language_detection(
+        creative_id=creative_id,
+        detected_language=result.language,
+        detected_language_code=result.language_code,
+        language_confidence=result.confidence,
+        language_source=result.source,
+        language_analysis_error=result.error,
+    )
+
+    return LanguageDetectionResponse(
+        creative_id=creative_id,
+        detected_language=result.language,
+        detected_language_code=result.language_code,
+        language_confidence=result.confidence,
+        language_source=result.source,
+        language_analyzed_at=datetime.now().isoformat(),
+        language_analysis_error=result.error,
+        success=result.success,
+    )
+
+
+@router.put("/creatives/{creative_id}/language", response_model=LanguageDetectionResponse)
+async def update_creative_language(
+    creative_id: str,
+    update: ManualLanguageUpdate,
+    store: SQLiteStore = Depends(get_store),
+):
+    """Manually update a creative's detected language.
+
+    Use this endpoint when automated detection was incorrect
+    and you want to manually specify the correct language.
+    """
+    creative = await store.get_creative(creative_id)
+    if not creative:
+        raise HTTPException(status_code=404, detail="Creative not found")
+
+    # Save manual update
+    await store.creative_repository.update_language_detection(
+        creative_id=creative_id,
+        detected_language=update.detected_language,
+        detected_language_code=update.detected_language_code.lower(),
+        language_confidence=1.0,  # Manual updates have full confidence
+        language_source="manual",
+        language_analysis_error=None,
+    )
+
+    return LanguageDetectionResponse(
+        creative_id=creative_id,
+        detected_language=update.detected_language,
+        detected_language_code=update.detected_language_code.lower(),
+        language_confidence=1.0,
+        language_source="manual",
+        language_analyzed_at=datetime.now().isoformat(),
+        language_analysis_error=None,
+        success=True,
+    )
+
+
+@router.get("/creatives/{creative_id}/geo-mismatch", response_model=GeoMismatchResponse)
+async def get_creative_geo_mismatch(
+    creative_id: str,
+    days: int = Query(7, ge=1, le=90, description="Days to look back for serving data"),
+    store: SQLiteStore = Depends(get_store),
+):
+    """Check if a creative's language matches its serving countries.
+
+    Returns an alert if the detected language doesn't match the countries
+    where the creative is being served, indicating a potential localization issue.
+    """
+    creative = await store.get_creative(creative_id)
+    if not creative:
+        raise HTTPException(status_code=404, detail="Creative not found")
+
+    # If no language detected, no mismatch check possible
+    if not creative.detected_language_code:
+        return GeoMismatchResponse(
+            creative_id=creative_id,
+            has_mismatch=False,
+            alert=None,
+            serving_countries=[],
+        )
+
+    # Get serving countries for this creative
+    country_breakdown = await _get_country_breakdown_for_creative(store, creative_id, days)
+
+    if not country_breakdown:
+        return GeoMismatchResponse(
+            creative_id=creative_id,
+            has_mismatch=False,
+            alert=None,
+            serving_countries=[],
+        )
+
+    serving_countries = [c["country_code"] for c in country_breakdown if c.get("country_code")]
+
+    # Check for mismatch
+    from utils.language_country_map import get_mismatch_alert
+
+    alert_data = get_mismatch_alert(
+        language_code=creative.detected_language_code,
+        language_name=creative.detected_language or creative.detected_language_code,
+        serving_countries=serving_countries,
+    )
+
+    if alert_data:
+        return GeoMismatchResponse(
+            creative_id=creative_id,
+            has_mismatch=True,
+            alert=GeoMismatchAlert(**alert_data),
+            serving_countries=serving_countries,
+        )
+
+    return GeoMismatchResponse(
+        creative_id=creative_id,
+        has_mismatch=False,
+        alert=None,
+        serving_countries=serving_countries,
     )

@@ -74,6 +74,13 @@ class Creative:
     # Disapproval details (Phase 29)
     disapproval_reasons: Optional[list] = None
     serving_restrictions: Optional[list] = None
+    # Language detection (Creative geo display feature)
+    detected_language: Optional[str] = None  # "German", "English", etc.
+    detected_language_code: Optional[str] = None  # ISO 639-1: "de", "en"
+    language_confidence: Optional[float] = None  # 0.0 to 1.0
+    language_source: Optional[str] = None  # "gemini" or "manual"
+    language_analyzed_at: Optional[datetime] = None
+    language_analysis_error: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

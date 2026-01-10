@@ -1972,3 +1972,46 @@ export async function discoverViaADC(bidderId: string): Promise<GCPDiscoveryResp
     body: JSON.stringify({ bidder_id: bidderId }),
   });
 }
+
+// =============================================================================
+// Language Detection API (Creative Geo Display)
+// =============================================================================
+
+import type {
+  LanguageDetectionResponse,
+  GeoMismatchResponse,
+  ManualLanguageUpdate,
+} from "@/types/api";
+
+export async function analyzeCreativeLanguage(
+  creativeId: string,
+  force: boolean = false
+): Promise<LanguageDetectionResponse> {
+  const params = force ? "?force=true" : "";
+  return fetchApi<LanguageDetectionResponse>(
+    `/creatives/${encodeURIComponent(creativeId)}/analyze-language${params}`,
+    { method: "POST" }
+  );
+}
+
+export async function updateCreativeLanguage(
+  creativeId: string,
+  update: ManualLanguageUpdate
+): Promise<LanguageDetectionResponse> {
+  return fetchApi<LanguageDetectionResponse>(
+    `/creatives/${encodeURIComponent(creativeId)}/language`,
+    {
+      method: "PUT",
+      body: JSON.stringify(update),
+    }
+  );
+}
+
+export async function getCreativeGeoMismatch(
+  creativeId: string,
+  days: number = 7
+): Promise<GeoMismatchResponse> {
+  return fetchApi<GeoMismatchResponse>(
+    `/creatives/${encodeURIComponent(creativeId)}/geo-mismatch?days=${days}`
+  );
+}
