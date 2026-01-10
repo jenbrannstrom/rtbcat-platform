@@ -16,6 +16,35 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def get_gemini_api_key_sync(db_path: Optional[str] = None) -> Optional[str]:
+    """Get Gemini API key from database or environment variable (sync version).
+
+    Args:
+        db_path: Path to database file. If not provided, checks env var only.
+
+    Returns:
+        API key if configured, None otherwise.
+    """
+    # Try database first using direct SQLite access
+    if db_path:
+        try:
+            import sqlite3
+            conn = sqlite3.connect(db_path)
+            cursor = conn.execute(
+                "SELECT value FROM system_settings WHERE key = ?",
+                ("gemini_api_key",)
+            )
+            row = cursor.fetchone()
+            conn.close()
+            if row and row[0]:
+                return row[0]
+        except Exception as e:
+            logger.debug(f"Could not get Gemini API key from database: {e}")
+
+    # Fall back to environment variable
+    return os.environ.get("GEMINI_API_KEY")
+
+
 @dataclass
 class LanguageDetectionResult:
     """Result of language detection analysis."""
@@ -35,13 +64,14 @@ class LanguageDetectionResult:
 class GeminiLanguageAnalyzer:
     """Gemini-powered language detection for creative content."""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, db_path: Optional[str] = None):
         """Initialize the language analyzer.
 
         Args:
-            api_key: Google Gemini API key. If not provided, uses GEMINI_API_KEY env var.
+            api_key: Google Gemini API key. If not provided, checks database then env var.
+            db_path: Path to database file to check for stored API key.
         """
-        self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
+        self.api_key = api_key or get_gemini_api_key_sync(db_path)
         self._client = None
         self._model = None
 

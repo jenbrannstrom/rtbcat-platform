@@ -104,20 +104,16 @@ async def _trigger_background_language_analysis(
     Returns:
         Number of creatives successfully analyzed.
     """
-    # Check if Gemini API is configured
-    import os
-    if not os.environ.get("GEMINI_API_KEY"):
-        logger.debug("GEMINI_API_KEY not configured, skipping language analysis")
-        return 0
-
+    # Check if Gemini API is configured (database or env var)
     try:
         from api.analysis.language_analyzer import GeminiLanguageAnalyzer
     except ImportError as e:
         logger.warning(f"Language analyzer not available: {e}")
         return 0
 
-    analyzer = GeminiLanguageAnalyzer()
+    analyzer = GeminiLanguageAnalyzer(db_path=store.db_path)
     if not analyzer.is_configured:
+        logger.debug("Gemini API key not configured, skipping language analysis")
         return 0
 
     # Get creatives needing analysis
