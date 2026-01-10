@@ -139,18 +139,9 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 | `retention` | Data retention policies |
 | `uploads` | CSV file uploads |
 
-### Database Schema (Key Tables)
+### Database Schema
 
-| Table | Purpose |
-|-------|---------|
-| `rtb_daily` | The fact table - all CSV imports |
-| `creatives` | Creative inventory from API |
-| `campaigns` | User-defined campaign groupings |
-| `buyer_seats` | Buyer accounts under a bidder |
-| `anomaly_signals` | Unusual patterns in traffic or performance |
-| `inefficiency_signals` | QPS optimization opportunities |
-
-See **[DATA_MODEL.md](DATA_MODEL.md)** for the complete 41-table schema.
+See **[DATA_MODEL.md](DATA_MODEL.md)** for the complete 41-table schema and multi-bidder architecture documentation.
 
 ---
 
@@ -158,7 +149,7 @@ See **[DATA_MODEL.md](DATA_MODEL.md)** for the complete 41-table schema.
 
 Cat-Scan requires **3 separate CSV reports** from Google Authorized Buyers due to field incompatibilities in Google's reporting system.
 
-> **See [docs/CSV_REPORTS_GUIDE.md](docs/CSV_REPORTS_GUIDE.md) for complete setup instructions.**
+> **Create these reports in Google Authorized Buyers: Reporting → Scheduled Reports**
 
 ### The Required Reports
 
@@ -358,20 +349,12 @@ DATABASE_PATH=~/.catscan/catscan.db
 
 | Document | Purpose |
 |----------|---------|
-| **[docs/HANDOVER.md](docs/HANDOVER.md)** | Complete project handover with next steps |
 | **[INSTALL.md](INSTALL.md)** | Detailed installation guide |
 | **[docs/GCP_CREDENTIALS_SETUP.md](docs/GCP_CREDENTIALS_SETUP.md)** | GCP VM deployment with nginx + SSL |
-| **[docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md)** | Google API setup instructions |
 | **[DATA_MODEL.md](DATA_MODEL.md)** | Complete database schema (41 tables) |
-| **[docs/CSV_REPORTS_GUIDE.md](docs/CSV_REPORTS_GUIDE.md)** | CSV report setup |
-
-### Historical Development Phases
-
-Detailed phase documentation is archived in `docs/phases/`:
-- Phase 11: Decision Intelligence
-- Phase 12: Schema Cleanup
-- Phase 21: RTB Funnel Analysis
-- Phase 22: Unified Dashboard
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | System architecture |
+| **[METRICS_GUIDE.md](METRICS_GUIDE.md)** | RTB metrics and optimization reference |
+| **[ROADMAP.md](ROADMAP.md)** | Planned features and known bugs |
 
 ---
 
@@ -392,14 +375,7 @@ Detailed phase documentation is archived in `docs/phases/`:
 
 ### Roadmap
 
-1. **Multi-account support** - Account switching in UI
-2. **Multi-seat improvements** - Enhanced seat management
-3. **RTB Troubleshooting API** - Integrate bid metrics
-4. **Performance at scale** - Virtual scrolling, caching
-5. **Auto-optimization (paid)** - Hands-free pretargeting adjustments
-6. **Creative modal enhancements** - Additional data in creative details
-
-See **[docs/HANDOVER.md](docs/HANDOVER.md)** for complete roadmap.
+See **[ROADMAP.md](ROADMAP.md)** for planned features and known bugs.
 
 ---
 

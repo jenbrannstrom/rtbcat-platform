@@ -34,14 +34,14 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copy application code
 COPY --chown=rtbcat:rtbcat . .
 
-# Create data directory
-RUN mkdir -p /data && chown rtbcat:rtbcat /data
+# Create data directory (matches production mount point)
+RUN mkdir -p /home/rtbcat/.catscan && chown rtbcat:rtbcat /home/rtbcat/.catscan
 
 # Read version from VERSION file and set environment variables
 ARG APP_VERSION=0.9.0
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    RTBCAT_CONFIG_DIR=/data/.rtbcat \
+    DATABASE_PATH=/home/rtbcat/.catscan/catscan.db \
     APP_VERSION=${APP_VERSION}
 
 # Switch to non-root user
