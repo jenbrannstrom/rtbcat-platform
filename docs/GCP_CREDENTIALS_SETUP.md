@@ -2,7 +2,29 @@
 
 **Purpose:** How to set up Google Cloud credentials and deploy Cat-Scan to a GCP VM
 
-**Production URL:** https://scan.rtb.cat (hosted on `catscan-prod` VM)
+**Production URL:** https://scan.rtb.cat (hosted on `catscan-production` VM)
+
+---
+
+## Quick Deploy (Code Updates)
+
+After pushing to GitHub, deploy to production:
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- \
+  "cd /opt/catscan && sudo -u catscan git pull && sudo docker-compose -f docker-compose.gcp.yml down && sudo docker-compose -f docker-compose.gcp.yml up -d --build"
+```
+
+Or step by step:
+1. `gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap`
+2. `cd /opt/catscan && sudo -u catscan git pull`
+3. `sudo docker-compose -f docker-compose.gcp.yml down && sudo docker-compose -f docker-compose.gcp.yml up -d --build`
+
+Verify deployment:
+```bash
+sudo docker ps  # Both containers should be running
+curl -s http://localhost:8000/health  # Should return healthy status
+```
 
 ---
 
