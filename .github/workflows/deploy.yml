@@ -54,8 +54,8 @@ jobs:
               export APP_VERSION=\$(cat VERSION)
               echo \"Deploying version: \$APP_VERSION\"
 
-              # Stop and remove containers, then rebuild from scratch
-              sudo docker-compose -f docker-compose.gcp.yml down --remove-orphans --rmi local
+              # Stop containers, rebuild, and restart
+              sudo docker-compose -f docker-compose.gcp.yml down --remove-orphans
               sudo docker-compose -f docker-compose.gcp.yml build --no-cache
               sudo docker-compose -f docker-compose.gcp.yml up -d
 
@@ -64,8 +64,8 @@ jobs:
 
       - name: Verify deployment
         run: |
-          # Wait for services to start
-          sleep 30
+          # Wait for services to start (build can take time on the VM)
+          sleep 60
 
           # Health check
           gcloud compute ssh ${{ env.VM_NAME }} \
