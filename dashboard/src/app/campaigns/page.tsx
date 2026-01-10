@@ -12,289 +12,44 @@ import {
   DragEndEvent,
   DragCancelEvent,
 } from '@dnd-kit/core';
-// import { createSnapModifier } from '@dnd-kit/modifiers';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Sparkles, RefreshCw, Check, LayoutGrid, List, ArrowDown, ArrowUp, Globe, X, AlertTriangle } from 'lucide-react';
-import { useDroppable } from '@dnd-kit/core';
-import { ClusterCard } from '@/components/campaigns/cluster-card';
-import { UnassignedPool } from '@/components/campaigns/unassigned-pool';
-import { DraggableCreative } from '@/components/campaigns/draggable-creative';
-import { ListCluster } from '@/components/campaigns/list-cluster';
-import { ListItem } from '@/components/campaigns/list-item';
-import { PreviewModal } from '@/components/preview-modal';
+import { Plus, Sparkles, RefreshCw, LayoutGrid, List } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAccount } from '@/contexts/account-context';
 import { useTranslation } from '@/contexts/i18n-context';
+import { PreviewModal } from '@/components/preview-modal';
+import {
+  // Types
+  type Campaign,
+  type CampaignCreative,
+  type ClusterSuggestion,
+  type ViewMode,
+  type SortField,
+  type SortDirection,
+  // API
+  fetchCampaigns,
+  fetchUnclustered,
+  fetchAllCreatives,
+  autoCluster,
+  createCampaign,
+  updateCampaign,
+  deleteCampaign,
+  // Utils
+  generateClusterName,
+  // Components
+  ClusterCard,
+  UnassignedPool,
+  DraggableCreative,
+  ListCluster,
+  ListItem,
+  NewCampaignDropZone,
+  NewCampaignDropZoneList,
+  SuggestionsPanel,
+  SortFilterControls,
+} from '@/components/campaigns';
 
-// Droppable zone to create a new campaign on drop (Grid view)
-function NewCampaignDropZone({ onClick }: { onClick: () => void }) {
-  const { t } = useTranslation();
-  const { setNodeRef, isOver } = useDroppable({
-    id: 'new-campaign',
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      onClick={onClick}
-      className={cn(
-        "min-h-[200px] rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-colors cursor-pointer",
-        isOver
-          ? "border-blue-500 bg-blue-50 text-blue-600"
-          : "border-gray-300 text-gray-400 hover:border-blue-400 hover:text-blue-500"
-      )}
-    >
-      <span className="text-4xl">+</span>
-      <span>{isOver ? t.campaigns.dropToCreateCampaign : t.campaigns.newCampaign}</span>
-      {isOver && (
-        <span className="text-sm text-blue-500">{t.campaigns.releaseToCreate}</span>
-      )}
-    </div>
-  );
-}
-
-// Droppable zone to create a new campaign on drop (List view)
-function NewCampaignDropZoneList({ onClick }: { onClick: () => void }) {
-  const { t } = useTranslation();
-  const { setNodeRef, isOver } = useDroppable({
-    id: 'new-campaign',
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      onClick={onClick}
-      className={cn(
-        "w-80 flex-shrink-0 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-colors cursor-pointer",
-        isOver
-          ? "border-blue-500 bg-blue-50 text-blue-600"
-          : "border-gray-300 bg-gray-50 text-gray-400 hover:border-blue-400 hover:text-blue-500"
-      )}
-      style={{ maxHeight: '70vh', minHeight: '200px' }}
-    >
-      <span className="text-4xl">+</span>
-      <span className="text-sm">{isOver ? t.campaigns.dropToCreate : t.campaigns.newCampaign}</span>
-      {isOver && (
-        <span className="text-xs text-blue-500">{t.campaigns.releaseToCreateShort}</span>
-      )}
-    </div>
-  );
-}
-
-type ViewMode = 'grid' | 'list';
-
-// =============================================================================
-// Types
-// =============================================================================
-
-interface Campaign {
-  id: string;
-  name: string;
-  creative_ids: string[];
-  created_at: string | null;
-  updated_at: string | null;
-  // Phase 29: Disapproval tracking
-  disapproved_count?: number;
-  has_disapproved?: boolean;
-}
-
-interface Creative {
-  id: string;
-  format: string;
-  country?: string;  // Phase 22: Country from performance data
-  created_at?: string;  // Phase 24: Date Added sort
-  final_url?: string;
-  video?: { thumbnail_url?: string };
-  native?: { logo?: { url?: string }; image?: { url?: string } };
-  html?: { thumbnail_url?: string };  // Phase 22: HTML thumbnail
-  performance?: {
-    total_spend_micros?: number;
-    total_impressions?: number;
-    total_clicks?: number;
-  };
-  waste_flags?: { broken_video?: boolean; zero_engagement?: boolean };
-  // Phase 29: App info and disapproval tracking
-  app_id?: string;
-  app_name?: string;
-  is_disapproved?: boolean;
-  disapproval_reasons?: Array<{ reason: string; details?: string }>;
-  serving_restrictions?: Array<{ restriction: string; contexts?: string[] }>;
-}
-
-interface ClusterSuggestion {
-  suggested_name: string;
-  creative_ids: string[];
-  domain: string | null;
-}
-
-interface AutoClusterResponse {
-  suggestions: ClusterSuggestion[];
-  unclustered_count: number;
-}
-
-// =============================================================================
-// Helpers
-// =============================================================================
-
-/**
- * Generate a clean cluster name from a URL/domain
- * - Decodes URL-encoded strings
- * - Extracts bundle IDs from AppsFlyer/Adjust URLs
- * - Formats com.app.name as "App Name"
- * - Handles Play Store, App Store, Firebase URLs
- */
-function generateClusterName(url: string | null): string {
-  if (!url) return 'Unknown';
-
-  try {
-    // Decode URL-encoded strings
-    let decoded = decodeURIComponent(url);
-
-    // Extract bundle ID from AppsFlyer URLs
-    // e.g., https://app.appsflyer.com/com.example.app?pid=...
-    const appsFlyerMatch = decoded.match(/app\.appsflyer\.com\/([a-zA-Z0-9._-]+)/);
-    if (appsFlyerMatch) {
-      return formatBundleId(appsFlyerMatch[1]);
-    }
-
-    // Extract from Adjust URLs
-    // e.g., https://app.adjust.com/abc123?campaign=...
-    const adjustMatch = decoded.match(/adjust\.com.*[?&]campaign=([^&]+)/i);
-    if (adjustMatch) {
-      return decodeURIComponent(adjustMatch[1]).replace(/[_-]/g, ' ');
-    }
-
-    // Extract from Play Store URLs
-    // e.g., https://play.google.com/store/apps/details?id=com.example.app
-    const playStoreMatch = decoded.match(/play\.google\.com\/store\/apps\/details\?id=([a-zA-Z0-9._-]+)/);
-    if (playStoreMatch) {
-      return formatBundleId(playStoreMatch[1]);
-    }
-
-    // Extract from App Store URLs
-    // e.g., https://apps.apple.com/app/app-name/id123456789
-    const appStoreMatch = decoded.match(/apps\.apple\.com\/[^/]+\/app\/([^/]+)/);
-    if (appStoreMatch) {
-      return appStoreMatch[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    }
-
-    // Extract from Firebase Dynamic Links
-    const firebaseMatch = decoded.match(/\.page\.link.*[?&]link=([^&]+)/);
-    if (firebaseMatch) {
-      return generateClusterName(decodeURIComponent(firebaseMatch[1]));
-    }
-
-    // If it looks like a bundle ID (com.something.app)
-    if (/^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/i.test(decoded)) {
-      return formatBundleId(decoded);
-    }
-
-    // Try to extract domain name
-    const domainMatch = decoded.match(/(?:https?:\/\/)?(?:www\.)?([^\/\?]+)/);
-    if (domainMatch) {
-      const domain = domainMatch[1];
-      // Clean up domain - remove .com, .io, etc. and format
-      const cleanDomain = domain
-        .replace(/\.(com|io|app|net|org|co)$/i, '')
-        .replace(/[._-]/g, ' ')
-        .replace(/\b\w/g, c => c.toUpperCase());
-      return cleanDomain || domain;
-    }
-
-    return url.substring(0, 30);
-  } catch {
-    return url.substring(0, 30);
-  }
-}
-
-/**
- * Format a bundle ID like com.example.myapp into "Example Myapp"
- */
-function formatBundleId(bundleId: string): string {
-  // Split by dots and take the last 2 parts (skip com/org/etc)
-  const parts = bundleId.split('.');
-  const relevantParts = parts.length > 2 ? parts.slice(-2) : parts;
-
-  return relevantParts
-    .map(part =>
-      part
-        .replace(/([a-z])([A-Z])/g, '$1 $2') // Split camelCase
-        .replace(/[_-]/g, ' ')
-        .replace(/\b\w/g, c => c.toUpperCase())
-    )
-    .join(' ');
-}
-
-// =============================================================================
-// API Functions
-// =============================================================================
-
-async function fetchCampaigns(): Promise<Campaign[]> {
-  const res = await fetch('/api/campaigns');
-  if (!res.ok) throw new Error('Failed to fetch campaigns');
-  return res.json();
-}
-
-async function fetchUnclustered(buyerId?: string | null): Promise<{ creative_ids: string[]; count: number }> {
-  const params = new URLSearchParams();
-  if (buyerId) params.set('buyer_id', buyerId);
-  const query = params.toString();
-  const res = await fetch(`/api/campaigns/unclustered${query ? `?${query}` : ''}`);
-  if (!res.ok) throw new Error('Failed to fetch unclustered');
-  return res.json();
-}
-
-async function fetchAllCreatives(buyerId?: string | null): Promise<Creative[]> {
-  const params = new URLSearchParams({ limit: '1000' });
-  if (buyerId) params.set('buyer_id', buyerId);
-  const res = await fetch(`/api/creatives?${params.toString()}`);
-  if (!res.ok) throw new Error('Failed to fetch creatives');
-  const data = await res.json();
-  // API returns list directly, not { creatives: [...] }
-  return Array.isArray(data) ? data : (data.creatives || []);
-}
-
-async function autoCluster(buyerId?: string | null): Promise<AutoClusterResponse> {
-  const res = await fetch('/api/campaigns/auto-cluster', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ by_url: true, buyer_id: buyerId ?? undefined }),
-  });
-  if (!res.ok) throw new Error('Failed to auto-cluster');
-  return res.json();
-}
-
-async function createCampaign(data: { name: string; creative_ids: string[] }): Promise<Campaign> {
-  const res = await fetch('/api/campaigns', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error('Failed to create campaign');
-  return res.json();
-}
-
-async function updateCampaign(
-  id: string,
-  data: { name?: string; add_creative_ids?: string[]; remove_creative_ids?: string[] }
-): Promise<Campaign> {
-  const res = await fetch(`/api/campaigns/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error('Failed to update campaign');
-  return res.json();
-}
-
-async function deleteCampaign(id: string): Promise<void> {
-  const res = await fetch(`/api/campaigns/${id}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to delete campaign');
-}
-
-// =============================================================================
-// Main Page
-// =============================================================================
+// Local type alias for Creative used in this file
+type Creative = CampaignCreative;
 
 export default function CampaignsPage() {
   const { t } = useTranslation();
@@ -311,8 +66,8 @@ export default function CampaignsPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
   // Page-level sort/filter state (Phase 23)
-  const [pageSortField, setPageSortField] = useState<'spend' | 'impressions' | 'clicks' | 'creatives' | 'name'>('spend');
-  const [pageSortDir, setPageSortDir] = useState<'asc' | 'desc'>('desc');
+  const [pageSortField, setPageSortField] = useState<SortField>('spend');
+  const [pageSortDir, setPageSortDir] = useState<SortDirection>('desc');
   const [countryFilter, setCountryFilter] = useState<string | null>(null);
   // Phase 29: Issues filter
   const [showIssuesOnly, setShowIssuesOnly] = useState(false);
@@ -839,145 +594,32 @@ export default function CampaignsPage() {
       </div>
 
       {/* Suggestions Panel */}
-      {showSuggestions && suggestions.length > 0 && (
-        <div className="mb-8 bg-purple-50/50 border border-purple-200 rounded-xl p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-purple-900">
-              {t.campaigns.suggestedClusters} ({suggestions.length})
-            </h2>
-            <button
-              onClick={() => setShowSuggestions(false)}
-              className="text-sm text-purple-600 hover:text-purple-800"
-            >
-              {t.campaigns.dismiss}
-            </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {(showAllSuggestions ? suggestions : suggestions.slice(0, 9)).map((suggestion, index) => {
-              const isCreated = createdSuggestions.has(suggestion.suggested_name);
-              const isApplying = applyingId === suggestion.suggested_name;
-              const displayName = suggestion.suggested_name || generateClusterName(suggestion.domain);
-
-              return (
-                <div
-                  key={`${index}-${suggestion.suggested_name}`}
-                  className={`border rounded-xl p-4 ${isCreated ? 'bg-green-50 border-green-200' : 'bg-purple-50 border-purple-200'}`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex-1 min-w-0">
-                      <h4 className={`font-medium truncate ${isCreated ? 'text-green-900' : 'text-purple-900'}`}>
-                        {displayName}
-                      </h4>
-                      {suggestion.domain && suggestion.domain !== displayName && (
-                        <p className="text-xs text-gray-500 truncate max-w-[200px]">
-                          {suggestion.domain}
-                        </p>
-                      )}
-                    </div>
-                    {isCreated ? (
-                      <span className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg flex items-center gap-1">
-                        <Check className="h-3 w-3" />
-                        {t.campaigns.created}
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => handleApplySuggestion(suggestion)}
-                        disabled={isApplying}
-                        className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50"
-                      >
-                        {isApplying ? t.campaigns.creating : t.campaigns.create}
-                      </button>
-                    )}
-                  </div>
-                  <p className={`text-sm ${isCreated ? 'text-green-700' : 'text-purple-700'}`}>
-                    {suggestion.creative_ids.length} {suggestion.creative_ids.length !== 1 ? t.campaigns.creativeCountPlural.replace('{count}', '') : t.campaigns.creativeCount.replace('{count}', '')}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-          {suggestions.length > 9 && (
-            <button
-              onClick={() => setShowAllSuggestions(!showAllSuggestions)}
-              className="mt-3 text-sm text-purple-600 hover:text-purple-800 text-center w-full"
-            >
-              {showAllSuggestions ? t.campaigns.showLess : t.campaigns.moreSuggestions.replace('{count}', String(suggestions.length - 9))}
-            </button>
-          )}
-        </div>
+      {showSuggestions && (
+        <SuggestionsPanel
+          suggestions={suggestions}
+          showAllSuggestions={showAllSuggestions}
+          setShowAllSuggestions={setShowAllSuggestions}
+          createdSuggestions={createdSuggestions}
+          applyingId={applyingId}
+          onApplySuggestion={handleApplySuggestion}
+          onDismiss={() => setShowSuggestions(false)}
+        />
       )}
 
       {/* Page-level Sort/Filter Controls (Phase 23) */}
-      <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-gray-50 rounded-lg">
-        <span className="text-sm text-gray-600 font-medium">{t.campaigns.sort}</span>
-        {(['spend', 'impressions', 'clicks', 'creatives', 'name'] as const).map(field => (
-          <button
-            key={field}
-            onClick={() => {
-              if (pageSortField === field) {
-                setPageSortDir(d => d === 'desc' ? 'asc' : 'desc');
-              } else {
-                setPageSortField(field);
-                setPageSortDir('desc');
-              }
-            }}
-            className={cn(
-              "px-3 py-1 text-sm rounded flex items-center gap-1 transition-colors",
-              pageSortField === field
-                ? "bg-blue-100 text-blue-700 font-medium"
-                : "hover:bg-gray-200 text-gray-600"
-            )}
-          >
-            {field === 'spend' ? t.campaigns.spend :
-             field === 'impressions' ? t.campaigns.impressions :
-             field === 'clicks' ? t.campaigns.clicks :
-             field === 'creatives' ? t.creatives.title :
-             t.campaigns.name}
-            {pageSortField === field && (
-              pageSortDir === 'desc' ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />
-            )}
-          </button>
-        ))}
-
-        {/* Phase 29: Issues filter */}
-        <button
-          onClick={() => setShowIssuesOnly(!showIssuesOnly)}
-          className={cn(
-            "px-3 py-1 text-sm rounded flex items-center gap-1 transition-colors",
-            showIssuesOnly
-              ? "bg-red-100 text-red-700 font-medium"
-              : "hover:bg-gray-200 text-gray-600"
-          )}
-          title={showIssuesOnly ? "Showing campaigns with issues" : "Filter to campaigns with disapproved creatives"}
-        >
-          <AlertTriangle className="h-3 w-3" />
-          Issues
-        </button>
-
-        {/* Country filter */}
-        {allCountries.length > 0 && (
-          <div className="ml-auto flex items-center gap-2">
-            <Globe className="h-4 w-4 text-gray-400" />
-            <select
-              value={countryFilter || ''}
-              onChange={e => setCountryFilter(e.target.value || null)}
-              className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">{t.campaigns.allCountries}</option>
-              {allCountries.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            {countryFilter && (
-              <button
-                onClick={() => setCountryFilter(null)}
-                className="p-1 text-gray-400 hover:text-gray-600"
-                title={t.campaigns.clearFilter}
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      <SortFilterControls
+        pageSortField={pageSortField}
+        pageSortDir={pageSortDir}
+        onSortChange={(field, dir) => {
+          setPageSortField(field);
+          setPageSortDir(dir);
+        }}
+        countryFilter={countryFilter}
+        onCountryFilterChange={setCountryFilter}
+        allCountries={allCountries}
+        showIssuesOnly={showIssuesOnly}
+        onShowIssuesOnlyChange={setShowIssuesOnly}
+      />
 
       <DndContext
         sensors={sensors}
