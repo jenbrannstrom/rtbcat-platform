@@ -1,6 +1,19 @@
 version: '3.8'
 
-# Simplified production compose - API + Dashboard only (no cat-scan)
+# ============================================================================
+# WARNING: DO NOT USE THIS FILE IN PRODUCTION!
+# ============================================================================
+# This file uses Docker VOLUMES (catscan-data:) which are DELETED by:
+#   - docker volume prune
+#   - docker system prune --volumes
+#
+# For production, use docker-compose.gcp.yml which uses BIND MOUNTS
+# that store data safely on the host filesystem.
+#
+# This file is for LOCAL DEVELOPMENT ONLY.
+# ============================================================================
+
+# Simplified compose - API + Dashboard only (no cat-scan)
 services:
   creative-api:
     build:

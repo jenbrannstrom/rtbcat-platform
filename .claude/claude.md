@@ -58,7 +58,17 @@ sudo -u catscan git fetch origin
 sudo -u catscan git reset --hard origin/unified-platform
 sudo docker-compose -f docker-compose.gcp.yml down --remove-orphans
 sudo docker-compose -f docker-compose.gcp.yml up -d --build
+
+# Step 4: Clean up old images (ALWAYS do this to prevent disk filling)
+sudo docker image prune -f
+sudo docker container prune -f
 ```
+
+### ⚠️ GitHub Actions Workflow
+There is a deploy workflow at `.github/workflows/deploy.yml` but it is **MANUAL TRIGGER ONLY**.
+- Do NOT add `push:` triggers - this caused the Jan 2026 incident
+- If you need to use it, click "Run workflow" in GitHub Actions
+- Prefer the SSH method above for more control
 
 ### 🛑 CRITICAL RULES - VIOLATIONS CAUSE DATA LOSS
 
@@ -68,6 +78,8 @@ sudo docker-compose -f docker-compose.gcp.yml up -d --build
 | **Never upload directly** | No tarballs, no scp of code files - EVER |
 | **One deployment at a time** | Wait for docker-compose to FULLY finish |
 | **NEVER interrupt docker-compose** | Interrupting mid-build can corrupt state |
+| **ALWAYS use docker-compose.gcp.yml** | Uses bind mounts - data survives prunes |
+| **NEVER use docker-compose.simple.yml** | Uses Docker volumes - data gets deleted! |
 | **NEVER run `docker volume prune`** | This can DELETE the database |
 | **NEVER run `docker system prune -a --volumes`** | This WILL delete everything |
 
