@@ -55,10 +55,9 @@ jobs:
               echo \"Deploying version: \$APP_VERSION\"
 
               # Rebuild and restart services (no cache to ensure fresh build)
-              # Use docker compose v2 (not docker-compose v1) to avoid ContainerConfig bug
-              sudo docker compose -f docker-compose.gcp.yml down --remove-orphans
-              sudo docker compose -f docker-compose.gcp.yml build --no-cache
-              sudo docker compose -f docker-compose.gcp.yml up -d
+              sudo docker-compose -f docker-compose.gcp.yml down --remove-orphans
+              sudo docker-compose -f docker-compose.gcp.yml build --no-cache
+              sudo docker-compose -f docker-compose.gcp.yml up -d
 
               echo 'Deployment complete!'
             "
