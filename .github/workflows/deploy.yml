@@ -54,9 +54,12 @@ jobs:
               export APP_VERSION=\$(cat VERSION)
               echo \"Deploying version: \$APP_VERSION\"
 
-              # Stop containers, rebuild, and restart
-              sudo docker-compose -f docker-compose.gcp.yml down --remove-orphans
-              sudo docker-compose -f docker-compose.gcp.yml build --no-cache
+              # Stop all running containers and clean up
+              sudo docker stop \$(sudo docker ps -q) 2>/dev/null || true
+              sudo docker container prune -f || true
+
+              # Rebuild and start (using cache for faster builds)
+              sudo docker-compose -f docker-compose.gcp.yml build
               sudo docker-compose -f docker-compose.gcp.yml up -d
 
               echo 'Deployment complete!'
