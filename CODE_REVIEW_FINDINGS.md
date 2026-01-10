@@ -135,9 +135,9 @@ rtbcat-platform/
 - [x] Create modular API structure (`dashboard/src/lib/api/`)
   - [x] `core.ts` - fetchApi, health, stats, system
   - [x] `auth.ts` - login, logout, session management
+  - [x] `creatives.ts` - creative CRUD, thumbnails, language detection
+  - [x] `campaigns.ts` - campaigns, AI campaigns, clustering
   - [x] `index.ts` - backward-compatible re-exports
-  - [ ] `creatives.ts` - creative CRUD, thumbnails, language
-  - [ ] `campaigns.ts` - campaigns, AI campaigns
   - [ ] `seats.ts` - buyer seats, discovery
   - [ ] `analytics.ts` - waste, performance, QPS, funnel
   - [ ] `settings.ts` - RTB endpoints, pretargeting, configs
