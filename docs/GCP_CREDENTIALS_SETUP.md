@@ -8,23 +8,37 @@
 
 ## Quick Deploy (Code Updates)
 
-After pushing to GitHub, deploy to production:
+**GitHub Actions handles ALL deployments automatically on push to `unified-platform` branch.**
 
+Simply push your changes:
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- \
-  "cd /opt/catscan && sudo -u catscan git pull && sudo docker-compose -f docker-compose.gcp.yml down && sudo docker-compose -f docker-compose.gcp.yml up -d --build"
+git push origin unified-platform
 ```
 
-Or step by step:
-1. `gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap`
-2. `cd /opt/catscan && sudo -u catscan git pull`
-3. `sudo docker-compose -f docker-compose.gcp.yml down && sudo docker-compose -f docker-compose.gcp.yml up -d --build`
-
-Verify deployment:
+Check deployment status:
 ```bash
-sudo docker ps  # Both containers should be running
-curl -s http://localhost:8000/health  # Should return healthy status
+gh run list --repo jenbrannstrom/rtbcat-platform --limit 1
+gh run view <run-id> --repo jenbrannstrom/rtbcat-platform
 ```
+
+Trigger manual deploy (if needed):
+```bash
+gh workflow run deploy.yml --repo jenbrannstrom/rtbcat-platform
+```
+
+### CRITICAL: DO NOT
+
+- **DO NOT** SSH into the VM for deployment
+- **DO NOT** run docker commands manually on the server
+- **DO NOT** try to "fix" failed deployments via SSH
+
+Manual SSH interference WILL break the deployment and cause downtime.
+
+### If Deploy Fails
+
+1. Check the error: `gh run view <run-id> --log`
+2. Fix the issue in code
+3. Push the fix - GitHub Actions will retry automatically
 
 ---
 
