@@ -526,8 +526,6 @@ function CountrySection({ creativeId, detectedLanguage, detectedLanguageCode }: 
 
   const handleDismissMismatch = () => {
     setMismatchDismissed(true);
-    // Log dismissal (in a real app this would call an API)
-    console.log(`Geo mismatch dismissed for creative ${creativeId} at ${new Date().toISOString()}`);
   };
 
   return (

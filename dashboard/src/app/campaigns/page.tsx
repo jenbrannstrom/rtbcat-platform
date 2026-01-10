@@ -358,7 +358,6 @@ export default function CampaignsPage() {
       const map = new Map<string, Creative>();
       allCreatives.forEach((c) => map.set(String(c.id), c));
       setCreativesMap(map);
-      console.log(`[Campaigns] Built creatives map with ${map.size} entries`);
     }
   }, [allCreatives]);
 
@@ -481,7 +480,6 @@ export default function CampaignsPage() {
   // Drag handlers
   function handleDragStart(event: DragStartEvent) {
     const dragId = event.active.id as string;
-    console.log('=== DRAG START ===', dragId, 'selected:', selectedIds.size);
     setActiveId(dragId);
 
     // If dragged item is selected, drag all selected items
@@ -493,15 +491,13 @@ export default function CampaignsPage() {
     }
   }
 
-  function handleDragCancel(event: DragCancelEvent) {
-    console.log('=== DRAG CANCEL ===', event.active.id);
+  function handleDragCancel(_event: DragCancelEvent) {
     setActiveId(null);
     setDraggedIds([]);
   }
 
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-    console.log('=== DRAG END ===', active.id, '→', over?.id, 'dragging:', draggedIds.length, 'items');
     setActiveId(null);
 
     // No target - drop cancelled, do nothing
@@ -512,7 +508,6 @@ export default function CampaignsPage() {
 
     // Only process creative drags, not cluster drags
     if (active.data.current?.type !== 'creative') {
-      console.log('Not a creative drag, ignoring');
       setDraggedIds([]);
       return;
     }
@@ -526,8 +521,6 @@ export default function CampaignsPage() {
       targetClusterId = over.data.current.clusterId as string;
     }
 
-    console.log('Source cluster:', sourceClusterId, 'Target cluster:', targetClusterId);
-
     // Dropped on same cluster - do nothing
     if (sourceClusterId === targetClusterId) {
       setDraggedIds([]);
@@ -536,11 +529,9 @@ export default function CampaignsPage() {
 
     // Get all IDs to move (could be multiple if multi-select)
     const idsToMove = draggedIds.length > 0 ? draggedIds : [active.id as string];
-    console.log('Moving', idsToMove.length, 'items to', targetClusterId);
 
     // Handle drop on "new-campaign" zone - create campaign with these items
     if (targetClusterId === 'new-campaign') {
-      console.log('Creating new campaign with', idsToMove.length, 'items');
 
       // Remove from source clusters first
       const idsBySource = new Map<string, string[]>();
@@ -582,7 +573,6 @@ export default function CampaignsPage() {
     const isValidTarget = targetClusterId === 'unassigned' ||
       campaigns.some(c => c.id === targetClusterId);
     if (!isValidTarget) {
-      console.log('Invalid target:', targetClusterId);
       setDraggedIds([]);
       return;
     }
@@ -766,27 +756,6 @@ export default function CampaignsPage() {
 
     return filtered;
   }, [campaigns, getCampaignCreatives, pageSortField, pageSortDir, countryFilter, selectedBuyerId, showIssuesOnly]);
-
-  // Debug: Log when data changes
-  useEffect(() => {
-    console.log('=== CAMPAIGNS DEBUG ===');
-    console.log('Campaigns count:', campaigns.length);
-    campaigns.forEach(c => {
-      console.log(`Campaign "${c.name}": ${c.creative_ids?.length || 0} creative_ids`);
-      console.log('  First 5 IDs:', c.creative_ids?.slice(0, 5));
-    });
-
-    console.log('=== CREATIVES MAP DEBUG ===');
-    console.log('CreativesMap size:', creativesMap.size);
-    console.log('Sample keys:', Array.from(creativesMap.keys()).slice(0, 5));
-
-    // Check if campaign creative_ids exist in the map
-    campaigns.forEach(c => {
-      const found = c.creative_ids?.filter(id => creativesMap.has(String(id))).length || 0;
-      const missing = c.creative_ids?.filter(id => !creativesMap.has(String(id))).length || 0;
-      console.log(`Campaign "${c.name}": ${found} found in map, ${missing} missing`);
-    });
-  }, [campaigns, unclustered, creativesMap]);
 
   if (isLoading) {
     return (
