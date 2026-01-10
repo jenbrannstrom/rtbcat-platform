@@ -48,7 +48,6 @@ const navigationItems = [
 // Settings sub-navigation
 const settingsItems = [
   { key: "connectedAccounts" as const, href: "/settings/accounts", icon: Link2 },
-  { key: "buyerSeats" as const, href: "/settings/seats", icon: Users },
   { key: "dataRetention" as const, href: "/settings/retention", icon: Clock },
   { key: "systemStatus" as const, href: "/settings/system", icon: Activity },
 ];
