@@ -140,9 +140,9 @@ rtbcat-platform/
   - [x] `seats.ts` - buyer seats, discovery, sync (111 lines)
   - [x] `admin.ts` - user management, audit logs, settings (185 lines)
   - [x] `integrations.ts` - credentials, Gmail, GCP (213 lines)
+  - [x] `analytics.ts` - waste, QPS, RTB funnel, performance (290 lines)
   - [x] `index.ts` - backward-compatible re-exports
-  - [ ] `analytics.ts` - waste, performance, QPS, funnel
-  - [ ] `settings.ts` - RTB endpoints, pretargeting, configs
+  - [ ] Remaining in legacy: recommendations, settings, snapshots, history
 - [ ] Split `settings.py` (1,846 lines) into sub-routers
 - [ ] Split `accounts/page.tsx` (1,621 lines) into components
 - [ ] Complete repository migration in `sqlite_store.py`
