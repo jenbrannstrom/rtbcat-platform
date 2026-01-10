@@ -2,6 +2,17 @@
 
 Handles RTB endpoint sync and pretargeting configuration management
 from the Google Authorized Buyers API.
+
+NOTE: This is a legacy monolithic file (1,846 lines) being refactored.
+Models have been extracted to api/routers/settings/models.py.
+Routes will be split into:
+- settings/endpoints.py: RTB endpoints sync and management
+- settings/pretargeting.py: Pretargeting config management
+- settings/snapshots.py: Config snapshots and comparisons
+- settings/changes.py: Pending changes queue
+- settings/actions.py: Apply, suspend, activate, rollback
+
+See api/routers/settings/__init__.py for the migration plan.
 """
 
 import json
