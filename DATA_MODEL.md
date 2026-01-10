@@ -217,6 +217,56 @@ RTB buyer seats/accounts.
 
 **Unique Constraint:** (bidder_id, buyer_id)
 
+### Multi-Bidder Architecture
+
+The platform supports multiple bidder accounts, each with their own RTB endpoints and pretargeting configurations.
+
+**Database Location (container):** `/home/rtbcat/.catscan/catscan.db`
+**Database Location (host):** `/home/catscan/.catscan/catscan.db`
+
+**Key Concepts:**
+
+| Term | Description |
+|------|-------------|
+| `bidder_id` | The RTB account that owns endpoints and pretargeting configs |
+| `buyer_id` | The seat ID (equals `bidder_id` - one bidder = one seat) |
+| `service_account_id` | The GCP service account with API access to sync data |
+
+**Relationship:** One bidder = one seat. The `buyer_id` and `bidder_id` are the same value.
+
+```
+service_account (GCP credentials)
+    └── bidder/seat 1487810529
+    │       └── rtb_endpoints
+    │       └── pretargeting_configs
+    │       └── creatives
+    └── bidder/seat 6634662463
+            └── rtb_endpoints
+            └── pretargeting_configs
+            └── creatives
+```
+
+**Sync Behavior:**
+
+The `sync_all_data` function in `api/routers/seats.py` must iterate over ALL unique `bidder_id` values when syncing endpoints and pretargeting configs:
+
+```python
+# CORRECT: Sync for all bidders
+bidder_rows = await db_query("SELECT DISTINCT bidder_id FROM buyer_seats")
+for bidder_row in bidder_rows:
+    account_id = bidder_row["bidder_id"]
+    # Sync endpoints for this bidder
+    # Sync pretargeting for this bidder
+```
+
+**API Query Behavior:**
+
+When the frontend requests endpoints or pretargeting for a specific `buyer_id`, the API:
+1. Looks up the `bidder_id` from `buyer_seats` WHERE `buyer_id = ?`
+2. Queries `rtb_endpoints` or `pretargeting_configs` WHERE `bidder_id = ?`
+
+This ensures each bidder sees only its own data.
+
 ### seats
 
 Billing accounts (simplified seat reference).
