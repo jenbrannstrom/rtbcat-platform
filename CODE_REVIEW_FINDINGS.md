@@ -15,9 +15,9 @@ Comprehensive code review of the Cat-Scan/RTB platform identifying security vuln
 
 | File | Lines | Status | Refactoring Plan |
 |------|-------|--------|------------------|
-| `dashboard/src/lib/api.ts` | 2,047 | Pending | Split into `api/creatives.ts`, `api/campaigns.ts`, `api/settings.ts`, `api/analytics.ts` |
-| `api/routers/settings.py` | 1,846 | Pending | Extract into `endpoints.py`, `pretargeting.py`, `service_accounts.py` |
-| `dashboard/src/app/settings/accounts/page.tsx` | 1,621 | Pending | Split into `AccountList`, `AccountForm`, `ApiKeyManager`, `GeminiSettings` components |
+| `dashboard/src/lib/api.ts` | 2,047 → ~800 | **PARTIAL** | 8 modules extracted to `api/` folder, legacy still has ~30 functions |
+| `api/routers/settings.py` | 1,846 | **PARTIAL** | Package structure created, models extracted; routes pending |
+| ~~`dashboard/src/app/settings/accounts/page.tsx`~~ | ~~1,621~~ → 143 | **REFACTORED** | Split into 4 components in `components/` folder |
 | `storage/sqlite_store.py` | 1,384 | Pending | Complete migration to repository pattern |
 | ~~`storage/sqlite_store_new.py`~~ | ~~1,373~~ | **DELETED** | Was dead code - never imported |
 | `dashboard/src/app/page.tsx` | 1,254 | Pending | Extract `FunnelCard`, `PublisherPerformance`, `GeoPerformance`, `SpendStats` |
@@ -153,7 +153,12 @@ rtbcat-platform/
   - [ ] Extract snapshots routes (~200 lines)
   - [ ] Extract changes routes (~350 lines)
   - [ ] Extract actions routes (~350 lines)
-- [ ] Split `accounts/page.tsx` (1,621 lines) into components
+- [x] Split `accounts/page.tsx` (1,621 → 143 lines) into components
+  - [x] `ApiConnectionTab.tsx` - Service accounts and buyer seats (~500 lines)
+  - [x] `GeminiApiKeySection.tsx` - AI language detection config (~210 lines)
+  - [x] `GmailReportsTab.tsx` - Gmail auto-import config (~330 lines)
+  - [x] `SystemTab.tsx` - System status and thumbnails (~200 lines)
+  - [x] `index.ts` - Component exports
 - [ ] Complete repository migration in `sqlite_store.py`
 - [ ] Split remaining large files
 
