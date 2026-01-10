@@ -23,9 +23,9 @@ Comprehensive code review of the Cat-Scan/RTB platform identifying security vuln
 | ~~`dashboard/src/app/page.tsx`~~ | ~~1,254~~ → 459 | **REFACTORED** | Split into 4 components in `components/waste-analyzer/` |
 | `storage/repositories/user_repository.py` | 1,188 | Pending | Split into `auth_repo`, `permissions_repo`, `audit_repo` |
 | `api/routers/creatives.py` | 1,181 | Pending | Extract language detection, preview generation logic |
-| `dashboard/src/components/preview-modal.tsx` | 1,179 | Pending | Extract `VideoPreview`, `HtmlPreview`, `NativePreview`, `PreviewMetadata` |
-| `dashboard/src/app/import/page.tsx` | 1,168 | Pending | Split into `CsvImporter`, `ImportHistory`, `ImportValidation` |
-| `dashboard/src/app/campaigns/page.tsx` | 1,125 | Pending | Extract drag-and-drop logic, campaign card, cluster management |
+| ~~`dashboard/src/components/preview-modal.tsx`~~ | ~~1,179~~ → 7 modules | **REFACTORED** | Split into `components/preview-modal/` (utils, renderers, sections) |
+| ~~`dashboard/src/app/import/page.tsx`~~ | ~~1,168~~ → 615 | **REFACTORED** | Split into `components/import/` (6 components) |
+| ~~`dashboard/src/app/campaigns/page.tsx`~~ | ~~1,094~~ → 736 | **REFACTORED** | Extracted types, utils, API, UI components to `components/campaigns/` |
 | `creative-intelligence/cli/qps_analyzer.py` | 1,053 | Pending | Split into separate command modules under `cli/commands/` |
 
 ---
@@ -165,8 +165,29 @@ rtbcat-platform/
   - [x] `SizeAnalysisSection.tsx` - Size coverage analysis (~275 lines)
   - [x] `GeoAnalysisSection.tsx` - Geographic performance (~200 lines)
   - [x] `index.ts` - Component exports
+- [x] Split `preview-modal.tsx` (1,179 lines) into modular components
+  - [x] `utils.ts` - Formatting, data notes, tracking params (~150 lines)
+  - [x] `SharedComponents.tsx` - CopyButton, MetricCard (~70 lines)
+  - [x] `PreviewRenderers.tsx` - Video, HTML, Native previews (~210 lines)
+  - [x] `CountrySection.tsx` - Country targeting (~170 lines)
+  - [x] `LanguageSection.tsx` - Language detection (~260 lines)
+  - [x] `PreviewModal.tsx` - Main modal (~330 lines)
+- [x] Split `import/page.tsx` (1,168 → 615 lines) into components
+  - [x] `ExportInstructions.tsx` - Google AB export guide (~250 lines)
+  - [x] `RequiredColumnsTable.tsx` - Column requirements (~30 lines)
+  - [x] `TroubleshootingSection.tsx` - Large file tips (~45 lines)
+  - [x] `ColumnMappingCard.tsx` - Column mapping display (~32 lines)
+  - [x] `ImportResultCard.tsx` - Import results (~130 lines)
+  - [x] `ImportHistorySection.tsx` - Recent imports (~100 lines)
+- [x] Split `campaigns/page.tsx` (1,094 → 736 lines) into components
+  - [x] `types.ts` - Type definitions (~55 lines)
+  - [x] `utils.ts` - Helper functions (~90 lines)
+  - [x] `api.ts` - API functions (~70 lines)
+  - [x] `NewCampaignDropZone.tsx` - Drop zone components (~70 lines)
+  - [x] `SuggestionsPanel.tsx` - Auto-cluster suggestions (~100 lines)
+  - [x] `SortFilterControls.tsx` - Sort/filter UI (~110 lines)
 - [ ] Complete repository migration in `sqlite_store.py`
-- [ ] Split remaining large files
+- [ ] Split remaining large files (creatives.py, qps_analyzer.py, user_repository.py)
 
 ### Phase 4: Testing Foundation
 - [ ] Set up pytest infrastructure
