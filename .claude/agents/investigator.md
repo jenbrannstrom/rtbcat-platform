@@ -2,6 +2,7 @@
 name: incident-investigator
 description: Deep incident investigation combining safety guardian and debugger. Use for deployment failures, data loss, mysterious system changes, or any production incident.
 tools: Read, Bash, Grep, Glob
+model: opus
 ---
 
 # Cat-Scan Incident Investigator
