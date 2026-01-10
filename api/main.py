@@ -13,6 +13,25 @@ from typing import Optional
 from fastapi import FastAPI
 
 
+def get_allowed_origins() -> list[str]:
+    """Get allowed CORS origins from environment or defaults.
+
+    Set ALLOWED_ORIGINS env var as comma-separated list for production:
+    ALLOWED_ORIGINS=https://scan.rtb.cat,https://yourdomain.com
+    """
+    env_origins = os.environ.get("ALLOWED_ORIGINS", "")
+    if env_origins:
+        return [origin.strip() for origin in env_origins.split(",") if origin.strip()]
+
+    # Development defaults - restrict in production via ALLOWED_ORIGINS
+    return [
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000",
+    ]
+
+
 def get_version() -> str:
     """Get app version from VERSION file or environment variable."""
     # First check environment variable (set in Docker)
@@ -127,13 +146,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Configure CORS
+    # Configure CORS - use explicit origins, never wildcards with credentials
+    # Set ALLOWED_ORIGINS env var in production (comma-separated)
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Configure appropriately for production
+        allow_origins=get_allowed_origins(),
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "X-API-Key"],
     )
 
     # Session-based authentication (multi-user mode)

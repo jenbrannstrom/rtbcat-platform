@@ -45,15 +45,19 @@ def hash_password(password: str) -> str:
 
     Returns:
         bcrypt hash string.
+
+    Raises:
+        RuntimeError: If bcrypt is not installed (required dependency).
     """
     try:
         import bcrypt
-        salt = bcrypt.gensalt()
-        return bcrypt.hashpw(password.encode(), salt).decode()
     except ImportError:
-        # Fallback for environments without bcrypt
-        import hashlib
-        return "sha256:" + hashlib.sha256(password.encode()).hexdigest()
+        raise RuntimeError(
+            "bcrypt is required for password hashing. "
+            "Install it with: pip install bcrypt"
+        )
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode(), salt).decode()
 
 
 def verify_password(password: str, password_hash: str) -> bool:
@@ -65,19 +69,36 @@ def verify_password(password: str, password_hash: str) -> bool:
 
     Returns:
         True if password matches.
+
+    Raises:
+        RuntimeError: If bcrypt is not installed (required dependency).
+
+    Note:
+        Legacy SHA-256 hashes (prefix "sha256:") are still verified for
+        backward compatibility, but users should be prompted to reset
+        their password to upgrade to bcrypt.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Handle legacy SHA-256 hashes (backward compatibility only)
+    if password_hash.startswith("sha256:"):
+        import hashlib
+        logger.warning(
+            "Legacy SHA-256 password hash detected. "
+            "User should reset password to upgrade to bcrypt."
+        )
+        return password_hash == "sha256:" + hashlib.sha256(password.encode()).hexdigest()
+
+    # Require bcrypt for all new hashes
     try:
         import bcrypt
-        if password_hash.startswith("sha256:"):
-            # Fallback verification
-            import hashlib
-            return password_hash == "sha256:" + hashlib.sha256(password.encode()).hexdigest()
-        return bcrypt.checkpw(password.encode(), password_hash.encode())
     except ImportError:
-        import hashlib
-        if password_hash.startswith("sha256:"):
-            return password_hash == "sha256:" + hashlib.sha256(password.encode()).hexdigest()
-        return False
+        raise RuntimeError(
+            "bcrypt is required for password verification. "
+            "Install it with: pip install bcrypt"
+        )
+    return bcrypt.checkpw(password.encode(), password_hash.encode())
 
 
 def generate_password(length: int = 16) -> str:

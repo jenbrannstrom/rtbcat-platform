@@ -30,18 +30,35 @@ DEFAULT_DB_PATH = CATSCAN_DIR / 'catscan.db'
 DEFAULT_RETENTION_DAYS = int(os.environ.get('CATSCAN_RETENTION_DAYS', '90'))
 LOGS_DIR = CATSCAN_DIR / 'logs'
 
-# Tables and their date columns
+# Tables and their date columns - SECURITY: This is the ONLY whitelist
+# of allowed table/column names. Never dynamically add to this list.
 TABLES_TO_CLEAN = {
     'rtb_daily': 'day',
     'rtb_funnel': 'day',
     'performance_metrics': 'date',
 }
 
+# Allowed table names (for SQL injection prevention)
+ALLOWED_TABLES = frozenset(TABLES_TO_CLEAN.keys())
+ALLOWED_COLUMNS = frozenset(TABLES_TO_CLEAN.values())
+
 # Tables to preserve (audit/reference data)
 TABLES_TO_PRESERVE = [
     'import_history',
     'creatives',
 ]
+
+
+def _validate_table_column(table: str, column: str) -> None:
+    """Validate table and column names against whitelist.
+
+    Raises:
+        ValueError: If table or column is not in the allowed list.
+    """
+    if table not in ALLOWED_TABLES:
+        raise ValueError(f"Table '{table}' is not in the allowed whitelist")
+    if column not in ALLOWED_COLUMNS:
+        raise ValueError(f"Column '{column}' is not in the allowed whitelist")
 
 
 def get_db_path() -> Path:
@@ -60,19 +77,41 @@ def log(message: str, verbose: bool = True):
 
 
 def get_table_row_count(cursor: sqlite3.Cursor, table: str) -> int:
-    """Get the current row count for a table."""
+    """Get the current row count for a table.
+
+    Args:
+        cursor: SQLite cursor.
+        table: Table name (must be in ALLOWED_TABLES whitelist).
+
+    Returns:
+        Row count or 0 on error.
+    """
+    if table not in ALLOWED_TABLES:
+        raise ValueError(f"Table '{table}' is not in the allowed whitelist")
     try:
-        cursor.execute(f"SELECT COUNT(*) FROM {table}")
+        cursor.execute(f"SELECT COUNT(*) FROM {table}")  # noqa: S608 - table validated above
         return cursor.fetchone()[0]
     except sqlite3.OperationalError:
         return 0
 
 
 def count_rows_to_delete(cursor: sqlite3.Cursor, table: str, date_column: str, cutoff_date: str) -> int:
-    """Count how many rows would be deleted."""
+    """Count how many rows would be deleted.
+
+    Args:
+        cursor: SQLite cursor.
+        table: Table name (must be in ALLOWED_TABLES whitelist).
+        date_column: Column name (must be in ALLOWED_COLUMNS whitelist).
+        cutoff_date: Date string for cutoff.
+
+    Returns:
+        Count of rows to delete or 0 on error.
+    """
+    _validate_table_column(table, date_column)
     try:
+        # Table/column validated above against whitelist
         cursor.execute(
-            f"SELECT COUNT(*) FROM {table} WHERE {date_column} < ?",
+            f"SELECT COUNT(*) FROM {table} WHERE {date_column} < ?",  # noqa: S608
             (cutoff_date,)
         )
         return cursor.fetchone()[0]
@@ -82,10 +121,22 @@ def count_rows_to_delete(cursor: sqlite3.Cursor, table: str, date_column: str, c
 
 
 def delete_old_rows(cursor: sqlite3.Cursor, table: str, date_column: str, cutoff_date: str) -> int:
-    """Delete rows older than cutoff date. Returns number of deleted rows."""
+    """Delete rows older than cutoff date.
+
+    Args:
+        cursor: SQLite cursor.
+        table: Table name (must be in ALLOWED_TABLES whitelist).
+        date_column: Column name (must be in ALLOWED_COLUMNS whitelist).
+        cutoff_date: Date string for cutoff.
+
+    Returns:
+        Number of deleted rows or 0 on error.
+    """
+    _validate_table_column(table, date_column)
     try:
+        # Table/column validated above against whitelist
         cursor.execute(
-            f"DELETE FROM {table} WHERE {date_column} < ?",
+            f"DELETE FROM {table} WHERE {date_column} < ?",  # noqa: S608
             (cutoff_date,)
         )
         return cursor.rowcount
