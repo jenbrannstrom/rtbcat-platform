@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { X, Play, ExternalLink, Copy, Check, Loader2, Info, AlertTriangle, Globe, RefreshCw, Edit2 } from "lucide-react";
+import { X, Play, ExternalLink, Copy, Check, Loader2, Info, AlertTriangle, Globe, RefreshCw, Edit2, CheckCircle, XCircle } from "lucide-react";
 import type { Creative, CreativePerformanceSummary, CreativeCountryBreakdown, GeoMismatchResponse, LanguageDetectionResponse } from "@/types/api";
 import { cn, getFormatColor, getFormatLabel, getStatusColor } from "@/lib/utils";
 import { getCreative, getCreativeCountries, analyzeCreativeLanguage, updateCreativeLanguage, getCreativeGeoMismatch } from "@/lib/api";
