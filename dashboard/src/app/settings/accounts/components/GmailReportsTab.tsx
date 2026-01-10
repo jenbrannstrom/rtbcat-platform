@@ -203,30 +203,37 @@ export function GmailReportsTab() {
             )}
 
             {/* Import Now button */}
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => importMutation.mutate()}
-                disabled={importMutation.isPending}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-lg font-medium",
-                  "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                )}
-              >
-                {importMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Checking Gmail...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4" />
-                    Import Now
-                  </>
-                )}
-              </button>
-              <p className="text-sm text-gray-500">
-                Check for new report emails and import them immediately
-              </p>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => importMutation.mutate()}
+                  disabled={importMutation.isPending}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-lg font-medium",
+                    "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                  )}
+                >
+                  {importMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4" />
+                      Import Now
+                    </>
+                  )}
+                </button>
+                <p className="text-sm text-gray-500">
+                  Check for new report emails and import them immediately
+                </p>
+              </div>
+              {importMutation.isPending && (
+                <p className="text-sm text-blue-600 animate-pulse">
+                  Checking Gmail for report emails, downloading attachments, and importing data. This may take a minute...
+                </p>
+              )}
             </div>
 
             {/* Recent history */}

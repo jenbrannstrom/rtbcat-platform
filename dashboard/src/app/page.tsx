@@ -154,13 +154,13 @@ function WasteAnalysisContent() {
     queryFn: () => getPretargetingConfigs({ buyer_id: selectedBuyerId || undefined }),
   });
 
-  // Fetch config-level performance data
+  // Fetch config-level performance data (filtered by selected buyer)
   const {
     data: configPerformance,
     refetch: refetchConfigPerf,
   } = useQuery({
-    queryKey: ["rtb-funnel-configs", days],
-    queryFn: () => getRTBFunnelConfigs(days),
+    queryKey: ["rtb-funnel-configs", days, selectedBuyerId],
+    queryFn: () => getRTBFunnelConfigs(days, selectedBuyerId || undefined),
   });
 
   const handleRefresh = () => {

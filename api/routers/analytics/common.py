@@ -65,6 +65,42 @@ async def get_valid_billing_ids() -> list[str]:
         return []
 
 
+async def get_valid_billing_ids_for_buyer(buyer_id: Optional[str] = None) -> list[str]:
+    """Get list of billing_ids for a specific buyer seat.
+
+    If buyer_id is provided, returns billing_ids for that specific buyer seat.
+    This allows filtering data by selected buyer in multi-account scenarios.
+
+    Args:
+        buyer_id: The buyer seat ID to filter by. If None, returns all billing_ids.
+
+    Returns:
+        List of billing_id strings for the specified buyer (or all if not specified).
+    """
+    try:
+        if buyer_id:
+            # Get bidder_id for this buyer seat
+            seat = await db_query_one(
+                "SELECT bidder_id FROM buyer_seats WHERE buyer_id = ?",
+                (buyer_id,)
+            )
+            if seat and seat["bidder_id"]:
+                rows = await db_query(
+                    "SELECT DISTINCT billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL AND bidder_id = ?",
+                    (seat["bidder_id"],)
+                )
+                return [row["billing_id"] for row in rows]
+
+        # Fallback: return all billing_ids
+        rows = await db_query(
+            "SELECT DISTINCT billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL"
+        )
+        return [row["billing_id"] for row in rows]
+    except Exception as e:
+        logger.error(f"Failed to get billing IDs for buyer {buyer_id}: {e}")
+        return []
+
+
 def _group_signals_by_type(signals) -> dict[str, int]:
     """Group signals by type and count."""
     counts = {}

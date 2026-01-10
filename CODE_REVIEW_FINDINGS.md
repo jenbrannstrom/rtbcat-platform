@@ -211,7 +211,102 @@ rtbcat-platform/
 
 ---
 
-## 7. Production Setup Required
+## 7. Dashboard Data Bug (CRITICAL - Pending Fix)
+
+**Reported:** 2026-01-10
+**Symptoms:**
+- Home page shows empty data for seat "Tuky"
+- All pretargeting settings show RED (0 reached, 0% win, 100% waste)
+- Drill-down shows "No data available for this breakdown"
+
+### Root Cause (Confirmed via SSH investigation)
+
+**Database has data:**
+- 1.3GB at `/home/rtbcat/.catscan/catscan.db`
+- rtb_daily: 120,363 rows
+- rtb_funnel: 2,717,041 rows
+- Tuky has 5,495 rows across 7 billing_ids with real metrics
+
+**The Bug:** `/analytics/rtb-funnel/configs` endpoint uses "most recently synced" bidder_id instead of respecting the selected buyer seat.
+
+### Fix Required
+
+**1. Backend - Add buyer_id param:**
+
+File: `api/routers/analytics/rtb_funnel.py`
+```python
+@router.get("/analytics/rtb-funnel/configs")
+async def get_config_performance(
+    days: int = Query(7),
+    buyer_id: Optional[str] = Query(None),  # ADD THIS
+):
+    valid_billing_ids = await get_valid_billing_ids_for_buyer(buyer_id)  # USE NEW FUNCTION
+```
+
+File: `api/routers/analytics/common.py`
+```python
+async def get_valid_billing_ids_for_buyer(buyer_id: Optional[str] = None) -> list[str]:
+    """Get billing IDs for a specific buyer seat."""
+    if buyer_id:
+        seat = await db_query_one(
+            "SELECT bidder_id FROM buyer_seats WHERE buyer_id = ?", (buyer_id,)
+        )
+        if seat:
+            rows = await db_query(
+                "SELECT DISTINCT billing_id FROM pretargeting_configs WHERE bidder_id = ?",
+                (seat["bidder_id"],)
+            )
+            return [r["billing_id"] for r in rows]
+    # Fallback: return all
+    rows = await db_query("SELECT DISTINCT billing_id FROM pretargeting_configs")
+    return [r["billing_id"] for r in rows]
+```
+
+**2. Frontend - Pass buyer_id:**
+
+File: `dashboard/src/lib/api/analytics.ts`
+```typescript
+export async function getRTBFunnelConfigs(days: number = 7, buyerId?: string) {
+  const params = new URLSearchParams({ days: String(days) });
+  if (buyerId) params.set('buyer_id', buyerId);
+  return fetchApi(`/analytics/rtb-funnel/configs?${params}`);
+}
+```
+
+File: `dashboard/src/app/page.tsx`
+```typescript
+// Pass selectedBuyerId to API call
+const configPerf = await getRTBFunnelConfigs(7, selectedBuyerId);
+```
+
+**3. Gmail Import Progress (Minor UX fix):**
+
+File: `dashboard/src/app/settings/accounts/components/GmailReportsTab.tsx`
+- Add visual progress indicator during import
+- Show "Checking Gmail..." with spinner
+- Toast success message with file count
+
+### Files to Modify
+
+| File | Change |
+|------|--------|
+| `api/routers/analytics/rtb_funnel.py` | Add `buyer_id` param |
+| `api/routers/analytics/common.py` | Add `get_valid_billing_ids_for_buyer()` |
+| `dashboard/src/lib/api/analytics.ts` | Add `buyerId` param |
+| `dashboard/src/app/page.tsx` | Pass `selectedBuyerId` |
+| `dashboard/src/app/settings/accounts/components/GmailReportsTab.tsx` | Add progress UI |
+
+### Verification
+
+```bash
+# Test API directly after fix
+curl "https://scan.rtb.cat/api/analytics/rtb-funnel/configs?days=7&buyer_id=299038253"
+# Should return Tuky's config data
+```
+
+---
+
+## 8. Production Setup Required
 
 Add to production environment:
 ```bash

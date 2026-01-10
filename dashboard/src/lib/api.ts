@@ -1034,10 +1034,13 @@ export interface ConfigPerformanceResponse {
 }
 
 export async function getRTBFunnelConfigs(
-  days: number = 7
+  days: number = 7,
+  buyerId?: string
 ): Promise<ConfigPerformanceResponse> {
+  const params = new URLSearchParams({ days: String(days) });
+  if (buyerId) params.set('buyer_id', buyerId);
   return fetchApi<ConfigPerformanceResponse>(
-    `/analytics/rtb-funnel/configs?days=${days}`
+    `/analytics/rtb-funnel/configs?${params}`
   );
 }
 
