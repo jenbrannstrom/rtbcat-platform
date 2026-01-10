@@ -21,6 +21,8 @@
 // Re-export from modular files
 export * from "./core";
 export * from "./auth";
+export * from "./creatives";
+export * from "./campaigns";
 
 // TODO: Migrate remaining functions to modules, then remove this re-export
 // For now, re-export everything from the legacy file
