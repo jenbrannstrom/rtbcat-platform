@@ -26,7 +26,9 @@ export * from "./campaigns";
 export * from "./seats";
 export * from "./admin";
 export * from "./integrations";
+export * from "./analytics";
 
-// TODO: Migrate remaining functions to modules (analytics, settings),
-// then remove this re-export from the legacy file
+// Legacy file still contains: recommendations, RTB settings/pretargeting,
+// upload tracking, import history, snapshots, pending changes, traffic.
+// These can be migrated in future refactoring passes.
 export * from "../api";
