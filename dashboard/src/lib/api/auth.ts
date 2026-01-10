@@ -1,6 +1,8 @@
 /**
  * Authentication API module.
- * Handles login, logout, session management, and user info.
+ * Handles logout, session management, and user info.
+ *
+ * Note: Login is handled by OAuth2 Proxy (Google Auth) - no password-based login.
  */
 
 import { fetchApi } from "./core";
@@ -17,14 +19,9 @@ export interface AuthUser {
   is_admin: boolean;
 }
 
-export interface LoginResponse {
-  status: string;
-  user: AuthUser;
-  message: string;
-}
-
 export interface AuthCheckResponse {
   authenticated: boolean;
+  auth_method?: string;
   user: AuthUser | null;
 }
 
@@ -41,13 +38,6 @@ export interface UserInfo {
 // API Functions
 // =============================================================================
 
-export async function login(email: string, password: string): Promise<LoginResponse> {
-  return fetchApi<LoginResponse>("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
-}
-
 export async function logout(): Promise<{ status: string; message: string }> {
   return fetchApi<{ status: string; message: string }>("/auth/logout", {
     method: "POST",
@@ -60,17 +50,4 @@ export async function checkAuth(): Promise<AuthCheckResponse> {
 
 export async function getCurrentUser(): Promise<UserInfo> {
   return fetchApi<UserInfo>("/auth/me");
-}
-
-export async function changePassword(
-  currentPassword: string,
-  newPassword: string
-): Promise<{ status: string; message: string }> {
-  return fetchApi<{ status: string; message: string }>("/auth/change-password", {
-    method: "POST",
-    body: JSON.stringify({
-      current_password: currentPassword,
-      new_password: newPassword,
-    }),
-  });
 }

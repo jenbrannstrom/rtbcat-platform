@@ -7,7 +7,6 @@ import { Settings, Link2, Mail } from "lucide-react";
 import { getHealth, getGmailStatus } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
-import { SensitiveRouteGuard } from "@/components/sensitive-route-guard";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/contexts/i18n-context";
 
@@ -63,7 +62,6 @@ export default function ConnectedAccountsPage() {
   const isGmailConfigured = gmailStatus?.configured === true;
 
   return (
-    <SensitiveRouteGuard featureName="API credentials and account settings">
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="mb-6">
@@ -137,6 +135,5 @@ export default function ConnectedAccountsPage() {
         {activeTab === "system" && <SystemTab />}
       </div>
     </div>
-    </SensitiveRouteGuard>
   );
 }

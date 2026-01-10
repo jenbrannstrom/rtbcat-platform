@@ -3,12 +3,14 @@
  *
  * This file re-exports all API functions for backward compatibility.
  * New code should import from specific modules:
- *   import { login, logout } from "@/lib/api/auth";
+ *   import { logout, checkAuth } from "@/lib/api/auth";
  *   import { getCreatives } from "@/lib/api/creatives";
+ *
+ * Note: Login is handled by OAuth2 Proxy (Google Auth) - no password-based login.
  *
  * The monolithic api.ts is being split into:
  *   - core.ts: fetchApi, health, stats, system
- *   - auth.ts: login, logout, session management
+ *   - auth.ts: logout, session management (OAuth2 Proxy handles login)
  *   - admin.ts: user management, audit logs
  *   - creatives.ts: creative CRUD, thumbnails, language
  *   - campaigns.ts: campaigns, AI campaigns

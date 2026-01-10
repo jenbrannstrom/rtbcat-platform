@@ -45,14 +45,23 @@ Comprehensive code review of the Cat-Scan/RTB platform identifying security vuln
 |-------|----------|--------|-------------|
 | SQL injection in dynamic queries | `scripts/cleanup_old_data.py` | **FIXED** | Added whitelist validation for table/column names |
 
-### MEDIUM (Pending)
+### MEDIUM (Partial)
 
 | Issue | Location | Status | Notes |
 |-------|----------|--------|-------|
 | XSS via dangerouslySetInnerHTML | `dashboard/src/components/preview-modal.tsx` | Pending | Sanitize HTML content, use sandboxed iframe |
-| Session cookie not always secure | `api/auth_v2.py:320-328` | Pending | Consider requiring HTTPS in production |
-| Email validation too weak | `api/auth_v2.py:589-591` | Pending | Use proper email validation library |
+| ~~Session cookie not always secure~~ | ~~`api/auth_v2.py`~~ | **N/A** | Removed - OAuth2 Proxy handles auth |
+| ~~Email validation too weak~~ | ~~`api/auth_v2.py`~~ | **N/A** | Removed - OAuth2 Proxy validates Google accounts |
 | API keys logged in plaintext | Various files | Pending | Mask sensitive data in logs |
+
+### Authentication Cleanup (Completed)
+
+Password-based authentication has been removed. The app now uses **OAuth2 Proxy (Google Auth)** exclusively:
+- Deleted: `dashboard/src/app/login/`, `initial-setup/`, `change-password/` pages
+- Deleted: `dashboard/src/components/sensitive-route-guard.tsx`
+- Cleaned: `api/auth_v2.py` (693 lines → 177 lines) - removed password endpoints
+- Updated: `dashboard/src/contexts/auth-context.tsx` - OAuth2-only flow
+- Updated: `dashboard/src/lib/api/auth.ts` - removed login/changePassword functions
 
 ---
 

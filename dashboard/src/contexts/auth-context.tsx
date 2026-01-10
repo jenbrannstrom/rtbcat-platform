@@ -1,5 +1,15 @@
 "use client";
 
+/**
+ * Authentication context for OAuth2 Proxy (Google Auth).
+ *
+ * With OAuth2 Proxy:
+ * - Users authenticate via Google before reaching the app
+ * - X-Email header from OAuth2 Proxy identifies the user
+ * - Users are auto-created on first login (first user gets admin role)
+ * - No password-based login - Google Auth only
+ */
+
 import {
   createContext,
   useContext,
@@ -8,7 +18,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 // ==================== Types ====================
 
@@ -18,7 +28,6 @@ interface User {
   display_name: string | null;
   role: string;
   is_admin: boolean;
-  must_change_password?: boolean;
 }
 
 interface AuthContextValue {
@@ -27,7 +36,6 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isAdmin: boolean;
   permissions: string[];
-  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
 }
@@ -36,24 +44,14 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-// Public paths that don't require authentication
-const PUBLIC_PATHS = ["/login", "/initial-setup"];
-
-// Paths allowed even if password change is required
-const PASSWORD_CHANGE_ALLOWED_PATHS = ["/change-password", "/login", "/initial-setup"];
-
 // ==================== Provider ====================
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
-
-  // Check if current path is public
-  const isPublicPath = PUBLIC_PATHS.some((p) => pathname?.startsWith(p));
 
   // Check authentication status
   const checkAuth = useCallback(async () => {
@@ -91,44 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Login function
-  const login = useCallback(
-    async (email: string, password: string) => {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || "Login failed");
-      }
-
-      const data = await response.json();
-      setUser(data.user);
-
-      // Fetch permissions
-      const meResponse = await fetch("/api/auth/me", {
-        credentials: "include",
-      });
-      if (meResponse.ok) {
-        const meData = await meResponse.json();
-        setPermissions(meData.permissions || []);
-      }
-
-      // Redirect to password change if required, otherwise home
-      if (data.user?.must_change_password) {
-        router.push("/change-password");
-      } else {
-        router.push("/");
-      }
-    },
-    [router]
-  );
-
-  // Logout function
+  // Logout function - clears session and redirects to OAuth2 sign-out
   const logout = useCallback(async () => {
     try {
       await fetch("/api/auth/logout", {
@@ -141,8 +102,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setUser(null);
     setPermissions([]);
-    router.push("/login");
-  }, [router]);
+    // Redirect to OAuth2 Proxy sign-out which will redirect to Google sign-out
+    window.location.href = "/oauth2/sign_out";
+  }, []);
 
   // Initialize auth state on mount
   useEffect(() => {
@@ -156,42 +118,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     init();
   }, [checkAuth]);
 
-  // Redirect to login if not authenticated and not on public path
+  // If not authenticated after OAuth2 Proxy, redirect to sign-in
+  // This shouldn't normally happen since OAuth2 Proxy handles auth at the edge
   useEffect(() => {
     if (!initialized || isLoading) return;
 
-    if (!user && !isPublicPath) {
-      router.push("/login");
+    if (!user) {
+      // Redirect to OAuth2 Proxy sign-in (which redirects to Google)
+      window.location.href = "/oauth2/sign_in";
     }
-  }, [initialized, isLoading, user, isPublicPath, router]);
-
-  // Redirect away from login if already authenticated
-  useEffect(() => {
-    if (!initialized || isLoading) return;
-
-    if (user && pathname === "/login") {
-      // If must change password, go to change-password page
-      if (user.must_change_password) {
-        router.push("/change-password");
-      } else {
-        router.push("/");
-      }
-    }
-  }, [initialized, isLoading, user, pathname, router]);
-
-  // Redirect to password change if required and not on allowed path
-  useEffect(() => {
-    if (!initialized || isLoading) return;
-
-    if (user?.must_change_password) {
-      const isAllowedPath = PASSWORD_CHANGE_ALLOWED_PATHS.some(
-        (p) => pathname?.startsWith(p)
-      );
-      if (!isAllowedPath) {
-        router.push("/change-password");
-      }
-    }
-  }, [initialized, isLoading, user, pathname, router]);
+  }, [initialized, isLoading, user]);
 
   const value: AuthContextValue = {
     user,
@@ -199,7 +135,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated: !!user,
     isAdmin: user?.is_admin ?? false,
     permissions,
-    login,
     logout,
     checkAuth,
   };
