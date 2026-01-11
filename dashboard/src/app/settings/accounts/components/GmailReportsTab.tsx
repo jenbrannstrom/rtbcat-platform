@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle,
@@ -13,9 +13,22 @@ import {
   X,
   Calendar,
   Inbox,
+  Search,
+  Download,
+  Database,
 } from "lucide-react";
 import { getGmailStatus, triggerGmailImport } from "@/lib/api";
 import { cn } from "@/lib/utils";
+
+// Import progress phases
+const IMPORT_PHASES = [
+  { id: 'connecting', label: 'Connecting to Gmail', icon: Mail, duration: 2000 },
+  { id: 'searching', label: 'Searching for report emails', icon: Search, duration: 3000 },
+  { id: 'downloading', label: 'Downloading attachments', icon: Download, duration: 8000 },
+  { id: 'importing', label: 'Importing CSV data', icon: Database, duration: 5000 },
+] as const;
+
+type ImportPhase = typeof IMPORT_PHASES[number]['id'] | 'idle' | 'complete';
 
 /**
  * Gmail Reports configuration tab.
@@ -24,15 +37,48 @@ import { cn } from "@/lib/utils";
 export function GmailReportsTab() {
   const queryClient = useQueryClient();
   const [importMessage, setImportMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [importPhase, setImportPhase] = useState<ImportPhase>('idle');
+  const phaseTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const { data: gmailStatus, isLoading: statusLoading, refetch: refetchStatus } = useQuery({
     queryKey: ["gmailStatus"],
     queryFn: getGmailStatus,
   });
 
+  // Cycle through phases while importing
+  useEffect(() => {
+    if (importPhase === 'idle' || importPhase === 'complete') {
+      return;
+    }
+
+    const currentIndex = IMPORT_PHASES.findIndex(p => p.id === importPhase);
+    if (currentIndex === -1) return;
+
+    const currentPhase = IMPORT_PHASES[currentIndex];
+
+    // Move to next phase after duration
+    phaseTimerRef.current = setTimeout(() => {
+      const nextIndex = currentIndex + 1;
+      if (nextIndex < IMPORT_PHASES.length) {
+        setImportPhase(IMPORT_PHASES[nextIndex].id);
+      }
+      // Stay on last phase until complete
+    }, currentPhase.duration);
+
+    return () => {
+      if (phaseTimerRef.current) {
+        clearTimeout(phaseTimerRef.current);
+      }
+    };
+  }, [importPhase]);
+
   const importMutation = useMutation({
     mutationFn: triggerGmailImport,
+    onMutate: () => {
+      setImportPhase('connecting');
+    },
     onSuccess: (data) => {
+      setImportPhase('complete');
       if (data.success) {
         if (data.files_imported > 0) {
           setImportMessage({ type: "success", text: `Imported ${data.files_imported} file(s) from ${data.emails_processed} email(s)` });
@@ -46,9 +92,13 @@ export function GmailReportsTab() {
       }
       refetchStatus();
       queryClient.invalidateQueries({ queryKey: ["stats"] });
-      setTimeout(() => setImportMessage(null), 8000);
+      setTimeout(() => {
+        setImportMessage(null);
+        setImportPhase('idle');
+      }, 8000);
     },
     onError: (error) => {
+      setImportPhase('idle');
       setImportMessage({ type: "error", text: error instanceof Error ? error.message : "Import failed" });
       setTimeout(() => setImportMessage(null), 8000);
     },
@@ -203,7 +253,7 @@ export function GmailReportsTab() {
             )}
 
             {/* Import Now button */}
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => importMutation.mutate()}
@@ -225,14 +275,62 @@ export function GmailReportsTab() {
                     </>
                   )}
                 </button>
-                <p className="text-sm text-gray-500">
-                  Check for new report emails and import them immediately
-                </p>
+                {!importMutation.isPending && (
+                  <p className="text-sm text-gray-500">
+                    Check for new report emails and import them immediately
+                  </p>
+                )}
               </div>
-              {importMutation.isPending && (
-                <p className="text-sm text-blue-600 animate-pulse">
-                  Checking Gmail for report emails, downloading attachments, and importing data. This may take a minute...
-                </p>
+
+              {/* Progress indicator with phases */}
+              {importMutation.isPending && importPhase !== 'idle' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+                    <span className="font-medium text-blue-900">Import in progress...</span>
+                  </div>
+
+                  {/* Phase steps */}
+                  <div className="space-y-2">
+                    {IMPORT_PHASES.map((phase, index) => {
+                      const currentIndex = IMPORT_PHASES.findIndex(p => p.id === importPhase);
+                      const isComplete = index < currentIndex;
+                      const isCurrent = phase.id === importPhase;
+                      const isPending = index > currentIndex;
+                      const PhaseIcon = phase.icon;
+
+                      return (
+                        <div
+                          key={phase.id}
+                          className={cn(
+                            "flex items-center gap-3 text-sm py-1.5 px-2 rounded",
+                            isCurrent && "bg-blue-100",
+                            isComplete && "text-green-700",
+                            isPending && "text-gray-400"
+                          )}
+                        >
+                          {isComplete ? (
+                            <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                          ) : isCurrent ? (
+                            <Loader2 className="h-4 w-4 text-blue-600 animate-spin flex-shrink-0" />
+                          ) : (
+                            <PhaseIcon className="h-4 w-4 text-gray-300 flex-shrink-0" />
+                          )}
+                          <span className={cn(
+                            isCurrent && "font-medium text-blue-800"
+                          )}>
+                            {phase.label}
+                            {isCurrent && "..."}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <p className="text-xs text-blue-600 mt-3">
+                    This may take a minute depending on the number of report emails.
+                  </p>
+                </div>
               )}
             </div>
 
