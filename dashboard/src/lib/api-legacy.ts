@@ -1118,6 +1118,7 @@ export interface ConfigBreakdownResponse {
   billing_id: string;
   breakdown_by: ConfigBreakdownType;
   breakdown: ConfigBreakdownItem[];
+  is_aggregate?: boolean;
 }
 
 export async function getConfigBreakdown(
