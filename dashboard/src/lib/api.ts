@@ -996,53 +996,7 @@ export interface RTBFunnelResponse {
   };
 }
 
-export async function getRTBFunnel(days: number = 7): Promise<RTBFunnelResponse> {
-  return fetchApi<RTBFunnelResponse>(`/analytics/rtb-funnel?days=${days}`);
-}
-
-export async function getRTBPublishers(
-  limit: number = 30
-): Promise<{ publishers: PublisherPerformance[]; count: number }> {
-  return fetchApi<{ publishers: PublisherPerformance[]; count: number }>(
-    `/analytics/rtb-funnel/publishers?limit=${limit}`
-  );
-}
-
-export async function getRTBGeos(
-  limit: number = 30
-): Promise<{ geos: GeoPerformance[]; count: number }> {
-  return fetchApi<{ geos: GeoPerformance[]; count: number }>(
-    `/analytics/rtb-funnel/geos?limit=${limit}`
-  );
-}
-
-// RTB Config Performance API
-
-export interface ConfigPerformanceItem {
-  billing_id: string;
-  name: string | null;
-  reached: number;
-  impressions: number;
-  win_rate_pct: number;
-  waste_pct: number;
-}
-
-export interface ConfigPerformanceResponse {
-  period_days: number;
-  total_configs: number;
-  configs: ConfigPerformanceItem[];
-}
-
-export async function getRTBFunnelConfigs(
-  days: number = 7,
-  buyerId?: string
-): Promise<ConfigPerformanceResponse> {
-  const params = new URLSearchParams({ days: String(days) });
-  if (buyerId) params.set('buyer_id', buyerId);
-  return fetchApi<ConfigPerformanceResponse>(
-    `/analytics/rtb-funnel/configs?${params}`
-  );
-}
+// RTB Funnel functions moved to ./api/analytics.ts
 
 // RTB Settings API
 
