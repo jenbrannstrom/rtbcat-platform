@@ -51,7 +51,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.auth import APIKeyAuthMiddleware
 from api.session_middleware import SessionAuthMiddleware
-from api.auth_v2 import router as auth_router, ensure_admin_exists, cleanup_sessions
+from api.auth_v2 import router as auth_router, cleanup_sessions
 from config import ConfigManager
 from storage import SQLiteStore
 from api.campaigns_router import router as campaigns_router
@@ -110,12 +110,6 @@ async def lifespan(app: FastAPI):
             logger.info(f"Auto-populated {seats_created} buyer seats from existing creatives")
     except Exception as e:
         logger.warning(f"Failed to auto-populate buyer seats: {e}")
-
-    # Ensure initial admin user exists (from env vars)
-    try:
-        await ensure_admin_exists()
-    except Exception as e:
-        logger.warning(f"Failed to check/create admin user: {e}")
 
     # Cleanup expired sessions on startup
     try:
