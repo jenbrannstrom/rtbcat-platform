@@ -12,7 +12,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from api.dependencies import require_admin, get_current_user, _get_user_repo
-from api.auth_v2 import hash_password, generate_password
 from storage.repositories.user_repository import User
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -21,11 +20,10 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 # ==================== Request/Response Models ====================
 
 class CreateUserRequest(BaseModel):
-    """Request to create a new user."""
+    """Request to create a new user (OAuth2 - no password needed)."""
     email: str = Field(..., description="User email address")
     display_name: Optional[str] = Field(None, description="User display name")
     role: str = Field("user", description="User role (admin or user)")
-    password: Optional[str] = Field(None, description="Password (auto-generated if not provided)")
 
 
 class CreateUserResponse(BaseModel):
@@ -33,7 +31,6 @@ class CreateUserResponse(BaseModel):
     status: str
     user_id: str
     email: str
-    password: str  # Return generated password (only shown once!)
     message: str
 
 
@@ -53,7 +50,6 @@ class UpdateUserRequest(BaseModel):
     display_name: Optional[str] = None
     role: Optional[str] = None
     is_active: Optional[bool] = None
-    password: Optional[str] = None
 
 
 class PermissionRequest(BaseModel):
@@ -143,11 +139,11 @@ async def create_user(
     user_request: CreateUserRequest,
     admin: User = Depends(require_admin),
 ):
-    """Create a new user.
+    """Create a new user (pre-register for OAuth2 login).
 
-    Requires admin role. Password is auto-generated if not provided.
-    The generated password is returned in the response and should be
-    shared securely with the user (it's only shown once).
+    Requires admin role. Users authenticate via Google OAuth2,
+    so no password is needed. This pre-creates the user record
+    with assigned role before they first log in.
     """
     repo = _get_user_repo()
 
@@ -160,16 +156,12 @@ async def create_user(
     if user_request.role not in ("admin", "user"):
         raise HTTPException(status_code=400, detail="Role must be 'admin' or 'user'")
 
-    # Generate password if not provided
-    password = user_request.password or generate_password()
-    password_hash = hash_password(password)
-
-    # Create user
+    # Create user (no password - OAuth2 only)
     user_id = str(uuid.uuid4())
     user = await repo.create_user(
         user_id=user_id,
         email=user_request.email.lower().strip(),
-        password_hash=password_hash,
+        password_hash=None,  # OAuth2 only - no password
         display_name=user_request.display_name,
         role=user_request.role,
     )
@@ -193,8 +185,7 @@ async def create_user(
         status="success",
         user_id=user_id,
         email=user.email,
-        password=password,  # Only shown once!
-        message="User created successfully. Share the password securely.",
+        message="User created. They can now log in via Google OAuth2.",
     )
 
 
@@ -233,7 +224,7 @@ async def update_user(
 ):
     """Update a user's details.
 
-    Requires admin role. Can update display_name, role, is_active, and password.
+    Requires admin role. Can update display_name, role, and is_active.
     """
     repo = _get_user_repo()
     user = await repo.get_user_by_id(user_id)
@@ -249,18 +240,12 @@ async def update_user(
     if user_update.role == "user" and user_id == admin.id:
         raise HTTPException(status_code=400, detail="Cannot remove your own admin role")
 
-    # Hash password if provided
-    password_hash = None
-    if user_update.password:
-        password_hash = hash_password(user_update.password)
-
     # Update user
     await repo.update_user(
         user_id=user_id,
         display_name=user_update.display_name,
         role=user_update.role,
         is_active=user_update.is_active,
-        password_hash=password_hash,
     )
 
     # Log the action
@@ -271,8 +256,6 @@ async def update_user(
         changes["role"] = user_update.role
     if user_update.is_active is not None:
         changes["is_active"] = user_update.is_active
-    if user_update.password:
-        changes["password"] = "changed"
 
     await repo.log_audit(
         audit_id=str(uuid.uuid4()),
@@ -602,52 +585,6 @@ async def get_admin_stats(
         "active_users": len(active_users),
         "admin_users": len(admin_users),
         "multi_user_enabled": await repo.is_multi_user_enabled(),
-    }
-
-
-# ==================== Password Reset Endpoint ====================
-
-@router.post("/users/{user_id}/reset-password")
-async def reset_user_password(
-    request: Request,
-    user_id: str,
-    admin: User = Depends(require_admin),
-):
-    """Reset a user's password.
-
-    Requires admin role. Generates a new random password.
-    The new password is returned and should be shared securely.
-    """
-    repo = _get_user_repo()
-    user = await repo.get_user_by_id(user_id)
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Generate new password
-    new_password = generate_password()
-    password_hash = hash_password(new_password)
-
-    # Update password
-    await repo.update_user(user_id=user_id, password_hash=password_hash)
-
-    # Log the action
-    await repo.log_audit(
-        audit_id=str(uuid.uuid4()),
-        action="reset_password",
-        user_id=admin.id,
-        resource_type="user",
-        resource_id=user_id,
-        details=json.dumps({"email": user.email}),
-        ip_address=_get_client_ip(request),
-    )
-
-    return {
-        "status": "success",
-        "user_id": user_id,
-        "email": user.email,
-        "new_password": new_password,  # Only shown once!
-        "message": "Password reset. Share the new password securely.",
     }
 
 
