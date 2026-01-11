@@ -138,6 +138,12 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
 
         {!isLoading && !error && sortedBreakdown.length > 0 && (
           <div className="bg-white rounded-lg border overflow-hidden">
+            {data?.is_aggregate && (
+              <div className="px-3 py-2 bg-blue-50 border-b border-blue-200 text-xs text-blue-700">
+                <AlertCircle className="h-3 w-3 inline mr-1" />
+                Showing account-level aggregate data (per-config breakdown not available for this view)
+              </div>
+            )}
             {/* Table header */}
             <div className="grid grid-cols-12 gap-2 px-3 py-2 border-b bg-gray-50 text-xs font-medium text-gray-500">
               <div className="col-span-1"></div>
