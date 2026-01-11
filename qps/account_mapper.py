@@ -38,7 +38,9 @@ class AccountMapper:
                 WHERE billing_id IS NOT NULL AND bidder_id IS NOT NULL
             """)
             for row in cursor.fetchall():
-                self._cache[row[0]] = row[1]
+                # Normalize billing_id (strip whitespace) to match CSV import format
+                normalized_billing_id = str(row[0]).strip()
+                self._cache[normalized_billing_id] = row[1]
             conn.close()
             logger.debug(f"Loaded {len(self._cache)} billing_id -> bidder_id mappings")
         except Exception as e:
@@ -56,23 +58,27 @@ class AccountMapper:
         if not billing_id:
             return None
 
+        # Normalize billing_id to match how it's stored (stripped of whitespace)
+        normalized_billing_id = str(billing_id).strip()
+
         # Check cache first
-        if billing_id in self._cache:
-            return self._cache[billing_id]
+        if normalized_billing_id in self._cache:
+            return self._cache[normalized_billing_id]
 
         # Try database lookup (cache miss or new billing_id)
+        # Use TRIM() in SQL to handle any existing un-normalized data
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT bidder_id FROM pretargeting_configs
-                WHERE billing_id = ?
-            """, (billing_id,))
+                WHERE TRIM(billing_id) = ?
+            """, (normalized_billing_id,))
             row = cursor.fetchone()
             conn.close()
 
             bidder_id = row[0] if row else None
-            self._cache[billing_id] = bidder_id
+            self._cache[normalized_billing_id] = bidder_id
             return bidder_id
         except Exception as e:
             logger.warning(f"Failed to lookup bidder_id for billing_id {billing_id}: {e}")
