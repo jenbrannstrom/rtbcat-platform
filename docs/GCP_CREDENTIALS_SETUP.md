@@ -18,17 +18,33 @@ git push origin unified-platform
 
 ### Step 2: SSH to VM and pull
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
+gcloud compute ssh catscan-production --zone=europe-west1-b
 ```
 
 On the VM:
 ```bash
 cd /opt/catscan
-sudo -u catscan git fetch origin
-sudo -u catscan git reset --hard origin/unified-platform
+sudo -u catscan git pull
+
+# Rebuild and restart containers
+sudo docker build -t catscan_api -f Dockerfile .
+sudo docker rm -f catscan-api
+sudo docker run -d --name catscan-api \
+  -p 127.0.0.1:8000:8000 \
+  -v /home/catscan/.catscan:/root/.catscan \
+  -e OAUTH2_PROXY_ENABLED=true \
+  catscan_api
+```
+
+**Important:** The `OAUTH2_PROXY_ENABLED=true` environment variable is required for the backend to trust the `X-Email` header from OAuth2 Proxy. Without it, authentication will fail even after successful Google login.
+
+### Alternative: Using docker-compose
+```bash
 sudo docker-compose -f docker-compose.gcp.yml down --remove-orphans
 sudo docker-compose -f docker-compose.gcp.yml up -d --build
 ```
+
+Note: If docker-compose fails with missing environment variables, use the manual docker commands above.
 
 ### CRITICAL RULES
 
@@ -255,6 +271,63 @@ result = service.users().messages().list(userId='me', maxResults=1).execute()
 print('Gmail API: OK')
 "
 ```
+
+---
+
+## OAuth2 Proxy Configuration
+
+The production VM uses OAuth2 Proxy for authentication. Configuration file: `/etc/oauth2-proxy.cfg`
+
+### Required Configuration
+```ini
+provider = "google"
+client_id = "YOUR_CLIENT_ID.apps.googleusercontent.com"
+client_secret = "GOCSPX-xxxxx"
+cookie_secret = "random-32-byte-string"
+cookie_secure = true
+cookie_name = "_catscan_oauth"
+redirect_url = "https://scan.rtb.cat/oauth2/callback"
+http_address = "127.0.0.1:4180"
+email_domains = ["rtb.cat", "amazingdo.com"]
+cookie_expire = "168h"
+cookie_refresh = "1h"
+skip_auth_routes = ["/health"]
+set_xauthrequest = true
+pass_user_headers = true
+```
+
+### Important Notes
+
+1. **Do NOT use `cookie_domain` or `cookie_domains`** - These can cause authentication loops. The default behavior works correctly without them.
+
+2. **Backend requires `OAUTH2_PROXY_ENABLED=true`** - The API container must have this environment variable set to trust the `X-Email` header from OAuth2 Proxy.
+
+3. **Restart after config changes:**
+   ```bash
+   sudo systemctl restart oauth2-proxy
+   sudo systemctl restart nginx
+   ```
+
+### Auth Loop Troubleshooting
+
+If users get stuck in an authentication loop (Google login succeeds but immediately redirects back to login):
+
+1. **Check oauth2-proxy logs:**
+   ```bash
+   sudo journalctl -u oauth2-proxy --since "5 minutes ago" --no-pager
+   ```
+
+2. **Look for cookie issues** - If you see successful auth (202) followed by 401, check:
+   - Remove any `cookie_domain` or `cookie_domains` settings
+   - Ensure `OAUTH2_PROXY_ENABLED=true` is set on the API container
+
+3. **Restart services:**
+   ```bash
+   sudo systemctl restart oauth2-proxy
+   sudo docker restart catscan-api
+   ```
+
+4. **Clear browser cookies** for `scan.rtb.cat` and try again
 
 ---
 
