@@ -63,6 +63,25 @@ async def get_rtb_funnel(
         """, (f'-{days} days', *buyer_params))
 
         total_reached = funnel_row["total_reached"] or 0
+
+        # If buyer filter returned no data, fall back to unfiltered query
+        # This handles cases where rtb_funnel.bidder_id is not populated
+        if total_reached == 0 and buyer_filter:
+            logger.info(f"No data with buyer filter, falling back to unfiltered query")
+            funnel_row = await db_query_one("""
+                SELECT
+                    SUM(reached_queries) as total_reached,
+                    SUM(impressions) as total_impressions,
+                    SUM(bids) as total_bids,
+                    COUNT(DISTINCT publisher_id) as publisher_count,
+                    COUNT(DISTINCT country) as country_count
+                FROM rtb_funnel
+                WHERE metric_date >= date('now', ?)
+            """, (f'-{days} days',))
+            total_reached = funnel_row["total_reached"] or 0
+            # Clear buyer filter for subsequent queries
+            buyer_filter = ""
+            buyer_params = []
         total_impressions = funnel_row["total_impressions"] or 0
         total_bids = funnel_row["total_bids"] or 0
 
@@ -487,34 +506,75 @@ async def get_config_breakdown(
     - publisher: By app/publisher
     - creative: By individual creative ID
     """
-    # Map breakdown type to column
-    column_map = {
-        "size": "creative_size",
-        "geo": "country",
-        "publisher": "app_name",
-        "creative": "creative_id",
-    }
-    group_col = column_map.get(by, "creative_size")
-
     try:
-        # Query aggregated data for this billing_id
-        # Use bids_in_auction/auctions_won as primary metrics
-        rows = await db_query(f"""
-            SELECT
-                {group_col} as name,
-                COALESCE(NULLIF(SUM(bids_in_auction), 0), SUM(reached_queries), 0) as total_reached,
-                COALESCE(NULLIF(SUM(auctions_won), 0), SUM(impressions), 0) as total_impressions
-            FROM rtb_daily
-            WHERE billing_id = ?
-              AND metric_date >= date('now', ?)
-              AND {group_col} IS NOT NULL
-              AND {group_col} != ''
-            GROUP BY {group_col}
-            ORDER BY total_reached DESC
-            LIMIT 50
-        """, (billing_id, f'-{days} days'))
-
         breakdown = []
+        is_aggregate = False
+
+        if by in ("geo", "publisher"):
+            # For geo/publisher, try rtb_daily first
+            column_map = {
+                "geo": "country",
+                "publisher": "app_name",
+            }
+            group_col = column_map[by]
+
+            rows = await db_query(f"""
+                SELECT
+                    {group_col} as name,
+                    COALESCE(SUM(bids_in_auction), SUM(reached_queries), 0) as total_reached,
+                    COALESCE(SUM(auctions_won), SUM(impressions), 0) as total_impressions
+                FROM rtb_daily
+                WHERE billing_id = ?
+                  AND metric_date >= date('now', ?)
+                  AND {group_col} IS NOT NULL
+                  AND {group_col} != ''
+                GROUP BY {group_col}
+                ORDER BY total_reached DESC
+                LIMIT 50
+            """, (billing_id, f'-{days} days'))
+
+            # If rtb_daily has no geo/publisher data, fall back to rtb_funnel aggregate
+            if not rows:
+                is_aggregate = True
+                funnel_col = "country" if by == "geo" else "publisher_id"
+                funnel_name_col = "country" if by == "geo" else "COALESCE(publisher_name, publisher_id)"
+
+                rows = await db_query(f"""
+                    SELECT
+                        {funnel_name_col} as name,
+                        SUM(reached_queries) as total_reached,
+                        SUM(impressions) as total_impressions
+                    FROM rtb_funnel
+                    WHERE metric_date >= date('now', ?)
+                      AND {funnel_col} IS NOT NULL
+                      AND {funnel_col} != ''
+                    GROUP BY {funnel_col}
+                    ORDER BY total_reached DESC
+                    LIMIT 50
+                """, (f'-{days} days',))
+        else:
+            # For size/creative, use rtb_daily
+            column_map = {
+                "size": "creative_size",
+                "creative": "creative_id",
+            }
+            group_col = column_map.get(by, "creative_size")
+
+            rows = await db_query(f"""
+                SELECT
+                    {group_col} as name,
+                    COALESCE(SUM(bids_in_auction), SUM(reached_queries), 0) as total_reached,
+                    COALESCE(SUM(auctions_won), SUM(impressions), 0) as total_impressions
+                FROM rtb_daily
+                WHERE billing_id = ?
+                  AND metric_date >= date('now', ?)
+                  AND {group_col} IS NOT NULL
+                  AND {group_col} != ''
+                GROUP BY {group_col}
+                ORDER BY total_reached DESC
+                LIMIT 50
+            """, (billing_id, f'-{days} days'))
+
         for row in rows:
             reached = row["total_reached"] or 0
             impressions = row["total_impressions"] or 0
@@ -532,6 +592,7 @@ async def get_config_breakdown(
             "billing_id": billing_id,
             "breakdown_by": by,
             "breakdown": breakdown,
+            "is_aggregate": is_aggregate,
         }
 
     except Exception as e:
