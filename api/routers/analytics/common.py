@@ -43,6 +43,8 @@ async def get_valid_billing_ids() -> list[str]:
 
     The function first identifies the current bidder_id (account), then
     returns only billing_ids associated with that account.
+
+    Billing IDs are normalized (trimmed) to match CSV import format.
     """
     try:
         # Get the current bidder_id (most recently synced account)
@@ -51,13 +53,13 @@ async def get_valid_billing_ids() -> list[str]:
         if current_bidder:
             # Filter by the current account's bidder_id
             rows = await db_query(
-                "SELECT DISTINCT billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL AND bidder_id = ?",
+                "SELECT DISTINCT TRIM(billing_id) as billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL AND bidder_id = ?",
                 (current_bidder,)
             )
         else:
             # Fallback: return all billing_ids if no bidder_id found
             rows = await db_query(
-                "SELECT DISTINCT billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL"
+                "SELECT DISTINCT TRIM(billing_id) as billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL"
             )
 
         return [row["billing_id"] for row in rows]
@@ -76,6 +78,7 @@ async def get_valid_billing_ids_for_buyer(buyer_id: Optional[str] = None) -> lis
 
     Returns:
         List of billing_id strings for the specified buyer (or all if not specified).
+        Billing IDs are normalized (trimmed) to match CSV import format.
     """
     try:
         if buyer_id:
@@ -86,14 +89,14 @@ async def get_valid_billing_ids_for_buyer(buyer_id: Optional[str] = None) -> lis
             )
             if seat and seat["bidder_id"]:
                 rows = await db_query(
-                    "SELECT DISTINCT billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL AND bidder_id = ?",
+                    "SELECT DISTINCT TRIM(billing_id) as billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL AND bidder_id = ?",
                     (seat["bidder_id"],)
                 )
                 return [row["billing_id"] for row in rows]
 
         # Fallback: return all billing_ids
         rows = await db_query(
-            "SELECT DISTINCT billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL"
+            "SELECT DISTINCT TRIM(billing_id) as billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL"
         )
         return [row["billing_id"] for row in rows]
     except Exception as e:

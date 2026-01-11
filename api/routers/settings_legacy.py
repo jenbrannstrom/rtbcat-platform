@@ -395,7 +395,8 @@ async def sync_pretargeting_configs(
                 (
                     account_id,
                     cfg["configId"],
-                    cfg.get("billingId"),
+                    # Normalize billing_id to match CSV import (strip whitespace)
+                    str(cfg.get("billingId", "")).strip() or None,
                     cfg.get("displayName"),
                     cfg.get("state", "ACTIVE"),
                     json.dumps(cfg.get("includedFormats", [])),
