@@ -51,6 +51,7 @@ export {
   syncPretargetingConfigs,
   setPretargetingName,
   getConfigBreakdown,
+  getAppDrilldown,
   // Upload & Import tracking
   getUploadTracking,
   getImportHistory,
