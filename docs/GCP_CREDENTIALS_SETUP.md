@@ -70,6 +70,7 @@ Credentials are stored in `~/.catscan/credentials/` (outside git).
 
 ## Directory Structure
 
+**Local development:**
 ```
 ~/.catscan/
 ├── catscan.db                          # SQLite database
@@ -80,6 +81,26 @@ Credentials are stored in `~/.catscan/credentials/` (outside git).
 ├── imports/                            # Downloaded CSVs
 └── gmail_import_status.json            # Import tracking
 ```
+
+**Production VM (catscan-production):**
+```
+/home/catscan/.catscan/
+├── catscan.db                          # SQLite database (~1.3GB with data)
+├── credentials/
+│   └── ...                             # Same structure as above
+├── imports/
+└── gmail_import_status.json
+
+/opt/catscan/
+├── data/catscan.db                     # Empty DB (schema only, NOT used)
+└── docker-compose.gcp.yml              # Docker deployment config
+```
+
+> **Important:** On the production VM, you SSH as your user (e.g., `jen`) but the
+> database is under the `catscan` user's home directory. Use `sudo` to access it:
+> ```bash
+> sudo sqlite3 /home/catscan/.catscan/catscan.db ".tables"
+> ```
 
 ---
 
