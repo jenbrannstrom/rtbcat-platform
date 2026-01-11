@@ -75,15 +75,25 @@ export async function getSizes(): Promise<string[]> {
 }
 
 export interface SystemStatus {
-  version: string;
-  database: {
+  version?: string;
+  python_version: string;
+  node_available: boolean;
+  node_version?: string;
+  ffmpeg_available: boolean;
+  ffmpeg_version?: string;
+  database_size_mb: number;
+  thumbnails_count: number;
+  disk_space_gb: number;
+  creatives_count: number;
+  videos_count: number;
+  database?: {
     status: string;
     creative_count: number;
     daily_stats_count: number;
     oldest_date: string | null;
     newest_date: string | null;
   };
-  thumbnails: {
+  thumbnails?: {
     pending: number;
     total: number;
   };
