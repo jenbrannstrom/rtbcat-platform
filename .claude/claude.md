@@ -29,18 +29,14 @@ git add -A && git commit -m "Your message"
 git push origin unified-platform
 ```
 
-### Step 2: SSH to VM and pull
+### Step 2: Deploy via helper script
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-deploy"
 ```
 
-On the VM:
+Or for a specific branch:
 ```bash
-cd /opt/catscan
-sudo -u catscan git fetch origin
-sudo -u catscan git reset --hard origin/unified-platform
-sudo docker-compose -f docker-compose.gcp.yml down --remove-orphans
-sudo docker-compose -f docker-compose.gcp.yml up -d --build
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-deploy main"
 ```
 
 ### CRITICAL RULES
@@ -51,6 +47,74 @@ sudo docker-compose -f docker-compose.gcp.yml up -d --build
 
 ### If Deploy Fails
 
-1. Check container logs: `sudo docker-compose -f docker-compose.gcp.yml logs`
+1. Check container logs: `gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-logs 100 error"`
 2. Fix the issue in code locally
-3. Push fix to GitHub, then SSH and pull again
+3. Push fix to GitHub, then deploy again
+
+
+## Server Helper Commands
+
+**ALWAYS use these helper scripts instead of constructing raw commands with complex quoting.**
+
+### Database Queries: catscan-db
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-db 'YOUR SQL QUERY'"
+```
+
+Examples:
+```bash
+# List all tables
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-db '.tables'"
+
+# Show table schema
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-db '.schema rtb_funnel'"
+
+# Query data
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-db 'SELECT * FROM rtb_funnel LIMIT 10'"
+
+# Aggregations
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-db 'SELECT COUNT(*) FROM creatives'"
+```
+
+### View Logs: catscan-logs
+```bash
+# Last 50 lines (default)
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-logs"
+
+# Last 100 lines
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-logs 100"
+
+# Filter for errors
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-logs 200 error"
+
+# Filter for specific term
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-logs 100 rtb-funnel"
+```
+
+### Test API Endpoints: catscan-api
+```bash
+# Health check
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-api /health"
+
+# Get analytics (note: may require auth)
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-api /analytics/rtb-funnel?days=7"
+```
+
+### Deploy: catscan-deploy
+```bash
+# Deploy unified-platform branch (default)
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-deploy"
+
+# Deploy specific branch
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-deploy main"
+```
+
+## DO NOT DO THIS
+
+Never construct raw sqlite3/docker commands with complex quoting like:
+```bash
+# BAD - quoting nightmare, will fail
+gcloud compute ssh catscan-production -- "sudo sqlite3 /path/to/db 'SELECT * FROM table WHERE x = \"value\"'"
+```
+
+Always use the helper scripts instead - they handle quoting internally.
