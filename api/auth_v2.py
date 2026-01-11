@@ -10,13 +10,31 @@ Password-based login has been removed - Google Auth only.
 """
 
 import json
+import secrets
 import uuid
 from typing import Optional
 
+import bcrypt
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from storage.database import DB_PATH
+
+
+# ==================== Password Utilities ====================
+# These are kept for admin user management compatibility
+# (even though OAuth2 is primary auth method)
+
+def hash_password(password: str) -> str:
+    """Hash a password using bcrypt."""
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def generate_password(length: int = 16) -> str:
+    """Generate a secure random password."""
+    return secrets.token_urlsafe(length)
+
+
 from storage.repositories.user_repository import UserRepository
 
 # Session cookie name (used by OAuth2 Proxy flow)
