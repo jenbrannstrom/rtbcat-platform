@@ -305,8 +305,13 @@ export interface ConfigPerformanceResponse {
 // RTB Funnel API
 // =============================================================================
 
-export async function getRTBFunnel(days: number = 7): Promise<RTBFunnelResponse> {
-  return fetchApi<RTBFunnelResponse>(`/analytics/rtb-funnel?days=${days}`);
+export async function getRTBFunnel(
+  days: number = 7,
+  buyerId?: string
+): Promise<RTBFunnelResponse> {
+  const params = new URLSearchParams({ days: String(days) });
+  if (buyerId) params.set('buyer_id', buyerId);
+  return fetchApi<RTBFunnelResponse>(`/analytics/rtb-funnel?${params}`);
 }
 
 export async function getRTBPublishers(

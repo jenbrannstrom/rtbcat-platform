@@ -20,7 +20,10 @@ router = APIRouter(tags=["RTB Analytics"])
 
 
 @router.get("/analytics/rtb-funnel", tags=["RTB Analytics"])
-async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
+async def get_rtb_funnel(
+    days: int = Query(7, ge=1, le=90),
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+):
     """
     Get RTB funnel analysis from database.
 
@@ -28,10 +31,27 @@ async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
     - Funnel summary: Reached Queries -> Impressions
     - Publisher performance with win rates
     - Geographic breakdown
+
+    Args:
+        days: Number of days to analyze
+        buyer_id: Optional buyer seat ID to filter results
     """
     try:
+        # Build filter for buyer seat if specified
+        buyer_filter = ""
+        buyer_params = []
+        if buyer_id:
+            # Get bidder_id for this buyer seat
+            seat = await db_query_one(
+                "SELECT bidder_id FROM buyer_seats WHERE buyer_id = ?",
+                (buyer_id,)
+            )
+            if seat and seat["bidder_id"]:
+                buyer_filter = " AND bidder_id = ?"
+                buyer_params = [seat["bidder_id"]]
+
         # Get funnel summary from database - use rtb_funnel for pipeline metrics
-        funnel_row = await db_query_one("""
+        funnel_row = await db_query_one(f"""
             SELECT
                 SUM(reached_queries) as total_reached,
                 SUM(impressions) as total_impressions,
@@ -39,8 +59,8 @@ async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
                 COUNT(DISTINCT publisher_id) as publisher_count,
                 COUNT(DISTINCT country) as country_count
             FROM rtb_funnel
-            WHERE metric_date >= date('now', ?)
-        """, (f'-{days} days',))
+            WHERE metric_date >= date('now', ?){buyer_filter}
+        """, (f'-{days} days', *buyer_params))
 
         total_reached = funnel_row["total_reached"] or 0
         total_impressions = funnel_row["total_impressions"] or 0
@@ -50,7 +70,7 @@ async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
         waste_rate = 100 - win_rate
 
         # Get top publishers
-        pub_rows = await db_query("""
+        pub_rows = await db_query(f"""
             SELECT
                 publisher_id,
                 publisher_name,
@@ -58,11 +78,11 @@ async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
                 SUM(impressions) as impressions,
                 SUM(bids) as total_bids
             FROM rtb_funnel
-            WHERE metric_date >= date('now', ?) AND publisher_id IS NOT NULL
+            WHERE metric_date >= date('now', ?) AND publisher_id IS NOT NULL{buyer_filter}
             GROUP BY publisher_id
             ORDER BY reached DESC
             LIMIT 10
-        """, (f'-{days} days',))
+        """, (f'-{days} days', *buyer_params))
 
         publishers = []
         for row in pub_rows:
@@ -83,18 +103,18 @@ async def get_rtb_funnel(days: int = Query(7, ge=1, le=90)):
             })
 
         # Get top geos
-        geo_rows = await db_query("""
+        geo_rows = await db_query(f"""
             SELECT
                 country,
                 SUM(reached_queries) as reached,
                 SUM(impressions) as impressions,
                 SUM(bids) as total_bids
             FROM rtb_funnel
-            WHERE metric_date >= date('now', ?) AND country IS NOT NULL
+            WHERE metric_date >= date('now', ?) AND country IS NOT NULL{buyer_filter}
             GROUP BY country
             ORDER BY reached DESC
             LIMIT 10
-        """, (f'-{days} days',))
+        """, (f'-{days} days', *buyer_params))
 
         geos = []
         for row in geo_rows:
