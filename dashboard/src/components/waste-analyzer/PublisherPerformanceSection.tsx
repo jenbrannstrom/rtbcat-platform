@@ -82,9 +82,12 @@ export function PublisherPerformanceSection({ publishers }: PublisherPerformance
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-blue-600" />
             Publisher Performance
+            <span className="text-xs font-normal bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+              Account-wide
+            </span>
           </h3>
           <p className="text-sm text-gray-500 mt-1">
-            Where are you winning vs losing?
+            Win/loss analysis across all pretargeting configs
           </p>
         </div>
         <div className="text-right">

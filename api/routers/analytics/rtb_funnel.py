@@ -533,25 +533,19 @@ async def get_config_breakdown(
                 LIMIT 50
             """, (billing_id, f'-{days} days'))
 
-            # If rtb_daily has no geo/publisher data, fall back to rtb_funnel aggregate
+            # If rtb_daily has no geo/publisher data for this config, return empty
+            # with a clear message. DO NOT fall back to account-wide aggregate data
+            # as it would be misleading (e.g., showing India/Pakistan for a USA-only config)
             if not rows:
-                is_aggregate = True
-                funnel_col = "country" if by == "geo" else "publisher_id"
-                funnel_name_col = "country" if by == "geo" else "COALESCE(publisher_name, publisher_id)"
-
-                rows = await db_query(f"""
-                    SELECT
-                        {funnel_name_col} as name,
-                        SUM(reached_queries) as total_reached,
-                        SUM(impressions) as total_impressions
-                    FROM rtb_funnel
-                    WHERE metric_date >= date('now', ?)
-                      AND {funnel_col} IS NOT NULL
-                      AND {funnel_col} != ''
-                    GROUP BY {funnel_col}
-                    ORDER BY total_reached DESC
-                    LIMIT 50
-                """, (f'-{days} days',))
+                return {
+                    "billing_id": billing_id,
+                    "breakdown_by": by,
+                    "breakdown": [],
+                    "is_aggregate": False,
+                    "no_data_reason": f"No {by} breakdown data available for this pretargeting config. "
+                                      "This data comes from CSV imports - ensure you've imported reports "
+                                      "that include billing_id and geographic/publisher breakdown columns.",
+                }
         else:
             # For size/creative, use rtb_daily
             column_map = {
@@ -672,10 +666,35 @@ async def get_app_drilldown(
         """, tuple(params))
 
         if not summary_row or not summary_row["total_reached"]:
+            # Try without billing_id filter to see if data exists elsewhere
+            fallback_message = "No data found for this app in rtb_daily table."
+            if billing_id:
+                check_without_filter = await db_query_one("""
+                    SELECT COUNT(*) as cnt FROM rtb_daily
+                    WHERE app_name = ? AND metric_date >= date('now', ?)
+                """, (app_name, f'-{days} days'))
+                if check_without_filter and check_without_filter["cnt"] > 0:
+                    fallback_message = (
+                        f"Data exists for '{app_name}' but not for this specific pretargeting config (billing_id={billing_id}). "
+                        "Try viewing drilldown from the account-wide publisher section, or import CSV reports with billing_id breakdown."
+                    )
+                else:
+                    # Check if it's a publisher_name mismatch
+                    check_publisher = await db_query_one("""
+                        SELECT publisher_name, SUM(reached_queries) as total
+                        FROM rtb_funnel
+                        WHERE publisher_name = ? AND metric_date >= date('now', ?)
+                        GROUP BY publisher_name
+                    """, (app_name, f'-{days} days'))
+                    if check_publisher and check_publisher["total"]:
+                        fallback_message = (
+                            f"Publisher '{app_name}' found in funnel data but detailed breakdown requires "
+                            "importing a Performance Detail CSV report with app-level breakdown."
+                        )
             return {
                 "app_name": app_name,
                 "has_data": False,
-                "message": "No data found for this app"
+                "message": fallback_message
             }
 
         total_reached = summary_row["total_reached"] or 0
