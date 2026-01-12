@@ -503,7 +503,7 @@ async def get_pretargeting_configs(
         results = []
         for row in rows:
             # Parse OS targeting and convert IDs to names if possible
-            os_ids = json.loads(row["included_operating_systems"]) if row.get("included_operating_systems") else None
+            os_ids = json.loads(row["included_operating_systems"]) if row["included_operating_systems"] else None
             os_names = None
             if os_ids:
                 # Map known OS IDs to human-readable names
