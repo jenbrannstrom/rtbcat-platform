@@ -37,6 +37,7 @@ export * from "./analytics";
 export {
   // Utilities
   getSizes,
+  lookupGeoNames,
   generateMockTraffic,
   importPerformanceData,
   // Recommendations

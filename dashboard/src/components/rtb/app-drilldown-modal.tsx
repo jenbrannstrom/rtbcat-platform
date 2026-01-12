@@ -105,8 +105,38 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
           )}
 
           {data && !data.has_data && (
-            <div className="text-center py-12 text-gray-500">
-              No data available for this app
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
+              <div className="flex flex-col items-center gap-4">
+                <AlertTriangle className="h-10 w-10 text-amber-500" />
+                <div>
+                  <h3 className="font-semibold text-amber-800 mb-2">
+                    No drill-down data for "{appName}"
+                  </h3>
+                  <p className="text-sm text-amber-700 max-w-md mx-auto">
+                    {data.message || "Per-publisher performance data requires CSV imports that include app-level breakdown columns."}
+                  </p>
+                </div>
+                <div className="bg-white/60 rounded-lg p-4 max-w-lg text-left">
+                  <h4 className="text-xs font-semibold text-amber-800 mb-2">Why might this happen?</h4>
+                  <ul className="text-xs text-amber-700 space-y-1">
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-500">•</span>
+                      <span><strong>No CSV data imported</strong> for this time period</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-500">•</span>
+                      <span><strong>App name mismatch</strong> between different report types</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-500">•</span>
+                      <span><strong>Time range issue</strong> - try adjusting the date filter</span>
+                    </li>
+                  </ul>
+                  <p className="text-xs text-amber-600 mt-3 italic">
+                    Tip: Import a Performance Detail CSV from Google Authorized Buyers for detailed app-level data.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
