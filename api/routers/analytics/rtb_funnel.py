@@ -511,40 +511,85 @@ async def get_config_breakdown(
         is_aggregate = False
 
         if by in ("geo", "publisher"):
-            # For geo/publisher, try rtb_daily first
-            column_map = {
-                "geo": "country",
-                "publisher": "app_name",
-            }
-            group_col = column_map[by]
+            # For geo/publisher, query rtb_funnel using bidder_id (buyer_account_id)
+            # First, look up the bidder_id for this billing_id from pretargeting_configs
+            bidder_rows = await db_query("""
+                SELECT bidder_id FROM pretargeting_configs WHERE billing_id = ? LIMIT 1
+            """, (billing_id,))
 
-            rows = await db_query(f"""
-                SELECT
-                    {group_col} as name,
-                    COALESCE(NULLIF(SUM(bids_in_auction), 0), SUM(reached_queries), 0) as total_reached,
-                    COALESCE(NULLIF(SUM(auctions_won), 0), SUM(impressions), 0) as total_impressions
-                FROM rtb_daily
-                WHERE billing_id = ?
-                  AND metric_date >= date('now', ?)
-                  AND {group_col} IS NOT NULL
-                  AND {group_col} != ''
-                GROUP BY {group_col}
-                ORDER BY total_reached DESC
-                LIMIT 50
-            """, (billing_id, f'-{days} days'))
+            if not bidder_rows:
+                return {
+                    "billing_id": billing_id,
+                    "breakdown_by": by,
+                    "breakdown": [],
+                    "is_aggregate": False,
+                    "no_data_reason": f"No pretargeting config found for billing_id {billing_id}.",
+                }
 
-            # If rtb_daily has no geo/publisher data for this config, return empty
-            # with a clear message. DO NOT fall back to account-wide aggregate data
-            # as it would be misleading (e.g., showing India/Pakistan for a USA-only config)
+            bidder_id = bidder_rows[0]["bidder_id"]
+
+            # For geo, use rtb_funnel which has country data by buyer_account_id
+            # For publisher, try rtb_daily first (has app_name), fall back to rtb_funnel
+            if by == "geo":
+                rows = await db_query("""
+                    SELECT
+                        country as name,
+                        COALESCE(NULLIF(SUM(bids_in_auction), 0), SUM(reached_queries), 0) as total_reached,
+                        COALESCE(NULLIF(SUM(auctions_won), 0), SUM(impressions), 0) as total_impressions
+                    FROM rtb_funnel
+                    WHERE buyer_account_id = ?
+                      AND metric_date >= date('now', ?)
+                      AND country IS NOT NULL
+                      AND country != ''
+                    GROUP BY country
+                    ORDER BY total_reached DESC
+                    LIMIT 50
+                """, (bidder_id, f'-{days} days'))
+                is_aggregate = True  # This is account-wide data, not config-specific
+            else:
+                # publisher - try rtb_daily first (has app_name by billing_id)
+                rows = await db_query("""
+                    SELECT
+                        app_name as name,
+                        COALESCE(NULLIF(SUM(bids_in_auction), 0), SUM(reached_queries), 0) as total_reached,
+                        COALESCE(NULLIF(SUM(auctions_won), 0), SUM(impressions), 0) as total_impressions
+                    FROM rtb_daily
+                    WHERE billing_id = ?
+                      AND metric_date >= date('now', ?)
+                      AND app_name IS NOT NULL
+                      AND app_name != ''
+                    GROUP BY app_name
+                    ORDER BY total_reached DESC
+                    LIMIT 50
+                """, (billing_id, f'-{days} days'))
+
+                # If no app data in rtb_daily, try rtb_funnel publisher_name
+                if not rows:
+                    rows = await db_query("""
+                        SELECT
+                            publisher_name as name,
+                            COALESCE(NULLIF(SUM(bids_in_auction), 0), SUM(reached_queries), 0) as total_reached,
+                            COALESCE(NULLIF(SUM(auctions_won), 0), SUM(impressions), 0) as total_impressions
+                        FROM rtb_funnel
+                        WHERE buyer_account_id = ?
+                          AND metric_date >= date('now', ?)
+                          AND publisher_name IS NOT NULL
+                          AND publisher_name != ''
+                        GROUP BY publisher_name
+                        ORDER BY total_reached DESC
+                        LIMIT 50
+                    """, (bidder_id, f'-{days} days'))
+                    if rows:
+                        is_aggregate = True
+
             if not rows:
                 return {
                     "billing_id": billing_id,
                     "breakdown_by": by,
                     "breakdown": [],
                     "is_aggregate": False,
-                    "no_data_reason": f"No {by} breakdown data available for this pretargeting config. "
-                                      "This data comes from CSV imports - ensure you've imported reports "
-                                      "that include billing_id and geographic/publisher breakdown columns.",
+                    "no_data_reason": f"No {by} breakdown data available. "
+                                      "Ensure CSV reports with geographic/publisher breakdown have been imported.",
                 }
         else:
             # For size/creative, use rtb_daily
