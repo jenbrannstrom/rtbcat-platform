@@ -651,6 +651,99 @@ class SizesResponse(BaseModel):
     sizes: list[str]
 
 
+class GeoLookupResponse(BaseModel):
+    """Response model for geo ID to name mapping."""
+    geos: dict[str, str]  # geo_id -> display name
+
+
+# Fallback geo ID mappings for common Google Ads criterion IDs
+# Used when migration 010 hasn't been run or geographies table is empty
+FALLBACK_GEO_NAMES = {
+    # US Metro/DMA regions (21xxx series) - most common
+    '21155': 'Los Angeles, CA', '21164': 'New York, NY', '21174': 'Chicago, IL',
+    '21145': 'Atlanta, GA', '21147': 'Austin, TX', '21149': 'Baltimore, MD',
+    '21159': 'Boston, MA', '21170': 'Charlotte, NC', '21176': 'Cincinnati, OH',
+    '21178': 'Cleveland-Akron, OH', '21183': 'Columbus, OH', '21186': 'Dallas-Fort Worth, TX',
+    '21189': 'Denver, CO', '21191': 'Detroit, MI', '21225': 'Houston, TX',
+    '21228': 'Indianapolis, IN', '21231': 'Jacksonville, FL', '21236': 'Kansas City, MO',
+    '21244': 'Las Vegas, NV', '21258': 'Miami-Fort Lauderdale, FL', '21260': 'Minneapolis-St. Paul, MN',
+    '21267': 'Nashville, TN', '21268': 'New Orleans, LA', '21272': 'Oklahoma City, OK',
+    '21274': 'Orlando-Daytona Beach, FL', '21281': 'Philadelphia, PA', '21282': 'Phoenix, AZ',
+    '21283': 'Pittsburgh, PA', '21284': 'Portland, OR', '21289': 'Raleigh-Durham, NC',
+    '21297': 'Sacramento-Stockton, CA', '21299': 'Saint Louis, MO', '21301': 'Salt Lake City, UT',
+    '21303': 'San Antonio, TX', '21304': 'San Diego, CA', '21305': 'San Francisco-Oakland, CA',
+    '21308': 'Seattle-Tacoma, WA', '21319': 'Tampa-St. Petersburg, FL', '21332': 'Washington, DC',
+    '21152': 'Beaumont-Port Arthur, TX', '21171': 'Charlottesville, VA',
+    # Country-level IDs
+    '2840': 'United States', '2826': 'United Kingdom', '2124': 'Canada', '2036': 'Australia',
+    '2276': 'Germany', '2250': 'France', '2392': 'Japan', '2076': 'Brazil', '2356': 'India',
+    '2484': 'Mexico', '2724': 'Spain', '2380': 'Italy', '2528': 'Netherlands', '2586': 'Pakistan',
+    '2360': 'Indonesia', '2608': 'Philippines', '2704': 'Vietnam', '2764': 'Thailand',
+    '2458': 'Malaysia', '2702': 'Singapore', '2784': 'UAE', '2682': 'Saudi Arabia',
+}
+
+
+@router.get("/geos/lookup", response_model=GeoLookupResponse)
+async def lookup_geo_names(
+    ids: str = Query(..., description="Comma-separated list of Google geo criterion IDs"),
+):
+    """Look up human-readable names for Google geo criterion IDs.
+
+    Accepts IDs like "21155,21164,21171" and returns names like
+    {"21155": "Los Angeles, CA", "21164": "New York, NY"}.
+
+    Falls back to inline mapping or original ID if not found in database.
+    """
+    geo_ids = [g.strip() for g in ids.split(",") if g.strip()]
+
+    if not geo_ids:
+        return GeoLookupResponse(geos={})
+
+    # Build query with placeholders
+    placeholders = ",".join(["?" for _ in geo_ids])
+
+    # Try database lookup first
+    rows = []
+    try:
+        rows = await db_query(f"""
+            SELECT google_geo_id, country_code, country_name, city_name
+            FROM geographies
+            WHERE google_geo_id IN ({placeholders})
+        """, tuple(geo_ids))
+    except Exception:
+        # Table may not exist if migration not run
+        pass
+
+    # Build result mapping from database
+    result = {}
+    found_ids = set()
+
+    for row in rows:
+        geo_id = str(row['google_geo_id'])
+        found_ids.add(geo_id)
+
+        if row['city_name']:
+            # City-level: show "City, ST" or just city name
+            result[geo_id] = row['city_name']
+        elif row['country_name']:
+            # Country-level: show country name
+            result[geo_id] = row['country_name']
+        elif row['country_code']:
+            # Fallback to country code
+            result[geo_id] = row['country_code']
+
+    # For any not found in DB, try fallback mapping
+    for geo_id in geo_ids:
+        if geo_id not in found_ids:
+            if geo_id in FALLBACK_GEO_NAMES:
+                result[geo_id] = FALLBACK_GEO_NAMES[geo_id]
+            else:
+                # Return original ID as last resort
+                result[geo_id] = geo_id
+
+    return GeoLookupResponse(geos=result)
+
+
 @router.get("/stats", response_model=StatsResponse)
 async def get_stats(store: SQLiteStore = Depends(get_store)):
     """Get database statistics."""

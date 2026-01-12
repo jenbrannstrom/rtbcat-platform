@@ -232,16 +232,17 @@ function WasteAnalysisContent() {
   const activeConfigsCount = displayConfigs.filter(c => c.state === 'ACTIVE').length;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t.dashboard.title}</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            {t.dashboard.subtitle}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+    <div className="max-w-7xl mx-auto">
+      {/* Page Header - Sticky period selector stays at top while scrolling */}
+      <div className="sticky top-0 z-30 px-6 py-4 bg-white border-b border-gray-200 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{t.dashboard.title}</h1>
+            <p className="mt-1 text-sm text-gray-500">
+              {t.dashboard.subtitle}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
           {/* CPM Badge - show when spend data available */}
           {spendStats?.has_spend_data && spendStats.avg_cpm_usd && (
             <div className={cn(
@@ -300,9 +301,12 @@ function WasteAnalysisContent() {
             <RefreshCw className={cn("h-4 w-4", (summaryLoading || funnelLoading) && "animate-spin")} />
             {t.common.refresh}
           </button>
+          </div>
         </div>
       </div>
 
+      {/* Content area with padding */}
+      <div className="p-6 space-y-6">
       {/* Account Endpoints Header */}
       <AccountEndpointsHeader />
 
@@ -430,6 +434,7 @@ function WasteAnalysisContent() {
       <section>
         <GeoAnalysisSection geos={geos} />
       </section>
+      </div>
     </div>
   );
 }
