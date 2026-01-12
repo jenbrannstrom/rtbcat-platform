@@ -8,6 +8,54 @@
 
 ---
 
+## ONE-TIME Credential Setup (Do This Once, Never Again)
+
+Credentials are stored in **GCP Secret Manager** and automatically pulled on every VM deploy/restart.
+
+### Step 1: Create Credentials (GCP Console)
+
+1. **Gmail OAuth Client:**
+   - Go to: https://console.cloud.google.com/apis/credentials
+   - Create OAuth 2.0 Client ID (Desktop app)
+   - Download JSON → save as `gmail-oauth-client.json`
+
+2. **Service Account (for Authorized Buyers API):**
+   - Go to: https://console.cloud.google.com/iam-admin/serviceaccounts
+   - Create service account → download JSON → save as `catscan-service-account.json`
+
+3. **Gmail Token (requires browser):**
+   ```bash
+   # Run locally to authorize Gmail
+   python scripts/gmail_auth.py
+   # Token saved to: ~/.catscan/credentials/gmail-token.json
+   ```
+
+### Step 2: Upload to Secret Manager (ONE TIME!)
+
+```bash
+# Upload Gmail OAuth client
+gcloud secrets versions add catscan-gmail-oauth-client \
+  --data-file=gmail-oauth-client.json
+
+# Upload service account
+gcloud secrets versions add catscan-ab-service-account \
+  --data-file=catscan-service-account.json
+
+# Upload Gmail token (after running gmail_auth.py)
+gcloud secrets versions add catscan-gmail-token \
+  --data-file=~/.catscan/credentials/gmail-token.json
+```
+
+### Step 3: Done!
+
+Credentials are now stored permanently in Secret Manager.
+
+- **Every deploy** → VM pulls credentials automatically
+- **Every restart** → Credentials are there
+- **Never copy manually** → It's always automatic
+
+---
+
 ## Cost Summary
 
 | Component | Monthly Cost |
