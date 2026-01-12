@@ -34,18 +34,46 @@ function getStatus(item: ConfigBreakdownItem): 'great' | 'ok' | 'warning' | 'cri
   return 'ok';
 }
 
-// Status indicator component
+// Status indicator tooltips
+const STATUS_TOOLTIPS: Record<'great' | 'ok' | 'warning' | 'critical', string> = {
+  great: 'Excellent performance: Win rate ≥40%, low waste. Keep this targeting.',
+  ok: 'Acceptable performance: Room for optimization but not urgent.',
+  warning: 'Needs attention: Waste rate 70-90%. Consider adjusting targeting or excluding.',
+  critical: 'Critical waste: ≥90% of bid requests not winning. Strongly recommend excluding or fixing targeting.',
+};
+
+// Status indicator component with tooltip
 function StatusIndicator({ status }: { status: 'great' | 'ok' | 'warning' | 'critical' }) {
-  switch (status) {
-    case 'great':
-      return <Check className="h-4 w-4 text-green-500" />;
-    case 'warning':
-      return <AlertTriangle className="h-4 w-4 text-orange-500" />;
-    case 'critical':
-      return <AlertCircle className="h-4 w-4 text-red-500" />;
-    default:
-      return <div className="w-4" />;
-  }
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  const icon = (() => {
+    switch (status) {
+      case 'great':
+        return <Check className="h-4 w-4 text-green-500" />;
+      case 'ok':
+        return <div className="h-4 w-4 rounded-full border-2 border-gray-300" />;
+      case 'warning':
+        return <AlertTriangle className="h-4 w-4 text-orange-500" />;
+      case 'critical':
+        return <AlertCircle className="h-4 w-4 text-red-500" />;
+    }
+  })();
+
+  return (
+    <div
+      className="relative cursor-help"
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+    >
+      {icon}
+      {showTooltip && (
+        <div className="absolute z-50 left-6 top-1/2 -translate-y-1/2 w-56 p-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg whitespace-normal">
+          {STATUS_TOOLTIPS[status]}
+          <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900" />
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Waste bar component
@@ -131,8 +159,20 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
         )}
 
         {!isLoading && !error && sortedBreakdown.length === 0 && (
-          <div className="text-center py-6 text-gray-400 text-sm">
-            No data available for this breakdown
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-amber-800 mb-1">
+                  No {activeTab} breakdown data for this config
+                </p>
+                <p className="text-amber-700 text-xs">
+                  {data?.no_data_reason ||
+                    `Per-config ${activeTab} data requires CSV imports with billing_id breakdown.
+                    Import reports from Google Authorized Buyers that include this detail.`}
+                </p>
+              </div>
+            </div>
           </div>
         )}
 

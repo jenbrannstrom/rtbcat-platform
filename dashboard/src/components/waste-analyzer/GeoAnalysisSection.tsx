@@ -92,9 +92,12 @@ export function GeoAnalysisSection({ geos }: GeoAnalysisSectionProps) {
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <Globe className="h-5 w-5 text-green-600" />
             Geographic Performance
+            <span className="text-xs font-normal bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+              Account-wide
+            </span>
           </h3>
           <p className="text-sm text-gray-500 mt-1">
-            Win rates by country
+            Win rates by country (all pretargeting configs combined)
           </p>
         </div>
         <div className="text-right">
