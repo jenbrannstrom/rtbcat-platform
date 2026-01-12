@@ -381,6 +381,7 @@ CREATE TABLE IF NOT EXISTS pretargeting_configs (
     included_sizes TEXT,
     included_geos TEXT,
     excluded_geos TEXT,
+    included_operating_systems TEXT,  -- iOS, Android, etc.
     raw_config TEXT,
     synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(bidder_id, config_id)
@@ -930,4 +931,7 @@ MIGRATIONS = [
     "ALTER TABLE creatives ADD COLUMN language_analysis_error TEXT",
     "CREATE INDEX IF NOT EXISTS idx_creatives_language_analyzed ON creatives(language_analyzed_at)",
     "CREATE INDEX IF NOT EXISTS idx_creatives_detected_language ON creatives(detected_language_code)",
+
+    # OS targeting for pretargeting configs
+    "ALTER TABLE pretargeting_configs ADD COLUMN included_operating_systems TEXT",
 ]

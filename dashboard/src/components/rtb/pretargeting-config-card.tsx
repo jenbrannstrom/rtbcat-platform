@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { setPretargetingName } from '@/lib/api';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
+import { setPretargetingName, lookupGeoNames } from '@/lib/api';
 import { ChevronRight, Pencil, Check, X, AlertTriangle, AlertCircle, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SnapshotComparisonPanel } from './snapshot-comparison-panel';
@@ -37,67 +37,35 @@ function formatNumber(n: number): string {
   return n.toString();
 }
 
-// Google Ads geo criterion ID to ISO 3166-1 alpha-3 country code mapping
-// Reference: https://developers.google.com/google-ads/api/reference/data/geotargets
-const GEO_ID_TO_COUNTRY: Record<string, string> = {
-  '2004': 'AFG', '2008': 'ALB', '2012': 'DZA', '2016': 'ASM', '2020': 'AND',
-  '2024': 'AGO', '2028': 'ATG', '2031': 'AZE', '2032': 'ARG', '2036': 'AUS',
-  '2040': 'AUT', '2044': 'BHS', '2048': 'BHR', '2050': 'BGD', '2051': 'ARM',
-  '2052': 'BRB', '2056': 'BEL', '2060': 'BMU', '2064': 'BTN', '2068': 'BOL',
-  '2070': 'BIH', '2072': 'BWA', '2076': 'BRA', '2084': 'BLZ', '2090': 'SLB',
-  '2092': 'VGB', '2096': 'BRN', '2100': 'BGR', '2104': 'MMR', '2108': 'BDI',
-  '2112': 'BLR', '2116': 'KHM', '2120': 'CMR', '2124': 'CAN', '2132': 'CPV',
-  '2136': 'CYM', '2140': 'CAF', '2144': 'LKA', '2148': 'TCD', '2152': 'CHL',
-  '2156': 'CHN', '2158': 'TWN', '2162': 'CXI', '2166': 'CCK', '2170': 'COL',
-  '2174': 'COM', '2175': 'MYT', '2178': 'COG', '2180': 'COD', '2184': 'COK',
-  '2188': 'CRI', '2191': 'HRV', '2192': 'CUB', '2196': 'CYP', '2203': 'CZE',
-  '2204': 'BEN', '2208': 'DNK', '2212': 'DMA', '2214': 'DOM', '2218': 'ECU',
-  '2222': 'SLV', '2226': 'GNQ', '2231': 'ETH', '2232': 'ERI', '2233': 'EST',
-  '2234': 'FRO', '2238': 'FLK', '2242': 'FJI', '2246': 'FIN', '2250': 'FRA',
-  '2254': 'GUF', '2258': 'PYF', '2262': 'DJI', '2266': 'GAB', '2268': 'GEO',
-  '2270': 'GMB', '2276': 'DEU', '2288': 'GHA', '2292': 'GIB', '2296': 'KIR',
-  '2300': 'GRC', '2304': 'GRL', '2308': 'GRD', '2312': 'GLP', '2316': 'GUM',
-  '2320': 'GTM', '2324': 'GIN', '2328': 'GUY', '2332': 'HTI', '2336': 'VAT',
-  '2340': 'HND', '2344': 'HKG', '2348': 'HUN', '2352': 'ISL', '2356': 'IND',
-  '2360': 'IDN', '2364': 'IRN', '2368': 'IRQ', '2372': 'IRL', '2376': 'ISR',
-  '2380': 'ITA', '2384': 'CIV', '2388': 'JAM', '2392': 'JPN', '2398': 'KAZ',
-  '2400': 'JOR', '2404': 'KEN', '2408': 'PRK', '2410': 'KOR', '2414': 'KWT',
-  '2417': 'KGZ', '2418': 'LAO', '2422': 'LBN', '2426': 'LSO', '2428': 'LVA',
-  '2430': 'LBR', '2434': 'LBY', '2438': 'LIE', '2440': 'LTU', '2442': 'LUX',
-  '2446': 'MAC', '2450': 'MDG', '2454': 'MWI', '2458': 'MYS', '2462': 'MDV',
-  '2466': 'MLI', '2470': 'MLT', '2474': 'MTQ', '2478': 'MRT', '2480': 'MUS',
-  '2484': 'MEX', '2492': 'MCO', '2496': 'MNG', '2498': 'MDA', '2499': 'MNE',
-  '2500': 'MSR', '2504': 'MAR', '2508': 'MOZ', '2512': 'OMN', '2516': 'NAM',
-  '2520': 'NRU', '2524': 'NPL', '2528': 'NLD', '2531': 'CUW', '2533': 'ABW',
-  '2534': 'SXM', '2535': 'BES', '2540': 'NCL', '2548': 'VUT', '2554': 'NZL',
-  '2558': 'NIC', '2562': 'NER', '2566': 'NGA', '2570': 'NIU', '2574': 'NFK',
-  '2578': 'NOR', '2580': 'MNP', '2583': 'FSM', '2584': 'MHL', '2585': 'PLW',
-  '2586': 'PAK', '2591': 'PAN', '2598': 'PNG', '2600': 'PRY', '2604': 'PER',
-  '2608': 'PHL', '2612': 'PCN', '2616': 'POL', '2620': 'PRT', '2624': 'GNB',
-  '2626': 'TLS', '2630': 'PRI', '2634': 'QAT', '2638': 'REU', '2642': 'ROU',
-  '2643': 'RUS', '2646': 'RWA', '2652': 'BLM', '2654': 'SHN', '2659': 'KNA',
-  '2660': 'AIA', '2662': 'LCA', '2663': 'MAF', '2666': 'SPM', '2670': 'VCT',
-  '2674': 'SMR', '2678': 'STP', '2682': 'SAU', '2686': 'SEN', '2688': 'SRB',
-  '2690': 'SYC', '2694': 'SLE', '2702': 'SGP', '2703': 'SVK', '2704': 'VNM',
-  '2705': 'SVN', '2706': 'SOM', '2710': 'ZAF', '2716': 'ZWE', '2724': 'ESP',
-  '2728': 'SSD', '2729': 'SDN', '2732': 'ESH', '2736': 'SUR', '2740': 'SJM',
-  '2744': 'SWZ', '2748': 'SWE', '2752': 'CHE', '2760': 'SYR', '2762': 'TJK',
-  '2764': 'THA', '2768': 'TGO', '2772': 'TKL', '2776': 'TON', '2780': 'TTO',
-  '2784': 'ARE', '2788': 'TUN', '2792': 'TUR', '2795': 'TKM', '2796': 'TCA',
-  '2798': 'TUV', '2800': 'UGA', '2804': 'UKR', '2807': 'MKD', '2818': 'EGY',
-  '2826': 'GBR', '2831': 'GGY', '2832': 'JEY', '2833': 'IMN', '2834': 'TZA',
-  '2840': 'USA', '2850': 'VIR', '2854': 'BFA', '2858': 'URY', '2860': 'UZB',
-  '2862': 'VEN', '2876': 'WLF', '2882': 'WSM', '2887': 'YEM', '2894': 'ZMB',
-};
+// Geo display component that fetches names from the database
+function GeoSettingPill({ geoIds, max = 5 }: { geoIds: string[]; max?: number }) {
+  const { data: geoNames } = useQuery({
+    queryKey: ['geo-names', geoIds.join(',')],
+    queryFn: () => lookupGeoNames(geoIds),
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    enabled: geoIds.length > 0,
+  });
 
-// Convert geo ID to country code
-function formatGeoCode(geoId: string): string {
-  // If it's already a 2 or 3 letter code, return as-is
-  if (/^[A-Z]{2,3}$/i.test(geoId)) {
-    return geoId.toUpperCase();
-  }
-  // Look up the country code
-  return GEO_ID_TO_COUNTRY[geoId] || geoId;
+  if (!geoIds?.length) return null;
+
+  const displayIds = geoIds.slice(0, max);
+  const remaining = geoIds.length - max;
+
+  // Format display names - use looked up name or fall back to ID
+  const displayNames = displayIds.map(id => {
+    if (geoNames?.[id]) return geoNames[id];
+    // If it's already a 2 or 3 letter code, return as-is
+    if (/^[A-Z]{2,3}$/i.test(id)) return id.toUpperCase();
+    return id;
+  });
+
+  return (
+    <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
+      <span className="text-gray-400">Geos:</span>
+      <span>{displayNames.join(', ')}</span>
+      {remaining > 0 && <span className="text-gray-400">+{remaining}</span>}
+    </div>
+  );
 }
 
 // Pill component for settings
@@ -331,7 +299,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
           {/* Settings pills with Edit button */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex flex-wrap gap-2">
-              <SettingPill label="Geos" values={config.included_geos} max={5} formatValue={formatGeoCode} />
+              <GeoSettingPill geoIds={config.included_geos} max={5} />
               <SettingPill label="Formats" values={config.formats} />
               <SettingPill label="Platforms" values={config.platforms} />
               <SettingPill label="Sizes" values={config.sizes} max={4} />

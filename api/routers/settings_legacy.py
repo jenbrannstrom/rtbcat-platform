@@ -70,6 +70,7 @@ class PretargetingConfigResponse(BaseModel):
     included_sizes: Optional[list[str]] = None
     included_geos: Optional[list[str]] = None
     excluded_geos: Optional[list[str]] = None
+    included_operating_systems: Optional[list[str]] = None  # iOS, Android IDs
     synced_at: Optional[str] = None
 
 
@@ -373,13 +374,16 @@ async def sync_pretargeting_configs(
             included_geos = geo_targeting.get("includedIds", [])
             excluded_geos = geo_targeting.get("excludedIds", [])
 
+            # Extract OS targeting IDs (iOS = 30001, Android = 30002)
+            included_os = cfg.get("includedMobileOperatingSystemIds", [])
+
             await db_execute(
                 """
                 INSERT INTO pretargeting_configs
                 (bidder_id, config_id, billing_id, display_name, state,
                  included_formats, included_platforms, included_sizes,
-                 included_geos, excluded_geos, raw_config, synced_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                 included_geos, excluded_geos, included_operating_systems, raw_config, synced_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(bidder_id, config_id) DO UPDATE SET
                     billing_id = excluded.billing_id,
                     display_name = excluded.display_name,
@@ -389,6 +393,7 @@ async def sync_pretargeting_configs(
                     included_sizes = excluded.included_sizes,
                     included_geos = excluded.included_geos,
                     excluded_geos = excluded.excluded_geos,
+                    included_operating_systems = excluded.included_operating_systems,
                     raw_config = excluded.raw_config,
                     synced_at = CURRENT_TIMESTAMP
                 """,
@@ -404,6 +409,7 @@ async def sync_pretargeting_configs(
                     json.dumps(sizes),
                     json.dumps(included_geos),
                     json.dumps(excluded_geos),
+                    json.dumps(included_os) if included_os else None,
                     json.dumps(cfg),
                 ),
             )
@@ -496,6 +502,14 @@ async def get_pretargeting_configs(
 
         results = []
         for row in rows:
+            # Parse OS targeting and convert IDs to names if possible
+            os_ids = json.loads(row["included_operating_systems"]) if row.get("included_operating_systems") else None
+            os_names = None
+            if os_ids:
+                # Map known OS IDs to human-readable names
+                os_map = {"30001": "iOS", "30002": "Android"}
+                os_names = [os_map.get(str(os_id), str(os_id)) for os_id in os_ids]
+
             results.append(
                 PretargetingConfigResponse(
                     config_id=row["config_id"],
@@ -509,6 +523,7 @@ async def get_pretargeting_configs(
                     included_sizes=json.loads(row["included_sizes"]) if row["included_sizes"] else None,
                     included_geos=json.loads(row["included_geos"]) if row["included_geos"] else None,
                     excluded_geos=json.loads(row["excluded_geos"]) if row["excluded_geos"] else None,
+                    included_operating_systems=os_names,
                     synced_at=row["synced_at"],
                 )
             )
