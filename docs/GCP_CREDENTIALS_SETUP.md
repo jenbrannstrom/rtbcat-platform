@@ -4,6 +4,20 @@
 
 **Production URL:** https://scan.rtb.cat (hosted on `catscan-production` VM)
 
+**Infrastructure:** GCE e2-micro (~$6/month) with SQLite database
+
+---
+
+## Cost Summary
+
+| Component | Monthly Cost |
+|-----------|-------------|
+| GCE e2-micro | $0-6 (free tier eligible) |
+| 20GB SSD | $3.40 |
+| Static IP | $0 (attached to running VM) |
+| SSL | $0 (Let's Encrypt) |
+| **Total** | **~$6/month** |
+
 ---
 
 ## Quick Deploy (Code Updates)
@@ -451,10 +465,20 @@ The manual steps below are **deprecated** and kept only for reference. They cont
 | Project ID | `catscan-prod-202601` |
 | VM Name | `catscan-production` |
 | Zone | `europe-west1-b` |
-| Machine Type | `e2-medium` |
+| Machine Type | `e2-micro` (~$6/month) |
+| RAM | 1GB |
+| vCPU | 2 shared |
+| Disk | 20GB SSD |
 | External IP | `35.205.211.184` |
 | Domain | `scan.rtb.cat` |
 | SSL Certificate | Let's Encrypt (auto-renewed) |
+
+**Upgrade if needed:**
+```bash
+# If slow, upgrade to e2-small (2GB RAM, ~$13/month)
+gcloud compute instances set-machine-type catscan-production \
+  --machine-type=e2-small --zone=europe-west1-b
+```
 
 **Note:** The old project was `augmented-vim-427407-t8` with IP `104.199.91.219`.
 The new deployment uses Terraform in project `catscan-prod-202601`.
@@ -520,12 +544,14 @@ gcloud compute instances list
 
 **Create a new VM (if needed):**
 ```bash
+# Use e2-micro for cost savings (~$6/month)
 gcloud compute instances create catscan-prod \
   --zone=europe-west1-b \
-  --machine-type=e2-medium \
+  --machine-type=e2-micro \
   --image-family=ubuntu-2404-lts-amd64 \
   --image-project=ubuntu-os-cloud \
   --boot-disk-size=20GB \
+  --boot-disk-type=pd-ssd \
   --tags=http-server,https-server
 ```
 
