@@ -31,7 +31,7 @@ sudo docker build -t catscan_api -f Dockerfile .
 sudo docker rm -f catscan-api
 sudo docker run -d --name catscan-api \
   -p 127.0.0.1:8000:8000 \
-  -v /home/catscan/.catscan:/root/.catscan \
+  -v /home/catscan/.catscan:/home/rtbcat/.catscan \
   -e OAUTH2_PROXY_ENABLED=true \
   catscan_api
 ```
