@@ -521,8 +521,8 @@ async def get_config_breakdown(
             rows = await db_query(f"""
                 SELECT
                     {group_col} as name,
-                    COALESCE(SUM(bids_in_auction), SUM(reached_queries), 0) as total_reached,
-                    COALESCE(SUM(auctions_won), SUM(impressions), 0) as total_impressions
+                    COALESCE(NULLIF(SUM(bids_in_auction), 0), SUM(reached_queries), 0) as total_reached,
+                    COALESCE(NULLIF(SUM(auctions_won), 0), SUM(impressions), 0) as total_impressions
                 FROM rtb_daily
                 WHERE billing_id = ?
                   AND metric_date >= date('now', ?)
@@ -557,8 +557,8 @@ async def get_config_breakdown(
             rows = await db_query(f"""
                 SELECT
                     {group_col} as name,
-                    COALESCE(SUM(bids_in_auction), SUM(reached_queries), 0) as total_reached,
-                    COALESCE(SUM(auctions_won), SUM(impressions), 0) as total_impressions
+                    COALESCE(NULLIF(SUM(bids_in_auction), 0), SUM(reached_queries), 0) as total_reached,
+                    COALESCE(NULLIF(SUM(auctions_won), 0), SUM(impressions), 0) as total_impressions
                 FROM rtb_daily
                 WHERE billing_id = ?
                   AND metric_date >= date('now', ?)
