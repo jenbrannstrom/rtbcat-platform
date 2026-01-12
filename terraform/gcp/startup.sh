@@ -154,6 +154,54 @@ mkdir -p "$APP_DIR" "$DATA_DIR/credentials" "$DATA_DIR/thumbnails" "$DATA_DIR/im
 chown -R catscan:catscan "$APP_DIR" "$DATA_DIR"
 
 # -----------------------------------------------------------------------------
+# 2b. Fetch Credentials from Secret Manager (ONE-TIME SETUP)
+# -----------------------------------------------------------------------------
+# These secrets are uploaded ONCE via gcloud or Terraform.
+# The VM pulls them automatically on every deployment.
+echo ">>> Fetching credentials from Secret Manager..."
+
+PROJECT_ID=$(curl -s http://metadata.google.internal/computeMetadata/v1/project/project-id -H 'Metadata-Flavor: Google')
+
+# Gmail OAuth Client
+echo "  - Fetching Gmail OAuth client..."
+gcloud secrets versions access latest --secret="${app_name}-gmail-oauth-client" --project="$PROJECT_ID" \
+    > "$DATA_DIR/credentials/gmail-oauth-client.json" 2>/dev/null || true
+
+if [ -s "$DATA_DIR/credentials/gmail-oauth-client.json" ]; then
+    echo "    ✓ Gmail OAuth client loaded"
+else
+    echo "    ⚠ Gmail OAuth client not found in Secret Manager"
+    echo "    Upload with: gcloud secrets versions add ${app_name}-gmail-oauth-client --data-file=gmail-oauth-client.json"
+fi
+
+# Gmail Token (may not exist on first deploy)
+echo "  - Fetching Gmail token..."
+gcloud secrets versions access latest --secret="${app_name}-gmail-token" --project="$PROJECT_ID" \
+    > "$DATA_DIR/credentials/gmail-token.json" 2>/dev/null || true
+
+if [ -s "$DATA_DIR/credentials/gmail-token.json" ]; then
+    echo "    ✓ Gmail token loaded"
+else
+    echo "    ⚠ Gmail token not found (run gmail_auth.py after deploy, then upload token)"
+fi
+
+# Authorized Buyers Service Account
+echo "  - Fetching AB service account..."
+gcloud secrets versions access latest --secret="${app_name}-ab-service-account" --project="$PROJECT_ID" \
+    > "$DATA_DIR/credentials/catscan-service-account.json" 2>/dev/null || true
+
+if [ -s "$DATA_DIR/credentials/catscan-service-account.json" ]; then
+    echo "    ✓ AB service account loaded"
+else
+    echo "    ⚠ AB service account not found in Secret Manager"
+    echo "    Upload with: gcloud secrets versions add ${app_name}-ab-service-account --data-file=catscan-service-account.json"
+fi
+
+# Fix permissions
+chmod 600 "$DATA_DIR/credentials/"*.json 2>/dev/null || true
+chown -R catscan:catscan "$DATA_DIR"
+
+# -----------------------------------------------------------------------------
 # 3. Setup SSH Deploy Key (for private GitHub repo)
 # -----------------------------------------------------------------------------
 echo ">>> Setting up GitHub deploy key..."

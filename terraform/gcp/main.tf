@@ -265,6 +265,88 @@ resource "google_compute_instance" "catscan" {
 }
 
 # =============================================================================
+# SECRET MANAGER - Credentials Storage
+# =============================================================================
+# Store credentials in Secret Manager so they persist across deployments.
+# ONE-TIME SETUP: Upload credentials once, they're always available.
+
+# Enable Secret Manager API
+resource "google_project_service" "secretmanager" {
+  service            = "secretmanager.googleapis.com"
+  disable_on_destroy = false
+}
+
+# Gmail OAuth Client (gmail-oauth-client.json)
+resource "google_secret_manager_secret" "gmail_oauth_client" {
+  secret_id = "${var.app_name}-gmail-oauth-client"
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    app         = var.app_name
+    environment = var.environment
+    type        = "gmail-oauth"
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+# Gmail Token (gmail-token.json) - created after first auth
+resource "google_secret_manager_secret" "gmail_token" {
+  secret_id = "${var.app_name}-gmail-token"
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    app         = var.app_name
+    environment = var.environment
+    type        = "gmail-token"
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+# Service Account for Authorized Buyers API
+resource "google_secret_manager_secret" "ab_service_account" {
+  secret_id = "${var.app_name}-ab-service-account"
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    app         = var.app_name
+    environment = var.environment
+    type        = "service-account"
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+# Grant VM service account access to read secrets
+resource "google_secret_manager_secret_iam_member" "gmail_oauth_client_access" {
+  secret_id = google_secret_manager_secret.gmail_oauth_client.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.catscan.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "gmail_token_access" {
+  secret_id = google_secret_manager_secret.gmail_token.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.catscan.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "ab_service_account_access" {
+  secret_id = google_secret_manager_secret.ab_service_account.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.catscan.email}"
+}
+
+# =============================================================================
 # DNS - Cloudflare (Optional)
 # =============================================================================
 # NOTE: Cloudflare provider removed to avoid initialization errors when not used.

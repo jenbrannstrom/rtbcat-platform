@@ -4,6 +4,68 @@
 
 **Production URL:** https://scan.rtb.cat (hosted on `catscan-production` VM)
 
+**Infrastructure:** GCE e2-micro (~$6/month) with SQLite database
+
+---
+
+## ONE-TIME Credential Setup (Do This Once, Never Again)
+
+Credentials are stored in **GCP Secret Manager** and automatically pulled on every VM deploy/restart.
+
+### Step 1: Create Credentials (GCP Console)
+
+1. **Gmail OAuth Client:**
+   - Go to: https://console.cloud.google.com/apis/credentials
+   - Create OAuth 2.0 Client ID (Desktop app)
+   - Download JSON → save as `gmail-oauth-client.json`
+
+2. **Service Account (for Authorized Buyers API):**
+   - Go to: https://console.cloud.google.com/iam-admin/serviceaccounts
+   - Create service account → download JSON → save as `catscan-service-account.json`
+
+3. **Gmail Token (requires browser):**
+   ```bash
+   # Run locally to authorize Gmail
+   python scripts/gmail_auth.py
+   # Token saved to: ~/.catscan/credentials/gmail-token.json
+   ```
+
+### Step 2: Upload to Secret Manager (ONE TIME!)
+
+```bash
+# Upload Gmail OAuth client
+gcloud secrets versions add catscan-gmail-oauth-client \
+  --data-file=gmail-oauth-client.json
+
+# Upload service account
+gcloud secrets versions add catscan-ab-service-account \
+  --data-file=catscan-service-account.json
+
+# Upload Gmail token (after running gmail_auth.py)
+gcloud secrets versions add catscan-gmail-token \
+  --data-file=~/.catscan/credentials/gmail-token.json
+```
+
+### Step 3: Done!
+
+Credentials are now stored permanently in Secret Manager.
+
+- **Every deploy** → VM pulls credentials automatically
+- **Every restart** → Credentials are there
+- **Never copy manually** → It's always automatic
+
+---
+
+## Cost Summary
+
+| Component | Monthly Cost |
+|-----------|-------------|
+| GCE e2-micro | $0-6 (free tier eligible) |
+| 20GB SSD | $3.40 |
+| Static IP | $0 (attached to running VM) |
+| SSL | $0 (Let's Encrypt) |
+| **Total** | **~$6/month** |
+
 ---
 
 ## Quick Deploy (Code Updates)
@@ -451,10 +513,20 @@ The manual steps below are **deprecated** and kept only for reference. They cont
 | Project ID | `catscan-prod-202601` |
 | VM Name | `catscan-production` |
 | Zone | `europe-west1-b` |
-| Machine Type | `e2-medium` |
+| Machine Type | `e2-micro` (~$6/month) |
+| RAM | 1GB |
+| vCPU | 2 shared |
+| Disk | 20GB SSD |
 | External IP | `35.205.211.184` |
 | Domain | `scan.rtb.cat` |
 | SSL Certificate | Let's Encrypt (auto-renewed) |
+
+**Upgrade if needed:**
+```bash
+# If slow, upgrade to e2-small (2GB RAM, ~$13/month)
+gcloud compute instances set-machine-type catscan-production \
+  --machine-type=e2-small --zone=europe-west1-b
+```
 
 **Note:** The old project was `augmented-vim-427407-t8` with IP `104.199.91.219`.
 The new deployment uses Terraform in project `catscan-prod-202601`.
@@ -520,12 +592,14 @@ gcloud compute instances list
 
 **Create a new VM (if needed):**
 ```bash
+# Use e2-micro for cost savings (~$6/month)
 gcloud compute instances create catscan-prod \
   --zone=europe-west1-b \
-  --machine-type=e2-medium \
+  --machine-type=e2-micro \
   --image-family=ubuntu-2404-lts-amd64 \
   --image-project=ubuntu-os-cloud \
   --boot-disk-size=20GB \
+  --boot-disk-type=pd-ssd \
   --tags=http-server,https-server
 ```
 
