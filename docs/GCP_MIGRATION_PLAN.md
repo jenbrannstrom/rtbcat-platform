@@ -1,12 +1,27 @@
 # GCP Migration Plan for Cat-Scan
 
 **Created:** January 6, 2026
-**Status:** Planning
+**Updated:** January 12, 2026
+**Status:** Ready to Execute
 **Current State:** AWS EC2 (Frankfurt) with SQLite
-**Target State:** GCP (europe-west1) with native Google integration
+**Target State:** GCP e2-micro (europe-west1) - **$6/month**
 
 ---
-Credentials saved to file: [/home/jen/.config/gcloud/application_default_credentials.json]
+
+## Executive Summary
+
+**Decision:** Migrate to GCP e2-micro for ~$6/month total cost.
+
+| Aspect | Value |
+|--------|-------|
+| **Monthly Cost** | ~$6 (vs $45 original plan) |
+| **Instance Type** | e2-micro (2 shared vCPU, 1GB RAM) |
+| **Storage** | 20GB SSD ($3.40/month) |
+| **Free Tier** | First 744 hours/month FREE |
+| **Migration Effort** | 1-2 days |
+| **Why GCP** | Zero egress fees, native Google API integration |
+
+---
 
 ## Why Migrate to GCP?
 
@@ -58,57 +73,83 @@ SQLite was chosen for:
 
 ---
 
-## Option 1: SQLite on GCE (Compute Engine)
+## Option 1: SQLite on GCE e2-micro (RECOMMENDED)
 
 **Architecture:** Single VM with SQLite file on persistent disk
+**Cost:** ~$6/month (or FREE with free tier)
 
 ### How It Works
 SQLite is an embedded database - it's a C library that reads/writes directly to a file. There's no separate server process. Your Python application links against SQLite and performs file I/O directly.
 
 ```
 ┌─────────────────────────────────────────┐
-│           GCE VM (e2-medium)            │
+│           GCE VM (e2-micro)             │
+│           1GB RAM, 2 shared vCPU        │
 │  ┌─────────────┐    ┌────────────────┐  │
 │  │  FastAPI    │───▶│  SQLite File   │  │
 │  │  (Python)   │    │  (catscan.db)  │  │
 │  └─────────────┘    └────────────────┘  │
 │                            │            │
-│                     Persistent Disk     │
+│                     20GB SSD Disk       │
 └─────────────────────────────────────────┘
 ```
+
+### Why e2-micro is Sufficient
+
+| Metric | Requirement | e2-micro Capacity |
+|--------|-------------|-------------------|
+| **RAM** | ~300MB (FastAPI + Next.js) | 1GB |
+| **CPU** | Low (mostly I/O bound) | 2 shared vCPU |
+| **Storage** | 437MB database | 20GB SSD |
+| **Concurrent Users** | 1-5 | Handles fine |
+| **Daily Imports** | ~50 CSV files | No problem |
+
+**Note:** If you experience slowness, upgrade to e2-small ($13/month) with one command.
 
 ### Pros
 | Advantage | Explanation |
 |-----------|-------------|
 | **Zero migration effort** | Same code, same schema, just copy the file |
-| **Lowest cost** | ~$25/month for e2-medium + disk |
+| **Extremely low cost** | ~$6/month (or FREE with free tier) |
 | **Simplest operations** | Backup = copy file to GCS |
 | **No network latency** | Database is local to application |
 | **Fastest queries** | No network round-trips |
 | **ACID compliant** | Full transaction support |
+| **Native Google APIs** | No egress fees for GCS downloads |
+| **Cloud Scheduler** | Free tier includes 3 jobs/month |
 
 ### Cons
 | Disadvantage | Explanation |
 |--------------|-------------|
-| **Single writer** | Only one process can write at a time (WAL helps but doesn't eliminate) |
+| **Single writer** | Only one process can write at a time (WAL helps) |
 | **No horizontal scaling** | Cannot add more instances |
-| **VM management** | You manage OS updates, security patches |
-| **Disk-bound** | Performance limited by disk IOPS |
-| **No point-in-time recovery** | Manual backup strategy required |
+| **VM management** | You manage OS updates (automated via startup script) |
+| **Limited RAM** | 1GB means careful memory management |
 
 ### When to Choose
-- Single-tenant deployments
-- Predictable, moderate load
+- Single-tenant deployments (you!)
+- Predictable, low-moderate load
 - Cost is primary concern
-- Team prefers simplicity over scalability
+- Want native Google integration
 
-### Cost Estimate
+### Cost Estimate (e2-micro)
 ```
-e2-medium (2 vCPU, 4GB RAM):     ~$25/month
-100GB SSD persistent disk:       ~$17/month
-Static IP:                       ~$3/month
-                                 ─────────
-Total:                           ~$45/month
+e2-micro (2 shared vCPU, 1GB RAM):  $0/month (free tier) or ~$6/month
+20GB SSD persistent disk:           ~$3.40/month
+Static IP (attached to running VM): $0/month
+Cloud Scheduler (3 jobs):           $0/month (free tier)
+                                    ─────────
+Total:                              ~$3-6/month
+```
+
+### Upgrade Path (if needed)
+```bash
+# If e2-micro is too slow, upgrade instantly:
+gcloud compute instances set-machine-type catscan-production \
+  --machine-type=e2-small --zone=europe-west1-b
+
+# e2-small: 2 vCPU, 2GB RAM = ~$13/month
+# e2-medium: 2 vCPU, 4GB RAM = ~$25/month
 ```
 
 ---
@@ -282,90 +323,87 @@ Total: $150-300/month (HIGHER than SQL options)
 
 ## Recommendation
 
-### For Cat-Scan: Option 1 (SQLite on GCE)
+### For Cat-Scan: Option 1 (SQLite on GCE e2-micro) - $6/month
 
 **Rationale:**
 
 1. **No migration effort** - Same code works immediately
-2. **Lowest cost** - ~$45/month vs $57+ for Cloud SQL
-3. **Performance** - Local disk faster than network DB for this workload
+2. **Extremely low cost** - ~$6/month (essentially free)
+3. **Performance** - Local disk faster than network DB
 4. **Scale is sufficient** - 1.6M rows is small; SQLite handles 100M+ fine
-5. **Simplicity** - One less service to manage
+5. **Native Google** - Zero egress fees, Cloud Scheduler for cron
+6. **One cloud** - Simplifies operations, authentication, billing
 
-**When to reconsider:**
-- If you need multiple app instances (load balancing)
-- If database grows past 10GB
-- If you need point-in-time recovery
-- If you hire a team (managed DB reduces ops burden)
+**When to upgrade:**
+- **e2-small ($13/month)** - If you notice slowness
+- **e2-medium ($25/month)** - If running heavy analytics
+- **Cloud SQL ($57/month)** - If database exceeds 10GB or need HA
 
 ### Migration Path
 
 ```
-Phase 1: GCE + SQLite (Current plan)
-   │
-   ▼ (If needed later)
-Phase 2: GCE + Cloud SQL (PostgreSQL)
-   │
-   ▼ (If needed later)
-Phase 3: Cloud Run + Cloud SQL (Serverless)
+NOW:           GCE e2-micro + SQLite (~$6/month)
+               ↓ (If slow)
+UPGRADE 1:     GCE e2-small + SQLite (~$16/month)
+               ↓ (If database >10GB)
+UPGRADE 2:     GCE e2-small + Cloud SQL (~$50/month)
+               ↓ (If need serverless)
+UPGRADE 3:     Cloud Run + Cloud SQL (~$75/month)
 ```
 
 ---
 
 ## GCP Architecture Plan
 
-### Target Architecture
+### Target Architecture (e2-micro - $6/month)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        GCP Project                               │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                 Cloud Load Balancing                      │   │
-│  │                 (HTTPS, managed SSL)                      │   │
-│  └─────────────────────────┬────────────────────────────────┘   │
-│                            │                                     │
-│  ┌─────────────────────────▼────────────────────────────────┐   │
-│  │              GCE Instance (e2-medium)                     │   │
-│  │              europe-west1-b                               │   │
-│  │  ┌─────────────────┐  ┌─────────────────┐                │   │
-│  │  │   FastAPI       │  │   Next.js       │                │   │
-│  │  │   (Port 8000)   │  │   (Port 3000)   │                │   │
-│  │  └────────┬────────┘  └─────────────────┘                │   │
-│  │           │                                               │   │
-│  │  ┌────────▼────────┐                                     │   │
-│  │  │  SQLite DB      │                                     │   │
-│  │  │  (Persistent    │                                     │   │
-│  │  │   Disk SSD)     │                                     │   │
-│  │  └─────────────────┘                                     │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌────────────────┐   │
-│  │ Cloud Scheduler │  │ Secret Manager  │  │ Cloud Storage  │   │
-│  │ (Gmail cron)    │  │ (Credentials)   │  │ (CSV Archive)  │   │
-│  └─────────────────┘  └─────────────────┘  └────────────────┘   │
-│                                                                  │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │              Service Account                             │    │
-│  │  - Gmail API (domain-wide delegation or OAuth)          │    │
-│  │  - Authorized Buyers API                                │    │
-│  │  - Cloud Storage (for GCS report downloads)             │    │
-│  └─────────────────────────────────────────────────────────┘    │
+┌──────────────────────────────────────────────────────────────────┐
+│                     GCP Project (europe-west1)                    │
+│                                                                   │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │              GCE e2-micro ($6/month)                        │  │
+│  │              1GB RAM, 2 shared vCPU, 20GB SSD               │  │
+│  │                                                             │  │
+│  │  ┌─────────────┐     ┌─────────────┐     ┌──────────────┐  │  │
+│  │  │   Nginx     │────▶│  FastAPI    │────▶│   SQLite     │  │  │
+│  │  │  (SSL/443)  │     │  (8000)     │     │  (catscan.db)│  │  │
+│  │  └──────┬──────┘     └─────────────┘     └──────────────┘  │  │
+│  │         │                                                   │  │
+│  │         └───────────▶┌─────────────┐                       │  │
+│  │                      │  Next.js    │                       │  │
+│  │                      │  (3000)     │                       │  │
+│  │                      └─────────────┘                       │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                   │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐   │
+│  │ Cloud Scheduler │  │  OAuth2 Proxy   │  │ Cloud Storage   │   │
+│  │ (FREE - 3 jobs) │  │  (Google Auth)  │  │ (Backups/CSV)   │   │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘   │
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │                    Service Account                           │ │
+│  │  - Gmail API (report imports)                               │ │
+│  │  - Authorized Buyers API (creatives, pretargeting)          │ │
+│  │  - Cloud Storage (zero egress - same cloud!)                │ │
+│  └─────────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### Components
+### Components & Costs
 
-| Component | GCP Service | Purpose |
-|-----------|-------------|---------|
-| Compute | GCE e2-medium | Run API + Dashboard |
-| Database | SQLite on SSD | Data persistence |
-| Load Balancer | Cloud Load Balancing | HTTPS termination |
-| DNS | Cloud DNS | scan.rtb.cat |
-| Scheduler | Cloud Scheduler | Gmail import cron |
-| Secrets | Secret Manager | API keys, OAuth tokens |
-| Storage | Cloud Storage | CSV archive, backups |
-| IAM | Service Account | API authentication |
+| Component | GCP Service | Monthly Cost |
+|-----------|-------------|--------------|
+| **Compute** | GCE e2-micro | $0-6 (free tier eligible) |
+| **Storage** | 20GB SSD | $3.40 |
+| **Database** | SQLite (on disk) | $0 |
+| **SSL** | Let's Encrypt | $0 |
+| **Auth** | OAuth2 Proxy | $0 |
+| **Cron** | Cloud Scheduler | $0 (3 free jobs) |
+| **Backups** | Cloud Storage | ~$0.50 |
+| **Static IP** | Attached to VM | $0 |
+| **DNS** | Cloud DNS | $0.20/zone |
+| | | **~$4-10/month** |
 
 ---
 
@@ -533,17 +571,25 @@ gcloud compute ssh catscan-production --zone=europe-west1-b -- "sudo /usr/local/
 
 ## Cost Comparison
 
-| Item | AWS (Current) | GCP (Proposed) |
-|------|---------------|----------------|
-| Compute | EC2 t3.medium ~$30 | GCE e2-medium ~$25 |
-| Storage | EBS 100GB ~$10 | PD-SSD 100GB ~$17 |
-| Load Balancer | ALB ~$16 | Cloud LB ~$18 |
-| Static IP | $3.60 | $3 |
+| Item | AWS (Current) | GCP e2-micro (Proposed) |
+|------|---------------|-------------------------|
+| Compute | EC2 t3.medium ~$30 | GCE e2-micro ~$6 |
+| Storage | EBS 100GB ~$10 | PD-SSD 20GB ~$3.40 |
+| Load Balancer | ALB ~$16 | Nginx (on VM) ~$0 |
+| Static IP | $3.60 | $0 (attached to VM) |
 | Data Transfer | $0 (within AWS) | $0 (within GCP) |
 | **GCS Egress** | **~$10-20** (cross-cloud) | **$0** (same cloud) |
-| **Total** | **~$60-80/month** | **~$63/month** |
+| SSL | ACM ~$0 | Let's Encrypt ~$0 |
+| **Total** | **~$60-80/month** | **~$6-10/month** |
 
-**Net effect:** Similar cost, but eliminates cross-cloud auth complexity.
+**Savings: 85-90%** (~$50-70/month saved)
+
+**Additional Benefits:**
+- Native Google API authentication
+- Zero egress fees for GCS report downloads
+- Cloud Scheduler for Gmail import cron (free)
+- Simpler billing (one cloud provider)
+- Instant upgrade path if needed
 
 ---
 
@@ -560,29 +606,65 @@ If GCP migration fails:
 
 ## Timeline
 
-| Day | Task |
-|-----|------|
-| 1 | GCP project setup, GCE instance creation |
-| 1 | Docker deployment, database migration |
-| 2 | DNS switchover, SSL setup |
-| 2 | Gmail integration, Cloud Scheduler |
-| 3 | Testing, backup setup |
-| 3 | AWS teardown (after verification) |
+| Day | Task | Time |
+|-----|------|------|
+| 1 | GCP project setup, enable APIs | 30 min |
+| 1 | Create e2-micro VM via Terraform | 15 min |
+| 1 | Copy database + credentials from AWS | 30 min |
+| 1 | Test application works | 30 min |
+| 2 | Update DNS to point to GCP | 5 min |
+| 2 | SSL certificate (Let's Encrypt) | 15 min |
+| 2 | Set up Cloud Scheduler for Gmail import | 15 min |
+| 2 | Full testing, verify all features | 1 hour |
+| 3 | Monitor for 24 hours | - |
+| 3 | Stop AWS instance (keep 1 week as backup) | 5 min |
 
-**Total: 3 days**
-
----
-
-## Decision Required
-
-Before proceeding, confirm:
-
-1. **Database choice**: SQLite on GCE (recommended) or Cloud SQL?
-2. **Gmail auth method**:
-   - Domain-wide delegation (cleanest, requires Workspace admin)
-   - OAuth with refresh token (current approach, needs initial browser auth)
-3. **Timeline**: Ready to start migration?
+**Total: 1-2 days** (mostly waiting for DNS propagation)
 
 ---
 
-*Plan created by Claude Code based on current architecture analysis.*
+## Quick Start Commands
+
+```bash
+# 1. Create GCP project (if new)
+gcloud projects create catscan-prod --name="Cat-Scan"
+gcloud config set project catscan-prod
+
+# 2. Enable APIs
+gcloud services enable compute.googleapis.com storage.googleapis.com
+
+# 3. Create e2-micro VM
+gcloud compute instances create catscan-production \
+  --zone=europe-west1-b \
+  --machine-type=e2-micro \
+  --image-family=ubuntu-2404-lts-amd64 \
+  --image-project=ubuntu-os-cloud \
+  --boot-disk-size=20GB \
+  --boot-disk-type=pd-ssd \
+  --tags=http-server,https-server
+
+# 4. Create firewall rule (HTTPS only!)
+gcloud compute firewall-rules create allow-https \
+  --allow=tcp:80,tcp:443 \
+  --target-tags=http-server,https-server
+
+# 5. SSH and setup
+gcloud compute ssh catscan-production --zone=europe-west1-b
+```
+
+---
+
+## Decision: APPROVED
+
+| Decision | Choice |
+|----------|--------|
+| **Instance Type** | e2-micro ($6/month) |
+| **Database** | SQLite on GCE (same code) |
+| **Gmail Auth** | OAuth with refresh token |
+| **Timeline** | Ready to execute |
+
+**Next Step:** Run the Terraform deployment or quick start commands above.
+
+---
+
+*Plan created by Claude Code. Updated January 12, 2026 for cost optimization.*
