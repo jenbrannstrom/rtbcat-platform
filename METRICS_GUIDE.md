@@ -52,8 +52,8 @@ This guide explains how to interpret and use this data for QPS optimization.
 | Report | Table | Key Metrics |
 |--------|-------|-------------|
 | Performance Detail | `rtb_daily` | Creative-level: Reached, Impressions, Clicks, Spend |
-| RTB Funnel (Regional) | `rtb_funnel` | Bid pipeline: Requests → Bids → Wins |
-| RTB Funnel (Publisher) | `rtb_funnel` | Same + Publisher dimension |
+| RTB Funnel (Regional) | `rtb_bidstream` | Bid pipeline: Requests → Bids → Wins |
+| RTB Funnel (Publisher) | `rtb_bidstream` | Same + Publisher dimension |
 | Bid Filtering | `rtb_bid_filtering` | Why bids were filtered |
 | Quality Signals | `rtb_quality` | IVT rate, Viewability |
 
@@ -127,7 +127,7 @@ Impressions           (ad served)
 
 **Question:** Which regions are performing poorly?
 
-**Endpoint:** `/analytics/regional-efficiency` (via rtb_funnel)
+**Endpoint:** `/analytics/regional-efficiency` (via rtb_bidstream)
 
 **Key Metrics:**
 - Win rate by region
@@ -296,7 +296,7 @@ SELECT
     SUM(bids) as total_bids,
     SUM(auctions_won) as total_wins,
     ROUND(SUM(auctions_won) * 100.0 / NULLIF(SUM(bids_in_auction), 0), 2) as win_rate_pct
-FROM rtb_funnel
+FROM rtb_bidstream
 WHERE metric_date >= date('now', '-7 days')
 GROUP BY region
 ORDER BY win_rate_pct ASC
@@ -311,7 +311,7 @@ SELECT
     SUM(f.impressions) as impressions,
     AVG(q.non_human_traffic_pct) as avg_ivt_pct,
     AVG(q.viewable_impressions_pct) as avg_viewability
-FROM rtb_funnel f
+FROM rtb_bidstream f
 LEFT JOIN rtb_quality q ON f.publisher_id = q.publisher_id AND f.metric_date = q.metric_date
 LEFT JOIN publishers p ON f.publisher_id = p.publisher_id
 WHERE f.metric_date >= date('now', '-7 days')

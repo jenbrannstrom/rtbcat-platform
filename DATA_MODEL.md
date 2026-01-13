@@ -33,8 +33,8 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 |---|----------|--------------|---------|
 | 1 | `catscan-bidsinauction-*` | `rtb_daily` | Creative-level performance with bid metrics |
 | 2 | `catscan-quality-*` | `rtb_daily` | Creative-level performance with viewability |
-| 3 | `catscan-funnel-geo-*` | `rtb_funnel` | Bid pipeline by country (hourly) |
-| 4 | `catscan-funnel-publishers-*` | `rtb_funnel` | Bid pipeline by publisher |
+| 3 | `catscan-funnel-geo-*` | `rtb_bidstream` | Bid pipeline by country (hourly) |
+| 4 | `catscan-funnel-publishers-*` | `rtb_bidstream` | Bid pipeline by publisher |
 | 5 | `catscan-bid-filtering-*` | `rtb_bid_filtering` | Why bids are rejected |
 
 ---
@@ -99,7 +99,7 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 
 ### CSV 3: catscan-funnel-geo (Funnel by Geography)
 
-**Target Table:** `rtb_funnel`
+**Target Table:** `rtb_bidstream`
 **Purpose:** Full bid pipeline metrics by country and hour
 
 #### Columns (exact order from sample)
@@ -131,7 +131,7 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 
 ### CSV 4: catscan-funnel-publishers (Funnel by Publisher)
 
-**Target Table:** `rtb_funnel`
+**Target Table:** `rtb_bidstream`
 **Purpose:** Bid pipeline metrics by publisher
 
 #### Columns (exact order from sample)
@@ -226,7 +226,7 @@ The importer auto-detects report type based on columns present:
 
 1. **Has `Bid filtering reason`?** → Bid Filtering → `rtb_bid_filtering`
 2. **Has `Creative ID`?** → Performance Detail → `rtb_daily`
-3. **Has `Bid requests`?** → RTB Funnel → `rtb_funnel`
+3. **Has `Bid requests`?** → RTB Funnel → `rtb_bidstream`
    - With `Publisher ID` → Funnel Publishers
    - Without → Funnel Geo
 4. **Otherwise** → Unknown (import fails)
@@ -654,7 +654,7 @@ Detailed RTB metrics imported from CSV reports (Bids in Auction report).
 
 **Unique Constraint:** row_hash
 
-### rtb_funnel
+### rtb_bidstream
 
 RTB funnel metrics for geo and publisher analysis (Funnel report).
 

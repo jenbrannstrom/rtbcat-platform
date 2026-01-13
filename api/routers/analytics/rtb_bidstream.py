@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from storage.database import db_query, db_query_one
-from analytics.rtb_funnel_analyzer import RTBFunnelAnalyzer
+from analytics.rtb_bidstream_analyzer import RTBFunnelAnalyzer
 from .common import get_valid_billing_ids, get_valid_billing_ids_for_buyer
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ router = APIRouter(tags=["RTB Analytics"])
 
 
 @router.get("/analytics/rtb-funnel", tags=["RTB Analytics"])
-async def get_rtb_funnel(
+async def get_rtb_bidstream(
     days: int = Query(7, ge=1, le=90),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
 ):
@@ -50,7 +50,7 @@ async def get_rtb_funnel(
                 buyer_filter = " AND bidder_id = ?"
                 buyer_params = [seat["bidder_id"]]
 
-        # Get funnel summary from database - use rtb_funnel for pipeline metrics
+        # Get funnel summary from database - use rtb_bidstream for pipeline metrics
         funnel_row = await db_query_one(f"""
             SELECT
                 SUM(reached_queries) as total_reached,
@@ -58,14 +58,14 @@ async def get_rtb_funnel(
                 SUM(bids) as total_bids,
                 COUNT(DISTINCT publisher_id) as publisher_count,
                 COUNT(DISTINCT country) as country_count
-            FROM rtb_funnel
+            FROM rtb_bidstream
             WHERE metric_date >= date('now', ?){buyer_filter}
         """, (f'-{days} days', *buyer_params))
 
         total_reached = funnel_row["total_reached"] or 0
 
         # If buyer filter returned no data, fall back to unfiltered query
-        # This handles cases where rtb_funnel.bidder_id is not populated
+        # This handles cases where rtb_bidstream.bidder_id is not populated
         if total_reached == 0 and buyer_filter:
             logger.info(f"No data with buyer filter, falling back to unfiltered query")
             funnel_row = await db_query_one("""
@@ -75,7 +75,7 @@ async def get_rtb_funnel(
                     SUM(bids) as total_bids,
                     COUNT(DISTINCT publisher_id) as publisher_count,
                     COUNT(DISTINCT country) as country_count
-                FROM rtb_funnel
+                FROM rtb_bidstream
                 WHERE metric_date >= date('now', ?)
             """, (f'-{days} days',))
             total_reached = funnel_row["total_reached"] or 0
@@ -96,7 +96,7 @@ async def get_rtb_funnel(
                 SUM(reached_queries) as reached,
                 SUM(impressions) as impressions,
                 SUM(bids) as total_bids
-            FROM rtb_funnel
+            FROM rtb_bidstream
             WHERE metric_date >= date('now', ?) AND publisher_id IS NOT NULL{buyer_filter}
             GROUP BY publisher_id
             ORDER BY reached DESC
@@ -128,7 +128,7 @@ async def get_rtb_funnel(
                 SUM(reached_queries) as reached,
                 SUM(impressions) as impressions,
                 SUM(bids) as total_bids
-            FROM rtb_funnel
+            FROM rtb_bidstream
             WHERE metric_date >= date('now', ?) AND country IS NOT NULL{buyer_filter}
             GROUP BY country
             ORDER BY reached DESC
@@ -190,7 +190,7 @@ async def get_rtb_publishers(
                 SUM(reached_queries) as total_reached,
                 SUM(impressions) as total_impressions,
                 SUM(bids) as total_bids
-            FROM rtb_funnel
+            FROM rtb_bidstream
             WHERE metric_date >= date('now', ?)
             GROUP BY publisher_id, publisher_name
             ORDER BY total_reached DESC
@@ -200,7 +200,7 @@ async def get_rtb_publishers(
         # Get total count
         count_row = await db_query_one("""
             SELECT COUNT(DISTINCT publisher_id) as total
-            FROM rtb_funnel
+            FROM rtb_bidstream
             WHERE metric_date >= date('now', ?)
         """, (f'-{days} days',))
 
@@ -253,7 +253,7 @@ async def get_rtb_geos(
                 SUM(reached_queries) as total_reached,
                 SUM(impressions) as total_impressions,
                 SUM(bids) as total_bids
-            FROM rtb_funnel
+            FROM rtb_bidstream
             WHERE metric_date >= date('now', ?)
             GROUP BY country
             ORDER BY total_reached DESC
@@ -263,7 +263,7 @@ async def get_rtb_geos(
         # Get total count
         count_row = await db_query_one("""
             SELECT COUNT(DISTINCT country) as total
-            FROM rtb_funnel
+            FROM rtb_bidstream
             WHERE metric_date >= date('now', ?)
         """, (f'-{days} days',))
 
@@ -358,13 +358,13 @@ async def get_config_performance(
             """, (f'-{days} days',))
 
         if not rows:
-            # No per-config data in rtb_daily - fall back to aggregate from rtb_funnel
+            # No per-config data in rtb_daily - fall back to aggregate from rtb_bidstream
             # This happens when the imported CSVs don't have billing_id breakdown
             funnel_agg = await db_query_one("""
                 SELECT
                     SUM(reached_queries) as total_reached,
                     SUM(impressions) as total_impressions
-                FROM rtb_funnel
+                FROM rtb_bidstream
                 WHERE metric_date >= date('now', ?)
             """, (f'-{days} days',))
 
@@ -375,7 +375,7 @@ async def get_config_performance(
 
                 return {
                     "period_days": days,
-                    "data_source": "rtb_funnel_aggregate",
+                    "data_source": "rtb_bidstream_aggregate",
                     "message": "Per-config breakdown not available. Showing aggregate funnel data.",
                     "configs": [],
                     "total_reached": total_reached,
@@ -541,7 +541,7 @@ async def get_config_breakdown(
                 """, (billing_id, f'-{days} days'))
                 is_aggregate = False  # This is now per-billing_id!
 
-                # Fallback to rtb_funnel (account-wide) if no joined data
+                # Fallback to rtb_bidstream (account-wide) if no joined data
                 if not rows:
                     bidder_rows = await db_query("""
                         SELECT bidder_id FROM pretargeting_configs WHERE billing_id = ? LIMIT 1
@@ -556,7 +556,7 @@ async def get_config_breakdown(
                                 COALESCE(SUM(auctions_won), 0) as total_auctions_won,
                                 COALESCE(SUM(reached_queries), 0) as total_reached,
                                 COALESCE(SUM(impressions), 0) as total_impressions
-                            FROM rtb_funnel
+                            FROM rtb_bidstream
                             WHERE buyer_account_id = ?
                               AND metric_date >= date('now', ?)
                               AND country IS NOT NULL
@@ -591,7 +591,7 @@ async def get_config_breakdown(
                 """, (billing_id, f'-{days} days'))
                 is_aggregate = False
 
-                # Fallback to rtb_funnel (account-wide) if no joined data
+                # Fallback to rtb_bidstream (account-wide) if no joined data
                 if not rows:
                     bidder_rows = await db_query("""
                         SELECT bidder_id FROM pretargeting_configs WHERE billing_id = ? LIMIT 1
@@ -606,7 +606,7 @@ async def get_config_breakdown(
                                 COALESCE(SUM(auctions_won), 0) as total_auctions_won,
                                 COALESCE(SUM(reached_queries), 0) as total_reached,
                                 COALESCE(SUM(impressions), 0) as total_impressions
-                            FROM rtb_funnel
+                            FROM rtb_bidstream
                             WHERE buyer_account_id = ?
                               AND metric_date >= date('now', ?)
                               AND publisher_name IS NOT NULL
@@ -824,7 +824,7 @@ async def get_app_drilldown(
                     # Check if it's a publisher_name mismatch
                     check_publisher = await db_query_one("""
                         SELECT publisher_name, SUM(reached_queries) as total
-                        FROM rtb_funnel
+                        FROM rtb_bidstream
                         WHERE publisher_name = ? AND metric_date >= date('now', ?)
                         GROUP BY publisher_name
                     """, (app_name, f'-{days} days'))

@@ -34,7 +34,7 @@ LOGS_DIR = CATSCAN_DIR / 'logs'
 # of allowed table/column names. Never dynamically add to this list.
 TABLES_TO_CLEAN = {
     'rtb_daily': 'day',
-    'rtb_funnel': 'day',
+    'rtb_bidstream': 'day',
     'performance_metrics': 'date',
 }
 
