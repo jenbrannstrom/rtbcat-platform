@@ -75,7 +75,7 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 | **Creative Sync** | Fetch all creatives from Google Authorized Buyers API |
 | **Multi-Seat Support** | Manage multiple buyer accounts under one bidder |
 | **Efficiency Analysis** | Identify size gaps, config inefficiencies, optimization opportunities |
-| **RTB Funnel** | Visualize reached queries → bids → impressions |
+| **RTB Bidstream** | Visualize bid pipeline: bid_requests → bids → auctions_won → impressions |
 | **Campaign Clustering** | AI-powered grouping by destination URL, region, advertiser, language |
 | **CSV Import** | Auto-import performance data from Google reports |
 | **MCP Support** | APIs to enable MCP access for your own choice of AI |
@@ -147,44 +147,72 @@ See **[DATA_MODEL.md](DATA_MODEL.md)** for the complete 41-table schema and mult
 
 ## CSV Format Requirements
 
-Cat-Scan requires **3 separate CSV reports** from Google Authorized Buyers due to field incompatibilities in Google's reporting system.
+Cat-Scan requires **5 separate CSV reports** from Google Authorized Buyers due to field incompatibilities in Google's reporting system.
+
+> **CRITICAL:** Set timezone to **UTC** for ALL reports! Non-UTC data is marked as legacy.
+>
+> **Naming Convention:** `catscan-{type}-{account_id}-{period}-UTC`
+> Example: `catscan-rtb-pipeline-1487810529-yesterday-UTC`
 
 > **Create these reports in Google Authorized Buyers: Reporting → Scheduled Reports**
 
 ### The Required Reports
 
-| Report | Purpose | Key Fields | Table |
-|--------|---------|------------|-------|
-| **Performance Detail** | Creative/Size/App data | Creative ID, Size, App ID, Publisher | `rtb_daily` |
-| **RTB Funnel (Regional)** | Bid pipeline by region | Bid requests, Bids, Auctions won | `rtb_bidstream` |
-| **RTB Funnel (Publishers)** | Bid pipeline by publisher | Publisher ID + Bid metrics | `rtb_bidstream` |
+| # | Report | Purpose | Key Fields | Table |
+|---|--------|---------|------------|-------|
+| 1 | **catscan-bidsinauction** | Bid metrics by creative | Creative ID, Bids in auction, Auctions won | `rtb_daily` |
+| 2 | **catscan-quality** | Quality/billing data | Billing ID, Reached queries, Impressions | `rtb_daily` |
+| 3 | **catscan-funnel-geo** | Bidstream by region | Country, Bid requests, Bids | `rtb_bidstream` |
+| 4 | **catscan-funnel-publishers** | Bidstream by publisher | Publisher ID + Bid metrics | `rtb_bidstream` |
+| 5 | **catscan-bid-filtering** | Bid filtering reasons | Bid filtering status, Filtered bids | `rtb_bid_filtering` |
 
-### Why 3 Reports?
+### Why 5 Reports?
 
-Google's limitation: *"Mobile app ID is not compatible with [Bid requests]..."*
+Google's limitation: *"Billing ID is not compatible with [Bid requests]..."*
 
-- To get **App/Creative detail** → you lose Bid request metrics
-- To get **Bid request metrics** → you lose App/Creative detail
-- Cat-Scan **joins them** by date + region to give you the full picture
+- To get **Billing ID + spend** → you lose bid request metrics
+- To get **Bid request metrics** → you lose Billing ID
+- **JOIN Strategy:** Cat-Scan joins CSV #1 and #2 on (Day, Creative ID) to reconstruct per-billing_id funnel metrics
+
+### Data Quality Flags
+
+All data has a `data_quality` column:
+- **`production`** - UTC data (real analytics)
+- **`legacy`** - Pre-UTC data (wrong timezone, keep for development only)
+- **`sample`** - Manually marked sample data
+
+> **Note:** Run migrations 016 and 017 to add data_quality support and rename rtb_funnel → rtb_bidstream.
 
 ### Quick Reference
 
-**Report 1 - Performance Detail:**
+**Report 1 - Bids in Auction (catscan-bidsinauction):**
 ```
-Dimensions: Day, Billing ID, Creative ID, Creative size, Region, Publisher ID, Mobile app ID
+Dimensions: Day, Hour, Buyer account ID, Creative ID, Region, Platform, Publisher ID
+Metrics: Bids, Bids in auction, Auctions won
+```
+
+**Report 2 - Quality (catscan-quality):**
+```
+Dimensions: Day, Hour, Buyer account ID, Billing ID, Creative ID, Region, Platform
 Metrics: Reached queries, Impressions, Clicks, Spend
 ```
 
-**Report 2 - RTB Funnel (Regional):**
+**Report 3 - Funnel Geo (catscan-funnel-geo):**
 ```
-Dimensions: Day, Region, Buyer account ID
+Dimensions: Day, Hour, Buyer account ID, Region
 Metrics: Bid requests, Inventory matches, Reached queries, Bids, Bids in auction, Auctions won, Impressions
 ```
 
-**Report 3 - RTB Funnel (Publishers):**
+**Report 4 - Funnel Publishers (catscan-funnel-publishers):**
 ```
-Dimensions: Day, Region, Buyer account ID, Publisher ID, Publisher name
-Metrics: Same as Report 2
+Dimensions: Day, Hour, Buyer account ID, Region, Publisher ID, Publisher name
+Metrics: Same as Report 3
+```
+
+**Report 5 - Bid Filtering (catscan-bid-filtering):**
+```
+Dimensions: Day, Hour, Buyer account ID, Bid filtering status, Creative ID
+Metrics: Filtered bids
 ```
 
 > **Efficiency Calculation:** `Impressions / Reached Queries`
@@ -367,11 +395,14 @@ DATABASE_PATH=~/.catscan/catscan.db
 - Creative sync from Google API
 - Multi-seat buyer account support
 - Efficiency analysis with recommendations
-- CSV import (CLI and UI)
+- CSV import (CLI and UI) with 5 report types
 - Gmail auto-import (daily cron)
 - Campaign clustering
-- RTB funnel visualization
+- RTB bidstream visualization (bid_requests → impressions)
 - Video thumbnail generation
+- UTC timezone standardization
+- Data quality flagging (legacy vs production data)
+- Per-billing_id funnel metrics via JOIN strategy
 
 ### Roadmap
 

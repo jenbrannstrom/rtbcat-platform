@@ -2,6 +2,76 @@
 
 All notable changes to Cat-Scan are documented in this file.
 
+## [17.0.0] - 2026-01-13
+
+### Phase 17: RTB Bidstream & UTC Standardization
+
+Major data model improvements for accurate analytics and clearer naming.
+
+### Breaking Changes
+
+- **Table renamed**: `rtb_funnel` → `rtb_bidstream`
+  - Better describes the bid pipeline data (bid_requests → bids → auctions_won → impressions)
+  - All indexes and views updated accordingly
+- **CSV naming convention changed**: All reports must now use UTC timezone
+  - Format: `catscan-{type}-{account_id}-{period}-UTC`
+  - Example: `catscan-rtb-pipeline-1487810529-yesterday-UTC`
+
+### Added
+
+- **Migration 016**: Renames rtb_funnel → rtb_bidstream
+  - Recreates all indexes with proper naming (idx_rtb_bidstream_*)
+  - Updates views: v_publisher_waste, v_platform_efficiency, v_hourly_patterns
+- **Migration 017**: Adds data_quality column
+  - Marks all existing data as 'legacy' (pre-UTC timezone issues)
+  - New imports default to 'production' quality
+  - Adds production-only views: v_rtb_daily_production, v_rtb_bidstream_production
+- **JOIN strategy for per-billing_id funnel metrics**
+  - Joins catscan-bidsinauction (has bid metrics) with catscan-quality (has billing_id) on (date, creative_id)
+  - Enables billing_id breakdown of bid pipeline metrics that Google's API doesn't allow directly
+- **5 CSV report types now documented**:
+  1. catscan-bidsinauction - Bid metrics by creative
+  2. catscan-quality - Quality/billing data
+  3. catscan-funnel-geo - Bidstream by region
+  4. catscan-funnel-publishers - Bidstream by publisher
+  5. catscan-bid-filtering - Bid filtering reasons
+
+### Data Quality Values
+
+| Value | Description |
+|-------|-------------|
+| `production` | UTC data (real analytics) - default for new imports |
+| `legacy` | Pre-UTC data (wrong timezone) - marked by migration 017 |
+| `sample` | Manually marked sample data |
+
+### Migration Steps
+
+```bash
+# 1. Backup first
+cp ~/.catscan/catscan.db ~/.catscan/catscan.db.backup_v16
+
+# 2. Run migrations
+sqlite3 ~/.catscan/catscan.db < migrations/016_rename_rtb_funnel_to_bidstream.sql
+sqlite3 ~/.catscan/catscan.db < migrations/017_mark_legacy_timezone_data.sql
+
+# 3. Verify
+sqlite3 ~/.catscan/catscan.db "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'rtb%';"
+# Should show: rtb_daily, rtb_bidstream, rtb_bid_filtering, rtb_quality
+```
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `migrations/016_rename_rtb_funnel_to_bidstream.sql` | New migration |
+| `migrations/017_mark_legacy_timezone_data.sql` | New migration |
+| `api/routers/analytics/rtb_bidstream.py` | Renamed from rtb_funnel.py, JOIN logic added |
+| `analytics/rtb_bidstream_analyzer.py` | Renamed from rtb_funnel_analyzer.py |
+| `qps/csv_report_types.py` | Updated naming convention, UTC requirement |
+| `DATA_MODEL.md` | CSV Import Reference section, JOIN strategy docs |
+
+---
+
 ## [12.0.0] - 2025-12-03
 
 ### Phase 12: Schema Cleanup - Single Source of Truth
