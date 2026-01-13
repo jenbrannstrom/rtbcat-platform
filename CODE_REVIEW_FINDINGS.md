@@ -224,7 +224,7 @@ rtbcat-platform/
 **Database has data:**
 - 1.3GB at `/home/rtbcat/.catscan/catscan.db`
 - rtb_daily: 120,363 rows
-- rtb_funnel: 2,717,041 rows
+- rtb_bidstream: 2,717,041 rows
 - Tuky has 5,495 rows across 7 billing_ids with real metrics
 
 **The Bug:** `/analytics/rtb-funnel/configs` endpoint uses "most recently synced" bidder_id instead of respecting the selected buyer seat.
@@ -233,7 +233,7 @@ rtbcat-platform/
 
 **1. Backend - Add buyer_id param:**
 
-File: `api/routers/analytics/rtb_funnel.py`
+File: `api/routers/analytics/rtb_bidstream.py`
 ```python
 @router.get("/analytics/rtb-funnel/configs")
 async def get_config_performance(
@@ -290,7 +290,7 @@ File: `dashboard/src/app/settings/accounts/components/GmailReportsTab.tsx`
 
 | File | Change |
 |------|--------|
-| `api/routers/analytics/rtb_funnel.py` | Add `buyer_id` param |
+| `api/routers/analytics/rtb_bidstream.py` | Add `buyer_id` param |
 | `api/routers/analytics/common.py` | Add `get_valid_billing_ids_for_buyer()` |
 | `dashboard/src/lib/api/analytics.ts` | Add `buyerId` param |
 | `dashboard/src/app/page.tsx` | Pass `selectedBuyerId` |

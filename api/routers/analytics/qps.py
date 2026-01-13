@@ -224,7 +224,7 @@ async def get_qps_optimization_report(
     Get comprehensive QPS optimization report with actionable recommendations.
 
     This endpoint JOINs data from:
-    - rtb_funnel (bid pipeline metrics)
+    - rtb_bidstream (bid pipeline metrics)
     - rtb_daily (creative/app performance)
     - rtb_bid_filtering (bid filtering reasons)
     - rtb_quality (fraud/viewability signals)
@@ -259,7 +259,7 @@ async def get_publisher_waste(
     """
     Get publishers ranked by QPS waste.
 
-    JOINs rtb_funnel + rtb_daily to calculate:
+    JOINs rtb_bidstream + rtb_daily to calculate:
     - Bid requests vs auctions won
     - Waste percentage
     - Win rate
