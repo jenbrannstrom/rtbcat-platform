@@ -161,9 +161,9 @@ def ensure_table_exists(cursor, table_name: str):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_daily_billing ON rtb_daily(billing_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_daily_creative ON rtb_daily(creative_id)")
 
-    elif table_name == "rtb_funnel":
+    elif table_name == "rtb_bidstream":
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS rtb_funnel (
+            CREATE TABLE IF NOT EXISTS rtb_bidstream (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 metric_date DATE NOT NULL,
                 hour INTEGER DEFAULT 0,
@@ -189,8 +189,8 @@ def ensure_table_exists(cursor, table_name: str):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_funnel_date ON rtb_funnel(metric_date)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_funnel_country ON rtb_funnel(country)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_date ON rtb_bidstream(metric_date)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_country ON rtb_bidstream(country)")
 
     elif table_name == "rtb_bid_filtering":
         cursor.execute("""
@@ -339,21 +339,21 @@ def import_to_rtb_daily(
         conn.close()
 
 
-def import_to_rtb_funnel(
+def import_to_rtb_bidstream(
     csv_path: str,
     mapping: MappingResult,
     db_path: str,
     batch_id: str,
     result: UnifiedImportResult
 ):
-    """Import data to rtb_funnel table."""
+    """Import data to rtb_bidstream table."""
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
     # Check if table exists, if not create it
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='rtb_funnel'")
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='rtb_bidstream'")
     if not cursor.fetchone():
-        ensure_table_exists(cursor, "rtb_funnel")
+        ensure_table_exists(cursor, "rtb_bidstream")
 
     hash_keys = ["metric_date", "hour", "country", "buyer_account_id", "publisher_id"]
     min_date, max_date = None, None
@@ -398,7 +398,7 @@ def import_to_rtb_funnel(
 
                     try:
                         cursor.execute("""
-                            INSERT INTO rtb_funnel (
+                            INSERT INTO rtb_bidstream (
                                 metric_date, hour, country, buyer_account_id, publisher_id, publisher_name,
                                 inventory_matches, bid_requests, successful_responses, reached_queries,
                                 bids, bids_in_auction, auctions_won, impressions, clicks,
@@ -583,8 +583,8 @@ def unified_import(
     # Import based on target table
     if target_table == "rtb_daily":
         import_to_rtb_daily(csv_path, mapping, db_path, result.batch_id, result)
-    elif target_table == "rtb_funnel":
-        import_to_rtb_funnel(csv_path, mapping, db_path, result.batch_id, result)
+    elif target_table == "rtb_bidstream":
+        import_to_rtb_bidstream(csv_path, mapping, db_path, result.batch_id, result)
     elif target_table == "rtb_bid_filtering":
         import_to_rtb_bid_filtering(csv_path, mapping, db_path, result.batch_id, result)
     else:

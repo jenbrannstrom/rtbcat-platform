@@ -1,7 +1,7 @@
 """QPS Optimizer - JOIN queries for full QPS optimization analysis.
 
 This module provides the QPSOptimizer class that joins data across:
-- rtb_funnel (bid pipeline metrics)
+- rtb_bidstream (bid pipeline metrics)
 - rtb_daily (creative/app performance)
 - rtb_bid_filtering (bid filtering reasons)
 - rtb_quality (fraud/viewability signals)
@@ -77,7 +77,7 @@ class QPSOptimizer:
                     THEN 100.0 * SUM(f.auctions_won) / SUM(f.bids)
                     ELSE 0
                 END as win_rate_pct
-            FROM rtb_funnel f
+            FROM rtb_bidstream f
             LEFT JOIN rtb_daily d ON f.metric_date = d.metric_date
                 AND f.country = d.country
                 AND f.publisher_id = d.publisher_id
@@ -136,7 +136,7 @@ class QPSOptimizer:
                     THEN 100.0 * SUM(f.auctions_won) / SUM(f.bids)
                     ELSE 0
                 END as win_rate_pct
-            FROM rtb_funnel f
+            FROM rtb_bidstream f
             LEFT JOIN rtb_daily d ON f.metric_date = d.metric_date
                 AND f.country = d.country
                 AND f.platform = d.platform
@@ -204,7 +204,7 @@ class QPSOptimizer:
                     THEN 100.0 * SUM(auctions_won) / SUM(bids)
                     ELSE 0
                 END as win_rate_pct
-            FROM rtb_funnel
+            FROM rtb_bidstream
             WHERE metric_date >= date('now', ?)
               AND hour IS NOT NULL
               {bidder_filter}
@@ -312,7 +312,7 @@ class QPSOptimizer:
                     THEN 100.0 * SUM(reached_queries) / SUM(inventory_matches)
                     ELSE 0
                 END as reach_rate_pct
-            FROM rtb_funnel
+            FROM rtb_bidstream
             WHERE metric_date >= date('now', ?)
               AND country IS NOT NULL
               {bidder_filter}

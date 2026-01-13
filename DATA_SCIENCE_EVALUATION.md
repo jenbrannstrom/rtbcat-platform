@@ -62,8 +62,8 @@ However, the app **cannot** optimize **bid prices** because Google's CSV exports
 | Report | Table | Key Metrics | Critical for Optimization? |
 |--------|-------|-------------|---------------------------|
 | Performance Detail | `rtb_daily` | Reached, Impressions, Clicks, Spend | ✅ Yes - revenue attribution |
-| RTB Funnel (Geo) | `rtb_funnel` | Full bid pipeline by country | ✅ Yes - funnel analysis |
-| RTB Funnel (Publisher) | `rtb_funnel` | Full bid pipeline by publisher | ✅ Yes - publisher quality review |
+| RTB Funnel (Geo) | `rtb_bidstream` | Full bid pipeline by country | ✅ Yes - funnel analysis |
+| RTB Funnel (Publisher) | `rtb_bidstream` | Full bid pipeline by publisher | ✅ Yes - publisher quality review |
 | Bid Filtering | `rtb_bid_filtering` | Why bids filtered | ⚠️ Optional - policy debugging |
 | Quality Signals | `rtb_quality` | Non-human traffic rate, viewability | ⚠️ Optional - traffic quality review |
 
@@ -127,12 +127,12 @@ impressions, spend                      inventory_matches
 
 | Decision | Required Metrics | Available? | Source |
 |----------|------------------|------------|--------|
-| Exclude publisher X | Publisher win rate, traffic quality, viewability | ✅ Yes | rtb_funnel + rtb_quality |
-| Exclude geo X | Geo win rate, spend efficiency | ✅ Yes | rtb_funnel + rtb_daily |
+| Exclude publisher X | Publisher win rate, traffic quality, viewability | ✅ Yes | rtb_bidstream + rtb_quality |
+| Exclude geo X | Geo win rate, spend efficiency | ✅ Yes | rtb_bidstream + rtb_daily |
 | Add creative size X | Size request volume, coverage gap | ✅ Yes | rtb_daily |
 | Remove size X | Size inefficiency rate | ✅ Yes | rtb_daily |
 | Pause creative X | Creative impressions = 0 with reached > 0 | ✅ Yes | rtb_daily |
-| Hour dayparting | Hourly bid/win patterns | ✅ Yes | rtb_funnel (with Hour) |
+| Hour dayparting | Hourly bid/win patterns | ✅ Yes | rtb_bidstream (with Hour) |
 | Platform optimization | Platform win rate | ⚠️ Partial | Needs Platform dimension |
 | App vs Web strategy | Environment split | ⚠️ Partial | Needs Environment dimension |
 | Bid price optimization | Bid price vs win rate | ❌ No | Not in exports |
@@ -225,7 +225,7 @@ BIDDING DECISIONS (Continuous: How much to bid)
 
 | Engine | Purpose | Data Used | Quality |
 |--------|---------|-----------|---------|
-| `QPSOptimizer` | Full optimization report | rtb_funnel + rtb_daily + rtb_quality | ✅ Excellent |
+| `QPSOptimizer` | Full optimization report | rtb_bidstream + rtb_daily + rtb_quality | ✅ Excellent |
 | `WasteAnalyzer` | Size coverage gaps | creatives + traffic | ✅ Excellent |
 | `RecommendationEngine` | Generate actionable recs | All sources | ✅ Excellent |
 | `PretargetingRecommender` | Optimal config generation | creatives + performance | ✅ Good |

@@ -156,8 +156,8 @@ Cat-Scan requires **3 separate CSV reports** from Google Authorized Buyers due t
 | Report | Purpose | Key Fields | Table |
 |--------|---------|------------|-------|
 | **Performance Detail** | Creative/Size/App data | Creative ID, Size, App ID, Publisher | `rtb_daily` |
-| **RTB Funnel (Regional)** | Bid pipeline by region | Bid requests, Bids, Auctions won | `rtb_funnel` |
-| **RTB Funnel (Publishers)** | Bid pipeline by publisher | Publisher ID + Bid metrics | `rtb_funnel` |
+| **RTB Funnel (Regional)** | Bid pipeline by region | Bid requests, Bids, Auctions won | `rtb_bidstream` |
+| **RTB Funnel (Publishers)** | Bid pipeline by publisher | Publisher ID + Bid metrics | `rtb_bidstream` |
 
 ### Why 3 Reports?
 

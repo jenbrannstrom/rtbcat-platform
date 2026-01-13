@@ -67,10 +67,10 @@ Examples:
 gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-db '.tables'"
 
 # Show table schema
-gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-db '.schema rtb_funnel'"
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-db '.schema rtb_bidstream'"
 
 # Query data
-gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-db 'SELECT * FROM rtb_funnel LIMIT 10'"
+gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-db 'SELECT * FROM rtb_bidstream LIMIT 10'"
 
 # Aggregations
 gcloud compute ssh catscan-production --zone=europe-west1-b -- "catscan-db 'SELECT COUNT(*) FROM creatives'"

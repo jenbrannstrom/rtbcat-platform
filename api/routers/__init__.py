@@ -18,7 +18,7 @@ from .admin import router as admin_router
 # Analytics sub-routers (refactored from monolithic analytics.py)
 from .analytics import (
     waste_router,
-    rtb_funnel_router,
+    rtb_bidstream_router,
     qps_router as analytics_qps_router,
     traffic_router,
     spend_router,
@@ -41,7 +41,7 @@ __all__ = [
     "admin_router",
     # Analytics sub-routers
     "waste_router",
-    "rtb_funnel_router",
+    "rtb_bidstream_router",
     "analytics_qps_router",
     "traffic_router",
     "spend_router",

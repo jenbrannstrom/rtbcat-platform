@@ -206,14 +206,14 @@ Gmail (scheduled reports)          Manual Upload
                        │
         ┌──────────────┼──────────────┐
         ▼              ▼              ▼
-    rtb_daily     rtb_funnel    rtb_quality
+    rtb_daily     rtb_bidstream    rtb_quality
    (Performance)  (Bid pipeline) (Traffic quality)
 ```
 
 ### 3. Analysis Flow
 
 ```
-    rtb_daily + rtb_funnel + creatives
+    rtb_daily + rtb_bidstream + creatives
                     │
                     ▼
     ┌───────────────────────────────┐
@@ -244,7 +244,7 @@ Gmail (scheduled reports)          Manual Upload
 | **Creative Management** | creatives, clusters, thumbnail_status | Store creative metadata and thumbnails |
 | **Campaign Management** | campaigns, ai_campaigns, creative_campaigns, campaign_creatives, campaign_daily_summary | Organize creatives into campaigns |
 | **Service Accounts & Seats** | service_accounts, buyer_seats, seats | Multi-account/multi-seat support (4 seats across 2 accounts) |
-| **RTB Performance** | rtb_daily, rtb_funnel, rtb_bid_filtering, rtb_quality | CSV import data |
+| **RTB Performance** | rtb_daily, rtb_bidstream, rtb_bid_filtering, rtb_quality | CSV import data |
 | **Pretargeting** | pretargeting_configs, pretargeting_history, pretargeting_snapshots, pretargeting_pending_changes | Pretargeting management |
 | **Import Tracking** | import_history, daily_upload_summary, import_anomalies | Track CSV imports |
 | **User Authentication** | users, user_sessions, login_attempts, audit_log | Multi-user support |

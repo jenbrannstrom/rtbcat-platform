@@ -14,7 +14,7 @@ THE 5 SUPPORTED REPORT TYPES:
                  Country, Publisher ID, Mobile app ID, Mobile app name
    - Metrics: Reached queries, Impressions, Clicks, Spend
 
-2. RTB FUNNEL - GEO ONLY (rtb_funnel table)
+2. RTB FUNNEL - GEO ONLY (rtb_bidstream table)
    - Purpose: Full bid pipeline metrics by country
    - Distinguishing columns: Bid requests (no Publisher ID)
    - What you CAN'T include: Creative ID, Creative size, Mobile app ID
@@ -22,7 +22,7 @@ THE 5 SUPPORTED REPORT TYPES:
    - Metrics: Bid requests, Inventory matches, Successful responses, Reached queries,
               Bids, Bids in auction, Auctions won, Impressions, Clicks
 
-3. RTB FUNNEL - WITH PUBLISHERS (rtb_funnel table)
+3. RTB FUNNEL - WITH PUBLISHERS (rtb_bidstream table)
    - Purpose: Publisher-level bid pipeline (for publisher optimization)
    - Distinguishing columns: Bid requests + Publisher ID
    - What you CAN'T include: Creative ID, Creative size, Mobile app ID
@@ -62,7 +62,7 @@ DETECTION PRIORITY:
 
 JOINING THE DATA:
 =================
-- rtb_daily + rtb_funnel JOIN ON (metric_date, country)
+- rtb_daily + rtb_bidstream JOIN ON (metric_date, country)
 - For publisher analysis: JOIN ON (metric_date, country, publisher_id)
 
 See DATA_MODEL.md for full column specifications and sample data.
@@ -76,8 +76,8 @@ from typing import Dict, List, Optional, Set
 class ReportType(Enum):
     """The 5 CSV report types for QPS optimization."""
     PERFORMANCE_DETAIL = "performance_detail"      # rtb_daily - has creative/app/size
-    RTB_FUNNEL_GEO = "rtb_funnel_geo"             # rtb_funnel - geo only, full pipeline
-    RTB_FUNNEL_PUBLISHER = "rtb_funnel_publisher"  # rtb_funnel - with publisher, full pipeline
+    RTB_FUNNEL_GEO = "rtb_bidstream_geo"             # rtb_bidstream - geo only, full pipeline
+    RTB_FUNNEL_PUBLISHER = "rtb_bidstream_publisher"  # rtb_bidstream - with publisher, full pipeline
     BID_FILTERING = "bid_filtering"                # rtb_bid_filtering - why bids fail
     QUALITY_SIGNALS = "quality_signals"            # rtb_quality - fraud/viewability signals
     UNKNOWN = "unknown"
@@ -118,7 +118,7 @@ PERFORMANCE_DETAIL_OPTIONAL = {
     "measurable_impressions": ["Active View measurable", "Active view measurable", "#Active View measurable"],
 }
 
-# Report 2 & 3: RTB Funnel (goes to rtb_funnel)
+# Report 2 & 3: RTB Funnel (goes to rtb_bidstream)
 RTB_FUNNEL_REQUIRED = {
     "day": ["#Day", "Day", "#Date", "Date"],
     "country": ["Country", "#Country"],
@@ -213,7 +213,7 @@ class ReportDetectionResult:
     """Result of detecting which report type a CSV is."""
     report_type: ReportType
     confidence: str  # "high", "medium", "low"
-    target_table: str  # "rtb_daily" or "rtb_funnel"
+    target_table: str  # "rtb_daily" or "rtb_bidstream"
 
     columns_found: List[str] = field(default_factory=list)
     columns_mapped: Dict[str, str] = field(default_factory=dict)
@@ -231,11 +231,11 @@ class ReportDetectionResult:
         elif self.report_type == ReportType.RTB_FUNNEL_GEO:
             self.report_name = "RTB Funnel (Geo)"
             self.description = "Bid pipeline by country"
-            self.target_table = "rtb_funnel"
+            self.target_table = "rtb_bidstream"
         elif self.report_type == ReportType.RTB_FUNNEL_PUBLISHER:
             self.report_name = "RTB Funnel (Publisher)"
             self.description = "Bid pipeline by publisher"
-            self.target_table = "rtb_funnel"
+            self.target_table = "rtb_bidstream"
         elif self.report_type == ReportType.BID_FILTERING:
             self.report_name = "Bid Filtering"
             self.description = "Bid filtering reasons (why bids fail)"
@@ -334,7 +334,7 @@ def detect_report_type(header: List[str]) -> ReportDetectionResult:
         else:
             result.report_type = ReportType.RTB_FUNNEL_GEO
 
-        result.target_table = "rtb_funnel"
+        result.target_table = "rtb_bidstream"
         result.confidence = "high"
 
         # Map columns
@@ -441,7 +441,7 @@ JOIN STRATEGY: Join Report 1 + Report 2 on (Day, Creative ID) to get:
 REPORT 3: "catscan-funnel-geo" (Full bid pipeline by country)
 --------------------------------------------------------------------------------
 Purpose: Full bid funnel from Bid requests -> Impressions by geo
-Target Table: rtb_funnel
+Target Table: rtb_bidstream
 Key Feature: Has BID REQUESTS (top of funnel) but NO Creative/Billing ID
 
 DIMENSIONS:
@@ -468,7 +468,7 @@ WARNING: CANNOT add Creative ID, Billing ID, or App ID - Google blocks this!
 REPORT 4: "catscan-funnel-publishers" (Full bid pipeline by publisher)
 --------------------------------------------------------------------------------
 Purpose: Publisher-level bid funnel for publisher optimization
-Target Table: rtb_funnel
+Target Table: rtb_bidstream
 Key Feature: Has Publisher ID + full funnel
 
 DIMENSIONS:
