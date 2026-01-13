@@ -1,7 +1,7 @@
 # GCP Migration Plan for Cat-Scan
 
 **Created:** January 6, 2026
-**Updated:** January 12, 2026
+**Updated:** January 13, 2026
 **Status:** Ready to Execute
 **Current State:** AWS EC2 (Frankfurt) with SQLite
 **Target State:** GCP e2-micro (europe-west1) - **$6/month**
@@ -506,6 +506,33 @@ gcloud compute scp ~/.catscan/catscan.db \
 gcloud compute ssh catscan-production --zone=europe-west1-b -- \
   "sudo mv /tmp/catscan.db /home/catscan/.catscan/ && sudo chown catscan:catscan /home/catscan/.catscan/catscan.db"
 ```
+
+### Step 5b: Run Database Migrations (Required for v17+)
+
+After migrating the database file, run the latest migrations:
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
+
+# Run migrations 016 and 017
+cd /opt/rtbcat-platform
+sqlite3 ~/.catscan/catscan.db < migrations/016_rename_rtb_funnel_to_bidstream.sql
+sqlite3 ~/.catscan/catscan.db < migrations/017_mark_legacy_timezone_data.sql
+```
+
+**What these migrations do:**
+
+| Migration | Purpose |
+|-----------|---------|
+| **016** | Renames `rtb_funnel` → `rtb_bidstream` (better describes bid pipeline data) |
+| **017** | Adds `data_quality` column to distinguish legacy (pre-UTC) data from production data |
+
+**Data quality values:**
+- `production` - UTC data (real analytics, default for new imports)
+- `legacy` - Pre-UTC data (kept for development, marked by migration 017)
+- `sample` - Manually marked sample data
+
+> **Note:** After running these migrations, all existing data is marked as `legacy`. New UTC imports will be `production` quality.
 
 ### Step 6: Update DNS
 
