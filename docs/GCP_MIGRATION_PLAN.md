@@ -106,6 +106,8 @@ SQLite is an embedded database - it's a C library that reads/writes directly to 
 
 **Note:** If you experience slowness, upgrade to e2-small ($13/month) with one command.
 
+**CSV Import Details:** Cat-Scan supports 5 CSV report types from Google Authorized Buyers. See [DATA_MODEL.md](../DATA_MODEL.md#csv-import-reference) for complete column specifications, sample data, and detection logic.
+
 ### Pros
 | Advantage | Explanation |
 |-----------|-------------|

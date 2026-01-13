@@ -2,26 +2,283 @@
 
 This document describes the database schema for the RTBcat platform, a real-time bidding (RTB) analytics and creative management system using SQLite.
 
-## Recent Changes
+## Table of Contents
 
-| CSV Report Type         | Target Table      |
-|-------------------------|-------------------|
-| Funnel (geo/publishers) | rtb_funnel        |
-| Bids in Auction         | rtb_daily         |
-| Bid Filtering           | rtb_bid_filtering |
+1. [CSV Import Reference](#csv-import-reference)
+2. [Creative Management](#creative-management)
+3. [Campaign Management](#campaign-management)
+4. [Service Accounts & Buyer Seats](#service-accounts--buyer-seats)
+5. [RTB Performance & Analytics](#rtb-performance--analytics)
+6. [Pretargeting Configuration](#pretargeting-configuration)
+7. [Import & Upload Tracking](#import--upload-tracking)
+8. [User Authentication & Security](#user-authentication--security)
+9. [Lookup & Reference Tables](#lookup--reference-tables)
 
 ---
 
-## Table of Contents
+## CSV Import Reference
 
-1. [Creative Management](#creative-management)
-2. [Campaign Management](#campaign-management)
-3. [Service Accounts & Buyer Seats](#service-accounts--buyer-seats)
-4. [RTB Performance & Analytics](#rtb-performance--analytics)
-5. [Pretargeting Configuration](#pretargeting-configuration)
-6. [Import & Upload Tracking](#import--upload-tracking)
-7. [User Authentication & Security](#user-authentication--security)
-8. [Lookup & Reference Tables](#lookup--reference-tables)
+Cat-Scan imports **5 CSV report files** from Google Authorized Buyers. Sample files are located in `data/csv-reports/`.
+
+### Why Multiple Reports?
+
+Google Authorized Buyers has **field incompatibilities** that prevent getting all data in a single export:
+- To get Creative-level bid metrics, you lose "Bid requests" column
+- To get "Bid requests", you lose Creative detail
+- Publisher CAN be combined with Bid requests (but not Creative ID)
+
+### CSV Files and Target Tables
+
+| # | Filename | Target Table | Purpose |
+|---|----------|--------------|---------|
+| 1 | `catscan-bidsinauction-*` | `rtb_daily` | Creative-level performance with bid metrics |
+| 2 | `catscan-quality-*` | `rtb_daily` | Creative-level performance with viewability |
+| 3 | `catscan-funnel-geo-*` | `rtb_funnel` | Bid pipeline by country (hourly) |
+| 4 | `catscan-funnel-publishers-*` | `rtb_funnel` | Bid pipeline by publisher |
+| 5 | `catscan-bid-filtering-*` | `rtb_bid_filtering` | Why bids are rejected |
+
+---
+
+### CSV 1: catscan-bidsinauction (Bids in Auction)
+
+**Target Table:** `rtb_daily`
+**Purpose:** Creative-level performance with bid pipeline metrics
+
+#### Columns (exact order from sample)
+| # | Column Name | Maps To | Description |
+|---|-------------|---------|-------------|
+| 1 | #Day | `metric_date` | Date (MM/DD/YY format) |
+| 2 | Country | `country` | Country name (e.g., "Brazil") |
+| 3 | Creative ID | `creative_id` | Creative identifier |
+| 4 | Buyer account ID | `buyer_account_id` | Buyer account ID |
+| 5 | Bids in auction | `bids_in_auction` | Bids that entered auction |
+| 6 | Auctions won | `auctions_won` | Auctions won |
+| 7 | Bids | `bids` | Total bids submitted |
+| 8 | Reached queries | `reached_queries` | Queries that reached bidder |
+| 9 | Impressions | `impressions` | Impressions served |
+| 10 | Spend (buyer currency) | `spend_micros` | Spend in buyer currency |
+| 11 | Spend (bidder currency) | - | Spend in bidder currency |
+
+#### Sample Data (from `catscan-bidsinauction-1487810529-yesterday-sample`)
+```csv
+#Day,Country,Creative ID,Buyer account ID,Bids in auction,Auctions won,Bids,Reached queries,Impressions,Spend (buyer currency),Spend (bidder currency)
+1/11/26,Brazil,1912783031778279425,1487810529,11320,10847,11487,11210,9216,$4.16,$4.16
+1/11/26,Brazil,1929790482851430401,1487810529,0,0,30844,0,0,$0.00,$0.00
+```
+
+---
+
+### CSV 2: catscan-quality (Quality/Viewability)
+
+**Target Table:** `rtb_daily`
+**Purpose:** Creative-level performance with viewability metrics
+
+#### Columns (exact order from sample)
+| # | Column Name | Maps To | Description |
+|---|-------------|---------|-------------|
+| 1 | #Day | `metric_date` | Date (MM/DD/YY format) |
+| 2 | Billing ID | `billing_id` | Pretargeting config ID |
+| 3 | Creative ID | `creative_id` | Creative identifier |
+| 4 | Creative size | `creative_size` | Size (e.g., "300x250", "Native") |
+| 5 | Creative format | `creative_format` | Format (e.g., "Display") |
+| 6 | Reached queries | `reached_queries` | Queries that reached bidder |
+| 7 | Impressions | `impressions` | Impressions served |
+| 8 | Spend (buyer currency) | `spend_micros` | Spend amount |
+| 9 | Active view viewable | `viewable_impressions` | Viewable impressions |
+| 10 | Active view measurable | `measurable_impressions` | Measurable impressions |
+
+#### Sample Data (from `catscan-quality-1487810529-yesterday-sample`)
+```csv
+#Day,Billing ID,Creative ID,Creative size,Creative format,Reached queries,Impressions,Spend (buyer currency),Active view viewable,Active view measurable
+1/5/26,158610251694,1987702299774660610,Native,Display,5474,3147,$0.85,2835,3134
+1/5/26,158610251694,1987702299774660613,300x250,Display,3339,1385,$0.37,1085,1384
+1/5/26,158610251694,1987702299774660614,320x50,Display,18275,9900,$2.68,8901,9895
+```
+
+---
+
+### CSV 3: catscan-funnel-geo (Funnel by Geography)
+
+**Target Table:** `rtb_funnel`
+**Purpose:** Full bid pipeline metrics by country and hour
+
+#### Columns (exact order from sample)
+| # | Column Name | Maps To | Description |
+|---|-------------|---------|-------------|
+| 1 | #Day | `metric_date` | Date (MM/DD/YY format) |
+| 2 | Country | `country` | Country name |
+| 3 | Hour | `hour` | Hour of day (0-23) |
+| 4 | Bid requests | `bid_requests` | Bid requests sent |
+| 5 | Inventory matches | `inventory_matches` | Inventory match count |
+| 6 | Successful responses | `successful_responses` | Valid bid responses |
+| 7 | Bids | `bids` | Total bids submitted |
+| 8 | Bids in auction | `bids_in_auction` | Bids that entered auction |
+| 9 | Auctions won | `auctions_won` | Auctions won |
+| 10 | Impressions | `impressions` | Impressions served |
+| 11 | Clicks | `clicks` | Clicks received |
+
+#### Sample Data (from `catscan-funnel-geo-1487810529-yesterday-sample`)
+```csv
+#Day,Country,Hour,Bid requests,Inventory matches,Successful responses,Bids,Bids in auction,Auctions won,Impressions,Clicks
+1/5/26,Bahrain,0,0,950,0,0,0,0,0,0
+1/5/26,Bahrain,1,10,2000,10,0,0,0,0,0
+1/5/26,Bahrain,2,0,1530,0,0,0,0,0,0
+```
+
+**Note:** This report does NOT have `Reached queries` - that metric is incompatible with `Bid requests`.
+
+---
+
+### CSV 4: catscan-funnel-publishers (Funnel by Publisher)
+
+**Target Table:** `rtb_funnel`
+**Purpose:** Bid pipeline metrics by publisher
+
+#### Columns (exact order from sample)
+| # | Column Name | Maps To | Description |
+|---|-------------|---------|-------------|
+| 1 | #Day | `metric_date` | Date (MM/DD/YY format) |
+| 2 | Hour | `hour` | Hour of day (0-23) |
+| 3 | Country | `country` | Country name |
+| 4 | Publisher ID | `publisher_id` | Publisher identifier |
+| 5 | Publisher name | `publisher_name` | Publisher display name |
+| 6 | Bid requests | `bid_requests` | Bid requests sent |
+| 7 | Inventory matches | `inventory_matches` | Inventory match count |
+| 8 | Successful responses | `successful_responses` | Valid bid responses |
+| 9 | Reached queries | `reached_queries` | Queries that reached bidder |
+| 10 | Bids | `bids` | Total bids submitted |
+| 11 | Bids in auction | `bids_in_auction` | Bids that entered auction |
+| 12 | Auctions won | `auctions_won` | Auctions won |
+| 13 | Impressions | `impressions` | Impressions served |
+| 14 | Clicks | `clicks` | Clicks received |
+
+#### Sample Data (from `catscan-funnel-publishers-1487810529-yesterday-sample`)
+```csv
+#Day,Hour,Country,Publisher ID,Publisher name,Bid requests,Inventory matches,Successful responses,Reached queries,Bids,Bids in auction,Auctions won,Impressions,Clicks
+1/11/26,0,Brazil,AdMob + AdSense,AdMob + AdSense,10720990,54677450,10718560,2776,4176,2894,2450,1714,1
+1/11/26,0,Brazil,pub-0054876817521062,Zynga DFP,3940,20390,3940,5,5,5,5,4,0
+```
+
+---
+
+### CSV 5: catscan-bid-filtering (Bid Filtering Reasons)
+
+**Target Table:** `rtb_bid_filtering`
+**Purpose:** Understand why bids are being filtered/rejected
+
+#### Columns (exact order from sample)
+| # | Column Name | Maps To | Description |
+|---|-------------|---------|-------------|
+| 1 | #Day | `metric_date` | Date (MM/DD/YY format) |
+| 2 | Country | `country` | Country name |
+| 3 | Creative ID | `creative_id` | Creative identifier |
+| 4 | Bid filtering reason | `filtering_reason` | Why bid was filtered |
+| 5 | Bids | `bids` | Number of filtered bids |
+
+#### Sample Data (from `catscan-bid-filtering-1487810529-yesterday-sample`)
+```csv
+#Day,Country,Creative ID,Bid filtering reason,Bids
+1/11/26,Brazil,1912783031778279425,Excluded product category detected,13
+1/11/26,Brazil,1912783031778279425,App excluded by publisher,7
+1/11/26,Brazil,1912783031778279425,Ad contains an unidentifiable vendor,147
+1/11/26,Brazil,1929790482851430401,Excluded sensitive category detected,313
+```
+
+#### Common Filtering Reasons (from sample data)
+- `Excluded product category detected`
+- `App excluded by publisher`
+- `Ad contains an unidentifiable vendor`
+- `Excluded sensitive category detected`
+
+---
+
+### Column Name Synonyms
+
+The importer uses flexible column mapping. The `#` prefix is optional:
+
+| Database Field | Accepted CSV Column Names |
+|---------------|---------------------------|
+| `metric_date` | #Day, Day, #Date, Date |
+| `billing_id` | Billing ID, #Billing ID |
+| `creative_id` | Creative ID, #Creative ID |
+| `creative_size` | Creative size, #Creative size |
+| `creative_format` | Creative format, #Creative format |
+| `country` | Country, #Country |
+| `publisher_id` | Publisher ID, #Publisher ID |
+| `publisher_name` | Publisher name, #Publisher name |
+| `bid_requests` | Bid requests, #Bid requests |
+| `bids` | Bids, #Bids |
+| `bids_in_auction` | Bids in auction, #Bids in auction |
+| `auctions_won` | Auctions won, #Auctions won |
+| `reached_queries` | Reached queries, #Reached queries |
+| `impressions` | Impressions, #Impressions |
+| `clicks` | Clicks, #Clicks |
+| `spend` | Spend (buyer currency), Spend (bidder currency) |
+| `viewable_impressions` | Active view viewable, #Active view viewable |
+| `measurable_impressions` | Active view measurable, #Active view measurable |
+| `filtering_reason` | Bid filtering reason, #Bid filtering reason |
+
+---
+
+### Detection Logic
+
+The importer auto-detects report type based on columns present:
+
+1. **Has `Bid filtering reason`?** → Bid Filtering → `rtb_bid_filtering`
+2. **Has `Creative ID`?** → Performance Detail → `rtb_daily`
+3. **Has `Bid requests`?** → RTB Funnel → `rtb_funnel`
+   - With `Publisher ID` → Funnel Publishers
+   - Without → Funnel Geo
+4. **Otherwise** → Unknown (import fails)
+
+---
+
+### JOIN Strategy for Per-Billing-ID Funnel Metrics
+
+Google blocks `Billing ID + Bid requests` in the same export. To get per-config funnel metrics:
+
+**Join CSV 1 + CSV 2 on (Day, Creative ID):**
+```sql
+SELECT
+    q.billing_id,
+    q.creative_id,
+    q.metric_date,
+    -- From catscan-quality (has Billing ID)
+    q.reached_queries,
+    q.impressions as quality_impressions,
+    q.spend_micros,
+    -- From catscan-bidsinauction (has bid metrics)
+    b.bids,
+    b.bids_in_auction,
+    b.auctions_won
+FROM rtb_daily q  -- quality rows (have billing_id)
+JOIN rtb_daily b  -- bidsinauction rows (have bid metrics)
+  ON q.metric_date = b.metric_date
+  AND q.creative_id = b.creative_id
+WHERE q.billing_id IS NOT NULL
+  AND b.bids_in_auction IS NOT NULL;
+```
+
+This gives you: **Billing ID + Bids + Bids in auction + Auctions won** per creative.
+
+---
+
+### Quality Signals / IVT Report (Optional - Not Yet Implemented)
+
+The system supports a **Quality Signals** report type for fraud/IVT analysis → `rtb_quality` table.
+
+**To create this report in Google AU Buyer:**
+1. Select dimension: **Bid requests** (this unlocks "Cost Transparency Metrics")
+2. Add dimensions: Day, Publisher ID, Country
+3. Add metrics from "Cost Transparency Metrics":
+   - Raw impressions
+   - Dedup impressions
+   - Pre-filtered impressions
+   - **IVT credited impressions** ← Key fraud signal
+   - Billed impressions
+   - Cost of dedup/pre-filtering/IVT
+
+No sample file currently exists. Create as `catscan-ivt-*` when ready.
 
 ---
 
