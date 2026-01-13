@@ -29,13 +29,17 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 
 ### CSV Files and Target Tables
 
-| # | Filename | Target Table | Purpose |
-|---|----------|--------------|---------|
-| 1 | `catscan-bidsinauction-*` | `rtb_daily` | Creative-level performance with bid metrics |
-| 2 | `catscan-quality-*` | `rtb_daily` | Creative-level performance with viewability |
-| 3 | `catscan-funnel-geo-*` | `rtb_bidstream` | Bid pipeline by country (hourly) |
-| 4 | `catscan-funnel-publishers-*` | `rtb_bidstream` | Bid pipeline by publisher |
-| 5 | `catscan-bid-filtering-*` | `rtb_bid_filtering` | Why bids are rejected |
+**Naming Convention:** `catscan-{type}-{account_id}-{period}-UTC`
+
+| # | Filename Pattern | Target Table | Purpose |
+|---|------------------|--------------|---------|
+| 1 | `catscan-bidsinauction-*-UTC` | `rtb_daily` | Creative-level performance with bid metrics |
+| 2 | `catscan-quality-*-UTC` | `rtb_daily` | Creative-level performance with viewability |
+| 3 | `catscan-rtb-pipeline-geo-*-UTC` | `rtb_bidstream` | Bid pipeline by country (hourly) |
+| 4 | `catscan-rtb-pipeline-publishers-*-UTC` | `rtb_bidstream` | Bid pipeline by publisher |
+| 5 | `catscan-bid-filtering-*-UTC` | `rtb_bid_filtering` | Why bids are rejected |
+
+**CRITICAL:** All reports must use UTC timezone. Data imported before 2026-01-14 is marked as `data_quality='legacy'` due to inconsistent timezones.
 
 ---
 
@@ -97,7 +101,7 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 
 ---
 
-### CSV 3: catscan-funnel-geo (Funnel by Geography)
+### CSV 3: catscan-rtb-pipeline-geo (Bidstream by Geography)
 
 **Target Table:** `rtb_bidstream`
 **Purpose:** Full bid pipeline metrics by country and hour
@@ -129,7 +133,7 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 
 ---
 
-### CSV 4: catscan-funnel-publishers (Funnel by Publisher)
+### CSV 4: catscan-rtb-pipeline-publishers (Bidstream by Publisher)
 
 **Target Table:** `rtb_bidstream`
 **Purpose:** Bid pipeline metrics by publisher
