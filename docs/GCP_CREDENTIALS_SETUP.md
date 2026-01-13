@@ -300,6 +300,8 @@ Token saved to `~/.catscan/credentials/gmail-token.json`
 python scripts/gmail_import.py --status
 ```
 
+**CSV Report Types:** The Gmail importer processes 5 different CSV report types from Google Authorized Buyers (Performance Detail, RTB Funnel Geo, RTB Funnel Publisher, Bid Filtering, Quality Signals). See [DATA_MODEL.md](../DATA_MODEL.md#csv-import-reference) for complete column specifications and sample data.
+
 ---
 
 ## Step 4: Verify Setup
