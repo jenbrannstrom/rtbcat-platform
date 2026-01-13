@@ -3,11 +3,12 @@
 Google Authorized Buyers has field incompatibilities that require MULTIPLE CSV exports
 to get complete QPS optimization data.
 
-THE 3 REQUIRED REPORTS:
-=======================
+THE 5 SUPPORTED REPORT TYPES:
+=============================
 
 1. PERFORMANCE DETAIL (rtb_daily table)
    - Purpose: Creative/Size/App-level performance
+   - Distinguishing columns: Creative ID + Billing ID
    - What you CAN'T include: Bid requests, Bids, Bids in auction, Auctions won
    - Dimensions: Day, Billing ID, Creative ID, Creative size, Creative format,
                  Country, Publisher ID, Mobile app ID, Mobile app name
@@ -15,30 +16,56 @@ THE 3 REQUIRED REPORTS:
 
 2. RTB FUNNEL - GEO ONLY (rtb_funnel table)
    - Purpose: Full bid pipeline metrics by country
-   - What you CAN'T include: Creative ID, Creative size, Mobile app ID, Publisher ID
+   - Distinguishing columns: Bid requests (no Publisher ID)
+   - What you CAN'T include: Creative ID, Creative size, Mobile app ID
    - Dimensions: Day, Country, Buyer account ID, Hour
    - Metrics: Bid requests, Inventory matches, Successful responses, Reached queries,
               Bids, Bids in auction, Auctions won, Impressions, Clicks
 
 3. RTB FUNNEL - WITH PUBLISHERS (rtb_funnel table)
    - Purpose: Publisher-level bid pipeline (for publisher optimization)
+   - Distinguishing columns: Bid requests + Publisher ID
    - What you CAN'T include: Creative ID, Creative size, Mobile app ID
    - Dimensions: Day, Country, Buyer account ID, Hour, Publisher ID, Publisher name
    - Metrics: Same as RTB Funnel Geo Only
 
-WHY 3 REPORTS?
-==============
+4. BID FILTERING (rtb_bid_filtering table)
+   - Purpose: Understand why bids are being filtered/rejected
+   - Distinguishing columns: Bid filtering reason
+   - Dimensions: Day, Country, Buyer account ID, Creative ID (optional)
+   - Metrics: Bids, Bids in auction, Opportunity cost
+
+5. QUALITY SIGNALS (rtb_quality table)
+   - Purpose: Fraud detection and viewability metrics by publisher
+   - Distinguishing columns: IVT credited impressions OR Pre-filtered impressions
+   - Dimensions: Day, Publisher ID, Publisher name, Country
+   - Metrics: Impressions, Pre-filtered, IVT credited, Billed, Measurable, Viewable
+
+WHY MULTIPLE REPORTS?
+=====================
 Google's error: "Mobile app ID is not compatible with [Bid requests], [Inventory matches]..."
 
 This means:
 - To get App-level data → you lose Bid request metrics
 - To get Bid request metrics → you lose App/Creative detail
 - To get Publisher + Bid metrics → separate from App data
+- Quality signals (IVT/viewability) require a separate report
+
+DETECTION PRIORITY:
+===================
+1. Has "Bid filtering reason"? → BID_FILTERING
+2. Has "IVT credited impressions" or "Pre-filtered impressions"? → QUALITY_SIGNALS
+3. Has "Creative ID"? → PERFORMANCE_DETAIL (even if bid metrics present)
+4. Has "Bid requests"? → RTB Funnel (Publisher if has Publisher ID, else Geo)
+5. Has "Impressions" only? → PERFORMANCE_DETAIL
+6. Otherwise → UNKNOWN
 
 JOINING THE DATA:
 =================
 - rtb_daily + rtb_funnel JOIN ON (metric_date, country)
 - For publisher analysis: JOIN ON (metric_date, country, publisher_id)
+
+See DATA_MODEL.md for full column specifications and sample data.
 """
 
 from dataclasses import dataclass, field
@@ -348,11 +375,11 @@ def detect_report_type(header: List[str]) -> ReportDetectionResult:
 
 REPORT_INSTRUCTIONS = """
 ================================================================================
-CAT-SCAN REQUIRED CSV REPORTS
+CAT-SCAN CSV REPORTS (5 REPORT TYPES)
 ================================================================================
 
-You need to create 3 DAILY scheduled reports in Google Authorized Buyers.
-This is required because Google has field incompatibilities.
+Cat-Scan supports 5 different CSV report types from Google Authorized Buyers.
+Create these as DAILY scheduled reports for complete analytics coverage.
 
 Go to: Authorized Buyers → Reporting → Scheduled Reports → New Report
 
@@ -360,6 +387,7 @@ Go to: Authorized Buyers → Reporting → Scheduled Reports → New Report
 REPORT 1: "catscan-performance" (Creative/App detail)
 --------------------------------------------------------------------------------
 Purpose: See which creatives, sizes, and apps are performing
+Target Table: rtb_daily
 
 DIMENSIONS (in this order):
   1. Day
@@ -368,15 +396,17 @@ DIMENSIONS (in this order):
   4. Creative size
   5. Creative format
   6. Country
-  7. Publisher ID        ← Can include this
-  8. Mobile app ID       ← Can include this
-  9. Mobile app name     ← Can include this
+  7. Publisher ID        (optional)
+  8. Mobile app ID       (optional)
+  9. Mobile app name     (optional)
 
 METRICS:
-  ✓ Reached queries
-  ✓ Impressions
-  ✓ Clicks
-  ✓ Spend (buyer currency)
+  * Reached queries
+  * Impressions
+  * Clicks
+  * Spend (buyer currency)
+  * Active View viewable (optional)
+  * Active View measurable (optional)
 
 Schedule: Daily, Yesterday
 Filename: catscan-performance
@@ -384,7 +414,8 @@ Filename: catscan-performance
 --------------------------------------------------------------------------------
 REPORT 2: "catscan-funnel-geo" (Bid pipeline by country)
 --------------------------------------------------------------------------------
-Purpose: Understand bid_requests → bids → wins conversion by geo
+Purpose: Understand bid_requests -> bids -> wins conversion by geo
+Target Table: rtb_funnel
 
 DIMENSIONS (in this order):
   1. Day
@@ -393,69 +424,109 @@ DIMENSIONS (in this order):
   4. Hour (optional)
 
 METRICS:
-  ✓ Bid requests         ← THE KEY METRIC
-  ✓ Inventory matches
-  ✓ Successful responses
-  ✓ Reached queries
-  ✓ Bids
-  ✓ Bids in auction
-  ✓ Auctions won
-  ✓ Impressions
-  ✓ Clicks
+  * Bid requests         <- THE KEY METRIC
+  * Inventory matches
+  * Successful responses
+  * Reached queries
+  * Bids
+  * Bids in auction
+  * Auctions won
+  * Impressions
+  * Clicks
 
 Schedule: Daily, Yesterday
 Filename: catscan-funnel-geo
 
-⚠️  You CANNOT add Creative ID, Mobile app ID, or Billing ID to this report!
-    Google will show: "Mobile app ID is not compatible with [Bid requests]"
+WARNING: You CANNOT add Creative ID, Mobile app ID, or Billing ID to this report!
+         Google will show: "Mobile app ID is not compatible with [Bid requests]"
 
 --------------------------------------------------------------------------------
 REPORT 3: "catscan-funnel-publishers" (Bid pipeline by publisher)
 --------------------------------------------------------------------------------
-Purpose: See which publishers have best bid→win conversion
+Purpose: See which publishers have best bid->win conversion
+Target Table: rtb_funnel
 
 DIMENSIONS (in this order):
   1. Day
   2. Country
   3. Buyer account ID
-  4. Publisher ID         ← Can include this (but not apps)
+  4. Publisher ID         <- Can include this (but not apps)
   5. Publisher name
   6. Hour (optional)
 
-METRICS:
-  ✓ Bid requests
-  ✓ Inventory matches
-  ✓ Successful responses
-  ✓ Reached queries
-  ✓ Bids
-  ✓ Bids in auction
-  ✓ Auctions won
-  ✓ Impressions
-  ✓ Clicks
+METRICS: Same as Report 2
 
 Schedule: Daily, Yesterday
 Filename: catscan-funnel-publishers
 
-⚠️  You CANNOT add Mobile app ID to this report!
+WARNING: You CANNOT add Mobile app ID to this report!
+
+--------------------------------------------------------------------------------
+REPORT 4: "catscan-bid-filtering" (Why bids are rejected)
+--------------------------------------------------------------------------------
+Purpose: Understand why bids are being filtered
+Target Table: rtb_bid_filtering
+
+DIMENSIONS (in this order):
+  1. Day
+  2. Bid filtering reason  <- REQUIRED
+  3. Country (optional)
+  4. Buyer account ID (optional)
+  5. Creative ID (may not be available)
+
+METRICS:
+  * Bids
+  * Bids in auction
+  * Opportunity cost (optional)
+
+Schedule: Daily, Yesterday
+Filename: catscan-bid-filtering
+
+--------------------------------------------------------------------------------
+REPORT 5: "catscan-quality" (Fraud/Viewability signals)
+--------------------------------------------------------------------------------
+Purpose: Identify high-fraud or low-viewability publishers
+Target Table: rtb_quality
+
+DIMENSIONS (in this order):
+  1. Day
+  2. Publisher ID          <- REQUIRED
+  3. Publisher name (optional)
+  4. Country (optional)
+
+METRICS:
+  * Impressions
+  * Pre-filtered impressions
+  * IVT credited impressions  <- Key fraud signal
+  * Billed impressions
+  * Active View measurable
+  * Active View viewable
+
+Schedule: Daily, Yesterday
+Filename: catscan-quality
 
 ================================================================================
-WHY 3 REPORTS?
+WHY 5 REPORTS?
 ================================================================================
 
-Google's API limitation:
+Google's API has field incompatibilities:
   "Mobile app ID is not compatible with [Bid requests], [Inventory matches]..."
 
 This means:
-  • To see App performance → you lose "Bid requests" column
-  • To see "Bid requests" → you lose App/Creative detail
-  • Publisher CAN be combined with Bid requests (but not Apps)
+  * To see App/Creative performance -> you lose "Bid requests" column
+  * To see "Bid requests" -> you lose App/Creative detail
+  * Publisher CAN be combined with Bid requests (but not Apps)
+  * Quality signals (IVT/viewability) require a separate report
+  * Bid filtering reasons are a separate report type
 
 HOW CAT-SCAN JOINS THEM:
-  • Report 1 (performance) + Report 2 (funnel-geo) → JOIN ON date + country
-  • Report 1 + Report 3 (funnel-publishers) → JOIN ON date + country + publisher
+  * Report 1 + Report 2 -> JOIN ON (date, country)
+  * Report 1 + Report 3 -> JOIN ON (date, country, publisher_id)
+  * Report 4 + others   -> JOIN ON (date, country, creative_id)
+  * Report 5 + others   -> JOIN ON (date, publisher_id)
 
 This gives AI the full picture:
-  Total traffic (bid_requests) → What you bid on → What you won → Revenue
+  Total traffic -> What you bid on -> What you won -> Revenue -> Quality
 ================================================================================
 """
 
