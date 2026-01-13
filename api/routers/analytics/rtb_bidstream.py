@@ -666,7 +666,7 @@ async def get_config_breakdown(
             """, (billing_id, f'-{days} days'))
 
             # Check if we got any funnel data from the JOIN
-            has_funnel_data = any(row.get("total_bids_in_auction", 0) > 0 for row in rows) if rows else False
+            has_funnel_data = any((row["total_bids_in_auction"] or 0) > 0 for row in rows) if rows else False
 
             if not has_funnel_data:
                 # Fallback: No bidsinauction data, just use quality data
@@ -689,11 +689,11 @@ async def get_config_breakdown(
                 """, (billing_id, f'-{days} days'))
 
         for row in rows:
-            reached = row.get("total_reached") or 0
-            impressions = row.get("total_impressions") or 0
-            bids = row.get("total_bids") or 0
-            bids_in_auction = row.get("total_bids_in_auction") or 0
-            auctions_won = row.get("total_auctions_won") or 0
+            reached = row["total_reached"] or 0
+            impressions = row["total_impressions"] or 0
+            bids = row["total_bids"] or 0
+            bids_in_auction = row["total_bids_in_auction"] or 0
+            auctions_won = row["total_auctions_won"] or 0
 
             # Calculate win rate based on best available data
             # Prefer: auctions_won / bids_in_auction (true auction win rate)
@@ -708,7 +708,7 @@ async def get_config_breakdown(
             waste_rate = 100 - win_rate
 
             item = {
-                "name": row.get("name") or "Unknown",
+                "name": row["name"] or "Unknown",
                 "reached": reached,
                 "impressions": impressions,
                 "win_rate": round(win_rate, 1),
