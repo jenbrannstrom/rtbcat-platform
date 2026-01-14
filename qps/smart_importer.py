@@ -50,7 +50,7 @@ def smart_import(
 
     Detects:
     - Performance Detail CSVs → rtb_daily table (via importer.py)
-    - RTB Funnel CSVs → rtb_funnel table (via funnel_importer.py)
+    - RTB Funnel CSVs → rtb_bidstream table (via funnel_importer.py)
 
     Args:
         csv_path: Path to CSV file
@@ -109,7 +109,7 @@ def smart_import(
         )
 
     elif detection.report_type in [ReportType.RTB_FUNNEL_GEO, ReportType.RTB_FUNNEL_PUBLISHER]:
-        # Use funnel importer for rtb_funnel
+        # Use funnel importer for rtb_bidstream
         kwargs = {"csv_path": csv_path}
         if db_path:
             kwargs["db_path"] = db_path
@@ -123,7 +123,7 @@ def smart_import(
         return SmartImportResult(
             success=result.success,
             report_type=detection.report_type,
-            target_table="rtb_funnel",
+            target_table="rtb_bidstream",
             report_name=report_name,
             rows_imported=result.rows_imported,
             rows_read=result.rows_read,

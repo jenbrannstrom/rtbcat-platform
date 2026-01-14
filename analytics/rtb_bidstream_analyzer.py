@@ -822,7 +822,7 @@ class RTBFunnelAnalyzer:
         }
 
 
-def get_rtb_funnel_data() -> dict:
+def get_rtb_bidstream_data() -> dict:
     """Convenience function to get RTB funnel data."""
     analyzer = RTBFunnelAnalyzer()
     return analyzer.get_full_analysis()

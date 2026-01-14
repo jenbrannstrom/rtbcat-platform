@@ -338,9 +338,9 @@ def detect_best_report_type(mapping: MappingResult) -> Tuple[str, str, List[str]
             missing.append("country")
 
         if has_publisher_id:
-            return ("rtb_funnel_publisher", "rtb_funnel", missing)
+            return ("rtb_bidstream_publisher", "rtb_bidstream", missing)
         else:
-            return ("rtb_funnel_geo", "rtb_funnel", missing)
+            return ("rtb_bidstream_geo", "rtb_bidstream", missing)
 
     # Check for Performance Detail without creative_id (has impressions)
     if has_impressions:
