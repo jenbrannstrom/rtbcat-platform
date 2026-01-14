@@ -25,6 +25,7 @@ from qps.flexible_mapper import (
 logger = logging.getLogger(__name__)
 
 DB_PATH = os.path.expanduser("~/.catscan/catscan.db")
+IMPORT_BATCH_SIZE = int(os.getenv("CATSCAN_IMPORT_BATCH_SIZE", "1000"))
 
 
 @dataclass
@@ -160,6 +161,7 @@ def ensure_table_exists(cursor, table_name: str):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_daily_date ON rtb_daily(metric_date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_daily_billing ON rtb_daily(billing_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_daily_creative ON rtb_daily(creative_id)")
+        ensure_unique_index(cursor, "rtb_daily", "row_hash", "idx_rtb_daily_row_hash")
 
     elif table_name == "rtb_bidstream":
         cursor.execute("""
@@ -191,6 +193,7 @@ def ensure_table_exists(cursor, table_name: str):
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_date ON rtb_bidstream(metric_date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_country ON rtb_bidstream(country)")
+        ensure_unique_index(cursor, "rtb_bidstream", "row_hash", "idx_rtb_bidstream_row_hash")
 
     elif table_name == "rtb_bid_filtering":
         cursor.execute("""
@@ -212,6 +215,38 @@ def ensure_table_exists(cursor, table_name: str):
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_bid_filtering_date ON rtb_bid_filtering(metric_date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_bid_filtering_reason ON rtb_bid_filtering(filtering_reason)")
+        ensure_unique_index(cursor, "rtb_bid_filtering", "row_hash", "idx_rtb_bid_filtering_row_hash")
+
+
+def configure_import_connection(conn: sqlite3.Connection) -> None:
+    """Apply SQLite pragmas tuned for bulk imports."""
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute("PRAGMA temp_store = MEMORY")
+
+
+def ensure_unique_index(cursor, table_name: str, column_name: str, index_name: str) -> None:
+    """Ensure a unique index exists, warn if duplicates prevent creation."""
+    try:
+        cursor.execute(
+            f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} ON {table_name}({column_name})"
+        )
+    except sqlite3.IntegrityError as e:
+        logger.warning(
+            "Could not create unique index %s on %s.%s due to duplicates: %s",
+            index_name,
+            table_name,
+            column_name,
+            e,
+        )
+    except sqlite3.OperationalError as e:
+        logger.warning(
+            "Could not create unique index %s on %s.%s: %s",
+            index_name,
+            table_name,
+            column_name,
+            e,
+        )
 
 
 def import_to_rtb_daily(
@@ -224,7 +259,9 @@ def import_to_rtb_daily(
     """Import data to rtb_daily table."""
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
+    configure_import_connection(conn)
     ensure_table_exists(cursor, "rtb_daily")
+    ensure_unique_index(cursor, "rtb_daily", "row_hash", "idx_rtb_daily_row_hash")
 
     # Ensure all potentially needed columns exist
     ensure_columns_exist(cursor, "rtb_daily", [
@@ -238,6 +275,29 @@ def import_to_rtb_daily(
 
     hash_keys = ["metric_date", "hour", "billing_id", "creative_id", "country", "publisher_id"]
     min_date, max_date = None, None
+
+    insert_sql = """
+        INSERT OR IGNORE INTO rtb_daily (
+            metric_date, hour, billing_id, creative_id, creative_size, creative_format,
+            country, platform, environment, publisher_id, publisher_name, publisher_domain,
+            app_id, app_name, reached_queries, impressions, clicks, spend_micros,
+            bids, bids_in_auction, auctions_won,
+            video_starts, video_completions, viewable_impressions, measurable_impressions,
+            row_hash, import_batch_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    rows_to_insert: list[tuple] = []
+
+    def flush_rows():
+        if not rows_to_insert:
+            return
+        before = conn.total_changes
+        cursor.executemany(insert_sql, rows_to_insert)
+        inserted = conn.total_changes - before
+        result.rows_imported += inserted
+        if inserted >= 0:
+            result.rows_duplicate += len(rows_to_insert) - inserted
+        rows_to_insert.clear()
 
     try:
         with open(csv_path, 'r', encoding='utf-8') as f:
@@ -294,38 +354,27 @@ def import_to_rtb_daily(
                     # Compute hash
                     row_hash = compute_row_hash(row_data, hash_keys)
 
-                    # Insert
-                    try:
-                        cursor.execute("""
-                            INSERT INTO rtb_daily (
-                                metric_date, hour, billing_id, creative_id, creative_size, creative_format,
-                                country, platform, environment, publisher_id, publisher_name, publisher_domain,
-                                app_id, app_name, reached_queries, impressions, clicks, spend_micros,
-                                bids, bids_in_auction, auctions_won,
-                                video_starts, video_completions, viewable_impressions, measurable_impressions,
-                                row_hash, import_batch_id
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (
-                            row_data["metric_date"], row_data["hour"], row_data["billing_id"],
-                            row_data["creative_id"], row_data["creative_size"], row_data["creative_format"],
-                            row_data["country"], row_data["platform"], row_data["environment"],
-                            row_data["publisher_id"], row_data["publisher_name"], row_data["publisher_domain"],
-                            row_data["app_id"], row_data["app_name"],
-                            row_data["reached_queries"], row_data["impressions"], row_data["clicks"],
-                            row_data["spend_micros"], row_data["bids"], row_data["bids_in_auction"],
-                            row_data["auctions_won"], row_data["video_starts"], row_data["video_completions"],
-                            row_data["viewable_impressions"], row_data["measurable_impressions"],
-                            row_hash, batch_id
-                        ))
-                        result.rows_imported += 1
-                    except sqlite3.IntegrityError:
-                        result.rows_duplicate += 1
+                    rows_to_insert.append((
+                        row_data["metric_date"], row_data["hour"], row_data["billing_id"],
+                        row_data["creative_id"], row_data["creative_size"], row_data["creative_format"],
+                        row_data["country"], row_data["platform"], row_data["environment"],
+                        row_data["publisher_id"], row_data["publisher_name"], row_data["publisher_domain"],
+                        row_data["app_id"], row_data["app_name"],
+                        row_data["reached_queries"], row_data["impressions"], row_data["clicks"],
+                        row_data["spend_micros"], row_data["bids"], row_data["bids_in_auction"],
+                        row_data["auctions_won"], row_data["video_starts"], row_data["video_completions"],
+                        row_data["viewable_impressions"], row_data["measurable_impressions"],
+                        row_hash, batch_id
+                    ))
+                    if len(rows_to_insert) >= IMPORT_BATCH_SIZE:
+                        flush_rows()
 
                 except Exception as e:
                     result.rows_skipped += 1
                     if len(result.errors) < 10:
                         result.errors.append(f"Row {row_num}: {str(e)}")
 
+        flush_rows()
         conn.commit()
         result.success = True
         result.date_range_start = min_date
@@ -349,14 +398,38 @@ def import_to_rtb_bidstream(
     """Import data to rtb_bidstream table."""
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
+    configure_import_connection(conn)
+    configure_import_connection(conn)
 
     # Check if table exists, if not create it
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='rtb_bidstream'")
     if not cursor.fetchone():
         ensure_table_exists(cursor, "rtb_bidstream")
+    ensure_unique_index(cursor, "rtb_bidstream", "row_hash", "idx_rtb_bidstream_row_hash")
 
     hash_keys = ["metric_date", "hour", "country", "buyer_account_id", "publisher_id"]
     min_date, max_date = None, None
+
+    insert_sql = """
+        INSERT OR IGNORE INTO rtb_bidstream (
+            metric_date, hour, country, buyer_account_id, publisher_id, publisher_name,
+            inventory_matches, bid_requests, successful_responses, reached_queries,
+            bids, bids_in_auction, auctions_won, impressions, clicks,
+            row_hash, import_batch_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    rows_to_insert: list[tuple] = []
+
+    def flush_rows():
+        if not rows_to_insert:
+            return
+        before = conn.total_changes
+        cursor.executemany(insert_sql, rows_to_insert)
+        inserted = conn.total_changes - before
+        result.rows_imported += inserted
+        if inserted >= 0:
+            result.rows_duplicate += len(rows_to_insert) - inserted
+        rows_to_insert.clear()
 
     try:
         with open(csv_path, 'r', encoding='utf-8') as f:
@@ -396,32 +469,24 @@ def import_to_rtb_bidstream(
 
                     row_hash = compute_row_hash(row_data, hash_keys)
 
-                    try:
-                        cursor.execute("""
-                            INSERT INTO rtb_bidstream (
-                                metric_date, hour, country, buyer_account_id, publisher_id, publisher_name,
-                                inventory_matches, bid_requests, successful_responses, reached_queries,
-                                bids, bids_in_auction, auctions_won, impressions, clicks,
-                                row_hash, import_batch_id
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (
-                            row_data["metric_date"], row_data["hour"], row_data["country"],
-                            row_data["buyer_account_id"], row_data["publisher_id"], row_data["publisher_name"],
-                            row_data["inventory_matches"], row_data["bid_requests"],
-                            row_data["successful_responses"], row_data["reached_queries"],
-                            row_data["bids"], row_data["bids_in_auction"], row_data["auctions_won"],
-                            row_data["impressions"], row_data["clicks"],
-                            row_hash, batch_id
-                        ))
-                        result.rows_imported += 1
-                    except sqlite3.IntegrityError:
-                        result.rows_duplicate += 1
+                    rows_to_insert.append((
+                        row_data["metric_date"], row_data["hour"], row_data["country"],
+                        row_data["buyer_account_id"], row_data["publisher_id"], row_data["publisher_name"],
+                        row_data["inventory_matches"], row_data["bid_requests"],
+                        row_data["successful_responses"], row_data["reached_queries"],
+                        row_data["bids"], row_data["bids_in_auction"], row_data["auctions_won"],
+                        row_data["impressions"], row_data["clicks"],
+                        row_hash, batch_id
+                    ))
+                    if len(rows_to_insert) >= IMPORT_BATCH_SIZE:
+                        flush_rows()
 
                 except Exception as e:
                     result.rows_skipped += 1
                     if len(result.errors) < 10:
                         result.errors.append(f"Row {row_num}: {str(e)}")
 
+        flush_rows()
         conn.commit()
         result.success = True
         result.date_range_start = min_date
@@ -445,10 +510,32 @@ def import_to_rtb_bid_filtering(
     """Import data to rtb_bid_filtering table."""
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
+    configure_import_connection(conn)
     ensure_table_exists(cursor, "rtb_bid_filtering")
+    ensure_unique_index(cursor, "rtb_bid_filtering", "row_hash", "idx_rtb_bid_filtering_row_hash")
 
     hash_keys = ["metric_date", "country", "filtering_reason", "creative_id"]
     min_date, max_date = None, None
+
+    insert_sql = """
+        INSERT OR IGNORE INTO rtb_bid_filtering (
+            metric_date, country, buyer_account_id, filtering_reason, creative_id,
+            bids, bids_in_auction, opportunity_cost_micros,
+            row_hash, import_batch_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    rows_to_insert: list[tuple] = []
+
+    def flush_rows():
+        if not rows_to_insert:
+            return
+        before = conn.total_changes
+        cursor.executemany(insert_sql, rows_to_insert)
+        inserted = conn.total_changes - before
+        result.rows_imported += inserted
+        if inserted >= 0:
+            result.rows_duplicate += len(rows_to_insert) - inserted
+        rows_to_insert.clear()
 
     try:
         with open(csv_path, 'r', encoding='utf-8') as f:
@@ -486,28 +573,21 @@ def import_to_rtb_bid_filtering(
 
                     row_hash = compute_row_hash(row_data, hash_keys)
 
-                    try:
-                        cursor.execute("""
-                            INSERT INTO rtb_bid_filtering (
-                                metric_date, country, buyer_account_id, filtering_reason, creative_id,
-                                bids, bids_in_auction, opportunity_cost_micros,
-                                row_hash, import_batch_id
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (
-                            row_data["metric_date"], row_data["country"], row_data["buyer_account_id"],
-                            row_data["filtering_reason"], row_data["creative_id"],
-                            row_data["bids"], row_data["bids_in_auction"], row_data["opportunity_cost_micros"],
-                            row_hash, batch_id
-                        ))
-                        result.rows_imported += 1
-                    except sqlite3.IntegrityError:
-                        result.rows_duplicate += 1
+                    rows_to_insert.append((
+                        row_data["metric_date"], row_data["country"], row_data["buyer_account_id"],
+                        row_data["filtering_reason"], row_data["creative_id"],
+                        row_data["bids"], row_data["bids_in_auction"], row_data["opportunity_cost_micros"],
+                        row_hash, batch_id
+                    ))
+                    if len(rows_to_insert) >= IMPORT_BATCH_SIZE:
+                        flush_rows()
 
                 except Exception as e:
                     result.rows_skipped += 1
                     if len(result.errors) < 10:
                         result.errors.append(f"Row {row_num}: {str(e)}")
 
+        flush_rows()
         conn.commit()
         result.success = True
         result.date_range_start = min_date
