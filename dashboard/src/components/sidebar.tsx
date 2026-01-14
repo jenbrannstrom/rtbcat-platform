@@ -524,42 +524,44 @@ export function Sidebar() {
 
       {/* Footer with user info and collapse */}
       <div className="px-2 py-3 border-t border-gray-200">
-        {/* Collapse toggle - just icon */}
-        <button
-          onClick={toggleCollapsed}
-          className={cn(
-            "flex items-center justify-center w-full p-2 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-50 transition-colors"
-          )}
-          title={collapsed ? t.navigation.expand : t.navigation.collapse}
-        >
-          {collapsed ? (
-            <ChevronRight className="h-5 w-5" />
-          ) : (
-            <ChevronLeft className="h-5 w-5" />
-          )}
-        </button>
-
-        {/* User info, version, and docs link */}
-        {!collapsed && (
-          <div className="pt-2 px-3">
-            {user && (
-              <p className="text-xs text-gray-500 truncate" title={user.email}>
-                {user.display_name || user.email}
-              </p>
-            )}
-            <div className="flex items-center gap-2 text-xs text-gray-400">
-              <span>v{process.env.NEXT_PUBLIC_APP_VERSION || "0.9.0"}</span>
-              <span>·</span>
-              <a
-                href="https://docs.rtb.cat"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-primary-600 transition-colors"
-              >
-                {t.navigation.docs}
-              </a>
+        {/* User info, version, docs, and collapse toggle in a clean row */}
+        {!collapsed ? (
+          <div className="flex items-center justify-between px-2">
+            <div className="flex-1 min-w-0">
+              {user && (
+                <p className="text-xs text-gray-500 truncate" title={user.email}>
+                  {user.display_name || user.email}
+                </p>
+              )}
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <span>v{process.env.NEXT_PUBLIC_APP_VERSION || "0.9.0"}</span>
+                <span>·</span>
+                <a
+                  href="https://docs.rtb.cat"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-primary-600 transition-colors"
+                >
+                  {t.navigation.docs}
+                </a>
+              </div>
             </div>
+            <button
+              onClick={toggleCollapsed}
+              className="flex items-center justify-center p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-50 transition-colors flex-shrink-0"
+              title={t.navigation.collapse}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
           </div>
+        ) : (
+          <button
+            onClick={toggleCollapsed}
+            className="flex items-center justify-center w-full p-2 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-50 transition-colors"
+            title={t.navigation.expand}
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
         )}
       </div>
     </div>
