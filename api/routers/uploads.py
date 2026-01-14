@@ -8,10 +8,12 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 
 from storage.database import db_query, DB_PATH
+from api.dependencies import get_current_user, get_allowed_bidder_ids
+from storage.repositories.user_repository import User
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +96,17 @@ class DailyUploadsGridResponse(BaseModel):
 @router.get("/uploads/tracking", response_model=UploadTrackingResponse)
 async def get_upload_tracking(
     days: int = Query(30, description="Number of days to retrieve", ge=1, le=365),
+    user: User = Depends(get_current_user),
 ):
     """Get daily upload tracking summary."""
+    if user.role != "admin":
+        return UploadTrackingResponse(
+            daily_summaries=[],
+            total_days=0,
+            total_uploads=0,
+            total_rows=0,
+            days_with_anomalies=0,
+        )
     if not DB_PATH.exists():
         return UploadTrackingResponse(
             daily_summaries=[],
@@ -161,12 +172,20 @@ async def get_import_history(
     limit: int = Query(50, description="Maximum number of records to return", ge=1, le=500),
     offset: int = Query(0, description="Number of records to skip", ge=0),
     bidder_id: Optional[str] = Query(None, description="Filter by account (bidder_id)"),
+    user: User = Depends(get_current_user),
 ):
     """Get import history records."""
     if not DB_PATH.exists():
         return []
 
     try:
+        allowed_bidder_ids = await get_allowed_bidder_ids(user=user)
+        if allowed_bidder_ids is not None:
+            if not allowed_bidder_ids:
+                return []
+            if bidder_id and bidder_id not in allowed_bidder_ids:
+                raise HTTPException(status_code=403, detail="You don't have access to this bidder account.")
+
         if bidder_id:
             rows = await db_query(
                 """SELECT * FROM import_history
@@ -176,12 +195,22 @@ async def get_import_history(
                 (bidder_id, limit, offset),
             )
         else:
-            rows = await db_query(
-                """SELECT * FROM import_history
-                ORDER BY imported_at DESC
-                LIMIT ? OFFSET ?""",
-                (limit, offset),
-            )
+            if allowed_bidder_ids is None:
+                rows = await db_query(
+                    """SELECT * FROM import_history
+                    ORDER BY imported_at DESC
+                    LIMIT ? OFFSET ?""",
+                    (limit, offset),
+                )
+            else:
+                placeholders = ",".join("?" * len(allowed_bidder_ids))
+                rows = await db_query(
+                    f"""SELECT * FROM import_history
+                    WHERE bidder_id IN ({placeholders})
+                    ORDER BY imported_at DESC
+                    LIMIT ? OFFSET ?""",
+                    (*allowed_bidder_ids, limit, offset),
+                )
 
         results = []
         for row in rows:
@@ -226,6 +255,7 @@ async def get_import_history(
 async def get_daily_uploads_grid(
     days: int = Query(14, description="Number of days to show", ge=1, le=90),
     expected_per_day: int = Query(3, description="Expected uploads per day", ge=1, le=10),
+    user: User = Depends(get_current_user),
 ):
     """Get daily uploads in a simple grid format."""
     if not DB_PATH.exists():
@@ -233,20 +263,42 @@ async def get_daily_uploads_grid(
 
     try:
         start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-        imports = await db_query(
-            """
-            SELECT
-                date(imported_at) as import_date,
-                rows_imported,
-                status,
-                error_message,
-                filename
-            FROM import_history
-            WHERE date(imported_at) >= ?
-            ORDER BY imported_at ASC
-            """,
-            (start_date,),
-        )
+        allowed_bidder_ids = await get_allowed_bidder_ids(user=user)
+        if allowed_bidder_ids is not None and not allowed_bidder_ids:
+            return DailyUploadsGridResponse(days=[], expected_uploads_per_day=expected_per_day)
+
+        if allowed_bidder_ids is None:
+            imports = await db_query(
+                """
+                SELECT
+                    date(imported_at) as import_date,
+                    rows_imported,
+                    status,
+                    error_message,
+                    filename
+                FROM import_history
+                WHERE date(imported_at) >= ?
+                ORDER BY imported_at ASC
+                """,
+                (start_date,),
+            )
+        else:
+            placeholders = ",".join("?" * len(allowed_bidder_ids))
+            imports = await db_query(
+                f"""
+                SELECT
+                    date(imported_at) as import_date,
+                    rows_imported,
+                    status,
+                    error_message,
+                    filename
+                FROM import_history
+                WHERE date(imported_at) >= ?
+                  AND bidder_id IN ({placeholders})
+                ORDER BY imported_at ASC
+                """,
+                (start_date, *allowed_bidder_ids),
+            )
 
         # Group imports by date
         imports_by_date: dict[str, list] = {}
@@ -329,7 +381,9 @@ class AccountsUploadSummaryResponse(BaseModel):
 
 
 @router.get("/uploads/accounts", response_model=AccountsUploadSummaryResponse)
-async def get_accounts_upload_summary():
+async def get_accounts_upload_summary(
+    user: User = Depends(get_current_user),
+):
     """Get upload statistics grouped by account (bidder_id)."""
     if not DB_PATH.exists():
         return AccountsUploadSummaryResponse(
@@ -339,23 +393,50 @@ async def get_accounts_upload_summary():
         )
 
     try:
-        rows = await db_query("""
-            SELECT
-                bidder_id,
-                COUNT(*) as upload_count,
-                SUM(rows_imported) as total_rows,
-                MAX(imported_at) as latest_upload,
-                GROUP_CONCAT(DISTINCT billing_ids_found) as all_billing_ids
-            FROM import_history
-            WHERE bidder_id IS NOT NULL
-            GROUP BY bidder_id
-            ORDER BY latest_upload DESC
-        """)
+        allowed_bidder_ids = await get_allowed_bidder_ids(user=user)
+        if allowed_bidder_ids is not None and not allowed_bidder_ids:
+            return AccountsUploadSummaryResponse(
+                accounts=[],
+                total_accounts=0,
+                unassigned_uploads=0,
+            )
 
-        unassigned_row = await db_query("""
-            SELECT COUNT(*) as cnt FROM import_history WHERE bidder_id IS NULL
-        """)
-        unassigned = unassigned_row[0]["cnt"] if unassigned_row else 0
+        if allowed_bidder_ids is None:
+            rows = await db_query("""
+                SELECT
+                    bidder_id,
+                    COUNT(*) as upload_count,
+                    SUM(rows_imported) as total_rows,
+                    MAX(imported_at) as latest_upload,
+                    GROUP_CONCAT(DISTINCT billing_ids_found) as all_billing_ids
+                FROM import_history
+                WHERE bidder_id IS NOT NULL
+                GROUP BY bidder_id
+                ORDER BY latest_upload DESC
+            """)
+
+            unassigned_row = await db_query("""
+                SELECT COUNT(*) as cnt FROM import_history WHERE bidder_id IS NULL
+            """)
+            unassigned = unassigned_row[0]["cnt"] if unassigned_row else 0
+        else:
+            placeholders = ",".join("?" * len(allowed_bidder_ids))
+            rows = await db_query(
+                f"""
+                SELECT
+                    bidder_id,
+                    COUNT(*) as upload_count,
+                    SUM(rows_imported) as total_rows,
+                    MAX(imported_at) as latest_upload,
+                    GROUP_CONCAT(DISTINCT billing_ids_found) as all_billing_ids
+                FROM import_history
+                WHERE bidder_id IN ({placeholders})
+                GROUP BY bidder_id
+                ORDER BY latest_upload DESC
+                """,
+                tuple(allowed_bidder_ids),
+            )
+            unassigned = 0
 
         accounts = []
         for row in rows:

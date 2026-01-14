@@ -247,7 +247,7 @@ Gmail (scheduled reports)          Manual Upload
 | **RTB Performance** | rtb_daily, rtb_bidstream, rtb_bid_filtering, rtb_quality | CSV import data |
 | **Pretargeting** | pretargeting_configs, pretargeting_history, pretargeting_snapshots, pretargeting_pending_changes | Pretargeting management |
 | **Import Tracking** | import_history, daily_upload_summary, import_anomalies | Track CSV imports |
-| **User Authentication** | users, user_sessions, login_attempts, audit_log | Multi-user support |
+| **User Authentication** | users, user_sessions, audit_log | Multi-user support |
 | **Lookup Tables** | apps, publishers, geographies, billing_accounts | Reference data |
 | **Quality & Efficiency** | anomaly_signals, inefficiency_signals, recommendations | Analysis outputs |
 
