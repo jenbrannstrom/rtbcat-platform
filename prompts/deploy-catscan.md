@@ -19,21 +19,30 @@ Use this prompt with Claude CLI to deploy Cat-Scan to the production GCP VM.
 
 ---
 
-## Task: Deploy Latest Code
+## Task: Deploy Latest Images (Fast)
 
-SSH to the production VM and deploy the latest code:
+Deploy the latest Docker images to the production VM:
 
 ```bash
-# 1. Pull latest code
+# 1. Pull latest images
 gcloud compute ssh catscan-production --zone=europe-west1-b -- \
-  "cd /opt/catscan && sudo -u catscan git fetch origin && sudo -u catscan git pull"
+  "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml pull"
 
-# 2. Rebuild containers (if needed)
+# 2. Restart containers
 gcloud compute ssh catscan-production --zone=europe-west1-b -- \
-  "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml up -d --build"
+  "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml up -d"
 
 # 3. Verify
 curl -s https://scan.rtb.cat/api/health
+```
+
+**Rollback (deploy a specific image tag):**
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+  "cd /opt/catscan && IMAGE_TAG=sha-<gitsha> sudo docker-compose -f docker-compose.gcp.yml pull"
+
+gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+  "cd /opt/catscan && IMAGE_TAG=sha-<gitsha> sudo docker-compose -f docker-compose.gcp.yml up -d"
 ```
 
 ---
@@ -104,7 +113,7 @@ gcloud compute ssh catscan-production --zone=europe-west1-b -- \
 
 ```bash
 gcloud compute ssh catscan-production --zone=europe-west1-b -- \
-  "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml build --no-cache dashboard"
+  "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml pull dashboard"
 
 gcloud compute ssh catscan-production --zone=europe-west1-b -- \
   "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml up -d --no-deps dashboard"
