@@ -32,11 +32,7 @@ gcloud compute ssh catscan-production --zone=europe-west1-b -- \
 gcloud compute ssh catscan-production --zone=europe-west1-b -- \
   "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml up -d --build"
 
-# 3. Restart services
-gcloud compute ssh catscan-production --zone=europe-west1-b -- \
-  "sudo systemctl restart catscan-api && sudo systemctl restart nginx"
-
-# 4. Verify
+# 3. Verify
 curl -s https://scan.rtb.cat/api/health
 ```
 
@@ -90,9 +86,9 @@ curl -s https://scan.rtb.cat/api/health
 ## Task: Check Logs
 
 ```bash
-# API logs
+# API logs (Docker)
 gcloud compute ssh catscan-production --zone=europe-west1-b -- \
-  "sudo journalctl -u catscan-api -f"
+  "sudo docker logs -f catscan-api"
 
 # Startup script log
 gcloud compute ssh catscan-production --zone=europe-west1-b -- \
@@ -101,6 +97,27 @@ gcloud compute ssh catscan-production --zone=europe-west1-b -- \
 # Nginx logs
 gcloud compute ssh catscan-production --zone=europe-west1-b -- \
   "sudo tail -f /var/log/nginx/error.log"
+
+---
+
+## Task: Rebuild Dashboard Only (Fast)
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+  "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml build --no-cache dashboard"
+
+gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+  "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml up -d --no-deps dashboard"
+```
+
+---
+
+## Task: Clean Failed Build Containers
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+  "sudo docker ps -a --filter 'status=exited' --filter 'ancestor=catscan_dashboard:latest' -q | xargs -r sudo docker rm -f"
+```
 ```
 
 ---

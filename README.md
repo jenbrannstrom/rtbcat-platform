@@ -81,6 +81,8 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 | **MCP Support** | APIs to enable MCP access for your own choice of AI |
 | **Video Thumbnails** | Visualize creatives clearly: extract from VAST XML or generate via ffmpeg |
 | **Multi-Language** | Internationalization (i18n) with 11 languages: EN, PL, ZH, RU, UK, ES, DA, FR, NL, HE, AR |
+| **OAuth-Only Login** | Google OAuth via OAuth2 Proxy (no passwords stored) |
+| **Per-User Access Control** | Role + service account access scoping |
 
 ### Dashboard Pages
 
