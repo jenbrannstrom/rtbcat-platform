@@ -21,6 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAccount } from "@/contexts/account-context";
 import { useTranslation } from "@/contexts/i18n-context";
+import { LanguageSelector } from "@/components/language-selector";
 
 const PERIOD_OPTIONS = [
   { value: 7, label: "7 days" },
@@ -296,6 +297,9 @@ function WasteAnalysisContent() {
           >
             <RefreshCw className={cn("h-3.5 w-3.5 text-gray-600", (summaryLoading || funnelLoading) && "animate-spin")} />
           </button>
+
+          {/* Language selector */}
+          <LanguageSelector compact />
         </div>
       </div>
 
