@@ -273,7 +273,7 @@ def import_to_rtb_daily(
         ("measurable_impressions", "INTEGER DEFAULT 0"),
     ])
 
-    hash_keys = ["metric_date", "hour", "billing_id", "creative_id", "country", "publisher_id"]
+    hash_keys = ["metric_date", "hour", "billing_id", "creative_id", "creative_size", "country", "publisher_id"]
     min_date, max_date = None, None
 
     insert_sql = """
