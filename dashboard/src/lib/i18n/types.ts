@@ -40,6 +40,7 @@ export interface Translations {
     time: string;
     never: string;
     version: string;
+    done: string;
   };
 
   relativeTime: {

@@ -38,6 +38,7 @@ export const en: Translations = {
     time: 'Time',
     never: 'Never',
     version: 'v0.1.0',
+    done: 'Done',
   },
 
   relativeTime: {
