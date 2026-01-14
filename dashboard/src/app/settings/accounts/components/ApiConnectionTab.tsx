@@ -69,6 +69,8 @@ export function ApiConnectionTab() {
     queryFn: () => getSeats({ active_only: false }),
     enabled: hasAccounts,
   });
+  const showSeatLoadingNote =
+    !seatsLoading && hasAccounts && (seats || []).some((seat) => seat.creative_count === 0);
 
   const [discoveryAttempted, setDiscoveryAttempted] = useState(false);
 
@@ -540,6 +542,20 @@ export function ApiConnectionTab() {
           </div>
         ) : isConfigured ? (
           <div className="space-y-4">
+            {showSeatLoadingNote && (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <Loader2 className="h-5 w-5 text-blue-600 mt-0.5 animate-spin" />
+                  <div>
+                    <p className="font-medium text-blue-900">Seat data is still populating</p>
+                    <p className="text-sm text-blue-700 mt-1">
+                      New seats can take several minutes to sync creatives, endpoints, and pretargeting data.
+                      This will update automatically.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
             {hasSeats ? (
               <div className="space-y-3">
                 {seats.map((seat: BuyerSeat) => (
@@ -586,7 +602,11 @@ export function ApiConnectionTab() {
                       )}
                       <p className="text-sm text-gray-500">
                         {seat.creative_count} creatives
-                        {seat.last_synced && ` · Last synced ${new Date(seat.last_synced).toLocaleDateString()}`}
+                        {syncingId === seat.buyer_id
+                          ? " · Sync in progress"
+                          : seat.last_synced
+                            ? ` · Last synced ${new Date(seat.last_synced).toLocaleDateString()}`
+                            : ""}
                       </p>
                     </div>
                     {editingId !== seat.buyer_id && (
