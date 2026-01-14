@@ -24,6 +24,7 @@ class CreateUserRequest(BaseModel):
     email: str = Field(..., description="User email address")
     display_name: Optional[str] = Field(None, description="User display name")
     role: str = Field("user", description="User role (admin or user)")
+    default_language: Optional[str] = Field("en", description="Default UI language code")
 
 
 class CreateUserResponse(BaseModel):
@@ -43,6 +44,7 @@ class UserResponse(BaseModel):
     is_active: bool
     created_at: Optional[str]
     last_login_at: Optional[str]
+    default_language: Optional[str]
 
 
 class UpdateUserRequest(BaseModel):
@@ -50,6 +52,7 @@ class UpdateUserRequest(BaseModel):
     display_name: Optional[str] = None
     role: Optional[str] = None
     is_active: Optional[bool] = None
+    default_language: Optional[str] = None
 
 
 class PermissionRequest(BaseModel):
@@ -128,6 +131,7 @@ async def list_users(
             is_active=u.is_active,
             created_at=u.created_at,
             last_login_at=u.last_login_at,
+            default_language=u.default_language,
         )
         for u in users
     ]
@@ -163,6 +167,7 @@ async def create_user(
         email=user_request.email.lower().strip(),
         display_name=user_request.display_name,
         role=user_request.role,
+        default_language=user_request.default_language or "en",
     )
 
     # Log the action
@@ -211,6 +216,7 @@ async def get_user(
         is_active=user.is_active,
         created_at=user.created_at,
         last_login_at=user.last_login_at,
+        default_language=user.default_language,
     )
 
 
@@ -245,6 +251,7 @@ async def update_user(
         display_name=user_update.display_name,
         role=user_update.role,
         is_active=user_update.is_active,
+        default_language=user_update.default_language,
     )
 
     # Log the action
@@ -255,6 +262,8 @@ async def update_user(
         changes["role"] = user_update.role
     if user_update.is_active is not None:
         changes["is_active"] = user_update.is_active
+    if user_update.default_language is not None:
+        changes["default_language"] = user_update.default_language
 
     await repo.log_audit(
         audit_id=str(uuid.uuid4()),
@@ -277,6 +286,7 @@ async def update_user(
         is_active=updated_user.is_active,
         created_at=updated_user.created_at,
         last_login_at=updated_user.last_login_at,
+        default_language=updated_user.default_language,
     )
 
 

@@ -28,6 +28,7 @@ interface User {
   display_name: string | null;
   role: string;
   is_admin: boolean;
+  default_language?: string | null;
 }
 
 interface AuthContextValue {

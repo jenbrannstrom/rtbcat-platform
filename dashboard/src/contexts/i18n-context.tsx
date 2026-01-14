@@ -13,11 +13,13 @@ import {
   type Translations,
   getTranslations,
   defaultLanguage,
+  availableLanguages,
 } from "@/lib/i18n";
 
 // ==================== Constants ====================
 
 const LANGUAGE_STORAGE_KEY = "rtbcat-language";
+const LANGUAGE_COOKIE_KEY = "rtbcat_language";
 
 // ==================== Types ====================
 
@@ -40,16 +42,38 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   // Load language from localStorage on mount
   useEffect(() => {
     const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
-    if (stored && (stored === 'en')) {
-      setLanguageState(stored as Language);
+    const cookieMatch = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith(`${LANGUAGE_COOKIE_KEY}=`));
+    const cookieValue = cookieMatch ? cookieMatch.split("=")[1] : null;
+    const preferred = stored || cookieValue;
+    const allowed = availableLanguages.map((lang) => lang.code);
+
+    if (preferred && allowed.includes(preferred as Language)) {
+      setLanguageState(preferred as Language);
+      setIsHydrated(true);
+      return;
     }
-    setIsHydrated(true);
+
+    fetch("/api/auth/me", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const userLang = data?.default_language;
+        if (userLang && allowed.includes(userLang as Language)) {
+          setLanguageState(userLang as Language);
+          localStorage.setItem(LANGUAGE_STORAGE_KEY, userLang);
+          document.cookie = `${LANGUAGE_COOKIE_KEY}=${userLang}; path=/; max-age=31536000`;
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsHydrated(true));
   }, []);
 
   // Set language and persist to localStorage
   const setLanguage = useCallback((lang: Language) => {
     setLanguageState(lang);
     localStorage.setItem(LANGUAGE_STORAGE_KEY, lang);
+    document.cookie = `${LANGUAGE_COOKIE_KEY}=${lang}; path=/; max-age=31536000`;
   }, []);
 
   // Get translations for current language

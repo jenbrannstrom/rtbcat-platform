@@ -376,6 +376,8 @@ export const en: Translations = {
     displayNameOptional: 'Display Name (optional)',
     userRole: 'User',
     adminRole: 'Admin',
+    defaultLanguage: 'Default Language',
+    defaultLanguageHelp: 'This is the initial language for this user.',
     oauthInviteNote: 'Users sign in with Google. No password is required.',
     passwordGenerated: 'A secure password will be automatically generated.',
     creating: 'Creating...',
