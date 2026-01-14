@@ -31,6 +31,7 @@ import { getSeats, syncAllData } from "@/lib/api";
 import { useAccount } from "@/contexts/account-context";
 import { useAuth } from "@/contexts/auth-context";
 import { useTranslation } from "@/contexts/i18n-context";
+import { LanguageSelector } from "@/components/language-selector";
 
 const SIDEBAR_COLLAPSED_KEY = "rtbcat-sidebar-collapsed";
 const SIDEBAR_SETTINGS_EXPANDED_KEY = "rtbcat-sidebar-settings-expanded";
@@ -519,6 +520,11 @@ export function Sidebar() {
             <LogOut className={cn("h-5 w-5 text-gray-400", !collapsed && "mr-3")} />
             {!collapsed && t.navigation.logout}
           </button>
+
+          {/* Language selector */}
+          <div className={cn("mt-2", collapsed ? "flex justify-center" : "px-3")}>
+            <LanguageSelector compact />
+          </div>
         </div>
       </nav>
 
