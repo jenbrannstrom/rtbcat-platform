@@ -379,6 +379,8 @@ export const en: Translations = {
     adminRole: 'Admin',
     defaultLanguage: 'Default Language',
     defaultLanguageHelp: 'This is the initial language for this user.',
+    seatAccess: 'Seat Access (optional)',
+    seatAccessHelp: 'Grant access now or adjust later in Manage Permissions.',
     oauthInviteNote: 'Users sign in with Google. No password is required.',
     passwordGenerated: 'A secure password will be automatically generated.',
     creating: 'Creating...',

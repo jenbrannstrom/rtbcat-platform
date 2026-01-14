@@ -381,6 +381,8 @@ export interface Translations {
     adminRole: string;
     defaultLanguage: string;
     defaultLanguageHelp: string;
+    seatAccess: string;
+    seatAccessHelp: string;
     oauthInviteNote: string;
     passwordGenerated: string;
     creating: string;

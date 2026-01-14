@@ -42,6 +42,7 @@ function UsersPage() {
   const [permissionsUser, setPermissionsUser] = useState<AdminUser | null>(null);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [createPermissions, setCreatePermissions] = useState<Record<string, string>>({});
 
   // Filters from URL params
   const activeOnly = searchParams.get("active_only") === "true";
@@ -55,7 +56,7 @@ function UsersPage() {
   const { data: serviceAccounts } = useQuery({
     queryKey: ["service-accounts", { activeOnly: true }],
     queryFn: () => getServiceAccounts(true).then((res) => res.accounts),
-    enabled: !!permissionsUser,
+    enabled: !!permissionsUser || showCreateModal,
   });
 
   const { data: userPermissions } = useQuery({
@@ -72,14 +73,6 @@ function UsersPage() {
 
   const createMutation = useMutation({
     mutationFn: createUser,
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
-      setShowCreateModal(false);
-    },
-    onError: (err: Error) => {
-      setError(err.message);
-    },
   });
 
   const deactivateMutation = useMutation({
@@ -107,7 +100,7 @@ function UsersPage() {
     },
   });
 
-  const handleCreateUser = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleCreateUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
     const formData = new FormData(e.currentTarget);
@@ -117,7 +110,23 @@ function UsersPage() {
       role: formData.get("role") as string,
       default_language: (formData.get("default_language") as string) || "en",
     };
-    createMutation.mutate(request);
+    try {
+      const created = await createMutation.mutateAsync(request);
+      const grants = Object.entries(createPermissions)
+        .filter(([, level]) => level !== "none")
+        .map(([serviceAccountId, level]) =>
+          grantPermission(created.user_id, serviceAccountId, level)
+        );
+      if (grants.length > 0) {
+        await Promise.all(grants);
+      }
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
+      setShowCreateModal(false);
+      setCreatePermissions({});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create user");
+    }
   };
 
   const formatDate = (dateStr: string | null) => {
@@ -144,7 +153,11 @@ function UsersPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowCreateModal(true)}
+          onClick={() => {
+            setShowCreateModal(true);
+            setCreatePermissions({});
+            setError(null);
+          }}
           className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
         >
           <Plus className="h-5 w-5 mr-2" />
@@ -360,6 +373,44 @@ function UsersPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-gray-700">{t.admin.seatAccess}</p>
+                <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2">
+                  {(serviceAccounts || []).map((account: ServiceAccount) => {
+                    const currentLevel = createPermissions[account.id] || "none";
+                    return (
+                      <div key={account.id} className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm text-gray-900 truncate">
+                            {account.display_name || account.client_email}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">{account.client_email}</p>
+                        </div>
+                        <select
+                          value={currentLevel}
+                          onChange={(e) => {
+                            const level = e.target.value;
+                            setCreatePermissions((prev) => ({
+                              ...prev,
+                              [account.id]: level,
+                            }));
+                          }}
+                          className="px-2 py-1 border border-gray-300 rounded text-sm"
+                        >
+                          <option value="none">{t.admin.noAccess}</option>
+                          <option value="read">{t.admin.readAccess}</option>
+                          <option value="write">{t.admin.writeAccess}</option>
+                          <option value="admin">{t.admin.adminAccess}</option>
+                        </select>
+                      </div>
+                    );
+                  })}
+                  {!serviceAccounts?.length && (
+                    <div className="text-sm text-gray-500">{t.admin.noServiceAccounts}</div>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500">{t.admin.seatAccessHelp}</p>
               </div>
               <p className="text-sm text-gray-500">
                 {t.admin.oauthInviteNote}
