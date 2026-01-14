@@ -16,7 +16,19 @@ from storage.repositories.user_repository import User
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
-ALLOWED_DEFAULT_LANGUAGES = {"en"}
+ALLOWED_DEFAULT_LANGUAGES = {
+    "en",
+    "pl",
+    "zh",
+    "ru",
+    "uk",
+    "es",
+    "da",
+    "fr",
+    "nl",
+    "he",
+    "ar",
+}
 
 
 # ==================== Request/Response Models ====================

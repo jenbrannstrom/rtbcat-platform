@@ -1,5 +1,5 @@
 // Supported languages
-export type Language = 'en';
+export type Language = 'en' | 'pl' | 'zh' | 'ru' | 'uk' | 'es' | 'da' | 'fr' | 'nl' | 'he' | 'ar';
 
 // Translation structure - all strings organized by namespace
 export interface Translations {
