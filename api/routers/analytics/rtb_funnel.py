@@ -623,6 +623,7 @@ async def get_config_breakdown(
             breakdown.append({
                 "name": row["name"] or "Unknown",
                 "reached": reached,
+                "impressions": impressions,
                 "win_rate": round(win_rate, 1),
                 "waste_rate": round(waste_rate, 1),
             })
