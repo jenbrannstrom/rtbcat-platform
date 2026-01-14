@@ -1144,6 +1144,7 @@ export type ConfigBreakdownType = 'size' | 'geo' | 'publisher' | 'creative';
 export interface ConfigBreakdownItem {
   name: string;
   reached: number;
+  impressions: number;
   win_rate: number;
   waste_rate: number;
 }
