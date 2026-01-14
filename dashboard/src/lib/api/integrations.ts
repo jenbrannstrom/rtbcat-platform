@@ -79,10 +79,17 @@ export interface GmailStatus {
   last_error: string | null;
   total_imports: number;
   recent_history: GmailImportHistoryItem[];
+  running?: boolean;
+  current_job_id?: string | null;
 }
 
 export interface GmailImportResult {
   success: boolean;
+  queued?: boolean;
+  job_id?: string | null;
+  message?: string | null;
+  emails_skipped?: number;
+  skipped_seat_ids?: string[];
   emails_processed: number;
   files_imported: number;
   files: string[];
