@@ -40,7 +40,13 @@ class SizeCoverageAnalyzer:
     def __init__(self, db_path: str):
         self.db_path = db_path
 
-    def analyze(self, days: int = 7, billing_id: Optional[str] = None) -> SizeCoverageSummary:
+    def analyze(
+        self,
+        days: int = 7,
+        billing_id: Optional[str] = None,
+        billing_ids: Optional[list[str]] = None,
+        buyer_id: Optional[str] = None,
+    ) -> SizeCoverageSummary:
         """
         Compare sizes in traffic against creative inventory.
 
@@ -58,7 +64,13 @@ class SizeCoverageAnalyzer:
         # Get all sizes we have approved creatives for
         # Normalize sizes to just WxH format (strip descriptions like "(Mobile Banner)")
         creative_sizes = {}  # size -> {format, count}
-        cursor = conn.execute("""
+        creative_params = []
+        creative_filter = ""
+        if buyer_id:
+            creative_filter = " AND buyer_id = ?"
+            creative_params.append(buyer_id)
+
+        cursor = conn.execute(f"""
             SELECT
                 CASE
                     WHEN width IS NOT NULL AND height IS NOT NULL AND width > 0 AND height > 0
@@ -77,9 +89,9 @@ class SizeCoverageAnalyzer:
               AND (
                   (width IS NOT NULL AND height IS NOT NULL AND width > 0 AND height > 0)
                   OR (canonical_size IS NOT NULL AND canonical_size != '')
-              )
+              ){creative_filter}
             GROUP BY normalized_size, format
-        """)
+        """, creative_params)
         for row in cursor:
             size = row['normalized_size']
             if not size or size.strip() == '':
@@ -93,15 +105,15 @@ class SizeCoverageAnalyzer:
             }
 
         # Also get creatives without canonical_size (like VIDEO) by format
-        cursor = conn.execute("""
+        cursor = conn.execute(f"""
             SELECT
                 format,
                 COUNT(*) as count
             FROM creatives
             WHERE approval_status = 'APPROVED'
-              AND (canonical_size IS NULL OR canonical_size = '')
+              AND (canonical_size IS NULL OR canonical_size = ''){creative_filter}
             GROUP BY format
-        """)
+        """, creative_params)
         for row in cursor:
             key = f"(any)|{row['format']}"
             creative_sizes[key] = {
@@ -117,7 +129,11 @@ class SizeCoverageAnalyzer:
         # Build query with optional billing_id filter
         billing_filter = ""
         params = [days]
-        if billing_id:
+        if billing_ids:
+            placeholders = ",".join("?" * len(billing_ids))
+            billing_filter = f" AND billing_id IN ({placeholders})"
+            params.extend(billing_ids)
+        elif billing_id:
             billing_filter = " AND billing_id = ?"
             params.append(billing_id)
 

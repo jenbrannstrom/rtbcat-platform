@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle, Globe, TrendingUp, XCircle, Eye } from 'lucide-react';
 import { getGeoWaste } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { useAccount } from '@/contexts/account-context';
 
 interface GeoWastePanelProps {
   days?: number;
@@ -37,9 +38,10 @@ const recommendationConfig = {
 };
 
 export function GeoWastePanel({ days = 7 }: GeoWastePanelProps) {
+  const { selectedBuyerId } = useAccount();
   const { data, isLoading, error } = useQuery({
-    queryKey: ['geo-waste', days],
-    queryFn: () => getGeoWaste(days),
+    queryKey: ['geo-waste', days, selectedBuyerId],
+    queryFn: () => getGeoWaste(days, selectedBuyerId || undefined),
   });
 
   if (isLoading) {

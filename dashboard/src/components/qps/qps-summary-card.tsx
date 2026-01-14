@@ -4,15 +4,17 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle, Globe, LayoutGrid, DollarSign } from 'lucide-react';
 import { getQPSSummary } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { useAccount } from '@/contexts/account-context';
 
 interface QPSSummaryCardProps {
   days?: number;
 }
 
 export function QPSSummaryCard({ days = 7 }: QPSSummaryCardProps) {
+  const { selectedBuyerId } = useAccount();
   const { data, isLoading, error } = useQuery({
-    queryKey: ['qps-summary', days],
-    queryFn: () => getQPSSummary(days),
+    queryKey: ['qps-summary', days, selectedBuyerId],
+    queryFn: () => getQPSSummary(days, selectedBuyerId || undefined),
   });
 
   if (isLoading) {

@@ -210,18 +210,27 @@ export interface SpendStatsResponse {
 // QPS Analytics API
 // =============================================================================
 
-export async function getQPSSizeCoverage(days: number = 7, billingId?: string): Promise<SizeCoverageResponse> {
+export async function getQPSSizeCoverage(
+  days: number = 7,
+  billingId?: string,
+  buyerId?: string
+): Promise<SizeCoverageResponse> {
   const params = new URLSearchParams({ days: String(days) });
   if (billingId) params.set("billing_id", billingId);
+  if (buyerId) params.set("buyer_id", buyerId);
   return fetchApi<SizeCoverageResponse>(`/analytics/size-coverage?${params.toString()}`);
 }
 
-export async function getGeoWaste(days: number = 7): Promise<GeoWasteResponse> {
-  return fetchApi<GeoWasteResponse>(`/analytics/geo-waste?days=${days}`);
+export async function getGeoWaste(days: number = 7, buyerId?: string): Promise<GeoWasteResponse> {
+  const params = new URLSearchParams({ days: String(days) });
+  if (buyerId) params.set("buyer_id", buyerId);
+  return fetchApi<GeoWasteResponse>(`/analytics/geo-waste?${params.toString()}`);
 }
 
-export async function getQPSSummary(days: number = 7): Promise<QPSSummaryResponse> {
-  return fetchApi<QPSSummaryResponse>(`/analytics/qps-summary?days=${days}`);
+export async function getQPSSummary(days: number = 7, buyerId?: string): Promise<QPSSummaryResponse> {
+  const params = new URLSearchParams({ days: String(days) });
+  if (buyerId) params.set("buyer_id", buyerId);
+  return fetchApi<QPSSummaryResponse>(`/analytics/qps-summary?${params.toString()}`);
 }
 
 export async function getSpendStats(days: number = 7, billingId?: string): Promise<SpendStatsResponse> {
@@ -283,6 +292,9 @@ export interface RTBFunnelResponse {
     publishers_count?: number;
     geos_count?: number;
     period_days?: number;
+    buyer_filter_applied?: boolean;
+    buyer_filter_message?: string | null;
+    bidder_id_populated?: boolean;
   };
 }
 

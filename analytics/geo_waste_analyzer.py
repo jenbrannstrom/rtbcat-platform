@@ -6,6 +6,7 @@ This helps identify geos that should be excluded from pretargeting.
 """
 
 from dataclasses import dataclass
+from typing import Optional
 import sqlite3
 
 
@@ -79,6 +80,7 @@ class GeoWasteAnalyzer:
         min_impressions: int = 100,
         low_ctr_threshold: float = 0.5,  # Fraction of average CTR
         low_cpm_threshold: float = 0.3,  # Fraction of average CPM
+        billing_ids: Optional[list[str]] = None,
     ) -> GeoWasteSummary:
         """
         Analyze geographic performance and identify waste.
@@ -98,6 +100,13 @@ class GeoWasteAnalyzer:
         conn.row_factory = sqlite3.Row
 
         # Get geo performance
+        billing_filter = ""
+        billing_params = []
+        if billing_ids:
+            placeholders = ",".join("?" * len(billing_ids))
+            billing_filter = f" AND pm.billing_id IN ({placeholders})"
+            billing_params.extend(billing_ids)
+
         cursor = conn.execute(f"""
             SELECT
                 pm.geography as country,
@@ -109,10 +118,11 @@ class GeoWasteAnalyzer:
             WHERE pm.metric_date >= date('now', '-{days} days')
               AND pm.geography IS NOT NULL
               AND pm.geography != ''
+              {billing_filter}
             GROUP BY pm.geography
             HAVING SUM(pm.impressions) >= {min_impressions}
             ORDER BY SUM(pm.impressions) DESC
-        """)
+        """, billing_params)
 
         geo_data = []
         for row in cursor:

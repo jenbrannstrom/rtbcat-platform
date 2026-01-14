@@ -107,6 +107,15 @@ def get_value(row: Dict, mapping: MappingResult, db_field: str, default: str = "
     return default
 
 
+def parse_bidder_id_from_filename(csv_path: str) -> Optional[str]:
+    """Try to extract a bidder/account ID from a Cat-Scan filename."""
+    filename = os.path.basename(csv_path)
+    for token in filename.split("-"):
+        if token.isdigit() and len(token) >= 6:
+            return token
+    return None
+
+
 def ensure_columns_exist(cursor, table_name: str, columns: List[Tuple[str, str]]):
     """Ensure columns exist in table, adding them if missing."""
     # Get existing columns
@@ -153,6 +162,7 @@ def ensure_table_exists(cursor, table_name: str):
                 video_completions INTEGER DEFAULT 0,
                 viewable_impressions INTEGER DEFAULT 0,
                 measurable_impressions INTEGER DEFAULT 0,
+                bidder_id TEXT,
                 row_hash TEXT UNIQUE,
                 import_batch_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -161,6 +171,7 @@ def ensure_table_exists(cursor, table_name: str):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_daily_date ON rtb_daily(metric_date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_daily_billing ON rtb_daily(billing_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_daily_creative ON rtb_daily(creative_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_daily_bidder ON rtb_daily(bidder_id)")
         ensure_unique_index(cursor, "rtb_daily", "row_hash", "idx_rtb_daily_row_hash")
 
     elif table_name == "rtb_bidstream":
@@ -254,7 +265,8 @@ def import_to_rtb_daily(
     mapping: MappingResult,
     db_path: str,
     batch_id: str,
-    result: UnifiedImportResult
+    result: UnifiedImportResult,
+    bidder_id: Optional[str] = None,
 ):
     """Import data to rtb_daily table."""
     conn = sqlite3.connect(db_path)
@@ -271,9 +283,13 @@ def import_to_rtb_daily(
         ("hour", "INTEGER DEFAULT 0"),
         ("viewable_impressions", "INTEGER DEFAULT 0"),
         ("measurable_impressions", "INTEGER DEFAULT 0"),
+        ("bidder_id", "TEXT"),
     ])
 
-    hash_keys = ["metric_date", "hour", "billing_id", "creative_id", "creative_size", "country", "publisher_id"]
+    hash_keys = [
+        "metric_date", "hour", "billing_id", "creative_id", "creative_size",
+        "country", "publisher_id", "buyer_account_id", "bidder_id",
+    ]
     min_date, max_date = None, None
 
     insert_sql = """
@@ -283,8 +299,8 @@ def import_to_rtb_daily(
             app_id, app_name, reached_queries, impressions, clicks, spend_micros,
             bids, bids_in_auction, auctions_won,
             video_starts, video_completions, viewable_impressions, measurable_impressions,
-            row_hash, import_batch_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            bidder_id, row_hash, import_batch_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
     rows_to_insert: list[tuple] = []
 
@@ -335,6 +351,7 @@ def import_to_rtb_daily(
                         "publisher_domain": get_value(row, mapping, "publisher_domain", ""),
                         "app_id": get_value(row, mapping, "app_id", ""),
                         "app_name": get_value(row, mapping, "app_name", ""),
+                        "buyer_account_id": get_value(row, mapping, "buyer_account_id", ""),
                         "reached_queries": parse_int(get_value(row, mapping, "reached_queries", "0")),
                         "impressions": parse_int(get_value(row, mapping, "impressions", "0")),
                         "clicks": parse_int(get_value(row, mapping, "clicks", "0")),
@@ -346,6 +363,14 @@ def import_to_rtb_daily(
                         "viewable_impressions": parse_int(get_value(row, mapping, "viewable_impressions", "0")),
                         "measurable_impressions": parse_int(get_value(row, mapping, "measurable_impressions", "0")),
                     }
+
+                    if not bidder_id:
+                        try:
+                            from qps.account_mapper import get_bidder_id_for_billing_id
+                            bidder_id = get_bidder_id_for_billing_id(row_data["billing_id"], db_path=db_path)
+                        except Exception:
+                            bidder_id = None
+                    row_data["bidder_id"] = bidder_id
 
                     # Parse spend (convert to micros)
                     spend = parse_float(get_value(row, mapping, "spend", "0"))
@@ -364,7 +389,7 @@ def import_to_rtb_daily(
                         row_data["spend_micros"], row_data["bids"], row_data["bids_in_auction"],
                         row_data["auctions_won"], row_data["video_starts"], row_data["video_completions"],
                         row_data["viewable_impressions"], row_data["measurable_impressions"],
-                        row_hash, batch_id
+                        row_data["bidder_id"], row_hash, batch_id
                     ))
                     if len(rows_to_insert) >= IMPORT_BATCH_SIZE:
                         flush_rows()
@@ -393,7 +418,8 @@ def import_to_rtb_bidstream(
     mapping: MappingResult,
     db_path: str,
     batch_id: str,
-    result: UnifiedImportResult
+    result: UnifiedImportResult,
+    bidder_id: Optional[str] = None,
 ):
     """Import data to rtb_bidstream table."""
     conn = sqlite3.connect(db_path)
@@ -406,8 +432,9 @@ def import_to_rtb_bidstream(
     if not cursor.fetchone():
         ensure_table_exists(cursor, "rtb_bidstream")
     ensure_unique_index(cursor, "rtb_bidstream", "row_hash", "idx_rtb_bidstream_row_hash")
+    ensure_columns_exist(cursor, "rtb_bidstream", [("bidder_id", "TEXT")])
 
-    hash_keys = ["metric_date", "hour", "country", "buyer_account_id", "publisher_id"]
+    hash_keys = ["metric_date", "hour", "country", "buyer_account_id", "publisher_id", "bidder_id"]
     min_date, max_date = None, None
 
     insert_sql = """
@@ -415,8 +442,8 @@ def import_to_rtb_bidstream(
             metric_date, hour, country, buyer_account_id, publisher_id, publisher_name,
             inventory_matches, bid_requests, successful_responses, reached_queries,
             bids, bids_in_auction, auctions_won, impressions, clicks,
-            row_hash, import_batch_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            bidder_id, row_hash, import_batch_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
     rows_to_insert: list[tuple] = []
 
@@ -467,6 +494,8 @@ def import_to_rtb_bidstream(
                         "clicks": parse_int(get_value(row, mapping, "clicks", "0")),
                     }
 
+                    row_data["bidder_id"] = bidder_id
+
                     row_hash = compute_row_hash(row_data, hash_keys)
 
                     rows_to_insert.append((
@@ -476,7 +505,7 @@ def import_to_rtb_bidstream(
                         row_data["successful_responses"], row_data["reached_queries"],
                         row_data["bids"], row_data["bids_in_auction"], row_data["auctions_won"],
                         row_data["impressions"], row_data["clicks"],
-                        row_hash, batch_id
+                        row_data["bidder_id"], row_hash, batch_id
                     ))
                     if len(rows_to_insert) >= IMPORT_BATCH_SIZE:
                         flush_rows()
@@ -505,7 +534,8 @@ def import_to_rtb_bid_filtering(
     mapping: MappingResult,
     db_path: str,
     batch_id: str,
-    result: UnifiedImportResult
+    result: UnifiedImportResult,
+    bidder_id: Optional[str] = None,
 ):
     """Import data to rtb_bid_filtering table."""
     conn = sqlite3.connect(db_path)
@@ -514,15 +544,15 @@ def import_to_rtb_bid_filtering(
     ensure_table_exists(cursor, "rtb_bid_filtering")
     ensure_unique_index(cursor, "rtb_bid_filtering", "row_hash", "idx_rtb_bid_filtering_row_hash")
 
-    hash_keys = ["metric_date", "country", "filtering_reason", "creative_id"]
+    hash_keys = ["metric_date", "country", "filtering_reason", "creative_id", "bidder_id"]
     min_date, max_date = None, None
 
     insert_sql = """
         INSERT OR IGNORE INTO rtb_bid_filtering (
             metric_date, country, buyer_account_id, filtering_reason, creative_id,
             bids, bids_in_auction, opportunity_cost_micros,
-            row_hash, import_batch_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            bidder_id, row_hash, import_batch_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
     rows_to_insert: list[tuple] = []
 
@@ -566,6 +596,7 @@ def import_to_rtb_bid_filtering(
                         "bids": parse_int(get_value(row, mapping, "bids", "0")),
                         "bids_in_auction": parse_int(get_value(row, mapping, "bids_in_auction", "0")),
                     }
+                    row_data["bidder_id"] = bidder_id
 
                     # Parse opportunity cost
                     opp_cost = parse_float(get_value(row, mapping, "opportunity_cost", "0"))
@@ -577,7 +608,7 @@ def import_to_rtb_bid_filtering(
                         row_data["metric_date"], row_data["country"], row_data["buyer_account_id"],
                         row_data["filtering_reason"], row_data["creative_id"],
                         row_data["bids"], row_data["bids_in_auction"], row_data["opportunity_cost_micros"],
-                        row_hash, batch_id
+                        bidder_id, row_hash, batch_id
                     ))
                     if len(rows_to_insert) >= IMPORT_BATCH_SIZE:
                         flush_rows()
@@ -604,6 +635,7 @@ def import_to_rtb_bid_filtering(
 def unified_import(
     csv_path: str,
     db_path: str = DB_PATH,
+    bidder_id: Optional[str] = None,
 ) -> UnifiedImportResult:
     """
     Import any CSV using flexible column mapping.
@@ -660,13 +692,16 @@ def unified_import(
         )
         return result
 
+    if not bidder_id:
+        bidder_id = parse_bidder_id_from_filename(csv_path)
+
     # Import based on target table
     if target_table == "rtb_daily":
-        import_to_rtb_daily(csv_path, mapping, db_path, result.batch_id, result)
+        import_to_rtb_daily(csv_path, mapping, db_path, result.batch_id, result, bidder_id=bidder_id)
     elif target_table == "rtb_bidstream":
-        import_to_rtb_bidstream(csv_path, mapping, db_path, result.batch_id, result)
+        import_to_rtb_bidstream(csv_path, mapping, db_path, result.batch_id, result, bidder_id=bidder_id)
     elif target_table == "rtb_bid_filtering":
-        import_to_rtb_bid_filtering(csv_path, mapping, db_path, result.batch_id, result)
+        import_to_rtb_bid_filtering(csv_path, mapping, db_path, result.batch_id, result, bidder_id=bidder_id)
     else:
         result.error_message = f"Unknown target table: {target_table}"
 

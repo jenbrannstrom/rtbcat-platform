@@ -284,14 +284,14 @@ export function RecommendedOptimizationsPanel({
   const queryClient = useQueryClient();
 
   // Fetch size coverage to generate size mismatch recommendations
+  const { selectedBuyerId: buyerId } = useAccount();
   const { data: sizeCoverage, isLoading: sizeLoading } = useQuery({
-    queryKey: ['size-coverage', days],
-    queryFn: () => getQPSSizeCoverage(days),
+    queryKey: ['size-coverage', days, buyerId],
+    queryFn: () => getQPSSizeCoverage(days, undefined, buyerId || undefined),
     enabled: aiMode !== 'manual',
   });
 
   // Fetch config performance for underperforming recommendations (filtered by selected buyer)
-  const { selectedBuyerId: buyerId } = useAccount();
   const { data: configPerformance, isLoading: configPerfLoading } = useQuery({
     queryKey: ['rtb-funnel-configs', days, buyerId],
     queryFn: () => getRTBFunnelConfigs(days, buyerId || undefined),

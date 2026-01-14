@@ -7,12 +7,16 @@ publisher waste, bid filtering, platform efficiency, and hourly patterns.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 
 from analytics.size_coverage_analyzer import SizeCoverageAnalyzer
 from analytics.geo_waste_analyzer import GeoWasteAnalyzer
 from analytics.pretargeting_recommender import PretargetingRecommender
 from analytics.qps_optimizer import QPSOptimizer
+from api.dependencies import get_store, get_current_user, resolve_buyer_id, get_allowed_buyer_ids
+from storage import SQLiteStore
+from storage.repositories.user_repository import User
+from .common import get_valid_billing_ids_for_buyer
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +26,10 @@ router = APIRouter(tags=["QPS Analytics"])
 @router.get("/analytics/size-coverage", tags=["QPS Analytics"])
 async def get_size_coverage(
     days: int = Query(7, ge=1, le=90),
-    billing_id: Optional[str] = Query(None, description="Filter by billing account ID (pretargeting config)")
+    billing_id: Optional[str] = Query(None, description="Filter by billing account ID (pretargeting config)"),
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer/seat ID"),
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """
     Analyze size coverage gaps.
@@ -35,11 +42,28 @@ async def get_size_coverage(
     try:
         # SizeCoverageAnalyzer uses its own db connection pattern
         from storage.database import DB_PATH
+        resolved_buyer_id = None
+        billing_ids = None
+        if buyer_id:
+            resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+            billing_ids = await get_valid_billing_ids_for_buyer(resolved_buyer_id)
+        else:
+            allowed = await get_allowed_buyer_ids(store=store, user=user)
+            if allowed:
+                billing_ids = []
+                for allowed_buyer in allowed:
+                    billing_ids.extend(await get_valid_billing_ids_for_buyer(allowed_buyer))
         analyzer = SizeCoverageAnalyzer(str(DB_PATH))
-        summary = analyzer.analyze(days, billing_id=billing_id)
+        summary = analyzer.analyze(
+            days,
+            billing_id=billing_id,
+            billing_ids=billing_ids if billing_ids else None,
+            buyer_id=resolved_buyer_id,
+        )
         return {
             "period_days": days,
             "billing_id": billing_id,
+            "buyer_id": resolved_buyer_id,
             "total_sizes_in_traffic": summary.total_sizes_in_traffic,
             "sizes_with_creatives": summary.sizes_with_creatives,
             "sizes_without_creatives": summary.sizes_without_creatives,
@@ -76,7 +100,12 @@ async def get_size_coverage(
 
 
 @router.get("/analytics/geo-waste", tags=["QPS Analytics"])
-async def get_geo_waste(days: int = Query(7, ge=1, le=90)):
+async def get_geo_waste(
+    days: int = Query(7, ge=1, le=90),
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer/seat ID"),
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
+):
     """
     Analyze geographic QPS waste.
 
@@ -84,10 +113,22 @@ async def get_geo_waste(days: int = Query(7, ge=1, le=90)):
     """
     try:
         from storage.database import DB_PATH
+        resolved_buyer_id = None
+        billing_ids = None
+        if buyer_id:
+            resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+            billing_ids = await get_valid_billing_ids_for_buyer(resolved_buyer_id)
+        else:
+            allowed = await get_allowed_buyer_ids(store=store, user=user)
+            if allowed:
+                billing_ids = []
+                for allowed_buyer in allowed:
+                    billing_ids.extend(await get_valid_billing_ids_for_buyer(allowed_buyer))
         analyzer = GeoWasteAnalyzer(str(DB_PATH))
-        summary = analyzer.analyze(days)
+        summary = analyzer.analyze(days, billing_ids=billing_ids if billing_ids else None)
         return {
             "period_days": days,
+            "buyer_id": resolved_buyer_id,
             "total_geos": summary.total_geos,
             "geos_with_traffic": summary.geos_with_traffic,
             "geos_to_exclude": summary.geos_to_exclude,
@@ -146,7 +187,12 @@ async def get_pretargeting_recommendations(
 
 
 @router.get("/analytics/qps-summary", tags=["QPS Analytics"])
-async def get_qps_summary(days: int = Query(7, ge=1, le=90)):
+async def get_qps_summary(
+    days: int = Query(7, ge=1, le=90),
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer/seat ID"),
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
+):
     """
     High-level QPS efficiency summary.
 
@@ -154,11 +200,26 @@ async def get_qps_summary(days: int = Query(7, ge=1, le=90)):
     """
     try:
         from storage.database import DB_PATH
+        resolved_buyer_id = None
+        billing_ids = None
+        if buyer_id:
+            resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+            billing_ids = await get_valid_billing_ids_for_buyer(resolved_buyer_id)
+        else:
+            allowed = await get_allowed_buyer_ids(store=store, user=user)
+            if allowed:
+                billing_ids = []
+                for allowed_buyer in allowed:
+                    billing_ids.extend(await get_valid_billing_ids_for_buyer(allowed_buyer))
         size_analyzer = SizeCoverageAnalyzer(str(DB_PATH))
         geo_analyzer = GeoWasteAnalyzer(str(DB_PATH))
 
-        size_summary = size_analyzer.analyze(days)
-        geo_summary = geo_analyzer.analyze(days)
+        size_summary = size_analyzer.analyze(
+            days,
+            billing_ids=billing_ids if billing_ids else None,
+            buyer_id=resolved_buyer_id,
+        )
+        geo_summary = geo_analyzer.analyze(days, billing_ids=billing_ids if billing_ids else None)
 
         # Calculate total estimated waste
         # Size gaps are 100% waste, geo waste is partial
@@ -166,6 +227,7 @@ async def get_qps_summary(days: int = Query(7, ge=1, le=90)):
 
         return {
             "period_days": days,
+            "buyer_id": resolved_buyer_id,
             "size_coverage": {
                 "coverage_rate_pct": round(size_summary.coverage_rate, 1),
                 "sizes_covered": size_summary.sizes_with_creatives,
