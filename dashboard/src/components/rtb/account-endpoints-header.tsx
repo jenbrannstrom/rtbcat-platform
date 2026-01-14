@@ -267,15 +267,15 @@ export function AccountEndpointsHeader({ funnelData }: AccountEndpointsHeaderPro
                 <span className="text-xs text-blue-600 uppercase tracking-wide">Reached</span>
                 <span className="text-sm font-bold text-blue-700">{formatNumber(funnelData!.reached!)}</span>
               </div>
-              {/* Win Rate */}
-              <div className="flex items-center justify-between px-3 py-1.5 bg-purple-50 rounded border border-purple-100">
-                <span className="text-xs text-purple-600 uppercase tracking-wide">Win Rate</span>
-                <span className="text-sm font-bold text-purple-700">{funnelData!.winRate?.toFixed(1)}%</span>
-              </div>
               {/* Impressions */}
               <div className="flex items-center justify-between px-3 py-1.5 bg-green-50 rounded border border-green-100">
                 <span className="text-xs text-green-600 uppercase tracking-wide">Impressions</span>
                 <span className="text-sm font-bold text-green-700">{formatNumber(funnelData!.impressions)}</span>
+              </div>
+              {/* Win Rate */}
+              <div className="flex items-center justify-between px-3 py-1.5 bg-purple-50 rounded border border-purple-100">
+                <span className="text-xs text-purple-600 uppercase tracking-wide">Win Rate</span>
+                <span className="text-sm font-bold text-purple-700">{funnelData!.winRate?.toFixed(1)}%</span>
               </div>
             </div>
           ) : (
