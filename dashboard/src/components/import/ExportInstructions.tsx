@@ -76,7 +76,7 @@ export function ExportInstructions() {
           <span className="bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded">2</span>
           <span className="bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded">Required</span>
           <h4 className="font-semibold text-gray-900">RTB Funnel (Geo Only)</h4>
-          <span className="text-xs text-gray-500 ml-auto">→ rtb_funnel table</span>
+          <span className="text-xs text-gray-500 ml-auto">→ rtb_bidstream table</span>
         </div>
         <p className="text-gray-600 mb-3">Full bid pipeline by country. <strong>Has Bid requests but NO Creative/App detail.</strong></p>
 
@@ -115,7 +115,7 @@ export function ExportInstructions() {
           <span className="bg-green-600 text-white text-xs font-bold px-2 py-1 rounded">3</span>
           <span className="bg-green-600 text-white text-xs font-bold px-2 py-1 rounded">Required</span>
           <h4 className="font-semibold text-gray-900">RTB Funnel (With Publishers)</h4>
-          <span className="text-xs text-gray-500 ml-auto">→ rtb_funnel table</span>
+          <span className="text-xs text-gray-500 ml-auto">→ rtb_bidstream table</span>
         </div>
         <p className="text-gray-600 mb-3">Bid pipeline by publisher. <strong>Has Publisher + Bid requests but NO App detail.</strong></p>
 

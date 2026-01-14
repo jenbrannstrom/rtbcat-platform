@@ -424,7 +424,7 @@ def import_to_catscan(filepath):
                          files={'file': f})
     
     Option 2 - Direct database import:
-        from analytics.rtb_funnel_analyzer import RTBFunnelAnalyzer
+        from analytics.rtb_bidstream_analyzer import RTBFunnelAnalyzer
         analyzer = RTBFunnelAnalyzer()
         analyzer.import_csv(filepath)
     """
