@@ -517,7 +517,8 @@ async def get_config_breakdown(
     """
     try:
         breakdown = []
-        is_aggregate = False
+        # Note: is_aggregate is always False - we only show per-config data now
+        # Account-wide data is shown in the main page sections, not in config breakdown
 
         if by in ("geo", "publisher"):
             # Strategy: JOIN rtb_daily tables to get per-billing_id geo/publisher data
@@ -527,6 +528,7 @@ async def get_config_breakdown(
 
             if by == "geo":
                 # JOIN: Get country data for creatives belonging to this billing_id
+                # quality rows have billing_id, bidsinauction rows have country
                 rows = await db_query("""
                     SELECT
                         b.country as name,
@@ -548,34 +550,7 @@ async def get_config_breakdown(
                     ORDER BY total_bids_in_auction DESC
                     LIMIT 50
                 """, (billing_id, f'-{days} days'))
-                is_aggregate = False  # This is now per-billing_id!
-
-                # Fallback to rtb_bidstream (account-wide) if no joined data
-                if not rows:
-                    bidder_rows = await db_query("""
-                        SELECT bidder_id FROM pretargeting_configs WHERE billing_id = ? LIMIT 1
-                    """, (billing_id,))
-                    if bidder_rows:
-                        bidder_id = bidder_rows[0]["bidder_id"]
-                        rows = await db_query("""
-                            SELECT
-                                country as name,
-                                0 as total_bids,
-                                COALESCE(SUM(bids_in_auction), 0) as total_bids_in_auction,
-                                COALESCE(SUM(auctions_won), 0) as total_auctions_won,
-                                COALESCE(SUM(reached_queries), 0) as total_reached,
-                                COALESCE(SUM(impressions), 0) as total_impressions
-                            FROM rtb_bidstream
-                            WHERE buyer_account_id = ?
-                              AND metric_date >= date('now', ?)
-                              AND country IS NOT NULL
-                              AND country != ''
-                            GROUP BY country
-                            ORDER BY total_bids_in_auction DESC
-                            LIMIT 50
-                        """, (bidder_id, f'-{days} days'))
-                        if rows:
-                            is_aggregate = True  # Account-wide fallback
+                # No account-wide fallback - only show per-config data
             else:
                 # publisher - JOIN to get publisher data for this billing_id's creatives
                 rows = await db_query("""
@@ -598,34 +573,7 @@ async def get_config_breakdown(
                     ORDER BY total_bids_in_auction DESC
                     LIMIT 50
                 """, (billing_id, f'-{days} days'))
-                is_aggregate = False
-
-                # Fallback to rtb_bidstream (account-wide) if no joined data
-                if not rows:
-                    bidder_rows = await db_query("""
-                        SELECT bidder_id FROM pretargeting_configs WHERE billing_id = ? LIMIT 1
-                    """, (billing_id,))
-                    if bidder_rows:
-                        bidder_id = bidder_rows[0]["bidder_id"]
-                        rows = await db_query("""
-                            SELECT
-                                publisher_name as name,
-                                0 as total_bids,
-                                COALESCE(SUM(bids_in_auction), 0) as total_bids_in_auction,
-                                COALESCE(SUM(auctions_won), 0) as total_auctions_won,
-                                COALESCE(SUM(reached_queries), 0) as total_reached,
-                                COALESCE(SUM(impressions), 0) as total_impressions
-                            FROM rtb_bidstream
-                            WHERE buyer_account_id = ?
-                              AND metric_date >= date('now', ?)
-                              AND publisher_name IS NOT NULL
-                              AND publisher_name != ''
-                            GROUP BY publisher_name
-                            ORDER BY total_bids_in_auction DESC
-                            LIMIT 50
-                        """, (bidder_id, f'-{days} days'))
-                        if rows:
-                            is_aggregate = True
+                # No account-wide fallback - only show per-config data
 
             if not rows:
                 return {
@@ -736,7 +684,7 @@ async def get_config_breakdown(
             "billing_id": billing_id,
             "breakdown_by": by,
             "breakdown": breakdown,
-            "is_aggregate": is_aggregate,
+            "is_aggregate": False,  # Always per-config, never account-wide
             "has_funnel_metrics": any(item.get("bids_in_auction", 0) > 0 for item in breakdown),
         }
 

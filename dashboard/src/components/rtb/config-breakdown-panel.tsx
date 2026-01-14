@@ -179,17 +179,16 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
         )}
 
         {!isLoading && !error && sortedBreakdown.length === 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="font-medium text-amber-800 mb-1">
-                  No {activeTab} breakdown data for this config
+                <p className="font-medium text-gray-700 mb-1">
+                  No {activeTab} data for this config
                 </p>
-                <p className="text-amber-700 text-xs">
+                <p className="text-gray-500 text-xs">
                   {data?.no_data_reason ||
-                    `Per-config ${activeTab} data requires CSV imports with billing_id breakdown.
-                    Import reports from Google Authorized Buyers that include this detail.`}
+                    `To see ${activeTab} breakdown, import both catscan-quality (has billing_id) and catscan-bidsinauction (has ${activeTab === 'geo' ? 'country' : activeTab}) CSV reports.`}
                 </p>
               </div>
             </div>
@@ -198,12 +197,6 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
 
         {!isLoading && !error && sortedBreakdown.length > 0 && (
           <div className="bg-white rounded-lg border overflow-hidden">
-            {data?.is_aggregate && (
-              <div className="px-3 py-2 bg-blue-50 border-b border-blue-200 text-xs text-blue-700">
-                <AlertCircle className="h-3 w-3 inline mr-1" />
-                Showing account-level aggregate data (per-config breakdown not available for this view)
-              </div>
-            )}
             {/* Table header */}
             <div className="grid grid-cols-14 gap-2 px-3 py-2 border-b bg-gray-50 text-xs font-medium text-gray-500">
               <div className="col-span-1"></div>
