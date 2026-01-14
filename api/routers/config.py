@@ -510,7 +510,7 @@ async def get_gemini_key_status(
 
     # Check database setting first
     repo = UserRepository(store.db_path)
-    stored_key = await repo.get_system_setting("gemini_api_key")
+    stored_key = await repo.get_setting("gemini_api_key")
 
     if stored_key:
         return GeminiKeyStatusResponse(
@@ -557,7 +557,7 @@ async def update_gemini_key(
 
         # Store in database
         repo = UserRepository(store.db_path)
-        await repo.set_system_setting("gemini_api_key", api_key, updated_by="api")
+        await repo.set_setting("gemini_api_key", api_key, updated_by="api")
 
         logger.info("Gemini API key updated")
         return GeminiKeyUpdateResponse(
@@ -586,7 +586,7 @@ async def delete_gemini_key(
 
     try:
         repo = UserRepository(store.db_path)
-        await repo.set_system_setting("gemini_api_key", "", updated_by="api")
+        await repo.set_setting("gemini_api_key", "", updated_by="api")
 
         logger.info("Gemini API key removed")
         return GeminiKeyUpdateResponse(
