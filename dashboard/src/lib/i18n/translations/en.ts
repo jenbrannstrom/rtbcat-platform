@@ -48,7 +48,7 @@ export const en: Translations = {
   },
 
   navigation: {
-    wasteOptimizer: 'Waste Optimizer',
+    wasteOptimizer: 'QPS Optimizer',
     creatives: 'Creatives',
     campaigns: 'Campaigns',
     changeHistory: 'Change History',
