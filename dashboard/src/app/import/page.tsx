@@ -172,8 +172,8 @@ export default function ImportPage() {
         });
 
         setImportResult(result);
-        const imported = result.imported ?? result.rows_imported ?? 0;
-        const duplicates = result.duplicates ?? result.rows_duplicate ?? 0;
+        const imported = result.imported ?? 0;
+        const duplicates = result.duplicates ?? 0;
         setStep(result.success || imported > 0 || duplicates > 0 ? "success" : "error");
         if (result.success || imported > 0 || duplicates > 0) {
           loadHistory(); // Reload history after successful import
