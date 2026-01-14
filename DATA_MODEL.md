@@ -1019,6 +1019,7 @@ User accounts for platform access.
 | created_at | TEXT | Creation time |
 | updated_at | TEXT | Last update time |
 | last_login_at | TEXT | Last login time |
+| default_language | TEXT | Default UI language |
 
 ### user_sessions
 

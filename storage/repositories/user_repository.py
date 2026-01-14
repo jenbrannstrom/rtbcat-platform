@@ -28,7 +28,8 @@ class User:
         is_active: Whether the account is active.
         created_at: Account creation timestamp.
         updated_at: Last update timestamp.
-        last_login_at: Last successful login timestamp.
+    last_login_at: Last successful login timestamp.
+    default_language: Default UI language code.
     """
 
     id: str
@@ -39,6 +40,7 @@ class User:
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     last_login_at: Optional[str] = None
+    default_language: Optional[str] = None
 
 
 @dataclass
@@ -130,6 +132,7 @@ class UserRepository(BaseRepository[User]):
         email: str,
         display_name: Optional[str] = None,
         role: str = "user",
+        default_language: str = "en",
     ) -> User:
         """Create a new user.
 
@@ -138,6 +141,7 @@ class UserRepository(BaseRepository[User]):
             email: User's email address.
             display_name: Optional display name.
             role: User role ('admin' or 'user').
+            default_language: Default UI language code.
 
         Returns:
             Created User object.
@@ -149,10 +153,10 @@ class UserRepository(BaseRepository[User]):
             def _create():
                 conn.execute(
                     """
-                    INSERT INTO users (id, email, display_name, role, is_active, created_at)
-                    VALUES (?, ?, ?, ?, 1, ?)
+                    INSERT INTO users (id, email, display_name, role, is_active, created_at, default_language)
+                    VALUES (?, ?, ?, ?, 1, ?, ?)
                     """,
-                    (user_id, email, display_name, role, now),
+                    (user_id, email, display_name, role, now, default_language),
                 )
                 conn.commit()
 
@@ -165,6 +169,7 @@ class UserRepository(BaseRepository[User]):
             role=role,
             is_active=True,
             created_at=now,
+            default_language=default_language,
         )
 
     async def get_user_by_id(self, user_id: str) -> Optional[User]:
@@ -183,7 +188,8 @@ class UserRepository(BaseRepository[User]):
                 cursor = conn.execute(
                     """
                     SELECT id, email, display_name, role,
-                           is_active, created_at, updated_at, last_login_at
+                           is_active, created_at, updated_at, last_login_at,
+                           default_language
                     FROM users
                     WHERE id = ?
                     """,
@@ -203,6 +209,7 @@ class UserRepository(BaseRepository[User]):
                     created_at=row[5],
                     updated_at=row[6],
                     last_login_at=row[7],
+                    default_language=row[8],
                 )
             return None
 
@@ -222,7 +229,8 @@ class UserRepository(BaseRepository[User]):
                 cursor = conn.execute(
                     """
                     SELECT id, email, display_name, role,
-                           is_active, created_at, updated_at, last_login_at
+                           is_active, created_at, updated_at, last_login_at,
+                           default_language
                     FROM users
                     WHERE email = ?
                     """,
@@ -242,6 +250,7 @@ class UserRepository(BaseRepository[User]):
                     created_at=row[5],
                     updated_at=row[6],
                     last_login_at=row[7],
+                    default_language=row[8],
                 )
             return None
 
@@ -277,7 +286,8 @@ class UserRepository(BaseRepository[User]):
                 cursor = conn.execute(
                     f"""
                     SELECT id, email, display_name, role,
-                           is_active, created_at, updated_at, last_login_at
+                           is_active, created_at, updated_at, last_login_at,
+                           default_language
                     FROM users
                     WHERE {where_clause}
                     ORDER BY created_at DESC
@@ -298,6 +308,7 @@ class UserRepository(BaseRepository[User]):
                 created_at=row[5],
                 updated_at=row[6],
                 last_login_at=row[7],
+                default_language=row[8],
             )
             for row in rows
         ]
@@ -308,6 +319,7 @@ class UserRepository(BaseRepository[User]):
         display_name: Optional[str] = None,
         role: Optional[str] = None,
         is_active: Optional[bool] = None,
+        default_language: Optional[str] = None,
     ) -> bool:
         """Update a user's fields.
 
@@ -316,6 +328,7 @@ class UserRepository(BaseRepository[User]):
             display_name: New display name.
             role: New role.
             is_active: New active status.
+            default_language: Default UI language code.
 
         Returns:
             True if user was updated, False if not found.
@@ -332,6 +345,9 @@ class UserRepository(BaseRepository[User]):
         if is_active is not None:
             updates.append("is_active = ?")
             params.append(1 if is_active else 0)
+        if default_language is not None:
+            updates.append("default_language = ?")
+            params.append(default_language)
 
         if not updates:
             return False
@@ -502,7 +518,8 @@ class UserRepository(BaseRepository[User]):
                 cursor = conn.execute(
                     """
                     SELECT u.id, u.email, u.display_name, u.role,
-                           u.is_active, u.created_at, u.updated_at, u.last_login_at
+                           u.is_active, u.created_at, u.updated_at, u.last_login_at,
+                           u.default_language
                     FROM user_sessions s
                     JOIN users u ON s.user_id = u.id
                     WHERE s.id = ? AND s.expires_at > ? AND u.is_active = 1
@@ -523,6 +540,7 @@ class UserRepository(BaseRepository[User]):
                     created_at=row[5],
                     updated_at=row[6],
                     last_login_at=row[7],
+                    default_language=row[8],
                 )
             return None
 

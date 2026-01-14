@@ -20,6 +20,7 @@ import {
   grantPermission,
   revokePermission,
   getServiceAccounts,
+  updateAdminUser,
   type AdminUser,
   type CreateUserRequest,
   type ServiceAccount,
@@ -28,6 +29,7 @@ import {
 import { withAdminAuth } from "@/contexts/auth-context";
 import { useTranslation } from "@/contexts/i18n-context";
 import { cn } from "@/lib/utils";
+import { availableLanguages } from "@/lib/i18n";
 
 function UsersPage() {
   const searchParams = useSearchParams();
@@ -113,6 +115,7 @@ function UsersPage() {
       email: formData.get("email") as string,
       display_name: (formData.get("display_name") as string) || undefined,
       role: formData.get("role") as string,
+      default_language: (formData.get("default_language") as string) || "en",
     };
     createMutation.mutate(request);
   };
@@ -342,6 +345,22 @@ function UsersPage() {
                   <option value="admin">{t.admin.adminRole}</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t.admin.defaultLanguage}
+                </label>
+                <select
+                  name="default_language"
+                  defaultValue="en"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  {availableLanguages.map((lang) => (
+                    <option key={lang.code} value={lang.code}>
+                      {lang.nativeName}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <p className="text-sm text-gray-500">
                 {t.admin.oauthInviteNote}
               </p>
@@ -389,6 +408,33 @@ function UsersPage() {
             </div>
 
             <div className="space-y-3 max-h-[420px] overflow-y-auto">
+              <div className="flex items-center justify-between border border-gray-200 rounded-lg p-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">{t.admin.defaultLanguage}</p>
+                  <p className="text-xs text-gray-500">{t.admin.defaultLanguageHelp}</p>
+                </div>
+                <select
+                  value={permissionsUser.default_language || "en"}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    updateAdminUser(permissionsUser.id, { default_language: value })
+                      .then(() => {
+                        queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+                        setPermissionsUser((prev) =>
+                          prev ? { ...prev, default_language: value } : prev
+                        );
+                      })
+                      .catch(() => {});
+                  }}
+                  className="ml-4 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  {availableLanguages.map((lang) => (
+                    <option key={lang.code} value={lang.code}>
+                      {lang.nativeName}
+                    </option>
+                  ))}
+                </select>
+              </div>
               {(serviceAccounts || []).map((account: ServiceAccount) => {
                 const currentLevel = permissionMap[account.id] || "none";
                 return (

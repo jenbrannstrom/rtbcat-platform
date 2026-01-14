@@ -35,6 +35,7 @@ class UserInfo(BaseModel):
     role: str
     is_admin: bool
     permissions: list[str]  # List of service account IDs
+    default_language: Optional[str] = None
 
 
 # ==================== Helper Functions ====================
@@ -107,6 +108,7 @@ async def get_current_user_info(request: Request):
             role=user.role,
             is_admin=user.role == "admin",
             permissions=permissions,
+            default_language=getattr(user, "default_language", None),
         )
 
     # No user means OAuth2 Proxy didn't authenticate them
@@ -134,6 +136,7 @@ async def check_auth_status(request: Request):
                 "display_name": user.display_name,
                 "role": user.role,
                 "is_admin": user.role == "admin",
+                "default_language": getattr(user, "default_language", None),
             },
         }
 

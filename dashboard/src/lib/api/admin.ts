@@ -17,12 +17,14 @@ export interface AdminUser {
   is_active: boolean;
   created_at: string | null;
   last_login_at: string | null;
+  default_language: string | null;
 }
 
 export interface CreateUserRequest {
   email: string;
   display_name?: string;
   role?: string;
+  default_language?: string;
 }
 
 export interface CreateUserResponse {
@@ -91,6 +93,7 @@ export async function updateAdminUser(
     display_name?: string;
     role?: string;
     is_active?: boolean;
+    default_language?: string;
   }
 ): Promise<AdminUser> {
   return fetchApi<AdminUser>(`/admin/users/${encodeURIComponent(userId)}`, {

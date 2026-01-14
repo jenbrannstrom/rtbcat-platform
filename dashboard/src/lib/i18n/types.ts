@@ -378,6 +378,8 @@ export interface Translations {
     displayNameOptional: string;
     userRole: string;
     adminRole: string;
+    defaultLanguage: string;
+    defaultLanguageHelp: string;
     oauthInviteNote: string;
     passwordGenerated: string;
     creating: string;
