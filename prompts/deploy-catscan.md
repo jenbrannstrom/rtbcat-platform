@@ -2,6 +2,64 @@
 
 Use this prompt with Claude CLI to deploy Cat-Scan to the production GCP VM.
 
+---
+
+## CI/CD Pipeline Overview
+
+Cat-Scan uses **GitHub Actions** to build Docker images and **Artifact Registry** to store them.
+Deploys pull prebuilt images from Artifact Registry — **no building on the VM**.
+
+### How It Works
+
+```
+Push to unified-platform → GitHub Actions builds images → Artifact Registry → VM pulls images
+```
+
+### GitHub Actions Workflow
+
+| Setting | Value |
+|---------|-------|
+| **Workflow file** | `.github/workflows/build-and-push.yml` |
+| **Trigger** | Push to `unified-platform` branch (or manual dispatch) |
+| **Images built** | `catscan-api`, `catscan-dashboard` |
+| **Tags** | `latest`, `sha-<gitsha>` (for rollback) |
+
+### Artifact Registry
+
+| Setting | Value |
+|---------|-------|
+| **Project** | `catscan-prod-202601` |
+| **Region** | `europe-west1` |
+| **Repository** | `catscan` |
+| **API image** | `europe-west1-docker.pkg.dev/catscan-prod-202601/catscan/catscan-api` |
+| **Dashboard image** | `europe-west1-docker.pkg.dev/catscan-prod-202601/catscan/catscan-dashboard` |
+
+### GitHub Secret (GCP_SA_KEY)
+
+The workflow authenticates to GCP using a service account key stored in GitHub Secrets.
+
+| Setting | Value |
+|---------|-------|
+| **Secret name** | `GCP_SA_KEY` |
+| **Content** | **Full JSON service account key** (NOT an SSH key!) |
+| **Service account** | `catscan-ci@catscan-prod-202601.iam.gserviceaccount.com` |
+| **Required role** | `roles/artifactregistry.writer` |
+
+**To create/rotate the key:**
+```bash
+# Create new key
+gcloud iam service-accounts keys create /tmp/key.json \
+  --iam-account=catscan-ci@catscan-prod-202601.iam.gserviceaccount.com
+
+# Set GitHub secret
+gh secret set GCP_SA_KEY < /tmp/key.json
+
+# Delete local key
+rm /tmp/key.json
+```
+
+---
+
 ## VM Access Details
 
 | Property | Value |
@@ -21,29 +79,82 @@ Use this prompt with Claude CLI to deploy Cat-Scan to the production GCP VM.
 
 ## Task: Deploy Latest Images (Fast)
 
-Deploy the latest Docker images to the production VM:
+Deploy the latest Docker images to the production VM.
+
+### Step 1: Pull and restart
 
 ```bash
-# 1. Pull latest images
+# Pull latest images
 gcloud compute ssh catscan-production --zone=europe-west1-b -- \
   "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml pull"
 
-# 2. Restart containers
+# Restart containers
 gcloud compute ssh catscan-production --zone=europe-west1-b -- \
   "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml up -d"
-
-# 3. Verify
-curl -s https://scan.rtb.cat/api/health
 ```
 
-**Rollback (deploy a specific image tag):**
+Or run directly on the VM:
 ```bash
+cd /opt/catscan
+sudo docker-compose -f docker-compose.gcp.yml pull
+sudo docker-compose -f docker-compose.gcp.yml up -d
+```
+
+### Step 2: Verify deployment
+
+```bash
+# Check containers are running with correct images
 gcloud compute ssh catscan-production --zone=europe-west1-b -- \
-  "cd /opt/catscan && IMAGE_TAG=sha-<gitsha> sudo docker-compose -f docker-compose.gcp.yml pull"
+  "sudo docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'"
+
+# Check API health (internal)
+gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+  "curl -s http://localhost:8000/health"
+```
+
+**Expected API response:**
+```json
+{"status":"healthy","version":"0.9.0","configured":true,"has_credentials":true,"database_exists":true}
+```
+
+### How to Verify (External)
+
+| URL | Expected Result |
+|-----|-----------------|
+| https://scan.rtb.cat | Dashboard loads (OAuth2 login page if not authenticated) |
+| https://scan.rtb.cat/api/health | OAuth2 redirect (returns 200 with login page HTML) |
+
+> **Note:** External `/api/health` shows OAuth2 login page because all routes are protected.
+> Use the internal check above for true health status.
+
+---
+
+## Task: Rollback to Previous Version
+
+Use `IMAGE_TAG=sha-<gitsha>` to deploy a specific version:
+
+```bash
+# Find available tags in Artifact Registry
+gcloud artifacts docker tags list \
+  europe-west1-docker.pkg.dev/catscan-prod-202601/catscan/catscan-api
+
+# Deploy specific version (replace sha-abc1234 with actual tag)
+gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+  "cd /opt/catscan && IMAGE_TAG=sha-abc1234 sudo docker-compose -f docker-compose.gcp.yml pull"
 
 gcloud compute ssh catscan-production --zone=europe-west1-b -- \
-  "cd /opt/catscan && IMAGE_TAG=sha-<gitsha> sudo docker-compose -f docker-compose.gcp.yml up -d"
+  "cd /opt/catscan && IMAGE_TAG=sha-abc1234 sudo docker-compose -f docker-compose.gcp.yml up -d"
 ```
+
+---
+
+## Important Notes / Gotchas
+
+1. **Do NOT build on VM** — Always use pull-based deploys from Artifact Registry
+2. **Do NOT paste SSH keys into GCP_SA_KEY** — Must be the full JSON service account key
+3. **Ensure Docker auth is configured on VM** — Run once: `sudo gcloud auth configure-docker europe-west1-docker.pkg.dev`
+4. **If dashboard 502 errors occur** — Use pull-based deploy (not build). The VM has limited memory.
+5. **Sync code before deploying** — If docker-compose.gcp.yml changed, run `git pull` on VM first
 
 ---
 
