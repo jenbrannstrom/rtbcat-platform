@@ -156,8 +156,12 @@
 - [x] Creative sync from Google Authorized Buyers API
 - [x] CSV import (CLI and UI)
 - [x] Gmail auto-import
-- [x] RTB funnel visualization
+- [x] RTB bidstream visualization (renamed from rtb_funnel)
 - [x] Efficiency analysis with recommendations
 - [x] Campaign clustering
 - [x] Video thumbnail generation
 - [x] GCP deployment with OAuth2 authentication
+- [x] **UTC timezone standardization** - All CSV reports now require UTC timezone
+- [x] **Data quality flagging** - Legacy (pre-UTC) vs production data separation
+- [x] **Per-billing_id funnel metrics** - JOIN strategy to reconstruct bid metrics by billing_id
+- [x] **Database schema v17** - rtb_funnel → rtb_bidstream rename, data_quality column added

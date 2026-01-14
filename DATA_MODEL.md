@@ -29,13 +29,17 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 
 ### CSV Files and Target Tables
 
-| # | Filename | Target Table | Purpose |
-|---|----------|--------------|---------|
-| 1 | `catscan-bidsinauction-*` | `rtb_daily` | Creative-level performance with bid metrics |
-| 2 | `catscan-quality-*` | `rtb_daily` | Creative-level performance with viewability |
-| 3 | `catscan-funnel-geo-*` | `rtb_funnel` | Bid pipeline by country (hourly) |
-| 4 | `catscan-funnel-publishers-*` | `rtb_funnel` | Bid pipeline by publisher |
-| 5 | `catscan-bid-filtering-*` | `rtb_bid_filtering` | Why bids are rejected |
+**Naming Convention:** `catscan-{type}-{account_id}-{period}-UTC`
+
+| # | Filename Pattern | Target Table | Purpose |
+|---|------------------|--------------|---------|
+| 1 | `catscan-bidsinauction-*-UTC` | `rtb_daily` | Creative-level performance with bid metrics |
+| 2 | `catscan-quality-*-UTC` | `rtb_daily` | Creative-level performance with viewability |
+| 3 | `catscan-rtb-pipeline-geo-*-UTC` | `rtb_bidstream` | Bid pipeline by country (hourly) |
+| 4 | `catscan-rtb-pipeline-publishers-*-UTC` | `rtb_bidstream` | Bid pipeline by publisher |
+| 5 | `catscan-bid-filtering-*-UTC` | `rtb_bid_filtering` | Why bids are rejected |
+
+**CRITICAL:** All reports must use UTC timezone. Data imported before 2026-01-14 is marked as `data_quality='legacy'` due to inconsistent timezones.
 
 ---
 
@@ -97,9 +101,9 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 
 ---
 
-### CSV 3: catscan-funnel-geo (Funnel by Geography)
+### CSV 3: catscan-rtb-pipeline-geo (Bidstream by Geography)
 
-**Target Table:** `rtb_funnel`
+**Target Table:** `rtb_bidstream`
 **Purpose:** Full bid pipeline metrics by country and hour
 
 #### Columns (exact order from sample)
@@ -129,9 +133,9 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 
 ---
 
-### CSV 4: catscan-funnel-publishers (Funnel by Publisher)
+### CSV 4: catscan-rtb-pipeline-publishers (Bidstream by Publisher)
 
-**Target Table:** `rtb_funnel`
+**Target Table:** `rtb_bidstream`
 **Purpose:** Bid pipeline metrics by publisher
 
 #### Columns (exact order from sample)
@@ -226,16 +230,59 @@ The importer auto-detects report type based on columns present:
 
 1. **Has `Bid filtering reason`?** → Bid Filtering → `rtb_bid_filtering`
 2. **Has `Creative ID`?** → Performance Detail → `rtb_daily`
-3. **Has `Bid requests`?** → RTB Funnel → `rtb_funnel`
+3. **Has `Bid requests`?** → RTB Funnel → `rtb_bidstream`
    - With `Publisher ID` → Funnel Publishers
    - Without → Funnel Geo
 4. **Otherwise** → Unknown (import fails)
 
 ---
 
-### Quality Signals Report (Not in Samples)
+### JOIN Strategy for Per-Billing-ID Funnel Metrics
 
-The system also supports a **Quality Signals** report type for fraud/viewability analysis, which would go to the `rtb_quality` table. This report requires columns like `IVT credited impressions` or `Pre-filtered impressions`. No sample file currently exists for this report type.
+Google blocks `Billing ID + Bid requests` in the same export. To get per-config funnel metrics:
+
+**Join CSV 1 + CSV 2 on (Day, Creative ID):**
+```sql
+SELECT
+    q.billing_id,
+    q.creative_id,
+    q.metric_date,
+    -- From catscan-quality (has Billing ID)
+    q.reached_queries,
+    q.impressions as quality_impressions,
+    q.spend_micros,
+    -- From catscan-bidsinauction (has bid metrics)
+    b.bids,
+    b.bids_in_auction,
+    b.auctions_won
+FROM rtb_daily q  -- quality rows (have billing_id)
+JOIN rtb_daily b  -- bidsinauction rows (have bid metrics)
+  ON q.metric_date = b.metric_date
+  AND q.creative_id = b.creative_id
+WHERE q.billing_id IS NOT NULL
+  AND b.bids_in_auction IS NOT NULL;
+```
+
+This gives you: **Billing ID + Bids + Bids in auction + Auctions won** per creative.
+
+---
+
+### Quality Signals / IVT Report (Optional - Not Yet Implemented)
+
+The system supports a **Quality Signals** report type for fraud/IVT analysis → `rtb_quality` table.
+
+**To create this report in Google AU Buyer:**
+1. Select dimension: **Bid requests** (this unlocks "Cost Transparency Metrics")
+2. Add dimensions: Day, Publisher ID, Country
+3. Add metrics from "Cost Transparency Metrics":
+   - Raw impressions
+   - Dedup impressions
+   - Pre-filtered impressions
+   - **IVT credited impressions** ← Key fraud signal
+   - Billed impressions
+   - Cost of dedup/pre-filtering/IVT
+
+No sample file currently exists. Create as `catscan-ivt-*` when ready.
 
 ---
 
@@ -611,7 +658,7 @@ Detailed RTB metrics imported from CSV reports (Bids in Auction report).
 
 **Unique Constraint:** row_hash
 
-### rtb_funnel
+### rtb_bidstream
 
 RTB funnel metrics for geo and publisher analysis (Funnel report).
 

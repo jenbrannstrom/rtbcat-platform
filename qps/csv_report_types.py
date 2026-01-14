@@ -14,7 +14,7 @@ THE 5 SUPPORTED REPORT TYPES:
                  Country, Publisher ID, Mobile app ID, Mobile app name
    - Metrics: Reached queries, Impressions, Clicks, Spend
 
-2. RTB FUNNEL - GEO ONLY (rtb_funnel table)
+2. RTB FUNNEL - GEO ONLY (rtb_bidstream table)
    - Purpose: Full bid pipeline metrics by country
    - Distinguishing columns: Bid requests (no Publisher ID)
    - What you CAN'T include: Creative ID, Creative size, Mobile app ID
@@ -22,7 +22,7 @@ THE 5 SUPPORTED REPORT TYPES:
    - Metrics: Bid requests, Inventory matches, Successful responses, Reached queries,
               Bids, Bids in auction, Auctions won, Impressions, Clicks
 
-3. RTB FUNNEL - WITH PUBLISHERS (rtb_funnel table)
+3. RTB FUNNEL - WITH PUBLISHERS (rtb_bidstream table)
    - Purpose: Publisher-level bid pipeline (for publisher optimization)
    - Distinguishing columns: Bid requests + Publisher ID
    - What you CAN'T include: Creative ID, Creative size, Mobile app ID
@@ -62,7 +62,7 @@ DETECTION PRIORITY:
 
 JOINING THE DATA:
 =================
-- rtb_daily + rtb_funnel JOIN ON (metric_date, country)
+- rtb_daily + rtb_bidstream JOIN ON (metric_date, country)
 - For publisher analysis: JOIN ON (metric_date, country, publisher_id)
 
 See DATA_MODEL.md for full column specifications and sample data.
@@ -76,8 +76,8 @@ from typing import Dict, List, Optional, Set
 class ReportType(Enum):
     """The 5 CSV report types for QPS optimization."""
     PERFORMANCE_DETAIL = "performance_detail"      # rtb_daily - has creative/app/size
-    RTB_FUNNEL_GEO = "rtb_funnel_geo"             # rtb_funnel - geo only, full pipeline
-    RTB_FUNNEL_PUBLISHER = "rtb_funnel_publisher"  # rtb_funnel - with publisher, full pipeline
+    RTB_FUNNEL_GEO = "rtb_bidstream_geo"             # rtb_bidstream - geo only, full pipeline
+    RTB_FUNNEL_PUBLISHER = "rtb_bidstream_publisher"  # rtb_bidstream - with publisher, full pipeline
     BID_FILTERING = "bid_filtering"                # rtb_bid_filtering - why bids fail
     QUALITY_SIGNALS = "quality_signals"            # rtb_quality - fraud/viewability signals
     UNKNOWN = "unknown"
@@ -118,7 +118,7 @@ PERFORMANCE_DETAIL_OPTIONAL = {
     "measurable_impressions": ["Active View measurable", "Active view measurable", "#Active View measurable"],
 }
 
-# Report 2 & 3: RTB Funnel (goes to rtb_funnel)
+# Report 2 & 3: RTB Funnel (goes to rtb_bidstream)
 RTB_FUNNEL_REQUIRED = {
     "day": ["#Day", "Day", "#Date", "Date"],
     "country": ["Country", "#Country"],
@@ -213,7 +213,7 @@ class ReportDetectionResult:
     """Result of detecting which report type a CSV is."""
     report_type: ReportType
     confidence: str  # "high", "medium", "low"
-    target_table: str  # "rtb_daily" or "rtb_funnel"
+    target_table: str  # "rtb_daily" or "rtb_bidstream"
 
     columns_found: List[str] = field(default_factory=list)
     columns_mapped: Dict[str, str] = field(default_factory=dict)
@@ -231,11 +231,11 @@ class ReportDetectionResult:
         elif self.report_type == ReportType.RTB_FUNNEL_GEO:
             self.report_name = "RTB Funnel (Geo)"
             self.description = "Bid pipeline by country"
-            self.target_table = "rtb_funnel"
+            self.target_table = "rtb_bidstream"
         elif self.report_type == ReportType.RTB_FUNNEL_PUBLISHER:
             self.report_name = "RTB Funnel (Publisher)"
             self.description = "Bid pipeline by publisher"
-            self.target_table = "rtb_funnel"
+            self.target_table = "rtb_bidstream"
         elif self.report_type == ReportType.BID_FILTERING:
             self.report_name = "Bid Filtering"
             self.description = "Bid filtering reasons (why bids fail)"
@@ -334,7 +334,7 @@ def detect_report_type(header: List[str]) -> ReportDetectionResult:
         else:
             result.report_type = ReportType.RTB_FUNNEL_GEO
 
-        result.target_table = "rtb_funnel"
+        result.target_table = "rtb_bidstream"
         result.confidence = "high"
 
         # Map columns
@@ -375,56 +375,113 @@ def detect_report_type(header: List[str]) -> ReportDetectionResult:
 
 REPORT_INSTRUCTIONS = """
 ================================================================================
-CAT-SCAN CSV REPORTS (5 REPORT TYPES)
+CAT-SCAN CSV REPORTS - ACTUAL FILES IN USE
 ================================================================================
 
-Cat-Scan supports 5 different CSV report types from Google Authorized Buyers.
-Create these as DAILY scheduled reports for complete analytics coverage.
+These are the 5 CSV report files Cat-Scan imports from Google Authorized Buyers.
 
-Go to: Authorized Buyers → Reporting → Scheduled Reports → New Report
+NAMING CONVENTION: catscan-{type}-{account_id}-{period}-UTC
+Example: catscan-rtb-pipeline-1487810529-yesterday-UTC
+
+Go to: Authorized Buyers -> Reporting -> Scheduled Reports -> New Report
+CRITICAL: Set timezone to UTC for ALL reports! Non-UTC data is marked as legacy.
 
 --------------------------------------------------------------------------------
-REPORT 1: "catscan-performance" (Creative/App detail)
+REPORT 1: "catscan-bidsinauction" (Creative bid metrics)
 --------------------------------------------------------------------------------
-Purpose: See which creatives, sizes, and apps are performing
+Purpose: Creative-level bid pipeline metrics (Bids -> Auctions won)
 Target Table: rtb_daily
+Key Feature: Has Creative ID + partial funnel (Bids in auction, Auctions won)
+             but NO Billing ID
 
-DIMENSIONS (in this order):
+DIMENSIONS:
   1. Day
-  2. Billing ID
+  2. Country
+  3. Creative ID
+  4. Buyer account ID
+
+METRICS:
+  * Bids in auction
+  * Auctions won
+  * Bids
+  * Reached queries
+  * Impressions
+  * Spend (buyer currency)
+  * Spend (bidder currency)
+
+Schedule: Daily, Yesterday, UTC
+Filename: catscan-bidsinauction
+
+--------------------------------------------------------------------------------
+REPORT 2: "catscan-quality" (Creative viewability with Billing ID)
+--------------------------------------------------------------------------------
+Purpose: Per-config (Billing ID) creative performance with viewability
+Target Table: rtb_daily
+Key Feature: Has BILLING ID for per-config analysis, but NO bid metrics
+
+DIMENSIONS:
+  1. Day
+  2. Billing ID            <- KEY: Links to pretargeting config
   3. Creative ID
   4. Creative size
   5. Creative format
-  6. Country
-  7. Publisher ID        (optional)
-  8. Mobile app ID       (optional)
-  9. Mobile app name     (optional)
 
 METRICS:
   * Reached queries
   * Impressions
-  * Clicks
   * Spend (buyer currency)
-  * Active View viewable (optional)
-  * Active View measurable (optional)
+  * Active View viewable
+  * Active View measurable
 
-Schedule: Daily, Yesterday
-Filename: catscan-performance
+Schedule: Daily, Yesterday, UTC
+Filename: catscan-quality
+
+JOIN STRATEGY: Join Report 1 + Report 2 on (Day, Creative ID) to get:
+  Billing ID + Bids in auction + Auctions won
 
 --------------------------------------------------------------------------------
-REPORT 2: "catscan-funnel-geo" (Bid pipeline by country)
+REPORT 3: "catscan-rtb-pipeline-geo" (Full bid pipeline by country)
 --------------------------------------------------------------------------------
-Purpose: Understand bid_requests -> bids -> wins conversion by geo
-Target Table: rtb_funnel
+Purpose: Full bid funnel from Bid requests -> Impressions by geo
+Target Table: rtb_bidstream
+Key Feature: Has BID REQUESTS (top of funnel) but NO Creative/Billing ID
 
-DIMENSIONS (in this order):
+DIMENSIONS:
   1. Day
   2. Country
-  3. Buyer account ID
-  4. Hour (optional)
+  3. Hour
 
 METRICS:
-  * Bid requests         <- THE KEY METRIC
+  * Bid requests           <- TOP OF FUNNEL
+  * Inventory matches
+  * Successful responses
+  * Bids
+  * Bids in auction
+  * Auctions won
+  * Impressions
+  * Clicks
+
+Schedule: Daily, Yesterday, UTC
+Filename: catscan-rtb-pipeline-geo-{account_id}-yesterday-UTC
+
+WARNING: CANNOT add Creative ID, Billing ID, or App ID - Google blocks this!
+
+--------------------------------------------------------------------------------
+REPORT 4: "catscan-rtb-pipeline-publishers" (Full bid pipeline by publisher)
+--------------------------------------------------------------------------------
+Purpose: Publisher-level bid funnel for publisher optimization
+Target Table: rtb_bidstream
+Key Feature: Has Publisher ID + full funnel
+
+DIMENSIONS:
+  1. Day
+  2. Hour
+  3. Country
+  4. Publisher ID
+  5. Publisher name
+
+METRICS:
+  * Bid requests
   * Inventory matches
   * Successful responses
   * Reached queries
@@ -434,99 +491,63 @@ METRICS:
   * Impressions
   * Clicks
 
-Schedule: Daily, Yesterday
-Filename: catscan-funnel-geo
-
-WARNING: You CANNOT add Creative ID, Mobile app ID, or Billing ID to this report!
-         Google will show: "Mobile app ID is not compatible with [Bid requests]"
+Schedule: Daily, Yesterday, UTC
+Filename: catscan-rtb-pipeline-publishers-{account_id}-yesterday-UTC
 
 --------------------------------------------------------------------------------
-REPORT 3: "catscan-funnel-publishers" (Bid pipeline by publisher)
+REPORT 5: "catscan-bid-filtering" (Why bids are rejected)
 --------------------------------------------------------------------------------
-Purpose: See which publishers have best bid->win conversion
-Target Table: rtb_funnel
-
-DIMENSIONS (in this order):
-  1. Day
-  2. Country
-  3. Buyer account ID
-  4. Publisher ID         <- Can include this (but not apps)
-  5. Publisher name
-  6. Hour (optional)
-
-METRICS: Same as Report 2
-
-Schedule: Daily, Yesterday
-Filename: catscan-funnel-publishers
-
-WARNING: You CANNOT add Mobile app ID to this report!
-
---------------------------------------------------------------------------------
-REPORT 4: "catscan-bid-filtering" (Why bids are rejected)
---------------------------------------------------------------------------------
-Purpose: Understand why bids are being filtered
+Purpose: Understand bid rejection reasons for optimization
 Target Table: rtb_bid_filtering
 
-DIMENSIONS (in this order):
+DIMENSIONS:
   1. Day
-  2. Bid filtering reason  <- REQUIRED
-  3. Country (optional)
-  4. Buyer account ID (optional)
-  5. Creative ID (may not be available)
+  2. Country
+  3. Creative ID
+  4. Bid filtering reason    <- KEY: The rejection reason
 
 METRICS:
   * Bids
-  * Bids in auction
-  * Opportunity cost (optional)
 
-Schedule: Daily, Yesterday
+Schedule: Daily, Yesterday, UTC
 Filename: catscan-bid-filtering
 
---------------------------------------------------------------------------------
-REPORT 5: "catscan-quality" (Fraud/Viewability signals)
---------------------------------------------------------------------------------
-Purpose: Identify high-fraud or low-viewability publishers
-Target Table: rtb_quality
+================================================================================
+OPTIONAL REPORT 6: "catscan-ivt" (Fraud/IVT signals) - NOT YET IMPLEMENTED
+================================================================================
+Purpose: Identify fraud and invalid traffic by publisher
+Target Table: rtb_quality (table exists but no CSV imports yet)
 
-DIMENSIONS (in this order):
-  1. Day
-  2. Publisher ID          <- REQUIRED
-  3. Publisher name (optional)
-  4. Country (optional)
-
-METRICS:
-  * Impressions
+This report uses "Cost Transparency Metrics" available when Bid Requests selected:
+  * Raw impressions
+  * Dedup impressions
   * Pre-filtered impressions
-  * IVT credited impressions  <- Key fraud signal
+  * IVT credited impressions   <- Key fraud signal
   * Billed impressions
-  * Active View measurable
-  * Active View viewable
+  * Cost of dedup/pre-filtering/IVT
 
-Schedule: Daily, Yesterday
-Filename: catscan-quality
+To create: Select Bid Requests dimension, then add Cost Transparency Metrics.
 
 ================================================================================
-WHY 5 REPORTS?
+GOOGLE'S FIELD INCOMPATIBILITIES
 ================================================================================
 
-Google's API has field incompatibilities:
-  "Mobile app ID is not compatible with [Bid requests], [Inventory matches]..."
+Google blocks certain dimension + metric combinations:
+  * Billing ID + Bid requests     -> BLOCKED (use JOIN strategy)
+  * Creative ID + Bid requests    -> BLOCKED
+  * App ID + Bid requests         -> BLOCKED
+  * Publisher ID + Bid requests   -> ALLOWED (that's why Report 4 works)
 
-This means:
-  * To see App/Creative performance -> you lose "Bid requests" column
-  * To see "Bid requests" -> you lose App/Creative detail
-  * Publisher CAN be combined with Bid requests (but not Apps)
-  * Quality signals (IVT/viewability) require a separate report
-  * Bid filtering reasons are a separate report type
+HOW CAT-SCAN JOINS DATA:
+  * Report 1 + Report 2 -> JOIN ON (Day, Creative ID)
+    Result: Billing ID + Bids in auction + Auctions won per creative
 
-HOW CAT-SCAN JOINS THEM:
-  * Report 1 + Report 2 -> JOIN ON (date, country)
-  * Report 1 + Report 3 -> JOIN ON (date, country, publisher_id)
-  * Report 4 + others   -> JOIN ON (date, country, creative_id)
-  * Report 5 + others   -> JOIN ON (date, publisher_id)
+  * Report 1 + Report 3 -> JOIN ON (Day, Country)
+    Result: Creative performance + geo funnel context
 
-This gives AI the full picture:
-  Total traffic -> What you bid on -> What you won -> Revenue -> Quality
+  * Report 1 + Report 4 -> JOIN ON (Day, Country, Publisher ID)
+    Result: Creative + publisher funnel performance
+
 ================================================================================
 """
 

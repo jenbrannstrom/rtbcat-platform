@@ -1,7 +1,7 @@
 """RTB Funnel CSV Importer.
 
 Imports the RTB Funnel CSV reports (with bid_requests, bids, auctions_won)
-into the rtb_funnel table.
+into the rtb_bidstream table.
 
 These reports are SEPARATE from the Performance Detail CSVs because Google AB
 does not allow bid_requests with creative/app dimensions.
@@ -37,7 +37,7 @@ class FunnelImportResult:
     """Result of RTB Funnel CSV import."""
     success: bool = False
     error_message: str = ""
-    report_type: str = ""  # "rtb_funnel_geo" or "rtb_funnel_publisher"
+    report_type: str = ""  # "rtb_bidstream_geo" or "rtb_bidstream_publisher"
 
     # Counts
     rows_read: int = 0
@@ -103,7 +103,7 @@ def import_funnel_csv(
     bidder_id: Optional[str] = None,
 ) -> FunnelImportResult:
     """
-    Import an RTB Funnel CSV into the rtb_funnel table.
+    Import an RTB Funnel CSV into the rtb_bidstream table.
 
     Automatically detects whether it's a geo-only or publisher funnel report.
 
@@ -288,9 +288,9 @@ def import_funnel_csv(
 
 
 def _ensure_funnel_table(cursor):
-    """Ensure rtb_funnel table exists with all required columns."""
+    """Ensure rtb_bidstream table exists with all required columns."""
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS rtb_funnel (
+        CREATE TABLE IF NOT EXISTS rtb_bidstream (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             metric_date DATE NOT NULL,
             hour INTEGER,
@@ -317,11 +317,11 @@ def _ensure_funnel_table(cursor):
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_funnel_date ON rtb_funnel(metric_date)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_funnel_country ON rtb_funnel(country)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_funnel_date_country ON rtb_funnel(metric_date, country)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_funnel_platform ON rtb_funnel(platform)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_funnel_environment ON rtb_funnel(environment)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_date ON rtb_bidstream(metric_date)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_country ON rtb_bidstream(country)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_date_country ON rtb_bidstream(metric_date, country)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_platform ON rtb_bidstream(platform)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_environment ON rtb_bidstream(environment)")
 
 
 def _insert_funnel_batch(cursor, batch: List[Tuple]) -> Tuple[int, int]:
@@ -332,7 +332,7 @@ def _insert_funnel_batch(cursor, batch: List[Tuple]) -> Tuple[int, int]:
     for row in batch:
         try:
             cursor.execute("""
-                INSERT INTO rtb_funnel (
+                INSERT INTO rtb_bidstream (
                     metric_date, hour, country, buyer_account_id,
                     publisher_id, publisher_name,
                     platform, environment, transaction_type,
