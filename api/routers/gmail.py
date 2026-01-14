@@ -7,8 +7,13 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+import uuid
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
+
+from api.dependencies import require_admin
+from storage.repositories.user_repository import User
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +33,18 @@ class GmailStatusResponse(BaseModel):
     last_error: Optional[str] = Field(None, description="Error message from last failed run")
     total_imports: int = Field(0, description="Total files imported all time")
     recent_history: list = Field(default_factory=list, description="Recent import history")
+    running: bool = Field(False, description="Whether an import is currently running")
+    current_job_id: Optional[str] = Field(None, description="Current import job ID")
 
 
 class GmailImportResponse(BaseModel):
     """Response model for Gmail import trigger."""
     success: bool
+    queued: bool = False
+    job_id: Optional[str] = None
+    message: Optional[str] = None
+    emails_skipped: int = 0
+    skipped_seat_ids: list[str] = Field(default_factory=list)
     emails_processed: int = 0
     files_imported: int = 0
     files: list[str] = Field(default_factory=list)
@@ -71,7 +83,10 @@ async def get_gmail_status():
 
 
 @router.post("/gmail/import", response_model=GmailImportResponse)
-async def trigger_gmail_import(background_tasks: BackgroundTasks):
+async def trigger_gmail_import(
+    background_tasks: BackgroundTasks,
+    admin: User = Depends(require_admin),
+):
     """
     Trigger a manual Gmail import.
 
@@ -95,15 +110,23 @@ async def trigger_gmail_import(background_tasks: BackgroundTasks):
                 detail="Gmail not authorized. Run the import script manually first to complete OAuth flow."
             )
 
-        # Run the import (synchronously for now, could be background task)
-        result = run_import(verbose=False)
+        if status.get("running"):
+            raise HTTPException(status_code=409, detail="Gmail import already running")
+
+        job_id = str(uuid.uuid4())
+        background_tasks.add_task(run_import, False, job_id)
 
         return GmailImportResponse(
-            success=result.get("success", False),
-            emails_processed=result.get("emails_processed", 0),
-            files_imported=result.get("files_imported", 0),
-            files=result.get("files", []),
-            errors=result.get("errors", [])
+            success=True,
+            queued=True,
+            job_id=job_id,
+            message="Gmail import queued",
+            emails_skipped=0,
+            skipped_seat_ids=[],
+            emails_processed=0,
+            files_imported=0,
+            files=[],
+            errors=[],
         )
 
     except ImportError as e:

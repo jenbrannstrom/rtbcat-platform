@@ -39,10 +39,12 @@ export function GmailReportsTab() {
   const [importMessage, setImportMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [importPhase, setImportPhase] = useState<ImportPhase>('idle');
   const phaseTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [pollStatus, setPollStatus] = useState(false);
 
   const { data: gmailStatus, isLoading: statusLoading, refetch: refetchStatus } = useQuery({
     queryKey: ["gmailStatus"],
     queryFn: getGmailStatus,
+    refetchInterval: pollStatus ? 5000 : false,
   });
 
   // Cycle through phases while importing
@@ -76,10 +78,13 @@ export function GmailReportsTab() {
     mutationFn: triggerGmailImport,
     onMutate: () => {
       setImportPhase('connecting');
+      setPollStatus(true);
     },
     onSuccess: (data) => {
       setImportPhase('complete');
-      if (data.success) {
+      if (data.queued) {
+        setImportMessage({ type: "success", text: data.message || "Import started in the background" });
+      } else if (data.success) {
         if (data.files_imported > 0) {
           setImportMessage({ type: "success", text: `Imported ${data.files_imported} file(s) from ${data.emails_processed} email(s)` });
         } else if (data.emails_processed === 0) {
@@ -100,6 +105,7 @@ export function GmailReportsTab() {
     onError: (error) => {
       setImportPhase('idle');
       setImportMessage({ type: "error", text: error instanceof Error ? error.message : "Import failed" });
+      setPollStatus(false);
       setTimeout(() => setImportMessage(null), 8000);
     },
   });
@@ -122,6 +128,15 @@ export function GmailReportsTab() {
 
   const isConfigured = gmailStatus?.configured === true;
   const isAuthorized = gmailStatus?.authorized === true;
+  const isImportRunning = gmailStatus?.running === true;
+
+  useEffect(() => {
+    if (isImportRunning) {
+      setPollStatus(true);
+    } else {
+      setPollStatus(false);
+    }
+  }, [isImportRunning]);
 
   return (
     <div className="space-y-6">
@@ -224,7 +239,9 @@ export function GmailReportsTab() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="p-3 bg-gray-50 rounded-lg">
                 <p className="text-xs text-gray-500 mb-1">Last Import</p>
-                <p className="font-medium text-gray-900">{formatRelativeTime(gmailStatus?.last_run || null)}</p>
+                <p className="font-medium text-gray-900">
+                  {isImportRunning ? "Import in progress" : formatRelativeTime(gmailStatus?.last_run || null)}
+                </p>
               </div>
               <div className="p-3 bg-gray-50 rounded-lg">
                 <p className="text-xs text-gray-500 mb-1">Last Success</p>
@@ -257,7 +274,7 @@ export function GmailReportsTab() {
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => importMutation.mutate()}
-                  disabled={importMutation.isPending}
+                  disabled={importMutation.isPending || isImportRunning}
                   className={cn(
                     "flex items-center gap-2 px-4 py-2 rounded-lg font-medium",
                     "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
@@ -268,6 +285,11 @@ export function GmailReportsTab() {
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Importing...
                     </>
+                  ) : isImportRunning ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Import in progress...
+                    </>
                   ) : (
                     <>
                       <RefreshCw className="h-4 w-4" />
@@ -275,7 +297,7 @@ export function GmailReportsTab() {
                     </>
                   )}
                 </button>
-                {!importMutation.isPending && (
+                {!importMutation.isPending && !isImportRunning && (
                   <p className="text-sm text-gray-500">
                     Check for new report emails and import them immediately
                   </p>
