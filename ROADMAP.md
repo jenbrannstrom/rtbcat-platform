@@ -9,6 +9,7 @@
 - [ ] **Campaigns tab filtering** - Creative ID type mismatch causing empty campaigns view
 - [ ] **Thumbnail placeholders** - Some creatives show placeholder instead of generated thumbnail (ffmpeg)
 - [ ] **CSV import account mismatch** - Imports not linking to correct accounts
+- [ ] **CI/CD pipeline** - Build images in GitHub Actions and deploy via docker pull (Artifact Registry)
 
 ---
 

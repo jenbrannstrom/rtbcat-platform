@@ -549,10 +549,10 @@ async def update_gemini_key(
     try:
         # Validate key format (basic check)
         api_key = request.api_key.strip()
-        if not api_key.startswith("AIza"):
+        if len(api_key) < 10:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid API key format. Gemini API keys typically start with 'AIza'.",
+                detail="Invalid API key format. Key is too short.",
             )
 
         # Store in database
