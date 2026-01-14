@@ -14,6 +14,7 @@ import {
   getTranslations,
   defaultLanguage,
   availableLanguages,
+  isRtlLanguage,
 } from "@/lib/i18n";
 
 // ==================== Constants ====================
@@ -75,6 +76,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(LANGUAGE_STORAGE_KEY, lang);
     document.cookie = `${LANGUAGE_COOKIE_KEY}=${lang}; path=/; max-age=31536000`;
   }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = language;
+    document.documentElement.dir = isRtlLanguage(language) ? "rtl" : "ltr";
+  }, [language]);
 
   // Get translations for current language
   const t = getTranslations(language);
