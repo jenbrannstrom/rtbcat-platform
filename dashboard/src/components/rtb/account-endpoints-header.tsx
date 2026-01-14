@@ -3,7 +3,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRTBEndpoints, getPretargetingConfigs, syncRTBEndpoints } from '@/lib/api';
 import { Server, AlertTriangle, Globe, Info, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { useAccount } from '@/contexts/account-context';
 import { useState, useEffect, useRef } from 'react';
 
@@ -26,7 +25,23 @@ function formatQPS(qps: number | null): string {
   return qps.toLocaleString();
 }
 
-export function AccountEndpointsHeader() {
+// Helper to format large numbers
+function formatNumber(num: number): string {
+  if (num >= 1000000000) return `${(num / 1000000000).toFixed(1)}B`;
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  return num.toLocaleString();
+}
+
+interface AccountEndpointsHeaderProps {
+  funnelData?: {
+    reached: number | null;
+    impressions: number;
+    winRate: number | null;
+  };
+}
+
+export function AccountEndpointsHeader({ funnelData }: AccountEndpointsHeaderProps) {
   const { selectedBuyerId, selectedServiceAccountId } = useAccount();
   const [showQpsInfo, setShowQpsInfo] = useState(false);
   const queryClient = useQueryClient();
@@ -156,39 +171,33 @@ export function AccountEndpointsHeader() {
     );
   }
 
-  // Calculate usage percentage
-  const usagePercent = data.qps_current && data.total_qps_allocated > 0
-    ? Math.round((data.qps_current / data.total_qps_allocated) * 100)
-    : null;
+  // Calculate funnel metrics
+  const hasFunnelData = funnelData && funnelData.reached !== null && funnelData.reached > 0;
 
   return (
     <div className="bg-white rounded-lg border p-4">
-      <div className="flex justify-between items-start mb-4">
-        <div>
-          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-            <Server className="h-4 w-4 text-gray-500" />
-            RTB Endpoints
-          </h3>
-          {data.bidder_id && (
-            <p className="text-xs text-gray-500 mt-0.5">
-              Bidder: {data.account_name || data.bidder_id}
-            </p>
-          )}
-        </div>
-      </div>
-
       <div className="flex gap-6">
-        {/* Left: Endpoints list */}
+        {/* Left: Endpoints with Total QPS as sum row */}
         <div className="flex-1">
-          <div className="grid gap-2">
+          <div className="flex items-center gap-2 mb-3">
+            <Server className="h-4 w-4 text-gray-500" />
+            <h3 className="font-semibold text-gray-900">RTB Endpoints</h3>
+            {data.bidder_id && (
+              <span className="text-xs text-gray-500">
+                · {data.account_name || data.bidder_id}
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-1">
             {data.endpoints.map((endpoint) => (
               <div
                 key={endpoint.endpoint_id}
-                className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg text-sm"
+                className="flex items-center justify-between px-3 py-1.5 bg-gray-50 rounded text-sm"
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <Globe className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                  <span className="font-medium text-gray-700 flex-shrink-0 w-16">
+                  <Globe className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                  <span className="font-medium text-gray-700 flex-shrink-0 w-16 text-sm">
                     {formatLocation(endpoint.trading_location)}
                   </span>
                   <span className="text-xs text-gray-400 font-mono truncate" title={endpoint.url}>
@@ -199,75 +208,79 @@ export function AccountEndpointsHeader() {
                   <span className="text-xs text-gray-500">
                     {endpoint.bid_protocol?.replace('OPENRTB_', 'OpenRTB ').replace('_', '.') || 'Unknown'}
                   </span>
-                  <span className="font-medium text-gray-900 min-w-[60px] text-right">
+                  <span className="font-medium text-gray-900 min-w-[80px] text-right text-sm">
                     {formatQPS(endpoint.maximum_qps)} QPS
                   </span>
                 </div>
               </div>
             ))}
+
+            {/* Total QPS Row - styled as a sum */}
+            <div className="flex items-center justify-between px-3 py-2 mt-2 bg-blue-50 border-2 border-blue-200 rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-blue-800">Total QPS Allocated</span>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowQpsInfo(!showQpsInfo)}
+                    onMouseEnter={() => setShowQpsInfo(true)}
+                    onMouseLeave={() => setShowQpsInfo(false)}
+                    className="p-0.5 hover:bg-blue-100 rounded-full transition-colors"
+                    aria-label="QPS allocation info"
+                  >
+                    <Info className="h-3.5 w-3.5 text-blue-400" />
+                  </button>
+                  {showQpsInfo && (
+                    <div className="absolute left-0 top-6 w-72 p-3 bg-white border border-gray-200 rounded-lg shadow-lg z-10 text-xs text-gray-600">
+                      <p className="font-medium text-gray-900 mb-1">QPS Allocation</p>
+                      <p className="mb-2">
+                        This is the total QPS your endpoints can handle.
+                        {activeConfigsCount > 0 && (
+                          <> You have <strong>{activeConfigsCount}</strong> active pretargeting config{activeConfigsCount !== 1 ? 's' : ''} competing for this QPS.</>
+                        )}
+                      </p>
+                      <p className="text-yellow-700 bg-yellow-50 p-2 rounded">
+                        <strong>Tip:</strong> If your pretargeting QPS budget exceeds your endpoint allocation,
+                        you may be losing traffic. Check your pretargeting configs.
+                      </p>
+                    </div>
+                  )}
+                </div>
+                {data.synced_at && (
+                  <span className="text-xs text-blue-400 ml-2">
+                    · {new Date(data.synced_at).toLocaleString()}
+                  </span>
+                )}
+              </div>
+              <span className="text-lg font-bold text-blue-900 min-w-[80px] text-right">
+                {formatQPS(data.total_qps_allocated)}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Right: QPS Summary */}
-        <div className="w-64 bg-gray-50 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-500 mb-1">Total QPS Allocated</div>
-            <div className="relative">
-              <button
-                onClick={() => setShowQpsInfo(!showQpsInfo)}
-                onMouseEnter={() => setShowQpsInfo(true)}
-                onMouseLeave={() => setShowQpsInfo(false)}
-                className="p-1 hover:bg-gray-200 rounded-full transition-colors"
-                aria-label="QPS allocation info"
-              >
-                <Info className="h-4 w-4 text-gray-400" />
-              </button>
-              {showQpsInfo && (
-                <div className="absolute right-0 top-6 w-72 p-3 bg-white border border-gray-200 rounded-lg shadow-lg z-10 text-xs text-gray-600">
-                  <p className="font-medium text-gray-900 mb-1">QPS Allocation</p>
-                  <p className="mb-2">
-                    This is the total QPS your endpoints can handle.
-                    {activeConfigsCount > 0 && (
-                      <> You have <strong>{activeConfigsCount}</strong> active pretargeting config{activeConfigsCount !== 1 ? 's' : ''} competing for this QPS.</>
-                    )}
-                  </p>
-                  <p className="text-yellow-700 bg-yellow-50 p-2 rounded">
-                    <strong>Tip:</strong> If your pretargeting QPS budget exceeds your endpoint allocation,
-                    you may be losing traffic. Check your pretargeting configs.
-                  </p>
-                </div>
-              )}
+        {/* Right: Compact Funnel Metrics */}
+        <div className="w-56 flex flex-col justify-center">
+          {hasFunnelData ? (
+            <div className="space-y-2">
+              {/* Reached */}
+              <div className="flex items-center justify-between px-3 py-1.5 bg-blue-50 rounded border border-blue-100">
+                <span className="text-xs text-blue-600 uppercase tracking-wide">Reached</span>
+                <span className="text-sm font-bold text-blue-700">{formatNumber(funnelData!.reached!)}</span>
+              </div>
+              {/* Win Rate */}
+              <div className="flex items-center justify-between px-3 py-1.5 bg-purple-50 rounded border border-purple-100">
+                <span className="text-xs text-purple-600 uppercase tracking-wide">Win Rate</span>
+                <span className="text-sm font-bold text-purple-700">{funnelData!.winRate?.toFixed(1)}%</span>
+              </div>
+              {/* Impressions */}
+              <div className="flex items-center justify-between px-3 py-1.5 bg-green-50 rounded border border-green-100">
+                <span className="text-xs text-green-600 uppercase tracking-wide">Impressions</span>
+                <span className="text-sm font-bold text-green-700">{formatNumber(funnelData!.impressions)}</span>
+              </div>
             </div>
-          </div>
-          <div className="text-2xl font-bold text-gray-900 mb-3">
-            {formatQPS(data.total_qps_allocated)}
-          </div>
-
-          {data.qps_current !== null && (
-            <>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-500">Current Usage</span>
-                <span className="font-medium text-gray-700">
-                  {formatQPS(data.qps_current)} ({usagePercent}%)
-                </span>
-              </div>
-              <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className={cn(
-                    'h-full transition-all',
-                    usagePercent !== null && usagePercent < 50 && 'bg-green-500',
-                    usagePercent !== null && usagePercent >= 50 && usagePercent < 80 && 'bg-yellow-500',
-                    usagePercent !== null && usagePercent >= 80 && 'bg-red-500'
-                  )}
-                  style={{ width: `${Math.min(usagePercent || 0, 100)}%` }}
-                />
-              </div>
-            </>
-          )}
-
-          {data.synced_at && (
-            <div className="text-xs text-gray-400 mt-3">
-              Last synced: {new Date(data.synced_at).toLocaleString()}
+          ) : (
+            <div className="text-center p-4 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+              <p className="text-xs text-gray-400">Import RTB data to see funnel metrics</p>
             </div>
           )}
         </div>

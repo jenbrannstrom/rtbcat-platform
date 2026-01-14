@@ -9,7 +9,6 @@ import { PretargetingConfigCard, type PretargetingConfig } from "@/components/rt
 import { ConfigBreakdownPanel } from "@/components/rtb/config-breakdown-panel";
 import { RecommendedOptimizationsPanel } from "@/components/rtb/recommended-optimizations-panel";
 import {
-  FunnelCard,
   PublisherPerformanceSection,
   SizeAnalysisSection,
   GeoAnalysisSection,
@@ -173,7 +172,6 @@ function WasteAnalysisContent() {
 
   // Use real funnel data if available (has_data can be at top level or in funnel)
   const hasFunnelData = rtbFunnel?.has_data ?? rtbFunnel?.funnel?.has_data ?? false;
-  const bidRequests = hasFunnelData ? (rtbFunnel?.funnel?.total_bid_requests ?? null) : null;
   const reached = hasFunnelData ? (rtbFunnel?.funnel?.total_reached_queries ?? null) : null;
   const impressions = hasFunnelData ? (rtbFunnel?.funnel?.total_impressions ?? 0) : 0;
 
@@ -231,34 +229,35 @@ function WasteAnalysisContent() {
 
   const activeConfigsCount = displayConfigs.filter(c => c.state === 'ACTIVE').length;
 
+  // Calculate funnel metrics for compact display
+  const winRate = reached && impressions ? (impressions / reached * 100) : null;
+  const funnelDataForHeader = {
+    reached,
+    impressions: impressions || 0,
+    winRate,
+  };
+
   return (
     <div className="max-w-7xl mx-auto">
-      {/* Page Header - Sticky period selector stays at top while scrolling */}
-      <div className="sticky top-0 z-30 px-6 py-4 bg-white border-b border-gray-200 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t.dashboard.title}</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              {t.dashboard.subtitle}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-          {/* CPM Badge - show when spend data available */}
+      {/* Compact Top Bar - CPM, Period Selector, Refresh */}
+      <div className="sticky top-0 z-30 px-6 py-2 bg-white border-b border-gray-200">
+        <div className="flex items-center justify-end gap-2">
+          {/* CPM Badge - compact */}
           {spendStats?.has_spend_data && spendStats.avg_cpm_usd && (
             <div className={cn(
-              "px-3 py-1.5 rounded-lg",
+              "px-2 py-1 rounded text-xs",
               expandedConfigId
                 ? "bg-blue-50 border border-blue-200"
                 : "bg-green-50 border border-green-200"
             )}>
               <span className={cn(
-                "text-xs uppercase tracking-wide",
+                "uppercase tracking-wide",
                 expandedConfigId ? "text-blue-600" : "text-green-600"
               )}>
-                {expandedConfigId ? `Config CPM (${days}d)` : `Avg CPM (${days}d)`}
+                {expandedConfigId ? 'Config CPM' : 'Avg CPM'}
               </span>
               <span className={cn(
-                "ml-2 text-sm font-bold",
+                "ml-1 font-bold",
                 expandedConfigId ? "text-blue-700" : "text-green-700"
               )}>
                 ${spendStats.avg_cpm_usd.toFixed(2)}
@@ -266,68 +265,44 @@ function WasteAnalysisContent() {
             </div>
           )}
 
-          {/* Period Selector */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">{t.dashboard.period}</span>
-            <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-              {PERIOD_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => handleDaysChange(option.value)}
-                  className={cn(
-                    "px-3 py-1.5 text-sm font-medium transition-colors",
-                    days === option.value
-                      ? "bg-blue-600 text-white"
-                      : "bg-white text-gray-700 hover:bg-gray-50"
-                  )}
-                >
-                  {option.value} {t.dashboard.days}
-                </button>
-              ))}
-            </div>
+          {/* Period Selector - compact buttons */}
+          <div className="flex rounded border border-gray-300 overflow-hidden">
+            {PERIOD_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => handleDaysChange(option.value)}
+                className={cn(
+                  "px-2.5 py-1 text-xs font-medium transition-colors",
+                  days === option.value
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-gray-600 hover:bg-gray-50"
+                )}
+              >
+                {option.value}d
+              </button>
+            ))}
           </div>
 
+          {/* Refresh button - icon only */}
           <button
             onClick={handleRefresh}
             disabled={summaryLoading}
             className={cn(
-              "flex items-center gap-2 px-4 py-2",
-              "bg-white border border-gray-300 rounded-lg shadow-sm",
+              "p-1.5 rounded border border-gray-300",
               "hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
-              "text-sm font-medium text-gray-700"
+              "disabled:opacity-50 disabled:cursor-not-allowed"
             )}
+            title={t.common.refresh}
           >
-            <RefreshCw className={cn("h-4 w-4", (summaryLoading || funnelLoading) && "animate-spin")} />
-            {t.common.refresh}
+            <RefreshCw className={cn("h-3.5 w-3.5 text-gray-600", (summaryLoading || funnelLoading) && "animate-spin")} />
           </button>
-          </div>
         </div>
       </div>
 
       {/* Content area with padding */}
-      <div className="p-6 space-y-6">
-      {/* Account Endpoints Header */}
-      <AccountEndpointsHeader />
-
-      {/* The Funnel */}
-      <section>
-        {(summaryLoading || funnelLoading) ? (
-          <div className="bg-white rounded-xl border p-6 animate-pulse">
-            <div className="h-6 bg-gray-200 rounded w-1/4 mb-4" />
-            <div className="flex gap-4">
-              {[1,2,3].map(i => <div key={i} className="flex-1 h-24 bg-gray-100 rounded" />)}
-            </div>
-          </div>
-        ) : (
-          <FunnelCard
-            bidRequests={bidRequests}
-            reached={reached}
-            impressions={impressions || 0}
-            days={days}
-          />
-        )}
-      </section>
+      <div className="p-6 space-y-4">
+      {/* Account Endpoints Header with integrated funnel metrics */}
+      <AccountEndpointsHeader funnelData={funnelDataForHeader} />
 
       {/* Recommended Optimizations Panel */}
       <section>
