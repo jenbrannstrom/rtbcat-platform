@@ -80,6 +80,7 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 | **CSV Import** | Auto-import performance data from Google reports |
 | **MCP Support** | APIs to enable MCP access for your own choice of AI |
 | **Video Thumbnails** | Visualize creatives clearly: extract from VAST XML or generate via ffmpeg |
+| **Multi-Language** | Internationalization (i18n) with 11 languages: EN, PL, ZH, RU, UK, ES, DA, FR, NL, HE, AR |
 
 ### Dashboard Pages
 

@@ -300,6 +300,41 @@ Two authentication modes:
 - **UI:** Tailwind CSS + shadcn/ui components
 - **State:** React Context + SWR for data fetching
 - **Charts:** Recharts
+- **i18n:** Custom type-safe internationalization system
+
+### Internationalization (i18n)
+
+Cat-Scan supports 11 languages with a type-safe translation system:
+
+| Code | Language |
+|------|----------|
+| `en` | English (default) |
+| `pl` | Polish |
+| `zh` | Chinese |
+| `ru` | Russian |
+| `uk` | Ukrainian |
+| `es` | Spanish |
+| `da` | Danish |
+| `fr` | French |
+| `nl` | Dutch |
+| `he` | Hebrew |
+| `ar` | Arabic |
+
+**Implementation:**
+
+```
+dashboard/src/lib/i18n/
+├── types.ts          # TypeScript interfaces for translations
+├── index.ts          # Translation provider & hooks
+└── translations/
+    └── en.ts         # English translations (default)
+```
+
+**Usage:**
+- `useTranslation()` hook provides type-safe access to translations
+- Language preference stored in localStorage
+- Language selector in sidebar allows users to switch languages
+- Translations are structured by feature area (common, sidebar, creatives, etc.)
 
 ### Page Structure
 
