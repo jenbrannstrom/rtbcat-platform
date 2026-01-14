@@ -1019,7 +1019,7 @@ User accounts for platform access.
 | created_at | TEXT | Creation time |
 | updated_at | TEXT | Last update time |
 | last_login_at | TEXT | Last login time |
-| default_language | TEXT | Default UI language |
+| default_language | TEXT | Default UI language (en, pl, zh, ru, uk, es, da, fr, nl, he, ar) |
 
 ### user_sessions
 
