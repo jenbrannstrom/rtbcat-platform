@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getConfigBreakdown, type ConfigBreakdownType, type ConfigBreakdownItem } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Loader2, AlertCircle, Check, AlertTriangle, ChevronRight } from 'lucide-react';
+import { Loader2, AlertCircle, Check, AlertTriangle, ChevronRight, Info } from 'lucide-react';
 import { AppDrilldownModal } from './app-drilldown-modal';
 
 interface ConfigBreakdownPanelProps {
@@ -93,6 +93,26 @@ function StatusIndicator({ status }: { status: 'great' | 'ok' | 'warning' | 'cri
         </div>
       )}
     </div>
+  );
+}
+
+// Info tooltip for table header explanations
+function HeaderInfoTooltip({ text }: { text: string }) {
+  const [showTooltip, setShowTooltip] = useState(false);
+  return (
+    <span
+      className="relative inline-block"
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+    >
+      <Info className="h-3 w-3 text-gray-400 hover:text-gray-600 cursor-help" />
+      {showTooltip && (
+        <div className="absolute z-50 left-0 top-full mt-1 w-56 p-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg whitespace-normal">
+          {text}
+          <div className="absolute bottom-full left-2 border-4 border-transparent border-b-gray-900" />
+        </div>
+      )}
+    </span>
   );
 }
 
@@ -196,10 +216,23 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
         )}
 
         {!isLoading && !error && sortedBreakdown.length > 0 && (
-          <div className="bg-white rounded-lg border overflow-hidden">
+          <>
+            {/* Creative tab info note explaining the metric */}
+            {activeTab === 'creative' && (
+              <div className="mb-3 flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+                <Info className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                <span>
+                  Win rate shows reached-to-impression conversion for this config.
+                  This measures how efficiently bid requests convert to impressions.
+                </span>
+              </div>
+            )}
+            <div className="bg-white rounded-lg border overflow-hidden">
             {/* Table header */}
             <div className="grid grid-cols-14 gap-2 px-3 py-2 border-b bg-gray-50 text-xs font-medium text-gray-500">
-              <div className="col-span-1"></div>
+              <div className="col-span-1 flex items-center">
+                <HeaderInfoTooltip text={`Warning/critical status only shown after ${MIN_IMPRESSIONS_FOR_WARNING.toLocaleString()}+ impressions for reliable assessment.`} />
+              </div>
               <div className="col-span-3">Name</div>
               <div className="col-span-2 text-right">Reached</div>
               <div className="col-span-2 text-right">Imp</div>
@@ -270,6 +303,7 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
               })}
             </div>
           </div>
+          </>
         )}
 
         {/* Drill-down modal */}

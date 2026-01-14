@@ -585,16 +585,38 @@ async def get_config_breakdown(
                     "no_data_reason": f"No {by} breakdown data available. "
                                       "Ensure both catscan-quality and catscan-bidsinauction CSVs have been imported.",
                 }
+        elif by == "creative":
+            # For creative breakdown, use ONLY quality data (per-billing_id accurate)
+            # The bidsinauction CSV doesn't have billing_id, so JOINing would mix
+            # bid metrics from ALL configs using the same creative.
+            # Using quality-only ensures per-billing_id accuracy.
+            # Win rate = impressions/reached (conversion rate, per-config accurate)
+            rows = await db_query("""
+                SELECT
+                    creative_id as name,
+                    0 as total_bids,
+                    0 as total_bids_in_auction,
+                    0 as total_auctions_won,
+                    COALESCE(SUM(reached_queries), 0) as total_reached,
+                    COALESCE(SUM(impressions), 0) as total_impressions
+                FROM rtb_daily
+                WHERE billing_id = ?
+                  AND metric_date >= date('now', ?)
+                  AND creative_id IS NOT NULL
+                  AND creative_id != ''
+                GROUP BY creative_id
+                ORDER BY total_reached DESC
+                LIMIT 50
+            """, (billing_id, f'-{days} days'))
+            has_funnel_data = False  # Never has funnel data for creative breakdown
+
         else:
-            # For size/creative, JOIN rtb_daily (quality rows) with rtb_daily (bidsinauction rows)
+            # For size breakdown, JOIN rtb_daily (quality rows) with rtb_daily (bidsinauction rows)
+            # Size is universal (not config-specific), so the JOIN is appropriate here.
             # Quality rows have billing_id but no bids_in_auction
             # Bidsinauction rows have bids_in_auction but no billing_id
             # JOIN on (metric_date, creative_id) to get billing_id + bid metrics
-            column_map = {
-                "size": "creative_size",
-                "creative": "creative_id",
-            }
-            group_col = column_map.get(by, "creative_size")
+            group_col = "creative_size"
 
             # First try the JOIN strategy to get real funnel metrics per billing_id
             rows = await db_query(f"""
