@@ -373,16 +373,25 @@ export interface Translations {
     inactive: string;
     resetPassword: string;
     deactivate: string;
+    managePermissions: string;
     emailAddress: string;
     displayNameOptional: string;
     userRole: string;
     adminRole: string;
+    oauthInviteNote: string;
     passwordGenerated: string;
     creating: string;
     userCreatedSuccessfully: string;
     shareCredentials: string;
     password: string;
     passwordOnlyShownOnce: string;
+    permissionsFor: string;
+    permissionsHelp: string;
+    noAccess: string;
+    readAccess: string;
+    writeAccess: string;
+    adminAccess: string;
+    noServiceAccounts: string;
     done: string;
     // Settings page
     configureSettings: string;
@@ -403,6 +412,8 @@ export interface Translations {
     sessionSettings: string;
     sessionSettingsDesc: string;
     sessionDuration: string;
+    authProvider: string;
+    authProviderValue: string;
     loginAttempts: string;
     lockoutDuration: string;
     passwordHashing: string;

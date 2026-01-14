@@ -152,10 +152,8 @@ async def cleanup_sessions():
     """
     repo = _get_user_repo()
     sessions_deleted = await repo.cleanup_expired_sessions()
-    attempts_deleted = await repo.cleanup_old_login_attempts(older_than_days=7)
     return {
         "sessions_deleted": sessions_deleted,
-        "attempts_deleted": attempts_deleted,
     }
 
 

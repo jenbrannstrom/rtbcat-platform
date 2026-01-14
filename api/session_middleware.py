@@ -38,10 +38,8 @@ PUBLIC_PATHS = {
     "/docs",
     "/openapi.json",
     "/redoc",
-    "/auth/login",
     "/auth/check",
     "/auth/me",
-    "/auth/setup/status",
 }
 
 # Path prefixes that are public
@@ -150,10 +148,8 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             user = await repo.create_user(
                 user_id=user_id,
                 email=email,
-                password_hash="oauth2_proxy_auth",  # No password - OAuth2 only
                 display_name=display_name,
                 role=role,
-                must_change_password=False,  # No password to change
             )
 
             logger.info(f"Auto-created user from OAuth2 Proxy: {email} (role={role})")

@@ -20,7 +20,14 @@ from pydantic import BaseModel
 
 from config import ConfigManager
 from storage import SQLiteStore, creative_dicts_to_storage
-from api.dependencies import get_store, get_config
+from api.dependencies import (
+    get_store,
+    get_config,
+    get_current_user,
+    get_allowed_service_account_ids,
+    require_buyer_access,
+)
+from storage.repositories.user_repository import User
 from collectors import BuyerSeatsClient, CreativesClient, EndpointsClient, PretargetingClient
 from storage.database import db_query, db_query_one, db_execute
 
@@ -241,12 +248,21 @@ async def list_seats(
     bidder_id: Optional[str] = Query(None, description="Filter by bidder ID"),
     active_only: bool = Query(True, description="Only return active seats"),
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """List all known buyer seats.
 
     Returns buyer seats that have been discovered via the /seats/discover endpoint.
     """
-    seats = await store.get_buyer_seats(bidder_id=bidder_id, active_only=active_only)
+    if user.role == "admin":
+        seats = await store.get_buyer_seats(bidder_id=bidder_id, active_only=active_only)
+    else:
+        service_account_ids = await get_allowed_service_account_ids(user=user)
+        seats = await store.get_buyer_seats_for_service_accounts(
+            service_account_ids=service_account_ids,
+            bidder_id=bidder_id,
+            active_only=active_only,
+        )
     return [
         BuyerSeatResponse(
             buyer_id=s.buyer_id,
@@ -265,8 +281,10 @@ async def list_seats(
 async def get_seat(
     buyer_id: str,
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Get a specific buyer seat by ID."""
+    await require_buyer_access(buyer_id, store=store, user=user)
     seat = await store.get_buyer_seat(buyer_id)
     if not seat:
         raise HTTPException(status_code=404, detail="Buyer seat not found")
@@ -399,6 +417,7 @@ async def sync_seat_creatives(
     filter_query: Optional[str] = Query(None, description="Optional API filter"),
     config: ConfigManager = Depends(get_config),
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Sync creatives for a specific buyer seat.
 
@@ -408,6 +427,7 @@ async def sync_seat_creatives(
     Uses multi-account credentials if available, falling back to legacy config.
     """
     # Verify seat exists
+    await require_buyer_access(buyer_id, store=store, user=user)
     seat = await store.get_buyer_seat(buyer_id)
     if not seat:
         raise HTTPException(status_code=404, detail="Buyer seat not found")
@@ -455,8 +475,10 @@ async def update_seat(
     buyer_id: str,
     request: UpdateSeatRequest,
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Update a buyer seat's display name."""
+    await require_buyer_access(buyer_id, store=store, user=user)
     if request.display_name:
         success = await store.update_buyer_seat_display_name(buyer_id, request.display_name)
         if not success:
@@ -498,6 +520,7 @@ async def populate_seats_from_creatives(
 async def sync_all_data(
     store: SQLiteStore = Depends(get_store),
     config: ConfigManager = Depends(get_config),
+    user: User = Depends(get_current_user),
 ):
     """Sync all data: creatives, RTB endpoints, and pretargeting configs.
 
@@ -515,7 +538,14 @@ async def sync_all_data(
     errors = []
 
     # Get all active buyer seats
-    seats = await store.get_buyer_seats(active_only=True)
+    if user.role == "admin":
+        seats = await store.get_buyer_seats(active_only=True)
+    else:
+        service_account_ids = await get_allowed_service_account_ids(user=user)
+        seats = await store.get_buyer_seats_for_service_accounts(
+            service_account_ids=service_account_ids,
+            active_only=True,
+        )
 
     if not seats:
         raise HTTPException(
@@ -567,7 +597,11 @@ async def sync_all_data(
 
     # Get all unique bidder_ids for endpoints and pretargeting sync
     # Each bidder may have different endpoints and pretargeting configs
-    bidder_rows = await db_query("SELECT DISTINCT bidder_id FROM buyer_seats")
+    if user.role == "admin":
+        bidder_rows = await db_query("SELECT DISTINCT bidder_id FROM buyer_seats")
+    else:
+        bidder_ids = {seat.bidder_id for seat in seats}
+        bidder_rows = [{"bidder_id": bidder_id} for bidder_id in bidder_ids]
     import json
 
     for bidder_row in bidder_rows:

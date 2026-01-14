@@ -339,6 +339,123 @@ class AccountRepository(BaseRepository[ServiceAccount]):
             for row in rows
         ]
 
+    async def get_buyer_seats_for_service_accounts(
+        self,
+        service_account_ids: list[str],
+        bidder_id: Optional[str] = None,
+        active_only: bool = False,
+    ) -> list[BuyerSeat]:
+        """Get buyer seats scoped to service accounts.
+
+        Args:
+            service_account_ids: Allowed service account IDs.
+            bidder_id: Optional filter by bidder account.
+            active_only: If True, only return active seats.
+
+        Returns:
+            List of BuyerSeat objects.
+        """
+        if not service_account_ids:
+            return []
+
+        conditions = ["bs.service_account_id IN ({})".format(",".join("?" * len(service_account_ids)))]
+        params: list[Any] = list(service_account_ids)
+
+        if bidder_id:
+            conditions.append("bs.bidder_id = ?")
+            params.append(bidder_id)
+        if active_only:
+            conditions.append("bs.active = 1")
+
+        where_clause = " AND ".join(conditions)
+
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _query():
+                cursor = conn.execute(
+                    f"""
+                    SELECT bs.buyer_id, bs.bidder_id, bs.service_account_id, bs.display_name, bs.active,
+                           COALESCE(c.cnt, 0) as creative_count,
+                           bs.last_synced, bs.created_at
+                    FROM buyer_seats bs
+                    LEFT JOIN (
+                        SELECT account_id, COUNT(*) as cnt
+                        FROM creatives
+                        GROUP BY account_id
+                    ) c ON c.account_id = bs.buyer_id
+                    WHERE {where_clause}
+                    ORDER BY bs.display_name, bs.buyer_id
+                    """,
+                    params,
+                )
+                return cursor.fetchall()
+
+            rows = await loop.run_in_executor(None, _query)
+
+        return [
+            BuyerSeat(
+                buyer_id=row[0],
+                bidder_id=row[1],
+                service_account_id=row[2],
+                display_name=row[3],
+                active=bool(row[4]),
+                creative_count=row[5] or 0,
+                last_synced=row[6],
+                created_at=row[7],
+            )
+            for row in rows
+        ]
+
+    async def get_buyer_ids_for_service_accounts(
+        self,
+        service_account_ids: list[str],
+        active_only: bool = True,
+    ) -> list[str]:
+        """Get buyer IDs scoped to service accounts."""
+        if not service_account_ids:
+            return []
+
+        conditions = ["service_account_id IN ({})".format(",".join("?" * len(service_account_ids)))]
+        params: list[Any] = list(service_account_ids)
+        if active_only:
+            conditions.append("active = 1")
+
+        where_clause = " AND ".join(conditions)
+
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _query():
+                cursor = conn.execute(
+                    f"SELECT buyer_id FROM buyer_seats WHERE {where_clause}",
+                    params,
+                )
+                return [row[0] for row in cursor.fetchall()]
+
+            return await loop.run_in_executor(None, _query)
+
+    async def get_bidder_ids_for_buyer_ids(
+        self,
+        buyer_ids: list[str],
+    ) -> list[str]:
+        """Get unique bidder IDs for a set of buyer IDs."""
+        if not buyer_ids:
+            return []
+
+        placeholders = ",".join("?" * len(buyer_ids))
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _query():
+                cursor = conn.execute(
+                    f"SELECT DISTINCT bidder_id FROM buyer_seats WHERE buyer_id IN ({placeholders})",
+                    buyer_ids,
+                )
+                return [row[0] for row in cursor.fetchall()]
+
+            return await loop.run_in_executor(None, _query)
+
     async def get_buyer_seat(self, buyer_id: str) -> Optional[BuyerSeat]:
         """Get a specific buyer seat.
 

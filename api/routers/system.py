@@ -16,7 +16,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from api.dependencies import get_store, get_config
+from api.dependencies import get_store, get_config, get_current_user, resolve_buyer_id
+from storage.repositories.user_repository import User
 from storage import SQLiteStore
 from storage.database import db_query, db_execute, DB_PATH
 from config import ConfigManager
@@ -277,6 +278,7 @@ async def get_thumbnail(creative_id: str):
 async def get_thumbnail_status(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Get summary of thumbnail generation status.
 
@@ -293,6 +295,8 @@ async def get_thumbnail_status(
             coverage_percent=0.0,
             ffmpeg_available=ffmpeg_available,
         )
+
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
 
     # Build WHERE clause with optional buyer_id filter
     where_clause = "WHERE c.format = 'VIDEO'"

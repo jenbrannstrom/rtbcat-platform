@@ -8,9 +8,12 @@ import logging
 from collections import defaultdict
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 
 from storage.database import db_query, db_query_one
+from api.dependencies import get_store, get_current_user, resolve_buyer_id
+from storage import SQLiteStore
+from storage.repositories.user_repository import User
 from analytics.rtb_bidstream_analyzer import RTBFunnelAnalyzer
 from .common import get_valid_billing_ids, get_valid_billing_ids_for_buyer
 
@@ -23,6 +26,8 @@ router = APIRouter(tags=["RTB Analytics"])
 async def get_rtb_bidstream(
     days: int = Query(7, ge=1, le=90),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """
     Get RTB funnel analysis from database.
@@ -40,6 +45,7 @@ async def get_rtb_bidstream(
         # Build filter for buyer seat if specified
         buyer_filter = ""
         buyer_params = []
+        buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         if buyer_id:
             # Get bidder_id for this buyer seat
             seat = await db_query_one(
@@ -298,6 +304,8 @@ async def get_rtb_geos(
 async def get_config_performance(
     days: int = Query(7, ge=1, le=30),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """
     Get performance breakdown by pretargeting config (billing_id).
@@ -317,6 +325,7 @@ async def get_config_performance(
         buyer_id: Optional buyer seat ID to filter results
     """
     try:
+        buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         # Get valid billing IDs for the specified buyer seat (or all if not specified)
         valid_billing_ids = await get_valid_billing_ids_for_buyer(buyer_id)
 

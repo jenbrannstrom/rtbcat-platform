@@ -16,7 +16,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File
 from pydantic import BaseModel
 
-from api.dependencies import get_store
+from api.dependencies import get_store, get_current_user, get_allowed_buyer_ids
+from storage.repositories.user_repository import User
 from api.schemas.performance import (
     PerformanceMetricInput,
     PerformanceMetricResponse,
@@ -109,9 +110,18 @@ async def get_creative_performance(
     creative_id: str,
     days: int = Query(30, ge=1, le=365, description="Days to aggregate"),
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Get aggregated performance summary for a creative."""
     try:
+        creative = await store.get_creative(creative_id)
+        if not creative:
+            raise HTTPException(status_code=404, detail="Creative not found")
+        if creative.buyer_id:
+            allowed = await get_allowed_buyer_ids(store=store, user=user)
+            if allowed is not None and creative.buyer_id not in allowed:
+                raise HTTPException(status_code=403, detail="You don't have access to this buyer account.")
+
         summary = await store.get_creative_performance_summary(creative_id, days=days)
 
         return PerformanceSummaryResponse(
@@ -287,6 +297,7 @@ async def import_performance_csv(
 async def get_batch_performance(
     request: BatchPerformanceRequest,
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Get performance summaries for multiple creatives in a single request."""
     try:
@@ -297,6 +308,29 @@ async def get_batch_performance(
             "all_time": 365,
         }
         days = period_days.get(request.period, 7)
+
+        allowed = await get_allowed_buyer_ids(store=store, user=user)
+        if allowed is not None:
+            if not allowed:
+                raise HTTPException(status_code=403, detail="No buyer accounts assigned.")
+            # Validate all creatives belong to allowed buyers
+            async with store._connection() as conn:
+                import asyncio
+                loop = asyncio.get_event_loop()
+
+                def _fetch_creatives():
+                    placeholders = ",".join("?" * len(request.creative_ids))
+                    cursor = conn.execute(
+                        f"SELECT id, buyer_id FROM creatives WHERE id IN ({placeholders})",
+                        request.creative_ids,
+                    )
+                    return cursor.fetchall()
+
+                rows = await loop.run_in_executor(None, _fetch_creatives)
+            for row in rows:
+                buyer_id = row["buyer_id"]
+                if buyer_id and buyer_id not in allowed:
+                    raise HTTPException(status_code=403, detail="You don't have access to this buyer account.")
 
         results: dict[str, CreativePerformanceSummary] = {}
 

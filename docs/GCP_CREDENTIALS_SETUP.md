@@ -1011,43 +1011,7 @@ ssh jen@104.199.91.219 "sqlite3 ~/.catscan/catscan.db \"UPDATE system_settings S
 sudo systemctl restart catscan-api
 ```
 
-**Production Fix:** Create default admin user (see "Fresh Install Workaround" below).
-
-### Fresh Install Workaround (Until Secure First-Run is Implemented)
-
-On fresh installs, multi-user mode is enabled but no users exist. Apply this workaround:
-
-**Option A: Disable multi-user mode (single-user/development)**
-```bash
-ssh jen@104.199.91.219 "sqlite3 ~/.catscan/catscan.db \"UPDATE system_settings SET value='0' WHERE key='multi_user_enabled';\""
-sudo systemctl restart catscan-api
-```
-
-**Option B: Create admin user manually (recommended for production)**
-```bash
-ssh jen@104.199.91.219 "~/rtbcat-platform/venv/bin/python3 -c \"
-import sqlite3, uuid, os, hashlib
-
-db_path = os.path.expanduser('~/.catscan/catscan.db')
-conn = sqlite3.connect(db_path)
-
-# Check if admin exists
-if conn.execute('SELECT COUNT(*) FROM users WHERE email=?', ('admin@local',)).fetchone()[0] > 0:
-    print('Admin already exists')
-else:
-    # Use sha256 hash (auth_v2.py fallback format)
-    password_hash = 'sha256:' + hashlib.sha256('admin'.encode()).hexdigest()
-    user_id = str(uuid.uuid4())
-    conn.execute('INSERT INTO users (id, email, password_hash, display_name, role, is_active) VALUES (?,?,?,?,?,?)',
-        (user_id, 'admin@local', password_hash, 'Administrator', 'admin', 1))
-    conn.commit()
-    print(f'Created: admin@local / admin')
-conn.close()
-\""
-ssh jen@104.199.91.219 "sudo systemctl restart catscan-api"
-```
-
-After login with admin/admin, immediately change the password via the UI.
+**Production Fix:** Ensure OAuth2 Proxy is configured and `allowed_email_domains` is set.
 
 ### Data Verification
 
@@ -1081,133 +1045,10 @@ ssh jen@104.199.91.219 "uptime"
 
 ## First Run Setup (Production)
 
-For new installations, Cat-Scan should use a secure first-run flow:
+Cat-Scan relies on OAuth2 Proxy for authentication. There are no local
+passwords or default credentials to configure. Control access via:
 
-### Default Credentials
-- **Username:** `admin`
-- **Password:** `admin`
-
-### Security Requirements
-1. On first login with default credentials, user MUST change password
-2. Credentials cannot be uploaded until password is changed
-3. Multi-user mode is enabled by default for security
-
-### Setup Steps (Post-Installation)
-
-1. **Access the dashboard:** `http://YOUR_IP:3000`
-2. **Login with:** `admin` / `admin`
-3. **Change password immediately** (system enforces this)
-4. **Only then:** Upload Google credentials via Settings → Credentials
-
-This ensures no sensitive API keys can be added until the installation is secured.
-
----
-
-## TO BE DONE: Secure First-Run Implementation
-
-**Status:** Not yet implemented. Currently multi-user mode must be manually disabled or admin user manually created.
-
-### Implementation Tasks
-
-#### 1. Database Migration (014_first_run_admin.sql)
-```sql
--- Add must_change_password column to users table
-ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0;
-
--- Index for quick lookup
-CREATE INDEX IF NOT EXISTS idx_users_must_change_password ON users(must_change_password);
-```
-
-#### 2. Default Admin Creation (api/auth_v2.py)
-On startup, if no users exist:
-- Create user: `admin@local` with password: `admin`
-- Set `must_change_password=1`
-- Set `role='admin'`
-
-```python
-async def ensure_default_admin():
-    """Create default admin if no users exist."""
-    repo = _get_user_repo()
-    user_count = await repo.count_users()
-
-    if user_count == 0:
-        user_id = str(uuid.uuid4())
-        password_hash = hash_password("admin")
-        await repo.create_user(
-            user_id=user_id,
-            email="admin@local",
-            password_hash=password_hash,
-            display_name="Administrator",
-            role="admin",
-            must_change_password=True,
-        )
-```
-
-#### 3. Update User Model (storage/repositories/user_repository.py)
-- Add `must_change_password: bool = False` to `User` dataclass
-- Update all SELECT queries to include `must_change_password`
-- Update `create_user()` to accept `must_change_password` parameter
-
-#### 4. Auth Flow Changes (api/auth_v2.py)
-After successful login:
-```python
-return LoginResponse(
-    status="success",
-    user={...},
-    must_change_password=user.must_change_password,  # NEW
-    message="Login successful",
-)
-```
-
-Update `change_password()` endpoint to clear the flag:
-```python
-await repo.update_user(user.id, password_hash=new_hash, must_change_password=False)
-```
-
-#### 5. Block Credentials Upload (api/dependencies.py)
-New dependency:
-```python
-async def require_password_changed(user: User = Depends(get_current_user)) -> User:
-    """Block sensitive operations until password is changed."""
-    if user.must_change_password:
-        raise HTTPException(
-            status_code=403,
-            detail="Please change your default password before adding credentials.",
-        )
-    return user
-```
-
-Apply to `api/routers/config.py`:
-```python
-@router.post("/config/service-accounts", response_model=CredentialsUploadResponse)
-async def add_service_account(
-    request: CredentialsUploadRequest,
-    store: SQLiteStore = Depends(get_store),
-    user: User = Depends(require_password_changed),  # NEW
-):
-```
-
-#### 6. Frontend Changes (dashboard)
-- Check `must_change_password` in login response
-- If true, redirect to `/change-password` page
-- Block navigation to Settings → Credentials until password changed
-
-### Files to Modify
-- `migrations/014_first_run_admin.sql` (new)
-- `storage/repositories/user_repository.py`
-- `api/auth_v2.py`
-- `api/dependencies.py`
-- `api/routers/config.py`
-- `dashboard/src/app/login/page.tsx`
-- `dashboard/src/components/ProtectedRoute.tsx`
-
-### Testing Checklist
-- [ ] Fresh install creates admin@local with admin/admin
-- [ ] Login with admin/admin shows must_change_password=true
-- [ ] Cannot access /config/service-accounts until password changed
-- [ ] After password change, must_change_password=false
-- [ ] Credentials upload works after password change
-
----
+1. `allowed_email_domains` in Terraform
+2. OAuth2 Proxy allowlist settings (optional)
 
 *See also: [GCP_MIGRATION_PLAN.md](GCP_MIGRATION_PLAN.md)*
