@@ -233,16 +233,9 @@ function WasteAnalysisContent() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      {/* Page Header - Sticky period selector stays at top while scrolling */}
-      <div className="sticky top-0 z-30 px-6 py-4 bg-white border-b border-gray-200 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t.dashboard.title}</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              {t.dashboard.subtitle}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
+      {/* Page Header - Sticky controls at top while scrolling */}
+      <div className="sticky top-0 z-30 px-6 py-2 bg-white border-b border-gray-200 shadow-sm">
+        <div className="flex items-center justify-end gap-3">
           {/* CPM Badge - show when spend data available */}
           {spendStats?.has_spend_data && spendStats.avg_cpm_usd && (
             <div className={cn(
@@ -268,7 +261,6 @@ function WasteAnalysisContent() {
 
           {/* Period Selector */}
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">{t.dashboard.period}</span>
             <div className="flex rounded-lg border border-gray-300 overflow-hidden">
               {PERIOD_OPTIONS.map((option) => (
                 <button
@@ -281,7 +273,7 @@ function WasteAnalysisContent() {
                       : "bg-white text-gray-700 hover:bg-gray-50"
                   )}
                 >
-                  {option.value} {t.dashboard.days}
+                  {option.value}d
                 </button>
               ))}
             </div>
@@ -291,7 +283,7 @@ function WasteAnalysisContent() {
             onClick={handleRefresh}
             disabled={summaryLoading}
             className={cn(
-              "flex items-center gap-2 px-4 py-2",
+              "flex items-center gap-1 px-3 py-1.5",
               "bg-white border border-gray-300 rounded-lg shadow-sm",
               "hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500",
               "disabled:opacity-50 disabled:cursor-not-allowed",
@@ -299,9 +291,7 @@ function WasteAnalysisContent() {
             )}
           >
             <RefreshCw className={cn("h-4 w-4", (summaryLoading || funnelLoading) && "animate-spin")} />
-            {t.common.refresh}
           </button>
-          </div>
         </div>
       </div>
 
