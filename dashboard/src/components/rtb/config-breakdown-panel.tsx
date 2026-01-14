@@ -26,8 +26,25 @@ function formatNumber(n: number): string {
   return n.toString();
 }
 
-// Get status based on win/waste rates
-function getStatus(item: ConfigBreakdownItem): 'great' | 'ok' | 'warning' | 'critical' {
+// Minimum impressions threshold for showing waste warnings
+// Below this, there's insufficient data to make confident assessments
+// Inspired by Facebook's 1000 impression learning phase
+const MIN_IMPRESSIONS_FOR_WARNING = 1000;
+
+// Get status based on win/waste rates with smart minimum threshold
+function getStatus(item: ConfigBreakdownItem): 'great' | 'ok' | 'warning' | 'critical' | 'insufficient_data' {
+  // If we don't have enough impressions, don't show warning/critical status
+  // This prevents alarming users over small sample sizes
+  const hasEnoughData = item.impressions >= MIN_IMPRESSIONS_FOR_WARNING;
+
+  if (!hasEnoughData) {
+    // With insufficient data, only show 'great' if win_rate is excellent
+    // Otherwise show neutral 'insufficient_data' status
+    if (item.win_rate >= 40) return 'great';
+    return 'insufficient_data';
+  }
+
+  // With sufficient data, apply normal thresholds
   if (item.waste_rate >= 90) return 'critical';
   if (item.waste_rate >= 70) return 'warning';
   if (item.win_rate >= 40) return 'great';
@@ -35,15 +52,16 @@ function getStatus(item: ConfigBreakdownItem): 'great' | 'ok' | 'warning' | 'cri
 }
 
 // Status indicator tooltips
-const STATUS_TOOLTIPS: Record<'great' | 'ok' | 'warning' | 'critical', string> = {
+const STATUS_TOOLTIPS: Record<'great' | 'ok' | 'warning' | 'critical' | 'insufficient_data', string> = {
   great: 'Excellent performance: Win rate ≥40%, low waste. Keep this targeting.',
   ok: 'Acceptable performance: Room for optimization but not urgent.',
   warning: 'Needs attention: Waste rate 70-90%. Consider adjusting targeting or excluding.',
   critical: 'Critical waste: ≥90% of bid requests not winning. Strongly recommend excluding or fixing targeting.',
+  insufficient_data: `Insufficient data: Need ${MIN_IMPRESSIONS_FOR_WARNING.toLocaleString()}+ impressions to assess performance reliably.`,
 };
 
 // Status indicator component with tooltip
-function StatusIndicator({ status }: { status: 'great' | 'ok' | 'warning' | 'critical' }) {
+function StatusIndicator({ status }: { status: 'great' | 'ok' | 'warning' | 'critical' | 'insufficient_data' }) {
   const [showTooltip, setShowTooltip] = useState(false);
 
   const icon = (() => {
@@ -56,6 +74,8 @@ function StatusIndicator({ status }: { status: 'great' | 'ok' | 'warning' | 'cri
         return <AlertTriangle className="h-4 w-4 text-orange-500" />;
       case 'critical':
         return <AlertCircle className="h-4 w-4 text-red-500" />;
+      case 'insufficient_data':
+        return <div className="h-4 w-4 rounded-full border-2 border-dashed border-gray-300" title="Insufficient data" />;
     }
   })();
 
@@ -185,13 +205,14 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
               </div>
             )}
             {/* Table header */}
-            <div className="grid grid-cols-12 gap-2 px-3 py-2 border-b bg-gray-50 text-xs font-medium text-gray-500">
+            <div className="grid grid-cols-14 gap-2 px-3 py-2 border-b bg-gray-50 text-xs font-medium text-gray-500">
               <div className="col-span-1"></div>
-              <div className="col-span-4">Name</div>
+              <div className="col-span-3">Name</div>
               <div className="col-span-2 text-right">Reached</div>
+              <div className="col-span-2 text-right">Imp</div>
               <div className="col-span-2 text-right">Win Rate</div>
               <div className="col-span-2 text-right">Waste</div>
-              <div className="col-span-1"></div>
+              <div className="col-span-2"></div>
             </div>
 
             {/* Table body */}
@@ -204,7 +225,7 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                     key={`${item.name}-${index}`}
                     onClick={() => isClickable && setSelectedApp(item.name)}
                     className={cn(
-                      'grid grid-cols-12 gap-2 px-3 py-2 text-sm items-center',
+                      'grid grid-cols-14 gap-2 px-3 py-2 text-sm items-center',
                       'hover:bg-gray-50 transition-colors',
                       status === 'critical' && 'bg-red-50/50',
                       status === 'warning' && 'bg-orange-50/30',
@@ -214,7 +235,7 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                     <div className="col-span-1">
                       <StatusIndicator status={status} />
                     </div>
-                    <div className="col-span-4 font-medium text-gray-900 truncate flex items-center gap-1" title={item.name}>
+                    <div className="col-span-3 font-medium text-gray-900 truncate flex items-center gap-1" title={item.name}>
                       {item.name}
                       {isClickable && (
                         <ChevronRight className="h-3 w-3 text-gray-400 flex-shrink-0" />
@@ -222,6 +243,9 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                     </div>
                     <div className="col-span-2 text-right text-gray-600 font-mono text-xs">
                       {formatNumber(item.reached)}
+                    </div>
+                    <div className="col-span-2 text-right text-gray-600 font-mono text-xs">
+                      {formatNumber(item.impressions || 0)}
                     </div>
                     <div
                       className={cn(
@@ -236,15 +260,16 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                     <div
                       className={cn(
                         'col-span-2 text-right',
-                        item.waste_rate < 50 && 'text-gray-500',
-                        item.waste_rate >= 50 && item.waste_rate < 70 && 'text-yellow-600',
-                        item.waste_rate >= 70 && item.waste_rate < 90 && 'text-orange-600',
-                        item.waste_rate >= 90 && 'text-red-600 font-medium'
+                        status === 'insufficient_data' && 'text-gray-400',
+                        status !== 'insufficient_data' && item.waste_rate < 50 && 'text-gray-500',
+                        status !== 'insufficient_data' && item.waste_rate >= 50 && item.waste_rate < 70 && 'text-yellow-600',
+                        status !== 'insufficient_data' && item.waste_rate >= 70 && item.waste_rate < 90 && 'text-orange-600',
+                        status !== 'insufficient_data' && item.waste_rate >= 90 && 'text-red-600 font-medium'
                       )}
                     >
                       {item.waste_rate.toFixed(1)}%
                     </div>
-                    <div className="col-span-1 flex justify-end">
+                    <div className="col-span-2 flex justify-end">
                       <WasteBar pct={item.waste_rate} />
                     </div>
                   </div>
