@@ -166,6 +166,125 @@ async def get_user_service_accounts(
     return await repo.get_user_service_account_ids(user.id)
 
 
+async def get_allowed_service_account_ids(
+    user: User = Depends(get_current_user),
+) -> list[str]:
+    """Get service account IDs allowed for the current user.
+
+    Returns an empty list for admins to signal "all accounts".
+    """
+    if user.role == "admin":
+        return []
+    repo = _get_user_repo()
+    return await repo.get_user_service_account_ids(user.id)
+
+
+async def get_allowed_buyer_ids(
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
+) -> Optional[list[str]]:
+    """Get buyer IDs allowed for the current user.
+
+    Returns None for admins to signal "all buyers".
+    """
+    if user.role == "admin":
+        return None
+
+    repo = _get_user_repo()
+    service_account_ids = await repo.get_user_service_account_ids(user.id)
+    if not service_account_ids:
+        return []
+    return await store.get_buyer_ids_for_service_accounts(service_account_ids)
+
+
+async def get_allowed_bidder_ids(
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
+) -> Optional[list[str]]:
+    """Get bidder IDs allowed for the current user."""
+    buyer_ids = await get_allowed_buyer_ids(store=store, user=user)
+    if buyer_ids is None:
+        return None
+    if not buyer_ids:
+        return []
+    return await store.get_bidder_ids_for_buyer_ids(buyer_ids)
+
+
+async def resolve_buyer_id(
+    buyer_id: Optional[str],
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
+) -> Optional[str]:
+    """Resolve buyer_id for a request based on user access.
+
+    - Admins: return buyer_id as-is (may be None).
+    - Non-admins: if buyer_id provided, must be allowed.
+      If not provided, allow only when user has exactly one buyer_id.
+    """
+    allowed = await get_allowed_buyer_ids(store=store, user=user)
+    if allowed is None:
+        return buyer_id
+
+    if buyer_id:
+        if buyer_id not in allowed:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have access to this buyer account.",
+            )
+        return buyer_id
+
+    if len(allowed) == 1:
+        return allowed[0]
+
+    raise HTTPException(
+        status_code=400,
+        detail="buyer_id is required for your account access.",
+    )
+
+
+async def require_buyer_access(
+    buyer_id: str,
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
+) -> None:
+    """Require access to a specific buyer_id."""
+    allowed = await get_allowed_buyer_ids(store=store, user=user)
+    if allowed is None:
+        return
+    if buyer_id not in allowed:
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have access to this buyer account.",
+        )
+
+
+async def resolve_bidder_id(
+    bidder_id: Optional[str],
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
+) -> Optional[str]:
+    """Resolve bidder_id for a request based on user access."""
+    allowed = await get_allowed_bidder_ids(store=store, user=user)
+    if allowed is None:
+        return bidder_id
+
+    if bidder_id:
+        if bidder_id not in allowed:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have access to this bidder account.",
+            )
+        return bidder_id
+
+    if len(allowed) == 1:
+        return allowed[0]
+
+    raise HTTPException(
+        status_code=400,
+        detail="bidder_id is required for your account access.",
+    )
+
+
 async def check_service_account_access(
     service_account_id: str,
     user: User = Depends(get_current_user),

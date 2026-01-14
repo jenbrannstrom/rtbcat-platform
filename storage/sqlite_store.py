@@ -270,6 +270,34 @@ class SQLiteStore:
         """Get all buyer seats, optionally filtered."""
         return await self._account_repo.get_buyer_seats(bidder_id, active_only)
 
+    async def get_buyer_seats_for_service_accounts(
+        self,
+        service_account_ids: list[str],
+        bidder_id: Optional[str] = None,
+        active_only: bool = False,
+    ) -> list[BuyerSeat]:
+        """Get buyer seats scoped to service accounts."""
+        return await self._account_repo.get_buyer_seats_for_service_accounts(
+            service_account_ids=service_account_ids,
+            bidder_id=bidder_id,
+            active_only=active_only,
+        )
+
+    async def get_buyer_ids_for_service_accounts(
+        self,
+        service_account_ids: list[str],
+        active_only: bool = True,
+    ) -> list[str]:
+        """Get buyer IDs scoped to service accounts."""
+        return await self._account_repo.get_buyer_ids_for_service_accounts(
+            service_account_ids=service_account_ids,
+            active_only=active_only,
+        )
+
+    async def get_bidder_ids_for_buyer_ids(self, buyer_ids: list[str]) -> list[str]:
+        """Get bidder IDs for a set of buyer IDs."""
+        return await self._account_repo.get_bidder_ids_for_buyer_ids(buyer_ids)
+
     async def get_buyer_seat(self, buyer_id: str) -> Optional[BuyerSeat]:
         """Get a specific buyer seat."""
         return await self._account_repo.get_buyer_seat(buyer_id)

@@ -1013,7 +1013,6 @@ User accounts for platform access.
 |--------|------|-------------|
 | id | TEXT | Primary key |
 | email | TEXT | Email (unique) |
-| password_hash | TEXT | Hashed password |
 | display_name | TEXT | Display name |
 | role | TEXT | Role (admin, user) |
 | is_active | INTEGER | Active flag |
@@ -1051,15 +1050,7 @@ User permissions for service accounts.
 
 ### login_attempts
 
-Tracks login attempts for security.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| id | INTEGER | Primary key |
-| email | TEXT | Attempted email |
-| ip_address | TEXT | Client IP |
-| attempted_at | TEXT | Attempt time |
-| success | INTEGER | Success flag |
+Removed in v018 (OAuth2 Proxy handles authentication).
 
 ### audit_log
 

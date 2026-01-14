@@ -7,11 +7,20 @@ viewability waste, and fraud risk endpoints.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 
 from analytics.waste_analyzer import WasteAnalyzer
 from analytics.qps_optimizer import QPSOptimizer
 from services.waste_analyzer import WasteAnalyzerService
+from api.dependencies import (
+    get_store,
+    get_current_user,
+    resolve_buyer_id,
+    require_buyer_access,
+    resolve_bidder_id,
+)
+from storage import SQLiteStore
+from storage.repositories.user_repository import User
 from .common import (
     SizeGapResponse,
     SizeCoverageResponse,
@@ -30,6 +39,8 @@ router = APIRouter(tags=["Waste Analysis"])
 async def get_waste_report(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     days: int = Query(7, ge=1, le=90, description="Days of traffic to analyze"),
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Get waste analysis report comparing bid requests vs creative inventory.
 
@@ -45,6 +56,7 @@ async def get_waste_report(
     """
     try:
         # WasteAnalyzer uses its own db connection internally
+        buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         analyzer = WasteAnalyzer()
         report = await analyzer.analyze_waste(buyer_id=buyer_id, days=days)
 
@@ -93,12 +105,20 @@ async def get_waste_report(
 async def get_waste_signals(
     creative_id: str,
     include_resolved: bool = Query(False, description="Include resolved signals"),
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Get evidence-based waste signals for a creative.
 
     Phase 11.2: Evidence-Based Waste Detection
     Returns signals with full evidence chain explaining WHY the creative is flagged.
     """
+    creative = await store.get_creative(creative_id)
+    if not creative:
+        raise HTTPException(status_code=404, detail="Creative not found")
+    if creative.buyer_id:
+        await require_buyer_access(creative.buyer_id, store=store, user=user)
+
     service = WasteAnalyzerService()
     signals = service.get_signals_for_creative(creative_id, include_resolved=include_resolved)
     return [WasteSignalResponse(**s) for s in signals]
@@ -109,6 +129,8 @@ async def detect_problem_formats(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     days: int = Query(7, ge=1, le=90, description="Timeframe for analysis"),
     size_tolerance: int = Query(5, ge=0, le=20, description="Pixel tolerance for size matching"),
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Detect creatives with problems that hurt QPS efficiency.
 
@@ -121,6 +143,7 @@ async def detect_problem_formats(
     - low_bid_rate: impressions / reached_queries < 1%
     - disapproved: approval_status != 'APPROVED'
     """
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     analyzer = WasteAnalyzer()
     problems = await analyzer.detect_problem_formats(
         buyer_id=buyer_id,
@@ -183,6 +206,8 @@ async def get_viewability_waste(
     days: int = Query(7, ge=1, le=30),
     threshold_pct: float = Query(50.0, ge=0, le=100, description="Viewability threshold"),
     bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """
     Find publishers with low viewability but high spend.
@@ -191,6 +216,7 @@ async def get_viewability_waste(
     Use this to identify where to reduce bids.
     """
     try:
+        bidder_id = await resolve_bidder_id(bidder_id, store=store, user=user)
         optimizer = QPSOptimizer()
         result = await optimizer.get_viewability_waste(days, threshold_pct, bidder_id)
         return {
@@ -209,6 +235,8 @@ async def get_fraud_risk_publishers(
     days: int = Query(7, ge=1, le=30),
     threshold_pct: float = Query(5.0, ge=0, le=100, description="IVT rate threshold"),
     bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """
     Find publishers with high fraud/IVT rates.
@@ -217,6 +245,7 @@ async def get_fraud_risk_publishers(
     Use this to identify publishers to block.
     """
     try:
+        bidder_id = await resolve_bidder_id(bidder_id, store=store, user=user)
         optimizer = QPSOptimizer()
         result = await optimizer.get_fraud_risk_publishers(days, threshold_pct, bidder_id)
         return {

@@ -183,21 +183,11 @@ function SettingsPage() {
             </div>
             <div className="p-3 bg-gray-50 rounded-lg">
               <p className="text-sm font-medium text-gray-500">
-                {t.admin.loginAttempts}
+                {t.admin.authProvider}
               </p>
-              <p className="text-lg font-semibold text-gray-900">5 attempts</p>
-            </div>
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm font-medium text-gray-500">
-                {t.admin.lockoutDuration}
+              <p className="text-lg font-semibold text-gray-900">
+                {t.admin.authProviderValue}
               </p>
-              <p className="text-lg font-semibold text-gray-900">1 hour</p>
-            </div>
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm font-medium text-gray-500">
-                {t.admin.passwordHashing}
-              </p>
-              <p className="text-lg font-semibold text-gray-900">bcrypt</p>
             </div>
           </div>
         </div>

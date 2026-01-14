@@ -1,14 +1,12 @@
 """User repository for authentication and authorization.
 
 This module provides database operations for users, sessions, permissions,
-rate limiting, and audit logging.
+and audit logging.
 """
 
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import secrets
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -25,28 +23,22 @@ class User:
     Attributes:
         id: UUID for the user.
         email: Unique email address.
-        password_hash: bcrypt password hash.
-        display_name: User-friendly display name.
+    display_name: User-friendly display name.
         role: User role ('admin' or 'user').
         is_active: Whether the account is active.
         created_at: Account creation timestamp.
         updated_at: Last update timestamp.
         last_login_at: Last successful login timestamp.
-        must_change_password: If True, user must change password before accessing sensitive features.
-        password_changed_at: When password was last changed.
     """
 
     id: str
     email: str
-    password_hash: str
     display_name: Optional[str] = None
     role: str = "user"
     is_active: bool = True
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     last_login_at: Optional[str] = None
-    must_change_password: bool = False
-    password_changed_at: Optional[str] = None
 
 
 @dataclass
@@ -119,7 +111,7 @@ class AuditLogEntry:
 class UserRepository(BaseRepository[User]):
     """Repository for user authentication and authorization.
 
-    Manages users, sessions, permissions, rate limiting, and audit logging.
+    Manages users, sessions, permissions, and audit logging.
     """
 
     def __init__(self, db_path: str | Path) -> None:
@@ -136,20 +128,16 @@ class UserRepository(BaseRepository[User]):
         self,
         user_id: str,
         email: str,
-        password_hash: str,
         display_name: Optional[str] = None,
         role: str = "user",
-        must_change_password: bool = False,
     ) -> User:
         """Create a new user.
 
         Args:
             user_id: UUID for the new user.
             email: User's email address.
-            password_hash: bcrypt password hash.
             display_name: Optional display name.
             role: User role ('admin' or 'user').
-            must_change_password: If True, user must change password on first login.
 
         Returns:
             Created User object.
@@ -161,10 +149,10 @@ class UserRepository(BaseRepository[User]):
             def _create():
                 conn.execute(
                     """
-                    INSERT INTO users (id, email, password_hash, display_name, role, is_active, created_at, must_change_password)
-                    VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+                    INSERT INTO users (id, email, display_name, role, is_active, created_at)
+                    VALUES (?, ?, ?, ?, 1, ?)
                     """,
-                    (user_id, email, password_hash, display_name, role, now, 1 if must_change_password else 0),
+                    (user_id, email, display_name, role, now),
                 )
                 conn.commit()
 
@@ -173,12 +161,10 @@ class UserRepository(BaseRepository[User]):
         return User(
             id=user_id,
             email=email,
-            password_hash=password_hash,
             display_name=display_name,
             role=role,
             is_active=True,
             created_at=now,
-            must_change_password=must_change_password,
         )
 
     async def get_user_by_id(self, user_id: str) -> Optional[User]:
@@ -196,9 +182,8 @@ class UserRepository(BaseRepository[User]):
             def _query():
                 cursor = conn.execute(
                     """
-                    SELECT id, email, password_hash, display_name, role,
-                           is_active, created_at, updated_at, last_login_at,
-                           must_change_password, password_changed_at
+                    SELECT id, email, display_name, role,
+                           is_active, created_at, updated_at, last_login_at
                     FROM users
                     WHERE id = ?
                     """,
@@ -212,15 +197,12 @@ class UserRepository(BaseRepository[User]):
                 return User(
                     id=row[0],
                     email=row[1],
-                    password_hash=row[2],
-                    display_name=row[3],
-                    role=row[4],
-                    is_active=bool(row[5]),
-                    created_at=row[6],
-                    updated_at=row[7],
-                    last_login_at=row[8],
-                    must_change_password=bool(row[9]) if row[9] is not None else False,
-                    password_changed_at=row[10],
+                    display_name=row[2],
+                    role=row[3],
+                    is_active=bool(row[4]),
+                    created_at=row[5],
+                    updated_at=row[6],
+                    last_login_at=row[7],
                 )
             return None
 
@@ -239,9 +221,8 @@ class UserRepository(BaseRepository[User]):
             def _query():
                 cursor = conn.execute(
                     """
-                    SELECT id, email, password_hash, display_name, role,
-                           is_active, created_at, updated_at, last_login_at,
-                           must_change_password, password_changed_at
+                    SELECT id, email, display_name, role,
+                           is_active, created_at, updated_at, last_login_at
                     FROM users
                     WHERE email = ?
                     """,
@@ -255,15 +236,12 @@ class UserRepository(BaseRepository[User]):
                 return User(
                     id=row[0],
                     email=row[1],
-                    password_hash=row[2],
-                    display_name=row[3],
-                    role=row[4],
-                    is_active=bool(row[5]),
-                    created_at=row[6],
-                    updated_at=row[7],
-                    last_login_at=row[8],
-                    must_change_password=bool(row[9]) if row[9] is not None else False,
-                    password_changed_at=row[10],
+                    display_name=row[2],
+                    role=row[3],
+                    is_active=bool(row[4]),
+                    created_at=row[5],
+                    updated_at=row[6],
+                    last_login_at=row[7],
                 )
             return None
 
@@ -298,9 +276,8 @@ class UserRepository(BaseRepository[User]):
             def _query():
                 cursor = conn.execute(
                     f"""
-                    SELECT id, email, password_hash, display_name, role,
-                           is_active, created_at, updated_at, last_login_at,
-                           must_change_password, password_changed_at
+                    SELECT id, email, display_name, role,
+                           is_active, created_at, updated_at, last_login_at
                     FROM users
                     WHERE {where_clause}
                     ORDER BY created_at DESC
@@ -315,15 +292,12 @@ class UserRepository(BaseRepository[User]):
             User(
                 id=row[0],
                 email=row[1],
-                password_hash=row[2],
-                display_name=row[3],
-                role=row[4],
-                is_active=bool(row[5]),
-                created_at=row[6],
-                updated_at=row[7],
-                last_login_at=row[8],
-                must_change_password=bool(row[9]) if row[9] is not None else False,
-                password_changed_at=row[10],
+                display_name=row[2],
+                role=row[3],
+                is_active=bool(row[4]),
+                created_at=row[5],
+                updated_at=row[6],
+                last_login_at=row[7],
             )
             for row in rows
         ]
@@ -334,8 +308,6 @@ class UserRepository(BaseRepository[User]):
         display_name: Optional[str] = None,
         role: Optional[str] = None,
         is_active: Optional[bool] = None,
-        password_hash: Optional[str] = None,
-        must_change_password: Optional[bool] = None,
     ) -> bool:
         """Update a user's fields.
 
@@ -344,8 +316,6 @@ class UserRepository(BaseRepository[User]):
             display_name: New display name.
             role: New role.
             is_active: New active status.
-            password_hash: New password hash.
-            must_change_password: Whether user must change password.
 
         Returns:
             True if user was updated, False if not found.
@@ -362,15 +332,6 @@ class UserRepository(BaseRepository[User]):
         if is_active is not None:
             updates.append("is_active = ?")
             params.append(1 if is_active else 0)
-        if password_hash is not None:
-            updates.append("password_hash = ?")
-            params.append(password_hash)
-            # Also update password_changed_at when password is changed
-            updates.append("password_changed_at = ?")
-            params.append(datetime.utcnow().isoformat())
-        if must_change_password is not None:
-            updates.append("must_change_password = ?")
-            params.append(1 if must_change_password else 0)
 
         if not updates:
             return False
@@ -540,7 +501,7 @@ class UserRepository(BaseRepository[User]):
             def _query():
                 cursor = conn.execute(
                     """
-                    SELECT u.id, u.email, u.password_hash, u.display_name, u.role,
+                    SELECT u.id, u.email, u.display_name, u.role,
                            u.is_active, u.created_at, u.updated_at, u.last_login_at
                     FROM user_sessions s
                     JOIN users u ON s.user_id = u.id
@@ -556,13 +517,12 @@ class UserRepository(BaseRepository[User]):
                 return User(
                     id=row[0],
                     email=row[1],
-                    password_hash=row[2],
-                    display_name=row[3],
-                    role=row[4],
-                    is_active=bool(row[5]),
-                    created_at=row[6],
-                    updated_at=row[7],
-                    last_login_at=row[8],
+                    display_name=row[2],
+                    role=row[3],
+                    is_active=bool(row[4]),
+                    created_at=row[5],
+                    updated_at=row[6],
+                    last_login_at=row[7],
                 )
             return None
 
@@ -838,110 +798,7 @@ class UserRepository(BaseRepository[User]):
                 return user_index >= required_index
             return False
 
-    # ==================== Rate Limiting Methods ====================
-
-    async def record_login_attempt(
-        self,
-        email: str,
-        ip_address: Optional[str] = None,
-        success: bool = False,
-    ) -> None:
-        """Record a login attempt for rate limiting.
-
-        Args:
-            email: Email address used.
-            ip_address: Client IP address.
-            success: Whether the attempt was successful.
-        """
-        async with self._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _record():
-                conn.execute(
-                    """
-                    INSERT INTO login_attempts (email, ip_address, success)
-                    VALUES (?, ?, ?)
-                    """,
-                    (email, ip_address, 1 if success else 0),
-                )
-                conn.commit()
-
-            await loop.run_in_executor(None, _record)
-
-    async def get_failed_login_count(
-        self,
-        email: str,
-        since_minutes: int = 60,
-    ) -> int:
-        """Get count of failed login attempts for an email.
-
-        Args:
-            email: Email address.
-            since_minutes: Time window in minutes.
-
-        Returns:
-            Number of failed attempts.
-        """
-        since = (datetime.utcnow() - timedelta(minutes=since_minutes)).isoformat()
-
-        async with self._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _count():
-                cursor = conn.execute(
-                    """
-                    SELECT COUNT(*)
-                    FROM login_attempts
-                    WHERE email = ? AND success = 0 AND attempted_at > ?
-                    """,
-                    (email, since),
-                )
-                return cursor.fetchone()[0]
-
-            return await loop.run_in_executor(None, _count)
-
-    async def is_locked_out(
-        self,
-        email: str,
-        max_attempts: int = 5,
-        lockout_minutes: int = 60,
-    ) -> bool:
-        """Check if an email is locked out due to failed attempts.
-
-        Args:
-            email: Email address.
-            max_attempts: Maximum allowed attempts.
-            lockout_minutes: Lockout window in minutes.
-
-        Returns:
-            True if locked out.
-        """
-        count = await self.get_failed_login_count(email, lockout_minutes)
-        return count >= max_attempts
-
-    async def cleanup_old_login_attempts(self, older_than_days: int = 7) -> int:
-        """Delete old login attempt records.
-
-        Args:
-            older_than_days: Delete attempts older than this.
-
-        Returns:
-            Number of records deleted.
-        """
-        cutoff = (datetime.utcnow() - timedelta(days=older_than_days)).isoformat()
-
-        async with self._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _cleanup():
-                cursor = conn.execute(
-                    "DELETE FROM login_attempts WHERE attempted_at < ?",
-                    (cutoff,),
-                )
-                conn.commit()
-                return cursor.rowcount
-
-            return await loop.run_in_executor(None, _cleanup)
+    # Login attempt tracking removed - OAuth2 Proxy handles authentication.
 
     # ==================== Audit Log Methods ====================
 

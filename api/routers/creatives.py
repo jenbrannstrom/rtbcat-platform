@@ -15,7 +15,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from storage import SQLiteStore
-from api.dependencies import get_store
+from api.dependencies import get_store, get_current_user, resolve_buyer_id, require_buyer_access
+from storage.repositories.user_repository import User
 
 logger = logging.getLogger(__name__)
 
@@ -531,6 +532,7 @@ async def list_creatives(
     days: int = Query(7, ge=1, le=365, description="Timeframe for waste detection (default 7 days)"),
     active_only: bool = Query(False, description="Only return creatives with activity (impressions/clicks/spend) in timeframe"),
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """List creatives with optional filtering.
 
@@ -539,6 +541,7 @@ async def list_creatives(
     - Set active_only=True to hide creatives with zero activity in the timeframe
     - Includes thumbnail_status and waste_flags for each creative
     """
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     creatives = await store.list_creatives(
         campaign_id=campaign_id,
         cluster_id=cluster_id,
@@ -642,19 +645,28 @@ async def list_creatives_paginated(
     days: int = Query(7, ge=1, le=365, description="Timeframe for waste detection"),
     active_only: bool = Query(False, description="Only return creatives with activity in timeframe"),
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """List creatives with pagination metadata.
 
     Phase 11.4: Scale Readiness
     Returns paginated results with metadata for large accounts.
     """
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+
     # Get total count for pagination
     async with store._connection() as conn:
         import asyncio
         loop = asyncio.get_event_loop()
 
         def _count():
-            cursor = conn.execute("SELECT COUNT(*) FROM creatives")
+            if buyer_id:
+                cursor = conn.execute(
+                    "SELECT COUNT(*) FROM creatives WHERE buyer_id = ?",
+                    (buyer_id,),
+                )
+            else:
+                cursor = conn.execute("SELECT COUNT(*) FROM creatives")
             return cursor.fetchone()[0]
 
         total = await loop.run_in_executor(None, _count)
@@ -764,7 +776,9 @@ async def get_newly_uploaded_creatives(
     days: int = Query(7, description="Number of days to look back", ge=1, le=90),
     limit: int = Query(100, description="Maximum number of creatives to return", ge=1, le=1000),
     format: Optional[str] = Query(None, description="Filter by format (HTML, VIDEO, NATIVE)"),
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Get creatives that were first seen within the specified time period.
 
@@ -774,6 +788,7 @@ async def get_newly_uploaded_creatives(
     try:
         period_end = datetime.now()
         period_start = period_end - timedelta(days=days)
+        buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
 
         async with store._connection() as conn:
             import asyncio
@@ -794,6 +809,10 @@ async def get_newly_uploaded_creatives(
                 query += " AND c.format = ?"
                 params.append(format.upper())
 
+            if buyer_id:
+                query += " AND c.buyer_id = ?"
+                params.append(buyer_id)
+
             query += " ORDER BY c.first_seen_at DESC LIMIT ?"
             params.append(limit)
 
@@ -812,6 +831,9 @@ async def get_newly_uploaded_creatives(
             if format:
                 count_query += " AND c.format = ?"
                 count_params.append(format.upper())
+            if buyer_id:
+                count_query += " AND c.buyer_id = ?"
+                count_params.append(buyer_id)
 
             total_count = await loop.run_in_executor(
                 None,
@@ -853,6 +875,7 @@ async def get_creative(
     creative_id: str,
     days: int = Query(7, ge=1, le=365, description="Timeframe for waste detection (default 7 days)"),
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Get a specific creative by ID.
 
@@ -861,6 +884,8 @@ async def get_creative(
     creative = await store.get_creative(creative_id)
     if not creative:
         raise HTTPException(status_code=404, detail="Creative not found")
+    if creative.buyer_id:
+        await require_buyer_access(creative.buyer_id, store=store, user=user)
 
     # Get thumbnail status and waste flags
     thumbnail_statuses = await _get_thumbnail_status_for_creatives(store, [creative_id])
@@ -913,8 +938,12 @@ async def get_creative(
 async def delete_creative(
     creative_id: str,
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Delete a creative by ID."""
+    creative = await store.get_creative(creative_id)
+    if creative and creative.buyer_id:
+        await require_buyer_access(creative.buyer_id, store=store, user=user)
     deleted = await store.delete_creative(creative_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Creative not found")
@@ -925,8 +954,14 @@ async def delete_creative(
 async def assign_cluster(
     assignment: ClusterAssignment,
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Assign a creative to a cluster."""
+    creative = await store.get_creative(assignment.creative_id)
+    if not creative:
+        raise HTTPException(status_code=404, detail="Creative not found")
+    if creative.buyer_id:
+        await require_buyer_access(creative.buyer_id, store=store, user=user)
     await store.update_creative_cluster(
         assignment.creative_id,
         assignment.cluster_id,
@@ -938,11 +973,14 @@ async def assign_cluster(
 async def remove_from_campaign(
     creative_id: str,
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Remove a creative from its campaign."""
     creative = await store.get_creative(creative_id)
     if not creative:
         raise HTTPException(status_code=404, detail="Creative not found")
+    if creative.buyer_id:
+        await require_buyer_access(creative.buyer_id, store=store, user=user)
 
     await store.update_creative_campaign(creative_id, None)
     return {"status": "removed", "creative_id": creative_id}
@@ -953,6 +991,7 @@ async def get_creative_countries(
     creative_id: str,
     days: int = Query(7, ge=1, le=90, description="Days to look back"),
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Get country breakdown for a specific creative.
 
@@ -964,6 +1003,8 @@ async def get_creative_countries(
     creative = await store.get_creative(creative_id)
     if not creative:
         raise HTTPException(status_code=404, detail="Creative not found")
+    if creative.buyer_id:
+        await require_buyer_access(creative.buyer_id, store=store, user=user)
 
     breakdown = await _get_country_breakdown_for_creative(store, creative_id, days)
 
@@ -1002,6 +1043,7 @@ async def analyze_creative_language(
     creative_id: str,
     force: bool = Query(False, description="Force re-analysis even if already analyzed"),
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Analyze a creative's content to detect its language.
 
@@ -1013,6 +1055,8 @@ async def analyze_creative_language(
     creative = await store.get_creative(creative_id)
     if not creative:
         raise HTTPException(status_code=404, detail="Creative not found")
+    if creative.buyer_id:
+        await require_buyer_access(creative.buyer_id, store=store, user=user)
 
     # Check if already analyzed (unless force=True)
     if not force and creative.language_analyzed_at:
@@ -1087,6 +1131,7 @@ async def update_creative_language(
     creative_id: str,
     update: ManualLanguageUpdate,
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Manually update a creative's detected language.
 
@@ -1096,6 +1141,8 @@ async def update_creative_language(
     creative = await store.get_creative(creative_id)
     if not creative:
         raise HTTPException(status_code=404, detail="Creative not found")
+    if creative.buyer_id:
+        await require_buyer_access(creative.buyer_id, store=store, user=user)
 
     # Save manual update
     await store.creative_repository.update_language_detection(
@@ -1124,6 +1171,7 @@ async def get_creative_geo_mismatch(
     creative_id: str,
     days: int = Query(7, ge=1, le=90, description="Days to look back for serving data"),
     store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Check if a creative's language matches its serving countries.
 
@@ -1133,6 +1181,8 @@ async def get_creative_geo_mismatch(
     creative = await store.get_creative(creative_id)
     if not creative:
         raise HTTPException(status_code=404, detail="Creative not found")
+    if creative.buyer_id:
+        await require_buyer_access(creative.buyer_id, store=store, user=user)
 
     # If no language detected, no mismatch check possible
     if not creative.detected_language_code:

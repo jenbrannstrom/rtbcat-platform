@@ -9,19 +9,21 @@ import {
   Shield,
   User,
   MoreVertical,
-  Key,
   XCircle,
-  Copy,
-  Check,
   AlertCircle,
 } from "lucide-react";
 import {
   getAdminUsers,
   createUser,
   deactivateUser,
-  resetUserPassword,
+  getUserPermissions,
+  grantPermission,
+  revokePermission,
+  getServiceAccounts,
   type AdminUser,
   type CreateUserRequest,
+  type ServiceAccount,
+  type UserPermission,
 } from "@/lib/api";
 import { withAdminAuth } from "@/contexts/auth-context";
 import { useTranslation } from "@/contexts/i18n-context";
@@ -35,12 +37,8 @@ function UsersPage() {
   const [showCreateModal, setShowCreateModal] = useState(
     searchParams.get("action") === "create"
   );
-  const [showPasswordModal, setShowPasswordModal] = useState<{
-    email: string;
-    password: string;
-  } | null>(null);
+  const [permissionsUser, setPermissionsUser] = useState<AdminUser | null>(null);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Filters from URL params
@@ -52,13 +50,30 @@ function UsersPage() {
     queryFn: () => getAdminUsers({ active_only: activeOnly, role: roleFilter }),
   });
 
+  const { data: serviceAccounts } = useQuery({
+    queryKey: ["service-accounts", { activeOnly: true }],
+    queryFn: () => getServiceAccounts(true).then((res) => res.accounts),
+    enabled: !!permissionsUser,
+  });
+
+  const { data: userPermissions } = useQuery({
+    queryKey: ["user-permissions", permissionsUser?.id],
+    queryFn: () =>
+      permissionsUser ? getUserPermissions(permissionsUser.id) : Promise.resolve([] as UserPermission[]),
+    enabled: !!permissionsUser,
+  });
+
+  const permissionMap = (userPermissions || []).reduce<Record<string, string>>((acc, perm) => {
+    acc[perm.service_account_id] = perm.permission_level;
+    return acc;
+  }, {});
+
   const createMutation = useMutation({
     mutationFn: createUser,
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
       setShowCreateModal(false);
-      setShowPasswordModal({ email: data.email, password: data.password });
     },
     onError: (err: Error) => {
       setError(err.message);
@@ -74,11 +89,19 @@ function UsersPage() {
     },
   });
 
-  const resetPasswordMutation = useMutation({
-    mutationFn: resetUserPassword,
-    onSuccess: (data) => {
-      setActiveDropdown(null);
-      setShowPasswordModal({ email: data.email, password: data.new_password });
+  const grantPermissionMutation = useMutation({
+    mutationFn: (params: { userId: string; serviceAccountId: string; level: string }) =>
+      grantPermission(params.userId, params.serviceAccountId, params.level),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-permissions", permissionsUser?.id] });
+    },
+  });
+
+  const revokePermissionMutation = useMutation({
+    mutationFn: (params: { userId: string; serviceAccountId: string }) =>
+      revokePermission(params.userId, params.serviceAccountId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-permissions", permissionsUser?.id] });
     },
   });
 
@@ -92,16 +115,6 @@ function UsersPage() {
       role: formData.get("role") as string,
     };
     createMutation.mutate(request);
-  };
-
-  const copyPassword = async (password: string) => {
-    try {
-      await navigator.clipboard.writeText(password);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy:", err);
-    }
   };
 
   const formatDate = (dateStr: string | null) => {
@@ -247,11 +260,14 @@ function UsersPage() {
                         <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-10">
                           <div className="py-1">
                             <button
-                              onClick={() => resetPasswordMutation.mutate(user.id)}
+                              onClick={() => {
+                                setPermissionsUser(user);
+                                setActiveDropdown(null);
+                              }}
                               className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                             >
-                              <Key className="h-4 w-4 mr-3 text-gray-400" />
-                              {t.admin.resetPassword}
+                              <Shield className="h-4 w-4 mr-3 text-gray-400" />
+                              {t.admin.managePermissions}
                             </button>
                             {user.is_active && (
                               <button
@@ -327,7 +343,7 @@ function UsersPage() {
                 </select>
               </div>
               <p className="text-sm text-gray-500">
-                {t.admin.passwordGenerated}
+                {t.admin.oauthInviteNote}
               </p>
               <div className="flex gap-3 pt-2">
                 <button
@@ -353,58 +369,81 @@ function UsersPage() {
         </div>
       )}
 
-      {/* Password Modal */}
-      {showPasswordModal && (
+      {/* Permissions Modal */}
+      {permissionsUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
-            <div className="text-center mb-4">
-              <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
-                <Check className="h-6 w-6 text-green-600" />
-              </div>
-              <h2 className="text-xl font-semibold text-gray-900">
-                {t.admin.userCreatedSuccessfully}
-              </h2>
-              <p className="mt-2 text-gray-600">
-                {t.admin.shareCredentials}
-              </p>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-4 mb-4">
-              <div className="mb-3">
-                <p className="text-sm font-medium text-gray-500">{t.admin.email}</p>
-                <p className="text-gray-900">{showPasswordModal.email}</p>
-              </div>
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="text-sm font-medium text-gray-500">{t.admin.password}</p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 bg-white px-3 py-2 rounded border font-mono text-sm">
-                    {showPasswordModal.password}
-                  </code>
-                  <button
-                    onClick={() => copyPassword(showPasswordModal.password)}
-                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
-                    title={t.common.copy}
-                  >
-                    {copied ? (
-                      <Check className="h-5 w-5 text-green-600" />
-                    ) : (
-                      <Copy className="h-5 w-5" />
-                    )}
-                  </button>
-                </div>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  {t.admin.permissionsFor.replace("{email}", permissionsUser.email)}
+                </h2>
+                <p className="text-sm text-gray-500">{t.admin.permissionsHelp}</p>
               </div>
+              <button
+                onClick={() => setPermissionsUser(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
             </div>
 
-            <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg mb-4">
-              {t.admin.passwordOnlyShownOnce}
-            </p>
+            <div className="space-y-3 max-h-[420px] overflow-y-auto">
+              {(serviceAccounts || []).map((account: ServiceAccount) => {
+                const currentLevel = permissionMap[account.id] || "none";
+                return (
+                  <div
+                    key={account.id}
+                    className="flex items-center justify-between border border-gray-200 rounded-lg p-3"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">
+                        {account.display_name || account.client_email}
+                      </p>
+                      <p className="text-xs text-gray-500">{account.client_email}</p>
+                    </div>
+                    <select
+                      value={currentLevel}
+                      onChange={(e) => {
+                        const level = e.target.value;
+                        if (level === "none") {
+                          if (currentLevel !== "none") {
+                            revokePermissionMutation.mutate({
+                              userId: permissionsUser.id,
+                              serviceAccountId: account.id,
+                            });
+                          }
+                        } else {
+                          grantPermissionMutation.mutate({
+                            userId: permissionsUser.id,
+                            serviceAccountId: account.id,
+                            level,
+                          });
+                        }
+                      }}
+                      className="ml-4 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    >
+                      <option value="none">{t.admin.noAccess}</option>
+                      <option value="read">{t.admin.readAccess}</option>
+                      <option value="write">{t.admin.writeAccess}</option>
+                      <option value="admin">{t.admin.adminAccess}</option>
+                    </select>
+                  </div>
+                );
+              })}
+              {!serviceAccounts?.length && (
+                <div className="text-sm text-gray-500">{t.admin.noServiceAccounts}</div>
+              )}
+            </div>
 
-            <button
-              onClick={() => setShowPasswordModal(null)}
-              className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-            >
-              {t.admin.done}
-            </button>
+            <div className="pt-4 flex justify-end">
+              <button
+                onClick={() => setPermissionsUser(null)}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+              >
+                {t.common.done}
+              </button>
+            </div>
           </div>
         </div>
       )}

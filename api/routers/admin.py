@@ -161,7 +161,6 @@ async def create_user(
     user = await repo.create_user(
         user_id=user_id,
         email=user_request.email.lower().strip(),
-        password_hash=None,  # OAuth2 only - no password
         display_name=user_request.display_name,
         role=user_request.role,
     )

@@ -9,7 +9,7 @@ This module provides REST API endpoints for:
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 
 from storage.database import db_query, db_transaction_async, DB_PATH
@@ -17,6 +17,9 @@ from storage.campaign_repository import CampaignRepository, AICampaign
 from api.clustering.rule_based import pre_cluster_creatives, merge_small_clusters
 from api.clustering.ai_clusterer import AICampaignClusterer, apply_ai_suggestions
 from utils.app_parser import format_package_id_as_name, parse_app_store_url
+from api.dependencies import get_store, get_current_user, resolve_buyer_id
+from storage import SQLiteStore
+from storage.repositories.user_repository import User
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +184,11 @@ def _split_clusters_by_country(
 
 
 @router.post("/auto-cluster", response_model=AutoClusterResponse)
-async def auto_cluster_creatives(request: AutoClusterRequest):
+async def auto_cluster_creatives(
+    request: AutoClusterRequest,
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
+):
     """
     Auto-cluster unclustered creatives by destination URL (and optionally country).
 
@@ -189,9 +196,10 @@ async def auto_cluster_creatives(request: AutoClusterRequest):
     Supports buyer_id filtering for multi-account scenarios.
     """
     try:
+        buyer_id = await resolve_buyer_id(request.buyer_id, store=store, user=user)
         # Build query for unclustered creatives, optionally filtered by buyer_id
         # Phase 29: Include app info fields for better clustering
-        if request.buyer_id:
+        if buyer_id:
             rows = await db_query("""
                 SELECT c.id as creative_id, c.final_url, c.buyer_id,
                        c.app_id, c.app_name, c.app_store, c.advertiser_name
@@ -200,7 +208,7 @@ async def auto_cluster_creatives(request: AutoClusterRequest):
                 WHERE cc.creative_id IS NULL
                   AND c.buyer_id = ?
                 ORDER BY c.id
-            """, (request.buyer_id,))
+            """, (buyer_id,))
         else:
             rows = await db_query("""
                 SELECT c.id as creative_id, c.final_url, c.buyer_id,
@@ -216,7 +224,7 @@ async def auto_cluster_creatives(request: AutoClusterRequest):
         if not rows:
             return AutoClusterResponse(suggestions=[], unclustered_count=0)
 
-        logger.info(f"Found {unclustered_count} unclustered creatives for buyer_id={request.buyer_id}")
+        logger.info(f"Found {unclustered_count} unclustered creatives for buyer_id={buyer_id}")
 
         # Group by cluster key (app ID for app stores, domain for others)
         from collections import defaultdict
@@ -296,6 +304,8 @@ async def auto_cluster_creatives(request: AutoClusterRequest):
 @router.get("/unclustered")
 async def get_unclustered_creatives(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer_id"),
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """
     Get all creatives that are not assigned to any campaign.
@@ -305,6 +315,7 @@ async def get_unclustered_creatives(
         count: Total number of unclustered creatives
     """
     try:
+        buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         if buyer_id:
             rows = await db_query("""
                 SELECT c.id as creative_id

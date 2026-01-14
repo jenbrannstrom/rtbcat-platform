@@ -23,14 +23,12 @@ export interface CreateUserRequest {
   email: string;
   display_name?: string;
   role?: string;
-  password?: string;
 }
 
 export interface CreateUserResponse {
   status: string;
   user_id: string;
   email: string;
-  password: string;
   message: string;
 }
 
@@ -93,7 +91,6 @@ export async function updateAdminUser(
     display_name?: string;
     role?: string;
     is_active?: boolean;
-    password?: string;
   }
 ): Promise<AdminUser> {
   return fetchApi<AdminUser>(`/admin/users/${encodeURIComponent(userId)}`, {
@@ -106,15 +103,6 @@ export async function deactivateUser(userId: string): Promise<{ status: string; 
   return fetchApi<{ status: string; message: string }>(
     `/admin/users/${encodeURIComponent(userId)}`,
     { method: "DELETE" }
-  );
-}
-
-export async function resetUserPassword(
-  userId: string
-): Promise<{ status: string; user_id: string; email: string; new_password: string; message: string }> {
-  return fetchApi<{ status: string; user_id: string; email: string; new_password: string; message: string }>(
-    `/admin/users/${encodeURIComponent(userId)}/reset-password`,
-    { method: "POST" }
   );
 }
 

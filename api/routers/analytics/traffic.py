@@ -8,9 +8,12 @@ import io
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, Depends
 
 from .common import ImportTrafficResponse
+from api.dependencies import get_store, get_current_user, resolve_buyer_id, get_allowed_buyer_ids
+from storage import SQLiteStore
+from storage.repositories.user_repository import User
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +23,8 @@ router = APIRouter(tags=["Traffic Import"])
 @router.post("/analytics/import-traffic", response_model=ImportTrafficResponse)
 async def import_traffic_data(
     file: UploadFile = File(..., description="CSV file with traffic data"),
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Import RTB traffic data from CSV file.
 
@@ -58,17 +63,36 @@ async def import_traffic_data(
                 detail=f"CSV missing required columns: {', '.join(missing)}",
             )
 
+        allowed_buyer_ids = await get_allowed_buyer_ids(store=store, user=user)
+        if allowed_buyer_ids is not None and not allowed_buyer_ids:
+            raise HTTPException(status_code=403, detail="No buyer accounts assigned.")
+
         # Parse records
         records = []
         for row in reader:
             try:
+                buyer_id = row.get("buyer_id") or None
+                if allowed_buyer_ids is not None:
+                    if buyer_id is None:
+                        if len(allowed_buyer_ids) == 1:
+                            buyer_id = allowed_buyer_ids[0]
+                        else:
+                            raise HTTPException(
+                                status_code=400,
+                                detail="buyer_id is required for your account access.",
+                            )
+                    elif buyer_id not in allowed_buyer_ids:
+                        raise HTTPException(
+                            status_code=403,
+                            detail="You don't have access to this buyer account.",
+                        )
                 records.append(
                     {
                         "canonical_size": row["canonical_size"],
                         "raw_size": row["raw_size"],
                         "request_count": int(row["request_count"]),
                         "date": row["date"],
-                        "buyer_id": row.get("buyer_id") or None,
+                        "buyer_id": buyer_id,
                     }
                 )
             except (ValueError, KeyError) as e:
@@ -109,6 +133,8 @@ async def generate_mock_traffic_endpoint(
     buyer_id: Optional[str] = Query(None, description="Buyer ID to associate"),
     base_daily_requests: int = Query(100000, ge=1000, le=1000000, description="Base daily request volume"),
     waste_bias: float = Query(0.3, ge=0.0, le=1.0, description="Bias towards waste traffic (0-1)"),
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Generate mock RTB traffic data for testing and demos.
 
@@ -127,6 +153,7 @@ async def generate_mock_traffic_endpoint(
     from storage.database import db_execute
 
     try:
+        buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         # Generate mock traffic
         traffic_records = generate_mock_traffic(
             days=days,
