@@ -16,6 +16,8 @@ from storage.repositories.user_repository import User
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
+ALLOWED_DEFAULT_LANGUAGES = {"en"}
+
 
 # ==================== Request/Response Models ====================
 
@@ -107,6 +109,22 @@ def _get_client_ip(request: Request) -> Optional[str]:
     return None
 
 
+def _validate_default_language(value: Optional[str]) -> Optional[str]:
+    """Validate and normalize a default language code."""
+    if value is None:
+        return None
+
+    normalized = value.strip().lower()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Default language cannot be empty")
+    if normalized not in ALLOWED_DEFAULT_LANGUAGES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported default language: {normalized}",
+        )
+    return normalized
+
+
 # ==================== User Management Endpoints ====================
 
 @router.get("/users", response_model=List[UserResponse])
@@ -160,6 +178,8 @@ async def create_user(
     if user_request.role not in ("admin", "user"):
         raise HTTPException(status_code=400, detail="Role must be 'admin' or 'user'")
 
+    default_language = _validate_default_language(user_request.default_language or "en")
+
     # Create user (no password - OAuth2 only)
     user_id = str(uuid.uuid4())
     user = await repo.create_user(
@@ -167,7 +187,7 @@ async def create_user(
         email=user_request.email.lower().strip(),
         display_name=user_request.display_name,
         role=user_request.role,
-        default_language=user_request.default_language or "en",
+        default_language=default_language or "en",
     )
 
     # Log the action
@@ -246,12 +266,13 @@ async def update_user(
         raise HTTPException(status_code=400, detail="Cannot remove your own admin role")
 
     # Update user
+    default_language = _validate_default_language(user_update.default_language)
     await repo.update_user(
         user_id=user_id,
         display_name=user_update.display_name,
         role=user_update.role,
         is_active=user_update.is_active,
-        default_language=user_update.default_language,
+        default_language=default_language,
     )
 
     # Log the action
@@ -263,7 +284,7 @@ async def update_user(
     if user_update.is_active is not None:
         changes["is_active"] = user_update.is_active
     if user_update.default_language is not None:
-        changes["default_language"] = user_update.default_language
+        changes["default_language"] = default_language
 
     await repo.log_audit(
         audit_id=str(uuid.uuid4()),
