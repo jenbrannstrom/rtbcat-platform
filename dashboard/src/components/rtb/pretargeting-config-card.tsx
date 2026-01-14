@@ -22,6 +22,7 @@ export interface PretargetingConfig {
   impressions: number;
   win_rate: number;
   waste_rate: number;
+  has_performance: boolean;
 }
 
 interface PretargetingConfigCardProps {
@@ -164,9 +165,9 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   };
 
   // Determine status indicator
-  const isHighWaste = config.waste_rate >= 70;
-  const isCriticalWaste = config.waste_rate >= 90;
-  const isGoodWinRate = config.win_rate >= 50;
+  const isHighWaste = config.has_performance && config.waste_rate >= 70;
+  const isCriticalWaste = config.has_performance && config.waste_rate >= 90;
+  const isGoodWinRate = config.has_performance && config.win_rate >= 50;
 
   // Check if using display_name from Google (not user-defined)
   const isGoogleName = !config.user_name && config.display_name;
@@ -268,28 +269,38 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
           <span className="text-gray-600 w-16 text-right">
             {formatNumber(config.reached)}
           </span>
-          <span
-            className={cn(
-              'w-14 text-right font-medium',
-              config.win_rate >= 50 && 'text-green-600',
-              config.win_rate >= 30 && config.win_rate < 50 && 'text-yellow-600',
-              config.win_rate < 30 && 'text-red-600'
-            )}
-          >
-            {config.win_rate.toFixed(1)}% win
-          </span>
-          <span
-            className={cn(
-              'w-14 text-right',
-              config.waste_rate < 50 && 'text-gray-500',
-              config.waste_rate >= 50 && config.waste_rate < 70 && 'text-yellow-600',
-              config.waste_rate >= 70 && config.waste_rate < 90 && 'text-orange-600',
-              config.waste_rate >= 90 && 'text-red-600 font-medium'
-            )}
-          >
-            {config.waste_rate.toFixed(1)}%
-          </span>
-          <WasteMiniBar pct={config.waste_rate} />
+          {config.has_performance ? (
+            <>
+              <span
+                className={cn(
+                  'w-14 text-right font-medium',
+                  config.win_rate >= 50 && 'text-green-600',
+                  config.win_rate >= 30 && config.win_rate < 50 && 'text-yellow-600',
+                  config.win_rate < 30 && 'text-red-600'
+                )}
+              >
+                {config.win_rate.toFixed(1)}% win
+              </span>
+              <span
+                className={cn(
+                  'w-14 text-right',
+                  config.waste_rate < 50 && 'text-gray-500',
+                  config.waste_rate >= 50 && config.waste_rate < 70 && 'text-yellow-600',
+                  config.waste_rate >= 70 && config.waste_rate < 90 && 'text-orange-600',
+                  config.waste_rate >= 90 && 'text-red-600 font-medium'
+                )}
+              >
+                {config.waste_rate.toFixed(1)}%
+              </span>
+              <WasteMiniBar pct={config.waste_rate} />
+            </>
+          ) : (
+            <>
+              <span className="w-14 text-right text-gray-400">--</span>
+              <span className="w-14 text-right text-gray-400">No data</span>
+              <div className="w-16 h-1.5 bg-gray-200 rounded-full" />
+            </>
+          )}
         </div>
       </div>
 
@@ -351,12 +362,13 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
               <div
                 className={cn(
                   'text-xl font-bold',
-                  config.win_rate >= 50 && 'text-green-600',
-                  config.win_rate >= 30 && config.win_rate < 50 && 'text-yellow-600',
-                  config.win_rate < 30 && 'text-red-600'
+                  config.has_performance && config.win_rate >= 50 && 'text-green-600',
+                  config.has_performance && config.win_rate >= 30 && config.win_rate < 50 && 'text-yellow-600',
+                  config.has_performance && config.win_rate < 30 && 'text-red-600',
+                  !config.has_performance && 'text-gray-400'
                 )}
               >
-                {config.win_rate.toFixed(1)}%
+                {config.has_performance ? `${config.win_rate.toFixed(1)}%` : '--'}
               </div>
             </div>
             <div className="bg-white rounded-lg p-3 border">
@@ -364,13 +376,14 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
               <div
                 className={cn(
                   'text-xl font-bold',
-                  config.waste_rate < 50 && 'text-gray-700',
-                  config.waste_rate >= 50 && config.waste_rate < 70 && 'text-yellow-600',
-                  config.waste_rate >= 70 && config.waste_rate < 90 && 'text-orange-600',
-                  config.waste_rate >= 90 && 'text-red-600'
+                  config.has_performance && config.waste_rate < 50 && 'text-gray-700',
+                  config.has_performance && config.waste_rate >= 50 && config.waste_rate < 70 && 'text-yellow-600',
+                  config.has_performance && config.waste_rate >= 70 && config.waste_rate < 90 && 'text-orange-600',
+                  config.has_performance && config.waste_rate >= 90 && 'text-red-600',
+                  !config.has_performance && 'text-gray-400'
                 )}
               >
-                {config.waste_rate.toFixed(1)}%
+                {config.has_performance ? `${config.waste_rate.toFixed(1)}%` : '--'}
               </div>
             </div>
           </div>

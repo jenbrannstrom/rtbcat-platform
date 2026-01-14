@@ -45,6 +45,8 @@ async def get_rtb_bidstream(
         # Build filter for buyer seat if specified
         buyer_filter = ""
         buyer_params = []
+        buyer_filter_applied = False
+        buyer_filter_message = None
         buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         if buyer_id:
             # Get bidder_id for this buyer seat
@@ -55,6 +57,9 @@ async def get_rtb_bidstream(
             if seat and seat["bidder_id"]:
                 buyer_filter = " AND bidder_id = ?"
                 buyer_params = [seat["bidder_id"]]
+                buyer_filter_applied = True
+            else:
+                buyer_filter_message = "Buyer seat has no bidder_id mapping; funnel data is account-wide."
 
         # Get funnel summary from database - use rtb_bidstream for pipeline metrics
         funnel_row = await db_query_one(f"""
@@ -73,7 +78,9 @@ async def get_rtb_bidstream(
         # If buyer filter returned no data, fall back to unfiltered query
         # This handles cases where rtb_bidstream.bidder_id is not populated
         if total_reached == 0 and buyer_filter:
-            logger.info(f"No data with buyer filter, falling back to unfiltered query")
+            logger.info("No data with buyer filter, falling back to unfiltered query")
+            buyer_filter_applied = False
+            buyer_filter_message = "Buyer filter not applied (bidder_id missing on rtb_bidstream rows)."
             funnel_row = await db_query_one("""
                 SELECT
                     SUM(reached_queries) as total_reached,
@@ -155,6 +162,15 @@ async def get_rtb_bidstream(
                 "win_rate": round(geo_win_rate, 2),
             })
 
+        bidder_id_row = await db_query_one("""
+            SELECT COUNT(*) as cnt
+            FROM rtb_bidstream
+            WHERE metric_date >= date('now', ?)
+              AND bidder_id IS NOT NULL
+              AND bidder_id != ''
+        """, (f'-{days} days',))
+        bidder_id_populated = (bidder_id_row["cnt"] or 0) > 0 if bidder_id_row else False
+
         return {
             "has_data": total_reached > 0,
             "funnel": {
@@ -170,6 +186,9 @@ async def get_rtb_bidstream(
                 "publisher_count": funnel_row["publisher_count"] or 0,
                 "country_count": funnel_row["country_count"] or 0,
                 "period_days": days,
+                "buyer_filter_applied": buyer_filter_applied,
+                "buyer_filter_message": buyer_filter_message,
+                "bidder_id_populated": bidder_id_populated,
             }
         }
     except Exception as e:
@@ -521,70 +540,17 @@ async def get_config_breakdown(
         # Account-wide data is shown in the main page sections, not in config breakdown
 
         if by in ("geo", "publisher"):
-            # Strategy: JOIN rtb_daily tables to get per-billing_id geo/publisher data
-            # - catscan-quality has billing_id + creative_id (no country)
-            # - catscan-bidsinauction has creative_id + country + bid metrics (no billing_id)
-            # JOIN on (metric_date, creative_id) to get billing_id + geo data
-
-            if by == "geo":
-                # JOIN: Get country data for creatives belonging to this billing_id
-                # quality rows have billing_id, bidsinauction rows have country
-                rows = await db_query("""
-                    SELECT
-                        b.country as name,
-                        COALESCE(SUM(b.bids), 0) as total_bids,
-                        COALESCE(SUM(b.bids_in_auction), 0) as total_bids_in_auction,
-                        COALESCE(SUM(b.auctions_won), 0) as total_auctions_won,
-                        COALESCE(SUM(b.reached_queries), 0) as total_reached,
-                        COALESCE(SUM(b.impressions), 0) as total_impressions
-                    FROM rtb_daily q
-                    JOIN rtb_daily b
-                        ON q.metric_date = b.metric_date
-                        AND q.creative_id = b.creative_id
-                    WHERE q.billing_id = ?
-                      AND q.metric_date >= date('now', ?)
-                      AND b.country IS NOT NULL
-                      AND b.country != ''
-                      AND b.bids_in_auction IS NOT NULL
-                    GROUP BY b.country
-                    ORDER BY total_bids_in_auction DESC
-                    LIMIT 50
-                """, (billing_id, f'-{days} days'))
-                # No account-wide fallback - only show per-config data
-            else:
-                # publisher - JOIN to get publisher data for this billing_id's creatives
-                rows = await db_query("""
-                    SELECT
-                        COALESCE(b.app_name, b.publisher_name) as name,
-                        COALESCE(SUM(b.bids), 0) as total_bids,
-                        COALESCE(SUM(b.bids_in_auction), 0) as total_bids_in_auction,
-                        COALESCE(SUM(b.auctions_won), 0) as total_auctions_won,
-                        COALESCE(SUM(b.reached_queries), 0) as total_reached,
-                        COALESCE(SUM(b.impressions), 0) as total_impressions
-                    FROM rtb_daily q
-                    JOIN rtb_daily b
-                        ON q.metric_date = b.metric_date
-                        AND q.creative_id = b.creative_id
-                    WHERE q.billing_id = ?
-                      AND q.metric_date >= date('now', ?)
-                      AND (b.app_name IS NOT NULL OR b.publisher_name IS NOT NULL)
-                      AND b.bids_in_auction IS NOT NULL
-                    GROUP BY COALESCE(b.app_name, b.publisher_name)
-                    ORDER BY total_bids_in_auction DESC
-                    LIMIT 50
-                """, (billing_id, f'-{days} days'))
-                # No account-wide fallback - only show per-config data
-
-            if not rows:
-                return {
-                    "billing_id": billing_id,
-                    "breakdown_by": by,
-                    "breakdown": [],
-                    "is_aggregate": False,
-                    "has_funnel_metrics": False,
-                    "no_data_reason": f"No {by} breakdown data available. "
-                                      "Ensure both catscan-quality and catscan-bidsinauction CSVs have been imported.",
-                }
+            return {
+                "billing_id": billing_id,
+                "breakdown_by": by,
+                "breakdown": [],
+                "is_aggregate": False,
+                "has_funnel_metrics": False,
+                "no_data_reason": (
+                    f"Per-config {by} breakdown is disabled because creative IDs are not unique across seats. "
+                    "Without a seat identifier in the CSVs, joins would mix data across seats."
+                ),
+            }
         elif by == "creative":
             # For creative breakdown, use ONLY quality data (per-billing_id accurate)
             # The bidsinauction CSV doesn't have billing_id, so JOINing would mix
@@ -609,63 +575,51 @@ async def get_config_breakdown(
                 LIMIT 50
             """, (billing_id, f'-{days} days'))
             has_funnel_data = False  # Never has funnel data for creative breakdown
+            if not rows:
+                return {
+                    "billing_id": billing_id,
+                    "breakdown_by": by,
+                    "breakdown": [],
+                    "is_aggregate": False,
+                    "has_funnel_metrics": False,
+                    "no_data_reason": (
+                        "No creative breakdown data. Import a catscan-quality CSV "
+                        "(includes billing_id and creative_id)."
+                    ),
+                }
 
         else:
-            # For size breakdown, JOIN rtb_daily (quality rows) with rtb_daily (bidsinauction rows)
-            # Size is universal (not config-specific), so the JOIN is appropriate here.
-            # Quality rows have billing_id but no bids_in_auction
-            # Bidsinauction rows have bids_in_auction but no billing_id
-            # JOIN on (metric_date, creative_id) to get billing_id + bid metrics
             group_col = "creative_size"
-
-            # First try the JOIN strategy to get real funnel metrics per billing_id
             rows = await db_query(f"""
                 SELECT
-                    q.{group_col} as name,
-                    -- Bid metrics from bidsinauction rows
-                    COALESCE(SUM(b.bids), 0) as total_bids,
-                    COALESCE(SUM(b.bids_in_auction), 0) as total_bids_in_auction,
-                    COALESCE(SUM(b.auctions_won), 0) as total_auctions_won,
-                    -- Basic metrics from quality rows
-                    COALESCE(SUM(q.reached_queries), 0) as total_reached,
-                    COALESCE(SUM(q.impressions), 0) as total_impressions
-                FROM rtb_daily q
-                LEFT JOIN rtb_daily b
-                    ON q.metric_date = b.metric_date
-                    AND q.creative_id = b.creative_id
-                    AND b.bids_in_auction IS NOT NULL
-                    AND b.billing_id IS NULL
-                WHERE q.billing_id = ?
-                  AND q.metric_date >= date('now', ?)
-                  AND q.{group_col} IS NOT NULL
-                  AND q.{group_col} != ''
-                GROUP BY q.{group_col}
-                ORDER BY total_bids_in_auction DESC, total_reached DESC
+                    {group_col} as name,
+                    0 as total_bids,
+                    0 as total_bids_in_auction,
+                    0 as total_auctions_won,
+                    SUM(reached_queries) as total_reached,
+                    SUM(impressions) as total_impressions
+                FROM rtb_daily
+                WHERE billing_id = ?
+                  AND metric_date >= date('now', ?)
+                  AND {group_col} IS NOT NULL
+                  AND {group_col} != ''
+                GROUP BY {group_col}
+                ORDER BY total_reached DESC
                 LIMIT 50
             """, (billing_id, f'-{days} days'))
-
-            # Check if we got any funnel data from the JOIN
-            has_funnel_data = any((row["total_bids_in_auction"] or 0) > 0 for row in rows) if rows else False
-
-            if not has_funnel_data:
-                # Fallback: No bidsinauction data, just use quality data
-                rows = await db_query(f"""
-                    SELECT
-                        {group_col} as name,
-                        0 as total_bids,
-                        0 as total_bids_in_auction,
-                        0 as total_auctions_won,
-                        SUM(reached_queries) as total_reached,
-                        SUM(impressions) as total_impressions
-                    FROM rtb_daily
-                    WHERE billing_id = ?
-                      AND metric_date >= date('now', ?)
-                      AND {group_col} IS NOT NULL
-                      AND {group_col} != ''
-                    GROUP BY {group_col}
-                    ORDER BY total_reached DESC
-                    LIMIT 50
-                """, (billing_id, f'-{days} days'))
+            has_funnel_data = False
+            if not rows:
+                return {
+                    "billing_id": billing_id,
+                    "breakdown_by": by,
+                    "breakdown": [],
+                    "is_aggregate": False,
+                    "has_funnel_metrics": False,
+                    "no_data_reason": (
+                        "No size breakdown data. Import a catscan-quality CSV "
+                        "(includes billing_id and creative_size)."
+                    ),
+                }
 
         for row in rows:
             reached = row["total_reached"] or 0

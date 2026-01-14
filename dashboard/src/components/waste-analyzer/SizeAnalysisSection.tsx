@@ -66,18 +66,19 @@ function SizeBar({
 interface SizeAnalysisSectionProps {
   days: number;
   billingId?: string;
+  buyerId?: string;
 }
 
 /**
  * Size Analysis Section.
  * Shows which sizes convert to impressions and identifies coverage gaps.
  */
-export function SizeAnalysisSection({ days, billingId }: SizeAnalysisSectionProps) {
+export function SizeAnalysisSection({ days, billingId, buyerId }: SizeAnalysisSectionProps) {
   const [copiedSizes, setCopiedSizes] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['size-coverage', days, billingId],
-    queryFn: () => getQPSSizeCoverage(days, billingId),
+    queryFn: () => getQPSSizeCoverage(days, billingId, buyerId),
   });
 
   const copyBlockSizes = useCallback(() => {

@@ -36,10 +36,11 @@ function transformConfigToProps(
   performanceData?: { reached: number; impressions: number; win_rate: number; waste_rate: number }
 ): PretargetingConfig {
   const name = apiConfig.user_name || apiConfig.display_name || `Config ${apiConfig.billing_id}`;
+  const hasPerformance = !!performanceData && (performanceData.reached > 0 || performanceData.impressions > 0);
   const reached = performanceData?.reached || 0;
   const impressions = performanceData?.impressions || 0;
   const win_rate = performanceData?.win_rate || 0;
-  const waste_rate = performanceData?.waste_rate || 100;
+  const waste_rate = performanceData?.waste_rate || 0;
 
   return {
     billing_id: apiConfig.billing_id || apiConfig.config_id,
@@ -55,6 +56,7 @@ function transformConfigToProps(
     impressions,
     win_rate,
     waste_rate,
+    has_performance: hasPerformance,
   };
 }
 
@@ -121,7 +123,7 @@ function WasteAnalysisContent() {
     refetch: refetchSummary,
   } = useQuery({
     queryKey: ["qps-summary", days],
-    queryFn: () => getQPSSummary(days),
+    queryFn: () => getQPSSummary(days, selectedBuyerId || undefined),
   });
 
   // Fetch RTB funnel data from CSV files
@@ -199,6 +201,9 @@ function WasteAnalysisContent() {
 
   // Sort configs based on current sort settings
   const displayConfigs = [...unsortedConfigs].sort((a, b) => {
+    if (a.has_performance !== b.has_performance) {
+      return a.has_performance ? -1 : 1;
+    }
     let aVal: number | string;
     let bVal: number | string;
 
@@ -304,6 +309,13 @@ function WasteAnalysisContent() {
       {/* Account Endpoints Header with integrated funnel metrics */}
       <AccountEndpointsHeader funnelData={funnelDataForHeader} />
 
+      {selectedBuyerId && rtbFunnel?.data_sources?.buyer_filter_applied === false && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+          {rtbFunnel.data_sources.buyer_filter_message ||
+            "Seat filter could not be applied to funnel data. Metrics shown may include other seats."}
+        </div>
+      )}
+
       {/* Recommended Optimizations Panel */}
       <section>
         <RecommendedOptimizationsPanel
@@ -402,7 +414,11 @@ function WasteAnalysisContent() {
 
       {/* Size Analysis */}
       <section>
-        <SizeAnalysisSection days={days} billingId={expandedConfigId || undefined} />
+        <SizeAnalysisSection
+          days={days}
+          billingId={expandedConfigId || undefined}
+          buyerId={selectedBuyerId || undefined}
+        />
       </section>
 
       {/* Geographic Analysis */}
