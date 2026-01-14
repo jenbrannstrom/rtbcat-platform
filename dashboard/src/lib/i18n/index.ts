@@ -37,6 +37,12 @@ export const availableLanguages: { code: Language; name: string; nativeName: str
   { code: 'ar', name: 'Arabic', nativeName: 'Arabic' },
 ];
 
+const rtlLanguages = new Set<Language>(["he", "ar"]);
+
+export function isRtlLanguage(language: Language): boolean {
+  return rtlLanguages.has(language);
+}
+
 // Get translations for a specific language
 export function getTranslations(language: Language): Translations {
   return translations[language] || translations[defaultLanguage];
