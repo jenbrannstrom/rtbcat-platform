@@ -68,17 +68,73 @@ Credentials are now stored permanently in Secret Manager.
 
 ---
 
-## Artifact Registry (CI Images)
+## CI/CD Pipeline
 
-Create the Docker repository once:
+Cat-Scan uses GitHub Actions to build Docker images and push them to Artifact Registry.
+The VM pulls prebuilt images — **no building on the VM**.
+
+### Architecture
+
+```
+git push → GitHub Actions → Artifact Registry → VM pulls images
+```
+
+### Artifact Registry Setup (One-Time)
 
 ```bash
+# Enable API
 gcloud services enable artifactregistry.googleapis.com
+
+# Create repository
 gcloud artifacts repositories create catscan \
   --repository-format=docker \
   --location=europe-west1 \
   --description="Cat-Scan Docker images"
 ```
+
+### CI Service Account Setup (One-Time)
+
+Create a service account for GitHub Actions to push images:
+
+```bash
+# Create service account
+gcloud iam service-accounts create catscan-ci \
+  --display-name="Cat-Scan CI/CD"
+
+# Grant Artifact Registry write access
+gcloud projects add-iam-policy-binding catscan-prod-202601 \
+  --member="serviceAccount:catscan-ci@catscan-prod-202601.iam.gserviceaccount.com" \
+  --role="roles/artifactregistry.writer"
+
+# Create key and set GitHub secret
+gcloud iam service-accounts keys create /tmp/key.json \
+  --iam-account=catscan-ci@catscan-prod-202601.iam.gserviceaccount.com
+
+gh secret set GCP_SA_KEY < /tmp/key.json
+rm /tmp/key.json
+```
+
+### GitHub Secret: GCP_SA_KEY
+
+| Setting | Value |
+|---------|-------|
+| **Secret name** | `GCP_SA_KEY` |
+| **Content** | Full JSON service account key |
+| **Service account** | `catscan-ci@catscan-prod-202601.iam.gserviceaccount.com` |
+| **Required role** | `roles/artifactregistry.writer` |
+
+> **WARNING:** The secret must contain the **full JSON key**, NOT an SSH key.
+> An SSH key will cause: `failed to parse service account key JSON credentials`
+
+### Workflow Details
+
+| Setting | Value |
+|---------|-------|
+| **File** | `.github/workflows/build-and-push.yml` |
+| **Trigger** | Push to `unified-platform` or manual dispatch |
+| **Images** | `catscan-api`, `catscan-dashboard` |
+| **Tags** | `latest`, `sha-<gitsha>` |
+| **Registry** | `europe-west1-docker.pkg.dev/catscan-prod-202601/catscan/` |
 
 ---
 
@@ -92,7 +148,9 @@ git add -A && git commit -m "Your message"
 git push origin unified-platform
 ```
 
-### Step 2: Pull latest images on the VM
+Wait for GitHub Actions to complete (~3 minutes).
+
+### Step 2: Pull and restart on VM
 ```bash
 gcloud compute ssh catscan-production --zone=europe-west1-b -- \
   "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml pull"
@@ -101,15 +159,39 @@ gcloud compute ssh catscan-production --zone=europe-west1-b -- \
   "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml up -d"
 ```
 
-### CI/CD Notes
+### Step 3: Verify
 
-- GitHub Actions builds and pushes Docker images to Artifact Registry.
-- Required GitHub secret: `GCP_SA_KEY` (service account JSON with Artifact Registry write access).
-- Image tags:
-  - `latest` (default deploy)
-  - `sha-<gitsha>` (rollback-safe)
+```bash
+# Check containers
+gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+  "sudo docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'"
 
-Note: If docker-compose fails with missing environment variables, use the manual docker commands above.
+# Check API health (internal)
+gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+  "curl -s http://localhost:8000/health"
+```
+
+### Rollback
+
+Deploy a specific version using `IMAGE_TAG`:
+
+```bash
+# List available tags
+gcloud artifacts docker tags list \
+  europe-west1-docker.pkg.dev/catscan-prod-202601/catscan/catscan-api
+
+# Deploy specific version
+gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+  "cd /opt/catscan && IMAGE_TAG=sha-abc1234 sudo docker-compose -f docker-compose.gcp.yml pull && \
+   IMAGE_TAG=sha-abc1234 sudo docker-compose -f docker-compose.gcp.yml up -d"
+```
+
+### Important Notes
+
+- **Do NOT build on VM** — The VM has limited memory. Always pull prebuilt images.
+- **Do NOT use SSH keys for GCP_SA_KEY** — Must be the JSON service account key.
+- **Configure Docker auth on VM** (one-time): `sudo gcloud auth configure-docker europe-west1-docker.pkg.dev`
+- **If docker-compose.gcp.yml changed** — Run `git pull` on VM before deploying.
 
 ### CRITICAL RULES
 

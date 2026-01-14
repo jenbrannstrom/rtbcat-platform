@@ -270,7 +270,24 @@ Full API docs: http://localhost:8000/docs (118 endpoints total)
 
 ## Services
 
-### Production Deployment (Nginx + SSL)
+### Production Deployment (CI/CD)
+
+Cat-Scan uses GitHub Actions for CI/CD. Pushing to `unified-platform` triggers:
+
+1. **Build** — Docker images built in GitHub Actions
+2. **Push** — Images pushed to Google Artifact Registry
+3. **Deploy** — Pull images on VM (no building on VM)
+
+```bash
+# Deploy latest (on VM)
+cd /opt/catscan
+sudo docker-compose -f docker-compose.gcp.yml pull
+sudo docker-compose -f docker-compose.gcp.yml up -d
+```
+
+See **[docs/GCP_CREDENTIALS_SETUP.md](docs/GCP_CREDENTIALS_SETUP.md)** for full CI/CD setup.
+
+### Production Architecture (Nginx + SSL)
 
 For production, use nginx as a reverse proxy with Let's Encrypt SSL:
 
