@@ -68,9 +68,23 @@ Credentials are now stored permanently in Secret Manager.
 
 ---
 
+## Artifact Registry (CI Images)
+
+Create the Docker repository once:
+
+```bash
+gcloud services enable artifactregistry.googleapis.com
+gcloud artifacts repositories create catscan \
+  --repository-format=docker \
+  --location=europe-west1 \
+  --description="Cat-Scan Docker images"
+```
+
+---
+
 ## Quick Deploy (Code Updates)
 
-**Deployment flow: Local → GitHub → VM (via SSH pull)**
+**Deployment flow: Local → GitHub → CI builds images → VM pulls**
 
 ### Step 1: Push to GitHub
 ```bash
@@ -78,39 +92,28 @@ git add -A && git commit -m "Your message"
 git push origin unified-platform
 ```
 
-### Step 2: SSH to VM and pull
+### Step 2: Pull latest images on the VM
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b
+gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+  "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml pull"
+
+gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+  "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml up -d"
 ```
 
-On the VM:
-```bash
-cd /opt/catscan
-sudo -u catscan git pull
+### CI/CD Notes
 
-# Rebuild and restart containers
-sudo docker build -t catscan_api -f Dockerfile .
-sudo docker rm -f catscan-api
-sudo docker run -d --name catscan-api \
-  -p 127.0.0.1:8000:8000 \
-  -v /home/catscan/.catscan:/home/rtbcat/.catscan \
-  -e OAUTH2_PROXY_ENABLED=true \
-  catscan_api
-```
-
-**Important:** The `OAUTH2_PROXY_ENABLED=true` environment variable is required for the backend to trust the `X-Email` header from OAuth2 Proxy. Without it, authentication will fail even after successful Google login.
-
-### Alternative: Using docker-compose
-```bash
-sudo docker-compose -f docker-compose.gcp.yml down --remove-orphans
-sudo docker-compose -f docker-compose.gcp.yml up -d --build
-```
+- GitHub Actions builds and pushes Docker images to Artifact Registry.
+- Required GitHub secret: `GCP_SA_KEY` (service account JSON with Artifact Registry write access).
+- Image tags:
+  - `latest` (default deploy)
+  - `sha-<gitsha>` (rollback-safe)
 
 Note: If docker-compose fails with missing environment variables, use the manual docker commands above.
 
 ### CRITICAL RULES
 
-- **Code MUST go through GitHub** - Never skip `git push`
+- **Code MUST go through GitHub** - CI builds the images
 - **Never upload directly** - No tarballs, no scp of code files
 - **One deployment at a time** - Wait for docker-compose to finish before starting another
 

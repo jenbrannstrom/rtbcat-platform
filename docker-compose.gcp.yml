@@ -5,11 +5,7 @@
 
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - APP_VERSION=${APP_VERSION:-0.9.0}
+    image: ${IMAGE_REGISTRY:-europe-west1-docker.pkg.dev/catscan-prod-202601/catscan}/catscan-api:${IMAGE_TAG:-latest}
     container_name: catscan-api
     ports:
       - "127.0.0.1:8000:8000"
@@ -33,12 +29,7 @@ services:
         max-file: "3"
 
   dashboard:
-    build:
-      context: ./dashboard
-      dockerfile: Dockerfile
-      args:
-        - OAUTH2_PROXY_MODE=true
-        - APP_VERSION=${APP_VERSION:-0.9.0}
+    image: ${IMAGE_REGISTRY:-europe-west1-docker.pkg.dev/catscan-prod-202601/catscan}/catscan-dashboard:${IMAGE_TAG:-latest}
     container_name: catscan-dashboard
     ports:
       - "127.0.0.1:3000:3000"

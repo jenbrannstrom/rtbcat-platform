@@ -1,0 +1,59 @@
+name: Build and Push Images
+
+on:
+  push:
+    branches:
+      - unified-platform
+
+permissions:
+  contents: read
+
+env:
+  PROJECT_ID: catscan-prod-202601
+  REGION: europe-west1
+  REPOSITORY: catscan
+  REGISTRY_HOST: europe-west1-docker.pkg.dev
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker $REGISTRY_HOST --quiet
+
+      - name: Set image tags
+        run: |
+          echo "IMAGE_TAG=sha-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "IMAGE_REGISTRY=${REGISTRY_HOST}/${PROJECT_ID}/${REPOSITORY}" >> "$GITHUB_ENV"
+
+      - name: Build and push API image
+        run: |
+          docker build \
+            -t "$IMAGE_REGISTRY/catscan-api:$IMAGE_TAG" \
+            -t "$IMAGE_REGISTRY/catscan-api:latest" \
+            --build-arg APP_VERSION="$(cat VERSION)" \
+            -f Dockerfile .
+          docker push "$IMAGE_REGISTRY/catscan-api:$IMAGE_TAG"
+          docker push "$IMAGE_REGISTRY/catscan-api:latest"
+
+      - name: Build and push dashboard image
+        run: |
+          docker build \
+            -t "$IMAGE_REGISTRY/catscan-dashboard:$IMAGE_TAG" \
+            -t "$IMAGE_REGISTRY/catscan-dashboard:latest" \
+            --build-arg APP_VERSION="$(cat VERSION)" \
+            --build-arg OAUTH2_PROXY_MODE=true \
+            -f dashboard/Dockerfile dashboard
+          docker push "$IMAGE_REGISTRY/catscan-dashboard:$IMAGE_TAG"
+          docker push "$IMAGE_REGISTRY/catscan-dashboard:latest"
