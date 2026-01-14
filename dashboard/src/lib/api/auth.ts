@@ -17,6 +17,7 @@ export interface AuthUser {
   display_name: string | null;
   role: string;
   is_admin: boolean;
+  default_language?: string | null;
 }
 
 export interface AuthCheckResponse {
@@ -32,6 +33,7 @@ export interface UserInfo {
   role: string;
   is_admin: boolean;
   permissions: string[];
+  default_language?: string | null;
 }
 
 // =============================================================================
