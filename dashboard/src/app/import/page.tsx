@@ -171,21 +171,11 @@ export default function ImportPage() {
           signal: abortControllerRef.current.signal,
         });
 
-        setImportResult({
-          success: result.success,
-          imported: result.imported,
-          duplicates: result.skipped,
-          error_details: result.errors.map(e => ({
-            row: e.row || 0,
-            field: e.field || "unknown",
-            error: e.error,
-            value: e.value,
-          })),
-          date_range: result.dateRange,
-          total_spend: result.totalSpend,
-        });
-        setStep(result.success || result.imported > 0 ? "success" : "error");
-        if (result.success || result.imported > 0) {
+        setImportResult(result);
+        const imported = result.imported ?? result.rows_imported ?? 0;
+        const duplicates = result.duplicates ?? result.rows_duplicate ?? 0;
+        setStep(result.success || imported > 0 || duplicates > 0 ? "success" : "error");
+        if (result.success || imported > 0 || duplicates > 0) {
           loadHistory(); // Reload history after successful import
         }
       } else {
@@ -209,7 +199,7 @@ export default function ImportPage() {
 
       setImportResult({
         success: false,
-        imported: chunkedProgress?.rowsImported || 0,
+        imported: 0,
         error: errorMessage,
       });
       setStep("error");
@@ -530,21 +520,21 @@ export default function ImportPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                 <div>
                   <p className="text-2xl font-bold text-gray-900">
-                    {chunkedProgress.rowsProcessed.toLocaleString()}
+                    {formatFileSize(chunkedProgress.bytesSent)}
                   </p>
-                  <p className="text-sm text-gray-600">Rows Processed</p>
+                  <p className="text-sm text-gray-600">Uploaded</p>
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-green-600">
-                    {chunkedProgress.rowsImported.toLocaleString()}
+                    {formatFileSize(chunkedProgress.totalBytes)}
                   </p>
-                  <p className="text-sm text-gray-600">Imported</p>
+                  <p className="text-sm text-gray-600">Total Size</p>
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-gray-500">
-                    {chunkedProgress.batchesSent}
+                    {chunkedProgress.chunksSent}/{chunkedProgress.totalChunks}
                   </p>
-                  <p className="text-sm text-gray-600">Batches Sent</p>
+                  <p className="text-sm text-gray-600">Chunks Sent</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-700">

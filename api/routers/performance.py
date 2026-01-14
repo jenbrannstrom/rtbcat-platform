@@ -11,9 +11,12 @@ import json
 import logging
 import os
 import tempfile
+import time
+import uuid
+from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, Form
 from pydantic import BaseModel
 
 from api.dependencies import get_store, get_current_user, get_allowed_buyer_ids
@@ -30,7 +33,6 @@ from api.schemas.performance import (
     CSVImportResult,
     StreamingImportResult,
 )
-from qps.importer import validate_csv, import_csv
 from qps.unified_importer import unified_import
 from storage import SQLiteStore, PerformanceMetric
 from storage.database import db_execute, db_query_one, db_transaction_async
@@ -38,6 +40,9 @@ from storage.database import db_execute, db_query_one, db_transaction_async
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/performance", tags=["Performance"])
+
+UPLOAD_DIR = Path(tempfile.gettempdir()) / "catscan_uploads"
+UPLOAD_TTL_SECONDS = 24 * 60 * 60
 
 
 class BatchImportRequest(BaseModel):
@@ -63,6 +68,88 @@ class FinalizeImportRequest(BaseModel):
     total_spend_usd: float = 0
     total_impressions: int = 0
     total_reached: int = 0
+
+
+class StreamStartRequest(BaseModel):
+    filename: str
+    file_size_bytes: int
+
+
+class StreamStartResponse(BaseModel):
+    upload_id: str
+    message: str
+    expires_in_seconds: int
+
+
+class StreamChunkResponse(BaseModel):
+    upload_id: str
+    chunk_index: int
+    bytes_received: int
+    total_bytes: int
+
+
+class StreamCompleteRequest(BaseModel):
+    upload_id: str
+
+
+def _ensure_upload_dir() -> None:
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _meta_path(upload_id: str) -> Path:
+    return UPLOAD_DIR / f"{upload_id}.json"
+
+
+def _data_path(upload_id: str) -> Path:
+    return UPLOAD_DIR / f"{upload_id}.part"
+
+
+def _load_meta(upload_id: str) -> dict:
+    meta_file = _meta_path(upload_id)
+    if not meta_file.exists():
+        raise HTTPException(status_code=404, detail="Upload not found")
+    meta = json.loads(meta_file.read_text())
+    created_at = int(meta.get("created_at", 0) or 0)
+    if created_at and (int(time.time()) - created_at) > UPLOAD_TTL_SECONDS:
+        raise HTTPException(status_code=410, detail="Upload expired")
+    return meta
+
+
+def _save_meta(upload_id: str, meta: dict) -> None:
+    _meta_path(upload_id).write_text(json.dumps(meta))
+
+
+def _safe_filename(filename: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in (".", "_", "-") else "_" for ch in filename)
+
+
+def _build_import_response(result) -> CSVImportResult:
+    if result.success:
+        return CSVImportResult(
+            success=True,
+            batch_id=result.batch_id,
+            rows_read=result.rows_read,
+            rows_imported=result.rows_imported,
+            rows_duplicate=result.rows_duplicate,
+            rows_skipped=result.rows_skipped,
+            date_range={
+                "start": result.date_range_start,
+                "end": result.date_range_end,
+            },
+            columns_imported=list(result.columns_mapped.keys()),
+            columns_mapped=result.columns_mapped,
+            columns_defaulted=result.columns_defaulted,
+            report_type=result.report_type,
+            target_table=result.target_table,
+        )
+
+    return CSVImportResult(
+        success=False,
+        error=result.error_message,
+        errors=result.errors,
+        columns_mapped=result.columns_mapped,
+        columns_found=list(result.columns_mapped.values()) + result.columns_unmapped,
+    )
 
 
 @router.post("/import", response_model=ImportPerformanceResponse)
@@ -252,34 +339,7 @@ async def import_performance_csv(
 
         # Try flexible unified importer first - it auto-maps columns
         result = unified_import(tmp_path)
-
-        if result.success:
-            return CSVImportResult(
-                success=True,
-                batch_id=result.batch_id,
-                rows_read=result.rows_read,
-                rows_imported=result.rows_imported,
-                rows_duplicate=result.rows_duplicate,
-                rows_skipped=result.rows_skipped,
-                date_range={
-                    "start": result.date_range_start,
-                    "end": result.date_range_end,
-                },
-                columns_imported=list(result.columns_mapped.keys()),
-                columns_mapped=result.columns_mapped,
-                columns_defaulted=result.columns_defaulted,
-                report_type=result.report_type,
-                target_table=result.target_table,
-            )
-
-        # If unified import failed, return the error with helpful info
-        return CSVImportResult(
-            success=False,
-            error=result.error_message,
-            errors=result.errors,
-            columns_mapped=result.columns_mapped,
-            columns_found=list(result.columns_mapped.values()) + result.columns_unmapped,
-        )
+        return _build_import_response(result)
 
     except Exception as e:
         logger.error(f"Import failed: {e}")
@@ -291,6 +351,106 @@ async def import_performance_csv(
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
+
+
+@router.post("/import/stream/start", response_model=StreamStartResponse)
+async def start_stream_import(request: StreamStartRequest):
+    """Start a streamed CSV upload for large files."""
+    if request.file_size_bytes <= 0:
+        raise HTTPException(status_code=400, detail="Invalid file size")
+
+    _ensure_upload_dir()
+    upload_id = str(uuid.uuid4())
+    meta = {
+        "filename": request.filename,
+        "file_size_bytes": request.file_size_bytes,
+        "bytes_received": 0,
+        "chunks_received": 0,
+        "total_chunks": None,
+        "created_at": int(time.time()),
+    }
+    _save_meta(upload_id, meta)
+    _data_path(upload_id).write_bytes(b"")
+
+    return StreamStartResponse(
+        upload_id=upload_id,
+        message="Upload started",
+        expires_in_seconds=UPLOAD_TTL_SECONDS,
+    )
+
+
+@router.post("/import/stream/chunk", response_model=StreamChunkResponse)
+async def upload_stream_chunk(
+    upload_id: str = Form(...),
+    chunk_index: int = Form(..., ge=0),
+    total_chunks: int = Form(..., ge=1),
+    chunk: UploadFile = File(...),
+):
+    """Append a chunk to a streamed CSV upload."""
+    _ensure_upload_dir()
+    meta = _load_meta(upload_id)
+    expected_index = meta.get("chunks_received", 0)
+    if chunk_index != expected_index:
+        raise HTTPException(status_code=409, detail="Unexpected chunk index")
+
+    if meta.get("total_chunks") is None:
+        meta["total_chunks"] = total_chunks
+    elif meta["total_chunks"] != total_chunks:
+        raise HTTPException(status_code=400, detail="Total chunks mismatch")
+
+    data = await chunk.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty chunk")
+
+    with _data_path(upload_id).open("ab") as f:
+        f.write(data)
+
+    meta["chunks_received"] = expected_index + 1
+    meta["bytes_received"] = int(meta.get("bytes_received", 0)) + len(data)
+    _save_meta(upload_id, meta)
+
+    return StreamChunkResponse(
+        upload_id=upload_id,
+        chunk_index=chunk_index,
+        bytes_received=meta["bytes_received"],
+        total_bytes=meta["file_size_bytes"],
+    )
+
+
+@router.post("/import/stream/complete", response_model=CSVImportResult)
+async def complete_stream_import(request: StreamCompleteRequest):
+    """Finalize a streamed CSV upload and run the unified importer."""
+    _ensure_upload_dir()
+    meta = _load_meta(request.upload_id)
+    total_chunks = meta.get("total_chunks")
+    if total_chunks is None:
+        raise HTTPException(status_code=400, detail="Upload not initialized")
+
+    if meta.get("chunks_received") != total_chunks:
+        raise HTTPException(status_code=400, detail="Upload incomplete")
+
+    if meta.get("bytes_received") != meta.get("file_size_bytes"):
+        raise HTTPException(status_code=400, detail="File size mismatch")
+
+    data_path = _data_path(request.upload_id)
+    if not data_path.exists():
+        raise HTTPException(status_code=404, detail="Upload data missing")
+
+    safe_name = _safe_filename(meta.get("filename", "upload.csv"))
+    imports_dir = Path.home() / ".catscan" / "imports"
+    imports_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = int(time.time())
+    final_path = imports_dir / f"{timestamp}_{safe_name}"
+    data_path.rename(final_path)
+
+    try:
+        result = unified_import(str(final_path))
+        return _build_import_response(result)
+    finally:
+        try:
+            _meta_path(request.upload_id).unlink()
+        except FileNotFoundError:
+            pass
 
 
 @router.post("/metrics/batch", response_model=BatchPerformanceResponse)
