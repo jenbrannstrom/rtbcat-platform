@@ -14,7 +14,6 @@ import { useAuth } from "@/contexts/auth-context";
 import { useTranslation } from "@/contexts/i18n-context";
 import { Sidebar } from "@/components/sidebar";
 import { FirstRunCheck } from "@/components/first-run-check";
-import { LanguageSelector } from "@/components/language-selector";
 
 interface AuthenticatedLayoutProps {
   children: ReactNode;
@@ -60,13 +59,7 @@ export function AuthenticatedLayout({
         <Suspense fallback={sidebarFallback}>
           <Sidebar />
         </Suspense>
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header bar with language selector */}
-          <header className="h-10 flex items-center justify-end px-4 bg-white border-b border-gray-200 flex-shrink-0">
-            <LanguageSelector compact />
-          </header>
-          <main className="flex-1 overflow-auto">{children}</main>
-        </div>
+        <main className="flex-1 overflow-auto">{children}</main>
       </div>
     </FirstRunCheck>
   );
