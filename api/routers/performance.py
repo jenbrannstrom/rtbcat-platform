@@ -10,6 +10,7 @@ This module provides endpoints for importing and querying performance metrics:
 import json
 import logging
 import os
+import shutil
 import tempfile
 import time
 import uuid
@@ -405,9 +406,16 @@ async def upload_stream_chunk(
     with _data_path(upload_id).open("ab") as f:
         f.write(data)
 
+    prev_bytes = int(meta.get("bytes_received", 0))
     meta["chunks_received"] = expected_index + 1
-    meta["bytes_received"] = int(meta.get("bytes_received", 0)) + len(data)
+    meta["bytes_received"] = prev_bytes + len(data)
     _save_meta(upload_id, meta)
+
+    logger.debug(
+        f"Chunk {chunk_index + 1}/{total_chunks} received for {upload_id}: "
+        f"chunk_bytes={len(data)}, total_received={meta['bytes_received']}, "
+        f"expected_total={meta['file_size_bytes']}"
+    )
 
     return StreamChunkResponse(
         upload_id=upload_id,
@@ -429,8 +437,18 @@ async def complete_stream_import(request: StreamCompleteRequest):
     if meta.get("chunks_received") != total_chunks:
         raise HTTPException(status_code=400, detail="Upload incomplete")
 
-    if meta.get("bytes_received") != meta.get("file_size_bytes"):
-        raise HTTPException(status_code=400, detail="File size mismatch")
+    bytes_received = meta.get("bytes_received", 0)
+    file_size_bytes = meta.get("file_size_bytes", 0)
+    if bytes_received != file_size_bytes:
+        logger.error(
+            f"File size mismatch for upload {request.upload_id}: "
+            f"received={bytes_received}, expected={file_size_bytes}, "
+            f"diff={file_size_bytes - bytes_received}"
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=f"File size mismatch: received {bytes_received} bytes but expected {file_size_bytes} bytes"
+        )
 
     data_path = _data_path(request.upload_id)
     if not data_path.exists():
@@ -441,11 +459,19 @@ async def complete_stream_import(request: StreamCompleteRequest):
     imports_dir.mkdir(parents=True, exist_ok=True)
     timestamp = int(time.time())
     final_path = imports_dir / f"{timestamp}_{safe_name}"
-    data_path.rename(final_path)
+    # Use shutil.move instead of rename to handle cross-filesystem moves
+    # (e.g., /tmp -> mounted volume in Docker)
+    shutil.move(str(data_path), str(final_path))
 
     try:
         result = unified_import(str(final_path))
         return _build_import_response(result)
+    except Exception as e:
+        logger.error(f"Import failed for {final_path}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Import processing failed: {str(e)}"
+        )
     finally:
         try:
             _meta_path(request.upload_id).unlink()
