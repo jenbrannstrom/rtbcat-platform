@@ -135,7 +135,7 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 | `creatives` | Creative management & sync |
 | `seats` | Buyer seat discovery |
 | `settings` | RTB endpoints, pretargeting |
-| `analytics` | Efficiency analysis, RTB funnel |
+| `analytics` | Efficiency analysis, RTB bidstream |
 | `config` | Configuration & credentials |
 | `gmail` | Auto-import from Gmail |
 | `recommendations` | AI recommendations |
@@ -165,8 +165,8 @@ Cat-Scan requires **5 separate CSV reports** from Google Authorized Buyers due t
 |---|--------|---------|------------|-------|
 | 1 | **catscan-bidsinauction** | Bid metrics by creative | Creative ID, Bids in auction, Auctions won | `rtb_daily` |
 | 2 | **catscan-quality** | Quality/billing data | Billing ID, Reached queries, Impressions | `rtb_daily` |
-| 3 | **catscan-funnel-geo** | Bidstream by region | Country, Bid requests, Bids | `rtb_bidstream` |
-| 4 | **catscan-funnel-publishers** | Bidstream by publisher | Publisher ID + Bid metrics | `rtb_bidstream` |
+| 3 | **catscan-bidstream-geo** | Bidstream by region | Country, Bid requests, Bids | `rtb_bidstream` |
+| 4 | **catscan-bidstream-publishers** | Bidstream by publisher | Publisher ID + Bid metrics | `rtb_bidstream` |
 | 5 | **catscan-bid-filtering** | Bid filtering reasons | Bid filtering status, Filtered bids | `rtb_bid_filtering` |
 
 ### Why 5 Reports?
@@ -175,7 +175,7 @@ Google's limitation: *"Billing ID is not compatible with [Bid requests]..."*
 
 - To get **Billing ID + spend** → you lose bid request metrics
 - To get **Bid request metrics** → you lose Billing ID
-- **JOIN Strategy:** Cat-Scan joins CSV #1 and #2 on (Day, Creative ID) to reconstruct per-billing_id funnel metrics
+- **JOIN Strategy:** Cat-Scan joins CSV #1 and #2 on (Day, Creative ID) to reconstruct per-billing_id bidstream metrics
 
 ### Data Quality Flags
 
@@ -184,7 +184,7 @@ All data has a `data_quality` column:
 - **`legacy`** - Pre-UTC data (wrong timezone, keep for development only)
 - **`sample`** - Manually marked sample data
 
-> **Note:** Run migrations 016 and 017 to add data_quality support and rename rtb_funnel → rtb_bidstream.
+> **Note:** Run migrations 016 and 017 to add data_quality support and rename the legacy `rtb_funnel` table to `rtb_bidstream`.
 
 ### Quick Reference
 
@@ -200,13 +200,13 @@ Dimensions: Day, Hour, Buyer account ID, Billing ID, Creative ID, Region, Platfo
 Metrics: Reached queries, Impressions, Clicks, Spend
 ```
 
-**Report 3 - Funnel Geo (catscan-funnel-geo):**
+**Report 3 - Bidstream Geo (catscan-bidstream-geo):**
 ```
 Dimensions: Day, Hour, Buyer account ID, Region
 Metrics: Bid requests, Inventory matches, Reached queries, Bids, Bids in auction, Auctions won, Impressions
 ```
 
-**Report 4 - Funnel Publishers (catscan-funnel-publishers):**
+**Report 4 - Bidstream Publishers (catscan-bidstream-publishers):**
 ```
 Dimensions: Day, Hour, Buyer account ID, Region, Publisher ID, Publisher name
 Metrics: Same as Report 3
@@ -234,8 +234,8 @@ Metrics: Filtered bids
 # Import performance CSV specifically
 ./venv/bin/python cli/qps_analyzer.py import /path/to/report.csv
 
-# Import funnel CSV specifically
-./venv/bin/python -m qps.funnel_importer /path/to/funnel-report.csv
+# Import bidstream CSV specifically
+./venv/bin/python -m qps.funnel_importer /path/to/bidstream-report.csv
 
 # Validate CSV before import
 ./venv/bin/python cli/qps_analyzer.py validate /path/to/report.csv
@@ -425,7 +425,7 @@ DATABASE_PATH=~/.catscan/catscan.db
 - Video thumbnail generation
 - UTC timezone standardization
 - Data quality flagging (legacy vs production data)
-- Per-billing_id funnel metrics via JOIN strategy
+- Per-billing_id bidstream metrics via JOIN strategy
 
 ### Roadmap
 
