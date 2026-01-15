@@ -9,7 +9,7 @@
 - [ ] **Campaigns tab filtering** - Creative ID type mismatch causing empty campaigns view
 - [ ] **Thumbnail placeholders** - Some creatives show placeholder instead of generated thumbnail (ffmpeg)
 - [ ] **CSV import account mismatch** - Imports not linking to correct accounts
-- [ ] **CI/CD pipeline** - Build images in GitHub Actions and deploy via docker pull (Artifact Registry)
+- [ ] ~~**CI/CD pipeline** - Build images in GitHub Actions and deploy via docker pull (Artifact Registry)~~ **(Done)**
 
 ---
 
@@ -107,6 +107,42 @@
 
 ---
 
+## Home Page Finalization (Seat-Scoped)
+
+**Goal:** Home page shows only data for the selected seat (buyer_id). Admins can switch seats; users only see assigned seats.
+
+### Phase 0 — Audit & Baseline
+- [ ] **Data source audit** - For each Home section, list data tables used and % of rows missing `bidder_id`/`billing_id`
+- [ ] **Seat scope verification** - Confirm all Home endpoints enforce `buyer_id` and user permissions
+
+### Phase 1 — Import & Data Model Fixes
+- [ ] **Persist seat identity** - Ensure `bidder_id` is stored for all imports (`rtb_daily`, `rtb_bidstream`, `rtb_bid_filtering`)
+- [ ] **Billing ID guarantees** - Enforce `billing_id` for per-config reports; exclude rows missing it from config breakdowns
+- [ ] **Join-safe keys** - Geo/publisher joins must include seat identity (`bidder_id` or `buyer_account_id`)
+
+### Phase 2 — Precompute & Caching
+- [ ] **Materialized aggregates** - Precompute seat-wide and billing_id-level metrics (size/geo/publisher/config)
+- [ ] **Refresh strategy** - Recompute on import + nightly full refresh
+
+### Phase 3 — API Refactor
+- [ ] **Seat-scoped endpoints** - `/analytics/home/*` endpoints that return precomputed data for a buyer_id
+- [ ] **Correctness flags** - API returns data_source + missing-data warnings for UI banners
+
+### Phase 4 — UI Refactor & Features
+- [ ] **Pretargeting configs** - “No data” state when performance missing; seat-only list (10 active)
+- [ ] **By Size** - Billing ID scoped; add size drill-down to list creatives + modal icon per creative
+- [ ] **By Geo / By Publisher** - Re-enable once join-safe keys are available; seat-only
+- [ ] **By Creative** - Confirm billing_id scoping; add creative modal icon; move country targeting near top
+- [ ] **Publisher Performance** - Title “overall for {seat}”; fix blank publisher name fallback
+- [ ] **Size Analysis** - Seat-wide only; two-column layout with “No Creatives” and wasted QPS
+- [ ] **Geographic Performance** - Title “overall for {seat}”; sortable columns; fix totals + bids/reached mismatch; replace blocks with table icons (trophy/!)
+
+### Phase 5 — Validation
+- [ ] **Data correctness checks** - Assert `bids <= reached` where applicable; warn on inconsistent source data
+- [ ] **Performance checks** - Home page loads in sections with independent loading states
+
+---
+
 ## Features - Optimization Engine
 
 - [ ] **QPS Adjudication Engine** - Auto-calculate optimal pretargeting based on performance data:
@@ -166,3 +202,4 @@
 - [x] **Data quality flagging** - Legacy (pre-UTC) vs production data separation
 - [x] **Per-billing_id funnel metrics** - JOIN strategy to reconstruct bid metrics by billing_id
 - [x] **Database schema v17** - rtb_funnel → rtb_bidstream rename, data_quality column added
+- [x] **CI/CD pipeline** - Build images in GitHub Actions and deploy via docker pull (Artifact Registry)
