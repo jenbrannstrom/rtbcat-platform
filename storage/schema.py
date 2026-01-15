@@ -223,6 +223,72 @@ CREATE TABLE IF NOT EXISTS daily_creative_summary (
 CREATE INDEX IF NOT EXISTS idx_summary_seat_date ON daily_creative_summary(seat_id, date);
 CREATE INDEX IF NOT EXISTS idx_summary_creative ON daily_creative_summary(creative_id);
 
+-- Home page precompute tables (seat-scoped daily aggregates)
+CREATE TABLE IF NOT EXISTS home_seat_daily (
+    metric_date TEXT NOT NULL,
+    buyer_account_id TEXT NOT NULL,
+    reached_queries INTEGER DEFAULT 0,
+    impressions INTEGER DEFAULT 0,
+    bids INTEGER DEFAULT 0,
+    successful_responses INTEGER DEFAULT 0,
+    bid_requests INTEGER DEFAULT 0,
+    auctions_won INTEGER DEFAULT 0,
+    PRIMARY KEY (metric_date, buyer_account_id)
+);
+
+CREATE TABLE IF NOT EXISTS home_publisher_daily (
+    metric_date TEXT NOT NULL,
+    buyer_account_id TEXT NOT NULL,
+    publisher_id TEXT NOT NULL,
+    publisher_name TEXT,
+    reached_queries INTEGER DEFAULT 0,
+    impressions INTEGER DEFAULT 0,
+    bids INTEGER DEFAULT 0,
+    successful_responses INTEGER DEFAULT 0,
+    bid_requests INTEGER DEFAULT 0,
+    auctions_won INTEGER DEFAULT 0,
+    PRIMARY KEY (metric_date, buyer_account_id, publisher_id)
+);
+
+CREATE TABLE IF NOT EXISTS home_geo_daily (
+    metric_date TEXT NOT NULL,
+    buyer_account_id TEXT NOT NULL,
+    country TEXT NOT NULL,
+    reached_queries INTEGER DEFAULT 0,
+    impressions INTEGER DEFAULT 0,
+    bids INTEGER DEFAULT 0,
+    successful_responses INTEGER DEFAULT 0,
+    bid_requests INTEGER DEFAULT 0,
+    auctions_won INTEGER DEFAULT 0,
+    PRIMARY KEY (metric_date, buyer_account_id, country)
+);
+
+CREATE TABLE IF NOT EXISTS home_config_daily (
+    metric_date TEXT NOT NULL,
+    buyer_account_id TEXT NOT NULL,
+    billing_id TEXT NOT NULL,
+    reached_queries INTEGER DEFAULT 0,
+    impressions INTEGER DEFAULT 0,
+    bids_in_auction INTEGER DEFAULT 0,
+    auctions_won INTEGER DEFAULT 0,
+    PRIMARY KEY (metric_date, buyer_account_id, billing_id)
+);
+
+CREATE TABLE IF NOT EXISTS home_size_daily (
+    metric_date TEXT NOT NULL,
+    buyer_account_id TEXT NOT NULL,
+    creative_size TEXT NOT NULL,
+    reached_queries INTEGER DEFAULT 0,
+    impressions INTEGER DEFAULT 0,
+    PRIMARY KEY (metric_date, buyer_account_id, creative_size)
+);
+
+CREATE INDEX IF NOT EXISTS idx_home_seat_date ON home_seat_daily(metric_date);
+CREATE INDEX IF NOT EXISTS idx_home_pub_date ON home_publisher_daily(metric_date);
+CREATE INDEX IF NOT EXISTS idx_home_geo_date ON home_geo_daily(metric_date);
+CREATE INDEX IF NOT EXISTS idx_home_config_date ON home_config_daily(metric_date);
+CREATE INDEX IF NOT EXISTS idx_home_size_date ON home_size_daily(metric_date);
+
 -- Retention config table
 CREATE TABLE IF NOT EXISTS retention_config (
     id INTEGER PRIMARY KEY,

@@ -6,13 +6,14 @@ import { formatNumber } from "./FunnelCard";
 
 interface PublisherPerformanceSectionProps {
   publishers: PublisherPerformance[];
+  seatName?: string;
 }
 
 /**
  * Publisher Performance Section.
  * Shows publisher win rates categorized by performance tier.
  */
-export function PublisherPerformanceSection({ publishers }: PublisherPerformanceSectionProps) {
+export function PublisherPerformanceSection({ publishers, seatName }: PublisherPerformanceSectionProps) {
   const hasPublisherData = publishers && publishers.length > 0;
 
   if (!hasPublisherData) {
@@ -83,11 +84,11 @@ export function PublisherPerformanceSection({ publishers }: PublisherPerformance
             <BarChart3 className="h-5 w-5 text-blue-600" />
             Publisher Performance
             <span className="text-xs font-normal bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-              Account-wide
+              {seatName ? `Overall for ${seatName}` : "Seat overall"}
             </span>
           </h3>
           <p className="text-sm text-gray-500 mt-1">
-            Win/loss analysis across all pretargeting configs
+            Win/loss analysis across all pretargeting configs for this seat
           </p>
         </div>
         <div className="text-right">
