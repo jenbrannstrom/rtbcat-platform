@@ -321,7 +321,7 @@ async def cleanup_old_rtb_daily(
 @router.post("/import-csv", response_model=CSVImportResult)
 async def import_performance_csv(
     file: UploadFile = File(..., description="CSV file with performance data"),
-    background_tasks: BackgroundTasks,
+    background_tasks: Optional[BackgroundTasks] = None,
 ):
     """Import performance data from Authorized Buyers CSV export.
 
