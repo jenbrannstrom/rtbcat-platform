@@ -320,8 +320,8 @@ async def cleanup_old_rtb_daily(
 
 @router.post("/import-csv", response_model=CSVImportResult)
 async def import_performance_csv(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="CSV file with performance data"),
-    background_tasks: Optional[BackgroundTasks] = None,
 ):
     """Import performance data from Authorized Buyers CSV export.
 
@@ -342,7 +342,7 @@ async def import_performance_csv(
 
         # Try flexible unified importer first - it auto-maps columns
         result = unified_import(tmp_path)
-        if result.success and result.date_range_start and result.date_range_end and background_tasks:
+        if result.success and result.date_range_start and result.date_range_end:
             background_tasks.add_task(
                 refresh_home_summaries,
                 result.date_range_start,
