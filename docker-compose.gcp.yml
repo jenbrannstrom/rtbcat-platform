@@ -7,6 +7,8 @@ services:
   api:
     image: ${IMAGE_REGISTRY:-europe-west1-docker.pkg.dev/catscan-prod-202601/catscan}/catscan-api:${IMAGE_TAG:-latest}
     container_name: catscan-api
+    init: true
+    stop_grace_period: 30s
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
@@ -31,6 +33,7 @@ services:
   dashboard:
     image: ${IMAGE_REGISTRY:-europe-west1-docker.pkg.dev/catscan-prod-202601/catscan}/catscan-dashboard:${IMAGE_TAG:-latest}
     container_name: catscan-dashboard
+    init: true
     ports:
       - "127.0.0.1:3000:3000"
     environment:
