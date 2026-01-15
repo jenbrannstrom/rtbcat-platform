@@ -325,7 +325,7 @@ export async function getRTBFunnel(
 ): Promise<RTBFunnelResponse> {
   const params = new URLSearchParams({ days: String(days) });
   if (buyerId) params.set('buyer_id', buyerId);
-  return fetchApi<RTBFunnelResponse>(`/analytics/rtb-funnel?${params}`);
+  return fetchApi<RTBFunnelResponse>(`/analytics/home/funnel?${params}`);
 }
 
 export async function getRTBPublishers(
@@ -351,6 +351,6 @@ export async function getRTBFunnelConfigs(
   const params = new URLSearchParams({ days: String(days) });
   if (buyerId) params.set('buyer_id', buyerId);
   return fetchApi<ConfigPerformanceResponse>(
-    `/analytics/rtb-funnel/configs?${params}`
+    `/analytics/home/configs?${params}`
   );
 }

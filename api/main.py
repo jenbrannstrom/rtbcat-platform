@@ -73,6 +73,7 @@ from api.routers import (
     # Analytics sub-routers (refactored from monolithic analytics.py)
     waste_router,
     rtb_bidstream_router,
+    home_router,
     analytics_qps_router,
     traffic_router,
     spend_router,
@@ -183,6 +184,7 @@ app.include_router(config_router)
 # Analytics and optimization (refactored into sub-routers)
 app.include_router(waste_router)
 app.include_router(rtb_bidstream_router)
+app.include_router(home_router)
 app.include_router(analytics_qps_router)
 app.include_router(traffic_router)
 app.include_router(spend_router)

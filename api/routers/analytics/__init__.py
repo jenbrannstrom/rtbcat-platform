@@ -13,6 +13,7 @@ from .rtb_bidstream import router as rtb_bidstream_router
 from .qps import router as qps_router
 from .traffic import router as traffic_router
 from .spend import router as spend_router
+from .home import router as home_router
 
 __all__ = [
     "waste_router",
@@ -20,4 +21,5 @@ __all__ = [
     "qps_router",
     "traffic_router",
     "spend_router",
+    "home_router",
 ]
