@@ -1,0 +1,10 @@
+[Unit]
+Description=Cat-Scan Home cache refresh
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/catscan
+ExecStart=/usr/bin/docker exec catscan-api python /app/scripts/refresh_home_cache.py --days 30
+User=root
