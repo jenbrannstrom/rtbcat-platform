@@ -867,6 +867,9 @@ server {
     listen 80;
     server_name scan.rtb.cat 104.199.91.219;
 
+    # Allow large CSV uploads for imports (avoid 413 errors)
+    client_max_body_size 200m;
+
     # API routes - strip /api prefix
     location /api/ {
         proxy_pass http://127.0.0.1:8000/;
