@@ -152,6 +152,15 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
             )}
           </div>
 
+          {/* Country Targeting */}
+          <div className="p-4 border-b">
+            <CountrySection
+              creativeId={creative.id}
+              detectedLanguage={creative.detected_language}
+              detectedLanguageCode={creative.detected_language_code}
+            />
+          </div>
+
           {/* Data Notes */}
           {dataNotes.length > 0 && (
             <div className="p-4 border-b">
@@ -299,13 +308,6 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                   <p className="text-sm text-gray-400 italic">No tracking params</p>
                 )}
               </div>
-
-              {/* Country Targeting */}
-              <CountrySection
-                creativeId={creative.id}
-                detectedLanguage={creative.detected_language}
-                detectedLanguageCode={creative.detected_language_code}
-              />
 
               {/* Language Detection */}
               <LanguageSection
