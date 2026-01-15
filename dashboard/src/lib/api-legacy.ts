@@ -1159,10 +1159,13 @@ export interface ConfigBreakdownResponse {
 
 export async function getConfigBreakdown(
   billingId: string,
-  by: ConfigBreakdownType = 'size'
+  by: ConfigBreakdownType = 'size',
+  buyerId?: string
 ): Promise<ConfigBreakdownResponse> {
+  const params = new URLSearchParams({ by });
+  if (buyerId) params.set("buyer_id", buyerId);
   return fetchApi<ConfigBreakdownResponse>(
-    `/analytics/rtb-funnel/configs/${encodeURIComponent(billingId)}/breakdown?by=${by}`
+    `/analytics/rtb-funnel/configs/${encodeURIComponent(billingId)}/breakdown?${params.toString()}`
   );
 }
 
