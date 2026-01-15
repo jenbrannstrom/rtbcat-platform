@@ -110,7 +110,8 @@ async function startUpload(file: File): Promise<{ upload_id: string }> {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.detail || "Failed to start upload");
+    const errorDetail = error.detail || error.error || error.message;
+    throw new Error(errorDetail || `Failed to start upload (HTTP ${response.status})`);
   }
 
   return response.json();
@@ -137,7 +138,8 @@ async function uploadChunk(params: {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.detail || `Chunk upload failed: ${response.status}`);
+    const errorDetail = error.detail || error.error || error.message;
+    throw new Error(errorDetail || `Chunk upload failed (HTTP ${response.status})`);
   }
 
   return response.json();
@@ -152,7 +154,8 @@ async function completeUpload(uploadId: string): Promise<ImportResponse> {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.detail || "Failed to finalize upload");
+    const errorDetail = error.detail || error.error || error.message;
+    throw new Error(errorDetail || `Failed to finalize upload (HTTP ${response.status})`);
   }
 
   const apiResult = await response.json();
