@@ -6,6 +6,7 @@ import { getConfigBreakdown, type ConfigBreakdownType, type ConfigBreakdownItem 
 import { cn } from '@/lib/utils';
 import { Loader2, AlertCircle, Check, AlertTriangle, ChevronRight, Info } from 'lucide-react';
 import { AppDrilldownModal } from './app-drilldown-modal';
+import { useAccount } from '@/contexts/account-context';
 
 interface ConfigBreakdownPanelProps {
   billing_id: string;
@@ -139,11 +140,12 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
   const contentRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
+  const { selectedBuyerId } = useAccount();
 
   // Query for breakdown data
   const { data, isLoading, error } = useQuery({
     queryKey: ['config-breakdown', billing_id, activeTab],
-    queryFn: () => getConfigBreakdown(billing_id, activeTab),
+    queryFn: () => getConfigBreakdown(billing_id, activeTab, selectedBuyerId || undefined),
     enabled: isExpanded,
     staleTime: 30000, // Cache for 30 seconds
   });
