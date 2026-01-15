@@ -134,6 +134,46 @@ npm run build
 
 ---
 
+## Production Reverse Proxy (Nginx)
+
+If you run behind nginx, set a larger upload limit to avoid `413 Request Entity Too Large` on CSV imports.
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    # Allow large CSV uploads for imports (avoid 413 errors)
+    client_max_body_size 200m;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Cookie $http_cookie;
+        proxy_pass_header Set-Cookie;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+Reload nginx after changes:
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+---
+
 ## Automatic Report Import (Gmail)
 
 Cat-Scan can automatically download scheduled reports from Google Authorized Buyers. This section explains how to set up a dedicated Gmail account to receive and process reports.
