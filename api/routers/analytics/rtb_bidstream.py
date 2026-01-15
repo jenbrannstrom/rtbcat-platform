@@ -49,17 +49,24 @@ async def get_rtb_bidstream(
         buyer_filter_message = None
         buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         if buyer_id:
-            # Get bidder_id for this buyer seat
-            seat = await db_query_one(
-                "SELECT bidder_id FROM buyer_seats WHERE buyer_id = ?",
-                (buyer_id,)
+            buyer_filter = " AND buyer_account_id = ?"
+            buyer_params = [buyer_id]
+            buyer_filter_applied = True
+
+            seat_rows = await db_query_one(
+                """
+                SELECT COUNT(*) as cnt
+                FROM rtb_bidstream
+                WHERE metric_date >= date('now', ?)
+                  AND buyer_account_id = ?
+                """,
+                (f'-{days} days', buyer_id),
             )
-            if seat and seat["bidder_id"]:
-                buyer_filter = " AND bidder_id = ?"
-                buyer_params = [seat["bidder_id"]]
-                buyer_filter_applied = True
-            else:
-                buyer_filter_message = "Buyer seat has no bidder_id mapping; funnel data is account-wide."
+            if not seat_rows or (seat_rows["cnt"] or 0) == 0:
+                buyer_filter_applied = False
+                buyer_filter_message = (
+                    "No RTB bidstream rows for this seat. Re-import bidstream CSVs that include buyer_account_id."
+                )
 
         # Get funnel summary from database - use rtb_bidstream for pipeline metrics
         funnel_row = await db_query_one(f"""
@@ -77,28 +84,6 @@ async def get_rtb_bidstream(
 
         total_reached = funnel_row["total_reached"] or 0
 
-        # If buyer filter returned no data, fall back to unfiltered query
-        # This handles cases where rtb_bidstream.bidder_id is not populated
-        if total_reached == 0 and buyer_filter:
-            logger.info("No data with buyer filter, falling back to unfiltered query")
-            buyer_filter_applied = False
-            buyer_filter_message = "Buyer filter not applied (bidder_id missing on rtb_bidstream rows)."
-            funnel_row = await db_query_one("""
-                SELECT
-                    SUM(reached_queries) as total_reached,
-                    SUM(impressions) as total_impressions,
-                    SUM(bids) as total_bids,
-                    SUM(successful_responses) as total_successful_responses,
-                    SUM(bid_requests) as total_bid_requests,
-                    COUNT(DISTINCT publisher_id) as publisher_count,
-                    COUNT(DISTINCT country) as country_count
-                FROM rtb_bidstream
-                WHERE metric_date >= date('now', ?)
-            """, (f'-{days} days',))
-            total_reached = funnel_row["total_reached"] or 0
-            # Clear buyer filter for subsequent queries
-            buyer_filter = ""
-            buyer_params = []
         total_impressions = funnel_row["total_impressions"] or 0
         total_bids = funnel_row["total_bids"] or 0
         total_successful = funnel_row["total_successful_responses"] or 0
@@ -199,6 +184,15 @@ async def get_rtb_bidstream(
         """, (f'-{days} days',))
         bidder_id_populated = (bidder_id_row["cnt"] or 0) > 0 if bidder_id_row else False
 
+        buyer_account_row = await db_query_one("""
+            SELECT COUNT(*) as cnt
+            FROM rtb_bidstream
+            WHERE metric_date >= date('now', ?)
+              AND buyer_account_id IS NOT NULL
+              AND buyer_account_id != ''
+        """, (f'-{days} days',))
+        buyer_account_id_populated = (buyer_account_row["cnt"] or 0) > 0 if buyer_account_row else False
+
         return {
             "has_data": effective_reached > 0,
             "funnel": {
@@ -217,6 +211,7 @@ async def get_rtb_bidstream(
                 "buyer_filter_applied": buyer_filter_applied,
                 "buyer_filter_message": buyer_filter_message,
                 "bidder_id_populated": bidder_id_populated,
+                "buyer_account_id_populated": buyer_account_id_populated,
             }
         }
     except Exception as e:
@@ -373,31 +368,11 @@ async def get_config_performance(
     """
     try:
         buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
-        # Get valid billing IDs for the specified buyer seat (or all if not specified)
-        valid_billing_ids = await get_valid_billing_ids_for_buyer(buyer_id)
 
         # Query aggregated data by billing_id from rtb_daily
         # Use bids_in_auction/auctions_won as they're populated by bids-in-auction CSV
         # Fall back to reached_queries/impressions if bids data not available
-        if valid_billing_ids:
-            placeholders = ",".join("?" * len(valid_billing_ids))
-            rows = await db_query(f"""
-                SELECT
-                    billing_id,
-                    creative_size,
-                    creative_format,
-                    country,
-                    platform,
-                    COALESCE(NULLIF(SUM(bids_in_auction), 0), SUM(reached_queries), 0) as total_reached,
-                    COALESCE(NULLIF(SUM(auctions_won), 0), SUM(impressions), 0) as total_impressions
-                FROM rtb_daily
-                WHERE metric_date >= date('now', ?)
-                  AND billing_id IN ({placeholders})
-                GROUP BY billing_id, creative_size, creative_format, country, platform
-                ORDER BY total_reached DESC
-            """, (f'-{days} days', *valid_billing_ids))
-        else:
-            # No pretargeting configs synced yet - return all data as fallback
+        if buyer_id:
             rows = await db_query("""
                 SELECT
                     billing_id,
@@ -409,11 +384,62 @@ async def get_config_performance(
                     COALESCE(NULLIF(SUM(auctions_won), 0), SUM(impressions), 0) as total_impressions
                 FROM rtb_daily
                 WHERE metric_date >= date('now', ?)
+                  AND buyer_account_id = ?
+                  AND billing_id IS NOT NULL
+                  AND billing_id != ''
                 GROUP BY billing_id, creative_size, creative_format, country, platform
                 ORDER BY total_reached DESC
-            """, (f'-{days} days',))
+            """, (f'-{days} days', buyer_id))
+        else:
+            # Get valid billing IDs for the specified buyer seat (or all if not specified)
+            valid_billing_ids = await get_valid_billing_ids_for_buyer(buyer_id)
+            if valid_billing_ids:
+                placeholders = ",".join("?" * len(valid_billing_ids))
+                rows = await db_query(f"""
+                    SELECT
+                        billing_id,
+                        creative_size,
+                        creative_format,
+                        country,
+                        platform,
+                        COALESCE(NULLIF(SUM(bids_in_auction), 0), SUM(reached_queries), 0) as total_reached,
+                        COALESCE(NULLIF(SUM(auctions_won), 0), SUM(impressions), 0) as total_impressions
+                    FROM rtb_daily
+                    WHERE metric_date >= date('now', ?)
+                      AND billing_id IN ({placeholders})
+                    GROUP BY billing_id, creative_size, creative_format, country, platform
+                    ORDER BY total_reached DESC
+                """, (f'-{days} days', *valid_billing_ids))
+            else:
+                # No pretargeting configs synced yet - return all data as fallback
+                rows = await db_query("""
+                    SELECT
+                        billing_id,
+                        creative_size,
+                        creative_format,
+                        country,
+                        platform,
+                        COALESCE(NULLIF(SUM(bids_in_auction), 0), SUM(reached_queries), 0) as total_reached,
+                        COALESCE(NULLIF(SUM(auctions_won), 0), SUM(impressions), 0) as total_impressions
+                    FROM rtb_daily
+                    WHERE metric_date >= date('now', ?)
+                    GROUP BY billing_id, creative_size, creative_format, country, platform
+                    ORDER BY total_reached DESC
+                """, (f'-{days} days',))
 
         if not rows:
+            if buyer_id:
+                return {
+                    "period_days": days,
+                    "data_source": "rtb_daily",
+                    "message": "No per-config data for this seat. Re-import catscan-quality with buyer_account_id.",
+                    "configs": [],
+                    "total_reached": 0,
+                    "total_impressions": 0,
+                    "overall_win_rate_pct": 0,
+                    "overall_waste_pct": 100,
+                }
+
             # No per-config data in rtb_daily - fall back to aggregate from rtb_bidstream
             # This happens when the imported CSVs don't have billing_id breakdown
             funnel_agg = await db_query_one("""
@@ -568,27 +594,19 @@ async def get_config_breakdown(
     try:
         breakdown = []
         resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
-        bidder_id = None
-        if resolved_buyer_id:
-            seat = await db_query_one(
-                "SELECT bidder_id FROM buyer_seats WHERE buyer_id = ?",
-                (resolved_buyer_id,)
+        buyer_account_id = resolved_buyer_id or None
+        if buyer_account_id:
+            seat_rows = await db_query_one(
+                """
+                SELECT COUNT(*) as cnt
+                FROM rtb_daily
+                WHERE billing_id = ?
+                  AND metric_date >= date('now', ?)
+                  AND buyer_account_id = ?
+                """,
+                (billing_id, f'-{days} days', buyer_account_id),
             )
-            bidder_id = seat["bidder_id"] if seat else None
-        if resolved_buyer_id and not bidder_id:
-            return {
-                "billing_id": billing_id,
-                "breakdown_by": by,
-                "breakdown": [],
-                "is_aggregate": False,
-                "has_funnel_metrics": False,
-                "no_data_reason": "Seat is missing bidder_id mapping. Sync seats and re-import CSVs.",
-            }
-        # Note: is_aggregate is always False - we only show per-config data now
-        # Account-wide data is shown in the main page sections, not in config breakdown
-
-        if by in ("geo", "publisher"):
-            if not bidder_id:
+            if not seat_rows or (seat_rows["cnt"] or 0) == 0:
                 return {
                     "billing_id": billing_id,
                     "breakdown_by": by,
@@ -596,13 +614,21 @@ async def get_config_breakdown(
                     "is_aggregate": False,
                     "has_funnel_metrics": False,
                     "no_data_reason": (
-                        "Per-config breakdown requires bidder_id on imported rows. "
-                        "Re-import catscan-quality and catscan-bidsinauction for this seat."
+                        "No rows found for this seat. Re-import catscan-quality with buyer_account_id populated."
                     ),
                 }
+        # Note: is_aggregate is always False - we only show per-config data now
+        # Account-wide data is shown in the main page sections, not in config breakdown
+
+        if by in ("geo", "publisher"):
+            seat_clause = ""
+            seat_params: tuple = ()
+            if buyer_account_id:
+                seat_clause = " AND q.buyer_account_id = ? AND b.buyer_account_id = ?"
+                seat_params = (buyer_account_id, buyer_account_id)
 
             if by == "geo":
-                rows = await db_query("""
+                rows = await db_query(f"""
                     SELECT
                         b.country as name,
                         COALESCE(SUM(b.bids), 0) as total_bids,
@@ -614,19 +640,19 @@ async def get_config_breakdown(
                     JOIN rtb_daily b
                         ON q.metric_date = b.metric_date
                         AND q.creative_id = b.creative_id
-                        AND q.bidder_id = b.bidder_id
+                        AND q.buyer_account_id = b.buyer_account_id
                     WHERE q.billing_id = ?
                       AND q.metric_date >= date('now', ?)
-                      AND q.bidder_id = ?
+                      {seat_clause}
                       AND b.country IS NOT NULL
                       AND b.country != ''
                       AND b.bids_in_auction IS NOT NULL
                     GROUP BY b.country
                     ORDER BY total_bids_in_auction DESC
                     LIMIT 50
-                """, (billing_id, f'-{days} days', bidder_id))
+                """, (billing_id, f'-{days} days', *seat_params))
             else:
-                rows = await db_query("""
+                rows = await db_query(f"""
                     SELECT
                         COALESCE(b.app_name, b.publisher_name) as name,
                         COALESCE(SUM(b.bids), 0) as total_bids,
@@ -638,16 +664,16 @@ async def get_config_breakdown(
                     JOIN rtb_daily b
                         ON q.metric_date = b.metric_date
                         AND q.creative_id = b.creative_id
-                        AND q.bidder_id = b.bidder_id
+                        AND q.buyer_account_id = b.buyer_account_id
                     WHERE q.billing_id = ?
                       AND q.metric_date >= date('now', ?)
-                      AND q.bidder_id = ?
+                      {seat_clause}
                       AND (b.app_name IS NOT NULL OR b.publisher_name IS NOT NULL)
                       AND b.bids_in_auction IS NOT NULL
                     GROUP BY COALESCE(b.app_name, b.publisher_name)
                     ORDER BY total_bids_in_auction DESC
                     LIMIT 50
-                """, (billing_id, f'-{days} days', bidder_id))
+                """, (billing_id, f'-{days} days', *seat_params))
 
             if not rows:
                 return {
@@ -667,7 +693,12 @@ async def get_config_breakdown(
             # bid metrics from ALL configs using the same creative.
             # Using quality-only ensures per-billing_id accuracy.
             # Win rate = impressions/reached (conversion rate, per-config accurate)
-            rows = await db_query("""
+            seat_clause = ""
+            seat_params: tuple = ()
+            if buyer_account_id:
+                seat_clause = " AND buyer_account_id = ?"
+                seat_params = (buyer_account_id,)
+            rows = await db_query(f"""
                 SELECT
                     creative_id as name,
                     0 as total_bids,
@@ -678,13 +709,13 @@ async def get_config_breakdown(
                 FROM rtb_daily
                 WHERE billing_id = ?
                   AND metric_date >= date('now', ?)
-                  AND (? IS NULL OR bidder_id = ?)
+                  {seat_clause}
                   AND creative_id IS NOT NULL
                   AND creative_id != ''
                 GROUP BY creative_id
                 ORDER BY total_reached DESC
                 LIMIT 50
-            """, (billing_id, f'-{days} days', bidder_id, bidder_id))
+            """, (billing_id, f'-{days} days', *seat_params))
             has_funnel_data = False  # Never has funnel data for creative breakdown
             if not rows:
                 return {
@@ -701,6 +732,11 @@ async def get_config_breakdown(
 
         else:
             group_col = "creative_size"
+            seat_clause = ""
+            seat_params: tuple = ()
+            if buyer_account_id:
+                seat_clause = " AND buyer_account_id = ?"
+                seat_params = (buyer_account_id,)
             rows = await db_query(f"""
                 SELECT
                     {group_col} as name,
@@ -712,13 +748,13 @@ async def get_config_breakdown(
                 FROM rtb_daily
                 WHERE billing_id = ?
                   AND metric_date >= date('now', ?)
-                  AND (? IS NULL OR bidder_id = ?)
+                  {seat_clause}
                   AND {group_col} IS NOT NULL
                   AND {group_col} != ''
                 GROUP BY {group_col}
                 ORDER BY total_reached DESC
                 LIMIT 50
-            """, (billing_id, f'-{days} days', bidder_id, bidder_id))
+            """, (billing_id, f'-{days} days', *seat_params))
             has_funnel_data = False
             if not rows:
                 return {
@@ -793,24 +829,29 @@ async def get_config_creatives(
     """List creatives for a config (optionally filtered by size)."""
     try:
         resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
-        bidder_id = None
-        if resolved_buyer_id:
-            seat = await db_query_one(
-                "SELECT bidder_id FROM buyer_seats WHERE buyer_id = ?",
-                (resolved_buyer_id,)
+        buyer_account_id = resolved_buyer_id or None
+        if buyer_account_id:
+            seat_rows = await db_query_one(
+                """
+                SELECT COUNT(*) as cnt
+                FROM rtb_daily
+                WHERE billing_id = ?
+                  AND metric_date >= date('now', ?)
+                  AND buyer_account_id = ?
+                """,
+                (billing_id, f'-{days} days', buyer_account_id),
             )
-            bidder_id = seat["bidder_id"] if seat else None
-        if resolved_buyer_id and not bidder_id:
-            return {"creatives": [], "message": "Seat is missing bidder_id mapping."}
+            if not seat_rows or (seat_rows["cnt"] or 0) == 0:
+                return {"creatives": [], "message": "No rows found for this seat."}
 
         where = ["billing_id = ?", "metric_date >= date('now', ?)"]
         params: list = [billing_id, f'-{days} days']
         if size:
             where.append("creative_size = ?")
             params.append(size)
-        if bidder_id:
-            where.append("bidder_id = ?")
-            params.append(bidder_id)
+        if buyer_account_id:
+            where.append("buyer_account_id = ?")
+            params.append(buyer_account_id)
 
         rows = await db_query(
             f"""
