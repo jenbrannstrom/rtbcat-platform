@@ -711,18 +711,18 @@ def run_import(verbose: bool = True, job_id: Optional[str] = None) -> Dict[str, 
             print(f"Done! Imported {total_imported} file(s) to ~/.catscan/imports/")
             print("=" * 60)
 
-    update_status(
-        True,
-        files_imported=total_imported,
-        emails_processed=result["emails_processed"],
-        running=False,
-        current_job_id=None,
-    )
+        update_status(
+            True,
+            files_imported=total_imported,
+            emails_processed=result["emails_processed"],
+            running=False,
+            current_job_id=None,
+        )
 
-    if result["skipped_seat_ids"]:
-        result["skipped_seat_ids"] = sorted(set(result["skipped_seat_ids"]))
+        if result["skipped_seat_ids"]:
+            result["skipped_seat_ids"] = sorted(set(result["skipped_seat_ids"]))
 
-    return result
+        return result
     except Exception as e:
         error_msg = f"Gmail import failed: {e}"
         if verbose:
