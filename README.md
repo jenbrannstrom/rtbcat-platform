@@ -310,6 +310,9 @@ server {
     listen 80;
     server_name your-domain.com;
 
+    # Allow large CSV uploads for imports (avoid 413 errors)
+    client_max_body_size 200m;
+
     # API routes
     location /api/ {
         proxy_pass http://127.0.0.1:8000/;
