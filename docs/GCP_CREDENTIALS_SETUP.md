@@ -492,6 +492,13 @@ The OOB flow is deprecated. Use `run_local_server()` which redirects to localhos
 ### Token expired
 Gmail tokens auto-refresh. If issues persist, re-run `python scripts/gmail_auth.py`
 
+### "Invalid cross-device link" during CSV import
+This means the temp upload directory is on a different filesystem than `~/.catscan/`.
+
+Fix options:
+- Upgrade to the version that uses `shutil.move()` for imports (recommended).
+- Or set `TMPDIR` to a folder on the same disk as `~/.catscan/` (for example: `export TMPDIR=/home/rtbcat/.catscan/tmp`).
+
 ### "No buyer seats discovered" / 0 seats found
 
 The service account can authenticate but doesn't have access to any Authorized Buyers accounts.

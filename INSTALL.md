@@ -836,6 +836,14 @@ chmod 600 ~/.catscan/credentials/google-credentials.json
 chmod 600 ~/.catscan/credentials/gmail-token.json
 ```
 
+### "Invalid cross-device link" during CSV import
+
+This happens when the upload temp folder is on a different filesystem than the app data directory.
+
+Fix options:
+- Upgrade to the version that uses `shutil.move()` for imports (recommended).
+- Or set `TMPDIR` to a folder on the same disk as `~/.catscan/` (for example: `export TMPDIR=~/.catscan/tmp`).
+
 ### "PERMISSION_DENIED" from Google API
 
 1. Verify Real-Time Bidding API is enabled in Cloud Console
