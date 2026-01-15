@@ -126,7 +126,7 @@ class SizeCoverageAnalyzer:
         # This is the actual imported CSV data
         traffic_by_size = {}
 
-        # Build query with optional billing_id filter
+        # Build query with optional billing_id and buyer filters
         billing_filter = ""
         params = [days]
         if billing_ids:
@@ -136,6 +136,10 @@ class SizeCoverageAnalyzer:
         elif billing_id:
             billing_filter = " AND billing_id = ?"
             params.append(billing_id)
+        buyer_filter = ""
+        if buyer_id:
+            buyer_filter = " AND buyer_account_id = ?"
+            params.append(buyer_id)
 
         cursor = conn.execute(f"""
             SELECT
@@ -150,6 +154,7 @@ class SizeCoverageAnalyzer:
               AND creative_size IS NOT NULL
               AND creative_size != ''
             {billing_filter}
+            {buyer_filter}
             GROUP BY creative_size, COALESCE(creative_format, 'BANNER')
             ORDER BY total_impressions DESC
         """, params)

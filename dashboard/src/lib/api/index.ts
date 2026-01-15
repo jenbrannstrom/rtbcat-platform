@@ -52,6 +52,7 @@ export {
   syncPretargetingConfigs,
   setPretargetingName,
   getConfigBreakdown,
+  getConfigCreatives,
   getAppDrilldown,
   // Upload & Import tracking
   getUploadTracking,
@@ -98,6 +99,8 @@ export {
   type ConfigBreakdownType,
   type ConfigBreakdownItem,
   type ConfigBreakdownResponse,
+  type ConfigCreativesItem,
+  type ConfigCreativesResponse,
   type GmailImportHistoryItem,
   type DailyUploadSummary,
   type UploadTrackingResponse,

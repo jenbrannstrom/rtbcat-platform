@@ -65,7 +65,6 @@ function SizeBar({
 
 interface SizeAnalysisSectionProps {
   days: number;
-  billingId?: string;
   buyerId?: string;
 }
 
@@ -73,12 +72,12 @@ interface SizeAnalysisSectionProps {
  * Size Analysis Section.
  * Shows which sizes convert to impressions and identifies coverage gaps.
  */
-export function SizeAnalysisSection({ days, billingId, buyerId }: SizeAnalysisSectionProps) {
+export function SizeAnalysisSection({ days, buyerId }: SizeAnalysisSectionProps) {
   const [copiedSizes, setCopiedSizes] = useState(false);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['size-coverage', days, billingId],
-    queryFn: () => getQPSSizeCoverage(days, billingId, buyerId),
+    queryKey: ['size-coverage', days, buyerId],
+    queryFn: () => getQPSSizeCoverage(days, undefined, buyerId),
   });
 
   const copyBlockSizes = useCallback(() => {
@@ -141,15 +140,9 @@ export function SizeAnalysisSection({ days, billingId, buyerId }: SizeAnalysisSe
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-blue-600" />
             Size Analysis
-            {billingId && (
-              <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
-                Filtered: {billingId}
-              </span>
-            )}
           </h3>
           <p className="text-sm text-gray-500 mt-1">
             Which sizes convert to impressions?
-            {billingId && <span className="ml-1 text-blue-600">(for selected config)</span>}
           </p>
         </div>
         <div className="text-right">
@@ -159,78 +152,82 @@ export function SizeAnalysisSection({ days, billingId, buyerId }: SizeAnalysisSe
       </div>
 
       {allSizes.length > 0 ? (
-        <>
-          {/* Legend */}
-          <div className="flex items-center gap-6 mb-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-gray-300 rounded" />
-              <span className="text-gray-600">Requests</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-green-500 rounded" />
-              <span className="text-gray-600">Impressions</span>
-            </div>
-          </div>
-
-          {/* Size bars */}
-          <div className="space-y-1 mb-6">
-            <div className="flex items-center gap-4 py-1 text-xs font-medium text-gray-500 border-b">
-              <div className="w-24">Size</div>
-              <div className="flex-1">Traffic Distribution</div>
-              <div className="w-20 text-right">Requests</div>
-              <div className="w-24 text-right">Win Rate</div>
-              <div className="w-16 text-right">Creatives</div>
-            </div>
-            {allSizes.slice(0, 15).map((s) => (
-              <SizeBar
-                key={s.size}
-                size={s.size}
-                requests={s.requests}
-                impressions={s.impressions}
-                hasCreative={s.hasCreative}
-                creativeCount={s.creative_count}
-                maxRequests={maxRequests}
-              />
-            ))}
-          </div>
-
-          {/* Sizes without creatives alert */}
-          {sizesWithoutCreative.length > 0 && (
-            <div className="p-4 bg-red-50 rounded-lg border border-red-200">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h4 className="text-sm font-medium text-red-800 flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4" />
-                    No creatives for {sizesWithoutCreative.length} sizes
-                  </h4>
-                  <p className="text-sm text-red-700 mt-1">
-                    You're receiving traffic for sizes you can't bid on.
-                    Either add creatives or remove these sizes from pretargeting.
-                  </p>
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {sizesWithoutCreative.slice(0, 10).map(g => (
-                      <span key={g.size} className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-medium">
-                        {g.size}
-                      </span>
-                    ))}
-                    {sizesWithoutCreative.length > 10 && (
-                      <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs">
-                        +{sizesWithoutCreative.length - 10} more
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <button
-                  onClick={copyBlockSizes}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded text-sm transition-colors"
-                >
-                  {copiedSizes ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  {copiedSizes ? 'Copied!' : 'Copy sizes'}
-                </button>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div>
+            {/* Legend */}
+            <div className="flex items-center gap-6 mb-4 text-sm">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-gray-300 rounded" />
+                <span className="text-gray-600">Requests</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-green-500 rounded" />
+                <span className="text-gray-600">Impressions</span>
               </div>
             </div>
-          )}
-        </>
+
+            {/* Size bars */}
+            <div className="space-y-1">
+              <div className="flex items-center gap-4 py-1 text-xs font-medium text-gray-500 border-b">
+                <div className="w-24">Size</div>
+                <div className="flex-1">Traffic Distribution</div>
+                <div className="w-20 text-right">Requests</div>
+                <div className="w-24 text-right">Win Rate</div>
+                <div className="w-16 text-right">Creatives</div>
+              </div>
+              {allSizes.slice(0, 15).map((s) => (
+                <SizeBar
+                  key={s.size}
+                  size={s.size}
+                  requests={s.requests}
+                  impressions={s.impressions}
+                  hasCreative={s.hasCreative}
+                  creativeCount={s.creative_count}
+                  maxRequests={maxRequests}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-medium text-gray-900">No Creatives</h4>
+              {sizesWithoutCreative.length > 0 && (
+                <button
+                  onClick={copyBlockSizes}
+                  className="flex items-center gap-1 px-2.5 py-1 bg-red-100 hover:bg-red-200 text-red-800 rounded text-xs transition-colors"
+                >
+                  {copiedSizes ? <CheckCircle className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  {copiedSizes ? 'Copied!' : 'Copy sizes'}
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mb-3">
+              You're receiving traffic for sizes you can't bid on. Add creatives or remove sizes from pretargeting.
+            </p>
+            <div className="border rounded-lg overflow-hidden">
+              <div className="grid grid-cols-2 gap-2 px-3 py-2 text-xs font-medium text-gray-500 bg-gray-50 border-b">
+                <div>Size</div>
+                <div className="text-right">Wasted QPS</div>
+              </div>
+              <div className="max-h-64 overflow-y-auto">
+                {sizesWithoutCreative.length === 0 && (
+                  <div className="px-3 py-3 text-sm text-gray-400">No gaps detected.</div>
+                )}
+                {sizesWithoutCreative.map((g) => {
+                  const daily = g.daily_estimate || g.queries_received || 0;
+                  const wastedQps = daily / 86400;
+                  return (
+                    <div key={g.size} className="grid grid-cols-2 gap-2 px-3 py-2 text-sm border-b last:border-b-0">
+                      <div className="font-mono text-gray-800">{g.size}</div>
+                      <div className="text-right text-red-700">{wastedQps.toFixed(2)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="p-6 border-2 border-dashed border-gray-200 rounded-lg">
           <div className="flex items-start gap-4">

@@ -849,6 +849,18 @@ Environment=PORT=3000
 [Install]
 WantedBy=multi-user.target
 EOF
+
+### Step 7b: Home Cache Refresh Timer (nightly)
+
+The Home page uses precomputed tables. Install a nightly refresh:
+
+```bash
+sudo cp /opt/catscan/scripts/systemd/catscan-home-refresh.service /etc/systemd/system/
+sudo cp /opt/catscan/scripts/systemd/catscan-home-refresh.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now catscan-home-refresh.timer
+sudo systemctl status catscan-home-refresh.timer
+```
 ```
 
 **Enable and start services:**
