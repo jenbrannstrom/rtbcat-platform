@@ -2,11 +2,19 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getConfigBreakdown, type ConfigBreakdownType, type ConfigBreakdownItem } from '@/lib/api';
+import {
+  getConfigBreakdown,
+  getConfigCreatives,
+  getCreative,
+  type ConfigBreakdownType,
+  type ConfigBreakdownItem,
+  type ConfigCreativesItem,
+} from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Loader2, AlertCircle, Check, AlertTriangle, ChevronRight, Info } from 'lucide-react';
+import { Loader2, AlertCircle, Check, AlertTriangle, ChevronRight, Info, Image } from 'lucide-react';
 import { AppDrilldownModal } from './app-drilldown-modal';
 import { useAccount } from '@/contexts/account-context';
+import { PreviewModal } from '@/components/preview-modal';
 
 interface ConfigBreakdownPanelProps {
   billing_id: string;
@@ -141,13 +149,25 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
   const [height, setHeight] = useState(0);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const { selectedBuyerId } = useAccount();
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [sizeCreatives, setSizeCreatives] = useState<ConfigCreativesItem[]>([]);
+  const [selectedCreative, setSelectedCreative] = useState<null | { id: string }>(null);
+  const [isLoadingCreative, setIsLoadingCreative] = useState(false);
+  const [fullCreative, setFullCreative] = useState<any | null>(null);
 
   // Query for breakdown data
   const { data, isLoading, error } = useQuery({
-    queryKey: ['config-breakdown', billing_id, activeTab],
+    queryKey: ['config-breakdown', billing_id, activeTab, selectedBuyerId],
     queryFn: () => getConfigBreakdown(billing_id, activeTab, selectedBuyerId || undefined),
     enabled: isExpanded,
     staleTime: 30000, // Cache for 30 seconds
+  });
+
+  const { data: sizeCreativeData, isLoading: sizeCreativesLoading } = useQuery({
+    queryKey: ['config-creatives', billing_id, selectedSize, selectedBuyerId],
+    queryFn: () => getConfigCreatives(billing_id, selectedSize || undefined, selectedBuyerId || undefined),
+    enabled: isExpanded && activeTab === 'size' && !!selectedSize,
+    staleTime: 30000,
   });
 
   // Animate height changes
@@ -156,6 +176,29 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
       setHeight(isExpanded ? contentRef.current.scrollHeight : 0);
     }
   }, [isExpanded, data, activeTab]);
+
+  useEffect(() => {
+    setSelectedSize(null);
+    setSizeCreatives([]);
+  }, [activeTab, billing_id]);
+
+  useEffect(() => {
+    if (sizeCreativeData?.creatives) {
+      setSizeCreatives(sizeCreativeData.creatives);
+    }
+  }, [sizeCreativeData]);
+
+  useEffect(() => {
+    if (!selectedCreative) {
+      setFullCreative(null);
+      return;
+    }
+    setIsLoadingCreative(true);
+    getCreative(selectedCreative.id)
+      .then((creative) => setFullCreative(creative))
+      .catch(() => setFullCreative(null))
+      .finally(() => setIsLoadingCreative(false));
+  }, [selectedCreative]);
 
   // Sort breakdown by reached descending
   const sortedBreakdown = data?.breakdown
@@ -265,6 +308,30 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                     </div>
                     <div className="col-span-3 font-medium text-gray-900 truncate flex items-center gap-1" title={item.name}>
                       {item.name}
+                      {activeTab === 'size' && (
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelectedSize(item.name);
+                          }}
+                          className="p-1 text-gray-400 hover:text-gray-600"
+                          title="View creatives for this size"
+                        >
+                          <ChevronRight className="h-3 w-3" />
+                        </button>
+                      )}
+                      {activeTab === 'creative' && (
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelectedCreative({ id: item.name });
+                          }}
+                          className="p-1 text-gray-400 hover:text-gray-600"
+                          title="View creative"
+                        >
+                          <Image className="h-3 w-3" />
+                        </button>
+                      )}
                       {isClickable && (
                         <ChevronRight className="h-3 w-3 text-gray-400 flex-shrink-0" />
                       )}
@@ -305,6 +372,43 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
               })}
             </div>
           </div>
+            {activeTab === 'size' && selectedSize && (
+              <div className="mt-4 border rounded-lg bg-white">
+                <div className="flex items-center justify-between px-3 py-2 border-b">
+                  <div className="text-sm font-medium text-gray-900">
+                    Creatives for {selectedSize}
+                  </div>
+                  <button
+                    onClick={() => setSelectedSize(null)}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Close
+                  </button>
+                </div>
+                {sizeCreativesLoading && (
+                  <div className="px-3 py-3 text-sm text-gray-500">Loading creatives...</div>
+                )}
+                {!sizeCreativesLoading && sizeCreatives.length === 0 && (
+                  <div className="px-3 py-3 text-sm text-gray-400">No creatives found for this size.</div>
+                )}
+                {!sizeCreativesLoading && sizeCreatives.length > 0 && (
+                  <div className="divide-y">
+                    {sizeCreatives.map((creative) => (
+                      <div key={creative.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                        <span className="font-mono text-gray-800 truncate">{creative.name}</span>
+                        <button
+                          onClick={() => setSelectedCreative({ id: creative.id })}
+                          className="p-1 text-gray-400 hover:text-gray-600"
+                          title="View creative"
+                        >
+                          <Image className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
 
@@ -314,6 +418,12 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
             appName={selectedApp}
             billingId={billing_id}
             onClose={() => setSelectedApp(null)}
+          />
+        )}
+        {fullCreative && selectedCreative && (
+          <PreviewModal
+            creative={fullCreative}
+            onClose={() => setSelectedCreative(null)}
           />
         )}
       </div>
