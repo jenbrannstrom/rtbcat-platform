@@ -1,19 +1,21 @@
 "use client";
 
-import { Globe, Upload, ArrowRight, Trophy, AlertCircle } from "lucide-react";
+import { useState } from "react";
+import { Globe, Upload, ArrowRight } from "lucide-react";
 import type { GeoPerformance } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "./FunnelCard";
 
 interface GeoAnalysisSectionProps {
   geos: GeoPerformance[];
+  seatName?: string;
 }
 
 /**
  * Geographic Analysis Section - Using RTB Funnel Geo Data.
  * Shows win rates by country and identifies optimization opportunities.
  */
-export function GeoAnalysisSection({ geos }: GeoAnalysisSectionProps) {
+export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) {
   const hasGeoData = geos && geos.length > 0;
 
   if (!hasGeoData) {
@@ -70,19 +72,59 @@ export function GeoAnalysisSection({ geos }: GeoAnalysisSectionProps) {
     );
   }
 
-  // Sort by wins (auctions_won or impressions)
-  const sortedGeos = [...geos].sort((a, b) =>
-    (b.auctions_won ?? b.impressions ?? 0) - (a.auctions_won ?? a.impressions ?? 0)
-  );
+  type SortColumn = "country" | "reached" | "bids" | "wins" | "win_rate";
+  type SortDirection = "asc" | "desc";
+  const [sortColumn, setSortColumn] = useState<SortColumn>("wins");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
-  // Categorize by win rate
-  const highWinRate = sortedGeos.filter(g => g.win_rate >= 80);
-  const lowWinRate = sortedGeos.filter(g => g.win_rate < 50 && (g.auctions_won ?? g.impressions ?? 0) > 0);
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortColumn(column);
+      setSortDirection("desc");
+    }
+  };
 
-  // Calculate totals
-  const totalBids = geos.reduce((sum, g) => sum + (g.bids ?? 0), 0);
-  const totalReached = geos.reduce((sum, g) => sum + g.reached_queries, 0);
-  const totalWins = geos.reduce((sum, g) => sum + (g.auctions_won ?? g.impressions ?? 0), 0);
+  const sortedGeos = [...geos].sort((a, b) => {
+    const aWins = a.auctions_won ?? a.impressions ?? 0;
+    const bWins = b.auctions_won ?? b.impressions ?? 0;
+    let aVal: number | string;
+    let bVal: number | string;
+
+    switch (sortColumn) {
+      case "country":
+        aVal = a.country || "";
+        bVal = b.country || "";
+        break;
+      case "reached":
+        aVal = a.reached_queries;
+        bVal = b.reached_queries;
+        break;
+      case "bids":
+        aVal = a.bids ?? 0;
+        bVal = b.bids ?? 0;
+        break;
+      case "win_rate":
+        aVal = a.win_rate;
+        bVal = b.win_rate;
+        break;
+      case "wins":
+      default:
+        aVal = aWins;
+        bVal = bWins;
+        break;
+    }
+
+    if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
+    if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  const displayGeos = sortedGeos.slice(0, 15);
+  const totalBids = displayGeos.reduce((sum, g) => sum + (g.bids ?? 0), 0);
+  const totalReached = displayGeos.reduce((sum, g) => sum + g.reached_queries, 0);
+  const totalWins = displayGeos.reduce((sum, g) => sum + (g.auctions_won ?? g.impressions ?? 0), 0);
   const overallWinRate = totalReached > 0 ? (totalWins / totalReached * 100) : 0;
 
   return (
@@ -91,82 +133,23 @@ export function GeoAnalysisSection({ geos }: GeoAnalysisSectionProps) {
         <div>
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <Globe className="h-5 w-5 text-green-600" />
-            Geographic Performance
-            <span className="text-xs font-normal bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-              Account-wide
-            </span>
+            Geographic Performance — overall for {seatName || "seat"}
           </h3>
           <p className="text-sm text-gray-500 mt-1">
             Win rates by country (all pretargeting configs combined)
           </p>
         </div>
-        <div className="text-right">
-          <div className="text-2xl font-bold text-gray-900">{overallWinRate.toFixed(1)}%</div>
-          <div className="text-sm text-gray-500">avg win rate</div>
-        </div>
-      </div>
-
-      {/* Summary Stats */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="p-3 bg-gray-50 rounded-lg text-center">
-          <div className="text-lg font-bold text-gray-900">{geos.length}</div>
-          <div className="text-xs text-gray-500">Countries</div>
-        </div>
-        <div className="p-3 bg-blue-50 rounded-lg text-center">
-          <div className="text-lg font-bold text-blue-700">{formatNumber(totalReached)}</div>
-          <div className="text-xs text-blue-600">Reached</div>
-        </div>
-        <div className="p-3 bg-purple-50 rounded-lg text-center">
-          <div className="text-lg font-bold text-purple-700">{formatNumber(totalBids)}</div>
-          <div className="text-xs text-purple-600">Bids</div>
-        </div>
-        <div className="p-3 bg-green-50 rounded-lg text-center">
-          <div className="text-lg font-bold text-green-700">{formatNumber(totalWins)}</div>
-          <div className="text-xs text-green-600">Wins</div>
-        </div>
-      </div>
-
-      {/* Win Rate Categories */}
-      <div className="space-y-4 mb-6">
-        {highWinRate.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 text-sm font-medium text-green-700 mb-2">
-              <Trophy className="h-4 w-4" />
-              High Win Rate (&gt;80%) - {highWinRate.length} countries
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {highWinRate.map(geo => (
-                <span
-                  key={geo.country}
-                  className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium"
-                  title={`Reached: ${formatNumber(geo.reached_queries)}, Wins: ${formatNumber(geo.auctions_won ?? geo.impressions ?? 0)}`}
-                >
-                  {geo.country} ({geo.win_rate.toFixed(0)}%)
-                </span>
-              ))}
-            </div>
+        <div className="flex items-center gap-3 text-sm text-gray-600">
+          <div className="px-3 py-1 bg-gray-50 rounded border">
+            Reached <span className="ml-1 font-semibold text-gray-900">{formatNumber(totalReached)}</span>
           </div>
-        )}
-
-        {lowWinRate.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 text-sm font-medium text-orange-700 mb-2">
-              <AlertCircle className="h-4 w-4" />
-              Lower Win Rate (&lt;50%) - Optimize these
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {lowWinRate.slice(0, 10).map(geo => (
-                <span
-                  key={geo.country}
-                  className="px-2 py-1 bg-orange-100 text-orange-800 rounded text-xs font-medium"
-                  title={`Reached: ${formatNumber(geo.reached_queries)}, Wins: ${formatNumber(geo.auctions_won ?? geo.impressions ?? 0)}`}
-                >
-                  {geo.country} ({geo.win_rate.toFixed(0)}%)
-                </span>
-              ))}
-            </div>
+          <div className="px-3 py-1 bg-gray-50 rounded border">
+            Wins <span className="ml-1 font-semibold text-gray-900">{formatNumber(totalWins)}</span>
           </div>
-        )}
+          <div className="px-3 py-1 bg-gray-50 rounded border">
+            Win Rate <span className="ml-1 font-semibold text-gray-900">{overallWinRate.toFixed(1)}%</span>
+          </div>
+        </div>
       </div>
 
       {/* Geo Table with RTB metrics */}
@@ -174,22 +157,40 @@ export function GeoAnalysisSection({ geos }: GeoAnalysisSectionProps) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200">
-              <th className="text-left py-2 font-medium text-gray-600">Country</th>
-              <th className="text-right py-2 font-medium text-gray-600">Bids</th>
-              <th className="text-right py-2 font-medium text-gray-600">Reached</th>
-              <th className="text-right py-2 font-medium text-gray-600">Wins</th>
-              <th className="text-right py-2 font-medium text-gray-600">Win Rate</th>
+              <th className="text-left py-2 font-medium text-gray-600">
+                <button onClick={() => handleSort("country")} className="hover:text-gray-900">Country</button>
+              </th>
+              <th className="text-right py-2 font-medium text-gray-600">
+                <button onClick={() => handleSort("reached")} className="hover:text-gray-900">Reached</button>
+              </th>
+              <th className="text-right py-2 font-medium text-gray-600">
+                <button onClick={() => handleSort("bids")} className="hover:text-gray-900">Bids</button>
+              </th>
+              <th className="text-right py-2 font-medium text-gray-600">
+                <button onClick={() => handleSort("wins")} className="hover:text-gray-900">Wins</button>
+              </th>
+              <th className="text-right py-2 font-medium text-gray-600">
+                <button onClick={() => handleSort("win_rate")} className="hover:text-gray-900">Win Rate</button>
+              </th>
             </tr>
           </thead>
           <tbody>
-            {sortedGeos.slice(0, 15).map(geo => (
+            {displayGeos.map((geo, index) => {
+              const wins = geo.auctions_won ?? geo.impressions ?? 0;
+              const isLow = geo.win_rate < 50 && wins > 0;
+              const isTop = index === 0;
+              return (
               <tr key={geo.country} className="border-b border-gray-100 last:border-0">
                 <td className="py-2">
-                  <span className="font-medium text-gray-900">{geo.country}</span>
+                  <span className="font-medium text-gray-900">
+                    {isTop && "🏆 "}
+                    {isLow && !isTop && "⚠️ "}
+                    {geo.country}
+                  </span>
                 </td>
-                <td className="py-2 text-right text-gray-900">{formatNumber(geo.bids ?? 0)}</td>
                 <td className="py-2 text-right text-blue-600">{formatNumber(geo.reached_queries)}</td>
-                <td className="py-2 text-right text-green-600">{formatNumber(geo.auctions_won ?? geo.impressions ?? 0)}</td>
+                <td className="py-2 text-right text-gray-900">{formatNumber(geo.bids ?? 0)}</td>
+                <td className="py-2 text-right text-green-600">{formatNumber(wins)}</td>
                 <td className={cn(
                   "py-2 text-right font-medium",
                   geo.win_rate < 30 ? "text-red-600" : geo.win_rate >= 60 ? "text-green-600" : "text-gray-900"
@@ -197,7 +198,7 @@ export function GeoAnalysisSection({ geos }: GeoAnalysisSectionProps) {
                   {geo.win_rate.toFixed(1)}%
                 </td>
               </tr>
-            ))}
+            )})}
           </tbody>
         </table>
       </div>

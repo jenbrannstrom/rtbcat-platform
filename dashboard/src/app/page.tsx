@@ -82,6 +82,10 @@ function WasteAnalysisContent() {
     }
   }, [selectedBuyerId, seats, setSelectedBuyerId]);
 
+  useEffect(() => {
+    setExpandedConfigId(null);
+  }, [selectedBuyerId]);
+
   const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
 
   // Sorting state for pretargeting configs
@@ -409,21 +413,23 @@ function WasteAnalysisContent() {
 
       {/* Publisher Performance */}
       <section>
-        <PublisherPerformanceSection publishers={publishers} />
+        <PublisherPerformanceSection
+          publishers={publishers}
+          seatName={seats?.find((seat) => seat.buyer_id === selectedBuyerId)?.display_name || selectedBuyerId || undefined}
+        />
       </section>
 
       {/* Size Analysis */}
       <section>
-        <SizeAnalysisSection
-          days={days}
-          billingId={expandedConfigId || undefined}
-          buyerId={selectedBuyerId || undefined}
-        />
+        <SizeAnalysisSection days={days} buyerId={selectedBuyerId || undefined} />
       </section>
 
       {/* Geographic Analysis */}
       <section>
-        <GeoAnalysisSection geos={geos} />
+        <GeoAnalysisSection
+          geos={geos}
+          seatName={seats?.find((seat) => seat.buyer_id === selectedBuyerId)?.display_name || selectedBuyerId || undefined}
+        />
       </section>
       </div>
     </div>

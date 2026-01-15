@@ -263,6 +263,7 @@ export interface PublisherPerformance {
   bid_requests?: number;
   reached_queries: number;
   bids?: number;
+  auctions_won?: number;
   impressions: number;
   pretargeting_filter_rate?: number;
   win_rate: number;
