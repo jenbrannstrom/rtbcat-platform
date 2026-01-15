@@ -67,6 +67,8 @@ async def get_rtb_bidstream(
                 SUM(reached_queries) as total_reached,
                 SUM(impressions) as total_impressions,
                 SUM(bids) as total_bids,
+                SUM(successful_responses) as total_successful_responses,
+                SUM(bid_requests) as total_bid_requests,
                 COUNT(DISTINCT publisher_id) as publisher_count,
                 COUNT(DISTINCT country) as country_count
             FROM rtb_bidstream
@@ -86,6 +88,8 @@ async def get_rtb_bidstream(
                     SUM(reached_queries) as total_reached,
                     SUM(impressions) as total_impressions,
                     SUM(bids) as total_bids,
+                    SUM(successful_responses) as total_successful_responses,
+                    SUM(bid_requests) as total_bid_requests,
                     COUNT(DISTINCT publisher_id) as publisher_count,
                     COUNT(DISTINCT country) as country_count
                 FROM rtb_bidstream
@@ -97,8 +101,14 @@ async def get_rtb_bidstream(
             buyer_params = []
         total_impressions = funnel_row["total_impressions"] or 0
         total_bids = funnel_row["total_bids"] or 0
+        total_successful = funnel_row["total_successful_responses"] or 0
+        total_bid_requests = funnel_row["total_bid_requests"] or 0
 
-        win_rate = (total_impressions / total_reached * 100) if total_reached > 0 else 0
+        effective_reached = total_reached
+        if effective_reached == 0:
+            effective_reached = total_successful or total_bid_requests
+
+        win_rate = (total_impressions / effective_reached * 100) if effective_reached > 0 else 0
         waste_rate = 100 - win_rate
 
         # Get top publishers
@@ -108,7 +118,10 @@ async def get_rtb_bidstream(
                 publisher_name,
                 SUM(reached_queries) as reached,
                 SUM(impressions) as impressions,
-                SUM(bids) as total_bids
+                SUM(bids) as total_bids,
+                SUM(auctions_won) as auctions_won,
+                SUM(successful_responses) as successful_responses,
+                SUM(bid_requests) as bid_requests
             FROM rtb_bidstream
             WHERE metric_date >= date('now', ?)
               AND publisher_id IS NOT NULL
@@ -121,8 +134,11 @@ async def get_rtb_bidstream(
         publishers = []
         for row in pub_rows:
             reached = row["reached"] or 0
+            if reached == 0:
+                reached = (row["successful_responses"] or 0) or (row["bid_requests"] or 0)
             imps = row["impressions"] or 0
             bids = row["total_bids"] or 0
+            wins = row["auctions_won"] or 0
             pub_win_rate = (imps / reached * 100) if reached > 0 else 0
             # Handle NULL, empty string, and whitespace-only for publisher_name
             raw_name = row["publisher_name"]
@@ -135,6 +151,7 @@ async def get_rtb_bidstream(
                 "reached_queries": reached,
                 "bids": bids,
                 "impressions": imps,
+                "auctions_won": wins,
                 "win_rate": round(pub_win_rate, 2),
             })
 
@@ -144,7 +161,10 @@ async def get_rtb_bidstream(
                 country,
                 SUM(reached_queries) as reached,
                 SUM(impressions) as impressions,
-                SUM(bids) as total_bids
+                SUM(bids) as total_bids,
+                SUM(auctions_won) as auctions_won,
+                SUM(successful_responses) as successful_responses,
+                SUM(bid_requests) as bid_requests
             FROM rtb_bidstream
             WHERE metric_date >= date('now', ?) AND country IS NOT NULL{buyer_filter}
             GROUP BY country
@@ -155,14 +175,18 @@ async def get_rtb_bidstream(
         geos = []
         for row in geo_rows:
             reached = row["reached"] or 0
+            if reached == 0:
+                reached = (row["successful_responses"] or 0) or (row["bid_requests"] or 0)
             imps = row["impressions"] or 0
             bids = row["total_bids"] or 0
+            wins = row["auctions_won"] or 0
             geo_win_rate = (imps / reached * 100) if reached > 0 else 0
             geos.append({
                 "country": row["country"],
                 "reached_queries": reached,
                 "bids": bids,
                 "impressions": imps,
+                "auctions_won": wins,
                 "win_rate": round(geo_win_rate, 2),
             })
 
@@ -176,9 +200,9 @@ async def get_rtb_bidstream(
         bidder_id_populated = (bidder_id_row["cnt"] or 0) > 0 if bidder_id_row else False
 
         return {
-            "has_data": total_reached > 0,
+            "has_data": effective_reached > 0,
             "funnel": {
-                "total_reached_queries": total_reached,
+                "total_reached_queries": effective_reached,
                 "total_impressions": total_impressions,
                 "total_bids": total_bids,
                 "win_rate": round(win_rate, 2),
@@ -754,6 +778,81 @@ async def get_config_breakdown(
 
     except Exception as e:
         logger.error(f"Failed to get config breakdown: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/rtb-funnel/configs/{billing_id}/creatives", tags=["RTB Analytics"])
+async def get_config_creatives(
+    billing_id: str,
+    size: Optional[str] = Query(None, description="Filter by creative size (e.g. 320x50)"),
+    days: int = Query(30, ge=1, le=90),
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    store: SQLiteStore = Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    """List creatives for a config (optionally filtered by size)."""
+    try:
+        resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+        bidder_id = None
+        if resolved_buyer_id:
+            seat = await db_query_one(
+                "SELECT bidder_id FROM buyer_seats WHERE buyer_id = ?",
+                (resolved_buyer_id,)
+            )
+            bidder_id = seat["bidder_id"] if seat else None
+        if resolved_buyer_id and not bidder_id:
+            return {"creatives": [], "message": "Seat is missing bidder_id mapping."}
+
+        where = ["billing_id = ?", "metric_date >= date('now', ?)"]
+        params: list = [billing_id, f'-{days} days']
+        if size:
+            where.append("creative_size = ?")
+            params.append(size)
+        if bidder_id:
+            where.append("bidder_id = ?")
+            params.append(bidder_id)
+
+        rows = await db_query(
+            f"""
+            SELECT DISTINCT creative_id
+            FROM rtb_daily
+            WHERE {" AND ".join(where)}
+              AND creative_id IS NOT NULL
+              AND creative_id != ''
+            LIMIT 200
+            """,
+            tuple(params),
+        )
+        creative_ids = [row["creative_id"] for row in rows if row["creative_id"]]
+        if not creative_ids:
+            return {"creatives": []}
+
+        placeholders = ",".join("?" * len(creative_ids))
+        creative_rows = await db_query(
+            f"""
+            SELECT id, name, format, width, height
+            FROM creatives
+            WHERE id IN ({placeholders})
+            """,
+            tuple(creative_ids),
+        )
+        creative_map = {row["id"]: row for row in creative_rows}
+
+        creatives = []
+        for creative_id in creative_ids:
+            row = creative_map.get(creative_id)
+            creatives.append({
+                "id": creative_id,
+                "name": row["name"] if row and row["name"] else creative_id,
+                "format": row["format"] if row else None,
+                "width": row["width"] if row else None,
+                "height": row["height"] if row else None,
+            })
+
+        return {"creatives": creatives}
+
+    except Exception as e:
+        logger.error(f"Failed to get creatives for config {billing_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
