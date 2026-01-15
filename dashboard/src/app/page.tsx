@@ -313,10 +313,9 @@ function WasteAnalysisContent() {
       {/* Account Endpoints Header with integrated funnel metrics */}
       <AccountEndpointsHeader funnelData={funnelDataForHeader} />
 
-      {selectedBuyerId && rtbFunnel?.data_sources?.buyer_filter_applied === false && (
+      {selectedBuyerId && rtbFunnel?.data_sources?.buyer_filter_message && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
-          {rtbFunnel.data_sources.buyer_filter_message ||
-            "Seat filter could not be applied to funnel data. Metrics shown may include other seats."}
+          {rtbFunnel.data_sources.buyer_filter_message}
         </div>
       )}
 

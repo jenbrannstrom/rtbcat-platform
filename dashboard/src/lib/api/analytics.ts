@@ -296,6 +296,7 @@ export interface RTBFunnelResponse {
     buyer_filter_applied?: boolean;
     buyer_filter_message?: string | null;
     bidder_id_populated?: boolean;
+    buyer_account_id_populated?: boolean;
   };
 }
 
