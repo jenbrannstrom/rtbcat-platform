@@ -22,6 +22,7 @@ from .analytics import (
     qps_router as analytics_qps_router,
     traffic_router,
     spend_router,
+    home_router,
 )
 
 __all__ = [
@@ -45,4 +46,5 @@ __all__ = [
     "analytics_qps_router",
     "traffic_router",
     "spend_router",
+    "home_router",
 ]
