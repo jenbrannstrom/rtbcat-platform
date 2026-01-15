@@ -263,6 +263,7 @@ export interface PublisherPerformance {
   bid_requests?: number;
   reached_queries: number;
   bids?: number;
+  auctions_won?: number;
   impressions: number;
   pretargeting_filter_rate?: number;
   win_rate: number;
@@ -295,6 +296,7 @@ export interface RTBFunnelResponse {
     buyer_filter_applied?: boolean;
     buyer_filter_message?: string | null;
     bidder_id_populated?: boolean;
+    buyer_account_id_populated?: boolean;
   };
 }
 
@@ -323,7 +325,7 @@ export async function getRTBFunnel(
 ): Promise<RTBFunnelResponse> {
   const params = new URLSearchParams({ days: String(days) });
   if (buyerId) params.set('buyer_id', buyerId);
-  return fetchApi<RTBFunnelResponse>(`/analytics/rtb-funnel?${params}`);
+  return fetchApi<RTBFunnelResponse>(`/analytics/home/funnel?${params}`);
 }
 
 export async function getRTBPublishers(
@@ -349,6 +351,6 @@ export async function getRTBFunnelConfigs(
   const params = new URLSearchParams({ days: String(days) });
   if (buyerId) params.set('buyer_id', buyerId);
   return fetchApi<ConfigPerformanceResponse>(
-    `/analytics/rtb-funnel/configs?${params}`
+    `/analytics/home/configs?${params}`
   );
 }

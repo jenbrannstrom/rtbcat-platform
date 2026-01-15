@@ -17,7 +17,7 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, Form
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, UploadFile, File, Form
 from pydantic import BaseModel
 
 from api.dependencies import get_store, get_current_user, get_allowed_buyer_ids
@@ -37,6 +37,7 @@ from api.schemas.performance import (
 from qps.unified_importer import unified_import
 from storage import SQLiteStore, PerformanceMetric
 from storage.database import db_execute, db_query_one, db_transaction_async
+from services.home_precompute import refresh_home_summaries
 
 logger = logging.getLogger(__name__)
 
@@ -320,6 +321,7 @@ async def cleanup_old_rtb_daily(
 @router.post("/import-csv", response_model=CSVImportResult)
 async def import_performance_csv(
     file: UploadFile = File(..., description="CSV file with performance data"),
+    background_tasks: Optional[BackgroundTasks] = None,
 ):
     """Import performance data from Authorized Buyers CSV export.
 
@@ -340,6 +342,12 @@ async def import_performance_csv(
 
         # Try flexible unified importer first - it auto-maps columns
         result = unified_import(tmp_path)
+        if result.success and result.date_range_start and result.date_range_end and background_tasks:
+            background_tasks.add_task(
+                refresh_home_summaries,
+                result.date_range_start,
+                result.date_range_end,
+            )
         return _build_import_response(result)
 
     except Exception as e:
@@ -426,7 +434,10 @@ async def upload_stream_chunk(
 
 
 @router.post("/import/stream/complete", response_model=CSVImportResult)
-async def complete_stream_import(request: StreamCompleteRequest):
+async def complete_stream_import(
+    request: StreamCompleteRequest,
+    background_tasks: BackgroundTasks,
+):
     """Finalize a streamed CSV upload and run the unified importer."""
     _ensure_upload_dir()
     meta = _load_meta(request.upload_id)
@@ -465,6 +476,12 @@ async def complete_stream_import(request: StreamCompleteRequest):
 
     try:
         result = unified_import(str(final_path))
+        if result.success and result.date_range_start and result.date_range_end:
+            background_tasks.add_task(
+                refresh_home_summaries,
+                result.date_range_start,
+                result.date_range_end,
+            )
         return _build_import_response(result)
     except Exception as e:
         logger.error(f"Import failed for {final_path}: {e}")

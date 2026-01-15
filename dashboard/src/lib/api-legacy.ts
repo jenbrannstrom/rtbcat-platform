@@ -1157,12 +1157,41 @@ export interface ConfigBreakdownResponse {
   no_data_reason?: string;  // Explains why breakdown data is missing
 }
 
+export interface ConfigCreativesItem {
+  id: string;
+  name: string;
+  format?: string | null;
+  width?: number | null;
+  height?: number | null;
+}
+
+export interface ConfigCreativesResponse {
+  creatives: ConfigCreativesItem[];
+  message?: string;
+}
+
 export async function getConfigBreakdown(
   billingId: string,
-  by: ConfigBreakdownType = 'size'
+  by: ConfigBreakdownType = 'size',
+  buyerId?: string
 ): Promise<ConfigBreakdownResponse> {
+  const params = new URLSearchParams({ by });
+  if (buyerId) params.set("buyer_id", buyerId);
   return fetchApi<ConfigBreakdownResponse>(
-    `/analytics/rtb-funnel/configs/${encodeURIComponent(billingId)}/breakdown?by=${by}`
+    `/analytics/rtb-funnel/configs/${encodeURIComponent(billingId)}/breakdown?${params.toString()}`
+  );
+}
+
+export async function getConfigCreatives(
+  billingId: string,
+  size?: string,
+  buyerId?: string
+): Promise<ConfigCreativesResponse> {
+  const params = new URLSearchParams();
+  if (size) params.set("size", size);
+  if (buyerId) params.set("buyer_id", buyerId);
+  return fetchApi<ConfigCreativesResponse>(
+    `/analytics/rtb-funnel/configs/${encodeURIComponent(billingId)}/creatives?${params.toString()}`
   );
 }
 

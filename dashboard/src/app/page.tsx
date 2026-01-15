@@ -82,6 +82,10 @@ function WasteAnalysisContent() {
     }
   }, [selectedBuyerId, seats, setSelectedBuyerId]);
 
+  useEffect(() => {
+    setExpandedConfigId(null);
+  }, [selectedBuyerId]);
+
   const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
 
   // Sorting state for pretargeting configs
@@ -158,6 +162,7 @@ function WasteAnalysisContent() {
   // Fetch config-level performance data (filtered by selected buyer)
   const {
     data: configPerformance,
+    isLoading: configPerformanceLoading,
     refetch: refetchConfigPerf,
   } = useQuery({
     queryKey: ["rtb-funnel-configs", days, selectedBuyerId],
@@ -309,10 +314,9 @@ function WasteAnalysisContent() {
       {/* Account Endpoints Header with integrated funnel metrics */}
       <AccountEndpointsHeader funnelData={funnelDataForHeader} />
 
-      {selectedBuyerId && rtbFunnel?.data_sources?.buyer_filter_applied === false && (
+      {selectedBuyerId && rtbFunnel?.data_sources?.buyer_filter_message && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
-          {rtbFunnel.data_sources.buyer_filter_message ||
-            "Seat filter could not be applied to funnel data. Metrics shown may include other seats."}
+          {rtbFunnel.data_sources.buyer_filter_message}
         </div>
       )}
 
@@ -332,7 +336,7 @@ function WasteAnalysisContent() {
           </h2>
         </div>
 
-        {configsLoading ? (
+        {(configsLoading || configPerformanceLoading) ? (
           <div className="space-y-2">
             {[1, 2, 3].map(i => (
               <div key={i} className="h-16 bg-gray-100 rounded-lg animate-pulse" />
@@ -409,21 +413,41 @@ function WasteAnalysisContent() {
 
       {/* Publisher Performance */}
       <section>
-        <PublisherPerformanceSection publishers={publishers} />
+        {funnelLoading ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="animate-pulse space-y-4">
+              <div className="h-6 bg-gray-200 rounded w-1/3" />
+              <div className="h-32 bg-gray-100 rounded" />
+            </div>
+          </div>
+        ) : (
+          <PublisherPerformanceSection
+            publishers={publishers}
+            seatName={seats?.find((seat) => seat.buyer_id === selectedBuyerId)?.display_name || selectedBuyerId || undefined}
+          />
+        )}
       </section>
 
       {/* Size Analysis */}
       <section>
-        <SizeAnalysisSection
-          days={days}
-          billingId={expandedConfigId || undefined}
-          buyerId={selectedBuyerId || undefined}
-        />
+        <SizeAnalysisSection days={days} buyerId={selectedBuyerId || undefined} />
       </section>
 
       {/* Geographic Analysis */}
       <section>
-        <GeoAnalysisSection geos={geos} />
+        {funnelLoading ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="animate-pulse space-y-4">
+              <div className="h-6 bg-gray-200 rounded w-1/3" />
+              <div className="h-32 bg-gray-100 rounded" />
+            </div>
+          </div>
+        ) : (
+          <GeoAnalysisSection
+            geos={geos}
+            seatName={seats?.find((seat) => seat.buyer_id === selectedBuyerId)?.display_name || selectedBuyerId || undefined}
+          />
+        )}
       </section>
       </div>
     </div>
