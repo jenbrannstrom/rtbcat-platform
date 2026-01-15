@@ -162,6 +162,7 @@ function WasteAnalysisContent() {
   // Fetch config-level performance data (filtered by selected buyer)
   const {
     data: configPerformance,
+    isLoading: configPerformanceLoading,
     refetch: refetchConfigPerf,
   } = useQuery({
     queryKey: ["rtb-funnel-configs", days, selectedBuyerId],
@@ -335,7 +336,7 @@ function WasteAnalysisContent() {
           </h2>
         </div>
 
-        {configsLoading ? (
+        {(configsLoading || configPerformanceLoading) ? (
           <div className="space-y-2">
             {[1, 2, 3].map(i => (
               <div key={i} className="h-16 bg-gray-100 rounded-lg animate-pulse" />
@@ -412,10 +413,19 @@ function WasteAnalysisContent() {
 
       {/* Publisher Performance */}
       <section>
-        <PublisherPerformanceSection
-          publishers={publishers}
-          seatName={seats?.find((seat) => seat.buyer_id === selectedBuyerId)?.display_name || selectedBuyerId || undefined}
-        />
+        {funnelLoading ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="animate-pulse space-y-4">
+              <div className="h-6 bg-gray-200 rounded w-1/3" />
+              <div className="h-32 bg-gray-100 rounded" />
+            </div>
+          </div>
+        ) : (
+          <PublisherPerformanceSection
+            publishers={publishers}
+            seatName={seats?.find((seat) => seat.buyer_id === selectedBuyerId)?.display_name || selectedBuyerId || undefined}
+          />
+        )}
       </section>
 
       {/* Size Analysis */}
@@ -425,10 +435,19 @@ function WasteAnalysisContent() {
 
       {/* Geographic Analysis */}
       <section>
-        <GeoAnalysisSection
-          geos={geos}
-          seatName={seats?.find((seat) => seat.buyer_id === selectedBuyerId)?.display_name || selectedBuyerId || undefined}
-        />
+        {funnelLoading ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="animate-pulse space-y-4">
+              <div className="h-6 bg-gray-200 rounded w-1/3" />
+              <div className="h-32 bg-gray-100 rounded" />
+            </div>
+          </div>
+        ) : (
+          <GeoAnalysisSection
+            geos={geos}
+            seatName={seats?.find((seat) => seat.buyer_id === selectedBuyerId)?.display_name || selectedBuyerId || undefined}
+          />
+        )}
       </section>
       </div>
     </div>
