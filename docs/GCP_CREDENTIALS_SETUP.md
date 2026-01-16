@@ -615,6 +615,25 @@ The manual steps below are **deprecated** and kept only for reference. They cont
 | Domain | `scan.rtb.cat` |
 | SSL Certificate | Let's Encrypt (auto-renewed) |
 
+### Quick Database Query (One-Liner)
+
+```bash
+# List tables
+gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+  "sudo sqlite3 /home/catscan/.catscan/catscan.db '.tables'"
+
+# Run any SQL query
+gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+  "sudo sqlite3 /home/catscan/.catscan/catscan.db 'SELECT COUNT(*) FROM rtb_bidstream;'"
+
+# Or via Docker container (for Python queries)
+gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+  "sudo docker exec catscan-api python -c \"import sqlite3; print(sqlite3.connect('/home/rtbcat/.catscan/catscan.db').execute('SELECT COUNT(*) FROM rtb_bidstream').fetchone()[0])\""
+```
+
+> **Note:** SSH as your user but DB is under `catscan` user, so use `sudo`.
+> Inside Docker, the path is `/home/rtbcat/.catscan/` (volume mounted from `/home/catscan/.catscan/`).
+
 **Upgrade if needed:**
 ```bash
 # If slow, upgrade to e2-small (2GB RAM, ~$13/month)
