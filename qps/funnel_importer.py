@@ -26,6 +26,7 @@ from qps.csv_report_types import (
     ReportType, detect_report_type,
     RTB_FUNNEL_REQUIRED, RTB_FUNNEL_PIPELINE_METRICS, RTB_FUNNEL_OPTIONAL
 )
+from qps.unified_importer import parse_bidder_id_from_filename
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,7 @@ def parse_int(value) -> int:
     """Parse integer, returning 0 for empty/invalid."""
     if value is None or value == "":
         return 0
+    fallback_buyer_id = parse_bidder_id_from_filename(csv_path)
     try:
         return int(str(value).replace(",", "").strip())
     except (ValueError, TypeError):
@@ -194,6 +196,8 @@ def import_funnel_csv(
                     # Parse optional/pipeline fields
                     hour = parse_int(row.get(column_map.get("hour", ""), "")) if "hour" in column_map else None
                     buyer_account_id = row.get(column_map.get("buyer_account_id", ""), "").strip() or None
+                    if not buyer_account_id:
+                        buyer_account_id = fallback_buyer_id
 
                     publisher_id = row.get(column_map.get("publisher_id", ""), "").strip() or None
                     publisher_name = row.get(column_map.get("publisher_name", ""), "").strip() or None
