@@ -151,6 +151,7 @@ def ensure_table_exists(cursor, table_name: str):
                 publisher_domain TEXT,
                 app_id TEXT,
                 app_name TEXT,
+                buyer_account_id TEXT,
                 reached_queries INTEGER DEFAULT 0,
                 impressions INTEGER DEFAULT 0,
                 clicks INTEGER DEFAULT 0,
@@ -283,6 +284,7 @@ def import_to_rtb_daily(
         ("hour", "INTEGER DEFAULT 0"),
         ("viewable_impressions", "INTEGER DEFAULT 0"),
         ("measurable_impressions", "INTEGER DEFAULT 0"),
+        ("buyer_account_id", "TEXT"),
         ("bidder_id", "TEXT"),
     ])
 
@@ -296,7 +298,7 @@ def import_to_rtb_daily(
         INSERT OR IGNORE INTO rtb_daily (
             metric_date, hour, billing_id, creative_id, creative_size, creative_format,
             country, platform, environment, publisher_id, publisher_name, publisher_domain,
-            app_id, app_name, reached_queries, impressions, clicks, spend_micros,
+            app_id, app_name, buyer_account_id, reached_queries, impressions, clicks, spend_micros,
             bids, bids_in_auction, auctions_won,
             video_starts, video_completions, viewable_impressions, measurable_impressions,
             bidder_id, row_hash, import_batch_id
@@ -388,7 +390,7 @@ def import_to_rtb_daily(
                         row_data["creative_id"], row_data["creative_size"], row_data["creative_format"],
                         row_data["country"], row_data["platform"], row_data["environment"],
                         row_data["publisher_id"], row_data["publisher_name"], row_data["publisher_domain"],
-                        row_data["app_id"], row_data["app_name"],
+                        row_data["app_id"], row_data["app_name"], row_data["buyer_account_id"],
                         row_data["reached_queries"], row_data["impressions"], row_data["clicks"],
                         row_data["spend_micros"], row_data["bids"], row_data["bids_in_auction"],
                         row_data["auctions_won"], row_data["video_starts"], row_data["video_completions"],
