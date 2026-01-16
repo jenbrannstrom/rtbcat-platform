@@ -211,7 +211,7 @@ class SizeCoverageAnalyzer:
                 })
             else:
                 # This is a gap - traffic but no creatives
-                daily_queries = traffic['reached_queries'] // max(days, 1)
+                daily_queries = traffic['reached_queries'] / max(days, 1)
                 pct_of_total = (traffic['reached_queries'] / total_reached * 100) if total_reached > 0 else 0
 
                 # Recommend based on daily query volume
