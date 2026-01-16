@@ -744,6 +744,18 @@ gcloud compute firewall-rules create allow-iap-ssh \
 gcloud compute ssh catscan-prod --zone=europe-west1-b
 ```
 
+**Direct SSH (no gcloud):**
+```bash
+ssh -i ~/.ssh/google_compute_engine jen@<VM_EXTERNAL_IP>
+```
+
+Get the external IP:
+```bash
+gcloud compute instances describe catscan-prod \
+  --zone=europe-west1-b \
+  --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
+```
+
 **If SSH fails with "Host key verification":**
 ```bash
 ssh-keyscan -H <EXTERNAL_IP> >> ~/.ssh/known_hosts
@@ -777,12 +789,11 @@ SSH to the VM, then:
 sudo apt update
 sudo apt install -y python3.11 python3.11-venv nodejs npm ffmpeg git
 
-# Clone repository
-git clone https://github.com/rtbcat/rtbcat-platform.git
-cd rtbcat-platform
-
-# Run setup
-./setup.sh
+# Clone repository (VM)
+sudo mkdir -p /opt/catscan
+sudo chown -R jen:jen /opt/catscan
+git clone https://github.com/jenbrannstrom/rtbcat-platform.git /opt/catscan
+cd /opt/catscan
 ```
 
 ### Step 5: Copy Credentials to VM
@@ -792,15 +803,15 @@ From your local machine (where credentials are already set up):
 ```bash
 # Copy service account
 scp ~/.catscan/credentials/catscan-service-account.json \
-  jen@104.199.91.219:~/.catscan/credentials/
+  jen@<VM_EXTERNAL_IP>:~/.catscan/credentials/
 
 # Copy Gmail OAuth client
 scp ~/.catscan/credentials/gmail-oauth-client.json \
-  jen@104.199.91.219:~/.catscan/credentials/
+  jen@<VM_EXTERNAL_IP>:~/.catscan/credentials/
 
 # Copy Gmail token (already authorized)
 scp ~/.catscan/credentials/gmail-token.json \
-  jen@104.199.91.219:~/.catscan/credentials/
+  jen@<VM_EXTERNAL_IP>:~/.catscan/credentials/
 ```
 
 ### Step 6: Register Service Account in Database
@@ -814,8 +825,8 @@ sqlite3 ~/.catscan/catscan.db "INSERT INTO service_accounts
   (id, client_email, project_id, display_name, credentials_path, is_active)
   VALUES (
     'sa-1',
-    'catscan-api@augmented-vim-427407-t8.iam.gserviceaccount.com',
-    'augmented-vim-427407-t8',
+    '<SERVICE_ACCOUNT_EMAIL>',
+    '<GCP_PROJECT_ID>',
     'Cat-Scan API',
     '~/.catscan/credentials/catscan-service-account.json',
     1
@@ -827,47 +838,15 @@ Verify:
 sqlite3 ~/.catscan/catscan.db "SELECT * FROM service_accounts;"
 ```
 
-### Step 7: Create Systemd Services
+### Step 7: Production Services (Docker Compose)
 
-**API Service:**
+Production uses prebuilt images from Artifact Registry. The VM pulls images and starts containers (no building on the VM).
+
 ```bash
-sudo tee /etc/systemd/system/catscan-api.service << 'EOF'
-[Unit]
-Description=Cat-Scan API
-After=network.target
-
-[Service]
-Type=simple
-User=jen
-WorkingDirectory=/home/jen/rtbcat-platform
-ExecStart=/home/jen/rtbcat-platform/venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
+cd /opt/catscan
+sudo docker-compose -f docker-compose.gcp.yml pull
+sudo docker-compose -f docker-compose.gcp.yml up -d
 ```
-
-**Dashboard Service:**
-```bash
-sudo tee /etc/systemd/system/catscan-dashboard.service << 'EOF'
-[Unit]
-Description=Cat-Scan Dashboard
-After=network.target
-
-[Service]
-Type=simple
-User=jen
-WorkingDirectory=/home/jen/rtbcat-platform/dashboard
-ExecStart=/usr/bin/npm run start
-Restart=always
-RestartSec=10
-Environment=PORT=3000
-
-[Install]
-WantedBy=multi-user.target
-EOF
 
 ### Step 7b: Home Cache Refresh Timer (nightly)
 
@@ -879,14 +858,6 @@ sudo cp /opt/catscan/scripts/systemd/catscan-home-refresh.timer /etc/systemd/sys
 sudo systemctl daemon-reload
 sudo systemctl enable --now catscan-home-refresh.timer
 sudo systemctl status catscan-home-refresh.timer
-```
-```
-
-**Enable and start services:**
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable catscan-api catscan-dashboard
-sudo systemctl start catscan-api catscan-dashboard
 ```
 
 ### Step 8: Set Up Nginx Reverse Proxy
@@ -903,7 +874,7 @@ sudo apt install -y nginx
 sudo tee /etc/nginx/sites-available/catscan << 'EOF'
 server {
     listen 80;
-    server_name scan.rtb.cat 104.199.91.219;
+    server_name scan.rtb.cat <VM_EXTERNAL_IP>;
 
     # Allow large CSV uploads for imports (avoid 413 errors)
     client_max_body_size 200m;
