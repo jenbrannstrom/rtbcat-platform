@@ -40,6 +40,7 @@ PUBLIC_PATHS = {
     "/redoc",
     "/auth/check",
     "/auth/me",
+    "/gmail/import/scheduled",  # Cloud Scheduler (uses secret header)
 }
 
 # Path prefixes that are public
