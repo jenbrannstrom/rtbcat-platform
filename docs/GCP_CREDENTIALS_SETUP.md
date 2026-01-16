@@ -745,16 +745,27 @@ gcloud compute ssh catscan-prod --zone=europe-west1-b
 ```
 
 **Direct SSH (no gcloud):**
-```bash
-ssh -i ~/.ssh/google_compute_engine jen@<VM_EXTERNAL_IP>
+
+SSH keys are auto-created by `gcloud compute ssh` on first use and stored in:
+```
+~/.ssh/google_compute_engine       # Private key
+~/.ssh/google_compute_engine.pub   # Public key
 ```
 
-Get the external IP:
+Connect directly:
 ```bash
-gcloud compute instances describe catscan-prod \
-  --zone=europe-west1-b \
-  --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
+ssh -i ~/.ssh/google_compute_engine jen@35.205.211.184
 ```
+
+Or add to `~/.ssh/config` for convenience:
+```
+Host catscan
+    HostName 35.205.211.184
+    User jen
+    IdentityFile ~/.ssh/google_compute_engine
+```
+
+Then just: `ssh catscan`
 
 **If SSH fails with "Host key verification":**
 ```bash
