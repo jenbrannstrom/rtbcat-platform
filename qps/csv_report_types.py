@@ -381,7 +381,7 @@ CAT-SCAN CSV REPORTS - ACTUAL FILES IN USE
 These are the 5 CSV report files Cat-Scan imports from Google Authorized Buyers.
 
 NAMING CONVENTION: catscan-{type}-{account_id}-{period}-UTC
-Example: catscan-rtb-pipeline-1487810529-yesterday-UTC
+Example: catscan-pipeline-1487810529-yesterday-UTC
 
 Go to: Authorized Buyers -> Reporting -> Scheduled Reports -> New Report
 CRITICAL: Set timezone to UTC for ALL reports! Non-UTC data is marked as legacy.
@@ -440,7 +440,7 @@ JOIN STRATEGY: Join Report 1 + Report 2 on (Day, Creative ID) to get:
   Billing ID + Bids in auction + Auctions won
 
 --------------------------------------------------------------------------------
-REPORT 3: "catscan-rtb-pipeline-geo" (Full bid pipeline by country)
+REPORT 3: "catscan-pipeline-geo" (Full bid pipeline by country)
 --------------------------------------------------------------------------------
 Purpose: Full bid funnel from Bid requests -> Impressions by geo
 Target Table: rtb_bidstream
@@ -462,12 +462,12 @@ METRICS:
   * Clicks
 
 Schedule: Daily, Yesterday, UTC
-Filename: catscan-rtb-pipeline-geo-{account_id}-yesterday-UTC
+Filename: catscan-pipeline-geo-{account_id}-yesterday-UTC
 
 WARNING: CANNOT add Creative ID, Billing ID, or App ID - Google blocks this!
 
 --------------------------------------------------------------------------------
-REPORT 4: "catscan-rtb-pipeline-publishers" (Full bid pipeline by publisher)
+REPORT 4: "catscan-pipeline" (Full bid pipeline by publisher)
 --------------------------------------------------------------------------------
 Purpose: Publisher-level bid funnel for publisher optimization
 Target Table: rtb_bidstream
@@ -492,7 +492,7 @@ METRICS:
   * Clicks
 
 Schedule: Daily, Yesterday, UTC
-Filename: catscan-rtb-pipeline-publishers-{account_id}-yesterday-UTC
+Filename: catscan-pipeline-{account_id}-yesterday-UTC
 
 --------------------------------------------------------------------------------
 REPORT 5: "catscan-bid-filtering" (Why bids are rejected)

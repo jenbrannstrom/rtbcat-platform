@@ -377,10 +377,14 @@ def import_to_rtb_daily(
                     # If buyer_account_id missing from CSV, use bidder_id from filename
                     if not row_data["buyer_account_id"] and bidder_id:
                         row_data["buyer_account_id"] = bidder_id
-
-                    # If buyer_account_id missing from CSV, use bidder_id from filename
-                    if not row_data["buyer_account_id"] and bidder_id:
-                        row_data["buyer_account_id"] = bidder_id
+                    if not row_data["buyer_account_id"]:
+                        raise ValueError("buyer_account_id missing and no seat ID detected in filename")
+                    if not row_data["buyer_account_id"]:
+                        raise ValueError("buyer_account_id missing and no seat ID detected in filename")
+                    if not row_data["buyer_account_id"]:
+                        raise ValueError("buyer_account_id missing and no seat ID detected in filename")
+                    if not row_data["buyer_account_id"]:
+                        raise ValueError("buyer_account_id missing and no seat ID detected in filename")
 
                     # Parse spend (convert to micros)
                     spend = parse_float(get_value(row, mapping, "spend", "0"))
@@ -713,6 +717,12 @@ def unified_import(
 
     if not bidder_id:
         bidder_id = parse_bidder_id_from_filename(csv_path)
+    if target_table in ("rtb_daily", "rtb_bidstream") and not bidder_id and not mapping.has_field("buyer_account_id"):
+        result.error_message = (
+            "Missing Buyer account ID. Include the column in the report or ensure the filename "
+            "contains the seat ID (e.g. catscan-quality-<seat>-yesterday-UTC.csv)."
+        )
+        return result
 
     # Import based on target table
     if target_table == "rtb_daily":

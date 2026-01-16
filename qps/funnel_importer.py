@@ -198,6 +198,8 @@ def import_funnel_csv(
                     buyer_account_id = row.get(column_map.get("buyer_account_id", ""), "").strip() or None
                     if not buyer_account_id:
                         buyer_account_id = fallback_buyer_id
+                    if not buyer_account_id:
+                        raise ValueError("buyer_account_id missing and no seat ID detected in filename")
 
                     publisher_id = row.get(column_map.get("publisher_id", ""), "").strip() or None
                     publisher_name = row.get(column_map.get("publisher_name", ""), "").strip() or None
