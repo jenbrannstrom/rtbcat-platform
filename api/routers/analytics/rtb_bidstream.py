@@ -4,6 +4,7 @@ Handles RTB funnel analysis, publisher/geo breakdowns, config performance,
 creative win performance, and app drill-down endpoints.
 """
 
+import json
 import logging
 from collections import defaultdict
 from typing import Optional
@@ -595,6 +596,30 @@ async def get_config_breakdown(
         breakdown = []
         resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         buyer_account_id = resolved_buyer_id or None
+        table_map = {
+            "size": "config_size_daily",
+            "geo": "config_geo_daily",
+            "publisher": "config_publisher_daily",
+            "creative": "config_creative_daily",
+        }
+        table_name = table_map.get(by)
+        if table_name:
+            table_row = await db_query_one(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+                (table_name,),
+            )
+            if not table_row:
+                return {
+                    "billing_id": billing_id,
+                    "breakdown_by": by,
+                    "breakdown": [],
+                    "is_aggregate": False,
+                    "has_funnel_metrics": False,
+                    "no_data_reason": (
+                        "Config breakdown tables are missing. Run migration 020 and "
+                        "recompute config breakdowns."
+                    ),
+                }
         if buyer_account_id:
             seat_rows = await db_query_one(
                 """
@@ -619,61 +644,80 @@ async def get_config_breakdown(
                 }
         # Note: is_aggregate is always False - we only show per-config data now
         # Account-wide data is shown in the main page sections, not in config breakdown
+        target_geo_ids: list[str] = []
+        target_country_codes: list[str] = []
+        if by == "creative":
+            config_row = await db_query_one(
+                """
+                SELECT included_geos
+                FROM pretargeting_configs
+                WHERE billing_id = ?
+                LIMIT 1
+                """,
+                (billing_id,),
+            )
+            if config_row and config_row.get("included_geos"):
+                try:
+                    target_geo_ids = json.loads(config_row["included_geos"]) or []
+                except (TypeError, json.JSONDecodeError):
+                    target_geo_ids = []
+            if target_geo_ids:
+                placeholders = ",".join("?" for _ in target_geo_ids)
+                rows = await db_query(
+                    f"""
+                    SELECT google_geo_id, country_code
+                    FROM geographies
+                    WHERE google_geo_id IN ({placeholders})
+                    """,
+                    tuple(target_geo_ids),
+                )
+                target_country_codes = sorted(
+                    {row["country_code"] for row in rows if row.get("country_code")}
+                )
 
         if by in ("geo", "publisher"):
             seat_clause = ""
             seat_params: tuple = ()
             if buyer_account_id:
-                seat_clause = " AND q.buyer_account_id = ? AND b.buyer_account_id = ?"
-                seat_params = (buyer_account_id, buyer_account_id)
+                seat_clause = " AND buyer_account_id = ?"
+                seat_params = (buyer_account_id,)
 
             if by == "geo":
-                rows = await db_query(f"""
+                rows = await db_query(
+                    f"""
                     SELECT
-                        b.country as name,
-                        COALESCE(SUM(b.bids), 0) as total_bids,
-                        COALESCE(SUM(b.bids_in_auction), 0) as total_bids_in_auction,
-                        COALESCE(SUM(b.auctions_won), 0) as total_auctions_won,
-                        COALESCE(SUM(b.reached_queries), 0) as total_reached,
-                        COALESCE(SUM(b.impressions), 0) as total_impressions
-                    FROM rtb_daily q
-                    JOIN rtb_daily b
-                        ON q.metric_date = b.metric_date
-                        AND q.creative_id = b.creative_id
-                        AND q.buyer_account_id = b.buyer_account_id
-                    WHERE q.billing_id = ?
-                      AND q.metric_date >= date('now', ?)
+                        country as name,
+                        COALESCE(SUM(reached_queries), 0) as total_reached,
+                        COALESCE(SUM(impressions), 0) as total_impressions,
+                        COALESCE(SUM(spend_micros), 0) as total_spend_micros
+                    FROM config_geo_daily
+                    WHERE billing_id = ?
+                      AND metric_date >= date('now', ?)
                       {seat_clause}
-                      AND b.country IS NOT NULL
-                      AND b.country != ''
-                      AND b.bids_in_auction IS NOT NULL
-                    GROUP BY b.country
-                    ORDER BY total_bids_in_auction DESC
+                    GROUP BY country
+                    ORDER BY total_reached DESC
                     LIMIT 50
-                """, (billing_id, f'-{days} days', *seat_params))
+                    """,
+                    (billing_id, f'-{days} days', *seat_params),
+                )
             else:
-                rows = await db_query(f"""
+                rows = await db_query(
+                    f"""
                     SELECT
-                        COALESCE(b.app_name, b.publisher_name) as name,
-                        COALESCE(SUM(b.bids), 0) as total_bids,
-                        COALESCE(SUM(b.bids_in_auction), 0) as total_bids_in_auction,
-                        COALESCE(SUM(b.auctions_won), 0) as total_auctions_won,
-                        COALESCE(SUM(b.reached_queries), 0) as total_reached,
-                        COALESCE(SUM(b.impressions), 0) as total_impressions
-                    FROM rtb_daily q
-                    JOIN rtb_daily b
-                        ON q.metric_date = b.metric_date
-                        AND q.creative_id = b.creative_id
-                        AND q.buyer_account_id = b.buyer_account_id
-                    WHERE q.billing_id = ?
-                      AND q.metric_date >= date('now', ?)
+                        COALESCE(publisher_name, publisher_id) as name,
+                        COALESCE(SUM(reached_queries), 0) as total_reached,
+                        COALESCE(SUM(impressions), 0) as total_impressions,
+                        COALESCE(SUM(spend_micros), 0) as total_spend_micros
+                    FROM config_publisher_daily
+                    WHERE billing_id = ?
+                      AND metric_date >= date('now', ?)
                       {seat_clause}
-                      AND (b.app_name IS NOT NULL OR b.publisher_name IS NOT NULL)
-                      AND b.bids_in_auction IS NOT NULL
-                    GROUP BY COALESCE(b.app_name, b.publisher_name)
-                    ORDER BY total_bids_in_auction DESC
+                    GROUP BY COALESCE(publisher_name, publisher_id)
+                    ORDER BY total_reached DESC
                     LIMIT 50
-                """, (billing_id, f'-{days} days', *seat_params))
+                    """,
+                    (billing_id, f'-{days} days', *seat_params),
+                )
 
             if not rows:
                 return {
@@ -683,8 +727,8 @@ async def get_config_breakdown(
                     "is_aggregate": False,
                     "has_funnel_metrics": False,
                     "no_data_reason": (
-                        f"No {by} breakdown data. Ensure catscan-quality + catscan-bidsinauction "
-                        "are imported for this seat."
+                        f"No {by} breakdown data. Run a config precompute refresh after importing "
+                        "catscan-quality for this seat."
                     ),
                 }
         elif by == "creative":
@@ -698,24 +742,27 @@ async def get_config_breakdown(
             if buyer_account_id:
                 seat_clause = " AND buyer_account_id = ?"
                 seat_params = (buyer_account_id,)
-            rows = await db_query(f"""
+            rows = await db_query(
+                f"""
                 SELECT
-                    creative_id as name,
-                    0 as total_bids,
-                    0 as total_bids_in_auction,
-                    0 as total_auctions_won,
-                    COALESCE(SUM(reached_queries), 0) as total_reached,
-                    COALESCE(SUM(impressions), 0) as total_impressions
-                FROM rtb_daily
-                WHERE billing_id = ?
-                  AND metric_date >= date('now', ?)
+                    d.creative_id as name,
+                    COALESCE(SUM(d.reached_queries), 0) as total_reached,
+                    COALESCE(SUM(d.impressions), 0) as total_impressions,
+                    COALESCE(SUM(d.spend_micros), 0) as total_spend_micros,
+                    MAX(c.detected_language) as detected_language,
+                    MAX(c.detected_language_code) as detected_language_code
+                FROM config_creative_daily d
+                LEFT JOIN creatives c
+                    ON c.id = d.creative_id
+                WHERE d.billing_id = ?
+                  AND d.metric_date >= date('now', ?)
                   {seat_clause}
-                  AND creative_id IS NOT NULL
-                  AND creative_id != ''
-                GROUP BY creative_id
+                GROUP BY d.creative_id
                 ORDER BY total_reached DESC
                 LIMIT 50
-            """, (billing_id, f'-{days} days', *seat_params))
+                """,
+                (billing_id, f'-{days} days', *seat_params),
+            )
             has_funnel_data = False  # Never has funnel data for creative breakdown
             if not rows:
                 return {
@@ -725,36 +772,34 @@ async def get_config_breakdown(
                     "is_aggregate": False,
                     "has_funnel_metrics": False,
                     "no_data_reason": (
-                        "No creative breakdown data. Import a catscan-quality CSV "
-                        "(includes billing_id and creative_id)."
+                        "No creative breakdown data. Run a config precompute refresh after importing "
+                        "catscan-quality for this seat."
                     ),
                 }
 
         else:
-            group_col = "creative_size"
             seat_clause = ""
             seat_params: tuple = ()
             if buyer_account_id:
                 seat_clause = " AND buyer_account_id = ?"
                 seat_params = (buyer_account_id,)
-            rows = await db_query(f"""
+            rows = await db_query(
+                f"""
                 SELECT
-                    {group_col} as name,
-                    0 as total_bids,
-                    0 as total_bids_in_auction,
-                    0 as total_auctions_won,
+                    creative_size as name,
                     SUM(reached_queries) as total_reached,
-                    SUM(impressions) as total_impressions
-                FROM rtb_daily
+                    SUM(impressions) as total_impressions,
+                    COALESCE(SUM(spend_micros), 0) as total_spend_micros
+                FROM config_size_daily
                 WHERE billing_id = ?
                   AND metric_date >= date('now', ?)
                   {seat_clause}
-                  AND {group_col} IS NOT NULL
-                  AND {group_col} != ''
-                GROUP BY {group_col}
+                GROUP BY creative_size
                 ORDER BY total_reached DESC
                 LIMIT 50
-            """, (billing_id, f'-{days} days', *seat_params))
+                """,
+                (billing_id, f'-{days} days', *seat_params),
+            )
             has_funnel_data = False
             if not rows:
                 return {
@@ -764,17 +809,18 @@ async def get_config_breakdown(
                     "is_aggregate": False,
                     "has_funnel_metrics": False,
                     "no_data_reason": (
-                        "No size breakdown data. Import a catscan-quality CSV "
-                        "(includes billing_id and creative_size)."
+                        "No size breakdown data. Run a config precompute refresh after importing "
+                        "catscan-quality for this seat."
                     ),
                 }
 
         for row in rows:
             reached = row["total_reached"] or 0
             impressions = row["total_impressions"] or 0
-            bids = row["total_bids"] or 0
-            bids_in_auction = row["total_bids_in_auction"] or 0
-            auctions_won = row["total_auctions_won"] or 0
+            bids = row.get("total_bids", 0) or 0
+            bids_in_auction = row.get("total_bids_in_auction", 0) or 0
+            auctions_won = row.get("total_auctions_won", 0) or 0
+            spend_micros = row.get("total_spend_micros", 0) or 0
 
             # Calculate win rate based on best available data
             # Prefer: auctions_won / bids_in_auction (true auction win rate)
@@ -794,6 +840,7 @@ async def get_config_breakdown(
                 "impressions": impressions,
                 "win_rate": round(win_rate, 1),
                 "waste_rate": round(waste_rate, 1),
+                "spend_usd": round(spend_micros / 1_000_000, 2),
             }
 
             # Include funnel metrics if available
@@ -801,6 +848,26 @@ async def get_config_breakdown(
                 item["bids"] = bids
                 item["bids_in_auction"] = bids_in_auction
                 item["auctions_won"] = auctions_won
+            if by == "creative":
+                language_code = row.get("detected_language_code")
+                language_name = row.get("detected_language")
+                item["creative_language"] = language_name or language_code
+                item["creative_language_code"] = language_code
+                if target_country_codes:
+                    from utils.language_country_map import check_language_country_match
+                    from utils.country_codes import get_country_alpha3
+
+                    match = check_language_country_match(language_code or "", target_country_codes)
+                    mismatched = [get_country_alpha3(code) for code in match["mismatched_countries"]]
+                    item["target_countries"] = [get_country_alpha3(code) for code in target_country_codes]
+                    item["language_mismatch"] = len(mismatched) > 0 and bool(language_code)
+                    item["mismatched_countries"] = mismatched
+                elif target_geo_ids:
+                    item["target_countries"] = target_geo_ids
+                    item["language_mismatch"] = False
+                else:
+                    item["target_countries"] = []
+                    item["language_mismatch"] = False
 
             breakdown.append(item)
 
