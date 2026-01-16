@@ -17,6 +17,7 @@ services:
       - GOOGLE_APPLICATION_CREDENTIALS=/home/rtbcat/.catscan/credentials/google-credentials.json
       - DATABASE_PATH=/home/rtbcat/.catscan/catscan.db
       - OAUTH2_PROXY_ENABLED=true
+      - GMAIL_IMPORT_SECRET=${GMAIL_IMPORT_SECRET:-}
     restart: always
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
