@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Globe, Upload, ArrowRight } from "lucide-react";
+import { Globe, Upload, ArrowRight, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
 import type { GeoPerformance } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "./FunnelCard";
@@ -86,6 +86,15 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
     }
   };
 
+  const getSortIcon = (column: SortColumn) => {
+    if (sortColumn !== column) return <ChevronsUpDown className="h-3 w-3 text-gray-400" />;
+    return sortDirection === "asc" ? (
+      <ArrowUp className="h-3 w-3 text-gray-600" />
+    ) : (
+      <ArrowDown className="h-3 w-3 text-gray-600" />
+    );
+  };
+
   const sortedGeos = [...geos].sort((a, b) => {
     const aWins = a.auctions_won ?? a.impressions ?? 0;
     const bWins = b.auctions_won ?? b.impressions ?? 0;
@@ -158,19 +167,29 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
           <thead>
             <tr className="border-b border-gray-200">
               <th className="text-left py-2 font-medium text-gray-600">
-                <button onClick={() => handleSort("country")} className="hover:text-gray-900">Country</button>
+                <button onClick={() => handleSort("country")} className="inline-flex items-center gap-1 hover:text-gray-900">
+                  Country {getSortIcon("country")}
+                </button>
               </th>
               <th className="text-right py-2 font-medium text-gray-600">
-                <button onClick={() => handleSort("reached")} className="hover:text-gray-900">Reached</button>
+                <button onClick={() => handleSort("reached")} className="inline-flex items-center gap-1 hover:text-gray-900">
+                  Reached {getSortIcon("reached")}
+                </button>
               </th>
               <th className="text-right py-2 font-medium text-gray-600">
-                <button onClick={() => handleSort("bids")} className="hover:text-gray-900">Bids</button>
+                <button onClick={() => handleSort("bids")} className="inline-flex items-center gap-1 hover:text-gray-900">
+                  Bids {getSortIcon("bids")}
+                </button>
               </th>
               <th className="text-right py-2 font-medium text-gray-600">
-                <button onClick={() => handleSort("wins")} className="hover:text-gray-900">Wins</button>
+                <button onClick={() => handleSort("wins")} className="inline-flex items-center gap-1 hover:text-gray-900">
+                  Wins {getSortIcon("wins")}
+                </button>
               </th>
               <th className="text-right py-2 font-medium text-gray-600">
-                <button onClick={() => handleSort("win_rate")} className="hover:text-gray-900">Win Rate</button>
+                <button onClick={() => handleSort("win_rate")} className="inline-flex items-center gap-1 hover:text-gray-900">
+                  Win Rate {getSortIcon("win_rate")}
+                </button>
               </th>
             </tr>
           </thead>
