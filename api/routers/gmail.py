@@ -4,12 +4,13 @@ Handles Gmail import status and triggering manual imports.
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.dependencies import require_admin
@@ -94,40 +95,7 @@ async def trigger_gmail_import(
     This is the same operation that runs via cron.
     """
     try:
-        from scripts.gmail_import import run_import, get_status
-
-        # Check if configured first
-        status = get_status()
-        if not status.get("configured"):
-            raise HTTPException(
-                status_code=400,
-                detail="Gmail not configured. Upload gmail-oauth-client.json to ~/.catscan/credentials/"
-            )
-
-        if not status.get("authorized"):
-            raise HTTPException(
-                status_code=400,
-                detail="Gmail not authorized. Run the import script manually first to complete OAuth flow."
-            )
-
-        if status.get("running"):
-            raise HTTPException(status_code=409, detail="Gmail import already running")
-
-        job_id = str(uuid.uuid4())
-        background_tasks.add_task(run_import, False, job_id)
-
-        return GmailImportResponse(
-            success=True,
-            queued=True,
-            job_id=job_id,
-            message="Gmail import queued",
-            emails_skipped=0,
-            skipped_seat_ids=[],
-            emails_processed=0,
-            files_imported=0,
-            files=[],
-            errors=[],
-        )
+        return await _queue_gmail_import(background_tasks)
 
     except ImportError as e:
         logger.error(f"Gmail import script not found: {e}")
@@ -140,3 +108,70 @@ async def trigger_gmail_import(
     except Exception as e:
         logger.error(f"Gmail import failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/gmail/import/scheduled", response_model=GmailImportResponse)
+async def trigger_gmail_import_scheduled(
+    request: Request,
+    background_tasks: BackgroundTasks,
+):
+    """
+    Trigger Gmail import for schedulers (Cloud Scheduler/systemd).
+
+    Requires header: X-Gmail-Import-Secret matching GMAIL_IMPORT_SECRET.
+    """
+    secret = os.getenv("GMAIL_IMPORT_SECRET")
+    header_secret = request.headers.get("X-Gmail-Import-Secret")
+    if not secret or not header_secret or header_secret != secret:
+        raise HTTPException(status_code=403, detail="Invalid scheduler secret")
+
+    try:
+        return await _queue_gmail_import(background_tasks)
+    except ImportError as e:
+        logger.error(f"Gmail import script not found: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Gmail import script not available. Check scripts/gmail_import.py"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Gmail import failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _queue_gmail_import(background_tasks: BackgroundTasks) -> GmailImportResponse:
+    from scripts.gmail_import import run_import, get_status
+
+    # Check if configured first
+    status = get_status()
+    if not status.get("configured"):
+        raise HTTPException(
+            status_code=400,
+            detail="Gmail not configured. Upload gmail-oauth-client.json to ~/.catscan/credentials/"
+        )
+
+    if not status.get("authorized"):
+        raise HTTPException(
+            status_code=400,
+            detail="Gmail not authorized. Run the import script manually first to complete OAuth flow."
+        )
+
+    if status.get("running"):
+        raise HTTPException(status_code=409, detail="Gmail import already running")
+
+    job_id = str(uuid.uuid4())
+    background_tasks.add_task(run_import, False, job_id)
+
+    return GmailImportResponse(
+        success=True,
+        queued=True,
+        job_id=job_id,
+        message="Gmail import queued",
+        emails_skipped=0,
+        skipped_seat_ids=[],
+        emails_processed=0,
+        files_imported=0,
+        files=[],
+        errors=[],
+    )

@@ -440,7 +440,7 @@ http_address = "127.0.0.1:4180"
 email_domains = ["rtb.cat", "amazingdo.com"]
 cookie_expire = "168h"
 cookie_refresh = "1h"
-skip_auth_routes = ["/health"]
+skip_auth_routes = ["/health", "/api/gmail/import/scheduled"]
 set_xauthrequest = true
 pass_user_headers = true
 ```
@@ -456,6 +456,31 @@ pass_user_headers = true
    sudo systemctl restart oauth2-proxy
    sudo systemctl restart nginx
    ```
+
+### Gmail Import Scheduling (Cloud Scheduler)
+
+The most reliable setup is Cloud Scheduler calling the scheduler endpoint:
+`POST https://scan.rtb.cat/api/gmail/import/scheduled`
+
+**1) Create a shared secret on the VM**
+```bash
+sudo bash -c 'echo "export GMAIL_IMPORT_SECRET=<RANDOM_32_CHARS>" >> /etc/environment'
+sudo systemctl restart catscan-api
+```
+
+**2) Configure Cloud Scheduler**
+- Target: HTTPS
+- URL: `https://scan.rtb.cat/api/gmail/import/scheduled`
+- Method: `POST`
+- Headers:
+  - `X-Gmail-Import-Secret: <RANDOM_32_CHARS>`
+- Schedule: daily (e.g., `0 7 * * *` UTC)
+
+**3) Verify**
+```bash
+curl -s -X POST https://scan.rtb.cat/api/gmail/import/scheduled \
+  -H "X-Gmail-Import-Secret: <RANDOM_32_CHARS>"
+```
 
 ### Auth Loop Troubleshooting
 

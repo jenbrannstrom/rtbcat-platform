@@ -154,6 +154,8 @@ Cat-Scan requires **5 separate CSV reports** from Google Authorized Buyers due t
 
 > **CRITICAL:** Set timezone to **UTC** for ALL reports! Non-UTC data is marked as legacy.
 >
+> **REQUIRED:** Include **Buyer account ID** in every report to enable seat-scoped views.
+>
 > **Naming Convention:** `catscan-{type}-{account_id}-{period}-UTC`
 > Example: `catscan-rtb-pipeline-1487810529-yesterday-UTC`
 
@@ -419,7 +421,7 @@ DATABASE_PATH=~/.catscan/catscan.db
 - Multi-seat buyer account support
 - Efficiency analysis with recommendations
 - CSV import (CLI and UI) with 5 report types
-- Gmail auto-import (daily cron)
+- Gmail auto-import (Cloud Scheduler or systemd timer)
 - Campaign clustering
 - RTB bidstream visualization (bid_requests → impressions)
 - Video thumbnail generation
