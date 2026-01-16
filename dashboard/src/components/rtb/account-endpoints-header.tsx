@@ -187,6 +187,11 @@ export function AccountEndpointsHeader({ funnelData }: AccountEndpointsHeaderPro
                 · {data.account_name || data.bidder_id}
               </span>
             )}
+            {selectedBuyerId && (
+              <span className="text-xs text-gray-500">
+                · {selectedBuyerId}
+              </span>
+            )}
           </div>
 
           <div className="space-y-1">
@@ -232,15 +237,10 @@ export function AccountEndpointsHeader({ funnelData }: AccountEndpointsHeaderPro
                   {showQpsInfo && (
                     <div className="absolute left-0 top-6 w-72 p-3 bg-white border border-gray-200 rounded-lg shadow-lg z-10 text-xs text-gray-600">
                       <p className="font-medium text-gray-900 mb-1">QPS Allocation</p>
-                      <p className="mb-2">
-                        This is the total QPS your endpoints can handle.
-                        {activeConfigsCount > 0 && (
-                          <> You have <strong>{activeConfigsCount}</strong> active pretargeting config{activeConfigsCount !== 1 ? 's' : ''} competing for this QPS.</>
-                        )}
-                      </p>
-                      <p className="text-yellow-700 bg-yellow-50 p-2 rounded">
-                        <strong>Tip:</strong> If your pretargeting QPS budget exceeds your endpoint allocation,
-                        you may be losing traffic. Check your pretargeting configs.
+                      <p>
+                        This is the QPS you have requested from Google to be sent to your endpoints. You can edit this amount.
+                        Once that allocated QPS reaches your endpoint you can then filter and adjust using the pretargeting settings
+                        (billing IDs). Google only assigns 10 pretargetings per seat.
                       </p>
                     </div>
                   )}

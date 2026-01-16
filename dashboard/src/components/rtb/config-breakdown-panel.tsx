@@ -151,6 +151,7 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
   const { selectedBuyerId } = useAccount();
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [sizeCreatives, setSizeCreatives] = useState<ConfigCreativesItem[]>([]);
+  const [sizeCreativesMessage, setSizeCreativesMessage] = useState<string | null>(null);
   const [selectedCreative, setSelectedCreative] = useState<null | { id: string }>(null);
   const [isLoadingCreative, setIsLoadingCreative] = useState(false);
   const [fullCreative, setFullCreative] = useState<any | null>(null);
@@ -186,6 +187,7 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
     if (sizeCreativeData?.creatives) {
       setSizeCreatives(sizeCreativeData.creatives);
     }
+    setSizeCreativesMessage(sizeCreativeData?.message || null);
   }, [sizeCreativeData]);
 
   useEffect(() => {
@@ -312,7 +314,7 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                         <button
                           onClick={(event) => {
                             event.stopPropagation();
-                            setSelectedSize(item.name);
+                            setSelectedSize((prev) => (prev === item.name ? null : item.name));
                           }}
                           className="p-1 text-gray-400 hover:text-gray-600"
                           title="View creatives for this size"
@@ -389,7 +391,9 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                   <div className="px-3 py-3 text-sm text-gray-500">Loading creatives...</div>
                 )}
                 {!sizeCreativesLoading && sizeCreatives.length === 0 && (
-                  <div className="px-3 py-3 text-sm text-gray-400">No creatives found for this size.</div>
+                  <div className="px-3 py-3 text-sm text-gray-400">
+                    {sizeCreativesMessage || "No creatives found for this size."}
+                  </div>
                 )}
                 {!sizeCreativesLoading && sizeCreatives.length > 0 && (
                   <div className="divide-y">

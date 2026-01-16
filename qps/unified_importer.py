@@ -378,6 +378,10 @@ def import_to_rtb_daily(
                     if not row_data["buyer_account_id"] and bidder_id:
                         row_data["buyer_account_id"] = bidder_id
 
+                    # If buyer_account_id missing from CSV, use bidder_id from filename
+                    if not row_data["buyer_account_id"] and bidder_id:
+                        row_data["buyer_account_id"] = bidder_id
+
                     # Parse spend (convert to micros)
                     spend = parse_float(get_value(row, mapping, "spend", "0"))
                     row_data["spend_micros"] = int(spend * 1_000_000) if spend < 1000 else int(spend)

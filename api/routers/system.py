@@ -730,17 +730,20 @@ async def lookup_geo_names(
             # City-level: show "City, ST" or just city name
             result[geo_id] = row['city_name']
         elif row['country_name']:
-            # Country-level: show country name
-            result[geo_id] = row['country_name']
+            # Country-level: show ISO-3 code when available
+            from utils.country_codes import get_country_alpha3
+            result[geo_id] = get_country_alpha3(row['country_code']) if row['country_code'] else row['country_name']
         elif row['country_code']:
-            # Fallback to country code
-            result[geo_id] = row['country_code']
+            # Fallback to ISO-3 code from country code
+            from utils.country_codes import get_country_alpha3
+            result[geo_id] = get_country_alpha3(row['country_code'])
 
     # For any not found in DB, try fallback mapping
     for geo_id in geo_ids:
         if geo_id not in found_ids:
             if geo_id in FALLBACK_GEO_NAMES:
-                result[geo_id] = FALLBACK_GEO_NAMES[geo_id]
+                from utils.country_codes import get_country_alpha3_from_name
+                result[geo_id] = get_country_alpha3_from_name(FALLBACK_GEO_NAMES[geo_id])
             else:
                 # Return original ID as last resort
                 result[geo_id] = geo_id

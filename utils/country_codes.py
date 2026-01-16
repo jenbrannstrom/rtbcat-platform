@@ -283,6 +283,125 @@ COUNTRY_NAMES = {
     "ZW": "Zimbabwe",
 }
 
+# ISO 3166-1 alpha-2 to alpha-3 mapping (common countries first).
+# Falls back to the 2-letter code if missing.
+ALPHA2_TO_ALPHA3 = {
+    "AE": "ARE",
+    "AF": "AFG",
+    "AL": "ALB",
+    "AM": "ARM",
+    "AR": "ARG",
+    "AT": "AUT",
+    "AU": "AUS",
+    "AZ": "AZE",
+    "BA": "BIH",
+    "BD": "BGD",
+    "BE": "BEL",
+    "BG": "BGR",
+    "BH": "BHR",
+    "BN": "BRN",
+    "BO": "BOL",
+    "BR": "BRA",
+    "BY": "BLR",
+    "CA": "CAN",
+    "CH": "CHE",
+    "CL": "CHL",
+    "CN": "CHN",
+    "CO": "COL",
+    "CR": "CRI",
+    "CZ": "CZE",
+    "DE": "DEU",
+    "DK": "DNK",
+    "DO": "DOM",
+    "DZ": "DZA",
+    "EC": "ECU",
+    "EE": "EST",
+    "EG": "EGY",
+    "ES": "ESP",
+    "FI": "FIN",
+    "FR": "FRA",
+    "GB": "GBR",
+    "GR": "GRC",
+    "GT": "GTM",
+    "HK": "HKG",
+    "HN": "HND",
+    "HR": "HRV",
+    "HU": "HUN",
+    "ID": "IDN",
+    "IE": "IRL",
+    "IL": "ISR",
+    "IN": "IND",
+    "IQ": "IRQ",
+    "IR": "IRN",
+    "IS": "ISL",
+    "IT": "ITA",
+    "JP": "JPN",
+    "KE": "KEN",
+    "KR": "KOR",
+    "KW": "KWT",
+    "KZ": "KAZ",
+    "LA": "LAO",
+    "LK": "LKA",
+    "LT": "LTU",
+    "LU": "LUX",
+    "LV": "LVA",
+    "MA": "MAR",
+    "MD": "MDA",
+    "ME": "MNE",
+    "MK": "MKD",
+    "MM": "MMR",
+    "MX": "MEX",
+    "MY": "MYS",
+    "NG": "NGA",
+    "NL": "NLD",
+    "NO": "NOR",
+    "NP": "NPL",
+    "NZ": "NZL",
+    "PA": "PAN",
+    "PE": "PER",
+    "PH": "PHL",
+    "PK": "PAK",
+    "PL": "POL",
+    "PT": "PRT",
+    "QA": "QAT",
+    "RO": "ROU",
+    "RS": "SRB",
+    "RU": "RUS",
+    "SA": "SAU",
+    "SE": "SWE",
+    "SG": "SGP",
+    "SI": "SVN",
+    "SK": "SVK",
+    "TH": "THA",
+    "TR": "TUR",
+    "TW": "TWN",
+    "UA": "UKR",
+    "US": "USA",
+    "UY": "URY",
+    "VE": "VEN",
+    "VN": "VNM",
+    "ZA": "ZAF",
+}
+
+NAME_TO_ALPHA2 = {name.upper(): code for code, name in COUNTRY_NAMES.items()}
+
+
+def get_country_alpha3(code: str) -> str:
+    """Get ISO 3166-1 alpha-3 code from alpha-2 code."""
+    if not code:
+        return code
+    return ALPHA2_TO_ALPHA3.get(code.upper(), code.upper())
+
+
+def get_country_alpha3_from_name(name: str) -> str:
+    """Get ISO 3166-1 alpha-3 code from country name."""
+    if not name:
+        return name
+    alpha2 = NAME_TO_ALPHA2.get(name.upper())
+    if not alpha2:
+        return name
+    return get_country_alpha3(alpha2)
+
 
 def get_country_name(code: str) -> str:
     """Get country name from ISO alpha-2 code.
