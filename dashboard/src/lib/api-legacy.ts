@@ -1143,10 +1143,16 @@ export type ConfigBreakdownType = 'size' | 'geo' | 'publisher' | 'creative';
 
 export interface ConfigBreakdownItem {
   name: string;
+  spend_usd?: number;
   reached: number;
   impressions: number;
   win_rate: number;
   waste_rate: number;
+  creative_language?: string | null;
+  creative_language_code?: string | null;
+  target_countries?: string[];
+  language_mismatch?: boolean;
+  mismatched_countries?: string[];
 }
 
 export interface ConfigBreakdownResponse {

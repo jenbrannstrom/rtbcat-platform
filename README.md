@@ -154,10 +154,10 @@ Cat-Scan requires **5 separate CSV reports** from Google Authorized Buyers due t
 
 > **CRITICAL:** Set timezone to **UTC** for ALL reports! Non-UTC data is marked as legacy.
 >
-> **REQUIRED:** Include **Buyer account ID** in every report to enable seat-scoped views.
+> **REQUIRED:** Include **Buyer account ID** in every report, or ensure the filename contains the seat ID.
 >
 > **Naming Convention:** `catscan-{type}-{account_id}-{period}-UTC`
-> Example: `catscan-rtb-pipeline-1487810529-yesterday-UTC`
+> Example: `catscan-pipeline-1487810529-yesterday-UTC`
 
 > **Create these reports in Google Authorized Buyers: Reporting → Scheduled Reports**
 
@@ -167,8 +167,8 @@ Cat-Scan requires **5 separate CSV reports** from Google Authorized Buyers due t
 |---|--------|---------|------------|-------|
 | 1 | **catscan-bidsinauction** | Bid metrics by creative | Creative ID, Bids in auction, Auctions won | `rtb_daily` |
 | 2 | **catscan-quality** | Quality/billing data | Billing ID, Reached queries, Impressions | `rtb_daily` |
-| 3 | **catscan-bidstream-geo** | Bidstream by region | Country, Bid requests, Bids | `rtb_bidstream` |
-| 4 | **catscan-bidstream-publishers** | Bidstream by publisher | Publisher ID + Bid metrics | `rtb_bidstream` |
+| 3 | **catscan-pipeline-geo** | Bidstream by region | Country, Bid requests, Bids | `rtb_bidstream` |
+| 4 | **catscan-pipeline** | Bidstream by publisher | Publisher ID + Bid metrics | `rtb_bidstream` |
 | 5 | **catscan-bid-filtering** | Bid filtering reasons | Bid filtering status, Filtered bids | `rtb_bid_filtering` |
 
 ### Why 5 Reports?
@@ -202,13 +202,13 @@ Dimensions: Day, Hour, Buyer account ID, Billing ID, Creative ID, Region, Platfo
 Metrics: Reached queries, Impressions, Clicks, Spend
 ```
 
-**Report 3 - Bidstream Geo (catscan-bidstream-geo):**
+**Report 3 - Bidstream Geo (catscan-pipeline-geo):**
 ```
 Dimensions: Day, Hour, Buyer account ID, Region
 Metrics: Bid requests, Inventory matches, Reached queries, Bids, Bids in auction, Auctions won, Impressions
 ```
 
-**Report 4 - Bidstream Publishers (catscan-bidstream-publishers):**
+**Report 4 - Bidstream Publishers (catscan-pipeline):**
 ```
 Dimensions: Day, Hour, Buyer account ID, Region, Publisher ID, Publisher name
 Metrics: Same as Report 3
