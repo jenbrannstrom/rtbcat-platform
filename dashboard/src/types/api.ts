@@ -207,6 +207,7 @@ export type PerformancePeriod = "yesterday" | "7d" | "30d" | "all_time";
 export interface CreativeCountryMetrics {
   country_code: string;
   country_name: string;
+  country_iso3?: string;
   spend_micros: number;
   impressions: number;
   clicks: number;

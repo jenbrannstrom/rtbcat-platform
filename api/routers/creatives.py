@@ -190,6 +190,7 @@ class CreativeCountryMetrics(BaseModel):
     """Country-level metrics for a creative."""
     country_code: str
     country_name: str  # Human-readable name
+    country_iso3: Optional[str] = None
     spend_micros: int
     impressions: int
     clicks: int
@@ -1012,12 +1013,13 @@ async def get_creative_countries(
     total_spend = sum(c.get("spend_micros", 0) or 0 for c in breakdown)
 
     # Map country codes to names
-    from utils.country_codes import get_country_name
+    from utils.country_codes import get_country_name, get_country_alpha3
 
     countries = [
         CreativeCountryMetrics(
             country_code=c["country_code"],
             country_name=get_country_name(c["country_code"]),
+            country_iso3=get_country_alpha3(c["country_code"]),
             spend_micros=c.get("spend_micros", 0) or 0,
             impressions=c.get("impressions", 0) or 0,
             clicks=c.get("clicks", 0) or 0,

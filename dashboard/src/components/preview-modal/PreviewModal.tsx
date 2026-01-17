@@ -161,6 +161,20 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
             />
           </div>
 
+          {/* Language Detection */}
+          <div className="p-4 border-b">
+            <LanguageSection
+              creative={creative}
+              onLanguageUpdate={(language, languageCode) => {
+                setCreative((prev) => ({
+                  ...prev,
+                  detected_language: language,
+                  detected_language_code: languageCode,
+                }));
+              }}
+            />
+          </div>
+
           {/* Data Notes */}
           {dataNotes.length > 0 && (
             <div className="p-4 border-b">
@@ -309,17 +323,6 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                 )}
               </div>
 
-              {/* Language Detection */}
-              <LanguageSection
-                creative={creative}
-                onLanguageUpdate={(language, languageCode) => {
-                  setCreative((prev) => ({
-                    ...prev,
-                    detected_language: language,
-                    detected_language_code: languageCode,
-                  }));
-                }}
-              />
             </div>
           </div>
         </div>
