@@ -57,6 +57,7 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
   const [selectedCreative, setSelectedCreative] = useState<null | { id: string }>(null);
   const [isLoadingCreative, setIsLoadingCreative] = useState(false);
   const [fullCreative, setFullCreative] = useState<any | null>(null);
+  const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
 
   // Query for breakdown data
   const { data, isLoading, error } = useQuery({
@@ -83,9 +84,22 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
   useEffect(() => {
     setSelectedSize(null);
     setSizeCreatives([]);
+    setExpandedCountries(new Set());
     setSortKey('reached');
     setSortDir('desc');
   }, [activeTab, billing_id]);
+
+  const toggleCountries = (creativeId: string) => {
+    setExpandedCountries((prev) => {
+      const next = new Set(prev);
+      if (next.has(creativeId)) {
+        next.delete(creativeId);
+      } else {
+        next.add(creativeId);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (sizeCreativeData?.creatives) {
@@ -383,7 +397,19 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                                   {creative.name}
                                 </div>
                                 <div className="col-span-2 text-xs text-gray-600 truncate">
-                                  {creative.serving_countries?.join(", ") || "—"}
+                                  {creative.serving_countries && creative.serving_countries.length > 1 ? (
+                                    <button
+                                      onClick={() => toggleCountries(creative.id)}
+                                      className="text-left text-gray-600 hover:text-gray-800"
+                                    >
+                                      {creative.serving_countries.slice(0, 1).join(", ")}
+                                      <span className="ml-1 text-gray-400">
+                                        +{creative.serving_countries.length - 1}
+                                      </span>
+                                    </button>
+                                  ) : (
+                                    creative.serving_countries?.join(", ") || "—"
+                                  )}
                                 </div>
                                 <div className="col-span-1 flex justify-end">
                                   <button
@@ -394,6 +420,11 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                                     <Image className="h-3 w-3" />
                                   </button>
                                 </div>
+                                {expandedCountries.has(creative.id) && (
+                                  <div className="col-span-6 text-xs text-gray-500">
+                                    {creative.serving_countries?.join(", ") || "—"}
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>

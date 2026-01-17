@@ -950,13 +950,15 @@ async def get_config_creatives(
             """,
             tuple(creative_ids + [billing_id, f'-{days} days']),
         )
+        from utils.country_codes import get_country_alpha3
+
         country_map: dict[str, list[str]] = {}
         for row in country_rows:
             creative_id = row["creative_id"]
             if creative_id not in country_map:
                 country_map[creative_id] = []
             if len(country_map[creative_id]) < 3:
-                country_map[creative_id].append(row["country"])
+                country_map[creative_id].append(get_country_alpha3(row["country"]))
 
         creative_rows = await db_query(
             f"""
