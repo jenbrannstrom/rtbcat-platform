@@ -85,7 +85,7 @@ export function CountrySection({ creativeId, detectedLanguage, detectedLanguageC
   return (
     <div className="bg-gray-50 rounded-lg p-3">
       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-        Country Targeting ({countryData.total_countries})
+        shown in: ({countryData.total_countries})
       </h4>
 
       {/* Language Match Status */}
@@ -137,31 +137,39 @@ export function CountrySection({ creativeId, detectedLanguage, detectedLanguageC
         </div>
       )}
 
-      <div className="space-y-1.5">
-        {countryData.countries.slice(0, 5).map((country) => (
-          <div key={country.country_code} className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1.5">
-              <span className="font-mono text-gray-400">{country.country_code}</span>
-              <span className="text-gray-700">{country.country_name}</span>
-              {/* Show mismatch indicator per country */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-2 text-xs">
+          {countryData.countries.slice(0, 8).map((country) => (
+            <span
+              key={country.country_code}
+              className="inline-flex items-center gap-1 rounded-full bg-white border border-gray-200 px-2 py-0.5 text-gray-700"
+            >
+              <span>{country.country_name}</span>
+              <span className="text-gray-400 font-mono">{country.country_iso3 || country.country_code}</span>
               {detectedLanguageCode && langMatch.mismatchedCountries.includes(country.country_code) && (
                 <span className="text-amber-500" title="Language mismatch">⚠</span>
               )}
               {detectedLanguageCode && langMatch.matchingCountries.includes(country.country_code) && (
                 <span className="text-green-500" title="Language match">✓</span>
               )}
+            </span>
+          ))}
+        </div>
+        {countryData.countries.length > 8 && (
+          <details className="text-xs text-gray-500">
+            <summary className="cursor-pointer select-none text-gray-500">Show all countries</summary>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {countryData.countries.map((country) => (
+                <span
+                  key={country.country_code}
+                  className="inline-flex items-center gap-1 rounded-full bg-white border border-gray-200 px-2 py-0.5 text-gray-700"
+                >
+                  <span>{country.country_name}</span>
+                  <span className="text-gray-400 font-mono">{country.country_iso3 || country.country_code}</span>
+                </span>
+              ))}
             </div>
-            <div className="flex items-center gap-2 text-gray-500">
-              <span>{formatSpendUsd(country.spend_micros)}</span>
-              <span className="text-gray-300">|</span>
-              <span>{country.spend_percent.toFixed(1)}%</span>
-            </div>
-          </div>
-        ))}
-        {countryData.countries.length > 5 && (
-          <div className="text-xs text-gray-400 pt-1">
-            +{countryData.countries.length - 5} more countries
-          </div>
+          </details>
         )}
       </div>
     </div>
