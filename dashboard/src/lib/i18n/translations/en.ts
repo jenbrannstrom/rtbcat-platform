@@ -63,6 +63,12 @@ export const en: Translations = {
     settings: 'Settings',
   },
 
+  qpsNav: {
+    publisher: 'Pub QPS',
+    geo: 'Geo QPS',
+    size: 'Size QPS',
+  },
+
   settingsNav: {
     connectedAccounts: 'Connected Accounts',
     buyerSeats: 'Buyer Seats',

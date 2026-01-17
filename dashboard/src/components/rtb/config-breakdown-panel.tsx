@@ -289,120 +289,122 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                   winRate < 51 ? 'text-red-600' : winRate < 75 ? 'text-orange-600' : 'text-green-600';
                 const nameColSpan = activeTab === 'creative' ? 'col-span-3' : 'col-span-4';
                 return (
-                  <div
-                    key={`${item.name}-${index}`}
-                    onClick={() => isClickable && setSelectedApp(item.name)}
-                    className={cn(
-                      'grid gap-2 px-3 py-2 text-sm items-center',
-                      activeTab === 'creative' ? 'grid-cols-14' : 'grid-cols-12',
-                      'hover:bg-gray-50 transition-colors',
-                      isClickable && 'cursor-pointer hover:bg-blue-50'
-                    )}
-                  >
-                    <div className={cn(nameColSpan, "font-medium text-gray-900 truncate flex items-center gap-1")} title={item.name}>
-                      {item.name}
-                      {activeTab === 'size' && (
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setSelectedSize((prev) => (prev === item.name ? null : item.name));
-                          }}
-                          className="p-1 text-gray-400 hover:text-gray-600"
-                          title="View creatives for this size"
-                        >
-                          <ChevronRight className="h-3 w-3" />
-                        </button>
+                  <div key={`${item.name}-${index}`}>
+                    <div
+                      onClick={() => isClickable && setSelectedApp(item.name)}
+                      className={cn(
+                        'grid gap-2 px-3 py-2 text-sm items-center',
+                        activeTab === 'creative' ? 'grid-cols-14' : 'grid-cols-12',
+                        'hover:bg-gray-50 transition-colors',
+                        isClickable && 'cursor-pointer hover:bg-blue-50'
                       )}
+                    >
+                      <div className={cn(nameColSpan, "font-medium text-gray-900 truncate flex items-center gap-1")} title={item.name}>
+                        {item.name}
+                        {activeTab === 'size' && (
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedSize((prev) => (prev === item.name ? null : item.name));
+                            }}
+                            className="p-1 text-gray-400 hover:text-gray-600"
+                            title="View creatives for this size"
+                          >
+                            <ChevronRight className="h-3 w-3" />
+                          </button>
+                        )}
+                        {activeTab === 'creative' && (
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedCreative({ id: item.name });
+                            }}
+                            className="p-1 text-gray-400 hover:text-gray-600"
+                            title="View creative"
+                          >
+                            <Image className="h-3 w-3" />
+                          </button>
+                        )}
+                        {isClickable && (
+                          <ChevronRight className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                        )}
+                      </div>
+                      <div className="col-span-2 text-right text-gray-600 font-mono text-xs">
+                        {formatMoney(item.spend_usd ?? 0)}
+                      </div>
+                      <div className="col-span-2 text-right text-gray-600 font-mono text-xs">
+                        {formatNumber(item.reached)}
+                      </div>
+                      <div className="col-span-2 text-right text-gray-600 font-mono text-xs">
+                        {formatNumber(item.impressions || 0)}
+                      </div>
+                      <div className={cn('col-span-2 text-right font-medium', winRateClass)}>
+                        {winRate.toFixed(1)}%
+                      </div>
                       {activeTab === 'creative' && (
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setSelectedCreative({ id: item.name });
-                          }}
-                          className="p-1 text-gray-400 hover:text-gray-600"
-                          title="View creative"
-                        >
-                          <Image className="h-3 w-3" />
-                        </button>
+                        <>
+                          <div className="col-span-2 text-xs text-gray-600 truncate">
+                            {(item.target_countries || []).join(", ") || "—"}
+                          </div>
+                          <div className="col-span-1 text-xs text-gray-600 flex items-center gap-1">
+                            <span className="truncate">{item.creative_language || "—"}</span>
+                            {item.language_mismatch && (
+                              <span
+                                className="inline-flex"
+                                title={`Language mismatch: ${item.mismatched_countries?.join(", ") || "check geo targets"}`}
+                              >
+                                <AlertTriangle className="h-3 w-3 text-orange-500" />
+                              </span>
+                            )}
+                          </div>
+                        </>
                       )}
-                      {isClickable && (
-                        <ChevronRight className="h-3 w-3 text-gray-400 flex-shrink-0" />
-                      )}
                     </div>
-                    <div className="col-span-2 text-right text-gray-600 font-mono text-xs">
-                      {formatMoney(item.spend_usd ?? 0)}
-                    </div>
-                    <div className="col-span-2 text-right text-gray-600 font-mono text-xs">
-                      {formatNumber(item.reached)}
-                    </div>
-                    <div className="col-span-2 text-right text-gray-600 font-mono text-xs">
-                      {formatNumber(item.impressions || 0)}
-                    </div>
-                    <div className={cn('col-span-2 text-right font-medium', winRateClass)}>
-                      {winRate.toFixed(1)}%
-                    </div>
-                    {activeTab === 'creative' && (
-                      <>
-                        <div className="col-span-2 text-xs text-gray-600 truncate">
-                          {(item.target_countries || []).join(", ") || "—"}
+                    {activeTab === 'size' && selectedSize === item.name && (
+                      <div className="border-t bg-gray-50 px-3 py-2">
+                        <div className="grid grid-cols-6 gap-2 text-xs font-medium text-gray-500 border-b pb-1">
+                          <div className="col-span-3">Creative</div>
+                          <div className="col-span-2">Country targeted</div>
+                          <div className="col-span-1 text-right">Preview</div>
                         </div>
-                        <div className="col-span-1 text-xs text-gray-600 flex items-center gap-1">
-                          <span className="truncate">{item.creative_language || "—"}</span>
-                          {item.language_mismatch && (
-                            <span
-                              className="inline-flex"
-                              title={`Language mismatch: ${item.mismatched_countries?.join(", ") || "check geo targets"}`}
-                            >
-                              <AlertTriangle className="h-3 w-3 text-orange-500" />
-                            </span>
-                          )}
-                        </div>
-                      </>
+                        {sizeCreativesLoading && (
+                          <div className="py-2 text-sm text-gray-500">Loading creatives...</div>
+                        )}
+                        {!sizeCreativesLoading && sizeCreatives.length === 0 && (
+                          <div className="py-2 text-sm text-gray-400">
+                            {sizeCreativesMessage || "No creatives found for this size."}
+                          </div>
+                        )}
+                        {!sizeCreativesLoading && sizeCreatives.length > 0 && (
+                          <div className="divide-y">
+                            {sizeCreatives.map((creative) => (
+                              <div key={creative.id} className="grid grid-cols-6 gap-2 py-2 text-sm items-center">
+                                <div className="col-span-3 font-mono text-gray-800 truncate">
+                                  {creative.name}
+                                </div>
+                                <div className="col-span-2 text-xs text-gray-600 truncate">
+                                  {creative.serving_countries?.join(", ") || "—"}
+                                </div>
+                                <div className="col-span-1 flex justify-end">
+                                  <button
+                                    onClick={() => setSelectedCreative({ id: creative.id })}
+                                    className="p-1 text-gray-400 hover:text-gray-600"
+                                    title="View creative"
+                                  >
+                                    <Image className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 );
               })}
             </div>
           </div>
-            {activeTab === 'size' && selectedSize && (
-              <div className="mt-4 border rounded-lg bg-white">
-                <div className="flex items-center justify-between px-3 py-2 border-b">
-                  <div className="text-sm font-medium text-gray-900">
-                    Creatives for {selectedSize}
-                  </div>
-                  <button
-                    onClick={() => setSelectedSize(null)}
-                    className="text-xs text-gray-500 hover:text-gray-700"
-                  >
-                    Close
-                  </button>
-                </div>
-                {sizeCreativesLoading && (
-                  <div className="px-3 py-3 text-sm text-gray-500">Loading creatives...</div>
-                )}
-                {!sizeCreativesLoading && sizeCreatives.length === 0 && (
-                  <div className="px-3 py-3 text-sm text-gray-400">
-                    {sizeCreativesMessage || "No creatives found for this size."}
-                  </div>
-                )}
-                {!sizeCreativesLoading && sizeCreatives.length > 0 && (
-                  <div className="divide-y">
-                    {sizeCreatives.map((creative) => (
-                      <div key={creative.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                        <span className="font-mono text-gray-800 truncate">{creative.name}</span>
-                        <button
-                          onClick={() => setSelectedCreative({ id: creative.id })}
-                          className="p-1 text-gray-400 hover:text-gray-600"
-                          title="View creative"
-                        >
-                          <Image className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
           </>
         )}
 

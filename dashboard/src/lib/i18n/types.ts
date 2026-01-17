@@ -64,6 +64,11 @@ export interface Translations {
     expand: string;
     settings: string;
   };
+  qpsNav: {
+    publisher: string;
+    geo: string;
+    size: string;
+  };
 
   settingsNav: {
     connectedAccounts: string;
