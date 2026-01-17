@@ -349,10 +349,12 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                         <div className="col-span-1 text-xs text-gray-600 flex items-center gap-1">
                           <span className="truncate">{item.creative_language || "—"}</span>
                           {item.language_mismatch && (
-                            <AlertTriangle
-                              className="h-3 w-3 text-orange-500"
+                            <span
+                              className="inline-flex"
                               title={`Language mismatch: ${item.mismatched_countries?.join(", ") || "check geo targets"}`}
-                            />
+                            >
+                              <AlertTriangle className="h-3 w-3 text-orange-500" />
+                            </span>
                           )}
                         </div>
                       </>
