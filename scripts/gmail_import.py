@@ -406,7 +406,7 @@ def extract_attachments(service, message_id: str, payload: Dict) -> List[Path]:
     return downloaded_files
 
 
-def download_from_url(url: str, message_id: str, access_token: str = None) -> List[Path]:
+def download_from_url(url: str, message_id: str, access_token: str = None, seat_id: str = None) -> List[Path]:
     """Download CSV from GCS URL (for reports >= 10MB).
 
     Uses OAuth access token for authenticated GCS downloads.
@@ -414,7 +414,11 @@ def download_from_url(url: str, message_id: str, access_token: str = None) -> Li
     import requests
 
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    filename = f"report_{timestamp}_{message_id[:8]}.csv"
+    # Include seat_id in filename so the importer can identify the account
+    if seat_id:
+        filename = f"catscan-report-{seat_id}-{timestamp}.csv"
+    else:
+        filename = f"report_{timestamp}_{message_id[:8]}.csv"
     filepath = IMPORTS_DIR / filename
 
     print(f"  Downloading from URL: {url[:60]}...")
@@ -470,7 +474,7 @@ def import_to_catscan(filepath: Path) -> bool:
             print(f"  Imported: {result.rows_imported} rows ({result.report_type})")
             return True
         else:
-            print(f"  Import failed: {result.error}")
+            print(f"  Import failed: {result.error_message}")
             return False
     except ImportError as e:
         # Fall back to HTTP API if running standalone
@@ -535,7 +539,7 @@ def process_message(
 
         url = extract_download_url(body)
         if url:
-            downloaded_files = download_from_url(url, message_id, access_token)
+            downloaded_files = download_from_url(url, message_id, access_token, seat_id)
 
     return downloaded_files, seat_id, subject, False
 
