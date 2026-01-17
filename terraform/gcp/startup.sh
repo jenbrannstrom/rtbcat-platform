@@ -61,6 +61,10 @@ apt-get install -y \
     jq \
     fail2ban
 
+# Configure Docker to authenticate with Artifact Registry
+echo ">>> Configuring Docker authentication for Artifact Registry..."
+gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+
 # -----------------------------------------------------------------------------
 # 1b. Install OAuth2 Proxy (Google Authentication)
 # -----------------------------------------------------------------------------
@@ -73,8 +77,9 @@ mv /tmp/oauth2-proxy-v$${OAUTH2_PROXY_VERSION}.linux-amd64/oauth2-proxy /usr/loc
 chmod +x /usr/local/bin/oauth2-proxy
 rm -rf /tmp/oauth2-proxy*
 
-# Generate cookie secret (random 32 bytes)
-COOKIE_SECRET=$(openssl rand -base64 32 | tr -d '\n')
+# Generate cookie secret (must be exactly 32 bytes for AES-256)
+# Use hex output and take first 32 chars, then convert to the format oauth2-proxy expects
+COOKIE_SECRET=$(openssl rand -hex 16)
 
 # Determine email domains config
 if [ "$ALLOWED_EMAIL_DOMAINS" = "[]" ] || [ -z "$ALLOWED_EMAIL_DOMAINS" ]; then
