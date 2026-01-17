@@ -656,7 +656,7 @@ async def get_config_breakdown(
                 """,
                 (billing_id,),
             )
-            if config_row and config_row.get("included_geos"):
+            if config_row and "included_geos" in config_row.keys() and config_row["included_geos"]:
                 try:
                     target_geo_ids = json.loads(config_row["included_geos"]) or []
                 except (TypeError, json.JSONDecodeError):
@@ -672,7 +672,7 @@ async def get_config_breakdown(
                     tuple(target_geo_ids),
                 )
                 target_country_codes = sorted(
-                    {row["country_code"] for row in rows if row.get("country_code")}
+                    {row["country_code"] for row in rows if "country_code" in row.keys() and row["country_code"]}
                 )
 
         if by in ("geo", "publisher"):
@@ -849,8 +849,8 @@ async def get_config_breakdown(
                 item["bids_in_auction"] = bids_in_auction
                 item["auctions_won"] = auctions_won
             if by == "creative":
-                language_code = row.get("detected_language_code")
-                language_name = row.get("detected_language")
+                language_code = row["detected_language_code"] if "detected_language_code" in row.keys() else None
+                language_name = row["detected_language"] if "detected_language" in row.keys() else None
                 item["creative_language"] = language_name or language_code
                 item["creative_language_code"] = language_code
                 if target_country_codes:
