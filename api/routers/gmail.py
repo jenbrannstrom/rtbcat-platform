@@ -5,15 +5,17 @@ Handles Gmail import status and triggering manual imports.
 
 import logging
 import os
+import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
-
-import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.dependencies import require_admin
+from services.config_precompute import refresh_config_breakdowns
+from services.home_precompute import refresh_home_summaries
 from storage.repositories.user_repository import User
 
 logger = logging.getLogger(__name__)
@@ -161,7 +163,7 @@ async def _queue_gmail_import(background_tasks: BackgroundTasks) -> GmailImportR
         raise HTTPException(status_code=409, detail="Gmail import already running")
 
     job_id = str(uuid.uuid4())
-    background_tasks.add_task(run_import, False, job_id)
+    background_tasks.add_task(_run_import_and_refresh, job_id)
 
     return GmailImportResponse(
         success=True,
@@ -175,3 +177,19 @@ async def _queue_gmail_import(background_tasks: BackgroundTasks) -> GmailImportR
         files=[],
         errors=[],
     )
+
+
+def _run_import_and_refresh(job_id: str) -> None:
+    from scripts.gmail_import import run_import
+
+    result = run_import(False, job_id)
+    if not result.get("success") or result.get("files_imported", 0) == 0:
+        return
+
+    end_date = datetime.utcnow().date().isoformat()
+    start_date = (datetime.utcnow().date() - timedelta(days=30)).isoformat()
+
+    import asyncio
+
+    asyncio.run(refresh_home_summaries(start_date, end_date))
+    asyncio.run(refresh_config_breakdowns(start_date, end_date))
