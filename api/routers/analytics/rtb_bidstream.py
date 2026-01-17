@@ -817,10 +817,10 @@ async def get_config_breakdown(
         for row in rows:
             reached = row["total_reached"] or 0
             impressions = row["total_impressions"] or 0
-            bids = row.get("total_bids", 0) or 0
-            bids_in_auction = row.get("total_bids_in_auction", 0) or 0
-            auctions_won = row.get("total_auctions_won", 0) or 0
-            spend_micros = row.get("total_spend_micros", 0) or 0
+            bids = row["total_bids"] if "total_bids" in row.keys() else 0
+            bids_in_auction = row["total_bids_in_auction"] if "total_bids_in_auction" in row.keys() else 0
+            auctions_won = row["total_auctions_won"] if "total_auctions_won" in row.keys() else 0
+            spend_micros = row["total_spend_micros"] if "total_spend_micros" in row.keys() else 0
 
             # Calculate win rate based on best available data
             # Prefer: auctions_won / bids_in_auction (true auction win rate)
