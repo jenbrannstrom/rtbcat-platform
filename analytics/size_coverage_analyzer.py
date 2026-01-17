@@ -170,6 +170,24 @@ class SizeCoverageAnalyzer:
                 'clicks': row['clicks'],
             }
 
+        creative_counts_from_traffic = {}
+        cursor = conn.execute(f"""
+            SELECT
+                creative_size as size,
+                COALESCE(creative_format, 'BANNER') as format,
+                COUNT(DISTINCT creative_id) as creative_count
+            FROM rtb_daily
+            WHERE metric_date >= date('now', '-' || ? || ' days')
+              AND creative_size IS NOT NULL
+              AND creative_size != ''
+            {billing_filter}
+            {buyer_filter}
+            GROUP BY creative_size, COALESCE(creative_format, 'BANNER')
+        """, params)
+        for row in cursor:
+            key = f"{row['size']}|{row['format']}"
+            creative_counts_from_traffic[key] = row['creative_count']
+
         # Calculate coverage using reached_queries (the actual QPS metric)
         total_reached = sum(t['reached_queries'] for t in traffic_by_size.values())
         total_impressions = sum(t['impressions'] for t in traffic_by_size.values())
@@ -199,6 +217,8 @@ class SizeCoverageAnalyzer:
                         v['creative_count'] for k, v in creative_sizes.items()
                         if k.startswith(f"{size_only}|")
                     )
+                if creative_count == 0:
+                    creative_count = creative_counts_from_traffic.get(key, 0)
 
                 covered_sizes.append({
                     'size': traffic['size'],

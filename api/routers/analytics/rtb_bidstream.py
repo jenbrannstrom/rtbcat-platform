@@ -936,6 +936,28 @@ async def get_config_creatives(
             return {"creatives": []}
 
         placeholders = ",".join("?" * len(creative_ids))
+        country_rows = await db_query(
+            f"""
+            SELECT creative_id, country, SUM(impressions) as total_impressions
+            FROM rtb_daily
+            WHERE creative_id IN ({placeholders})
+              AND billing_id = ?
+              AND metric_date >= date('now', ?)
+              AND country IS NOT NULL
+              AND country != ''
+            GROUP BY creative_id, country
+            ORDER BY creative_id, total_impressions DESC
+            """,
+            tuple(creative_ids + [billing_id, f'-{days} days']),
+        )
+        country_map: dict[str, list[str]] = {}
+        for row in country_rows:
+            creative_id = row["creative_id"]
+            if creative_id not in country_map:
+                country_map[creative_id] = []
+            if len(country_map[creative_id]) < 3:
+                country_map[creative_id].append(row["country"])
+
         creative_rows = await db_query(
             f"""
             SELECT id, name, format, width, height
@@ -955,6 +977,7 @@ async def get_config_creatives(
                 "format": row["format"] if row else None,
                 "width": row["width"] if row else None,
                 "height": row["height"] if row else None,
+                "serving_countries": country_map.get(creative_id, []),
             })
 
         return {"creatives": creatives}

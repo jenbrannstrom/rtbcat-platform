@@ -126,7 +126,7 @@ async def refresh_config_breakdowns(
         params = [start_date, end_date]
         seat_clause = ""
         if buyer_account_id:
-            seat_clause = " AND buyer_account_id = ?"
+            seat_clause = " AND q.buyer_account_id = ?"
             params.append(buyer_account_id)
 
         for table in (
@@ -204,23 +204,29 @@ async def refresh_config_breakdowns(
                 reached_queries, impressions, spend_micros
             )
             SELECT
-                metric_date,
-                buyer_account_id,
-                billing_id,
-                publisher_id,
-                MAX(publisher_name),
-                SUM(reached_queries),
-                SUM(impressions),
-                SUM(spend_micros)
-            FROM rtb_daily
-            WHERE metric_date BETWEEN ? AND ?
-              AND billing_id IS NOT NULL
-              AND billing_id != ''
-              AND buyer_account_id IS NOT NULL
-              AND buyer_account_id != ''
-              AND publisher_id IS NOT NULL
-              AND publisher_id != ''{seat_clause}
-            GROUP BY metric_date, buyer_account_id, billing_id, publisher_id
+                q.metric_date,
+                q.buyer_account_id,
+                q.billing_id,
+                b.publisher_id,
+                MAX(b.publisher_name),
+                SUM(q.reached_queries),
+                SUM(q.impressions),
+                SUM(q.spend_micros)
+            FROM rtb_daily q
+            JOIN rtb_daily b
+              ON q.metric_date = b.metric_date
+             AND q.hour = b.hour
+             AND q.creative_id = b.creative_id
+             AND q.buyer_account_id = b.buyer_account_id
+             AND q.country = b.country
+            WHERE q.metric_date BETWEEN ? AND ?
+              AND q.billing_id IS NOT NULL
+              AND q.billing_id != ''
+              AND q.buyer_account_id IS NOT NULL
+              AND q.buyer_account_id != ''
+              AND b.publisher_id IS NOT NULL
+              AND b.publisher_id != ''{seat_clause}
+            GROUP BY q.metric_date, q.buyer_account_id, q.billing_id, b.publisher_id
             """,
             tuple(params),
         )
