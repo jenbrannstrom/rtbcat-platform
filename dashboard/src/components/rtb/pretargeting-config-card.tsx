@@ -201,7 +201,11 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
         <div className="shrink-0">
           {isCriticalWaste && <AlertCircle className="h-4 w-4 text-red-500" />}
           {isHighWaste && !isCriticalWaste && <AlertTriangle className="h-4 w-4 text-orange-500" />}
-          {isGoodWinRate && !isHighWaste && <Check className="h-4 w-4 text-green-500" />}
+          {isGoodWinRate && !isHighWaste && (
+            <span title="Healthy config: win rate >= 50% and waste < 70%">
+              <Check className="h-4 w-4 text-green-500" />
+            </span>
+          )}
           {!isGoodWinRate && !isHighWaste && <div className="w-4" />}
         </div>
 
