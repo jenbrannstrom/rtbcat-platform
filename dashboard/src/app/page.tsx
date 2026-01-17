@@ -9,11 +9,6 @@ import { PretargetingConfigCard, type PretargetingConfig } from "@/components/rt
 import { ConfigBreakdownPanel } from "@/components/rtb/config-breakdown-panel";
 import { RecommendedOptimizationsPanel } from "@/components/rtb/recommended-optimizations-panel";
 import {
-  PublisherPerformanceSection,
-  SizeAnalysisSection,
-  GeoAnalysisSection,
-} from "@/components/waste-analyzer";
-import {
   getQPSSummary, getRTBFunnel, getSpendStats,
   getPretargetingConfigs, getRTBFunnelConfigs, getSeats,
   type PretargetingConfigResponse
@@ -183,8 +178,6 @@ function WasteAnalysisContent() {
   const impressions = hasFunnelData ? (rtbFunnel?.funnel?.total_impressions ?? 0) : 0;
 
   // Publishers and Geos from RTB data
-  const publishers = rtbFunnel?.publishers || [];
-  const geos = rtbFunnel?.geos || [];
 
   // Build a map of billing_id to performance data from config performance API
   const configPerformanceMap = new Map<string, { reached: number; impressions: number; win_rate: number; waste_rate: number }>();
@@ -411,44 +404,6 @@ function WasteAnalysisContent() {
         )}
       </section>
 
-      {/* Publisher Performance */}
-      <section>
-        {funnelLoading ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="animate-pulse space-y-4">
-              <div className="h-6 bg-gray-200 rounded w-1/3" />
-              <div className="h-32 bg-gray-100 rounded" />
-            </div>
-          </div>
-        ) : (
-          <PublisherPerformanceSection
-            publishers={publishers}
-            seatName={seats?.find((seat) => seat.buyer_id === selectedBuyerId)?.display_name || selectedBuyerId || undefined}
-          />
-        )}
-      </section>
-
-      {/* Size Analysis */}
-      <section>
-        <SizeAnalysisSection days={days} buyerId={selectedBuyerId || undefined} />
-      </section>
-
-      {/* Geographic Analysis */}
-      <section>
-        {funnelLoading ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="animate-pulse space-y-4">
-              <div className="h-6 bg-gray-200 rounded w-1/3" />
-              <div className="h-32 bg-gray-100 rounded" />
-            </div>
-          </div>
-        ) : (
-          <GeoAnalysisSection
-            geos={geos}
-            seatName={seats?.find((seat) => seat.buyer_id === selectedBuyerId)?.display_name || selectedBuyerId || undefined}
-          />
-        )}
-      </section>
       </div>
     </div>
   );

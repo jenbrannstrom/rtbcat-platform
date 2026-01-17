@@ -1169,6 +1169,7 @@ export interface ConfigCreativesItem {
   format?: string | null;
   width?: number | null;
   height?: number | null;
+  serving_countries?: string[];
 }
 
 export interface ConfigCreativesResponse {

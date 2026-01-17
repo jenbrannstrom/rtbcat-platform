@@ -25,6 +25,8 @@ import {
   Activity,
   FileText,
   Wrench,
+  Map,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getSeats, syncAllData } from "@/lib/api";
@@ -36,14 +38,20 @@ import { LanguageSelector } from "@/components/language-selector";
 const SIDEBAR_COLLAPSED_KEY = "rtbcat-sidebar-collapsed";
 const SIDEBAR_SETTINGS_EXPANDED_KEY = "rtbcat-sidebar-settings-expanded";
 const SIDEBAR_ADMIN_EXPANDED_KEY = "rtbcat-sidebar-admin-expanded";
+const SIDEBAR_QPS_EXPANDED_KEY = "rtbcat-sidebar-qps-expanded";
 
 // Main navigation items
 const navigationItems = [
-  { key: "wasteOptimizer" as const, href: "/", icon: TrendingDown },
   { key: "creatives" as const, href: "/creatives", icon: Image },
   { key: "campaigns" as const, href: "/campaigns", icon: FolderKanban },
   { key: "changeHistory" as const, href: "/history", icon: History },
   { key: "import" as const, href: "/import", icon: RefreshCw },
+];
+
+const qpsItems = [
+  { key: "publisher" as const, href: "/qps/publisher", icon: Users },
+  { key: "geo" as const, href: "/qps/geo", icon: Map },
+  { key: "size" as const, href: "/qps/size", icon: BarChart3 },
 ];
 
 // Settings sub-navigation
@@ -88,6 +96,7 @@ export function Sidebar() {
   const [syncMessage, setSyncMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [adminExpanded, setAdminExpanded] = useState(false);
+  const [qpsExpanded, setQpsExpanded] = useState(false);
 
   // Use context for buyer_id (persistent across pages)
   const currentBuyerId = selectedBuyerId;
@@ -95,6 +104,7 @@ export function Sidebar() {
   // Check if current path is in settings or admin section
   const isInSettings = pathname?.startsWith("/settings");
   const isInAdmin = pathname?.startsWith("/admin");
+  const isInQps = pathname?.startsWith("/qps");
 
   // Load collapsed and expanded states from localStorage
   useEffect(() => {
@@ -110,6 +120,10 @@ export function Sidebar() {
     if (adminStored !== null) {
       setAdminExpanded(adminStored === "true");
     }
+    const qpsStored = localStorage.getItem(SIDEBAR_QPS_EXPANDED_KEY);
+    if (qpsStored !== null) {
+      setQpsExpanded(qpsStored === "true");
+    }
   }, []);
 
   // Auto-expand sections when navigating to them
@@ -121,6 +135,10 @@ export function Sidebar() {
     if (isInAdmin && !adminExpanded) {
       setAdminExpanded(true);
       localStorage.setItem(SIDEBAR_ADMIN_EXPANDED_KEY, "true");
+    }
+    if (isInQps && !qpsExpanded) {
+      setQpsExpanded(true);
+      localStorage.setItem(SIDEBAR_QPS_EXPANDED_KEY, "true");
     }
   }, [pathname]);
 
@@ -140,6 +158,12 @@ export function Sidebar() {
     const newValue = !adminExpanded;
     setAdminExpanded(newValue);
     localStorage.setItem(SIDEBAR_ADMIN_EXPANDED_KEY, String(newValue));
+  };
+
+  const toggleQpsExpanded = () => {
+    const newValue = !qpsExpanded;
+    setQpsExpanded(newValue);
+    localStorage.setItem(SIDEBAR_QPS_EXPANDED_KEY, String(newValue));
   };
 
   const { data: seats } = useQuery({
@@ -336,6 +360,75 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
+        {/* QPS Section */}
+        <div className="pt-1">
+          {!collapsed && (
+            <div className="px-3 mb-1">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                {t.navigation.wasteOptimizer}
+              </span>
+            </div>
+          )}
+          <button
+            onClick={() => {
+              toggleQpsExpanded();
+              if (pathname !== "/") {
+                router.push("/");
+              }
+            }}
+            className={cn(
+              "flex items-center w-full px-3 py-2 text-sm font-medium rounded-md transition-colors",
+              isInQps
+                ? "bg-primary-50 text-primary-700"
+                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
+              collapsed && "justify-center px-2"
+            )}
+            title={collapsed ? t.navigation.wasteOptimizer : undefined}
+          >
+            <TrendingDown
+              className={cn(
+                "h-5 w-5 flex-shrink-0",
+                isInQps ? "text-primary-600" : "text-gray-400",
+                !collapsed && "mr-3"
+              )}
+            />
+            {!collapsed && (
+              <>
+                <span className="flex-1 text-left">{t.navigation.wasteOptimizer}</span>
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 transition-transform",
+                    qpsExpanded && "rotate-180"
+                  )}
+                />
+              </>
+            )}
+          </button>
+          {(!collapsed && qpsExpanded) && (
+            <div className="ml-6 space-y-1">
+              {qpsItems.map((item) => {
+                const isActive = pathname?.startsWith(item.href);
+                const itemName = t.qpsNav?.[item.key] || item.key;
+                return (
+                  <Link
+                    key={item.key}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center px-3 py-2 text-sm rounded-md transition-colors",
+                      isActive
+                        ? "bg-primary-50 text-primary-700"
+                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    )}
+                  >
+                    <item.icon className={cn("h-4 w-4 mr-2", isActive ? "text-primary-600" : "text-gray-400")} />
+                    {itemName}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Main navigation items */}
         {navigationItems.map((item) => {
           const isActive = item.href === "/"
