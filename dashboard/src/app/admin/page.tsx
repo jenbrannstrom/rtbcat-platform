@@ -22,6 +22,10 @@ function AdminDashboard() {
   });
 
   const isLoading = statsLoading || settingsLoading;
+  const reportHealth = stats?.report_health;
+  const reportAlerts = reportHealth?.seats.filter(
+    (seat) => seat.missing.length > 0 || seat.failed.length > 0
+  ) ?? [];
 
   const statCards = [
     {
@@ -89,6 +93,53 @@ function AdminDashboard() {
             </div>
           </Link>
         ))}
+      </div>
+
+      {/* Report Health Alerts */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+        <h2 className="text-lg font-semibold text-gray-900 mb-2">
+          {t.admin.reportHealthTitle}
+        </h2>
+        <p className="text-sm text-gray-600 mb-4">
+          {t.admin.reportHealthDesc.replace(
+            "{count}",
+            String(reportHealth?.expected_per_seat ?? 0)
+          )}
+        </p>
+        {isLoading ? (
+          <p className="text-sm text-gray-500">...</p>
+        ) : reportAlerts.length === 0 ? (
+          <p className="text-sm text-green-700">{t.admin.reportHealthNoAlerts}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500">
+                  <th className="py-2 pr-4">{t.admin.reportHealthSeat}</th>
+                  <th className="py-2 pr-4">{t.admin.reportHealthDate}</th>
+                  <th className="py-2 pr-4">{t.admin.reportHealthMissing}</th>
+                  <th className="py-2 pr-4">{t.admin.reportHealthFailed}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reportAlerts.map((seat) => (
+                  <tr key={seat.buyer_id} className="border-t border-gray-100">
+                    <td className="py-2 pr-4 text-gray-900">{seat.buyer_id}</td>
+                    <td className="py-2 pr-4 text-gray-600">
+                      {seat.latest_date ?? "-"}
+                    </td>
+                    <td className="py-2 pr-4 text-amber-700">
+                      {seat.missing.join(", ") || "-"}
+                    </td>
+                    <td className="py-2 pr-4 text-red-700">
+                      {seat.failed.join(", ") || "-"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Quick Actions */}

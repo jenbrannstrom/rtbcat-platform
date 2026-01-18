@@ -43,6 +43,7 @@ CATSCAN_DIR = Path.home() / '.catscan'
 CREDENTIALS_DIR = CATSCAN_DIR / 'credentials'
 IMPORTS_DIR = CATSCAN_DIR / 'imports'
 LOGS_DIR = CATSCAN_DIR / 'logs'
+DB_PATH = Path(os.environ.get('DATABASE_PATH', str(CATSCAN_DIR / 'catscan.db')))
 TOKEN_PATH = CREDENTIALS_DIR / 'gmail-token.json'
 CLIENT_SECRET_PATH = CREDENTIALS_DIR / 'gmail-oauth-client.json'
 STATUS_PATH = CATSCAN_DIR / 'gmail_import_status.json'
@@ -178,6 +179,101 @@ def detect_report_type(filepath: Path) -> str:
         pass
 
     return 'performance'
+
+
+def detect_report_kind(filename: str) -> str:
+    """Return the canonical report kind name from filename."""
+    name = filename.lower()
+    if "catscan-bid-filtering" in name:
+        return "catscan-bid-filtering"
+    if "catscan-bidsinauction" in name:
+        return "catscan-bidsinauction"
+    if "catscan-pipeline-geo" in name:
+        return "catscan-pipeline-geo"
+    if "catscan-pipeline" in name:
+        return "catscan-pipeline"
+    if "catscan-quality" in name:
+        return "catscan-quality"
+    return "unknown"
+
+
+def extract_report_date(filename: str) -> Optional[str]:
+    """Extract report date as YYYY-MM-DD from filename."""
+    match = re.search(r"(20\\d{6})", filename)
+    if not match:
+        return None
+    raw = match.group(1)
+    return f"{raw[:4]}-{raw[4:6]}-{raw[6:]}"
+
+
+def ensure_gmail_runs_table() -> None:
+    import sqlite3
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS gmail_import_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                imported_at TEXT NOT NULL,
+                report_date TEXT,
+                buyer_account_id TEXT,
+                report_kind TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                success INTEGER NOT NULL DEFAULT 0,
+                rows_imported INTEGER DEFAULT 0,
+                rows_duplicate INTEGER DEFAULT 0,
+                error TEXT
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_gmail_import_runs_date ON gmail_import_runs(report_date)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_gmail_import_runs_seat_date ON gmail_import_runs(buyer_account_id, report_date)"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def record_import_run(
+    *,
+    seat_id: Optional[str],
+    report_kind: str,
+    filename: str,
+    success: bool,
+    rows_imported: int = 0,
+    rows_duplicate: int = 0,
+    error: Optional[str] = None,
+) -> None:
+    import sqlite3
+    ensure_gmail_runs_table()
+    report_date = extract_report_date(filename)
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute(
+            """
+            INSERT INTO gmail_import_runs (
+                imported_at, report_date, buyer_account_id, report_kind, filename,
+                success, rows_imported, rows_duplicate, error
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                datetime.now().isoformat(),
+                report_date,
+                seat_id,
+                report_kind,
+                filename,
+                1 if success else 0,
+                rows_imported,
+                rows_duplicate,
+                error,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def archive_to_s3(filepath: Path, report_type: Optional[str] = None, verbose: bool = True) -> Optional[str]:
@@ -460,7 +556,7 @@ def mark_as_read(service, message_id: str):
     ).execute()
 
 
-def import_to_catscan(filepath: Path) -> bool:
+def import_to_catscan(filepath: Path) -> tuple[bool, str, int, int, Optional[str]]:
     """
     Import the CSV into Cat-Scan database directly using the unified importer.
     Returns True if successful.
@@ -472,10 +568,10 @@ def import_to_catscan(filepath: Path) -> bool:
 
         if result.success:
             print(f"  Imported: {result.rows_imported} rows ({result.report_type})")
-            return True
+            return True, result.report_type, result.rows_imported, result.rows_duplicate, None
         else:
             print(f"  Import failed: {result.error_message}")
-            return False
+            return False, result.report_type, result.rows_imported, result.rows_duplicate, result.error_message
     except ImportError as e:
         # Fall back to HTTP API if running standalone
         import requests
@@ -488,16 +584,16 @@ def import_to_catscan(filepath: Path) -> bool:
             if response.status_code == 200:
                 result = response.json()
                 print(f"  Imported: {result.get('rows_imported', 0)} rows")
-                return True
+                return True, "api_import", result.get("rows_imported", 0), result.get("rows_duplicate", 0), None
             else:
                 print(f"  Import failed: {response.text}")
-                return False
+                return False, "api_import", 0, 0, response.text
         except requests.exceptions.ConnectionError:
             print(f"  Warning: Cat-Scan API not running. File saved to {filepath}")
-            return False
+            return False, "api_import", 0, 0, "API not running"
     except Exception as e:
         print(f"  Import error: {e}")
-        return False
+        return False, "import_error", 0, 0, str(e)
 
 
 def process_message(
@@ -690,7 +786,18 @@ def run_import(verbose: bool = True, job_id: Optional[str] = None) -> Dict[str, 
                     # Archive to S3 before importing to database
                     archive_to_s3(filepath, verbose=verbose)
 
-                    if import_to_catscan(filepath):
+                    success, report_type, rows_imported, rows_duplicate, error = import_to_catscan(filepath)
+                    report_kind = detect_report_kind(filepath.name)
+                    record_import_run(
+                        seat_id=seat_id,
+                        report_kind=report_kind,
+                        filename=filepath.name,
+                        success=success,
+                        rows_imported=rows_imported,
+                        rows_duplicate=rows_duplicate,
+                        error=error,
+                    )
+                    if success:
                         total_imported += 1
 
                 mark_as_read(service, message_id)
