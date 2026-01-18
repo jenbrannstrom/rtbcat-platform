@@ -1,5 +1,8 @@
 # Cat-Scan Installation Guide
 
+This file is the single source of truth for both local installs and production
+VM rebuilds. The previous `docs/vm-rebuild-runbook.md` has been merged here.
+
 ## System Requirements
 
 | Requirement | Minimum Version | Check Command | Install Command (Ubuntu/Debian) |
@@ -902,6 +905,146 @@ After installation, Cat-Scan uses these directories:
     ├── gmail-oauth-client.json    # Gmail API OAuth client
     └── gmail-token.json           # Gmail API token (auto-generated)
 ```
+
+---
+
+## Production VM (GCP) Install/Rebuild
+
+Use this section for a full VM rebuild after a Terraform destroy/recreate. It is
+written as a sequence you can paste into a terminal, with short comments.
+
+### 1. Recreate the VM (Terraform)
+
+```bash
+cd terraform/gcp
+terraform apply -replace=google_compute_instance.catscan
+```
+
+Wait 3-5 minutes for `startup.sh` to finish.
+
+### 2. Upload Required Secrets (one-time, from your laptop)
+
+These names must match `terraform/gcp/startup.sh`.
+
+```bash
+gcloud secrets versions add catscan-gmail-oauth-client \
+  --data-file=$HOME/.catscan/credentials/gmail-oauth-client.json \
+  --project=catscan-prod-202601
+
+gcloud secrets versions add catscan-gmail-token \
+  --data-file=$HOME/.catscan/credentials/gmail-token.json \
+  --project=catscan-prod-202601
+
+gcloud secrets versions add catscan-ab-service-account \
+  --data-file=$HOME/.catscan/credentials/catscan-service-account.json \
+  --project=catscan-prod-202601
+
+gcloud secrets versions add catscan-deploy-key \
+  --data-file=$HOME/.ssh/id_ed25519 \
+  --project=catscan-prod-202601
+```
+
+### 3. Ensure Artifact Registry Auth on the VM
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b --project=catscan-prod-202601 --command="
+sudo gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+"
+```
+
+### 4. Fix Data Directory Ownership (must match container UID)
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b --project=catscan-prod-202601 --command="
+API_UID=\$(sudo docker exec catscan-api id -u rtbcat)
+sudo chown -R \${API_UID}:\${API_UID} /home/catscan/.catscan
+sudo chmod 755 /home/catscan/.catscan
+"
+```
+
+### 5. Pull and Start Containers
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b --project=catscan-prod-202601 --command="
+cd /opt/catscan
+sudo docker compose -f docker-compose.gcp.yml pull
+sudo docker compose -f docker-compose.gcp.yml up -d
+"
+```
+
+### 6. Register Authorized Buyers Service Account (DB)
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b --project=catscan-prod-202601 --command="
+sudo docker exec catscan-api python -c '
+import sqlite3, json, uuid
+from datetime import datetime
+db_path = \"/home/rtbcat/.catscan/catscan.db\"
+with open(\"/home/rtbcat/.catscan/credentials/catscan-service-account.json\") as f:
+    sa = json.load(f)
+conn = sqlite3.connect(db_path)
+cur = conn.cursor()
+sa_id = str(uuid.uuid4())
+cur.execute(\"\"\"
+    INSERT OR REPLACE INTO service_accounts
+    (id, name, email, credentials_json, is_active, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+\"\"\", (
+    sa_id,
+    \"Cat-Scan Service Account\",
+    sa.get(\"client_email\", \"\"),
+    json.dumps(sa),
+    1,
+    datetime.now().isoformat()
+))
+conn.commit()
+print(f\"Service account registered: {sa_id}\")
+'
+"
+```
+
+### 7. Gmail OAuth (headless)
+
+Run the OAuth flow on a machine with a browser, then upload the token as shown
+in step 2. Do not hardcode client secrets in this file; use your OAuth client JSON.
+
+### 8. Run Imports and Precompute
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b --project=catscan-prod-202601 --command="
+sudo docker exec catscan-api python -m collectors.gmail_import
+sudo docker exec catscan-api python -c 'from services.config_precompute import refresh_config_breakdowns; refresh_config_breakdowns(days=30)'
+"
+```
+
+### 9. Restore From Backup (optional)
+
+If you need to restore the SQLite DB from GCS:
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b --project=catscan-prod-202601 --command="
+export CATSCAN_GCS_BUCKET=catscan-backups
+/opt/catscan/scripts/restore_backup.sh
+"
+```
+
+You can also restore a specific date:
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b --project=catscan-prod-202601 --command="
+export CATSCAN_GCS_BUCKET=catscan-backups
+/opt/catscan/scripts/restore_backup.sh 20260117
+"
+```
+
+### 10. Verify Health
+
+```bash
+curl -s https://scan.rtb.cat/api/health
+```
+
+If the app shows a blank dashboard, verify the import counts in SQLite before
+debugging the UI.
 
 ---
 
