@@ -663,17 +663,20 @@ async def get_config_breakdown(
                     target_geo_ids = []
             if target_geo_ids:
                 placeholders = ",".join("?" for _ in target_geo_ids)
-                rows = await db_query(
-                    f"""
-                    SELECT google_geo_id, country_code
-                    FROM geographies
-                    WHERE google_geo_id IN ({placeholders})
-                    """,
-                    tuple(target_geo_ids),
-                )
-                target_country_codes = sorted(
-                    {row["country_code"] for row in rows if "country_code" in row.keys() and row["country_code"]}
-                )
+                try:
+                    rows = await db_query(
+                        f"""
+                        SELECT google_geo_id, country_code
+                        FROM geographies
+                        WHERE google_geo_id IN ({placeholders})
+                        """,
+                        tuple(target_geo_ids),
+                    )
+                    target_country_codes = sorted(
+                        {row["country_code"] for row in rows if "country_code" in row.keys() and row["country_code"]}
+                    )
+                except Exception:
+                    target_country_codes = []
 
         if by in ("geo", "publisher"):
             seat_clause = ""
@@ -727,8 +730,9 @@ async def get_config_breakdown(
                     "is_aggregate": False,
                     "has_funnel_metrics": False,
                     "no_data_reason": (
-                        f"No {by} breakdown data. Run a config precompute refresh after importing "
-                        "catscan-quality for this seat."
+                        f"No {by} breakdown data. This usually means the catscan-quality report is missing "
+                        f"{'Country' if by == 'geo' else 'Publisher'} fields. Add those dimensions if available, "
+                        "then re-import and refresh precompute."
                     ),
                 }
         elif by == "creative":
