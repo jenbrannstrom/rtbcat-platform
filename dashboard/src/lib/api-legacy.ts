@@ -1861,6 +1861,16 @@ export interface AdminStats {
   active_users: number;
   admin_users: number;
   multi_user_enabled: boolean;
+  report_health?: {
+    expected_per_seat: number;
+    seats: Array<{
+      buyer_id: string;
+      latest_date: string | null;
+      received: number;
+      missing: string[];
+      failed: string[];
+    }>;
+  };
 }
 
 export async function getAdminUsers(params?: {

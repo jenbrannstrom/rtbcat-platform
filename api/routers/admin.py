@@ -622,11 +622,102 @@ async def get_admin_stats(
     active_users = [u for u in users if u.is_active]
     admin_users = [u for u in users if u.role == "admin"]
 
+    from api.dependencies import get_store
+    from storage.sqlite_store import SQLiteStore
+
+    store: SQLiteStore = get_store()
+
+    expected_report_kinds = [
+        "catscan-quality",
+        "catscan-bidsinauction",
+        "catscan-pipeline-geo",
+        "catscan-pipeline",
+        "catscan-bid-filtering",
+    ]
+
+    async with store._connection() as conn:
+        import asyncio
+        loop = asyncio.get_event_loop()
+
+        def _get_report_health():
+            report_health = {
+                "expected_per_seat": len(expected_report_kinds),
+                "seats": [],
+            }
+
+            cursor = conn.execute(
+                """
+                SELECT DISTINCT buyer_id
+                FROM buyer_seats
+                WHERE active = 1
+                ORDER BY buyer_id
+                """
+            )
+            seats = [row[0] for row in cursor.fetchall()]
+
+            for seat_id in seats:
+                cursor = conn.execute(
+                    """
+                    SELECT MAX(report_date)
+                    FROM gmail_import_runs
+                    WHERE buyer_account_id = ?
+                    """,
+                    (seat_id,),
+                )
+                latest_date = cursor.fetchone()[0]
+                if not latest_date:
+                    report_health["seats"].append(
+                        {
+                            "buyer_id": seat_id,
+                            "latest_date": None,
+                            "received": 0,
+                            "missing": expected_report_kinds,
+                            "failed": [],
+                        }
+                    )
+                    continue
+
+                cursor = conn.execute(
+                    """
+                    SELECT report_kind, success
+                    FROM gmail_import_runs
+                    WHERE buyer_account_id = ?
+                      AND report_date = ?
+                    """,
+                    (seat_id, latest_date),
+                )
+                received_kinds = set()
+                failed_kinds = set()
+                for report_kind, success in cursor.fetchall():
+                    if success:
+                        received_kinds.add(report_kind)
+                    else:
+                        failed_kinds.add(report_kind)
+
+                missing_kinds = [
+                    kind for kind in expected_report_kinds if kind not in received_kinds
+                ]
+
+                report_health["seats"].append(
+                    {
+                        "buyer_id": seat_id,
+                        "latest_date": latest_date,
+                        "received": len(received_kinds),
+                        "missing": missing_kinds,
+                        "failed": sorted(failed_kinds),
+                    }
+                )
+
+            return report_health
+
+        report_health = await loop.run_in_executor(None, _get_report_health)
+
     return {
         "total_users": len(users),
         "active_users": len(active_users),
         "admin_users": len(admin_users),
         "multi_user_enabled": await repo.is_multi_user_enabled(),
+        "report_health": report_health,
     }
 
 

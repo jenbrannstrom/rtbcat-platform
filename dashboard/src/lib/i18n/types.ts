@@ -339,6 +339,13 @@ export interface Translations {
     viewAuditLog: string;
     systemSettings: string;
     systemConfiguration: string;
+    reportHealthTitle: string;
+    reportHealthDesc: string;
+    reportHealthNoAlerts: string;
+    reportHealthSeat: string;
+    reportHealthDate: string;
+    reportHealthMissing: string;
+    reportHealthFailed: string;
     multiUserMode: string;
     multipleUsersCanAccess: string;
     singleUserMode: string;
