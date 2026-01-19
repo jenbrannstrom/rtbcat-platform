@@ -17,19 +17,12 @@ import {
   ExportInstructions,
   RequiredColumnsTable,
   TroubleshootingSection,
-  ColumnMappingCard,
   ImportResultCard,
   ImportHistorySection,
 } from "@/components/import";
 import {
-  validatePerformanceCSV,
   type ExtendedValidationResult,
-  groupAnomaliesByType,
-  getTopAnomalyApps,
-  formatAnomalyType,
 } from "@/lib/csv-validator";
-import type { AnomalyType } from "@/lib/types/import";
-import { parseCSV } from "@/lib/csv-parser";
 import { importPerformanceData, getImportHistory, type ImportHistoryItem } from "@/lib/api";
 import {
   uploadChunkedCSV,
@@ -38,6 +31,11 @@ import {
 } from "@/lib/chunked-uploader";
 import { extractSeatFromPreview, formatSeatInfo, type SeatInfo } from "@/lib/seat-extractor";
 import type { ImportResponse } from "@/lib/types/import";
+import { GmailReportsTab } from "@/app/settings/accounts/components/GmailReportsTab";
+import {
+  detectReportType,
+  getMissingRequiredColumns,
+} from "@/lib/report-metadata";
 
 type ImportStep = "upload" | "preview" | "importing" | "success" | "error";
 
@@ -91,41 +89,44 @@ export default function ImportPage() {
     setIsLargeFile(selectedFile.size > CHUNKED_UPLOAD_THRESHOLD);
 
     try {
-      if (selectedFile.size > CHUNKED_UPLOAD_THRESHOLD) {
-        // Large file: use quick preview instead of full parse
-        const preview = await previewCSV(selectedFile, 10);
-        setPreviewData(preview);
+      const preview = await previewCSV(selectedFile, 10);
+      setPreviewData(preview);
 
-        // Extract seat info from preview rows
-        const seat = extractSeatFromPreview(preview.rows);
-        setSeatInfo(seat);
+      // Extract seat info from preview rows
+      const seat = extractSeatFromPreview(preview.rows);
+      setSeatInfo(seat);
 
-        // Create a mock validation result for preview
-        const hasRequiredCols = !!(preview.columnMappings.creative_id && preview.columnMappings.date);
-        setValidationResult({
-          valid: hasRequiredCols,
-          errors: hasRequiredCols ? [] : [{
-            row: 0,
-            field: "columns",
-            error: `Missing required columns. Detected: ${Object.entries(preview.columnMappings)
-              .filter(([, v]) => v)
-              .map(([k, v]) => `${v} → ${k}`)
-              .join(", ") || "none"}`,
-            value: null,
-          }],
-          warnings: [],
-          anomalies: [],
-          rowCount: preview.estimatedRowCount,
-          data: [],
-          detectedColumns: preview.columnMappings,
-          hasHourlyData: preview.headers.some(h => h.toLowerCase().includes("hour")),
-        });
-      } else {
-        // Small file: full parse and validate
-        const parseResult = await parseCSV(selectedFile);
-        const validation = validatePerformanceCSV(parseResult);
-        setValidationResult(validation);
-      }
+      const reportType = detectReportType(preview.headers, selectedFile.name);
+      const missingRequired = getMissingRequiredColumns(preview.headers, reportType);
+
+      const errors =
+        reportType === "unknown"
+          ? [{
+              row: 0,
+              field: "columns",
+              error: `Could not identify report type. Found columns: ${preview.headers.join(", ") || "none"}`,
+              value: null,
+            }]
+          : missingRequired.length > 0
+            ? [{
+                row: 0,
+                field: "columns",
+                error: `Missing required columns: ${missingRequired.join(", ")}. Found columns: ${preview.headers.join(", ") || "none"}`,
+                value: null,
+              }]
+            : [];
+
+      setValidationResult({
+        valid: reportType !== "unknown" && missingRequired.length === 0,
+        errors,
+        warnings: [],
+        anomalies: [],
+        rowCount: preview.estimatedRowCount,
+        data: [],
+        detectedColumns: undefined,
+        hasHourlyData: preview.headers.some((h) => h.toLowerCase().includes("hour")),
+        aggregatedFromRows: undefined,
+      });
     } catch (error) {
       console.error("CSV parsing error:", error);
       setValidationResult({
@@ -236,11 +237,12 @@ export default function ImportPage() {
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6 max-w-4xl mx-auto space-y-6">
+      <GmailReportsTab />
       {/* Header */}
-      <div className="mb-6">
+      <div>
         <h1 className="text-2xl font-bold text-gray-900">
-          Import Performance Data
+          Import Reports
         </h1>
         <p className="text-gray-600 mt-1">
           Upload CSV exports from Google Authorized Buyers
@@ -359,132 +361,24 @@ export default function ImportPage() {
             </div>
           )}
 
-          {/* Column Detection Info */}
-          {validationResult.detectedColumns && validationResult.valid && (
-            <ColumnMappingCard columns={validationResult.detectedColumns} />
-          )}
-
-          {/* Fatal Errors (only shown if file is unparseable) */}
+          {/* Fatal Errors */}
           {!validationResult.valid && validationResult.errors.length > 0 && (
             <ValidationErrors errors={validationResult.errors} />
           )}
 
-          {/* Anomalies - Interesting fraud signals, not blocking */}
-          {validationResult.valid && validationResult.anomalies && validationResult.anomalies.length > 0 && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <h3 className="font-semibold text-yellow-800 mb-2 flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5" />
-                {validationResult.anomalies.length} Anomalies Detected
-              </h3>
-              <p className="text-sm text-yellow-700 mb-3">
-                These patterns may indicate fraud or tracking issues.
-                Data will be imported and flagged for analysis.
-              </p>
-
-              {/* Group anomalies by type */}
-              <div className="space-y-1 text-sm">
-                {Object.entries(groupAnomaliesByType(validationResult.anomalies)).map(([type, items]) => (
-                  <div key={type} className="flex justify-between py-1 border-b border-yellow-200 last:border-0">
-                    <span className="text-yellow-800">{formatAnomalyType(type as AnomalyType)}</span>
-                    <span className="font-medium text-yellow-900">{items.length} rows</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Expand to see affected apps */}
-              {getTopAnomalyApps(validationResult.anomalies, 5).length > 0 && (
-                <details className="mt-3">
-                  <summary className="text-sm text-yellow-600 cursor-pointer hover:text-yellow-800">
-                    View affected apps
-                  </summary>
-                  <ul className="mt-2 text-xs space-y-1 text-yellow-700">
-                    {getTopAnomalyApps(validationResult.anomalies, 5).map((app, i) => (
-                      <li key={i} className="flex justify-between">
-                        <span>{app.app_name || "Unknown app"}</span>
-                        <span className="font-medium">{app.count} anomalies</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
+          {/* Preview */}
+          {validationResult.valid && previewData && (
+            <div className="mt-4">
+              <ImportPreview
+                headers={previewData.headers}
+                rows={previewData.rows.slice(0, 10)}
+              />
+              {previewData.rows.length > 10 && (
+                <p className="text-sm text-gray-600 text-center">
+                  Showing first 10 of {previewData.rows.length} rows
+                </p>
               )}
             </div>
-          )}
-
-          {/* Warnings - Informational (collapsible) */}
-          {validationResult.valid && validationResult.warnings && validationResult.warnings.length > 0 && (
-            <details className="bg-gray-50 border rounded-lg p-4">
-              <summary className="text-sm text-gray-600 cursor-pointer hover:text-gray-800">
-                {validationResult.warnings.length} warnings (click to expand)
-              </summary>
-              <ul className="mt-3 text-xs text-gray-600 max-h-40 overflow-y-auto space-y-1">
-                {validationResult.warnings.slice(0, 50).map((w, i) => (
-                  <li key={i} className={w.severity === "warning" ? "text-yellow-700" : "text-gray-500"}>
-                    Row {w.row}: {w.message}
-                  </li>
-                ))}
-                {validationResult.warnings.length > 50 && (
-                  <li className="text-gray-500 italic">
-                    ... and {validationResult.warnings.length - 50} more
-                  </li>
-                )}
-              </ul>
-            </details>
-          )}
-
-          {/* Preview */}
-          {validationResult.valid && (
-            <>
-              {isLargeFile && previewData ? (
-                // Large file preview from quick scan
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-gray-50 px-4 py-2 border-b">
-                    <p className="text-sm font-medium text-gray-700">
-                      Preview (first 10 rows)
-                    </p>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          {previewData.headers.slice(0, 6).map((header) => (
-                            <th
-                              key={header}
-                              className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase"
-                            >
-                              {header}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {previewData.rows.map((row, i) => (
-                          <tr key={i}>
-                            {previewData.headers.slice(0, 6).map((header) => (
-                              <td
-                                key={header}
-                                className="px-4 py-2 text-sm text-gray-900 whitespace-nowrap"
-                              >
-                                {row[header]}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : (
-                // Small file preview from full parse
-                <>
-                  <ImportPreview data={validationResult.data.slice(0, 10)} />
-                  {validationResult.data.length > 10 && (
-                    <p className="text-sm text-gray-600 text-center">
-                      Showing first 10 of {validationResult.data.length} rows
-                    </p>
-                  )}
-                </>
-              )}
-            </>
           )}
 
           {/* Actions */}
@@ -497,12 +391,7 @@ export default function ImportPage() {
               disabled={!validationResult.valid}
               className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Import {isLargeFile ? `~${validationResult.rowCount.toLocaleString()}` : validationResult.data.length.toLocaleString()} Rows
-              {validationResult.anomalies && validationResult.anomalies.length > 0 && (
-                <span className="ml-1 text-yellow-200">
-                  ({validationResult.anomalies.length} flagged)
-                </span>
-              )}
+              Import {validationResult.rowCount.toLocaleString()} Rows
               <ArrowRight className="ml-1 h-4 w-4" />
             </button>
           </div>
