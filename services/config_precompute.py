@@ -125,8 +125,10 @@ async def refresh_config_breakdowns(
 
         params = [start_date, end_date]
         seat_clause = ""
+        seat_clause_q = ""
         if buyer_account_id:
-            seat_clause = " AND q.buyer_account_id = ?"
+            seat_clause = " AND buyer_account_id = ?"
+            seat_clause_q = " AND q.buyer_account_id = ?"
             params.append(buyer_account_id)
 
         for table in (
@@ -225,7 +227,7 @@ async def refresh_config_breakdowns(
               AND q.buyer_account_id IS NOT NULL
               AND q.buyer_account_id != ''
               AND b.publisher_id IS NOT NULL
-              AND b.publisher_id != ''{seat_clause}
+              AND b.publisher_id != ''{seat_clause_q}
             GROUP BY q.metric_date, q.buyer_account_id, q.billing_id, b.publisher_id
             """,
             tuple(params),
