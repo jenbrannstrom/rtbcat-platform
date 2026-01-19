@@ -1,5 +1,10 @@
 import { History, RefreshCw, CheckCircle, XCircle } from "lucide-react";
 import type { ImportHistoryItem } from "@/lib/api";
+import {
+  detectReportType,
+  getMissingRequiredColumns,
+  getRequiredColumns,
+} from "@/lib/report-metadata";
 
 interface ImportHistorySectionProps {
   history: ImportHistoryItem[];
@@ -17,86 +22,6 @@ export function ImportHistorySection({
 }: ImportHistorySectionProps) {
   const normalizeColumn = (column: string) =>
     column.replace(/^#/, "").trim().toLowerCase();
-
-  const detectReportType = (columns: string[], filename?: string | null) => {
-    const normalized = new Set(columns.map(normalizeColumn));
-    const name = (filename || "").toLowerCase();
-
-    if (normalized.has("bid filtering reason") || name.includes("bid-filtering")) {
-      return "bid-filtering";
-    }
-    if (normalized.has("bid requests") || name.includes("pipeline")) {
-      if (normalized.has("publisher id") || name.includes("rtb-pipeline")) {
-        return "pipeline-publisher";
-      }
-      return "pipeline-geo";
-    }
-    if (normalized.has("billing id") && normalized.has("creative id")) {
-      return "quality";
-    }
-    if (normalized.has("bids in auction") && normalized.has("creative id")) {
-      return "bidsinauction";
-    }
-    return "unknown";
-  };
-
-  const REQUIRED_COLUMNS: Record<string, string[]> = {
-    "quality": [
-      "Buyer account ID",
-      "Billing ID",
-      "Creative ID",
-      "Creative size",
-      "Day",
-      "Country",
-      "Reached queries",
-      "Impressions",
-    ],
-    "bidsinauction": [
-      "Buyer account ID",
-      "Country",
-      "Creative ID",
-      "Day",
-      "Hour",
-      "Bids in auction",
-      "Auctions won",
-      "Bids",
-    ],
-    "pipeline-geo": [
-      "Buyer account ID",
-      "Country",
-      "Day",
-      "Hour",
-      "Bid requests",
-    ],
-    "pipeline-publisher": [
-      "Buyer account ID",
-      "Country",
-      "Publisher ID",
-      "Day",
-      "Hour",
-      "Bid requests",
-    ],
-    "bid-filtering": [
-      "Buyer account ID",
-      "Country",
-      "Creative ID",
-      "Bid filtering reason",
-      "Day",
-      "Hour",
-      "Bids",
-    ],
-    "unknown": [],
-  };
-
-  const getRequiredMissing = (columns: string[], filename?: string | null) => {
-    const reportType = detectReportType(columns, filename);
-    const required = REQUIRED_COLUMNS[reportType] || [];
-    const normalized = new Set(columns.map(normalizeColumn));
-    const missing = required.filter(
-      (column) => !normalized.has(normalizeColumn(column))
-    );
-    return { reportType, required, missing };
-  };
 
   const formatFileSize = (mb: number) => {
     if (mb < 1) return `${(mb * 1024).toFixed(0)} KB`;
@@ -148,10 +73,9 @@ export function ImportHistorySection({
         ) : (
           history.map((item) => {
             const columns = item.columns_found || [];
-            const { reportType, required, missing } = getRequiredMissing(
-              columns,
-              item.filename
-            );
+            const reportType = detectReportType(columns, item.filename);
+            const required = getRequiredColumns(reportType);
+            const missing = getMissingRequiredColumns(columns, reportType);
             const missingOptional = (item.columns_missing || []).filter(
               (column) =>
                 !missing.some(
