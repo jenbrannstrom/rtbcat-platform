@@ -35,6 +35,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, field
 
+from qps.unified_importer import parse_bidder_id_from_filename
+
 logger = logging.getLogger(__name__)
 
 DB_PATH = os.path.expanduser("~/.catscan/catscan.db")
@@ -394,6 +396,7 @@ def import_csv(
 
     column_map = validation.columns_mapped
     result.columns_imported = list(column_map.keys())
+    fallback_buyer_account_id = parse_bidder_id_from_filename(csv_path)
 
     # Import account mapper for bidder_id lookup
     try:
@@ -479,6 +482,8 @@ def import_csv(
                     advertiser = get_opt("advertiser")
                     buyer_account_id = get_opt("buyer_account_id")
                     buyer_account_name = get_opt("buyer_account_name")
+                    if not buyer_account_id and fallback_buyer_account_id:
+                        buyer_account_id = fallback_buyer_account_id
 
                     # Bid funnel metrics
                     bid_requests = get_opt_int("bid_requests") or 0
@@ -539,6 +544,8 @@ def import_csv(
                         if row_bidder_id and result.bidder_id_source == "unknown":
                             result.bidder_id = row_bidder_id
                             result.bidder_id_source = "inferred"
+                    if not buyer_account_id and row_bidder_id:
+                        buyer_account_id = row_bidder_id
 
                     # Add to batch (includes bidder_id and hour)
                     batch.append((
