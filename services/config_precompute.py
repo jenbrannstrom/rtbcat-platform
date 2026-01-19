@@ -8,7 +8,13 @@ from __future__ import annotations
 import logging
 import os
 import sqlite3
-from typing import Optional
+from typing import Optional, Sequence
+
+from services.precompute_utils import (
+    normalize_refresh_dates,
+    record_refresh_log,
+    refresh_window,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -101,10 +107,12 @@ def _ensure_tables(conn: sqlite3.Connection) -> None:
 
 
 async def refresh_config_breakdowns(
-    start_date: str,
-    end_date: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     buyer_account_id: Optional[str] = None,
     db_path: str = DB_PATH,
+    dates: Optional[Sequence[str]] = None,
+    days: Optional[int] = None,
 ) -> None:
     """Refresh config breakdown tables for a date range.
 
@@ -112,21 +120,34 @@ async def refresh_config_breakdowns(
         start_date: inclusive YYYY-MM-DD
         end_date: inclusive YYYY-MM-DD
         buyer_account_id: optional seat scope
+        dates: Optional list of YYYY-MM-DD strings to refresh.
+        days: Optional max-days window (inclusive, counting back from today).
     """
+    date_list = normalize_refresh_dates(
+        dates=dates,
+        start_date=start_date,
+        end_date=end_date,
+        days=days,
+    )
+    refresh_start, refresh_end = refresh_window(date_list)
     logger.info(
         "Refreshing config breakdowns for %s to %s (buyer_account_id=%s)",
-        start_date,
-        end_date,
+        refresh_start,
+        refresh_end,
         buyer_account_id,
     )
     conn = sqlite3.connect(db_path)
     try:
         _ensure_tables(conn)
 
-        params = [start_date, end_date]
+        date_placeholders = ",".join("?" * len(date_list))
+        date_clause = f"metric_date IN ({date_placeholders})"
+        date_clause_q = f"q.metric_date IN ({date_placeholders})"
+
+        params = list(date_list)
         seat_clause = ""
         if buyer_account_id:
-            seat_clause = " AND q.buyer_account_id = ?"
+            seat_clause = " AND buyer_account_id = ?"
             params.append(buyer_account_id)
 
         for table in (
@@ -138,10 +159,20 @@ async def refresh_config_breakdowns(
             conn.execute(
                 f"""
                 DELETE FROM {table}
-                WHERE metric_date BETWEEN ? AND ?{seat_clause}
+                WHERE {date_clause}{seat_clause}
                 """,
                 tuple(params),
             )
+
+        buyer_clause = ""
+        buyer_clause_q = ""
+        query_params = list(date_list)
+        query_params_q = list(date_list)
+        if buyer_account_id:
+            buyer_clause = " AND buyer_account_id = ?"
+            buyer_clause_q = " AND q.buyer_account_id = ?"
+            query_params.append(buyer_account_id)
+            query_params_q.append(buyer_account_id)
 
         conn.execute(
             f"""
@@ -158,16 +189,16 @@ async def refresh_config_breakdowns(
                 SUM(impressions),
                 SUM(spend_micros)
             FROM rtb_daily
-            WHERE metric_date BETWEEN ? AND ?
+            WHERE {date_clause}
               AND billing_id IS NOT NULL
               AND billing_id != ''
               AND buyer_account_id IS NOT NULL
               AND buyer_account_id != ''
               AND creative_size IS NOT NULL
-              AND creative_size != ''{seat_clause}
+              AND creative_size != ''{buyer_clause}
             GROUP BY metric_date, buyer_account_id, billing_id, creative_size
             """,
-            tuple(params),
+            tuple(query_params),
         )
 
         conn.execute(
@@ -185,16 +216,16 @@ async def refresh_config_breakdowns(
                 SUM(impressions),
                 SUM(spend_micros)
             FROM rtb_daily
-            WHERE metric_date BETWEEN ? AND ?
+            WHERE {date_clause}
               AND billing_id IS NOT NULL
               AND billing_id != ''
               AND buyer_account_id IS NOT NULL
               AND buyer_account_id != ''
               AND country IS NOT NULL
-              AND country != ''{seat_clause}
+              AND country != ''{buyer_clause}
             GROUP BY metric_date, buyer_account_id, billing_id, country
             """,
-            tuple(params),
+            tuple(query_params),
         )
 
         conn.execute(
@@ -219,16 +250,16 @@ async def refresh_config_breakdowns(
              AND q.creative_id = b.creative_id
              AND q.buyer_account_id = b.buyer_account_id
              AND q.country = b.country
-            WHERE q.metric_date BETWEEN ? AND ?
+            WHERE {date_clause_q}
               AND q.billing_id IS NOT NULL
               AND q.billing_id != ''
               AND q.buyer_account_id IS NOT NULL
               AND q.buyer_account_id != ''
               AND b.publisher_id IS NOT NULL
-              AND b.publisher_id != ''{seat_clause}
+              AND b.publisher_id != ''{buyer_clause_q}
             GROUP BY q.metric_date, q.buyer_account_id, q.billing_id, b.publisher_id
             """,
-            tuple(params),
+            tuple(query_params_q),
         )
 
         conn.execute(
@@ -246,16 +277,23 @@ async def refresh_config_breakdowns(
                 SUM(impressions),
                 SUM(spend_micros)
             FROM rtb_daily
-            WHERE metric_date BETWEEN ? AND ?
+            WHERE {date_clause}
               AND billing_id IS NOT NULL
               AND billing_id != ''
               AND buyer_account_id IS NOT NULL
               AND buyer_account_id != ''
               AND creative_id IS NOT NULL
-              AND creative_id != ''{seat_clause}
+              AND creative_id != ''{buyer_clause}
             GROUP BY metric_date, buyer_account_id, billing_id, creative_id
             """,
-            tuple(params),
+            tuple(query_params),
+        )
+
+        record_refresh_log(
+            conn,
+            cache_name="config_breakdowns",
+            buyer_account_id=buyer_account_id,
+            dates=date_list,
         )
 
         conn.commit()

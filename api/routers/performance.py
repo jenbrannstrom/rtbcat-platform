@@ -386,13 +386,13 @@ async def import_performance_csv(
         if result.success and result.date_range_start and result.date_range_end:
             background_tasks.add_task(
                 refresh_home_summaries,
-                result.date_range_start,
-                result.date_range_end,
+                start_date=result.date_range_start,
+                end_date=result.date_range_end,
             )
             background_tasks.add_task(
                 refresh_config_breakdowns,
-                result.date_range_start,
-                result.date_range_end,
+                start_date=result.date_range_start,
+                end_date=result.date_range_end,
             )
         return _build_import_response(result)
 
@@ -525,13 +525,13 @@ async def complete_stream_import(
         if result.success and result.date_range_start and result.date_range_end:
             background_tasks.add_task(
                 refresh_home_summaries,
-                result.date_range_start,
-                result.date_range_end,
+                start_date=result.date_range_start,
+                end_date=result.date_range_end,
             )
             background_tasks.add_task(
                 refresh_config_breakdowns,
-                result.date_range_start,
-                result.date_range_end,
+                start_date=result.date_range_start,
+                end_date=result.date_range_end,
             )
         return _build_import_response(result)
     except Exception as e:
