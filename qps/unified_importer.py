@@ -717,10 +717,16 @@ def unified_import(
 
     if not bidder_id:
         bidder_id = parse_bidder_id_from_filename(csv_path)
-    if target_table in ("rtb_daily", "rtb_bidstream") and not bidder_id and not mapping.has_field("buyer_account_id"):
+    if target_table == "rtb_bidstream" and not bidder_id and not mapping.has_field("buyer_account_id"):
         result.error_message = (
             "Missing Buyer account ID. Include the column in the report or ensure the filename "
-            "contains the seat ID (e.g. catscan-quality-<seat>-yesterday-UTC.csv)."
+            "contains the seat ID (e.g. catscan-pipeline-<seat>-yesterday-UTC.csv)."
+        )
+        return result
+    if target_table == "rtb_daily" and not mapping.has_field("buyer_account_id") and not mapping.has_field("billing_id") and not bidder_id:
+        result.error_message = (
+            "Missing Billing ID and Buyer account ID. Include Billing ID in the report or "
+            "ensure the filename contains the seat ID (e.g. catscan-quality-<seat>-yesterday-UTC.csv)."
         )
         return result
 
