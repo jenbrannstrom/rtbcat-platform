@@ -343,6 +343,46 @@ async def import_performance_csv(
 
         # Try flexible unified importer first - it auto-maps columns
         result = unified_import(tmp_path)
+        file_size_bytes = os.path.getsize(tmp_path) if tmp_path and os.path.exists(tmp_path) else 0
+        columns_found = []
+        seen_columns = set()
+        for col in list(result.columns_mapped.values()) + result.columns_unmapped:
+            if col not in seen_columns:
+                columns_found.append(col)
+                seen_columns.add(col)
+
+        def _record_import_history(conn):
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO import_history (
+                    batch_id, filename, rows_read, rows_imported, rows_skipped, rows_duplicate,
+                    date_range_start, date_range_end, columns_found, columns_missing,
+                    total_reached, total_impressions, total_spend_usd, status, error_message,
+                    file_size_bytes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    result.batch_id,
+                    file.filename,
+                    result.rows_read,
+                    result.rows_imported,
+                    result.rows_skipped,
+                    result.rows_duplicate,
+                    result.date_range_start,
+                    result.date_range_end,
+                    ",".join(columns_found) if columns_found else None,
+                    None,
+                    0,
+                    0,
+                    0,
+                    "complete" if result.success else "failed",
+                    result.error_message or None,
+                    file_size_bytes,
+                ),
+            )
+
+        await db_transaction_async(_record_import_history)
         if result.success and result.date_range_start and result.date_range_end:
             background_tasks.add_task(
                 refresh_home_summaries,
