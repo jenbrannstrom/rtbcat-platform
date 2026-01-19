@@ -78,10 +78,18 @@ def _ensure_tables(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_cfg_size_date ON config_size_daily(metric_date)"
     )
     conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cfg_size_date_buyer_billing_size "
+        "ON config_size_daily(metric_date, buyer_account_id, billing_id, creative_size)"
+    )
+    conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_cfg_size_billing ON config_size_daily(billing_id)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_cfg_geo_date ON config_geo_daily(metric_date)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cfg_geo_date_buyer_billing_country "
+        "ON config_geo_daily(metric_date, buyer_account_id, billing_id, country)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_cfg_geo_billing ON config_geo_daily(billing_id)"
@@ -90,10 +98,18 @@ def _ensure_tables(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_cfg_pub_date ON config_publisher_daily(metric_date)"
     )
     conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cfg_pub_date_buyer_billing_pub "
+        "ON config_publisher_daily(metric_date, buyer_account_id, billing_id, publisher_id)"
+    )
+    conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_cfg_pub_billing ON config_publisher_daily(billing_id)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_cfg_creative_date ON config_creative_daily(metric_date)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cfg_creative_date_buyer_billing_creative "
+        "ON config_creative_daily(metric_date, buyer_account_id, billing_id, creative_id)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_cfg_creative_billing ON config_creative_daily(billing_id)"
