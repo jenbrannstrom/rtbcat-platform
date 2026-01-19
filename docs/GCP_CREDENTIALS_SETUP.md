@@ -8,6 +8,153 @@
 
 ---
 
+## How to Access the Production VM (READ THIS FIRST)
+
+### What You Need to Access the VM
+
+You need ONE thing: **access to the Google account `billing@amazingdo.com`**
+
+That's it. No special keys, no certificates, no tokens. Just login access to that Google account.
+
+### Why?
+
+The VM uses **Google Identity-Aware Proxy (IAP)** for SSH access. This means:
+- Port 22 (SSH) is NOT open to the internet
+- Only users authenticated via Google AND authorized in the GCP project can connect
+- The `billing@amazingdo.com` account is the owner of the GCP project
+
+### Step-by-Step: Access from ANY Computer
+
+**Step 1: Install gcloud CLI**
+
+On Mac:
+```bash
+brew install google-cloud-sdk
+```
+
+On Ubuntu/Debian:
+```bash
+sudo apt install google-cloud-cli
+```
+
+On Windows: Download from https://cloud.google.com/sdk/docs/install
+
+**Step 2: Login to Google**
+
+```bash
+gcloud auth login
+```
+
+This opens a browser. Sign in with `billing@amazingdo.com` (or an account that has been granted access to the project).
+
+**Step 3: Set the project**
+
+```bash
+gcloud config set project catscan-prod-202601
+```
+
+**Step 4: Connect to the VM**
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
+```
+
+Done. You're in.
+
+> **Note:** The `--tunnel-through-iap` flag is required because port 22 is not open to the internet. Without it, the command will timeout trying direct SSH before falling back to IAP.
+
+### What About SSH Keys?
+
+You don't need to copy any SSH keys. When you run `gcloud compute ssh`, it:
+1. Automatically generates SSH keys if you don't have any
+2. Uploads the public key to the VM
+3. Connects you
+
+Keys are stored at `~/.ssh/google_compute_engine` but you never need to touch them.
+
+### If Jen's Laptop Dies: Recovery Checklist
+
+1. Get access to `billing@amazingdo.com` Google account (password in company password manager)
+2. Install gcloud CLI on any computer
+3. Run `gcloud auth login` and sign in
+4. Run `gcloud config set project catscan-prod-202601`
+5. Run `gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap`
+6. You're in the VM
+
+### Granting Access to Other People
+
+To let someone else access the VM:
+
+```bash
+gcloud projects add-iam-policy-binding catscan-prod-202601 \
+  --member="user:their-email@gmail.com" \
+  --role="roles/iap.tunnelResourceAccessor"
+
+gcloud projects add-iam-policy-binding catscan-prod-202601 \
+  --member="user:their-email@gmail.com" \
+  --role="roles/compute.instanceAdmin.v1"
+```
+
+### Running Commands Without Interactive Session
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- "your command here"
+```
+
+Examples:
+```bash
+# Check running containers
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- "sudo docker ps"
+
+# View API logs
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- "sudo docker logs catscan-api --tail 50"
+
+# Query the database
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- "sudo sqlite3 /home/catscan/.catscan/catscan.db 'SELECT COUNT(*) FROM rtb_daily;'"
+```
+
+### VM Details
+
+| Property | Value |
+|----------|-------|
+| VM Name | `catscan-production` |
+| Zone | `europe-west1-b` |
+| External IP | `35.205.211.184` |
+| Project ID | `catscan-prod-202601` |
+| GCP Owner Account | `billing@amazingdo.com` |
+
+### Firewall Rules (What's Open)
+
+| Port | Access | Purpose |
+|------|--------|---------|
+| 22 (SSH) | IAP only (`35.235.240.0/20`) | SSH via gcloud only |
+| 80 (HTTP) | Public | Redirects to HTTPS |
+| 443 (HTTPS) | Public | Main app at scan.rtb.cat |
+| 3000, 8000 | localhost only | Internal services, NOT exposed |
+
+### Local Credentials on Jen's Laptop (For Reference)
+
+These files exist on Jen's laptop at `/home/jen/`:
+
+| File | Purpose | Needed for Recovery? |
+|------|---------|---------------------|
+| `~/.config/gcloud/` | gcloud login session | NO - just run `gcloud auth login` |
+| `~/.ssh/google_compute_engine` | SSH key for VM | NO - auto-generated |
+| `~/.catscan/credentials/catscan-service-account.json` | Authorized Buyers API | YES - also in GCP Secret Manager |
+| `~/.catscan/credentials/gmail-token.json` | Gmail import | YES - also in GCP Secret Manager |
+
+**Important:** The service account and Gmail credentials are stored in **GCP Secret Manager**, so even if the laptop dies, they can be retrieved:
+
+```bash
+# Retrieve service account key
+gcloud secrets versions access latest --secret=catscan-ab-service-account > catscan-service-account.json
+
+# Retrieve Gmail token
+gcloud secrets versions access latest --secret=catscan-gmail-token > gmail-token.json
+```
+
+---
+
 ## ONE-TIME Credential Setup (Do This Once, Never Again)
 
 Credentials are stored in **GCP Secret Manager** and automatically pulled on every VM deploy/restart.
