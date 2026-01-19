@@ -6,7 +6,6 @@ Handles Gmail import status and triggering manual imports.
 import logging
 import os
 import uuid
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -186,10 +185,7 @@ def _run_import_and_refresh(job_id: str) -> None:
     if not result.get("success") or result.get("files_imported", 0) == 0:
         return
 
-    end_date = datetime.utcnow().date().isoformat()
-    start_date = (datetime.utcnow().date() - timedelta(days=30)).isoformat()
-
     import asyncio
 
-    asyncio.run(refresh_home_summaries(start_date, end_date))
-    asyncio.run(refresh_config_breakdowns(start_date, end_date))
+    asyncio.run(refresh_home_summaries(days=30))
+    asyncio.run(refresh_config_breakdowns(days=30))
