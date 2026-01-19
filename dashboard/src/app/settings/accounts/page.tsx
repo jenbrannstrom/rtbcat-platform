@@ -3,24 +3,23 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { Settings, Link2, Mail } from "lucide-react";
-import { getHealth, getGmailStatus } from "@/lib/api";
+import { Settings, Link2 } from "lucide-react";
+import { getHealth } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/contexts/i18n-context";
 
 // Import extracted components
-import { ApiConnectionTab, GmailReportsTab, SystemTab } from "./components";
+import { ApiConnectionTab, SystemTab } from "./components";
 
-type SetupTab = "api" | "gmail" | "system";
+type SetupTab = "api" | "system";
 
 export default function ConnectedAccountsPage() {
   const { t } = useTranslation();
 
   const TABS: { id: SetupTab; label: string; icon: React.ElementType; description: string }[] = [
     { id: "api", label: t.setup?.connectApi || "Connect API", icon: Link2, description: t.setup?.googleAuthorizedBuyers || "Google Authorized Buyers" },
-    { id: "gmail", label: t.setup?.gmailReports || "Gmail Reports", icon: Mail, description: t.setup?.autoFetchReports || "Auto-fetch reports" },
     { id: "system", label: t.setup?.system || "System", icon: Settings, description: t.setup?.statusAndSettings || "Status & settings" },
   ];
   const [activeTab, setActiveTab] = useState<SetupTab>("api");
@@ -33,11 +32,6 @@ export default function ConnectedAccountsPage() {
   } = useQuery({
     queryKey: ["health"],
     queryFn: getHealth,
-  });
-
-  const { data: gmailStatus } = useQuery({
-    queryKey: ["gmailStatus"],
-    queryFn: getGmailStatus,
   });
 
   if (healthLoading) {
@@ -58,9 +52,6 @@ export default function ConnectedAccountsPage() {
   }
 
   const isConfigured = health?.configured === true;
-  const isGmailAuthorized = gmailStatus?.authorized === true;
-  const isGmailConfigured = gmailStatus?.configured === true;
-
   return (
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
@@ -82,15 +73,6 @@ export default function ConnectedAccountsPage() {
               )} />
               <span className="text-sm text-gray-600">
                 API: {isConfigured ? (t.setup?.connected || "Connected") : (t.setup?.notConnected || "Not connected")}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className={cn(
-                "w-2 h-2 rounded-full",
-                isGmailAuthorized ? "bg-green-500" : isGmailConfigured ? "bg-yellow-500" : "bg-gray-400"
-              )} />
-              <span className="text-sm text-gray-600">
-                Gmail: {isGmailAuthorized ? (t.setup?.connected || "Connected") : isGmailConfigured ? (t.setup?.notAuthorized || "Not authorized") : (t.setup?.notConfigured || "Not configured")}
               </span>
             </div>
           </div>
@@ -131,7 +113,6 @@ export default function ConnectedAccountsPage() {
       {/* Tab Content */}
       <div className="min-h-[500px]">
         {activeTab === "api" && <ApiConnectionTab />}
-        {activeTab === "gmail" && <GmailReportsTab />}
         {activeTab === "system" && <SystemTab />}
       </div>
     </div>

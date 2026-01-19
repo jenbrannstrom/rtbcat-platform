@@ -1,11 +1,10 @@
-import type { PerformanceRow } from "@/lib/types/import";
-
 interface ImportPreviewProps {
-  data: PerformanceRow[];
+  headers: string[];
+  rows: Record<string, string>[];
 }
 
-export function ImportPreview({ data }: ImportPreviewProps) {
-  if (data.length === 0) {
+export function ImportPreview({ headers, rows }: ImportPreviewProps) {
+  if (rows.length === 0 || headers.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">No data to preview</div>
     );
@@ -23,45 +22,24 @@ export function ImportPreview({ data }: ImportPreviewProps) {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Creative ID
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Date
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                Impressions
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                Clicks
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                Spend
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Geo
-              </th>
+              {headers.map((header) => (
+                <th
+                  key={header}
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap"
+                >
+                  {header}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {data.map((row, index) => (
+            {rows.map((row, index) => (
               <tr key={index} className="hover:bg-gray-50">
-                <td className="px-4 py-3 text-sm text-gray-900">
-                  {row.creative_id}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-900">{row.date}</td>
-                <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                  {row.impressions.toLocaleString()}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                  {row.clicks.toLocaleString()}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                  ${row.spend.toFixed(2)}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-900">
-                  {row.geography || "-"}
-                </td>
+                {headers.map((header) => (
+                  <td key={header} className="px-4 py-3 text-sm text-gray-900">
+                    {row[header] ?? ""}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
