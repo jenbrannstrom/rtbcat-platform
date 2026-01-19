@@ -14,7 +14,7 @@ export function ImportPreview({ headers, rows }: ImportPreviewProps) {
     <div className="border rounded-lg overflow-hidden">
       <div className="bg-gray-50 px-4 py-3 border-b">
         <h3 className="font-semibold text-gray-900">
-          Preview (first {data.length} rows)
+          Preview (first {rows.length} rows)
         </h3>
       </div>
 
