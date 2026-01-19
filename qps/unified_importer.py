@@ -173,6 +173,26 @@ def ensure_table_exists(cursor, table_name: str):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_daily_billing ON rtb_daily(billing_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_daily_creative ON rtb_daily(creative_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_daily_bidder ON rtb_daily(bidder_id)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rtb_daily_metric_buyer "
+            "ON rtb_daily(metric_date, buyer_account_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rtb_daily_metric_billing "
+            "ON rtb_daily(metric_date, billing_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rtb_daily_metric_app "
+            "ON rtb_daily(metric_date, app_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rtb_daily_metric_creative "
+            "ON rtb_daily(metric_date, creative_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rtb_daily_metric_country "
+            "ON rtb_daily(metric_date, country)"
+        )
         ensure_unique_index(cursor, "rtb_daily", "row_hash", "idx_rtb_daily_row_hash")
 
     elif table_name == "rtb_bidstream":
@@ -205,6 +225,18 @@ def ensure_table_exists(cursor, table_name: str):
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_date ON rtb_bidstream(metric_date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_country ON rtb_bidstream(country)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_metric_buyer "
+            "ON rtb_bidstream(metric_date, buyer_account_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_metric_publisher "
+            "ON rtb_bidstream(metric_date, publisher_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_date_country "
+            "ON rtb_bidstream(metric_date, country)"
+        )
         ensure_unique_index(cursor, "rtb_bidstream", "row_hash", "idx_rtb_bidstream_row_hash")
 
     elif table_name == "rtb_bid_filtering":
