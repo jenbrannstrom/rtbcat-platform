@@ -79,10 +79,15 @@ HOME_TABLES_SQL = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_home_seat_date ON home_seat_daily(metric_date)",
+    "CREATE INDEX IF NOT EXISTS idx_home_seat_date_buyer ON home_seat_daily(metric_date, buyer_account_id)",
     "CREATE INDEX IF NOT EXISTS idx_home_pub_date ON home_publisher_daily(metric_date)",
+    "CREATE INDEX IF NOT EXISTS idx_home_pub_date_buyer_pub ON home_publisher_daily(metric_date, buyer_account_id, publisher_id)",
     "CREATE INDEX IF NOT EXISTS idx_home_geo_date ON home_geo_daily(metric_date)",
+    "CREATE INDEX IF NOT EXISTS idx_home_geo_date_buyer_country ON home_geo_daily(metric_date, buyer_account_id, country)",
     "CREATE INDEX IF NOT EXISTS idx_home_config_date ON home_config_daily(metric_date)",
+    "CREATE INDEX IF NOT EXISTS idx_home_config_date_buyer_billing ON home_config_daily(metric_date, buyer_account_id, billing_id)",
     "CREATE INDEX IF NOT EXISTS idx_home_size_date ON home_size_daily(metric_date)",
+    "CREATE INDEX IF NOT EXISTS idx_home_size_date_buyer_size ON home_size_daily(metric_date, buyer_account_id, creative_size)",
 ]
 
 
