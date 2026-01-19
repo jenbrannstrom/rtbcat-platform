@@ -39,6 +39,7 @@ from storage import SQLiteStore, PerformanceMetric
 from storage.database import db_execute, db_query_one, db_transaction_async
 from services.home_precompute import refresh_home_summaries
 from services.config_precompute import refresh_config_breakdowns
+from services.rtb_precompute import refresh_rtb_summaries
 
 logger = logging.getLogger(__name__)
 
@@ -394,6 +395,11 @@ async def import_performance_csv(
                 result.date_range_start,
                 result.date_range_end,
             )
+            background_tasks.add_task(
+                refresh_rtb_summaries,
+                result.date_range_start,
+                result.date_range_end,
+            )
         return _build_import_response(result)
 
     except Exception as e:
@@ -530,6 +536,11 @@ async def complete_stream_import(
             )
             background_tasks.add_task(
                 refresh_config_breakdowns,
+                result.date_range_start,
+                result.date_range_end,
+            )
+            background_tasks.add_task(
+                refresh_rtb_summaries,
                 result.date_range_start,
                 result.date_range_end,
             )

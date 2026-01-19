@@ -22,6 +22,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["RTB Analytics"])
 
+async def _table_exists(table_name: str) -> bool:
+    row = await db_query_one(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+        (table_name,),
+    )
+    return bool(row)
+
+
+async def _table_has_rows(query: str, params: tuple) -> bool:
+    row = await db_query_one(query, params)
+    return (row["cnt"] or 0) > 0 if row else False
+
 
 @router.get("/analytics/rtb-funnel", tags=["RTB Analytics"])
 async def get_rtb_bidstream(
@@ -69,19 +81,47 @@ async def get_rtb_bidstream(
                     "No RTB bidstream rows for this seat. Re-import bidstream CSVs that include buyer_account_id."
                 )
 
-        # Get funnel summary from database - use rtb_bidstream for pipeline metrics
-        funnel_row = await db_query_one(f"""
-            SELECT
-                SUM(reached_queries) as total_reached,
-                SUM(impressions) as total_impressions,
-                SUM(bids) as total_bids,
-                SUM(successful_responses) as total_successful_responses,
-                SUM(bid_requests) as total_bid_requests,
-                COUNT(DISTINCT publisher_id) as publisher_count,
-                COUNT(DISTINCT country) as country_count
-            FROM rtb_bidstream
-            WHERE metric_date >= date('now', ?){buyer_filter}
-        """, (f'-{days} days', *buyer_params))
+        funnel_table_ready = await _table_exists("rtb_funnel_daily")
+        publisher_table_ready = await _table_exists("rtb_publisher_daily")
+        geo_table_ready = await _table_exists("rtb_geo_daily")
+
+        funnel_params = (f'-{days} days', *buyer_params)
+        funnel_row = None
+        if funnel_table_ready:
+            has_funnel_precompute = await _table_has_rows(
+                f"""
+                SELECT COUNT(*) as cnt
+                FROM rtb_funnel_daily
+                WHERE metric_date >= date('now', ?){buyer_filter}
+                """,
+                funnel_params,
+            )
+            if has_funnel_precompute:
+                funnel_row = await db_query_one(f"""
+                    SELECT
+                        SUM(reached_queries) as total_reached,
+                        SUM(impressions) as total_impressions,
+                        SUM(bids) as total_bids,
+                        SUM(successful_responses) as total_successful_responses,
+                        SUM(bid_requests) as total_bid_requests
+                    FROM rtb_funnel_daily
+                    WHERE metric_date >= date('now', ?){buyer_filter}
+                """, funnel_params)
+
+        if not funnel_row:
+            # Get funnel summary from database - use rtb_bidstream for pipeline metrics
+            funnel_row = await db_query_one(f"""
+                SELECT
+                    SUM(reached_queries) as total_reached,
+                    SUM(impressions) as total_impressions,
+                    SUM(bids) as total_bids,
+                    SUM(successful_responses) as total_successful_responses,
+                    SUM(bid_requests) as total_bid_requests,
+                    COUNT(DISTINCT publisher_id) as publisher_count,
+                    COUNT(DISTINCT country) as country_count
+                FROM rtb_bidstream
+                WHERE metric_date >= date('now', ?){buyer_filter}
+            """, (f'-{days} days', *buyer_params))
 
         total_reached = funnel_row["total_reached"] or 0
 
@@ -97,25 +137,55 @@ async def get_rtb_bidstream(
         win_rate = (total_impressions / effective_reached * 100) if effective_reached > 0 else 0
         waste_rate = 100 - win_rate
 
-        # Get top publishers
-        pub_rows = await db_query(f"""
-            SELECT
-                publisher_id,
-                publisher_name,
-                SUM(reached_queries) as reached,
-                SUM(impressions) as impressions,
-                SUM(bids) as total_bids,
-                SUM(auctions_won) as auctions_won,
-                SUM(successful_responses) as successful_responses,
-                SUM(bid_requests) as bid_requests
-            FROM rtb_bidstream
-            WHERE metric_date >= date('now', ?)
-              AND publisher_id IS NOT NULL
-              AND publisher_id != ''{buyer_filter}
-            GROUP BY publisher_id
-            ORDER BY reached DESC
-            LIMIT 10
-        """, (f'-{days} days', *buyer_params))
+        pub_rows = []
+        if publisher_table_ready:
+            has_pub_precompute = await _table_has_rows(
+                f"""
+                SELECT COUNT(*) as cnt
+                FROM rtb_publisher_daily
+                WHERE metric_date >= date('now', ?)
+                  AND publisher_id != ''{buyer_filter}
+                """,
+                (f'-{days} days', *buyer_params),
+            )
+            if has_pub_precompute:
+                pub_rows = await db_query(f"""
+                    SELECT
+                        publisher_id,
+                        publisher_name,
+                        SUM(reached_queries) as reached,
+                        SUM(impressions) as impressions,
+                        SUM(bids) as total_bids,
+                        SUM(auctions_won) as auctions_won,
+                        SUM(successful_responses) as successful_responses,
+                        SUM(bid_requests) as bid_requests
+                    FROM rtb_publisher_daily
+                    WHERE metric_date >= date('now', ?)
+                      AND publisher_id != ''{buyer_filter}
+                    GROUP BY publisher_id
+                    ORDER BY reached DESC
+                    LIMIT 10
+                """, (f'-{days} days', *buyer_params))
+
+        if not pub_rows:
+            pub_rows = await db_query(f"""
+                SELECT
+                    publisher_id,
+                    publisher_name,
+                    SUM(reached_queries) as reached,
+                    SUM(impressions) as impressions,
+                    SUM(bids) as total_bids,
+                    SUM(auctions_won) as auctions_won,
+                    SUM(successful_responses) as successful_responses,
+                    SUM(bid_requests) as bid_requests
+                FROM rtb_bidstream
+                WHERE metric_date >= date('now', ?)
+                  AND publisher_id IS NOT NULL
+                  AND publisher_id != ''{buyer_filter}
+                GROUP BY publisher_id
+                ORDER BY reached DESC
+                LIMIT 10
+            """, (f'-{days} days', *buyer_params))
 
         publishers = []
         for row in pub_rows:
@@ -141,22 +211,51 @@ async def get_rtb_bidstream(
                 "win_rate": round(pub_win_rate, 2),
             })
 
-        # Get top geos
-        geo_rows = await db_query(f"""
-            SELECT
-                country,
-                SUM(reached_queries) as reached,
-                SUM(impressions) as impressions,
-                SUM(bids) as total_bids,
-                SUM(auctions_won) as auctions_won,
-                SUM(successful_responses) as successful_responses,
-                SUM(bid_requests) as bid_requests
-            FROM rtb_bidstream
-            WHERE metric_date >= date('now', ?) AND country IS NOT NULL{buyer_filter}
-            GROUP BY country
-            ORDER BY reached DESC
-            LIMIT 10
-        """, (f'-{days} days', *buyer_params))
+        geo_rows = []
+        if geo_table_ready:
+            has_geo_precompute = await _table_has_rows(
+                f"""
+                SELECT COUNT(*) as cnt
+                FROM rtb_geo_daily
+                WHERE metric_date >= date('now', ?)
+                  AND country != ''{buyer_filter}
+                """,
+                (f'-{days} days', *buyer_params),
+            )
+            if has_geo_precompute:
+                geo_rows = await db_query(f"""
+                    SELECT
+                        country,
+                        SUM(reached_queries) as reached,
+                        SUM(impressions) as impressions,
+                        SUM(bids) as total_bids,
+                        SUM(auctions_won) as auctions_won,
+                        SUM(successful_responses) as successful_responses,
+                        SUM(bid_requests) as bid_requests
+                    FROM rtb_geo_daily
+                    WHERE metric_date >= date('now', ?)
+                      AND country != ''{buyer_filter}
+                    GROUP BY country
+                    ORDER BY reached DESC
+                    LIMIT 10
+                """, (f'-{days} days', *buyer_params))
+
+        if not geo_rows:
+            geo_rows = await db_query(f"""
+                SELECT
+                    country,
+                    SUM(reached_queries) as reached,
+                    SUM(impressions) as impressions,
+                    SUM(bids) as total_bids,
+                    SUM(auctions_won) as auctions_won,
+                    SUM(successful_responses) as successful_responses,
+                    SUM(bid_requests) as bid_requests
+                FROM rtb_bidstream
+                WHERE metric_date >= date('now', ?) AND country IS NOT NULL{buyer_filter}
+                GROUP BY country
+                ORDER BY reached DESC
+                LIMIT 10
+            """, (f'-{days} days', *buyer_params))
 
         geos = []
         for row in geo_rows:
@@ -194,6 +293,42 @@ async def get_rtb_bidstream(
         """, (f'-{days} days',))
         buyer_account_id_populated = (buyer_account_row["cnt"] or 0) > 0 if buyer_account_row else False
 
+        publisher_count = 0
+        country_count = 0
+        if publisher_table_ready:
+            publisher_count_row = await db_query_one(
+                f"""
+                SELECT COUNT(DISTINCT publisher_id) as cnt
+                FROM rtb_publisher_daily
+                WHERE metric_date >= date('now', ?)
+                  AND publisher_id != ''{buyer_filter}
+                """,
+                (f'-{days} days', *buyer_params),
+            )
+            publisher_count = publisher_count_row["cnt"] or 0 if publisher_count_row else 0
+        if geo_table_ready:
+            country_count_row = await db_query_one(
+                f"""
+                SELECT COUNT(DISTINCT country) as cnt
+                FROM rtb_geo_daily
+                WHERE metric_date >= date('now', ?)
+                  AND country != ''{buyer_filter}
+                """,
+                (f'-{days} days', *buyer_params),
+            )
+            country_count = country_count_row["cnt"] or 0 if country_count_row else 0
+
+        if publisher_count == 0 or country_count == 0:
+            fallback_counts = await db_query_one(f"""
+                SELECT
+                    COUNT(DISTINCT publisher_id) as publisher_count,
+                    COUNT(DISTINCT country) as country_count
+                FROM rtb_bidstream
+                WHERE metric_date >= date('now', ?){buyer_filter}
+            """, (f'-{days} days', *buyer_params))
+            publisher_count = fallback_counts["publisher_count"] or publisher_count
+            country_count = fallback_counts["country_count"] or country_count
+
         return {
             "has_data": effective_reached > 0,
             "funnel": {
@@ -206,8 +341,8 @@ async def get_rtb_bidstream(
             "publishers": publishers,
             "geos": geos,
             "data_sources": {
-                "publisher_count": funnel_row["publisher_count"] or 0,
-                "country_count": funnel_row["country_count"] or 0,
+                "publisher_count": publisher_count,
+                "country_count": country_count,
                 "period_days": days,
                 "buyer_filter_applied": buyer_filter_applied,
                 "buyer_filter_message": buyer_filter_message,
@@ -231,27 +366,64 @@ async def get_rtb_publishers(
     Shows win rates and pretargeting filter rates by publisher.
     """
     try:
-        # Query publisher data from database
-        rows = await db_query("""
-            SELECT
-                publisher_id,
-                publisher_name,
-                SUM(reached_queries) as total_reached,
-                SUM(impressions) as total_impressions,
-                SUM(bids) as total_bids
-            FROM rtb_bidstream
-            WHERE metric_date >= date('now', ?)
-            GROUP BY publisher_id, publisher_name
-            ORDER BY total_reached DESC
-            LIMIT ?
-        """, (f'-{days} days', limit))
+        rows = []
+        count_row = None
+        precompute_ready = await _table_exists("rtb_publisher_daily")
+        if precompute_ready:
+            has_precompute = await _table_has_rows(
+                """
+                SELECT COUNT(*) as cnt
+                FROM rtb_publisher_daily
+                WHERE metric_date >= date('now', ?)
+                  AND publisher_id != ''
+                """,
+                (f'-{days} days',),
+            )
+            if has_precompute:
+                rows = await db_query("""
+                    SELECT
+                        publisher_id,
+                        publisher_name,
+                        SUM(reached_queries) as total_reached,
+                        SUM(impressions) as total_impressions,
+                        SUM(bids) as total_bids
+                    FROM rtb_publisher_daily
+                    WHERE metric_date >= date('now', ?)
+                      AND publisher_id != ''
+                    GROUP BY publisher_id, publisher_name
+                    ORDER BY total_reached DESC
+                    LIMIT ?
+                """, (f'-{days} days', limit))
 
-        # Get total count
-        count_row = await db_query_one("""
-            SELECT COUNT(DISTINCT publisher_id) as total
-            FROM rtb_bidstream
-            WHERE metric_date >= date('now', ?)
-        """, (f'-{days} days',))
+                count_row = await db_query_one("""
+                    SELECT COUNT(DISTINCT publisher_id) as total
+                    FROM rtb_publisher_daily
+                    WHERE metric_date >= date('now', ?)
+                      AND publisher_id != ''
+                """, (f'-{days} days',))
+
+        if not rows:
+            # Query publisher data from database
+            rows = await db_query("""
+                SELECT
+                    publisher_id,
+                    publisher_name,
+                    SUM(reached_queries) as total_reached,
+                    SUM(impressions) as total_impressions,
+                    SUM(bids) as total_bids
+                FROM rtb_bidstream
+                WHERE metric_date >= date('now', ?)
+                GROUP BY publisher_id, publisher_name
+                ORDER BY total_reached DESC
+                LIMIT ?
+            """, (f'-{days} days', limit))
+
+            # Get total count
+            count_row = await db_query_one("""
+                SELECT COUNT(DISTINCT publisher_id) as total
+                FROM rtb_bidstream
+                WHERE metric_date >= date('now', ?)
+            """, (f'-{days} days',))
 
         publishers = []
         for row in rows:
@@ -295,26 +467,62 @@ async def get_rtb_geos(
     Shows win rates and auction participation by country.
     """
     try:
-        # Query geo data from database
-        rows = await db_query("""
-            SELECT
-                country,
-                SUM(reached_queries) as total_reached,
-                SUM(impressions) as total_impressions,
-                SUM(bids) as total_bids
-            FROM rtb_bidstream
-            WHERE metric_date >= date('now', ?)
-            GROUP BY country
-            ORDER BY total_reached DESC
-            LIMIT ?
-        """, (f'-{days} days', limit))
+        rows = []
+        count_row = None
+        precompute_ready = await _table_exists("rtb_geo_daily")
+        if precompute_ready:
+            has_precompute = await _table_has_rows(
+                """
+                SELECT COUNT(*) as cnt
+                FROM rtb_geo_daily
+                WHERE metric_date >= date('now', ?)
+                  AND country != ''
+                """,
+                (f'-{days} days',),
+            )
+            if has_precompute:
+                rows = await db_query("""
+                    SELECT
+                        country,
+                        SUM(reached_queries) as total_reached,
+                        SUM(impressions) as total_impressions,
+                        SUM(bids) as total_bids
+                    FROM rtb_geo_daily
+                    WHERE metric_date >= date('now', ?)
+                      AND country != ''
+                    GROUP BY country
+                    ORDER BY total_reached DESC
+                    LIMIT ?
+                """, (f'-{days} days', limit))
 
-        # Get total count
-        count_row = await db_query_one("""
-            SELECT COUNT(DISTINCT country) as total
-            FROM rtb_bidstream
-            WHERE metric_date >= date('now', ?)
-        """, (f'-{days} days',))
+                count_row = await db_query_one("""
+                    SELECT COUNT(DISTINCT country) as total
+                    FROM rtb_geo_daily
+                    WHERE metric_date >= date('now', ?)
+                      AND country != ''
+                """, (f'-{days} days',))
+
+        if not rows:
+            # Query geo data from database
+            rows = await db_query("""
+                SELECT
+                    country,
+                    SUM(reached_queries) as total_reached,
+                    SUM(impressions) as total_impressions,
+                    SUM(bids) as total_bids
+                FROM rtb_bidstream
+                WHERE metric_date >= date('now', ?)
+                GROUP BY country
+                ORDER BY total_reached DESC
+                LIMIT ?
+            """, (f'-{days} days', limit))
+
+            # Get total count
+            count_row = await db_query_one("""
+                SELECT COUNT(DISTINCT country) as total
+                FROM rtb_bidstream
+                WHERE metric_date >= date('now', ?)
+            """, (f'-{days} days',))
 
         geos = []
         for row in rows:
@@ -1035,6 +1243,250 @@ async def get_app_drilldown(
     - Breakdown by creative ID (with links to creative details)
     """
     try:
+        app_table_ready = await _table_exists("rtb_app_daily")
+        app_size_ready = await _table_exists("rtb_app_size_daily")
+        app_country_ready = await _table_exists("rtb_app_country_daily")
+        app_creative_ready = await _table_exists("rtb_app_creative_daily")
+
+        if app_table_ready and app_size_ready and app_country_ready and app_creative_ready:
+            billing_clause = ""
+            billing_params: list[str] = []
+            if billing_id:
+                billing_clause = " AND billing_id = ?"
+                billing_params.append(billing_id)
+
+            summary_row = await db_query_one(
+                f"""
+                SELECT
+                    app_name,
+                    MAX(app_id) as app_id,
+                    COUNT(DISTINCT metric_date) as days_with_data,
+                    SUM(reached_queries) as total_reached,
+                    SUM(impressions) as total_impressions,
+                    SUM(clicks) as total_clicks,
+                    SUM(spend_micros) as total_spend_micros
+                FROM rtb_app_daily
+                WHERE app_name = ?{billing_clause}
+                  AND metric_date >= date('now', ?)
+                """,
+                (app_name, *billing_params, f'-{days} days'),
+            )
+
+            if summary_row and summary_row["total_reached"]:
+                total_reached = summary_row["total_reached"] or 0
+                total_impressions = summary_row["total_impressions"] or 0
+                win_rate = (total_impressions / total_reached * 100) if total_reached > 0 else 0
+
+                count_params = (app_name, *billing_params, f'-{days} days')
+                creative_count_row = await db_query_one(
+                    f"""
+                    SELECT COUNT(DISTINCT creative_id) as creative_count
+                    FROM rtb_app_creative_daily
+                    WHERE app_name = ?{billing_clause}
+                      AND metric_date >= date('now', ?)
+                    """,
+                    count_params,
+                )
+                country_count_row = await db_query_one(
+                    f"""
+                    SELECT COUNT(DISTINCT country) as country_count
+                    FROM rtb_app_country_daily
+                    WHERE app_name = ?{billing_clause}
+                      AND metric_date >= date('now', ?)
+                    """,
+                    count_params,
+                )
+
+                size_rows = await db_query(
+                    f"""
+                    SELECT
+                        creative_size,
+                        creative_format,
+                        SUM(reached_queries) as reached,
+                        SUM(impressions) as impressions,
+                        SUM(clicks) as clicks,
+                        SUM(spend_micros) as spend_micros
+                    FROM rtb_app_size_daily
+                    WHERE app_name = ?{billing_clause}
+                      AND metric_date >= date('now', ?)
+                    GROUP BY creative_size, creative_format
+                    ORDER BY reached DESC
+                    """,
+                    count_params,
+                )
+
+                sizes = []
+                for row in size_rows:
+                    reached = row["reached"] or 0
+                    imps = row["impressions"] or 0
+                    size_win_rate = (imps / reached * 100) if reached > 0 else 0
+                    is_wasteful = size_win_rate < (win_rate * 0.5) and reached > 10000
+                    sizes.append({
+                        "size": row["creative_size"],
+                        "format": row["creative_format"],
+                        "reached": reached,
+                        "impressions": imps,
+                        "clicks": row["clicks"] or 0,
+                        "spend_usd": (row["spend_micros"] or 0) / 1_000_000,
+                        "win_rate": round(size_win_rate, 1),
+                        "waste_pct": round(100 - size_win_rate, 1),
+                        "pct_of_traffic": round(reached / total_reached * 100, 1) if total_reached > 0 else 0,
+                        "is_wasteful": is_wasteful,
+                    })
+
+                country_rows = await db_query(
+                    f"""
+                    SELECT
+                        country,
+                        SUM(reached_queries) as reached,
+                        SUM(impressions) as impressions,
+                        SUM(clicks) as clicks,
+                        SUM(spend_micros) as spend_micros
+                    FROM rtb_app_country_daily
+                    WHERE app_name = ?{billing_clause}
+                      AND metric_date >= date('now', ?)
+                    GROUP BY country
+                    ORDER BY reached DESC
+                    """,
+                    count_params,
+                )
+
+                countries = []
+                for row in country_rows:
+                    reached = row["reached"] or 0
+                    imps = row["impressions"] or 0
+                    country_win_rate = (imps / reached * 100) if reached > 0 else 0
+                    countries.append({
+                        "country": row["country"],
+                        "reached": reached,
+                        "impressions": imps,
+                        "clicks": row["clicks"] or 0,
+                        "spend_usd": (row["spend_micros"] or 0) / 1_000_000,
+                        "win_rate": round(country_win_rate, 1),
+                        "pct_of_traffic": round(reached / total_reached * 100, 1) if total_reached > 0 else 0,
+                    })
+
+                creative_rows = await db_query(
+                    f"""
+                    SELECT
+                        creative_id,
+                        creative_size,
+                        creative_format,
+                        SUM(reached_queries) as reached,
+                        SUM(impressions) as impressions,
+                        SUM(clicks) as clicks,
+                        SUM(spend_micros) as spend_micros
+                    FROM rtb_app_creative_daily
+                    WHERE app_name = ?{billing_clause}
+                      AND metric_date >= date('now', ?)
+                    GROUP BY creative_id, creative_size, creative_format
+                    ORDER BY reached DESC
+                    LIMIT 10
+                    """,
+                    count_params,
+                )
+
+                creatives = []
+                for row in creative_rows:
+                    reached = row["reached"] or 0
+                    imps = row["impressions"] or 0
+                    creative_win_rate = (imps / reached * 100) if reached > 0 else 0
+                    creatives.append({
+                        "creative_id": row["creative_id"],
+                        "size": row["creative_size"],
+                        "format": row["creative_format"],
+                        "reached": reached,
+                        "impressions": imps,
+                        "clicks": row["clicks"] or 0,
+                        "spend_usd": (row["spend_micros"] or 0) / 1_000_000,
+                        "win_rate": round(creative_win_rate, 1),
+                        "pct_of_traffic": round(reached / total_reached * 100, 1) if total_reached > 0 else 0,
+                    })
+
+                wasteful_sizes = [s for s in sizes if s["is_wasteful"]]
+                waste_insight = None
+                if wasteful_sizes:
+                    worst = max(wasteful_sizes, key=lambda x: x["reached"])
+                    waste_insight = {
+                        "type": "size",
+                        "value": worst["size"],
+                        "message": (
+                            f"{worst['size']} has only {worst['win_rate']}% win rate but accounts for "
+                            f"{worst['pct_of_traffic']}% of traffic"
+                        ),
+                        "wasted_queries": int(worst["reached"] * (1 - worst["win_rate"] / 100)),
+                        "recommendation": f"Consider removing {worst['size']} from pretargeting for this app",
+                    }
+
+                bid_filtering = []
+                creative_ids = [c["creative_id"] for c in creatives]
+                if creative_ids:
+                    try:
+                        table_check = await db_query_one("""
+                            SELECT name FROM sqlite_master
+                            WHERE type='table' AND name='rtb_bid_filtering'
+                        """)
+
+                        if table_check:
+                            placeholders = ",".join(["?" for _ in creative_ids])
+                            filtering_params = creative_ids + [f'-{days} days']
+
+                            filtering_rows = await db_query(f"""
+                                SELECT
+                                    filtering_reason,
+                                    SUM(bids) as total_bids,
+                                    SUM(bids_in_auction) as bids_passed,
+                                    SUM(opportunity_cost_micros) as opportunity_cost_micros
+                                FROM rtb_bid_filtering
+                                WHERE creative_id IN ({placeholders})
+                                  AND metric_date >= date('now', ?)
+                                GROUP BY filtering_reason
+                                ORDER BY total_bids DESC
+                                LIMIT 10
+                            """, tuple(filtering_params))
+
+                            total_filtered_bids = sum(r["total_bids"] or 0 for r in filtering_rows)
+
+                            for row in filtering_rows:
+                                bids = row["total_bids"] or 0
+                                passed = row["bids_passed"] or 0
+                                bid_filtering.append({
+                                    "reason": row["filtering_reason"],
+                                    "bids_filtered": bids,
+                                    "bids_passed": passed,
+                                    "pct_of_filtered": (
+                                        round(bids / total_filtered_bids * 100, 1)
+                                        if total_filtered_bids > 0
+                                        else 0
+                                    ),
+                                    "opportunity_cost_usd": (row["opportunity_cost_micros"] or 0) / 1_000_000,
+                                })
+                    except Exception as e:
+                        logger.warning(f"Could not fetch bid filtering data: {e}")
+
+                return {
+                    "app_name": app_name,
+                    "app_id": summary_row["app_id"],
+                    "has_data": True,
+                    "period_days": days,
+                    "summary": {
+                        "total_reached": total_reached,
+                        "total_impressions": total_impressions,
+                        "total_clicks": summary_row["total_clicks"] or 0,
+                        "total_spend_usd": (summary_row["total_spend_micros"] or 0) / 1_000_000,
+                        "win_rate": round(win_rate, 1),
+                        "waste_rate": round(100 - win_rate, 1),
+                        "days_with_data": summary_row["days_with_data"],
+                        "creative_count": creative_count_row["creative_count"] if creative_count_row else 0,
+                        "country_count": country_count_row["country_count"] if country_count_row else 0,
+                    },
+                    "by_size": sizes,
+                    "by_country": countries,
+                    "by_creative": creatives,
+                    "waste_insight": waste_insight,
+                    "bid_filtering": bid_filtering,
+                }
+
         # Build base WHERE clause
         where_clauses = ["app_name = ?"]
         params = [app_name]
