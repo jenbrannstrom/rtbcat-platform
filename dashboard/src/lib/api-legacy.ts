@@ -1287,6 +1287,8 @@ export interface ImportHistoryItem {
   file_size_mb: number;
   status: string;
   error_message: string | null;
+  columns_found?: string[];
+  columns_missing?: string[];
 }
 
 export async function getUploadTracking(days: number = 30): Promise<UploadTrackingResponse> {

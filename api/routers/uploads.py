@@ -65,6 +65,8 @@ class ImportHistoryResponse(BaseModel):
     error_message: Optional[str] = None
     bidder_id: Optional[str] = None
     billing_ids_found: Optional[list[str]] = None
+    columns_found: Optional[list[str]] = None
+    columns_missing: Optional[list[str]] = None
 
 
 class DailyFileUpload(BaseModel):
@@ -212,6 +214,12 @@ async def get_import_history(
                     (*allowed_bidder_ids, limit, offset),
                 )
 
+        def _split_columns(value: Optional[str]) -> Optional[list[str]]:
+            if not value:
+                return None
+            columns = [col.strip() for col in value.split(",") if col.strip()]
+            return columns or None
+
         results = []
         for row in rows:
             file_size_bytes = row["file_size_bytes"] if "file_size_bytes" in row.keys() else 0
@@ -241,6 +249,8 @@ async def get_import_history(
                     error_message=row["error_message"],
                     bidder_id=row["bidder_id"] if "bidder_id" in row.keys() else None,
                     billing_ids_found=billing_ids,
+                    columns_found=_split_columns(row["columns_found"]) if "columns_found" in row.keys() else None,
+                    columns_missing=_split_columns(row["columns_missing"]) if "columns_missing" in row.keys() else None,
                 )
             )
 

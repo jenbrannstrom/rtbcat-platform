@@ -356,38 +356,6 @@ export function GmailReportsTab() {
               )}
             </div>
 
-            {/* Recent history */}
-            {gmailStatus?.recent_history && gmailStatus.recent_history.length > 0 && (
-              <div className="pt-4 border-t border-gray-200">
-                <h5 className="text-sm font-medium text-gray-700 mb-3">Recent Import History</h5>
-                <div className="space-y-2">
-                  {gmailStatus.recent_history.slice(0, 5).map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-sm py-2 border-b border-gray-100 last:border-0">
-                      <div className="flex items-center gap-2">
-                        {item.success ? (
-                          <CheckCircle className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <XCircle className="h-4 w-4 text-red-500" />
-                        )}
-                        <span className="text-gray-600">
-                          {new Date(item.timestamp).toLocaleString()}
-                        </span>
-                      </div>
-                      <span className={cn(
-                        "text-xs",
-                        item.success ? "text-green-600" : "text-red-600"
-                      )}>
-                        {item.success
-                          ? item.files_imported > 0
-                            ? `${item.files_imported} file(s) imported`
-                            : "No new files"
-                          : item.error || "Failed"}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         ) : (
           <div className="p-6 border-2 border-dashed border-gray-200 rounded-lg text-center">
