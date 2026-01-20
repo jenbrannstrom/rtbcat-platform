@@ -522,6 +522,16 @@ CREATE INDEX IF NOT EXISTS idx_pretargeting_history_date ON pretargeting_history
 CREATE INDEX IF NOT EXISTS idx_pretargeting_history_bidder ON pretargeting_history(bidder_id);
 """
 
+# Reference indexes for RTB CSV tables (created via importers/migrations):
+# - rtb_daily(metric_date, buyer_account_id)
+# - rtb_daily(metric_date, billing_id)
+# - rtb_daily(metric_date, app_id)
+# - rtb_daily(metric_date, creative_id)
+# - rtb_daily(metric_date, country)
+# - rtb_bidstream(metric_date, buyer_account_id)
+# - rtb_bidstream(metric_date, publisher_id)
+# - rtb_bidstream(metric_date, country)
+
 # Migrations for existing databases - run in order, silently fail if already applied
 MIGRATIONS = [
     # Early migrations (columns that may already exist in older DBs)
