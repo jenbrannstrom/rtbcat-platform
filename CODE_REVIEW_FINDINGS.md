@@ -37,7 +37,7 @@ Comprehensive code review of the Cat-Scan/RTB platform identifying security vuln
 | Issue | Location | Status | Fix Applied |
 |-------|----------|--------|-------------|
 | CORS wildcard with credentials | `api/main.py:131-137` | **FIXED** | Replaced `allow_origins=["*"]` with explicit allowlist via `ALLOWED_ORIGINS` env var |
-| Weak password hashing fallback | `api/auth_v2.py:49-56` | **FIXED** | Removed SHA-256 fallback, bcrypt now required |
+| Weak password hashing fallback | `api/auth_oauth_proxy.py:49-56` | **FIXED** | Removed SHA-256 fallback, bcrypt now required |
 
 ### HIGH (Fixed)
 
@@ -50,8 +50,8 @@ Comprehensive code review of the Cat-Scan/RTB platform identifying security vuln
 | Issue | Location | Status | Notes |
 |-------|----------|--------|-------|
 | XSS via dangerouslySetInnerHTML | `dashboard/src/components/preview-modal.tsx` | Pending | Sanitize HTML content, use sandboxed iframe |
-| ~~Session cookie not always secure~~ | ~~`api/auth_v2.py`~~ | **N/A** | Removed - OAuth2 Proxy handles auth |
-| ~~Email validation too weak~~ | ~~`api/auth_v2.py`~~ | **N/A** | Removed - OAuth2 Proxy validates Google accounts |
+| ~~Session cookie not always secure~~ | ~~`api/auth_oauth_proxy.py`~~ | **N/A** | Removed - OAuth2 Proxy handles auth |
+| ~~Email validation too weak~~ | ~~`api/auth_oauth_proxy.py`~~ | **N/A** | Removed - OAuth2 Proxy validates Google accounts |
 | API keys logged in plaintext | Various files | Pending | Mask sensitive data in logs |
 
 ### Authentication Cleanup (Completed)
@@ -59,7 +59,7 @@ Comprehensive code review of the Cat-Scan/RTB platform identifying security vuln
 Password-based authentication has been removed. The app now uses **OAuth2 Proxy (Google Auth)** exclusively:
 - Deleted: `dashboard/src/app/login/`, `initial-setup/`, `change-password/` pages
 - Deleted: `dashboard/src/components/sensitive-route-guard.tsx`
-- Cleaned: `api/auth_v2.py` (693 lines → 177 lines) - removed password endpoints
+- Cleaned: `api/auth_oauth_proxy.py` (693 lines → 177 lines) - removed password endpoints
 - Updated: `dashboard/src/contexts/auth-context.tsx` - OAuth2-only flow
 - Updated: `dashboard/src/lib/api/auth.ts` - removed login/changePassword functions
 
@@ -151,17 +151,17 @@ rtbcat-platform/
   - [x] `integrations.ts` - credentials, Gmail, GCP (213 lines)
   - [x] `analytics.ts` - waste, QPS, RTB funnel, performance (290 lines)
   - [x] `index.ts` - backward-compatible re-exports
-  - [ ] Remaining in legacy: recommendations, settings, snapshots, history
+  - [ ] Remaining in legacy: recommendations, history
 - [x] Start `settings.py` refactoring (1,846 lines)
   - [x] Create `api/routers/settings/` package structure
   - [x] Extract models to `settings/models.py` (210 lines)
   - [x] Create `settings/__init__.py` with re-exports
-  - [x] Rename original to `settings_legacy.py` with migration notes
-  - [ ] Extract endpoints routes (~200 lines)
-  - [ ] Extract pretargeting routes (~300 lines)
-  - [ ] Extract snapshots routes (~200 lines)
-  - [ ] Extract changes routes (~350 lines)
-  - [ ] Extract actions routes (~350 lines)
+  - [x] Extract endpoints routes (~200 lines)
+  - [x] Extract pretargeting routes (~300 lines)
+  - [x] Extract snapshots routes (~200 lines)
+  - [x] Extract changes routes (~350 lines)
+  - [x] Extract actions routes (~350 lines)
+  - [x] Remove legacy settings router file
 - [x] Split `accounts/page.tsx` (1,621 → 143 lines) into components
   - [x] `ApiConnectionTab.tsx` - Service accounts and buyer seats (~500 lines)
   - [x] `GeminiApiKeySection.tsx` - AI language detection config (~210 lines)
