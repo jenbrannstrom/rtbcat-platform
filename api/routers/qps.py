@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException, Query
 from api.schemas.qps import QPSSummaryResponse, QPSReportResponse
 from qps import (
     get_import_summary,
-    SizeCoverageAnalyzer,
+    QpsSizeCoverageAnalyzer,
     ConfigPerformanceTracker,
     FraudSignalDetector,
     ACCOUNT_ID,
@@ -66,7 +66,7 @@ async def get_size_coverage_report(days: int = Query(7, ge=1, le=90)):
         days: Number of days to analyze (default: 7)
     """
     try:
-        analyzer = SizeCoverageAnalyzer()
+        analyzer = QpsSizeCoverageAnalyzer()
         report_text = analyzer.generate_report(days)
 
         return QPSReportResponse(
@@ -159,7 +159,7 @@ async def get_full_qps_report(days: int = Query(7, ge=1, le=90)):
 
         # Size Coverage
         try:
-            analyzer = SizeCoverageAnalyzer()
+            analyzer = QpsSizeCoverageAnalyzer()
             lines.append(analyzer.generate_report(days))
             lines.append("")
         except Exception as e:
@@ -212,7 +212,7 @@ async def get_include_list():
     WARNING: Adding these to pretargeting will EXCLUDE all other sizes!
     """
     try:
-        analyzer = SizeCoverageAnalyzer()
+        analyzer = QpsSizeCoverageAnalyzer()
         report = analyzer.analyze_coverage(days=7)
 
         return {
