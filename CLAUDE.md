@@ -11,7 +11,6 @@ This project runs in a memory-limited environment. Follow these rules to prevent
 ### For large files (>500 lines):
 - Read in chunks using offset/limit parameters
 - Large files in this project:
-  - `api/routers/settings_legacy.py` (1800+ lines)
   - `dashboard/src/lib/api.ts` (1500+ lines)
   - `storage/sqlite_store.py` (1400+ lines)
 
