@@ -3,7 +3,6 @@
 
 import argparse
 import asyncio
-from datetime import datetime, timedelta
 
 from services.home_precompute import refresh_home_summaries
 
@@ -19,20 +18,14 @@ def parse_args() -> argparse.Namespace:
 
 async def main() -> None:
     args = parse_args()
+    refresh_kwargs = {"buyer_account_id": args.buyer_id}
     if args.start_date and args.end_date:
-        start_date = args.start_date
-        end_date = args.end_date
+        refresh_kwargs["start_date"] = args.start_date
+        refresh_kwargs["end_date"] = args.end_date
     else:
-        end = datetime.utcnow().date()
-        start = end - timedelta(days=max(args.days, 1))
-        start_date = start.strftime("%Y-%m-%d")
-        end_date = end.strftime("%Y-%m-%d")
+        refresh_kwargs["days"] = max(args.days, 1)
 
-    result = await refresh_home_summaries(
-        start_date,
-        end_date,
-        buyer_account_id=args.buyer_id,
-    )
+    result = await refresh_home_summaries(**refresh_kwargs)
     print(f"Refreshed home cache: {result}")
 
 
