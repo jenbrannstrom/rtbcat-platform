@@ -52,9 +52,10 @@ This document describes the technical architecture of Cat-Scan, a QPS optimizati
 │  │                         STORAGE LAYER                                │   │
 │  ├─────────────────────────────────────────────────────────────────────┤   │
 │  │  SQLiteStore         │  Repositories            │  S3Writer         │   │
-│  │  - 41 tables         │  - campaign_repository   │  - Archive        │   │
-│  │  - WAL mode          │  - seat_repository       │  - Backup         │   │
-│  │                      │  - performance_repository│                   │   │
+│  │  - 41 tables         │  - repositories/         │  - Archive        │   │
+│  │  - WAL mode          │    - campaign_repository │  - Backup         │   │
+│  │                      │    - seat_repository     │                   │   │
+│  │                      │    - performance_repository                 │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -99,7 +100,7 @@ rtbcat-platform/
 ├── api/                    # FastAPI backend
 │   ├── main.py            # Application entry point
 │   ├── auth.py            # API key authentication
-│   ├── auth_v2.py         # Session-based authentication
+│   ├── auth_oauth_proxy.py # Session-based authentication
 │   ├── session_middleware.py
 │   ├── dependencies.py    # Dependency injection
 │   ├── campaigns_router.py
@@ -123,9 +124,10 @@ rtbcat-platform/
 │   ├── schema.py          # Table definitions (41 tables)
 │   ├── models.py          # Pydantic models
 │   ├── database.py        # Connection management
-│   ├── campaign_repository.py
-│   ├── seat_repository.py
-│   ├── performance_repository.py
+│   ├── repositories/
+│   │   ├── campaign_repository.py
+│   │   ├── seat_repository.py
+│   │   ├── performance_repository.py
 │   ├── retention_manager.py
 │   └── s3_writer.py       # AWS S3 archival
 │

@@ -29,9 +29,10 @@ export * from "./seats";
 export * from "./admin";
 export * from "./integrations";
 export * from "./analytics";
+export * from "./snapshots";
 
 // Legacy file still contains: recommendations, RTB settings/pretargeting,
-// upload tracking, import history, snapshots, pending changes, traffic.
+// upload tracking, import history, pending changes, traffic.
 // These can be migrated in future refactoring passes.
 // NOTE: We explicitly re-export only unmigrated items to avoid duplicate exports.
 export {
@@ -59,11 +60,6 @@ export {
   getImportHistory,
   getPretargetingHistory,
   getNewlyUploadedCreatives,
-  // Snapshots & Comparisons
-  createSnapshot,
-  getSnapshots,
-  createComparison,
-  getComparisons,
   // Pending Changes
   createPendingChange,
   getPendingChanges,
@@ -108,8 +104,6 @@ export {
   type PretargetingHistoryItem,
   type NewlyUploadedCreative,
   type NewlyUploadedCreativesResponse,
-  type PretargetingSnapshot,
-  type SnapshotComparison,
   type PendingChange,
   type ConfigDetail,
   type ApplyChangeResponse,
