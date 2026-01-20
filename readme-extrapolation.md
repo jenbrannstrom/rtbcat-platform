@@ -8,17 +8,17 @@
 
 ## Executive Summary
 
-The codebase received significant performance optimizations (precompute tables, indexes, validation). However, the original technical debt issues from my first review were **not addressed**. New issues were also introduced.
+The codebase received significant performance optimizations (precompute tables, indexes, validation). Some original technical debt items have since been addressed, while others remain open, and new issues were introduced.
 
 ### Status of Previous Recommendations
 
 | Issue | Status | Notes |
 |-------|--------|-------|
-| Duplicate utility functions | ❌ NOT FIXED | Still 8 files with `DB_PATH`, 5 files with `parse_date` |
-| Settings router migration | ❌ NOT FIXED | `settings_legacy.py` still 1873 lines |
+| Duplicate utility functions | ✅ FIXED | Shared QPS utilities consolidated |
+| Settings router migration | ✅ FIXED | Settings routes split into endpoints/pretargeting/snapshots/changes/actions subrouters |
 | Frontend API migration | ❌ NOT FIXED | `api-legacy.ts` still 2065 lines |
 | Deprecated endpoints | ❌ NOT FIXED | Still 3 deprecated `/config/credentials` endpoints |
-| Duplicate SizeCoverageAnalyzer | ❌ NOT FIXED | Still in `analytics/` and `qps/` |
+| Duplicate size coverage analyzer name | ✅ FIXED | QPS analyzer renamed to avoid overlap |
 | Repository organization | ❌ NOT FIXED | Still split between `/storage/` and `/storage/repositories/` |
 
 ---
@@ -153,12 +153,12 @@ qps/bid_filtering_importer.py:80
 
 ### 2. Incomplete Settings Router Migration (HIGH)
 
-The 1800+ line `settings_legacy.py` was supposed to be split:
+The 1800+ line settings router was supposed to be split:
 
 ```python
 # api/routers/settings/__init__.py - Still says:
 # TODO: Replace with individual sub-routers as migration completes
-from ..settings_legacy import router
+from .endpoints import router as endpoints_router
 ```
 
 Sub-router files exist with models but routes were never migrated.
@@ -194,13 +194,13 @@ dashboard/src/lib/api/index.ts  - Still re-exports 90+ items from legacy
 
 ### 5. Duplicate Analyzer Classes (MEDIUM)
 
-Two `SizeCoverageAnalyzer` classes:
+Two size coverage analyzers with distinct names:
 - `analytics/size_coverage_analyzer.py:37`
-- `qps/size_analyzer.py:60`
+- `qps/size_analyzer.py:60` (`QpsSizeCoverageAnalyzer`)
 
 Two waste analyzers with confusing names:
 - `analytics/waste_analyzer.py` - `WasteAnalyzer`
-- `services/waste_analyzer.py` - `WasteAnalyzerService`
+- `services/waste_analyzer.py` - `CreativeWasteSignalService`
 
 ---
 
@@ -208,12 +208,10 @@ Two waste analyzers with confusing names:
 
 Split between two locations with no clear pattern:
 
-**In `/storage/` (root):**
+**In `/storage/repositories/`:**
 - `campaign_repository.py`
 - `seat_repository.py`
 - `performance_repository.py`
-
-**In `/storage/repositories/`:**
 - `creative_repository.py`
 - `user_repository.py`
 - `account_repository.py`
@@ -234,7 +232,7 @@ Split between two locations with no clear pattern:
 ### Short Term (Original Issues)
 
 1. **Create `qps/utils.py`** - Centralize `DB_PATH`, `parse_date`, `parse_int`, `parse_float`
-2. **Complete settings router migration** - Split `settings_legacy.py`
+2. **Complete settings router migration** - Split settings routes into subrouters
 3. **Add deprecation removal dates** - For `/config/credentials` endpoints
 
 ### Medium Term
@@ -254,7 +252,7 @@ Split between two locations with no clear pattern:
 | New indexes | 0 | 15+ | +15 |
 | Duplicate utility functions | ~15 | ~15 | No change |
 | Deprecated endpoints | 3 | 3 | No change |
-| settings_legacy.py lines | 1873 | 1873 | No change |
+| settings router split | 0% | 100% | Complete |
 | api-legacy.ts lines | 2065 | 2065 | No change |
 
 ---
