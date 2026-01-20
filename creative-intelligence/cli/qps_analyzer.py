@@ -44,7 +44,7 @@ from urllib.error import URLError
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from qps.importer import validate_csv, import_csv, get_data_summary
-from qps.size_analyzer import SizeCoverageAnalyzer
+from qps.size_analyzer import QpsSizeCoverageAnalyzer
 from qps.config_tracker import ConfigPerformanceTracker
 from qps.fraud_detector import FraudSignalDetector
 from qps.constants import ACCOUNT_NAME, ACCOUNT_ID, PRETARGETING_CONFIGS
@@ -165,13 +165,13 @@ def cmd_coverage(args):
     """Generate size coverage report."""
     days = args.days or 7
 
-    analyzer = SizeCoverageAnalyzer()
+    analyzer = QpsSizeCoverageAnalyzer()
     print(analyzer.generate_report(days))
 
 
 def cmd_include_list(args):
     """Generate recommended pretargeting include list."""
-    analyzer = SizeCoverageAnalyzer()
+    analyzer = QpsSizeCoverageAnalyzer()
     report = analyzer.analyze_coverage(days=7)
 
     print("=" * 60)
@@ -242,7 +242,7 @@ def cmd_full_report(args):
     print("SECTION 1: SIZE COVERAGE")
     print("-" * 80)
     try:
-        analyzer = SizeCoverageAnalyzer()
+        analyzer = QpsSizeCoverageAnalyzer()
         print(analyzer.generate_report(days))
     except Exception as e:
         print(f"Error generating size coverage: {e}")
