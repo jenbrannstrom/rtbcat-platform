@@ -285,8 +285,10 @@ async def get_home_config_performance(
 
 @router.post("/analytics/home/refresh", tags=["Home Analytics"])
 async def refresh_home_cache(
-    start_date: str,
-    end_date: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    dates: Optional[list[str]] = Query(None, description="Explicit YYYY-MM-DD dates to refresh"),
+    days: int = Query(7, ge=1, le=90),
     buyer_id: Optional[str] = None,
     store: SQLiteStore = Depends(get_store),
     user: User = Depends(get_current_user),
@@ -295,4 +297,12 @@ async def refresh_home_cache(
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
-    return await refresh_home_summaries(start_date, end_date, buyer_account_id=buyer_id)
+    refresh_kwargs = {"buyer_account_id": buyer_id}
+    if dates:
+        refresh_kwargs["dates"] = dates
+    elif start_date and end_date:
+        refresh_kwargs["start_date"] = start_date
+        refresh_kwargs["end_date"] = end_date
+    else:
+        refresh_kwargs["days"] = days
+    return await refresh_home_summaries(**refresh_kwargs)
