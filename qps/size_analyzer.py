@@ -8,14 +8,13 @@ against the creatives you have (from API sync) to identify:
 3. What an INCLUDE list would look like for pretargeting
 
 Example:
-    >>> from qps.size_analyzer import SizeCoverageAnalyzer
-    >>> analyzer = SizeCoverageAnalyzer()
+    >>> from qps.size_analyzer import QpsSizeCoverageAnalyzer
+    >>> analyzer = QpsSizeCoverageAnalyzer()
     >>> report = analyzer.generate_report(days=7)
     >>> print(report)
 """
 
 import sqlite3
-import os
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Set, Tuple, Optional
@@ -23,11 +22,9 @@ from dataclasses import dataclass
 
 from qps.constants import GOOGLE_AVAILABLE_SIZES, PRETARGETING_CONFIGS
 from qps.models import CreativeSizeInfo, SizeCoverageResult
+from qps.utils import DB_PATH
 
 logger = logging.getLogger(__name__)
-
-DB_PATH = os.path.expanduser("~/.catscan/catscan.db")
-
 
 @dataclass
 class CoverageReport:
@@ -57,7 +54,7 @@ class CoverageReport:
     generated_at: str
 
 
-class SizeCoverageAnalyzer:
+class QpsSizeCoverageAnalyzer:
     """Analyzes size coverage between your inventory and market traffic."""
 
     def __init__(self, db_path: str = DB_PATH):
@@ -407,5 +404,5 @@ if __name__ == "__main__":
         if idx + 1 < len(sys.argv):
             days = int(sys.argv[idx + 1])
 
-    analyzer = SizeCoverageAnalyzer()
+    analyzer = QpsSizeCoverageAnalyzer()
     print(analyzer.generate_report(days))

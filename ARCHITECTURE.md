@@ -99,7 +99,7 @@ rtbcat-platform/
 ├── api/                    # FastAPI backend
 │   ├── main.py            # Application entry point
 │   ├── auth.py            # API key authentication
-│   ├── auth_v2.py         # Session-based authentication
+│   ├── auth_oauth_proxy.py # Session-based authentication
 │   ├── session_middleware.py
 │   ├── dependencies.py    # Dependency injection
 │   ├── campaigns_router.py
