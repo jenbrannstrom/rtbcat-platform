@@ -326,6 +326,14 @@ def _ensure_funnel_table(cursor):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_date ON rtb_bidstream(metric_date)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_country ON rtb_bidstream(country)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_date_country ON rtb_bidstream(metric_date, country)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_metric_buyer "
+        "ON rtb_bidstream(metric_date, buyer_account_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_metric_publisher "
+        "ON rtb_bidstream(metric_date, publisher_id)"
+    )
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_platform ON rtb_bidstream(platform)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_environment ON rtb_bidstream(environment)")
 
