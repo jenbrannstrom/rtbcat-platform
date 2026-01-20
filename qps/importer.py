@@ -36,11 +36,9 @@ from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, field
 
 from qps.unified_importer import parse_bidder_id_from_filename
+from qps.utils import DB_PATH, parse_date, parse_float, parse_int
 
 logger = logging.getLogger(__name__)
-
-DB_PATH = os.path.expanduser("~/.catscan/catscan.db")
-
 
 # ============================================================================
 # COLUMN CONFIGURATION
@@ -275,56 +273,6 @@ def validate_csv(csv_path: str) -> ValidationResult:
     return result
 
 
-# ============================================================================
-# PARSING HELPERS
-# ============================================================================
-
-def parse_date(date_str: str) -> str:
-    """Parse date from various formats to YYYY-MM-DD."""
-    if not date_str:
-        return ""
-
-    formats = [
-        "%m/%d/%Y",   # 11/30/2025
-        "%m/%d/%y",   # 11/30/25
-        "%Y-%m-%d",   # 2025-11-30
-        "%d/%m/%Y",   # 30/11/2025
-    ]
-
-    for fmt in formats:
-        try:
-            return datetime.strptime(date_str.strip(), fmt).strftime("%Y-%m-%d")
-        except ValueError:
-            continue
-
-    return date_str  # Return as-is if no format matches
-
-
-def parse_int(value) -> Optional[int]:
-    """Parse integer, returning None for empty."""
-    if value is None or value == "":
-        return None
-    if isinstance(value, int):
-        return value
-    try:
-        return int(str(value).replace(",", "").strip())
-    except (ValueError, TypeError):
-        return None
-
-
-def parse_float(value) -> Optional[float]:
-    """Parse float, returning None for empty."""
-    if value is None or value == "":
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    try:
-        cleaned = str(value).replace(",", "").replace("$", "").strip()
-        return float(cleaned)
-    except (ValueError, TypeError):
-        return None
-
-
 def parse_bool(value) -> int:
     """Parse boolean to 0/1."""
     if value is None or value == "":
@@ -458,7 +406,7 @@ def import_csv(
                     def get_opt_int(key: str) -> Optional[int]:
                         if key not in column_map:
                             return None
-                        return parse_int(row.get(column_map[key], ""))
+                        return parse_int(row.get(column_map[key], ""), default=None)
 
                     # NEW: Parse hour for hourly granularity
                     hour = get_opt_int("hour")
