@@ -7,7 +7,7 @@ from services.campaign_aggregation import (
     CampaignWithMetrics,
 )
 from services.waste_analyzer import (
-    WasteAnalyzerService,
+    CreativeWasteSignalService,
     WasteSignal,
     WasteEvidence,
     analyze_waste,
@@ -18,7 +18,7 @@ __all__ = [
     "CampaignMetrics",
     "CampaignWarnings",
     "CampaignWithMetrics",
-    "WasteAnalyzerService",
+    "CreativeWasteSignalService",
     "WasteSignal",
     "WasteEvidence",
     "analyze_waste",
