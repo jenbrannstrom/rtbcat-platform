@@ -9,13 +9,13 @@ in RTB campaigns by:
 4. Detecting fraud signals for human review
 
 Example:
-    >>> from qps import import_bigquery_csv, SizeCoverageAnalyzer
+    >>> from qps import import_bigquery_csv, QpsSizeCoverageAnalyzer
     >>>
     >>> # Import data
     >>> result = import_bigquery_csv("/path/to/export.csv")
     >>>
     >>> # Analyze size coverage
-    >>> analyzer = SizeCoverageAnalyzer()
+    >>> analyzer = QpsSizeCoverageAnalyzer()
     >>> print(analyzer.generate_report(days=7))
 """
 
@@ -28,7 +28,7 @@ from qps.importer import (
     ValidationResult,
     ImportResult as ImportResultNew,
 )
-from qps.size_analyzer import SizeCoverageAnalyzer, CoverageReport
+from qps.size_analyzer import QpsSizeCoverageAnalyzer, CoverageReport
 from qps.config_tracker import ConfigPerformanceTracker, ConfigReport
 from qps.fraud_detector import FraudSignalDetector, FraudReport
 from qps.models import (
@@ -57,7 +57,7 @@ __all__ = [
     "get_data_summary",
     "ValidationResult",
     # Analyzers
-    "SizeCoverageAnalyzer",
+    "QpsSizeCoverageAnalyzer",
     "CoverageReport",
     "ConfigPerformanceTracker",
     "ConfigReport",

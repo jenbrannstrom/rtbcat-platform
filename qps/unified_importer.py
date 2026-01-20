@@ -14,17 +14,16 @@ import os
 import hashlib
 import uuid
 import logging
-from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 
 from qps.flexible_mapper import (
     map_columns, detect_best_report_type, get_default_value, MappingResult
 )
+from qps.utils import DB_PATH, parse_date, parse_float, parse_int
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.expanduser("~/.catscan/catscan.db")
 IMPORT_BATCH_SIZE = int(os.getenv("CATSCAN_IMPORT_BATCH_SIZE", "1000"))
 
 
@@ -58,39 +57,6 @@ class UnifiedImportResult:
 
     # Errors
     errors: List[str] = field(default_factory=list)
-
-
-def parse_date(date_str: str) -> str:
-    """Parse date from various formats to YYYY-MM-DD."""
-    if not date_str:
-        return ""
-    formats = ["%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d", "%d/%m/%Y"]
-    for fmt in formats:
-        try:
-            return datetime.strptime(date_str.strip(), fmt).strftime("%Y-%m-%d")
-        except ValueError:
-            continue
-    return date_str
-
-
-def parse_int(value) -> int:
-    """Parse integer, returning 0 for empty/invalid."""
-    if value is None or value == "":
-        return 0
-    try:
-        return int(str(value).replace(",", "").strip())
-    except (ValueError, TypeError):
-        return 0
-
-
-def parse_float(value) -> float:
-    """Parse float, returning 0.0 for empty/invalid."""
-    if value is None or value == "":
-        return 0.0
-    try:
-        return float(str(value).replace(",", "").replace("$", "").strip())
-    except (ValueError, TypeError):
-        return 0.0
 
 
 def compute_row_hash(row_data: Dict, keys: List[str]) -> str:

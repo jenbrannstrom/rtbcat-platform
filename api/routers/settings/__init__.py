@@ -2,22 +2,25 @@
 
 This package organizes the settings-related routes into focused modules:
 - models.py: Shared Pydantic models
-- endpoints.py: RTB endpoints sync and management (TODO)
+- endpoints.py: RTB endpoints sync and management
 - pretargeting.py: Pretargeting config management (TODO)
 - snapshots.py: Config snapshots and comparisons (TODO)
 - changes.py: Pending changes queue (TODO)
 - actions.py: Apply, suspend, activate, rollback (TODO)
 
-Currently, all routes are still in the legacy settings.py file.
+Currently, remaining routes are still in the legacy settings.py file.
 The models have been extracted to models.py for reuse.
 
 Migration plan:
-1. Extract endpoints routes (~200 lines)
+1. Extract endpoints routes (~200 lines) - completed
 2. Extract pretargeting routes (~300 lines)
 3. Extract snapshots routes (~200 lines)
 4. Extract changes routes (~350 lines)
 5. Extract actions routes (~350 lines)
 """
+
+# Re-export models for easy importing
+from fastapi import APIRouter
 
 # Re-export models for easy importing
 from .models import (
@@ -48,9 +51,12 @@ from .models import (
     RollbackResponse,
 )
 
-# Import the legacy router for backward compatibility
-# TODO: Replace with individual sub-routers as migration completes
-from ..settings_legacy import router
+from .endpoints import router as endpoints_router
+from ..settings_legacy import router as legacy_router
+
+router = APIRouter(tags=["RTB Settings"])
+router.include_router(endpoints_router)
+router.include_router(legacy_router)
 
 __all__ = [
     "router",

@@ -51,7 +51,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.auth import APIKeyAuthMiddleware
 from api.session_middleware import SessionAuthMiddleware
-from api.auth_v2 import router as auth_router, cleanup_sessions
+from api.auth_oauth_proxy import router as auth_router, cleanup_sessions
 from config import ConfigManager
 from storage import SQLiteStore
 from api.campaigns_router import router as campaigns_router
