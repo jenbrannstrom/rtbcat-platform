@@ -138,6 +138,7 @@ def reset_tables():
         CREATE INDEX IF NOT EXISTS idx_rtb_date_creative ON rtb_daily(metric_date, creative_id);
         CREATE INDEX IF NOT EXISTS idx_rtb_date_app ON rtb_daily(metric_date, app_id);
         CREATE INDEX IF NOT EXISTS idx_rtb_date_country ON rtb_daily(metric_date, country);
+        CREATE INDEX IF NOT EXISTS idx_rtb_date_buyer ON rtb_daily(metric_date, buyer_account_id);
     """)
     print("   ✓ Created: rtb_daily with indices")
 
