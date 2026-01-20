@@ -138,7 +138,7 @@ Transform Cat-Scan from a data viewer into a decision engine. Every screen now a
 
 #### Phase 11.2: Evidence-Based Waste Detection
 - **waste_signals table**: New table storing waste signals with full evidence JSON
-- **WasteAnalyzerService**: Generates evidence-based signals explaining WHY a creative is flagged
+- **CreativeWasteSignalService**: Generates evidence-based signals explaining WHY a creative is flagged
 - **Signal types**: broken_video, zero_engagement, low_ctr, high_spend_low_performance, low_vcr, disapproved
 - **API endpoints**:
   - `GET /analytics/waste-signals/{creative_id}` - Get signals for a creative
