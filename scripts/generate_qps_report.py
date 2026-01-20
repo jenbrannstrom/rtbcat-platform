@@ -28,7 +28,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from qps import (
-    SizeCoverageAnalyzer,
+    QpsSizeCoverageAnalyzer,
     ConfigPerformanceTracker,
     FraudSignalDetector,
     ACCOUNT_NAME,
@@ -65,7 +65,7 @@ def main():
     # Module 1: Size Coverage
     print("  Generating Size Coverage report...")
     try:
-        analyzer = SizeCoverageAnalyzer()
+        analyzer = QpsSizeCoverageAnalyzer()
         size_report = analyzer.generate_report(days)
         lines.append(size_report)
         lines.append("")

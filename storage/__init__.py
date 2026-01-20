@@ -27,10 +27,10 @@ Example:
 from .adapters import creative_dict_to_storage, creative_dicts_to_storage
 from .s3_writer import S3Writer
 from .sqlite_store import BuyerSeat, Campaign, Creative, PerformanceMetric, SQLiteStore
-from .performance_repository import PerformanceRepository
-from .seat_repository import Seat, SeatRepository
+from .repositories.performance_repository import PerformanceRepository
+from .repositories.seat_repository import Seat, SeatRepository
 from .retention_manager import RetentionManager
-from .campaign_repository import AICampaign, CampaignRepository
+from .repositories.campaign_repository import AICampaign, CampaignRepository
 
 # New modular imports
 from .models import (

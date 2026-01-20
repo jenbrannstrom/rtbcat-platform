@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 
 from storage.database import db_query, db_transaction_async, DB_PATH
-from storage.campaign_repository import CampaignRepository, AICampaign
+from storage.repositories.campaign_repository import CampaignRepository, AICampaign
 from api.clustering.rule_based import pre_cluster_creatives, merge_small_clusters
 from api.clustering.ai_clusterer import AICampaignClusterer, apply_ai_suggestions
 from utils.app_parser import format_package_id_as_name, parse_app_store_url

@@ -18,6 +18,7 @@
  *   - analytics.ts: waste, performance, QPS, funnel
  *   - settings.ts: RTB endpoints, pretargeting, configs
  *   - integrations.ts: credentials, Gmail, GCP
+ *   - uploads.ts: upload tracking, import history, new creatives
  */
 
 // Re-export from modular files
@@ -29,9 +30,11 @@ export * from "./seats";
 export * from "./admin";
 export * from "./integrations";
 export * from "./analytics";
+export * from "./snapshots";
+export * from "./settings";
+export * from "./uploads";
 
-// Legacy file still contains: recommendations, RTB settings/pretargeting,
-// upload tracking, import history, snapshots, pending changes, traffic.
+// Legacy file still contains: recommendations, traffic.
 // These can be migrated in future refactoring passes.
 // NOTE: We explicitly re-export only unmigrated items to avoid duplicate exports.
 export {
@@ -45,37 +48,6 @@ export {
   getRecommendationSummary,
   resolveRecommendation,
   getPretargetingRecommendations,
-  // RTB Endpoints & Pretargeting
-  getRTBEndpoints,
-  syncRTBEndpoints,
-  getPretargetingConfigs,
-  syncPretargetingConfigs,
-  setPretargetingName,
-  getConfigBreakdown,
-  getConfigCreatives,
-  getAppDrilldown,
-  // Upload & Import tracking
-  getUploadTracking,
-  getImportHistory,
-  getPretargetingHistory,
-  getNewlyUploadedCreatives,
-  // Snapshots & Comparisons
-  createSnapshot,
-  getSnapshots,
-  createComparison,
-  getComparisons,
-  // Pending Changes
-  createPendingChange,
-  getPendingChanges,
-  cancelPendingChange,
-  markChangeApplied,
-  getPretargetingConfigDetail,
-  // Actions
-  applyPendingChange,
-  applyAllPendingChanges,
-  suspendPretargeting,
-  activatePretargeting,
-  rollbackPretargeting,
   // Types (not migrated yet)
   type Evidence,
   type Impact,
@@ -91,35 +63,5 @@ export {
   type PretargetingResponse,
   type PretargetingRecommendation,
   type QPSSummaryResponse,
-  type RTBEndpointItem,
-  type RTBEndpointsResponse,
-  type SyncEndpointsResponse,
-  type PretargetingConfigResponse,
-  type SyncPretargetingResponse,
-  type ConfigBreakdownType,
-  type ConfigBreakdownItem,
-  type ConfigBreakdownResponse,
-  type ConfigCreativesItem,
-  type ConfigCreativesResponse,
   type GmailImportHistoryItem,
-  type DailyUploadSummary,
-  type UploadTrackingResponse,
-  type ImportHistoryItem,
-  type PretargetingHistoryItem,
-  type NewlyUploadedCreative,
-  type NewlyUploadedCreativesResponse,
-  type PretargetingSnapshot,
-  type SnapshotComparison,
-  type PendingChange,
-  type ConfigDetail,
-  type ApplyChangeResponse,
-  type ApplyAllResponse,
-  type SuspendActivateResponse,
-  type RollbackResponse,
-  type AppDrilldownSizeItem,
-  type AppDrilldownCountryItem,
-  type AppDrilldownCreativeItem,
-  type AppDrilldownWasteInsight,
-  type AppDrilldownBidFilteringItem,
-  type AppDrilldownResponse,
 } from "../api-legacy";

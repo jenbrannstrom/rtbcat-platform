@@ -650,7 +650,7 @@ async def import_performance_stream(
 
     Accepts NDJSON (newline-delimited JSON) stream of performance rows.
     """
-    from storage.performance_repository import PerformanceRepository
+    from storage.repositories.performance_repository import PerformanceRepository
     from storage.database import _get_connection
 
     BATCH_SIZE = 1000
