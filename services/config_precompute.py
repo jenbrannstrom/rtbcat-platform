@@ -126,7 +126,6 @@ async def refresh_config_breakdowns(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     buyer_account_id: Optional[str] = None,
-    db_path: str = DB_PATH,
     dates: Optional[Sequence[str]] = None,
     days: Optional[int] = None,
 ) -> None:
