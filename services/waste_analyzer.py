@@ -68,7 +68,7 @@ class WasteSignal:
     recommendation: str  # Suggested action
 
 
-class WasteAnalyzerService:
+class CreativeWasteSignalService:
     """
     Service for detecting and storing evidence-based waste signals.
 
@@ -497,5 +497,5 @@ class WasteAnalyzerService:
 # Convenience function
 def analyze_waste(days: int = 7, save: bool = True) -> list[WasteSignal]:
     """Quick function to run waste analysis."""
-    service = WasteAnalyzerService()
+    service = CreativeWasteSignalService()
     return service.analyze_all_creatives(days=days, save_to_db=save)
