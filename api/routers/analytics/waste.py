@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 
 from analytics.waste_analyzer import WasteAnalyzer
 from analytics.qps_optimizer import QPSOptimizer
-from services.waste_analyzer import WasteAnalyzerService
+from services.waste_analyzer import CreativeWasteSignalService
 from api.dependencies import (
     get_store,
     get_current_user,
@@ -119,7 +119,7 @@ async def get_waste_signals(
     if creative.buyer_id:
         await require_buyer_access(creative.buyer_id, store=store, user=user)
 
-    service = WasteAnalyzerService()
+    service = CreativeWasteSignalService()
     signals = service.get_signals_for_creative(creative_id, include_resolved=include_resolved)
     return [WasteSignalResponse(**s) for s in signals]
 
@@ -173,7 +173,7 @@ async def run_waste_analysis(
     Phase 11.2: Evidence-Based Waste Detection
     Analyzes all creatives and generates signals with evidence.
     """
-    service = WasteAnalyzerService()
+    service = CreativeWasteSignalService()
     signals = service.analyze_all_creatives(days=days, save_to_db=save_to_db)
 
     return {
@@ -192,7 +192,7 @@ async def resolve_waste_signal(
 
     Phase 11.2: Evidence-Based Waste Detection
     """
-    service = WasteAnalyzerService()
+    service = CreativeWasteSignalService()
     success = service.resolve_signal(signal_id, resolved_by="user", notes=notes)
 
     if not success:
