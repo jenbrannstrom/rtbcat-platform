@@ -16,12 +16,12 @@ from services.precompute_utils import (
     refresh_window,
 )
 
+from storage.database import db_transaction_async
+
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.expanduser("~/.catscan/catscan.db")
 
-
-def _ensure_tables(conn: sqlite3.Connection) -> None:
+def _ensure_tables(conn) -> None:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS config_size_daily (
@@ -152,8 +152,8 @@ async def refresh_config_breakdowns(
         refresh_end,
         buyer_account_id,
     )
-    conn = sqlite3.connect(db_path)
-    try:
+
+    def _run(conn):
         _ensure_tables(conn)
 
         date_placeholders = ",".join("?" * len(date_list))
@@ -312,6 +312,4 @@ async def refresh_config_breakdowns(
             dates=date_list,
         )
 
-        conn.commit()
-    finally:
-        conn.close()
+    await db_transaction_async(_run)
