@@ -6,9 +6,14 @@ Creates and refreshes daily summary tables for fast Home page queries.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Optional, Sequence
 
 from storage.database import db_transaction_async
+from services.precompute_utils import (
+    normalize_refresh_dates,
+    record_refresh_log,
+    refresh_window,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,9 +97,11 @@ HOME_TABLES_SQL = [
 
 
 async def refresh_home_summaries(
-    start_date: str,
-    end_date: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     buyer_account_id: Optional[str] = None,
+    dates: Optional[Sequence[str]] = None,
+    days: Optional[int] = None,
 ) -> dict:
     """Refresh Home page summary tables for a date range.
 
@@ -102,11 +109,20 @@ async def refresh_home_summaries(
         start_date: YYYY-MM-DD
         end_date: YYYY-MM-DD
         buyer_account_id: Optional seat ID to scope refresh.
+        dates: Optional list of YYYY-MM-DD strings to refresh.
+        days: Optional max-days window (inclusive, counting back from today).
     """
+    date_list = normalize_refresh_dates(
+        dates=dates,
+        start_date=start_date,
+        end_date=end_date,
+        days=days,
+    )
+    refresh_start, refresh_end = refresh_window(date_list)
     logger.info(
         "Refreshing home summaries for %s to %s (buyer_account_id=%s)",
-        start_date,
-        end_date,
+        refresh_start,
+        refresh_end,
         buyer_account_id,
     )
 
@@ -114,7 +130,10 @@ async def refresh_home_summaries(
         for stmt in HOME_TABLES_SQL:
             conn.execute(stmt)
 
-        params = [start_date, end_date]
+        date_placeholders = ",".join("?" * len(date_list))
+        date_clause = f"metric_date IN ({date_placeholders})"
+
+        params = list(date_list)
         buyer_filter = ""
         if buyer_account_id:
             buyer_filter = " AND buyer_account_id = ?"
@@ -123,40 +142,40 @@ async def refresh_home_summaries(
         conn.execute(
             f"""
             DELETE FROM home_seat_daily
-            WHERE metric_date BETWEEN ? AND ?{buyer_filter}
+            WHERE {date_clause}{buyer_filter}
             """,
             tuple(params),
         )
         conn.execute(
             f"""
             DELETE FROM home_publisher_daily
-            WHERE metric_date BETWEEN ? AND ?{buyer_filter}
+            WHERE {date_clause}{buyer_filter}
             """,
             tuple(params),
         )
         conn.execute(
             f"""
             DELETE FROM home_geo_daily
-            WHERE metric_date BETWEEN ? AND ?{buyer_filter}
+            WHERE {date_clause}{buyer_filter}
             """,
             tuple(params),
         )
         conn.execute(
             f"""
             DELETE FROM home_config_daily
-            WHERE metric_date BETWEEN ? AND ?{buyer_filter}
+            WHERE {date_clause}{buyer_filter}
             """,
             tuple(params),
         )
         conn.execute(
             f"""
             DELETE FROM home_size_daily
-            WHERE metric_date BETWEEN ? AND ?{buyer_filter}
+            WHERE {date_clause}{buyer_filter}
             """,
             tuple(params),
         )
 
-        seat_params = [start_date, end_date]
+        seat_params = list(date_list)
         seat_filter = ""
         if buyer_account_id:
             seat_filter = " AND buyer_account_id = ?"
@@ -178,7 +197,7 @@ async def refresh_home_summaries(
                 SUM(bid_requests),
                 SUM(auctions_won)
             FROM rtb_bidstream
-            WHERE metric_date BETWEEN ? AND ?
+            WHERE {date_clause}
               AND buyer_account_id IS NOT NULL
               AND buyer_account_id != ''{seat_filter}
             GROUP BY metric_date, buyer_account_id
@@ -205,7 +224,7 @@ async def refresh_home_summaries(
                 SUM(bid_requests),
                 SUM(auctions_won)
             FROM rtb_bidstream
-            WHERE metric_date BETWEEN ? AND ?
+            WHERE {date_clause}
               AND buyer_account_id IS NOT NULL
               AND buyer_account_id != ''
               AND publisher_id IS NOT NULL
@@ -233,7 +252,7 @@ async def refresh_home_summaries(
                 SUM(bid_requests),
                 SUM(auctions_won)
             FROM rtb_bidstream
-            WHERE metric_date BETWEEN ? AND ?
+            WHERE {date_clause}
               AND buyer_account_id IS NOT NULL
               AND buyer_account_id != ''
               AND country IS NOT NULL
@@ -258,7 +277,7 @@ async def refresh_home_summaries(
                 SUM(bids_in_auction),
                 SUM(auctions_won)
             FROM rtb_daily
-            WHERE metric_date BETWEEN ? AND ?
+            WHERE {date_clause}
               AND buyer_account_id IS NOT NULL
               AND buyer_account_id != ''
               AND billing_id IS NOT NULL
@@ -281,7 +300,7 @@ async def refresh_home_summaries(
                 SUM(reached_queries),
                 SUM(impressions)
             FROM rtb_daily
-            WHERE metric_date BETWEEN ? AND ?
+            WHERE {date_clause}
               AND buyer_account_id IS NOT NULL
               AND buyer_account_id != ''
               AND creative_size IS NOT NULL
@@ -291,10 +310,18 @@ async def refresh_home_summaries(
             tuple(seat_params),
         )
 
+        record_refresh_log(
+            conn,
+            cache_name="home_summaries",
+            buyer_account_id=buyer_account_id,
+            dates=date_list,
+        )
+
         return {
-            "start_date": start_date,
-            "end_date": end_date,
+            "start_date": refresh_start,
+            "end_date": refresh_end,
             "buyer_account_id": buyer_account_id,
+            "dates": date_list,
         }
 
     return await db_transaction_async(_run)
