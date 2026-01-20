@@ -16,7 +16,6 @@ Example:
 """
 
 import sqlite3
-import os
 import json
 import logging
 from datetime import datetime, timedelta
@@ -24,11 +23,9 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass
 
 from qps.models import FraudSignal
+from qps.utils import DB_PATH
 
 logger = logging.getLogger(__name__)
-
-DB_PATH = os.path.expanduser("~/.catscan/catscan.db")
-
 
 @dataclass
 class FraudReport:

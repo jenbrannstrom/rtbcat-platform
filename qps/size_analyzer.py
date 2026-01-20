@@ -15,7 +15,6 @@ Example:
 """
 
 import sqlite3
-import os
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Set, Tuple, Optional
@@ -23,11 +22,9 @@ from dataclasses import dataclass
 
 from qps.constants import GOOGLE_AVAILABLE_SIZES, PRETARGETING_CONFIGS
 from qps.models import CreativeSizeInfo, SizeCoverageResult
+from qps.utils import DB_PATH
 
 logger = logging.getLogger(__name__)
-
-DB_PATH = os.path.expanduser("~/.catscan/catscan.db")
-
 
 @dataclass
 class CoverageReport:

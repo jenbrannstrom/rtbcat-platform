@@ -18,7 +18,6 @@ import os
 import hashlib
 import uuid
 import logging
-from datetime import datetime
 from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, field
 
@@ -26,12 +25,9 @@ from qps.csv_report_types import (
     ReportType, detect_report_type,
     RTB_FUNNEL_REQUIRED, RTB_FUNNEL_PIPELINE_METRICS, RTB_FUNNEL_OPTIONAL
 )
-from qps.unified_importer import parse_bidder_id_from_filename
+from qps.utils import DB_PATH, parse_date, parse_int
 
 logger = logging.getLogger(__name__)
-
-DB_PATH = os.path.expanduser("~/.catscan/catscan.db")
-
 
 @dataclass
 class FunnelImportResult:
@@ -65,30 +61,6 @@ class FunnelImportResult:
 
     # Errors
     errors: List[str] = field(default_factory=list)
-
-
-def parse_date(date_str: str) -> str:
-    """Parse date from various formats to YYYY-MM-DD."""
-    if not date_str:
-        return ""
-    formats = ["%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d", "%d/%m/%Y"]
-    for fmt in formats:
-        try:
-            return datetime.strptime(date_str.strip(), fmt).strftime("%Y-%m-%d")
-        except ValueError:
-            continue
-    return date_str
-
-
-def parse_int(value) -> int:
-    """Parse integer, returning 0 for empty/invalid."""
-    if value is None or value == "":
-        return 0
-    fallback_buyer_id = parse_bidder_id_from_filename(csv_path)
-    try:
-        return int(str(value).replace(",", "").strip())
-    except (ValueError, TypeError):
-        return 0
 
 
 def compute_funnel_row_hash(row_data: Dict) -> str:
