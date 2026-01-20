@@ -613,6 +613,7 @@ async def get_credentials_status(
     """Get current credentials configuration status.
 
     DEPRECATED: Use /config/service-accounts instead for multi-account support.
+    Scheduled removal: 2026-06-30.
     This endpoint returns the first active service account for backward compatibility.
     """
     # Try new multi-account system first
@@ -668,6 +669,7 @@ async def upload_credentials(
     """Upload Google service account credentials.
 
     DEPRECATED: Use POST /config/service-accounts instead.
+    Scheduled removal: 2026-06-30.
     This endpoint now creates a service account in the new multi-account system.
     """
     # Redirect to new multi-account endpoint
@@ -682,6 +684,7 @@ async def delete_credentials(
     """Remove stored credentials and reset configuration.
 
     DEPRECATED: Use DELETE /config/service-accounts/{id} instead.
+    Scheduled removal: 2026-06-30.
     This endpoint removes ALL service accounts for backward compatibility.
     """
     try:

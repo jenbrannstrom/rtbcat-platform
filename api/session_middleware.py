@@ -25,7 +25,7 @@ from storage.repositories.user_repository import UserRepository, User
 
 logger = logging.getLogger(__name__)
 
-# Session cookie name (must match auth_v2.py)
+# Session cookie name (must match auth_oauth_proxy.py)
 SESSION_COOKIE_NAME = "rtbcat_session"
 
 # OAuth2 Proxy header (set by nginx auth_request)
