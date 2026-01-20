@@ -38,6 +38,7 @@ from qps.unified_importer import unified_import
 from storage import SQLiteStore, PerformanceMetric
 from storage.database import db_execute, db_query_one, db_transaction_async
 from services.home_precompute import refresh_home_summaries
+from services.precompute_validation import run_precompute_validation
 from services.config_precompute import refresh_config_breakdowns
 from services.rtb_precompute import refresh_rtb_summaries
 
@@ -397,6 +398,11 @@ async def import_performance_csv(
             )
             background_tasks.add_task(
                 refresh_rtb_summaries,
+                result.date_range_start,
+                result.date_range_end,
+            )
+            background_tasks.add_task(
+                run_precompute_validation,
                 result.date_range_start,
                 result.date_range_end,
             )
