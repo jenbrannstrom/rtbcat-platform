@@ -6,16 +6,14 @@ Creates and refreshes daily config breakdown tables for fast UI queries.
 from __future__ import annotations
 
 import logging
-import os
-import sqlite3
 from typing import Optional
+
+from storage.database import db_transaction_async
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.expanduser("~/.catscan/catscan.db")
 
-
-def _ensure_tables(conn: sqlite3.Connection) -> None:
+def _ensure_tables(conn) -> None:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS config_size_daily (
@@ -104,7 +102,6 @@ async def refresh_config_breakdowns(
     start_date: str,
     end_date: str,
     buyer_account_id: Optional[str] = None,
-    db_path: str = DB_PATH,
 ) -> None:
     """Refresh config breakdown tables for a date range.
 
@@ -119,8 +116,8 @@ async def refresh_config_breakdowns(
         end_date,
         buyer_account_id,
     )
-    conn = sqlite3.connect(db_path)
-    try:
+
+    def _run(conn):
         _ensure_tables(conn)
 
         params = [start_date, end_date]
@@ -258,6 +255,4 @@ async def refresh_config_breakdowns(
             tuple(params),
         )
 
-        conn.commit()
-    finally:
-        conn.close()
+    await db_transaction_async(_run)
