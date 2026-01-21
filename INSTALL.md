@@ -929,25 +929,25 @@ These names must match `terraform/gcp/startup.sh`.
 ```bash
 gcloud secrets versions add catscan-gmail-oauth-client \
   --data-file=$HOME/.catscan/credentials/gmail-oauth-client.json \
-  --project=catscan-prod-202601
+  --project=YOUR_PROJECT_ID
 
 gcloud secrets versions add catscan-gmail-token \
   --data-file=$HOME/.catscan/credentials/gmail-token.json \
-  --project=catscan-prod-202601
+  --project=YOUR_PROJECT_ID
 
 gcloud secrets versions add catscan-ab-service-account \
   --data-file=$HOME/.catscan/credentials/catscan-service-account.json \
-  --project=catscan-prod-202601
+  --project=YOUR_PROJECT_ID
 
 gcloud secrets versions add catscan-deploy-key \
   --data-file=$HOME/.ssh/id_ed25519 \
-  --project=catscan-prod-202601
+  --project=YOUR_PROJECT_ID
 ```
 
 ### 3. Ensure Artifact Registry Auth on the VM
 
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --project=catscan-prod-202601 --command="
+gcloud compute ssh catscan-production --zone=europe-west1-b --project=YOUR_PROJECT_ID --command="
 sudo gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
 "
 ```
@@ -955,7 +955,7 @@ sudo gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
 ### 4. Fix Data Directory Ownership (must match container UID)
 
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --project=catscan-prod-202601 --command="
+gcloud compute ssh catscan-production --zone=europe-west1-b --project=YOUR_PROJECT_ID --command="
 API_UID=\$(sudo docker exec catscan-api id -u rtbcat)
 sudo chown -R \${API_UID}:\${API_UID} /home/catscan/.catscan
 sudo chmod 755 /home/catscan/.catscan
@@ -965,7 +965,7 @@ sudo chmod 755 /home/catscan/.catscan
 ### 5. Pull and Start Containers
 
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --project=catscan-prod-202601 --command="
+gcloud compute ssh catscan-production --zone=europe-west1-b --project=YOUR_PROJECT_ID --command="
 cd /opt/catscan
 sudo docker compose -f docker-compose.gcp.yml pull
 sudo docker compose -f docker-compose.gcp.yml up -d
@@ -975,7 +975,7 @@ sudo docker compose -f docker-compose.gcp.yml up -d
 ### 6. Register Authorized Buyers Service Account (DB)
 
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --project=catscan-prod-202601 --command="
+gcloud compute ssh catscan-production --zone=europe-west1-b --project=YOUR_PROJECT_ID --command="
 sudo docker exec catscan-api python -c '
 import sqlite3, json, uuid
 from datetime import datetime
@@ -1011,7 +1011,7 @@ in step 2. Do not hardcode client secrets in this file; use your OAuth client JS
 ### 8. Run Imports and Precompute
 
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --project=catscan-prod-202601 --command="
+gcloud compute ssh catscan-production --zone=europe-west1-b --project=YOUR_PROJECT_ID --command="
 sudo docker exec catscan-api python -m collectors.gmail_import
 sudo docker exec catscan-api python -c 'from services.config_precompute import refresh_config_breakdowns; refresh_config_breakdowns(days=30)'
 "
@@ -1022,7 +1022,7 @@ sudo docker exec catscan-api python -c 'from services.config_precompute import r
 If you need to restore the SQLite DB from GCS:
 
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --project=catscan-prod-202601 --command="
+gcloud compute ssh catscan-production --zone=europe-west1-b --project=YOUR_PROJECT_ID --command="
 export CATSCAN_GCS_BUCKET=catscan-backups
 /opt/catscan/scripts/restore_backup.sh
 "
@@ -1031,7 +1031,7 @@ export CATSCAN_GCS_BUCKET=catscan-backups
 You can also restore a specific date:
 
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --project=catscan-prod-202601 --command="
+gcloud compute ssh catscan-production --zone=europe-west1-b --project=YOUR_PROJECT_ID --command="
 export CATSCAN_GCS_BUCKET=catscan-backups
 /opt/catscan/scripts/restore_backup.sh 20260117
 "
@@ -1040,7 +1040,7 @@ export CATSCAN_GCS_BUCKET=catscan-backups
 ### 10. Verify Health
 
 ```bash
-curl -s https://scan.rtb.cat/api/health
+curl -s https://your-domain.com/api/health
 ```
 
 If the app shows a blank dashboard, verify the import counts in SQLite before

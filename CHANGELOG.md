@@ -15,7 +15,7 @@ Major data model improvements for accurate analytics and clearer naming.
   - All indexes and views updated accordingly
 - **CSV naming convention changed**: All reports must now use UTC timezone
   - Format: `catscan-{type}-{account_id}-{period}-UTC`
-  - Example: `catscan-rtb-pipeline-1487810529-yesterday-UTC`
+  - Example: `catscan-rtb-pipeline-123456789-yesterday-UTC`
 
 ### Added
 

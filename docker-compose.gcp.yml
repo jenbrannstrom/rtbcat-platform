@@ -1,22 +1,31 @@
-# GCP deployment: API + Dashboard only
+# GCP/Cloud deployment: API + Dashboard only
 # Nginx + OAuth2 Proxy handle SSL and authentication externally
 #
 # Usage: docker compose -f docker-compose.gcp.yml up -d
+#
+# Environment variables (set in .env or shell):
+#   IMAGE_REGISTRY  - Container registry (default: build locally)
+#   IMAGE_TAG       - Image version tag (default: latest)
+#   DATA_DIR        - Host path for persistent data (default: ~/.catscan)
+#   GMAIL_IMPORT_SECRET - Secret for Gmail webhook (optional)
 
 services:
   api:
-    image: ${IMAGE_REGISTRY:-europe-west1-docker.pkg.dev/catscan-prod-202601/catscan}/catscan-api:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${IMAGE_REGISTRY:-catscan}/catscan-api:${IMAGE_TAG:-latest}
     container_name: catscan-api
     init: true
     stop_grace_period: 30s
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
-      - ${DATA_DIR:-/home/catscan/.catscan}:/home/rtbcat/.catscan
+      - "${DATA_DIR:-~/.catscan}:/home/rtbcat/.catscan"
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/home/rtbcat/.catscan/credentials/google-credentials.json
       - DATABASE_PATH=/home/rtbcat/.catscan/catscan.db
-      - OAUTH2_PROXY_ENABLED=true
+      - OAUTH2_PROXY_ENABLED=${OAUTH2_PROXY_ENABLED:-false}
       - GMAIL_IMPORT_SECRET=${GMAIL_IMPORT_SECRET:-}
     restart: always
     healthcheck:
@@ -32,7 +41,10 @@ services:
         max-file: "3"
 
   dashboard:
-    image: ${IMAGE_REGISTRY:-europe-west1-docker.pkg.dev/catscan-prod-202601/catscan}/catscan-dashboard:${IMAGE_TAG:-latest}
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    image: ${IMAGE_REGISTRY:-catscan}/catscan-dashboard:${IMAGE_TAG:-latest}
     container_name: catscan-dashboard
     init: true
     ports:

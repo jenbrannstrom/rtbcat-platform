@@ -63,11 +63,11 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 | 10 | Spend (buyer currency) | `spend_micros` | Spend in buyer currency |
 | 11 | Spend (bidder currency) | - | Spend in bidder currency |
 
-#### Sample Data (from `catscan-bidsinauction-1487810529-yesterday-sample`)
+#### Sample Data (from `catscan-bidsinauction-123456789-yesterday-sample`)
 ```csv
 #Day,Country,Creative ID,Buyer account ID,Bids in auction,Auctions won,Bids,Reached queries,Impressions,Spend (buyer currency),Spend (bidder currency)
-1/11/26,Brazil,1912783031778279425,1487810529,11320,10847,11487,11210,9216,$4.16,$4.16
-1/11/26,Brazil,1929790482851430401,1487810529,0,0,30844,0,0,$0.00,$0.00
+1/11/26,Brazil,1912783031778279425,123456789,11320,10847,11487,11210,9216,$4.16,$4.16
+1/11/26,Brazil,1929790482851430401,123456789,0,0,30844,0,0,$0.00,$0.00
 ```
 
 ---
@@ -91,7 +91,7 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 | 9 | Active view viewable | `viewable_impressions` | Viewable impressions |
 | 10 | Active view measurable | `measurable_impressions` | Measurable impressions |
 
-#### Sample Data (from `catscan-quality-1487810529-yesterday-sample`)
+#### Sample Data (from `catscan-quality-123456789-yesterday-sample`)
 ```csv
 #Day,Billing ID,Creative ID,Creative size,Creative format,Reached queries,Impressions,Spend (buyer currency),Active view viewable,Active view measurable
 1/5/26,158610251694,1987702299774660610,Native,Display,5474,3147,$0.85,2835,3134
@@ -121,7 +121,7 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 | 10 | Impressions | `impressions` | Impressions served |
 | 11 | Clicks | `clicks` | Clicks received |
 
-#### Sample Data (from `catscan-funnel-geo-1487810529-yesterday-sample`)
+#### Sample Data (from `catscan-funnel-geo-123456789-yesterday-sample`)
 ```csv
 #Day,Country,Hour,Bid requests,Inventory matches,Successful responses,Bids,Bids in auction,Auctions won,Impressions,Clicks
 1/5/26,Bahrain,0,0,950,0,0,0,0,0,0
@@ -156,7 +156,7 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 | 13 | Impressions | `impressions` | Impressions served |
 | 14 | Clicks | `clicks` | Clicks received |
 
-#### Sample Data (from `catscan-funnel-publishers-1487810529-yesterday-sample`)
+#### Sample Data (from `catscan-funnel-publishers-123456789-yesterday-sample`)
 ```csv
 #Day,Hour,Country,Publisher ID,Publisher name,Bid requests,Inventory matches,Successful responses,Reached queries,Bids,Bids in auction,Auctions won,Impressions,Clicks
 1/11/26,0,Brazil,AdMob + AdSense,AdMob + AdSense,10720990,54677450,10718560,2776,4176,2894,2450,1714,1
@@ -179,7 +179,7 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 | 4 | Bid filtering reason | `filtering_reason` | Why bid was filtered |
 | 5 | Bids | `bids` | Number of filtered bids |
 
-#### Sample Data (from `catscan-bid-filtering-1487810529-yesterday-sample`)
+#### Sample Data (from `catscan-bid-filtering-123456789-yesterday-sample`)
 ```csv
 #Day,Country,Creative ID,Bid filtering reason,Bids
 1/11/26,Brazil,1912783031778279425,Excluded product category detected,13
@@ -497,7 +497,7 @@ The platform supports multiple bidder accounts, each with their own RTB endpoint
 
 ```
 service_account (GCP credentials)
-    └── bidder/seat 1487810529
+    └── bidder/seat 123456789
     │       └── rtb_endpoints
     │       └── pretargeting_configs
     │       └── creatives

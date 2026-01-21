@@ -403,17 +403,51 @@ DATABASE_PATH=~/.catscan/catscan.db
 | Document | Purpose |
 |----------|---------|
 | **[INSTALL.md](INSTALL.md)** | Detailed installation guide |
-| **[docs/GCP_CREDENTIALS_SETUP.md](docs/GCP_CREDENTIALS_SETUP.md)** | GCP VM deployment with nginx + SSL |
+| **[docs/SECURITY.md](docs/SECURITY.md)** | Security guide for forks and deployments |
 | **[DATA_MODEL.md](DATA_MODEL.md)** | Complete database schema (41 tables) |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | System architecture |
 | **[METRICS_GUIDE.md](METRICS_GUIDE.md)** | RTB metrics and optimization reference |
 | **[ROADMAP.md](ROADMAP.md)** | Planned features and known bugs |
+| **[CHANGELOG.md](CHANGELOG.md)** | Version history and migration notes |
+
+---
+
+## Security (For Forks & Partners)
+
+**Code is public. Data and credentials are private.**
+
+When forking Cat-Scan for your organization:
+
+| Keep Public | Keep Private (gitignored) |
+|-------------|---------------------------|
+| Application code | `.env` (credentials) |
+| Docker configs | `terraform.tfvars` (secrets) |
+| `*.example` files | `*.json` (service account keys) |
+| Documentation | `~/.catscan/` (database, imports) |
+
+### Quick Security Checklist
+
+1. **Copy example files** - Never commit the real versions:
+   ```bash
+   cp .env.example .env
+   cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+   ```
+
+2. **Verify gitignore** - Ensure secrets aren't tracked:
+   ```bash
+   git ls-files | grep -E '\.(env|tfstate|db)$|terraform\.tfvars'
+   # Should return empty
+   ```
+
+3. **Use GitHub Secrets** - For CI/CD, never hardcode in workflow files
+
+See **[docs/SECURITY.md](docs/SECURITY.md)** for the complete security guide.
 
 ---
 
 ## Project Status
 
-**Deployed:** Live at `scan.rtb.cat` on GCP (Google Cloud Platform)
+**Open Source:** Self-host on your own infrastructure
 
 ### What Works (Production Ready)
 
