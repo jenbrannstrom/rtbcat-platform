@@ -6,16 +6,8 @@
 import { fetchApi } from "./core";
 
 // =============================================================================
-// Credentials Types
+// Service Account Types
 // =============================================================================
-
-export interface CredentialsStatus {
-  configured: boolean;
-  client_email?: string;
-  project_id?: string;
-  credentials_path?: string;
-  account_id?: string;
-}
 
 export interface CredentialsUploadResponse {
   success: boolean;
@@ -24,10 +16,6 @@ export interface CredentialsUploadResponse {
   project_id?: string;
   message: string;
 }
-
-// =============================================================================
-// Service Account Types
-// =============================================================================
 
 export interface ServiceAccount {
   id: string;
@@ -113,33 +101,6 @@ export interface GCPDiscoveryResponse {
   bidder_ids: string[];
   buyer_seats_count: number;
   message: string;
-}
-
-// =============================================================================
-// Credentials API
-// =============================================================================
-
-export async function getCredentialsStatus(): Promise<CredentialsStatus> {
-  return fetchApi<CredentialsStatus>("/config/credentials");
-}
-
-export async function uploadCredentials(
-  serviceAccountJson: string,
-  displayName?: string
-): Promise<CredentialsUploadResponse> {
-  return fetchApi<CredentialsUploadResponse>("/config/credentials", {
-    method: "POST",
-    body: JSON.stringify({
-      service_account_json: serviceAccountJson,
-      display_name: displayName,
-    }),
-  });
-}
-
-export async function deleteCredentials(): Promise<{ success: boolean; message: string }> {
-  return fetchApi<{ success: boolean; message: string }>("/config/credentials", {
-    method: "DELETE",
-  });
 }
 
 // =============================================================================
