@@ -387,42 +387,61 @@ export function GmailReportsTab() {
 
       {/* Expected Reports */}
       <div className="card p-6">
-        <h4 className="font-medium text-gray-900 mb-4">Reports to Schedule in Authorized Buyers</h4>
+        <h4 className="font-medium text-gray-900 mb-4">5 Reports to Schedule in Authorized Buyers</h4>
         <p className="text-sm text-gray-600 mb-4">
-          Create these scheduled reports in Google Authorized Buyers and set them to email you daily.
-          Name them exactly as shown to help Cat-Scan identify them.
+          Create these 5 scheduled reports in Google Authorized Buyers and set them to email you daily.
+          Google has field incompatibilities that prevent getting all data in one export.
         </p>
 
         <div className="space-y-4">
           <ReportSpecCard
             reportNumber={1}
-            title="Billing Config Performance"
-            filename="catscan-billing-config"
-            dimensions={["Day", "Billing ID", "Creative ID", "Creative size", "Creative format"]}
-            metrics={["Reached queries", "Impressions"]}
-            purpose="Shows waste per pretargeting config"
+            title="catscan-bidsinauction"
+            filename="catscan-bidsinauction"
+            dimensions={["Day", "Country", "Creative ID", "Buyer account ID"]}
+            metrics={["Bids in auction", "Auctions won", "Bids", "Reached queries", "Impressions", "Spend (buyer currency)"]}
+            purpose="Creative-level performance with bid pipeline metrics by country"
             color="blue"
           />
 
           <ReportSpecCard
             reportNumber={2}
-            title="Creative Bidding Activity"
-            filename="catscan-creative-bids"
-            dimensions={["Day", "Creative ID", "Country"]}
-            metrics={["Bids", "Bids in auction", "Reached queries"]}
-            purpose="Shows bidding activity per creative by geo"
+            title="catscan-quality"
+            filename="catscan-quality"
+            dimensions={["Day", "Billing ID", "Creative ID", "Creative size", "Creative format"]}
+            metrics={["Reached queries", "Impressions", "Spend (buyer currency)", "Active view viewable", "Active view measurable"]}
+            purpose="Creative-level performance with viewability metrics and Billing ID"
             color="purple"
           />
 
           <ReportSpecCard
             reportNumber={3}
-            title="Publisher Performance"
-            filename="catscan-publisher-perf"
-            dimensions={["Publisher ID", "Publisher name"]}
-            metrics={["Bid requests", "Reached queries", "Bids", "Successful responses", "Impressions"]}
-            purpose="Shows publisher-level funnel metrics"
+            title="catscan-pipeline-geo"
+            filename="catscan-pipeline-geo"
+            dimensions={["Day", "Country", "Hour"]}
+            metrics={["Bid requests", "Inventory matches", "Successful responses", "Bids", "Bids in auction", "Auctions won", "Impressions", "Clicks"]}
+            purpose="Full bid pipeline by country and hour - shows traffic volume"
             color="green"
-            optional
+          />
+
+          <ReportSpecCard
+            reportNumber={4}
+            title="catscan-pipeline"
+            filename="catscan-pipeline"
+            dimensions={["Day", "Hour", "Country", "Publisher ID", "Publisher name"]}
+            metrics={["Bid requests", "Inventory matches", "Successful responses", "Reached queries", "Bids", "Bids in auction", "Auctions won", "Impressions", "Clicks"]}
+            purpose="Bid pipeline by publisher - shows which publishers send traffic"
+            color="orange"
+          />
+
+          <ReportSpecCard
+            reportNumber={5}
+            title="catscan-bid-filtering"
+            filename="catscan-bid-filtering"
+            dimensions={["Day", "Country", "Creative ID", "Bid filtering reason"]}
+            metrics={["Bids"]}
+            purpose="Understand why your bids are being filtered/rejected"
+            color="red"
           />
         </div>
 
@@ -464,13 +483,15 @@ function ReportSpecCard({
   dimensions: string[];
   metrics: string[];
   purpose: string;
-  color: "blue" | "purple" | "green";
+  color: "blue" | "purple" | "green" | "orange" | "red";
   optional?: boolean;
 }) {
   const colorClasses = {
     blue: { bg: "bg-blue-100", text: "text-blue-800", badge: "bg-blue-100 text-blue-800" },
     purple: { bg: "bg-purple-100", text: "text-purple-800", badge: "bg-purple-100 text-purple-800" },
     green: { bg: "bg-green-100", text: "text-green-800", badge: "bg-green-100 text-green-800" },
+    orange: { bg: "bg-orange-100", text: "text-orange-800", badge: "bg-orange-100 text-orange-800" },
+    red: { bg: "bg-red-100", text: "text-red-800", badge: "bg-red-100 text-red-800" },
   }[color];
 
   return (
