@@ -1,31 +1,64 @@
 /**
- * Information about required columns for CSV import.
+ * Information about required columns for each CSV report type.
+ * Based on DATA_MODEL.md specifications.
  */
 export function RequiredColumnsTable() {
   return (
     <div className="space-y-4 text-sm">
       <p className="text-gray-600">
-        Cat-Scan imports <strong>all recognized columns</strong> from your CSV.
-        Required columns depend on the report type.
+        Cat-Scan auto-detects report type from columns. Here are the required columns for each:
       </p>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
-        <p className="text-blue-800 font-medium">Required columns by report</p>
-        <ul className="text-blue-800 space-y-1">
-          <li><strong>catscan-quality</strong>: Buyer account ID, Billing ID, Creative ID, Creative size, Day, Country, Reached queries, Impressions</li>
-          <li><strong>catscan-bidsinauction</strong>: Buyer account ID, Country, Creative ID, Day, Hour, Bids in auction, Auctions won, Bids</li>
-          <li><strong>catscan-rtb-pipeline</strong>: Buyer account ID, Country, Publisher ID, Day, Hour, Bid requests</li>
-          <li><strong>catscan-pipeline-geo</strong>: Buyer account ID, Country, Day, Hour, Bid requests</li>
-          <li><strong>catscan-bid-filtering</strong>: Buyer account ID, Country, Creative ID, Bid filtering reason, Day, Hour, Bids</li>
-        </ul>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="p-2 border font-medium">Report Name</th>
+              <th className="p-2 border font-medium">Target Table</th>
+              <th className="p-2 border font-medium">Required Columns</th>
+            </tr>
+          </thead>
+          <tbody className="text-xs">
+            <tr>
+              <td className="p-2 border font-medium text-blue-700">catscan-bidsinauction</td>
+              <td className="p-2 border">rtb_daily</td>
+              <td className="p-2 border">Day, Country, Creative ID, Buyer account ID, Bids in auction, Auctions won, Bids, Impressions</td>
+            </tr>
+            <tr className="bg-gray-50">
+              <td className="p-2 border font-medium text-purple-700">catscan-quality</td>
+              <td className="p-2 border">rtb_daily</td>
+              <td className="p-2 border">Day, Billing ID, Creative ID, Creative size, Reached queries, Impressions, Active view viewable</td>
+            </tr>
+            <tr>
+              <td className="p-2 border font-medium text-green-700">catscan-pipeline-geo</td>
+              <td className="p-2 border">rtb_bidstream</td>
+              <td className="p-2 border">Day, Country, Hour, Bid requests, Bids, Impressions</td>
+            </tr>
+            <tr className="bg-gray-50">
+              <td className="p-2 border font-medium text-orange-700">catscan-pipeline</td>
+              <td className="p-2 border">rtb_bidstream</td>
+              <td className="p-2 border">Day, Country, Publisher ID, Publisher name, Bid requests, Bids, Impressions</td>
+            </tr>
+            <tr>
+              <td className="p-2 border font-medium text-red-700">catscan-bid-filtering</td>
+              <td className="p-2 border">rtb_bid_filtering</td>
+              <td className="p-2 border">Day, Country, Creative ID, Bid filtering reason, Bids</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <div className="bg-gray-50 p-3 rounded-lg">
         <p className="text-gray-700">
-          <strong>Column auto-detection:</strong> Cat-Scan automatically maps Google{"'"}s column names
-          (e.g., <code className="bg-gray-200 px-1 rounded">#Creative ID</code> → <code className="bg-gray-200 px-1 rounded">creative_id</code>).
-          Unknown columns are safely ignored.
+          <strong>Auto-detection logic:</strong>
         </p>
+        <ul className="text-gray-600 mt-1 space-y-1 text-xs">
+          <li>• Has <code className="bg-gray-200 px-1 rounded">Bid filtering reason</code>? → bid-filtering</li>
+          <li>• Has <code className="bg-gray-200 px-1 rounded">Creative ID</code> + <code className="bg-gray-200 px-1 rounded">Bids in auction</code>? → bidsinauction</li>
+          <li>• Has <code className="bg-gray-200 px-1 rounded">Creative ID</code> + <code className="bg-gray-200 px-1 rounded">Active view</code>? → quality</li>
+          <li>• Has <code className="bg-gray-200 px-1 rounded">Bid requests</code> + <code className="bg-gray-200 px-1 rounded">Publisher ID</code>? → pipeline</li>
+          <li>• Has <code className="bg-gray-200 px-1 rounded">Bid requests</code> only? → pipeline-geo</li>
+        </ul>
       </div>
     </div>
   );
