@@ -11,11 +11,16 @@ concurrency:
   group: production-deploy
   cancel-in-progress: true
 
+# Configuration via GitHub repository variables (Settings > Secrets and variables > Actions > Variables)
+# This allows forks to use their own infrastructure without modifying the workflow file.
+# Required variables: GCP_PROJECT, GCP_SA_KEY (secret)
+# Optional variables: GCP_ZONE, VM_NAME, APP_DIR, GIT_BRANCH
 env:
-  GCP_PROJECT: catscan-prod-202601
-  GCP_ZONE: europe-west1-b
-  VM_NAME: catscan-production
-  APP_DIR: /opt/catscan
+  GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+  GCP_ZONE: ${{ vars.GCP_ZONE || 'europe-west1-b' }}
+  VM_NAME: ${{ vars.VM_NAME || 'catscan-production' }}
+  APP_DIR: ${{ vars.APP_DIR || '/opt/catscan' }}
+  GIT_BRANCH: ${{ vars.GIT_BRANCH || 'unified-platform' }}
 
 jobs:
   deploy:
@@ -47,8 +52,8 @@ jobs:
 
               # Pull latest code
               sudo -u catscan git fetch origin
-              sudo -u catscan git checkout unified-platform
-              sudo -u catscan git reset --hard origin/unified-platform
+              sudo -u catscan git checkout ${{ env.GIT_BRANCH }}
+              sudo -u catscan git reset --hard origin/${{ env.GIT_BRANCH }}
 
               # Get version
               export APP_VERSION=\$(cat VERSION)
