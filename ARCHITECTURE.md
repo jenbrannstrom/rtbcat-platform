@@ -137,20 +137,32 @@ rtbcat-platform/
 │   ├── endpoints/         # RTB endpoint discovery
 │   └── troubleshooting/   # Real-time bid troubleshooting
 │
-├── analytics/             # Analysis engines
-│   └── efficiency.py      # Efficiency calculations
+├── analytics/             # RTB analytics & metrics (14 modules)
+│   ├── waste_analyzer.py  # Traffic waste analysis
+│   ├── rtb_bidstream_analyzer.py  # Bidstream analysis
+│   ├── qps_optimizer.py   # QPS optimization
+│   ├── size_analyzer.py   # Ad size analysis
+│   ├── geo_analyzer.py    # Geographic analysis
+│   └── fraud_analyzer.py  # Fraud detection
 │
-├── analysis/              # Advanced analysis
-│   └── waste_analyzer.py  # QPS waste detection
+├── analysis/              # Evaluation & recommendations
+│   └── evaluation_engine.py  # Decision intelligence engine
 │
-├── qps/                   # QPS optimization
+├── qps/                   # CSV import & QPS utilities
 │   ├── smart_importer.py  # Auto-detect CSV type
 │   ├── funnel_importer.py # RTB funnel data import
-│   ├── optimizer.py       # Optimization engine
-│   └── recommender.py     # Recommendation generation
+│   ├── importer.py        # Core CSV import
+│   ├── size_analyzer.py   # Size coverage analysis
+│   ├── fraud_detector.py  # Fraud signal detection
+│   └── utils.py           # Shared utilities
+│
+├── utils/                 # Cross-cutting utilities
+│   ├── size_normalization.py  # IAB size mapping
+│   ├── app_parser.py      # App metadata parsing
+│   └── country_codes.py   # Geographic utilities
 │
 ├── config/                # Configuration management
-│   └── manager.py         # ConfigManager class
+│   └── config_manager.py  # ConfigManager class
 │
 ├── dashboard/             # Next.js frontend
 │   ├── src/
@@ -162,16 +174,21 @@ rtbcat-platform/
 │   │   └── types/         # TypeScript types
 │   └── package.json
 │
-├── cli/                   # Command-line tools
-│   └── qps_analyzer.py    # CLI for imports & analysis
+├── creative-intelligence/ # CLI tools & tests (legacy location)
+│   ├── cli/
+│   │   └── qps_analyzer.py  # CLI for imports & analysis
+│   └── tests/             # Test suite
 │
-├── migrations/            # Database migrations
-├── tests/                 # Test suite
+├── scripts/               # Utility scripts
+│   ├── gmail_import.py    # Gmail CSV import
+│   └── cleanup_old_data.py
+│
+├── migrations/            # Database migrations (20+ migrations)
 ├── docs/                  # Documentation
+├── terraform/             # Infrastructure as code
 │
 ├── setup.sh              # Development setup script
 ├── run.sh                # Start API + Dashboard
-├── deploy.sh             # AWS deployment script
 └── requirements.txt      # Python dependencies
 ```
 
