@@ -1,7 +1,7 @@
 # RTBcat Platform Refactor & Migration Plan
 
 > **Last Updated:** January 2026
-> **Status:** 10/10 deliverables complete (pending dead code removal after 2026-06-30)
+> **Status:** 10/10 deliverables complete
 
 This plan turns the audit findings into an actionable, phased roadmap focused on safety, correctness, and minimal service disruption. It prioritizes quick wins that reduce duplication and risk, then proceeds to larger migrations with guardrails, while preserving uptime and data integrity.
 
@@ -35,9 +35,8 @@ This plan turns the audit findings into an actionable, phased roadmap focused on
    - Explicitly state that `smart_importer.py` is the default entry point.
 
 3. **Deprecation dates for legacy endpoints** ✅
-   - `/config/credentials` endpoints marked deprecated with removal date 2026-06-30
-   - Docstrings include migration path to new `/config/service-accounts` endpoints
-   - Endpoints still functional but redirect to new multi-account system
+   - `/config/credentials` endpoints removed (previously deprecated)
+   - Migration complete to `/config/service-accounts` endpoints
 
 **Exit criteria**: zero duplicate utility functions, importer usage documented, deprecation dates published.
 
@@ -51,7 +50,7 @@ This plan turns the audit findings into an actionable, phased roadmap focused on
    - Legacy file removed, all routes migrated
 
 2. **Frontend API migration** ✅
-   - All functions migrated from `api-legacy.ts` to modular files:
+   - All functions in modular files under `dashboard/src/lib/api/`:
      - `core.ts`: fetchApi, health, stats, sizes, system status, geo lookup
      - `auth.ts`: logout, session, user info
      - `creatives.ts`: creative CRUD, thumbnails, language detection
@@ -59,10 +58,10 @@ This plan turns the audit findings into an actionable, phased roadmap focused on
      - `seats.ts`: buyer seats, discovery, sync
      - `analytics.ts`: waste, QPS, RTB funnel, recommendations
      - `settings.ts`: RTB endpoints, pretargeting
-     - `integrations.ts`: credentials, Gemini, Gmail, GCP
+     - `integrations.ts`: service accounts, Gemini, Gmail, GCP
      - `admin.ts`: users, audit, settings
      - `uploads.ts`: import tracking
-   - `api-legacy.ts` now deprecated (removal date: 2026-06-30)
+   - `api-legacy.ts` deleted
    - `api/index.ts` re-exports from modular files only
 
 3. **Analyzer naming clarity** ✅
@@ -93,13 +92,15 @@ This plan turns the audit findings into an actionable, phased roadmap focused on
 
 **Exit criteria**: repositories consolidated, one database access pattern, `sqlite_store` decomposed without breaking imports.
 
-## Phase 4 — Cleanup & Dead Code Removal (Ongoing)
+## Phase 4 — Cleanup & Dead Code Removal ✅
 
 **Goals**: remove technical debt safely after usage drops to zero.
 
-- Remove deprecated `/config/credentials` endpoints after the published date.
-- Delete dead tables/migrations in safe cycles.
-- Remove legacy authentication references and stale comments.
+- ✅ Removed `/config/credentials` legacy endpoints
+- ✅ Deleted `api-legacy.ts` frontend file
+- ✅ Removed legacy credentials functions from `integrations.ts`
+- Delete dead tables/migrations in safe cycles (as needed)
+- Remove legacy authentication references and stale comments (as needed)
 
 ## Validation & Rollback Strategy
 
@@ -125,7 +126,7 @@ This plan turns the audit findings into an actionable, phased roadmap focused on
 - [x] Repositories consolidated under `storage/repositories/`
 - [x] Unified database access pattern (repositories + facade pattern)
 - [x] `sqlite_store` refactor completed (1412→1156 lines, extracted AnomalyRepository + migrations.py)
-- [ ] Dead code removed per schedule
+- [x] Dead code removed (api-legacy.ts, /config/credentials endpoints, legacy credentials functions)
 
 ---
 
@@ -189,30 +190,16 @@ api/routers/settings/
 2. **Warning period** - Log deprecation warnings when endpoint is called
 3. **Removal** - Remove after scheduled date, coordinate with any dependent teams
 
-**Currently deprecated:**
-
-| Endpoint | Replacement | Removal Date |
-|----------|-------------|--------------|
-| `GET /config/credentials` | `GET /config/service-accounts` | 2026-06-30 |
-| `POST /config/credentials` | `POST /config/service-accounts` | 2026-06-30 |
-| `DELETE /config/credentials` | `DELETE /config/service-accounts/{id}` | 2026-06-30 |
-
 **Code aliases (backward compatibility):**
 
-| Old Name | New Name | Removal Date |
-|----------|----------|--------------|
-| `WasteAnalyzer` | `TrafficWasteAnalyzer` | TBD (after all usages updated) |
-| `CreativeWasteSignalService` | `CreativeHealthService` | TBD (after all usages updated) |
+| Old Name | New Name | Status |
+|----------|----------|--------|
+| `WasteAnalyzer` | `TrafficWasteAnalyzer` | Alias maintained |
+| `CreativeWasteSignalService` | `CreativeHealthService` | Alias maintained |
 
-**Frontend files (deprecated):**
+### Completed Cleanup
 
-| File | Replacement | Removal Date |
-|------|-------------|--------------|
-| `dashboard/src/lib/api-legacy.ts` | `dashboard/src/lib/api/` (modular files) | 2026-06-30 |
-
-### Remaining Work
-
-1. **Dead Code Cleanup**: Remove deprecated files/endpoints after 2026-06-30:
-   - `api-legacy.ts` - frontend API legacy file (now just re-exports)
-   - `/config/credentials` - legacy single-account endpoints
-   - Backend compatibility aliases (`WasteAnalyzer`, `CreativeWasteSignalService`)
+The following items have been removed:
+- `api-legacy.ts` - frontend API legacy file (deleted)
+- `/config/credentials` - backend legacy endpoints (deleted)
+- Legacy credentials functions from `integrations.ts` (deleted)
