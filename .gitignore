@@ -32,10 +32,17 @@ terraform/tfplan
 terraform/.terraform/
 terraform/.terraform.lock.hcl
 terraform/terraform.tfvars
+terraform/gcp/terraform.tfvars
 
-# Claude Code local settings
-.claude/settings.local.json
-**/.claude/settings.local.json
+# Deployment prompts with real infrastructure details (use .example as template)
+prompts/deploy-catscan.md
+
+# Instance-specific documentation (contains project IDs, IPs, emails)
+docs/GCP_CREDENTIALS_SETUP.md
+investigations/
+
+# Claude Code settings and agents (instance-specific)
+.claude/
 *.db
 catscan-ci-key.json
 Home page structure rtb.txt

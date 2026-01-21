@@ -1,0 +1,48 @@
+# Cat-Scan Terraform Variables (AWS)
+# Copy this file to terraform.tfvars and fill in your values
+#
+# terraform.tfvars is gitignored - never commit credentials!
+
+# =============================================================================
+# AWS Configuration
+# =============================================================================
+
+# AWS region (eu-central-1 is GDPR-compliant)
+# aws_region = "eu-central-1"
+
+# EC2 instance type
+# instance_type = "t3.small"
+
+# =============================================================================
+# SSH Access
+# =============================================================================
+
+# Name of your EC2 key pair (create in AWS Console > EC2 > Key Pairs)
+ssh_key_name = "your-key-name"
+
+# =============================================================================
+# Domain & HTTPS
+# =============================================================================
+
+# Your domain name (required for HTTPS)
+domain_name  = "your-domain.com"
+enable_https = true
+
+# =============================================================================
+# Authentication
+# =============================================================================
+
+# Basic auth credentials (change these!)
+basic_auth_user     = "admin"
+basic_auth_password = "CHANGE-THIS-STRONG-PASSWORD"
+
+# Session cookie hash (generate with: echo -n "your-secret" | sha256sum)
+catscan_auth_cookie = "generate-a-sha256-hash-here"
+
+# =============================================================================
+# Optional: Cloudflare DNS
+# =============================================================================
+
+# Leave empty if managing DNS manually
+# cloudflare_api_token = ""
+# cloudflare_zone_id   = ""
