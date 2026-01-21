@@ -1,6 +1,6 @@
-"""Waste Analyzer Service for Phase 11.2.
+"""Creative Health Service.
 
-Generates evidence-based waste signals with full context.
+Generates evidence-based health signals for creatives with full context.
 Replaces boolean flags with actionable insights that explain WHY.
 
 Signal Types:
@@ -68,11 +68,12 @@ class WasteSignal:
     recommendation: str  # Suggested action
 
 
-class CreativeWasteSignalService:
+class CreativeHealthService:
     """
-    Service for detecting and storing evidence-based waste signals.
+    Service for detecting creative health issues and generating actionable insights.
 
-    Phase 11.2: Evidence-Based Waste Detection
+    Analyzes creatives for performance issues like broken videos, low engagement,
+    suspicious click patterns, and disapproval status.
     """
 
     # Thresholds for waste detection
@@ -495,7 +496,11 @@ class CreativeWasteSignalService:
 
 
 # Convenience function
-def analyze_waste(days: int = 7, save: bool = True) -> list[WasteSignal]:
-    """Quick function to run waste analysis."""
-    service = CreativeWasteSignalService()
+def analyze_creative_health(days: int = 7, save: bool = True) -> list[WasteSignal]:
+    """Quick function to run creative health analysis."""
+    service = CreativeHealthService()
     return service.analyze_all_creatives(days=days, save_to_db=save)
+
+
+# Backward compatibility alias
+analyze_waste = analyze_creative_health

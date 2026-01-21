@@ -1,3 +1,43 @@
+/**
+ * @deprecated This file is deprecated and will be removed after 2026-06-30.
+ * All functions have been migrated to modular files in @/lib/api/
+ *
+ * Migration guide:
+ *   - fetchApi, getHealth, getStats, getSizes, getSystemStatus, lookupGeoNames
+ *       → import from "@/lib/api/core"
+ *   - logout, checkAuth, getCurrentUser
+ *       → import from "@/lib/api/auth"
+ *   - getCreatives, getCreative, deleteCreative, thumbnails, language detection
+ *       → import from "@/lib/api/creatives"
+ *   - getCampaigns, getCampaign, AI campaigns
+ *       → import from "@/lib/api/campaigns"
+ *   - getSeats, discoverSeats, syncSeat, syncAllData, collectCreatives
+ *       → import from "@/lib/api/seats"
+ *   - getWasteReport, getSizeCoverage, generateMockTraffic, getBatchPerformance,
+ *     importPerformanceData, QPS analytics, RTB funnel, recommendations
+ *       → import from "@/lib/api/analytics"
+ *   - RTB endpoints, pretargeting configs
+ *       → import from "@/lib/api/settings"
+ *   - Credentials, service accounts, Gemini, Gmail, GCP
+ *       → import from "@/lib/api/integrations"
+ *   - Admin users, audit logs, system settings
+ *       → import from "@/lib/api/admin"
+ *   - Upload tracking, import history
+ *       → import from "@/lib/api/uploads"
+ *
+ * Or import everything from "@/lib/api" (the index barrel file).
+ */
+
+// Re-export everything from modular files for backward compatibility
+export * from "./api/index";
+
+// =============================================================================
+// DEPRECATED: The code below is kept only for reference during migration.
+// It will be deleted after 2026-06-30.
+// =============================================================================
+
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import type {
   Creative,
   Campaign,
@@ -19,7 +59,7 @@ import type {
 } from "@/types/api";
 import type { ImportResponse } from "@/lib/types/import";
 
-const API_BASE = "/api";
+const _API_BASE = "/api";
 
 async function fetchApi<T>(
   endpoint: string,

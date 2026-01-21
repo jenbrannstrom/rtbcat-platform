@@ -3,7 +3,7 @@
 This module tests the waste analysis functionality including:
 - Data models (TrafficRecord, SizeGap, SizeCoverage, WasteReport)
 - Mock traffic generator
-- WasteAnalyzer engine
+- TrafficWasteAnalyzer engine
 - Database traffic storage methods
 - API endpoints for waste analysis
 
@@ -29,7 +29,7 @@ from analytics.mock_traffic import (
     get_size_from_raw,
     TRAFFIC_DISTRIBUTIONS,
 )
-from analytics.waste_analyzer import WasteAnalyzer
+from analytics.waste_analyzer import TrafficWasteAnalyzer
 from storage.sqlite_store import Creative, SQLiteStore
 
 
@@ -458,12 +458,12 @@ class TestSQLiteStoreTrafficData:
 
 
 @pytest.mark.asyncio
-class TestWasteAnalyzer:
-    """Tests for WasteAnalyzer engine."""
+class TestTrafficWasteAnalyzer:
+    """Tests for TrafficWasteAnalyzer engine."""
 
     async def test_analyze_waste_no_data(self, temp_store):
         """Test waste analysis with no data."""
-        analyzer = WasteAnalyzer(temp_store)
+        analyzer = TrafficWasteAnalyzer(temp_store)
         report = await analyzer.analyze_waste(days=7)
 
         assert report.total_requests == 0
@@ -491,7 +491,7 @@ class TestWasteAnalyzer:
         ]
         await store_with_creatives.store_traffic_data(records)
 
-        analyzer = WasteAnalyzer(store_with_creatives)
+        analyzer = TrafficWasteAnalyzer(store_with_creatives)
         report = await analyzer.analyze_waste(days=7)
 
         # Should have no waste since we have creatives for these sizes
@@ -521,7 +521,7 @@ class TestWasteAnalyzer:
         ]
         await store_with_creatives.store_traffic_data(records)
 
-        analyzer = WasteAnalyzer(store_with_creatives)
+        analyzer = TrafficWasteAnalyzer(store_with_creatives)
         report = await analyzer.analyze_waste(days=7)
 
         assert report.total_requests == 85000
@@ -558,7 +558,7 @@ class TestWasteAnalyzer:
         ]
         await store_with_creatives.store_traffic_data(records)
 
-        analyzer = WasteAnalyzer(store_with_creatives)
+        analyzer = TrafficWasteAnalyzer(store_with_creatives)
         report = await analyzer.analyze_waste(days=1)
 
         # Check recommendations match volume thresholds
@@ -587,7 +587,7 @@ class TestWasteAnalyzer:
         ]
         await store_with_creatives.store_traffic_data(records)
 
-        analyzer = WasteAnalyzer(store_with_creatives)
+        analyzer = TrafficWasteAnalyzer(store_with_creatives)
         report = await analyzer.analyze_waste(days=1)
 
         assert len(report.size_gaps) == 1
@@ -614,7 +614,7 @@ class TestWasteAnalyzer:
         ]
         await store_with_creatives.store_traffic_data(records)
 
-        analyzer = WasteAnalyzer(store_with_creatives)
+        analyzer = TrafficWasteAnalyzer(store_with_creatives)
 
         # With high min_requests, only the larger gap should be returned
         gaps = await analyzer.get_size_gaps(days=7, min_requests=1000)
@@ -634,7 +634,7 @@ class TestWasteAnalyzer:
         ]
         await store_with_creatives.store_traffic_data(records)
 
-        analyzer = WasteAnalyzer(store_with_creatives)
+        analyzer = TrafficWasteAnalyzer(store_with_creatives)
         coverage = await analyzer.get_size_coverage()
 
         assert "300x250 (Medium Rectangle)" in coverage
@@ -664,7 +664,7 @@ class TestWasteAnalyzer:
         ]
         await store_with_creatives.store_traffic_data(records)
 
-        analyzer = WasteAnalyzer(store_with_creatives)
+        analyzer = TrafficWasteAnalyzer(store_with_creatives)
 
         # Filter by buyer 456
         report = await analyzer.analyze_waste(buyer_id="456", days=7)
@@ -690,7 +690,7 @@ class TestWasteAnalyzer:
         ]
         await store_with_creatives.store_traffic_data(records)
 
-        analyzer = WasteAnalyzer(store_with_creatives)
+        analyzer = TrafficWasteAnalyzer(store_with_creatives)
         report = await analyzer.analyze_waste(days=1)
 
         assert "block" in report.recommendations_summary
@@ -699,12 +699,12 @@ class TestWasteAnalyzer:
 
 
 @pytest.mark.asyncio
-class TestWasteAnalyzerEdgeCases:
-    """Edge case tests for WasteAnalyzer."""
+class TestTrafficWasteAnalyzerEdgeCases:
+    """Edge case tests for TrafficWasteAnalyzer."""
 
     async def test_empty_traffic_data(self, store_with_creatives):
         """Test analysis with creatives but no traffic."""
-        analyzer = WasteAnalyzer(store_with_creatives)
+        analyzer = TrafficWasteAnalyzer(store_with_creatives)
         report = await analyzer.analyze_waste(days=7)
 
         # Should have coverage entries for sizes with creatives but no traffic
@@ -715,7 +715,7 @@ class TestWasteAnalyzerEdgeCases:
 
     async def test_zero_days_period(self, temp_store):
         """Test analysis with zero-day period."""
-        analyzer = WasteAnalyzer(temp_store)
+        analyzer = TrafficWasteAnalyzer(temp_store)
         # Should handle gracefully without division errors
         report = await analyzer.analyze_waste(days=0)
         assert report.analysis_period_days == 0
@@ -741,7 +741,7 @@ class TestWasteAnalyzerEdgeCases:
         ]
         await temp_store.store_traffic_data(records)
 
-        analyzer = WasteAnalyzer(temp_store)
+        analyzer = TrafficWasteAnalyzer(temp_store)
         report = await analyzer.analyze_waste(days=7)
 
         # Only recent traffic should be included

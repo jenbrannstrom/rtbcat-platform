@@ -39,6 +39,7 @@ from .schema import SCHEMA, MIGRATIONS
 # Import repositories
 from .repositories import (
     CreativeRepository, AccountRepository, TrafficRepository, ThumbnailRepository,
+    AnomalyRepository,
 )
 
 if TYPE_CHECKING:
@@ -86,6 +87,7 @@ class SQLiteStore:
         self._account_repo = AccountRepository(self.db_path)
         self._traffic_repo = TrafficRepository(self.db_path)
         self._thumbnail_repo = ThumbnailRepository(self.db_path)
+        self._anomaly_repo = AnomalyRepository(self.db_path)
 
     async def initialize(self) -> None:
         """Initialize the database schema.
@@ -738,292 +740,34 @@ class SQLiteStore:
             return await loop.run_in_executor(None, _query)
 
     # =========================================================================
-    # Migration Methods
+    # Migration Methods - Delegate to storage.migrations module
     # =========================================================================
 
     async def migrate_canonical_sizes(self) -> int:
-        """Migrate existing creatives to populate canonical_size fields.
-
-        Updates all creatives that have width/height but no canonical_size,
-        computing the normalized size values. For VIDEO creatives, it also
-        parses VAST XML to extract dimensions.
-
-        Returns:
-            Number of creatives updated.
-        """
-        from utils.size_normalization import canonical_size as compute_canonical_size
-        from utils.size_normalization import get_size_category
-        import re
-
-        async with self._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _parse_video_dimensions(raw_data: dict) -> tuple[Optional[int], Optional[int]]:
-                """Extract width and height from video VAST XML."""
-                video_data = raw_data.get("video")
-                if not video_data:
-                    return None, None
-                vast_xml = video_data.get("vastXml")
-                if not vast_xml:
-                    return None, None
-                match = re.search(
-                    r'<MediaFile[^>]*\s+width=["\'](\d+)["\'][^>]*\s+height=["\'](\d+)["\']',
-                    vast_xml,
-                )
-                if match:
-                    return int(match.group(1)), int(match.group(2))
-                match = re.search(
-                    r'<MediaFile[^>]*\s+height=["\'](\d+)["\'][^>]*\s+width=["\'](\d+)["\']',
-                    vast_xml,
-                )
-                if match:
-                    return int(match.group(2)), int(match.group(1))
-                return None, None
-
-            def _get_unmigrated_with_dims():
-                cursor = conn.execute(
-                    """
-                    SELECT id, width, height FROM creatives
-                    WHERE width IS NOT NULL AND height IS NOT NULL AND canonical_size IS NULL
-                    """
-                )
-                return cursor.fetchall()
-
-            def _get_unmigrated_videos():
-                cursor = conn.execute(
-                    """
-                    SELECT id, raw_data FROM creatives
-                    WHERE format = 'VIDEO' AND (width IS NULL OR height IS NULL)
-                    AND canonical_size IS NULL
-                    """
-                )
-                return cursor.fetchall()
-
-            rows_with_dims = await loop.run_in_executor(None, _get_unmigrated_with_dims)
-            rows_videos = await loop.run_in_executor(None, _get_unmigrated_videos)
-
-            updates = []
-            updates_with_dims = []
-
-            for row in rows_with_dims:
-                creative_id, width, height = row
-                canonical = compute_canonical_size(width, height)
-                category = get_size_category(canonical)
-                updates.append((canonical, category, creative_id))
-
-            for row in rows_videos:
-                creative_id, raw_data_str = row
-                if not raw_data_str:
-                    continue
-                raw_data = json.loads(raw_data_str)
-                width, height = _parse_video_dimensions(raw_data)
-                if width is not None and height is not None:
-                    canonical = compute_canonical_size(width, height)
-                    category = get_size_category(canonical)
-                    updates_with_dims.append((canonical, category, width, height, creative_id))
-
-            if not updates and not updates_with_dims:
-                return 0
-
-            if updates:
-                await loop.run_in_executor(
-                    None,
-                    lambda: conn.executemany(
-                        """
-                        UPDATE creatives
-                        SET canonical_size = ?, size_category = ?, updated_at = CURRENT_TIMESTAMP
-                        WHERE id = ?
-                        """,
-                        updates,
-                    ),
-                )
-
-            if updates_with_dims:
-                await loop.run_in_executor(
-                    None,
-                    lambda: conn.executemany(
-                        """
-                        UPDATE creatives
-                        SET canonical_size = ?, size_category = ?, width = ?, height = ?,
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE id = ?
-                        """,
-                        updates_with_dims,
-                    ),
-                )
-
-            await loop.run_in_executor(None, conn.commit)
-
-        total = len(updates) + len(updates_with_dims)
-        logger.info(f"Migrated canonical sizes for {total} creatives ({len(updates_with_dims)} from VAST XML)")
-        return total
+        """Migrate existing creatives to populate canonical_size fields."""
+        from storage.migrations import migrate_canonical_sizes
+        return await migrate_canonical_sizes(self)
 
     async def migrate_add_buyer_seats(self) -> int:
-        """Migrate existing creatives to populate buyer_id from account_id.
-
-        Returns:
-            Number of creatives updated with buyer_id.
-        """
-        async with self._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            for migration in MIGRATIONS:
-                try:
-                    await loop.run_in_executor(None, lambda m=migration: conn.execute(m))
-                    await loop.run_in_executor(None, conn.commit)
-                except sqlite3.OperationalError:
-                    pass
-
-            def _get_creatives_needing_buyer_id():
-                cursor = conn.execute(
-                    "SELECT id, name, account_id FROM creatives WHERE buyer_id IS NULL"
-                )
-                return cursor.fetchall()
-
-            rows = await loop.run_in_executor(None, _get_creatives_needing_buyer_id)
-
-            if not rows:
-                logger.info("No creatives need buyer_id migration")
-                return 0
-
-            updates = []
-            for row in rows:
-                creative_id, name, account_id = row
-                buyer_id = account_id
-                if buyer_id:
-                    updates.append((buyer_id, creative_id))
-
-            if updates:
-                await loop.run_in_executor(
-                    None,
-                    lambda: conn.executemany(
-                        """
-                        UPDATE creatives SET buyer_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
-                        """,
-                        updates,
-                    ),
-                )
-                await loop.run_in_executor(None, conn.commit)
-
-            logger.info(f"Migrated buyer_id for {len(updates)} creatives")
-            return len(updates)
+        """Migrate existing creatives to populate buyer_id from account_id."""
+        from storage.migrations import migrate_add_buyer_seats
+        return await migrate_add_buyer_seats(self)
 
     # =========================================================================
-    # Import Anomalies Methods
+    # Import Anomalies Methods - Delegate to AnomalyRepository
     # =========================================================================
 
     async def save_import_anomalies(self, import_id: str, anomalies: list[dict]) -> int:
-        """Store anomalies from import for later analysis.
-
-        Args:
-            import_id: Unique identifier for the import batch.
-            anomalies: List of anomaly dictionaries.
-
-        Returns:
-            Number of anomalies saved.
-        """
-        if not anomalies:
-            return 0
-
-        async with self._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _insert_anomalies():
-                count = 0
-                for a in anomalies:
-                    try:
-                        details = a.get("details", {})
-                        conn.execute(
-                            """
-                            INSERT INTO import_anomalies
-                            (import_id, row_number, anomaly_type, creative_id, app_id, app_name, details)
-                            VALUES (?, ?, ?, ?, ?, ?, ?)
-                            """,
-                            (
-                                import_id,
-                                a.get("row"),
-                                a.get("type"),
-                                str(details.get("creative_id")) if details.get("creative_id") else None,
-                                details.get("app_id"),
-                                details.get("app_name"),
-                                json.dumps(details),
-                            ),
-                        )
-                        count += 1
-                    except sqlite3.Error as e:
-                        logger.warning(f"Failed to insert anomaly: {e}")
-                conn.commit()
-                return count
-
-            return await loop.run_in_executor(None, _insert_anomalies)
+        """Store anomalies from import for later analysis."""
+        return await self._anomaly_repo.save_import_anomalies(import_id, anomalies)
 
     async def get_fraud_apps(self, limit: int = 50) -> list[dict]:
-        """Get apps with most fraud signals.
-
-        Args:
-            limit: Maximum number of apps to return.
-
-        Returns:
-            List of app dictionaries with anomaly counts.
-        """
-        async with self._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _query():
-                cursor = conn.execute(
-                    """
-                    SELECT
-                        app_id, app_name,
-                        COUNT(*) as anomaly_count,
-                        COUNT(DISTINCT anomaly_type) as anomaly_types,
-                        GROUP_CONCAT(DISTINCT anomaly_type) as types_list
-                    FROM import_anomalies
-                    WHERE anomaly_type IN ('clicks_exceed_impressions', 'extremely_high_ctr', 'zero_impressions_with_spend')
-                    AND app_id IS NOT NULL
-                    GROUP BY app_id
-                    ORDER BY anomaly_count DESC
-                    LIMIT ?
-                    """,
-                    (limit,),
-                )
-                return cursor.fetchall()
-
-            rows = await loop.run_in_executor(None, _query)
-
-        return [
-            {
-                "app_id": row["app_id"],
-                "app_name": row["app_name"],
-                "anomaly_count": row["anomaly_count"],
-                "anomaly_types": row["anomaly_types"],
-                "types_list": row["types_list"].split(",") if row["types_list"] else [],
-            }
-            for row in rows
-        ]
+        """Get apps with most fraud signals."""
+        return await self._anomaly_repo.get_fraud_apps(limit)
 
     async def get_anomaly_summary(self) -> dict:
-        """Get summary of all import anomalies.
-
-        Returns:
-            Dictionary with anomaly type counts.
-        """
-        async with self._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _query():
-                cursor = conn.execute(
-                    """
-                    SELECT anomaly_type, COUNT(*) as count
-                    FROM import_anomalies
-                    GROUP BY anomaly_type
-                    ORDER BY count DESC
-                    """
-                )
-                return cursor.fetchall()
-
-            rows = await loop.run_in_executor(None, _query)
-
-        return {row["anomaly_type"]: row["count"] for row in rows}
+        """Get summary of all import anomalies."""
+        return await self._anomaly_repo.get_anomaly_summary()
 
     # =========================================================================
     # Campaign Clustering Methods (with UUID generation)

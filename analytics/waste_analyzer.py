@@ -1,17 +1,17 @@
-"""Waste analysis engine for RTB traffic.
+"""Traffic waste analysis engine for RTB.
 
-This module provides the WasteAnalyzer class that compares RTB bid requests
+This module provides the TrafficWasteAnalyzer class that compares RTB bid requests
 against creative inventory to identify bandwidth waste and generate
 actionable recommendations.
 
 Example:
-    >>> from analytics import WasteAnalyzer
+    >>> from analytics import TrafficWasteAnalyzer
     >>> from storage import SQLiteStore
     >>>
     >>> store = SQLiteStore()
     >>> await store.initialize()
     >>>
-    >>> analyzer = WasteAnalyzer(store)
+    >>> analyzer = TrafficWasteAnalyzer(store)
     >>> report = await analyzer.analyze_waste(buyer_id="456", days=7)
     >>>
     >>> print(f"Waste: {report.waste_percentage}%")
@@ -47,7 +47,7 @@ SECONDS_PER_DAY = 86400
 ESTIMATED_COST_PER_1000 = 0.002  # $0.002 per 1000 requests
 
 
-class WasteAnalyzer:
+class TrafficWasteAnalyzer:
     """Analyze RTB traffic waste by comparing requests vs creative inventory.
 
     This analyzer compares what sizes publishers request via bid requests
