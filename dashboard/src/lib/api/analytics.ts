@@ -442,3 +442,163 @@ export async function getRTBFunnelConfigs(
     `/analytics/home/configs?${params}`
   );
 }
+
+// =============================================================================
+// Recommendations API
+// =============================================================================
+
+export interface Evidence {
+  metric_name: string;
+  metric_value: number;
+  threshold: number;
+  comparison: string;
+  time_period_days: number;
+  sample_size: number;
+  trend?: string | null;
+}
+
+export interface Impact {
+  wasted_qps: number;
+  wasted_queries_daily: number;
+  wasted_spend_usd: number;
+  percent_of_total_waste: number;
+  potential_savings_monthly: number;
+}
+
+export interface Action {
+  action_type: string; // "block", "exclude", "pause", "review", "add"
+  target_type: string; // "size", "publisher", "app", "geo", "creative", "config"
+  target_id: string;
+  target_name: string;
+  pretargeting_field?: string | null;
+  api_example?: string | null;
+}
+
+export interface Recommendation {
+  id: string;
+  type: string;
+  severity: string; // "critical", "high", "medium", "low"
+  confidence: string;
+  title: string;
+  description: string;
+  evidence: Evidence[];
+  impact: Impact;
+  actions: Action[];
+  affected_creatives: string[];
+  affected_campaigns: string[];
+  generated_at: string;
+  expires_at?: string | null;
+  status: string;
+}
+
+export interface RecommendationSummary {
+  analysis_period_days: number;
+  total_queries: number;
+  total_impressions: number;
+  total_waste_queries: number;
+  total_waste_rate: number;
+  total_wasted_qps: number;
+  total_spend_usd: number;
+  recommendation_count: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+  total_recommendations: number;
+  generated_at: string;
+}
+
+export interface PretargetingConfig {
+  name: string;
+  description: string;
+  priority: number;
+  targeting: {
+    formats: string[];
+    sizes: {
+      included: string[];
+      total_count: number;
+    };
+    geos: {
+      included: string[];
+      excluded: string[];
+      included_count: number;
+    };
+  };
+  estimated_impact: {
+    impressions: number;
+    spend_usd: number;
+    waste_reduction_pct: number;
+  };
+}
+
+export interface PretargetingResponse {
+  config_limit: number;
+  summary: string;
+  total_waste_reduction_pct: number;
+  configs: PretargetingConfig[];
+}
+
+// Individual optimization recommendation
+export interface PretargetingRecommendation {
+  id: string;
+  type: 'size_mismatch' | 'config_underperforming' | 'opportunity' | 'geo_waste';
+  title: string;
+  description: string;
+  reasoning?: string;
+  estimated_savings?: {
+    qps_per_day: number;
+    usd_per_month?: number;
+  };
+  data?: {
+    sizes?: string[];
+    geos?: string[];
+    billing_id?: string;
+    config_name?: string;
+    current_win_rate?: number;
+    avg_win_rate?: number;
+  };
+}
+
+export async function getRecommendations(params?: {
+  days?: number;
+  min_severity?: string;
+  type_filter?: string;
+}): Promise<Recommendation[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.days) searchParams.set("days", String(params.days));
+  if (params?.min_severity) searchParams.set("min_severity", params.min_severity);
+  if (params?.type_filter) searchParams.set("type_filter", params.type_filter);
+
+  const query = searchParams.toString();
+  return fetchApi<Recommendation[]>(`/recommendations${query ? `?${query}` : ""}`);
+}
+
+export async function getRecommendationSummary(
+  days: number = 7
+): Promise<RecommendationSummary> {
+  return fetchApi<RecommendationSummary>(`/recommendations/summary?days=${days}`);
+}
+
+export async function resolveRecommendation(
+  id: string,
+  notes?: string
+): Promise<{ status: string; id: string }> {
+  const searchParams = new URLSearchParams();
+  if (notes) searchParams.set("notes", notes);
+  const query = searchParams.toString();
+
+  return fetchApi<{ status: string; id: string }>(
+    `/recommendations/${encodeURIComponent(id)}/resolve${query ? `?${query}` : ""}`,
+    { method: "POST" }
+  );
+}
+
+export async function getPretargetingRecommendations(
+  days: number = 7,
+  maxConfigs: number = 10
+): Promise<PretargetingResponse> {
+  return fetchApi<PretargetingResponse>(
+    `/analytics/pretargeting-recommendations?days=${days}&max_configs=${maxConfigs}`
+  );
+}

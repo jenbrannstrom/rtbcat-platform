@@ -7,19 +7,25 @@ from services.campaign_aggregation import (
     CampaignWithMetrics,
 )
 from services.waste_analyzer import (
-    CreativeWasteSignalService,
+    CreativeHealthService,
     WasteSignal,
     WasteEvidence,
-    analyze_waste,
+    analyze_creative_health,
+    analyze_waste,  # Backward compatibility
 )
+
+# Backward compatibility alias
+CreativeWasteSignalService = CreativeHealthService
 
 __all__ = [
     "CampaignAggregationService",
     "CampaignMetrics",
     "CampaignWarnings",
     "CampaignWithMetrics",
-    "CreativeWasteSignalService",
+    "CreativeHealthService",
+    "CreativeWasteSignalService",  # Deprecated alias
     "WasteSignal",
     "WasteEvidence",
-    "analyze_waste",
+    "analyze_creative_health",
+    "analyze_waste",  # Deprecated alias
 ]

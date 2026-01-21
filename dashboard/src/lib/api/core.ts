@@ -102,3 +102,41 @@ export interface SystemStatus {
 export async function getSystemStatus(): Promise<SystemStatus> {
   return fetchApi<SystemStatus>("/system/status");
 }
+
+// =============================================================================
+// Geo Utilities
+// =============================================================================
+
+// Cache for geo lookups to avoid repeated API calls
+const geoNameCache: Record<string, string> = {};
+
+export async function lookupGeoNames(geoIds: string[]): Promise<Record<string, string>> {
+  // Filter out already cached IDs
+  const uncachedIds = geoIds.filter(id => !(id in geoNameCache));
+
+  if (uncachedIds.length === 0) {
+    // All IDs are cached
+    const result: Record<string, string> = {};
+    for (const id of geoIds) {
+      result[id] = geoNameCache[id];
+    }
+    return result;
+  }
+
+  // Fetch uncached IDs from API
+  const response = await fetchApi<{ geos: Record<string, string> }>(
+    `/geos/lookup?ids=${encodeURIComponent(uncachedIds.join(','))}`
+  );
+
+  // Add to cache
+  for (const [id, name] of Object.entries(response.geos)) {
+    geoNameCache[id] = name;
+  }
+
+  // Return all requested IDs
+  const result: Record<string, string> = {};
+  for (const id of geoIds) {
+    result[id] = geoNameCache[id] || id;
+  }
+  return result;
+}

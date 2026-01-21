@@ -9,6 +9,7 @@ from .creative_repository import CreativeRepository
 from .account_repository import AccountRepository
 from .traffic_repository import TrafficRepository
 from .thumbnail_repository import ThumbnailRepository
+from .anomaly_repository import AnomalyRepository
 
 __all__ = [
     "BaseRepository",
@@ -16,4 +17,5 @@ __all__ = [
     "AccountRepository",
     "TrafficRepository",
     "ThumbnailRepository",
+    "AnomalyRepository",
 ]

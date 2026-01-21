@@ -6,21 +6,24 @@ comparing bid requests against available creative inventory.
 Note: QPS optimization has been moved to the `qps` module.
 
 Example:
-    >>> from analytics import WasteAnalyzer
+    >>> from analytics import TrafficWasteAnalyzer
     >>> from storage import SQLiteStore
     >>>
     >>> store = SQLiteStore()
     >>> await store.initialize()
     >>>
-    >>> # Waste analysis
-    >>> analyzer = WasteAnalyzer(store)
+    >>> # Traffic waste analysis
+    >>> analyzer = TrafficWasteAnalyzer(store)
     >>> report = await analyzer.analyze_waste(buyer_id="456")
     >>> print(f"Waste: {report.waste_percentage}%")
 """
 
 from analytics.waste_models import SizeGap, WasteReport, TrafficRecord, SizeCoverage
 from analytics.mock_traffic import generate_mock_traffic, TRAFFIC_DISTRIBUTIONS
-from analytics.waste_analyzer import WasteAnalyzer
+from analytics.waste_analyzer import TrafficWasteAnalyzer
+
+# Backward compatibility alias
+WasteAnalyzer = TrafficWasteAnalyzer
 
 __all__ = [
     # Models
@@ -32,5 +35,6 @@ __all__ = [
     "generate_mock_traffic",
     "TRAFFIC_DISTRIBUTIONS",
     # Analyzers
-    "WasteAnalyzer",
+    "TrafficWasteAnalyzer",
+    "WasteAnalyzer",  # Deprecated alias for backward compatibility
 ]
