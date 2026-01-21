@@ -4,7 +4,7 @@ Size Mismatch Analyzer for QPS Optimization.
 Identifies ad sizes where traffic exists but no creatives are available,
 generating recommendations to either block the size or add creatives.
 
-This builds on the existing WasteAnalyzer but outputs structured
+This builds on the existing TrafficWasteAnalyzer but outputs structured
 Recommendation objects with evidence, impact, and actions.
 """
 
