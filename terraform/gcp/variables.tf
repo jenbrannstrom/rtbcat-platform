@@ -118,3 +118,81 @@ variable "allowed_email_domains" {
   type        = list(string)
   default     = []
 }
+
+# =============================================================================
+# Storage - Raw Parquet Bucket
+# =============================================================================
+
+variable "raw_parquet_bucket_name" {
+  description = "GCS bucket name for raw parquet storage"
+  type        = string
+  default     = "rtbcat-raw-parquet"
+}
+
+variable "raw_parquet_lifecycle_days" {
+  description = "Days to retain raw parquet files before lifecycle deletion"
+  type        = number
+  default     = 180
+}
+
+# =============================================================================
+# Analytics - BigQuery
+# =============================================================================
+
+variable "bigquery_dataset_id" {
+  description = "BigQuery dataset ID for analytics"
+  type        = string
+  default     = "rtbcat_analytics"
+}
+
+variable "bigquery_location" {
+  description = "BigQuery dataset location (should match or align with GCS)"
+  type        = string
+  default     = "EU"
+}
+
+variable "bigquery_raw_facts_table_id" {
+  description = "BigQuery table ID for raw facts"
+  type        = string
+  default     = "raw_facts"
+}
+
+# =============================================================================
+# Database - Cloud SQL for Postgres
+# =============================================================================
+
+variable "cloudsql_database_version" {
+  description = "Cloud SQL Postgres version"
+  type        = string
+  default     = "POSTGRES_15"
+}
+
+variable "cloudsql_tier" {
+  description = "Cloud SQL instance tier (use performance-optimized tier for high I/O)"
+  type        = string
+  default     = "db-perf-optimized-N-2"
+}
+
+variable "cloudsql_availability_type" {
+  description = "Cloud SQL availability type (ZONAL or REGIONAL)"
+  type        = string
+  default     = "REGIONAL"
+}
+
+variable "cloudsql_disk_size_gb" {
+  description = "Cloud SQL disk size in GB"
+  type        = number
+  default     = 100
+}
+
+variable "cloudsql_database_name" {
+  description = "Cloud SQL database name"
+  type        = string
+  default     = "rtbcat_serving"
+}
+
+variable "cloudsql_user_name" {
+  description = "Cloud SQL user name"
+  type        = string
+  default     = "rtbcat_serving"
+}
