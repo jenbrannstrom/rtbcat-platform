@@ -1,4 +1,4 @@
-"""QPS Data Import Module for Cat-Scan.
+"""Importers Module for Cat-Scan.
 
 This module handles importing and storing RTB performance data from various sources:
 
@@ -8,12 +8,8 @@ This module handles importing and storing RTB performance data from various sour
 
 The primary purpose is DATA IMPORT. Analysis logic lives in the `analytics/` module.
 
-Note: QpsSizeCoverageAnalyzer and FraudSignalDetector are exported here for
-backwards compatibility with the CLI, but will be consolidated into analytics/
-in a future refactor.
-
 Example:
-    >>> from qps import import_report, get_data_summary
+    >>> from importers import import_report, get_data_summary
     >>>
     >>> # Import data
     >>> result = import_report("/path/to/export.csv")
@@ -22,7 +18,7 @@ Example:
     >>> summary = get_data_summary()
 """
 
-from qps.importer import (
+from importers.importer import (
     import_report,
     import_bigquery_csv,  # Deprecated alias
     import_csv,
@@ -32,10 +28,7 @@ from qps.importer import (
     ValidationResult,
     ImportResult as ImportResultNew,
 )
-from qps.size_analyzer import QpsSizeCoverageAnalyzer, CoverageReport
-from qps.config_tracker import ConfigPerformanceTracker, ConfigReport
-from qps.fraud_detector import FraudSignalDetector, FraudReport
-from qps.models import (
+from importers.models import (
     SizeMetric,
     CreativeSizeInfo,
     SizeCoverageResult,
@@ -43,7 +36,7 @@ from qps.models import (
     FraudSignal,
     ImportResult,
 )
-from qps.constants import (
+from importers.constants import (
     GOOGLE_AVAILABLE_SIZES,
     PRETARGETING_CONFIGS,
     ENDPOINTS,
@@ -51,6 +44,11 @@ from qps.constants import (
     ACCOUNT_ID,
     ACCOUNT_NAME,
 )
+
+# Re-export analyzers from analytics/ for backwards compatibility
+from analytics.cli_size_analyzer import QpsSizeCoverageAnalyzer, CoverageReport
+from analytics.cli_config_tracker import ConfigPerformanceTracker, ConfigReport
+from analytics.cli_fraud_detector import FraudSignalDetector, FraudReport
 
 __all__ = [
     # Importer
@@ -61,7 +59,7 @@ __all__ = [
     "get_import_summary",
     "get_data_summary",
     "ValidationResult",
-    # Analyzers
+    # Analyzers (from analytics/, re-exported for compatibility)
     "QpsSizeCoverageAnalyzer",
     "CoverageReport",
     "ConfigPerformanceTracker",

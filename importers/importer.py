@@ -9,7 +9,7 @@ Multi-Account Support:
     using the pretargeting_configs table.
 
 Usage:
-    from qps.importer import import_csv, validate_csv
+    from importers.importer import import_csv, validate_csv
 
     # Check before import
     validation = validate_csv("/path/to/file.csv")
@@ -35,8 +35,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, field
 
-from qps.unified_importer import parse_bidder_id_from_filename
-from qps.utils import DB_PATH, parse_date, parse_float, parse_int
+from importers.unified_importer import parse_bidder_id_from_filename
+from importers.utils import DB_PATH, parse_date, parse_float, parse_int
 
 logger = logging.getLogger(__name__)
 
@@ -348,7 +348,7 @@ def import_csv(
 
     # Import account mapper for bidder_id lookup
     try:
-        from qps.account_mapper import get_account_mapper
+        from importers.account_mapper import get_account_mapper
         account_mapper = get_account_mapper(db_path)
     except ImportError:
         account_mapper = None

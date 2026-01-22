@@ -42,7 +42,7 @@ This document describes the technical architecture of Cat-Scan, a QPS optimizati
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                         CORE SERVICES                                │   │
 │  ├─────────────────────────────────────────────────────────────────────┤   │
-│  │  collectors/     │  analytics/      │  qps/           │  services/  │   │
+│  │  collectors/     │  analytics/      │  importers/           │  services/  │   │
 │  │  - creatives     │  - efficiency    │  - importer     │  - creative │   │
 │  │  - pretargeting  │  - funnel        │  - validation   │  - health   │   │
 │  │  - endpoints     │  - evaluation    │  - models       │             │   │
@@ -146,7 +146,7 @@ rtbcat-platform/
 │   ├── geo_analyzer.py    # Geographic analysis
 │   └── qps_optimizer.py   # QPS optimization
 │
-├── qps/                   # Data import module
+├── importers/                   # Data import module
 │   ├── importer.py        # Core CSV import
 │   ├── smart_importer.py  # Auto-detect CSV type
 │   ├── funnel_importer.py # RTB funnel data import
@@ -221,7 +221,7 @@ Gmail (scheduled reports)          Manual Upload
             │                            │
             └──────────┬─────────────────┘
                        ▼
-              qps/smart_importer.py
+              importers/smart_importer.py
                        │
         ┌──────────────┼──────────────┐
         ▼              ▼              ▼
@@ -538,7 +538,7 @@ Cat-Scan supports multiple Google Authorized Buyers accounts with multiple buyer
 | Purpose | File |
 |---------|------|
 | Account/Seat Repository | `storage/repositories/account_repository.py` |
-| Billing → Bidder Mapping | `qps/account_mapper.py` |
+| Billing → Bidder Mapping | `importers/account_mapper.py` |
 | Frontend Context | `dashboard/src/contexts/account-context.tsx` |
 | Multi-account Migration | `migrations/007_multi_account_tracking.sql` |
 

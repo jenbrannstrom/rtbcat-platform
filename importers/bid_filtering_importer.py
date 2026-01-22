@@ -7,7 +7,7 @@ This report answers: "WHY are bids being filtered?"
 Detected by presence of "Bid filtering reason" column.
 
 Usage:
-    from qps.bid_filtering_importer import import_bid_filtering_csv
+    from importers.bid_filtering_importer import import_bid_filtering_csv
 
     result = import_bid_filtering_csv("/path/to/bid-filtering-report.csv")
 """
@@ -21,11 +21,11 @@ import logging
 from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, field
 
-from qps.csv_report_types import (
+from importers.csv_report_types import (
     ReportType, detect_report_type,
     BID_FILTERING_REQUIRED, BID_FILTERING_METRICS, BID_FILTERING_OPTIONAL
 )
-from qps.utils import DB_PATH, parse_date, parse_int
+from importers.utils import DB_PATH, parse_date, parse_int
 
 logger = logging.getLogger(__name__)
 

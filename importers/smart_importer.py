@@ -3,7 +3,7 @@
 This is the RECOMMENDED entry point for importing any Cat-Scan CSV.
 
 Usage:
-    from qps.smart_importer import smart_import
+    from importers.smart_importer import smart_import
 
     result = smart_import("/path/to/any-catscan-report.csv")
     print(f"Imported to: {result.target_table}")
@@ -14,13 +14,13 @@ import os
 from dataclasses import dataclass
 from typing import Optional, Union
 
-from qps.csv_report_types import (
+from importers.csv_report_types import (
     ReportType, detect_report_type, get_report_instructions
 )
-from qps.importer import import_csv, ImportResult
-from qps.funnel_importer import import_funnel_csv, FunnelImportResult
-from qps.bid_filtering_importer import import_bid_filtering_csv, BidFilteringImportResult
-from qps.quality_importer import import_quality_csv, QualityImportResult
+from importers.importer import import_csv, ImportResult
+from importers.funnel_importer import import_funnel_csv, FunnelImportResult
+from importers.bid_filtering_importer import import_bid_filtering_csv, BidFilteringImportResult
+from importers.quality_importer import import_quality_csv, QualityImportResult
 
 
 @dataclass

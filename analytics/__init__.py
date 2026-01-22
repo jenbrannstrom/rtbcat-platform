@@ -37,6 +37,11 @@ from analytics.recommendation_engine import (
     Action,
 )
 
+# CLI-focused analyzers (sync, text output)
+from analytics.cli_size_analyzer import QpsSizeCoverageAnalyzer, CoverageReport
+from analytics.cli_config_tracker import ConfigPerformanceTracker, ConfigReport
+from analytics.cli_fraud_detector import FraudSignalDetector, FraudReport
+
 # Backward compatibility alias
 WasteAnalyzer = TrafficWasteAnalyzer
 
@@ -49,11 +54,18 @@ __all__ = [
     # Mock data
     "generate_mock_traffic",
     "TRAFFIC_DISTRIBUTIONS",
-    # Analyzers
+    # Analyzers (async, structured output)
     "TrafficWasteAnalyzer",
     "WasteAnalyzer",  # Deprecated alias for backward compatibility
     "SizeAnalyzer",
     "FraudAnalyzer",
+    # CLI analyzers (sync, text output)
+    "QpsSizeCoverageAnalyzer",
+    "CoverageReport",
+    "ConfigPerformanceTracker",
+    "ConfigReport",
+    "FraudSignalDetector",
+    "FraudReport",
     # Recommendation engine
     "Recommendation",
     "RecommendationType",

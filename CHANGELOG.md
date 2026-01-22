@@ -67,7 +67,7 @@ sqlite3 ~/.catscan/catscan.db "SELECT name FROM sqlite_master WHERE type='table'
 | `migrations/017_mark_legacy_timezone_data.sql` | New migration |
 | `api/routers/analytics/rtb_bidstream.py` | Renamed from rtb_funnel.py, JOIN logic added |
 | `analytics/rtb_bidstream_analyzer.py` | Renamed from rtb_funnel_analyzer.py |
-| `qps/csv_report_types.py` | Updated naming convention, UTC requirement |
+| `importers/csv_report_types.py` | Updated naming convention, UTC requirement |
 | `DATA_MODEL.md` | CSV Import Reference section, JOIN strategy docs |
 
 ---

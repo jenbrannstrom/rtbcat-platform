@@ -7,7 +7,7 @@ This report answers: "Which publishers have fraud or low viewability?"
 Detected by presence of "IVT credited impressions" or "Pre-filtered impressions" columns.
 
 Usage:
-    from qps.quality_importer import import_quality_csv
+    from importers.quality_importer import import_quality_csv
 
     result = import_quality_csv("/path/to/quality-report.csv")
 """
@@ -21,11 +21,11 @@ import logging
 from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, field
 
-from qps.csv_report_types import (
+from importers.csv_report_types import (
     ReportType, detect_report_type,
     QUALITY_SIGNALS_REQUIRED, QUALITY_SIGNALS_METRICS, QUALITY_SIGNALS_OPTIONAL
 )
-from qps.utils import DB_PATH, parse_date, parse_int
+from importers.utils import DB_PATH, parse_date, parse_int
 
 logger = logging.getLogger(__name__)
 
