@@ -93,6 +93,14 @@ else
     EMAIL_DOMAINS_CONFIG="email_domains = $ALLOWED_EMAIL_DOMAINS"
 fi
 
+if [ "$ENABLE_HTTPS" = "true" ]; then
+    OAUTH2_COOKIE_SECURE=true
+    OAUTH2_REDIRECT_SCHEME="https"
+else
+    OAUTH2_COOKIE_SECURE=false
+    OAUTH2_REDIRECT_SCHEME="http"
+fi
+
 # Create OAuth2 Proxy config
 cat > /etc/oauth2-proxy.cfg << OAUTHEOF
 # OAuth2 Proxy Configuration for Cat-Scan
@@ -102,11 +110,11 @@ provider = "google"
 client_id = "$GOOGLE_OAUTH_CLIENT_ID"
 client_secret = "$GOOGLE_OAUTH_CLIENT_SECRET"
 cookie_secret = "$COOKIE_SECRET"
-cookie_secure = true
+cookie_secure = $OAUTH2_COOKIE_SECURE
 cookie_name = "_catscan_oauth"
 
 # Redirect URL after authentication
-redirect_url = "https://$DOMAIN_NAME/oauth2/callback"
+redirect_url = "$OAUTH2_REDIRECT_SCHEME://$DOMAIN_NAME/oauth2/callback"
 
 # Listen on localhost only (nginx proxies to us)
 http_address = "127.0.0.1:4180"
