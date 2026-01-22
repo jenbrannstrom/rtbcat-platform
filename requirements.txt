@@ -29,6 +29,7 @@ python-dotenv>=1.0.0
 
 # Database
 # SQLite is built into Python, no additional package needed
+psycopg[binary]>=3.1.18
 
 # Testing
 pytest>=7.4.0
