@@ -7,7 +7,7 @@ These reports are SEPARATE from the Performance Detail CSVs because Google AB
 does not allow bid_requests with creative/app dimensions.
 
 Usage:
-    from qps.funnel_importer import import_funnel_csv
+    from importers.funnel_importer import import_funnel_csv
 
     result = import_funnel_csv("/path/to/catscan-funnel-geo.csv")
 """
@@ -21,11 +21,11 @@ import logging
 from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, field
 
-from qps.csv_report_types import (
+from importers.csv_report_types import (
     ReportType, detect_report_type,
     RTB_FUNNEL_REQUIRED, RTB_FUNNEL_PIPELINE_METRICS, RTB_FUNNEL_OPTIONAL
 )
-from qps.utils import DB_PATH, parse_date, parse_int
+from importers.utils import DB_PATH, parse_date, parse_int
 
 logger = logging.getLogger(__name__)
 

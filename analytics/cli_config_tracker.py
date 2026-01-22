@@ -4,7 +4,7 @@ Compares efficiency and performance across your 10 pretargeting configs,
 identifying configs that need investigation.
 
 Example:
-    >>> from qps.config_tracker import ConfigPerformanceTracker
+    >>> from importers.config_tracker import ConfigPerformanceTracker
     >>> tracker = ConfigPerformanceTracker()
     >>> report = tracker.generate_report(days=7)
     >>> print(report)
@@ -16,9 +16,9 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 
-from qps.constants import PRETARGETING_CONFIGS
-from qps.models import ConfigPerformance
-from qps.utils import DB_PATH
+from importers.constants import PRETARGETING_CONFIGS
+from importers.models import ConfigPerformance
+from importers.utils import DB_PATH
 
 logger = logging.getLogger(__name__)
 

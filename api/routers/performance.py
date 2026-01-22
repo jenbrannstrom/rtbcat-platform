@@ -34,7 +34,7 @@ from api.schemas.performance import (
     CSVImportResult,
     StreamingImportResult,
 )
-from qps.unified_importer import unified_import
+from importers.unified_importer import unified_import
 from storage import SQLiteStore, PerformanceMetric
 from storage.database import db_execute, db_query_one, db_transaction_async
 from services.home_precompute import refresh_home_summaries

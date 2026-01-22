@@ -8,7 +8,7 @@ import argparse
 import sqlite3
 from pathlib import Path
 
-from qps.unified_importer import parse_bidder_id_from_filename
+from importers.unified_importer import parse_bidder_id_from_filename
 
 DB_PATH = Path.home() / ".catscan" / "catscan.db"
 

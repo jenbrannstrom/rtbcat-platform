@@ -26,12 +26,12 @@ This plan turns the audit findings into an actionable, phased roadmap focused on
 **Goals**: reduce duplication and clarify entry points without changing behavior.
 
 1. **Centralize QPS utilities**
-   - Create `qps/utils.py` and move `DB_PATH`, `parse_date`, `parse_int`, `parse_float`.
+   - Create `importers/utils.py` and move `DB_PATH`, `parse_date`, `parse_int`, `parse_float`.
    - Update all importers to use the shared utility module.
    - Add unit tests for parsing edge cases and DB path resolution.
 
 2. **Document importer hierarchy**
-   - Add `qps/README.md` describing each importer and recommended entry points.
+   - Add `importers/README.md` describing each importer and recommended entry points.
    - Explicitly state that `smart_importer.py` is the default entry point.
 
 3. **Deprecation dates for legacy endpoints** ✅
@@ -112,15 +112,15 @@ This plan turns the audit findings into an actionable, phased roadmap focused on
    - Removed empty `creative-intelligence/` directory
    - Updated all documentation references
 
-2. **Clarify qps/ as import-only** ✅
-   - Updated `qps/__init__.py` docstring to emphasize data import purpose
-   - Updated `qps/README.md` to document import vs analysis separation
-   - Added deprecation notes to legacy analyzers in `qps/`
+2. **Clarify importers/ as import-only** ✅
+   - Updated `importers/__init__.py` docstring to emphasize data import purpose
+   - Updated `importers/README.md` to document import vs analysis separation
+   - Added deprecation notes to legacy analyzers in `importers/`
 
 3. **Consolidate analyzers in analytics/** ✅
    - Added cross-references between duplicate analyzers
    - `analytics/size_analyzer.py` is canonical (async, structured Recommendations)
-   - `qps/size_analyzer.py` maintained for CLI compatibility (sync, text reports)
+   - `importers/size_analyzer.py` maintained for CLI compatibility (sync, text reports)
    - Same pattern for fraud analyzers
    - Exported all analyzers from `analytics/__init__.py`
 
@@ -148,8 +148,8 @@ This plan turns the audit findings into an actionable, phased roadmap focused on
 
 ## Deliverables Checklist
 
-- [x] `qps/utils.py` with consolidated helpers
-- [x] `qps/README.md` importer overview
+- [x] `importers/utils.py` with consolidated helpers
+- [x] `importers/README.md` importer overview
 - [x] Deprecation policy + dated deprecation notices (removal date: 2026-06-30)
 - [x] Settings router split completed
 - [x] Frontend API migration completed (all functions in modular files, `api-legacy.ts` deprecated)
@@ -160,7 +160,7 @@ This plan turns the audit findings into an actionable, phased roadmap focused on
 - [x] Dead code removed (api-legacy.ts, /config/credentials endpoints, legacy credentials functions)
 - [x] CLI + tests moved to root (`cli/`, `tests/`)
 - [x] `creative-intelligence/` directory removed
-- [x] `qps/` clarified as import-only with legacy analyzer deprecation notes
+- [x] `importers/` clarified as import-only with legacy analyzer deprecation notes
 - [x] `analytics/` consolidated as canonical analyzer module
 - [x] `analysis/` deprecated in favor of `analytics/`
 
@@ -214,7 +214,7 @@ api/routers/settings/
 | Storage facade | `storage/sqlite_store.py` |
 | All repositories | `storage/repositories/` |
 | Data migrations | `storage/migrations.py` |
-| QPS utilities | `qps/utils.py` |
+| QPS utilities | `importers/utils.py` |
 | Analytics docs | `analytics/README.md` |
 | Services docs | `services/README.md` |
 | Settings API | `api/routers/settings/` |

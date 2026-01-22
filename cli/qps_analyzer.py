@@ -41,11 +41,11 @@ from pathlib import Path
 from urllib.request import urlopen
 from urllib.error import URLError
 
-from qps.importer import validate_csv, import_csv, get_data_summary
-from qps.size_analyzer import QpsSizeCoverageAnalyzer
-from qps.config_tracker import ConfigPerformanceTracker
-from qps.fraud_detector import FraudSignalDetector
-from qps.constants import ACCOUNT_NAME, ACCOUNT_ID, PRETARGETING_CONFIGS
+from importers.importer import validate_csv, import_csv, get_data_summary
+from importers.constants import ACCOUNT_NAME, ACCOUNT_ID, PRETARGETING_CONFIGS
+from analytics.cli_size_analyzer import QpsSizeCoverageAnalyzer
+from analytics.cli_config_tracker import ConfigPerformanceTracker
+from analytics.cli_fraud_detector import FraudSignalDetector
 
 # Troubleshooting imports (lazy loaded to avoid auth issues when not needed)
 def _get_troubleshooting_client():

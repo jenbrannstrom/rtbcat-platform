@@ -17,10 +17,10 @@ import logging
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 
-from qps.flexible_mapper import (
+from importers.flexible_mapper import (
     map_columns, detect_best_report_type, get_default_value, MappingResult
 )
-from qps.utils import DB_PATH, parse_date, parse_float, parse_int
+from importers.utils import DB_PATH, parse_date, parse_float, parse_int
 
 logger = logging.getLogger(__name__)
 
@@ -366,7 +366,7 @@ def import_to_rtb_daily(
 
                     if not bidder_id:
                         try:
-                            from qps.account_mapper import get_bidder_id_for_billing_id
+                            from importers.account_mapper import get_bidder_id_for_billing_id
                             bidder_id = get_bidder_id_for_billing_id(row_data["billing_id"], db_path=db_path)
                         except Exception:
                             bidder_id = None
