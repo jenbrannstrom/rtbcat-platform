@@ -1,22 +1,25 @@
-"""QPS Optimization Module for Cat-Scan.
+"""QPS Data Import Module for Cat-Scan.
 
-This module provides tools for analyzing and optimizing QPS (Queries Per Second)
-in RTB campaigns by:
+This module handles importing and storing RTB performance data from various sources:
 
-1. Importing BigQuery CSV exports with size-based aggregation
-2. Analyzing size coverage (what sizes you can serve vs. receive)
-3. Tracking performance by pretargeting config
-4. Detecting fraud signals for human review
+1. BigQuery CSV exports (bidstream, quality, funnel reports)
+2. Config performance tracking data
+3. Size-based traffic aggregation
+
+The primary purpose is DATA IMPORT. Analysis logic lives in the `analytics/` module.
+
+Note: QpsSizeCoverageAnalyzer and FraudSignalDetector are exported here for
+backwards compatibility with the CLI, but will be consolidated into analytics/
+in a future refactor.
 
 Example:
-    >>> from qps import import_bigquery_csv, QpsSizeCoverageAnalyzer
+    >>> from qps import import_bigquery_csv, get_data_summary
     >>>
     >>> # Import data
     >>> result = import_bigquery_csv("/path/to/export.csv")
     >>>
-    >>> # Analyze size coverage
-    >>> analyzer = QpsSizeCoverageAnalyzer()
-    >>> print(analyzer.generate_report(days=7))
+    >>> # Check what was imported
+    >>> summary = get_data_summary()
 """
 
 from qps.importer import (

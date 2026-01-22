@@ -26,7 +26,7 @@ Comprehensive code review of the Cat-Scan/RTB platform identifying security vuln
 | ~~`dashboard/src/components/preview-modal.tsx`~~ | ~~1,179~~ → 7 modules | **REFACTORED** | Split into `components/preview-modal/` (utils, renderers, sections) |
 | ~~`dashboard/src/app/import/page.tsx`~~ | ~~1,168~~ → 615 | **REFACTORED** | Split into `components/import/` (6 components) |
 | ~~`dashboard/src/app/campaigns/page.tsx`~~ | ~~1,094~~ → 736 | **REFACTORED** | Extracted types, utils, API, UI components to `components/campaigns/` |
-| `creative-intelligence/cli/qps_analyzer.py` | 1,053 | Pending | Split into separate command modules under `cli/commands/` |
+| `cli/qps_analyzer.py` | 1,053 | Pending | Split into separate command modules under `cli/commands/` |
 
 ---
 

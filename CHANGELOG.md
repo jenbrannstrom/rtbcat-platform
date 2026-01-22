@@ -102,7 +102,6 @@ Eliminate table naming confusion by renaming to clear, distinct names.
 cp ~/.catscan/catscan.db ~/.catscan/catscan.db.manual_backup
 
 # 2. Run migration
-cd creative-intelligence
 python scripts/migrate_schema_v12.py
 
 # 3. Verify
