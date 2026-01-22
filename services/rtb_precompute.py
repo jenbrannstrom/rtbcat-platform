@@ -9,6 +9,7 @@ import logging
 from typing import Optional
 
 from storage.database import db_transaction_async
+from services.precompute_utils import normalize_refresh_dates, record_refresh_log
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,7 @@ async def refresh_rtb_summaries(
     buyer_account_id: Optional[str] = None,
 ) -> dict:
     """Refresh RTB precompute tables for a date range."""
+    date_list = normalize_refresh_dates(start_date=start_date, end_date=end_date)
     logger.info(
         "Refreshing RTB summaries for %s to %s (buyer_account_id=%s)",
         start_date,
@@ -367,10 +369,18 @@ async def refresh_rtb_summaries(
             tuple(seat_params),
         )
 
+        record_refresh_log(
+            conn,
+            cache_name="rtb_summaries",
+            buyer_account_id=buyer_account_id,
+            dates=date_list,
+        )
+
         return {
             "start_date": start_date,
             "end_date": end_date,
             "buyer_account_id": buyer_account_id,
+            "dates": date_list,
         }
 
     return await db_transaction_async(_run)

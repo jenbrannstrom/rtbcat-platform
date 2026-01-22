@@ -65,6 +65,7 @@ from api.routers import (
     gmail_router,
     recommendations_router,
     retention_router,
+    precompute_router,
     qps_router,
     performance_router,
     troubleshooting_router,
@@ -199,6 +200,7 @@ app.include_router(collect_router)
 # Integrations
 app.include_router(gmail_router)
 app.include_router(retention_router)
+app.include_router(precompute_router)
 app.include_router(troubleshooting_router)
 
 # Admin routes (user management, audit logs)

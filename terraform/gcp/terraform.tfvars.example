@@ -57,3 +57,27 @@ google_oauth_client_secret = "GOCSPX-xxxxxxxxxx"
 # Leave empty to allow any Google account
 # Example: ["company.com", "partner.org"]
 allowed_email_domains = []
+
+# =============================================================================
+# Precompute Scheduler + Monitoring
+# =============================================================================
+
+# How many days to refresh in scheduled precompute job
+precompute_refresh_days = 2
+
+# How many hours before data is considered stale
+precompute_refresh_max_age_hours = 36
+
+# Daily schedule for precompute refresh (UTC)
+precompute_refresh_schedule = "0 3 * * *"
+
+# =============================================================================
+# Data Retention (GCS Parquet + BigQuery partitions)
+# =============================================================================
+
+# Retention days for parquet exports stored in GCS
+parquet_retention_days = 90
+
+# Optional: BigQuery dataset ID to apply partition retention defaults
+# bigquery_dataset_id = "catscan_analytics"
+bigquery_partition_retention_days = 90
