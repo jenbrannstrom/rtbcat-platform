@@ -237,11 +237,11 @@ Metrics: Filtered bids
 ./venv/bin/python -m qps.funnel_importer /path/to/bidstream-report.csv
 
 # CLI tool (alternative interface)
-./venv/bin/python creative-intelligence/cli/qps_analyzer.py import /path/to/report.csv
-./venv/bin/python creative-intelligence/cli/qps_analyzer.py validate /path/to/report.csv
-./venv/bin/python creative-intelligence/cli/qps_analyzer.py summary
-./venv/bin/python creative-intelligence/cli/qps_analyzer.py full-report --days 7
-./venv/bin/python creative-intelligence/cli/qps_analyzer.py generate-thumbnails --limit 100
+./venv/bin/python cli/qps_analyzer.py import /path/to/report.csv
+./venv/bin/python cli/qps_analyzer.py validate /path/to/report.csv
+./venv/bin/python cli/qps_analyzer.py summary
+./venv/bin/python cli/qps_analyzer.py full-report --days 7
+./venv/bin/python cli/qps_analyzer.py generate-thumbnails --limit 100
 ```
 
 ---
@@ -466,7 +466,7 @@ See **[ROADMAP.md](ROADMAP.md)** for planned features and known bugs.
 | Issue | Workaround |
 |-------|------------|
 | Port 8000 stuck | `sudo lsof -ti:8000 \| xargs -r sudo kill -9` |
-| No video thumbnails | Run `./venv/bin/python creative-intelligence/cli/qps_analyzer.py generate-thumbnails` |
+| No video thumbnails | Run `./venv/bin/python cli/qps_analyzer.py generate-thumbnails` |
 | Dashboard not updating | Run `npm run build` |
 | uvicorn "module not found" | Use `./venv/bin/python -m uvicorn` instead of `uvicorn` directly |
 

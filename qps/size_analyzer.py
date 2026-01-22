@@ -1,5 +1,10 @@
 """Size Coverage Analyzer for QPS Optimization.
 
+.. note::
+    This module is maintained for CLI compatibility. For new code, consider using
+    ``analytics.size_analyzer.SizeAnalyzer`` which integrates with the
+    RecommendationEngine and provides structured Recommendation objects.
+
 Compares the creative sizes you're receiving (from imported CSV data)
 against the creatives you have (from API sync) to identify:
 

@@ -1,7 +1,11 @@
-# QPS CSV Importers
+# QPS Data Import Module
 
-This folder contains multiple importers for different Google Authorized Buyers CSV exports.
-Use the importer that matches your CSV format.
+This module handles **data import** from BigQuery CSV exports and other RTB data sources.
+Analysis of imported data happens in the `analytics/` module.
+
+## Importers
+
+Use the importer that matches your CSV format:
 
 ## Recommended entry points
 
@@ -22,3 +26,17 @@ Use the importer that matches your CSV format.
 
 - `qps/utils.py`: Shared parsing helpers and DB path.
 - `qps/flexible_mapper.py`: Column mapping and report type detection logic used by the unified importer.
+- `qps/models.py`: Data models for import results.
+- `qps/constants.py`: Account IDs, config names, size mappings.
+
+## Legacy Analyzers (to be consolidated)
+
+These analyzers exist here for CLI compatibility but will be consolidated into `analytics/`:
+
+| File | Consolidates With |
+|------|-------------------|
+| `size_analyzer.py` | `analytics/size_analyzer.py` |
+| `fraud_detector.py` | `analytics/fraud_analyzer.py` |
+| `config_tracker.py` | `analytics/config_analyzer.py` (new) |
+
+For analysis, prefer using the `analytics/` module directly.

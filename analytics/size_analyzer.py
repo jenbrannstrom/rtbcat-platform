@@ -4,8 +4,19 @@ Size Mismatch Analyzer for QPS Optimization.
 Identifies ad sizes where traffic exists but no creatives are available,
 generating recommendations to either block the size or add creatives.
 
-This builds on the existing TrafficWasteAnalyzer but outputs structured
-Recommendation objects with evidence, impact, and actions.
+This is the canonical size analyzer for the analytics module. It outputs
+structured Recommendation objects with evidence, impact, and actions.
+
+Related modules:
+    - ``qps.size_analyzer.QpsSizeCoverageAnalyzer``: CLI-focused analyzer
+      that generates text reports. Maintained for backwards compatibility.
+
+Usage:
+    >>> from analytics.size_analyzer import SizeAnalyzer
+    >>> from storage.sqlite_store import SQLiteStore
+    >>> store = SQLiteStore()
+    >>> analyzer = SizeAnalyzer(store)
+    >>> recommendations = await analyzer.analyze(days=7)
 """
 
 from __future__ import annotations

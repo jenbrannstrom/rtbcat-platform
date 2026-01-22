@@ -1,5 +1,10 @@
 """Fraud Signal Detector for QPS Optimization.
 
+.. note::
+    This module is maintained for CLI compatibility. For new code, consider using
+    ``analytics.fraud_analyzer.FraudAnalyzer`` which integrates with the
+    RecommendationEngine and provides structured Recommendation objects.
+
 Flags suspicious patterns for HUMAN REVIEW. Does NOT definitively identify fraud.
 
 Important limitations:

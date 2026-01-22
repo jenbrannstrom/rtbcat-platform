@@ -1,14 +1,26 @@
 """
 Fraud Detection Analyzer for QPS Optimization.
 
-Identifies suspicious publisher and app patterns that indicate
-potential fraud or low-quality inventory.
+This is the canonical fraud analyzer for the analytics module. It outputs
+structured Recommendation objects with evidence, impact, and actions.
 
-Detects:
+Identifies suspicious publisher and app patterns that indicate
+potential fraud or low-quality inventory:
 - Publishers with abnormally high CTR (click fraud)
 - Publishers with 100% viewability but zero engagement
 - Apps/sites with high traffic but zero conversions
 - Unusual traffic patterns (bots, data centers)
+
+Related modules:
+    - ``qps.fraud_detector.FraudSignalDetector``: CLI-focused detector
+      that generates text reports. Maintained for backwards compatibility.
+
+Usage:
+    >>> from analytics.fraud_analyzer import FraudAnalyzer
+    >>> from storage.sqlite_store import SQLiteStore
+    >>> store = SQLiteStore()
+    >>> analyzer = FraudAnalyzer(store)
+    >>> recommendations = await analyzer.analyze(days=14)
 """
 
 from __future__ import annotations
