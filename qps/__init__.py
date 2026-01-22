@@ -2,7 +2,7 @@
 
 This module handles importing and storing RTB performance data from various sources:
 
-1. BigQuery CSV exports (bidstream, quality, funnel reports)
+1. Authorized Buyers CSV reports (bidstream, quality, funnel reports)
 2. Config performance tracking data
 3. Size-based traffic aggregation
 
@@ -13,17 +13,18 @@ backwards compatibility with the CLI, but will be consolidated into analytics/
 in a future refactor.
 
 Example:
-    >>> from qps import import_bigquery_csv, get_data_summary
+    >>> from qps import import_report, get_data_summary
     >>>
     >>> # Import data
-    >>> result = import_bigquery_csv("/path/to/export.csv")
+    >>> result = import_report("/path/to/export.csv")
     >>>
     >>> # Check what was imported
     >>> summary = get_data_summary()
 """
 
 from qps.importer import (
-    import_bigquery_csv,
+    import_report,
+    import_bigquery_csv,  # Deprecated alias
     import_csv,
     validate_csv,
     get_import_summary,
@@ -53,7 +54,8 @@ from qps.constants import (
 
 __all__ = [
     # Importer
-    "import_bigquery_csv",
+    "import_report",
+    "import_bigquery_csv",  # Deprecated
     "import_csv",
     "validate_csv",
     "get_import_summary",
