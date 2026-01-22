@@ -447,21 +447,18 @@ echo ">>> Setting up backup script..."
 cat > /usr/local/bin/catscan-backup << 'BACKUPEOF'
 #!/bin/bash
 # Daily backup of SQLite database to GCS
+# Uses streaming to avoid filling local disk (database can be >10GB)
 
 set -euo pipefail
 
 DATA_DIR="/home/catscan/.catscan"
-BACKUP_FILE="/tmp/catscan-backup-$(date +%Y%m%d-%H%M%S).db"
-GCS_PATH="gs://${gcs_bucket}/backups/$(date +%Y/%m)/catscan-$(date +%Y%m%d).db"
+GCS_PATH="gs://${gcs_bucket}/backups/$(date +%Y/%m)/catscan-$(date +%Y%m%d).db.gz"
 
-# Create backup using SQLite's backup command (safe for concurrent access)
-sqlite3 "$DATA_DIR/catscan.db" ".backup '$BACKUP_FILE'"
+echo "Starting streaming backup to $GCS_PATH"
+echo "This may take 15-30 minutes for large databases..."
 
-# Upload to GCS
-gsutil cp "$BACKUP_FILE" "$GCS_PATH"
-
-# Cleanup local backup
-rm -f "$BACKUP_FILE"
+# Stream dump directly to GCS via gzip (no local temp file needed)
+sqlite3 "$DATA_DIR/catscan.db" ".dump" | gzip | gsutil cp - "$GCS_PATH"
 
 echo "Backup completed: $GCS_PATH"
 BACKUPEOF
