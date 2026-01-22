@@ -472,6 +472,60 @@ chmod +x /usr/local/bin/catscan-backup
 echo "0 3 * * * root /usr/local/bin/catscan-backup >> /var/log/catscan-backup.log 2>&1" > /etc/cron.d/catscan-backup
 
 # -----------------------------------------------------------------------------
+# 8b. Maintenance Cron Jobs (CRITICAL - prevents disk full)
+# -----------------------------------------------------------------------------
+echo ">>> Setting up maintenance cron jobs..."
+
+# Docker cleanup - runs daily at 4am UTC
+# Removes unused images, containers, networks older than 24h
+# SAFE: Never removes running containers or volumes
+cat > /etc/cron.d/docker-cleanup << 'EOF'
+# Docker Cleanup - runs daily at 4am UTC
+0 4 * * * root docker system prune -af --filter "until=24h" > /var/log/docker-cleanup.log 2>&1
+EOF
+chmod 644 /etc/cron.d/docker-cleanup
+
+# Database cleanup - runs weekly on Sunday at 2am UTC
+# Deletes data older than 90 days (configurable via CATSCAN_RETENTION_DAYS)
+cat > /etc/cron.d/catscan-db-cleanup << 'EOF'
+# Database cleanup - runs weekly on Sunday at 2am UTC
+0 2 * * 0 root docker exec catscan-api python scripts/cleanup_old_data.py >> /var/log/catscan-db-cleanup.log 2>&1
+EOF
+chmod 644 /etc/cron.d/catscan-db-cleanup
+
+# Home page precompute - systemd timer runs daily at 3am UTC
+# Refreshes precomputed tables for fast dashboard loading
+cat > /etc/systemd/system/catscan-home-refresh.service << 'EOF'
+[Unit]
+Description=Cat-Scan Home Page Data Refresh
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec catscan-api python -c "from services.home_precompute import refresh_all_home_tables; refresh_all_home_tables()"
+EOF
+
+cat > /etc/systemd/system/catscan-home-refresh.timer << 'EOF'
+[Unit]
+Description=Daily refresh of Cat-Scan home page tables
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl daemon-reload
+systemctl enable catscan-home-refresh.timer
+
+echo "Maintenance jobs configured:"
+echo "  - docker-cleanup: daily 4am UTC"
+echo "  - catscan-db-cleanup: weekly Sunday 2am UTC"
+echo "  - catscan-home-refresh: daily 3am UTC"
+
+# -----------------------------------------------------------------------------
 # 9. Systemd Service
 # -----------------------------------------------------------------------------
 echo ">>> Creating systemd service..."
