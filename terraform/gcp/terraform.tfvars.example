@@ -57,3 +57,27 @@ google_oauth_client_secret = "GOCSPX-xxxxxxxxxx"
 # Leave empty to allow any Google account
 # Example: ["company.com", "partner.org"]
 allowed_email_domains = []
+
+# =============================================================================
+# Analytics storage + BigQuery
+# =============================================================================
+
+# Raw parquet bucket for analytics ingestion
+raw_parquet_bucket_name   = "rtbcat-raw-parquet"
+raw_parquet_lifecycle_days = 180
+
+# BigQuery dataset + raw facts table
+bigquery_dataset_id         = "rtbcat_analytics"
+bigquery_location           = "EU"
+bigquery_raw_facts_table_id = "raw_facts"
+
+# =============================================================================
+# Cloud SQL (Postgres)
+# =============================================================================
+
+cloudsql_database_version  = "POSTGRES_15"
+cloudsql_tier              = "db-perf-optimized-N-2"
+cloudsql_availability_type = "REGIONAL"
+cloudsql_disk_size_gb      = 100
+cloudsql_database_name     = "rtbcat_serving"
+cloudsql_user_name         = "rtbcat_serving"
