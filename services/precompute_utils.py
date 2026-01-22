@@ -81,3 +81,43 @@ def record_refresh_log(
         """,
         (cache_name, buyer_key, refresh_start, refresh_end, refreshed_at),
     )
+
+
+def ensure_refresh_log_table_postgres(conn) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS precompute_refresh_log (
+            cache_name TEXT NOT NULL,
+            buyer_account_id TEXT NOT NULL,
+            refresh_start TEXT,
+            refresh_end TEXT,
+            refreshed_at TEXT NOT NULL,
+            PRIMARY KEY (cache_name, buyer_account_id)
+        )
+        """
+    )
+
+
+def record_refresh_log_postgres(
+    conn,
+    *,
+    cache_name: str,
+    buyer_account_id: Optional[str],
+    dates: Sequence[str],
+) -> None:
+    ensure_refresh_log_table_postgres(conn)
+    refresh_start, refresh_end = refresh_window(dates)
+    refreshed_at = datetime.utcnow().isoformat()
+    buyer_key = buyer_account_id or DEFAULT_BUYER_KEY
+    conn.execute(
+        """
+        INSERT INTO precompute_refresh_log (
+            cache_name, buyer_account_id, refresh_start, refresh_end, refreshed_at
+        ) VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (cache_name, buyer_account_id) DO UPDATE SET
+            refresh_start = EXCLUDED.refresh_start,
+            refresh_end = EXCLUDED.refresh_end,
+            refreshed_at = EXCLUDED.refreshed_at
+        """,
+        (cache_name, buyer_key, refresh_start, refresh_end, refreshed_at),
+    )

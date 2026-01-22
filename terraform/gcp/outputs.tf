@@ -20,6 +20,11 @@ output "gcs_bucket" {
   value       = google_storage_bucket.catscan.name
 }
 
+output "raw_parquet_bucket" {
+  description = "Cloud Storage bucket for raw parquet ingestion"
+  value       = google_storage_bucket.raw_parquet.name
+}
+
 output "service_account_email" {
   description = "Service account email"
   value       = google_service_account.catscan.email
@@ -35,6 +40,16 @@ output "api_url" {
   value       = var.enable_https && var.domain_name != "" ? "https://${var.domain_name}/api" : "http://${google_compute_address.catscan.address}/api"
 }
 
+output "precompute_refresh_url" {
+  description = "Precompute refresh endpoint URL"
+  value       = var.enable_https && var.domain_name != "" ? "https://${var.domain_name}/api/precompute/refresh/scheduled" : "http://${google_compute_address.catscan.address}/api/precompute/refresh/scheduled"
+}
+
+output "precompute_health_url" {
+  description = "Precompute health endpoint URL"
+  value       = var.enable_https && var.domain_name != "" ? "https://${var.domain_name}/api/precompute/health" : "http://${google_compute_address.catscan.address}/api/precompute/health"
+}
+
 output "ssh_command" {
   description = "SSH command (via IAP - secure)"
   value       = "gcloud compute ssh ${google_compute_instance.catscan.name} --zone=${google_compute_instance.catscan.zone} --tunnel-through-iap"
@@ -48,10 +63,31 @@ output "ssh_command_direct" {
 output "secret_manager_secrets" {
   description = "Secret Manager secrets for credentials"
   value = {
-    gmail_oauth_client = google_secret_manager_secret.gmail_oauth_client.id
-    gmail_token        = google_secret_manager_secret.gmail_token.id
-    ab_service_account = google_secret_manager_secret.ab_service_account.id
+    gmail_oauth_client    = google_secret_manager_secret.gmail_oauth_client.id
+    gmail_token           = google_secret_manager_secret.gmail_token.id
+    ab_service_account    = google_secret_manager_secret.ab_service_account.id
+    serving_db_credentials = google_secret_manager_secret.serving_db_credentials.id
   }
+}
+
+output "bigquery_dataset" {
+  description = "BigQuery dataset for analytics"
+  value       = google_bigquery_dataset.rtbcat_analytics.dataset_id
+}
+
+output "bigquery_raw_facts_table" {
+  description = "BigQuery raw facts table"
+  value       = google_bigquery_table.raw_facts.table_id
+}
+
+output "cloudsql_instance_connection_name" {
+  description = "Cloud SQL instance connection name"
+  value       = google_sql_database_instance.rtbcat_serving.connection_name
+}
+
+output "cloudsql_database" {
+  description = "Cloud SQL database name"
+  value       = google_sql_database.serving_db.name
 }
 
 output "credential_upload_commands" {
@@ -73,6 +109,9 @@ output "credential_upload_commands" {
     # 3. Gmail Token (after running gmail_auth.py locally)
     gcloud secrets versions add ${var.app_name}-gmail-token \
       --data-file=~/.catscan/credentials/gmail-token.json
+
+    # 4. Serving DB credentials are created automatically by Terraform:
+    #    Secret: ${var.app_name}-serving-db-credentials
 
     After upload, credentials are automatically pulled on VM deploy/restart.
 
@@ -106,6 +145,7 @@ output "next_steps" {
     - ${var.app_name}-gmail-oauth-client
     - ${var.app_name}-gmail-token
     - ${var.app_name}-ab-service-account
+    - ${var.app_name}-serving-db-credentials
 
     VM pulls credentials automatically on every deploy/restart.
     You never need to copy credentials manually again.

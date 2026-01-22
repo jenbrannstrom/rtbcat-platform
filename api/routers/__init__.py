@@ -9,6 +9,7 @@ from .config import router as config_router
 from .gmail import router as gmail_router
 from .recommendations import router as recommendations_router
 from .retention import router as retention_router
+from .precompute import router as precompute_router
 from .qps import router as qps_router
 from .performance import router as performance_router
 from .troubleshooting import router as troubleshooting_router
@@ -35,6 +36,7 @@ __all__ = [
     "gmail_router",
     "recommendations_router",
     "retention_router",
+    "precompute_router",
     "qps_router",
     "performance_router",
     "troubleshooting_router",
