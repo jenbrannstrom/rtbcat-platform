@@ -42,10 +42,10 @@ This document describes the technical architecture of Cat-Scan, a QPS optimizati
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                         CORE SERVICES                                │   │
 │  ├─────────────────────────────────────────────────────────────────────┤   │
-│  │  collectors/     │  analytics/      │  qps/           │  analysis/  │   │
-│  │  - creatives     │  - efficiency    │  - optimizer    │  - waste    │   │
-│  │  - pretargeting  │  - funnel        │  - importer     │  - signals  │   │
-│  │  - endpoints     │  - traffic       │  - recommender  │             │   │
+│  │  collectors/     │  analytics/      │  qps/           │  services/  │   │
+│  │  - creatives     │  - efficiency    │  - importer     │  - creative │   │
+│  │  - pretargeting  │  - funnel        │  - validation   │  - health   │   │
+│  │  - endpoints     │  - evaluation    │  - models       │             │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                    │                                        │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
@@ -138,15 +138,13 @@ rtbcat-platform/
 │   └── troubleshooting/   # Real-time bid troubleshooting
 │
 ├── analytics/             # Primary analysis module (canonical)
+│   ├── evaluation_engine.py  # Decision intelligence engine
 │   ├── recommendation_engine.py  # Structured recommendations
 │   ├── waste_analyzer.py  # Traffic waste analysis
 │   ├── size_analyzer.py   # Size mismatch analysis
 │   ├── fraud_analyzer.py  # Fraud detection
 │   ├── geo_analyzer.py    # Geographic analysis
 │   └── qps_optimizer.py   # QPS optimization
-│
-├── analysis/              # Legacy evaluation (deprecated, use analytics/)
-│   └── evaluation_engine.py  # Sync evaluation engine
 │
 ├── qps/                   # Data import module
 │   ├── importer.py        # Core CSV import
@@ -239,9 +237,9 @@ Gmail (scheduled reports)          Manual Upload
                     ▼
     ┌───────────────────────────────┐
     │      Analysis Engines         │
-    │  - qps/optimizer.py           │
-    │  - analysis/waste_analyzer.py │
-    │  - qps/recommender.py         │
+    │  - analytics/evaluation_engine │
+    │  - analytics/waste_analyzer   │
+    │  - analytics/size_analyzer    │
     └───────────────────────────────┘
                     │
                     ▼

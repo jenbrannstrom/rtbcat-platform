@@ -1,0 +1,8 @@
+[project]
+name = "rtbcat-platform"
+version = "1.0.0"
+description = "QPS optimization platform for Google Authorized Buyers"
+requires-python = ">=3.10"
+
+[tool.setuptools]
+packages = ["analytics", "api", "cli", "collectors", "config", "qps", "services", "storage", "utils"]

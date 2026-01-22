@@ -12,7 +12,7 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 
-from analysis.evaluation_engine import EvaluationEngine, RecommendationType
+from analytics.evaluation_engine import EvaluationEngine, RecommendationType
 
 logger = logging.getLogger(__name__)
 

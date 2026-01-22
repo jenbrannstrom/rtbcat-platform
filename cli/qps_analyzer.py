@@ -41,8 +41,6 @@ from pathlib import Path
 from urllib.request import urlopen
 from urllib.error import URLError
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from qps.importer import validate_csv, import_csv, get_data_summary
 from qps.size_analyzer import QpsSizeCoverageAnalyzer
 from qps.config_tracker import ConfigPerformanceTracker
