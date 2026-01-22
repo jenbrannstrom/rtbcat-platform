@@ -120,33 +120,33 @@ This is a **well-designed optimization** that will significantly improve query p
 
 **DB_PATH defined in 8 files:**
 ```
-qps/config_tracker.py:25
-qps/bid_filtering_importer.py:32
+importers/config_tracker.py:25
+importers/bid_filtering_importer.py:32
 scripts/reset_database.py:8
-qps/size_analyzer.py:29
-qps/importer.py:42
-qps/funnel_importer.py:33
-qps/quality_importer.py:32
-qps/fraud_detector.py:30
-qps/unified_importer.py:27
+importers/size_analyzer.py:29
+importers/importer.py:42
+importers/funnel_importer.py:33
+importers/quality_importer.py:32
+importers/fraud_detector.py:30
+importers/unified_importer.py:27
 ```
 
 **parse_date() defined in 5 files:**
 ```
-qps/importer.py:282
-qps/funnel_importer.py:70
-qps/quality_importer.py:73
-qps/unified_importer.py:63
-qps/bid_filtering_importer.py:67
+importers/importer.py:282
+importers/funnel_importer.py:70
+importers/quality_importer.py:73
+importers/unified_importer.py:63
+importers/bid_filtering_importer.py:67
 ```
 
 **parse_int() defined in 5 files:**
 ```
-qps/importer.py:303
-qps/funnel_importer.py:83
-qps/quality_importer.py:86
-qps/unified_importer.py:76
-qps/bid_filtering_importer.py:80
+importers/importer.py:303
+importers/funnel_importer.py:83
+importers/quality_importer.py:86
+importers/unified_importer.py:76
+importers/bid_filtering_importer.py:80
 ```
 
 ---
@@ -196,7 +196,7 @@ dashboard/src/lib/api/index.ts  - Still re-exports 90+ items from legacy
 
 Two size coverage analyzers with distinct names:
 - `analytics/size_coverage_analyzer.py:37`
-- `qps/size_analyzer.py:60` (`QpsSizeCoverageAnalyzer`)
+- `importers/size_analyzer.py:60` (`QpsSizeCoverageAnalyzer`)
 
 Two waste analyzers with confusing names:
 - `analytics/waste_analyzer.py` - `WasteAnalyzer`
@@ -231,7 +231,7 @@ Split between two locations with no clear pattern:
 
 ### Short Term (Original Issues)
 
-1. **Create `qps/utils.py`** - Centralize `DB_PATH`, `parse_date`, `parse_int`, `parse_float`
+1. **Create `importers/utils.py`** - Centralize `DB_PATH`, `parse_date`, `parse_int`, `parse_float`
 2. **Complete settings router migration** - Split settings routes into subrouters
 3. **Add deprecation removal dates** - For `/config/credentials` endpoints
 

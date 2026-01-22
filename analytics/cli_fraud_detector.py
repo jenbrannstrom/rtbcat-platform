@@ -14,7 +14,7 @@ Important limitations:
 - We can only detect patterns over time
 
 Example:
-    >>> from qps.fraud_detector import FraudSignalDetector
+    >>> from importers.fraud_detector import FraudSignalDetector
     >>> detector = FraudSignalDetector()
     >>> report = detector.generate_report(days=14)
     >>> print(report)
@@ -27,8 +27,8 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 
-from qps.models import FraudSignal
-from qps.utils import DB_PATH
+from importers.models import FraudSignal
+from importers.utils import DB_PATH
 
 logger = logging.getLogger(__name__)
 

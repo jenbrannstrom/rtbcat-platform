@@ -42,4 +42,4 @@ print(f"Waste: {report.waste_percentage}%")
 ## Related Modules
 
 - `services/` - Business logic services including `CreativeHealthService` for creative-level health analysis
-- `qps/` - QPS-specific analyzers and the `FraudSignalDetector`
+- `importers/` - QPS-specific analyzers and the `FraudSignalDetector`

@@ -40,4 +40,4 @@ for signal in signals:
 ## Related Modules
 
 - `analytics/` - Traffic and QPS analysis (see `TrafficWasteAnalyzer`)
-- `qps/` - QPS-specific utilities and fraud detection
+- `importers/` - QPS-specific utilities and fraud detection

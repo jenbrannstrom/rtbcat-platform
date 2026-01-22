@@ -562,7 +562,7 @@ def import_to_catscan(filepath: Path) -> tuple[bool, str, int, int, Optional[str
     Returns True if successful.
     """
     try:
-        from qps.unified_importer import unified_import
+        from importers.unified_importer import unified_import
 
         result = unified_import(str(filepath))
 
