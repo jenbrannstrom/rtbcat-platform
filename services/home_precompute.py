@@ -8,12 +8,15 @@ from __future__ import annotations
 import logging
 from typing import Optional, Sequence
 
-from storage.database import db_transaction_async
+from google.cloud import bigquery
+
 from services.precompute_utils import (
     normalize_refresh_dates,
-    record_refresh_log,
+    record_refresh_log_postgres,
     refresh_window,
 )
+from storage.bigquery import build_table_ref, coerce_dates, get_bigquery_client, run_query
+from storage.postgres import execute_many, pg_transaction_async
 
 logger = logging.getLogger(__name__)
 
@@ -125,192 +128,293 @@ async def refresh_home_summaries(
         refresh_end,
         buyer_account_id,
     )
+    client = get_bigquery_client()
+    bidstream_table = build_table_ref(
+        client, table_env="BIGQUERY_RTB_BIDSTREAM_TABLE", default_table="rtb_bidstream"
+    )
+    rtb_daily_table = build_table_ref(
+        client, table_env="BIGQUERY_RTB_DAILY_TABLE", default_table="rtb_daily"
+    )
+    dates_param = coerce_dates(date_list)
+    buyer_clause = " AND buyer_account_id = @buyer_account_id" if buyer_account_id else ""
+
+    seat_rows = run_query(
+        client,
+        sql=f"""
+            SELECT
+                metric_date,
+                buyer_account_id,
+                SUM(reached_queries) AS reached_queries,
+                SUM(impressions) AS impressions,
+                SUM(bids) AS bids,
+                SUM(successful_responses) AS successful_responses,
+                SUM(bid_requests) AS bid_requests,
+                SUM(auctions_won) AS auctions_won
+            FROM `{bidstream_table}`
+            WHERE metric_date IN UNNEST(@dates)
+              AND buyer_account_id IS NOT NULL
+              AND buyer_account_id != ''{buyer_clause}
+            GROUP BY metric_date, buyer_account_id
+        """,
+        params=[
+            bigquery.ArrayQueryParameter("dates", "DATE", dates_param),
+            *(
+                [bigquery.ScalarQueryParameter("buyer_account_id", "STRING", buyer_account_id)]
+                if buyer_account_id
+                else []
+            ),
+        ],
+    )
+    publisher_rows = run_query(
+        client,
+        sql=f"""
+            SELECT
+                metric_date,
+                buyer_account_id,
+                publisher_id,
+                MAX(publisher_name) AS publisher_name,
+                SUM(reached_queries) AS reached_queries,
+                SUM(impressions) AS impressions,
+                SUM(bids) AS bids,
+                SUM(successful_responses) AS successful_responses,
+                SUM(bid_requests) AS bid_requests,
+                SUM(auctions_won) AS auctions_won
+            FROM `{bidstream_table}`
+            WHERE metric_date IN UNNEST(@dates)
+              AND buyer_account_id IS NOT NULL
+              AND buyer_account_id != ''
+              AND publisher_id IS NOT NULL
+              AND publisher_id != ''{buyer_clause}
+            GROUP BY metric_date, buyer_account_id, publisher_id
+        """,
+        params=[
+            bigquery.ArrayQueryParameter("dates", "DATE", dates_param),
+            *(
+                [bigquery.ScalarQueryParameter("buyer_account_id", "STRING", buyer_account_id)]
+                if buyer_account_id
+                else []
+            ),
+        ],
+    )
+    geo_rows = run_query(
+        client,
+        sql=f"""
+            SELECT
+                metric_date,
+                buyer_account_id,
+                country,
+                SUM(reached_queries) AS reached_queries,
+                SUM(impressions) AS impressions,
+                SUM(bids) AS bids,
+                SUM(successful_responses) AS successful_responses,
+                SUM(bid_requests) AS bid_requests,
+                SUM(auctions_won) AS auctions_won
+            FROM `{bidstream_table}`
+            WHERE metric_date IN UNNEST(@dates)
+              AND buyer_account_id IS NOT NULL
+              AND buyer_account_id != ''
+              AND country IS NOT NULL
+              AND country != ''{buyer_clause}
+            GROUP BY metric_date, buyer_account_id, country
+        """,
+        params=[
+            bigquery.ArrayQueryParameter("dates", "DATE", dates_param),
+            *(
+                [bigquery.ScalarQueryParameter("buyer_account_id", "STRING", buyer_account_id)]
+                if buyer_account_id
+                else []
+            ),
+        ],
+    )
+    config_rows = run_query(
+        client,
+        sql=f"""
+            SELECT
+                metric_date,
+                buyer_account_id,
+                billing_id,
+                SUM(reached_queries) AS reached_queries,
+                SUM(impressions) AS impressions,
+                SUM(bids_in_auction) AS bids_in_auction,
+                SUM(auctions_won) AS auctions_won
+            FROM `{rtb_daily_table}`
+            WHERE metric_date IN UNNEST(@dates)
+              AND buyer_account_id IS NOT NULL
+              AND buyer_account_id != ''
+              AND billing_id IS NOT NULL
+              AND billing_id != ''{buyer_clause}
+            GROUP BY metric_date, buyer_account_id, billing_id
+        """,
+        params=[
+            bigquery.ArrayQueryParameter("dates", "DATE", dates_param),
+            *(
+                [bigquery.ScalarQueryParameter("buyer_account_id", "STRING", buyer_account_id)]
+                if buyer_account_id
+                else []
+            ),
+        ],
+    )
+    size_rows = run_query(
+        client,
+        sql=f"""
+            SELECT
+                metric_date,
+                buyer_account_id,
+                creative_size,
+                SUM(reached_queries) AS reached_queries,
+                SUM(impressions) AS impressions
+            FROM `{rtb_daily_table}`
+            WHERE metric_date IN UNNEST(@dates)
+              AND buyer_account_id IS NOT NULL
+              AND buyer_account_id != ''
+              AND creative_size IS NOT NULL
+              AND creative_size != ''{buyer_clause}
+            GROUP BY metric_date, buyer_account_id, creative_size
+        """,
+        params=[
+            bigquery.ArrayQueryParameter("dates", "DATE", dates_param),
+            *(
+                [bigquery.ScalarQueryParameter("buyer_account_id", "STRING", buyer_account_id)]
+                if buyer_account_id
+                else []
+            ),
+        ],
+    )
+
+    def _format_date(value) -> str:
+        return value.isoformat() if hasattr(value, "isoformat") else str(value)
 
     def _run(conn):
         for stmt in HOME_TABLES_SQL:
             conn.execute(stmt)
 
-        date_placeholders = ",".join("?" * len(date_list))
-        date_clause = f"metric_date IN ({date_placeholders})"
-
-        params = list(date_list)
+        delete_params = [date_list]
         buyer_filter = ""
         if buyer_account_id:
-            buyer_filter = " AND buyer_account_id = ?"
-            params.append(buyer_account_id)
+            buyer_filter = " AND buyer_account_id = %s"
+            delete_params.append(buyer_account_id)
 
-        conn.execute(
-            f"""
-            DELETE FROM home_seat_daily
-            WHERE {date_clause}{buyer_filter}
-            """,
-            tuple(params),
-        )
-        conn.execute(
-            f"""
-            DELETE FROM home_publisher_daily
-            WHERE {date_clause}{buyer_filter}
-            """,
-            tuple(params),
-        )
-        conn.execute(
-            f"""
-            DELETE FROM home_geo_daily
-            WHERE {date_clause}{buyer_filter}
-            """,
-            tuple(params),
-        )
-        conn.execute(
-            f"""
-            DELETE FROM home_config_daily
-            WHERE {date_clause}{buyer_filter}
-            """,
-            tuple(params),
-        )
-        conn.execute(
-            f"""
-            DELETE FROM home_size_daily
-            WHERE {date_clause}{buyer_filter}
-            """,
-            tuple(params),
-        )
-
-        seat_params = list(date_list)
-        seat_filter = ""
-        if buyer_account_id:
-            seat_filter = " AND buyer_account_id = ?"
-            seat_params.append(buyer_account_id)
-
-        conn.execute(
-            f"""
-            INSERT OR REPLACE INTO home_seat_daily (
-                metric_date, buyer_account_id, reached_queries, impressions, bids,
-                successful_responses, bid_requests, auctions_won
+        for table in (
+            "home_seat_daily",
+            "home_publisher_daily",
+            "home_geo_daily",
+            "home_config_daily",
+            "home_size_daily",
+        ):
+            conn.execute(
+                f"DELETE FROM {table} WHERE metric_date = ANY(%s){buyer_filter}",
+                tuple(delete_params),
             )
-            SELECT
-                metric_date,
-                buyer_account_id,
-                SUM(reached_queries),
-                SUM(impressions),
-                SUM(bids),
-                SUM(successful_responses),
-                SUM(bid_requests),
-                SUM(auctions_won)
-            FROM rtb_bidstream
-            WHERE {date_clause}
-              AND buyer_account_id IS NOT NULL
-              AND buyer_account_id != ''{seat_filter}
-            GROUP BY metric_date, buyer_account_id
-            """,
-            tuple(seat_params),
+
+        execute_many(
+            conn,
+            sql=(
+                "INSERT INTO home_seat_daily "
+                "(metric_date, buyer_account_id, reached_queries, impressions, bids, "
+                "successful_responses, bid_requests, auctions_won) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+            ),
+            rows=[
+                (
+                    _format_date(row.metric_date),
+                    row.buyer_account_id,
+                    row.reached_queries,
+                    row.impressions,
+                    row.bids,
+                    row.successful_responses,
+                    row.bid_requests,
+                    row.auctions_won,
+                )
+                for row in seat_rows
+            ],
+        )
+        execute_many(
+            conn,
+            sql=(
+                "INSERT INTO home_publisher_daily "
+                "(metric_date, buyer_account_id, publisher_id, publisher_name, reached_queries, "
+                "impressions, bids, successful_responses, bid_requests, auctions_won) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            ),
+            rows=[
+                (
+                    _format_date(row.metric_date),
+                    row.buyer_account_id,
+                    row.publisher_id,
+                    row.publisher_name,
+                    row.reached_queries,
+                    row.impressions,
+                    row.bids,
+                    row.successful_responses,
+                    row.bid_requests,
+                    row.auctions_won,
+                )
+                for row in publisher_rows
+            ],
+        )
+        execute_many(
+            conn,
+            sql=(
+                "INSERT INTO home_geo_daily "
+                "(metric_date, buyer_account_id, country, reached_queries, impressions, bids, "
+                "successful_responses, bid_requests, auctions_won) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            ),
+            rows=[
+                (
+                    _format_date(row.metric_date),
+                    row.buyer_account_id,
+                    row.country,
+                    row.reached_queries,
+                    row.impressions,
+                    row.bids,
+                    row.successful_responses,
+                    row.bid_requests,
+                    row.auctions_won,
+                )
+                for row in geo_rows
+            ],
+        )
+        execute_many(
+            conn,
+            sql=(
+                "INSERT INTO home_config_daily "
+                "(metric_date, buyer_account_id, billing_id, reached_queries, impressions, "
+                "bids_in_auction, auctions_won) VALUES (%s, %s, %s, %s, %s, %s, %s)"
+            ),
+            rows=[
+                (
+                    _format_date(row.metric_date),
+                    row.buyer_account_id,
+                    row.billing_id,
+                    row.reached_queries,
+                    row.impressions,
+                    row.bids_in_auction,
+                    row.auctions_won,
+                )
+                for row in config_rows
+            ],
+        )
+        execute_many(
+            conn,
+            sql=(
+                "INSERT INTO home_size_daily "
+                "(metric_date, buyer_account_id, creative_size, reached_queries, impressions) "
+                "VALUES (%s, %s, %s, %s, %s)"
+            ),
+            rows=[
+                (
+                    _format_date(row.metric_date),
+                    row.buyer_account_id,
+                    row.creative_size,
+                    row.reached_queries,
+                    row.impressions,
+                )
+                for row in size_rows
+            ],
         )
 
-        conn.execute(
-            f"""
-            INSERT OR REPLACE INTO home_publisher_daily (
-                metric_date, buyer_account_id, publisher_id, publisher_name,
-                reached_queries, impressions, bids, successful_responses,
-                bid_requests, auctions_won
-            )
-            SELECT
-                metric_date,
-                buyer_account_id,
-                publisher_id,
-                MAX(publisher_name),
-                SUM(reached_queries),
-                SUM(impressions),
-                SUM(bids),
-                SUM(successful_responses),
-                SUM(bid_requests),
-                SUM(auctions_won)
-            FROM rtb_bidstream
-            WHERE {date_clause}
-              AND buyer_account_id IS NOT NULL
-              AND buyer_account_id != ''
-              AND publisher_id IS NOT NULL
-              AND publisher_id != ''{seat_filter}
-            GROUP BY metric_date, buyer_account_id, publisher_id
-            """,
-            tuple(seat_params),
-        )
-
-        conn.execute(
-            f"""
-            INSERT OR REPLACE INTO home_geo_daily (
-                metric_date, buyer_account_id, country,
-                reached_queries, impressions, bids, successful_responses,
-                bid_requests, auctions_won
-            )
-            SELECT
-                metric_date,
-                buyer_account_id,
-                country,
-                SUM(reached_queries),
-                SUM(impressions),
-                SUM(bids),
-                SUM(successful_responses),
-                SUM(bid_requests),
-                SUM(auctions_won)
-            FROM rtb_bidstream
-            WHERE {date_clause}
-              AND buyer_account_id IS NOT NULL
-              AND buyer_account_id != ''
-              AND country IS NOT NULL
-              AND country != ''{seat_filter}
-            GROUP BY metric_date, buyer_account_id, country
-            """,
-            tuple(seat_params),
-        )
-
-        conn.execute(
-            f"""
-            INSERT OR REPLACE INTO home_config_daily (
-                metric_date, buyer_account_id, billing_id,
-                reached_queries, impressions, bids_in_auction, auctions_won
-            )
-            SELECT
-                metric_date,
-                buyer_account_id,
-                billing_id,
-                SUM(reached_queries),
-                SUM(impressions),
-                SUM(bids_in_auction),
-                SUM(auctions_won)
-            FROM rtb_daily
-            WHERE {date_clause}
-              AND buyer_account_id IS NOT NULL
-              AND buyer_account_id != ''
-              AND billing_id IS NOT NULL
-              AND billing_id != ''{seat_filter}
-            GROUP BY metric_date, buyer_account_id, billing_id
-            """,
-            tuple(seat_params),
-        )
-
-        conn.execute(
-            f"""
-            INSERT OR REPLACE INTO home_size_daily (
-                metric_date, buyer_account_id, creative_size,
-                reached_queries, impressions
-            )
-            SELECT
-                metric_date,
-                buyer_account_id,
-                creative_size,
-                SUM(reached_queries),
-                SUM(impressions)
-            FROM rtb_daily
-            WHERE {date_clause}
-              AND buyer_account_id IS NOT NULL
-              AND buyer_account_id != ''
-              AND creative_size IS NOT NULL
-              AND creative_size != ''{seat_filter}
-            GROUP BY metric_date, buyer_account_id, creative_size
-            """,
-            tuple(seat_params),
-        )
-
-        record_refresh_log(
+        record_refresh_log_postgres(
             conn,
             cache_name="home_summaries",
             buyer_account_id=buyer_account_id,
@@ -324,4 +428,4 @@ async def refresh_home_summaries(
             "dates": date_list,
         }
 
-    return await db_transaction_async(_run)
+    return await pg_transaction_async(_run)

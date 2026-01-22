@@ -32,6 +32,7 @@ python-dotenv>=1.0.0
 
 # Database
 # SQLite is built into Python, no additional package needed
+# Note: google-cloud-bigquery>=3.25.0 already in Cloud Storage section above
 psycopg[binary]>=3.1.18
 
 # Testing
