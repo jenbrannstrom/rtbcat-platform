@@ -54,6 +54,7 @@ from api.session_middleware import SessionAuthMiddleware
 from api.auth_oauth_proxy import router as auth_router, cleanup_sessions
 from config import ConfigManager
 from storage import SQLiteStore
+from storage.serving_database import configure_serving_database
 from api.campaigns_router import router as campaigns_router
 from api.routers import (
     system_router,
@@ -65,6 +66,7 @@ from api.routers import (
     gmail_router,
     recommendations_router,
     retention_router,
+    precompute_router,
     qps_router,
     performance_router,
     troubleshooting_router,
@@ -97,6 +99,14 @@ async def lifespan(app: FastAPI):
 
     # Initialize on startup
     _config_manager = ConfigManager()
+    try:
+        config = _config_manager.load()
+    except Exception:
+        config = None
+    if config:
+        configure_serving_database(config.database.serving_postgres_dsn)
+    else:
+        configure_serving_database()
     _store = SQLiteStore()
     await _store.initialize()
 
@@ -199,6 +209,7 @@ app.include_router(collect_router)
 # Integrations
 app.include_router(gmail_router)
 app.include_router(retention_router)
+app.include_router(precompute_router)
 app.include_router(troubleshooting_router)
 
 # Admin routes (user management, audit logs)

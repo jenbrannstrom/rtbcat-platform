@@ -118,3 +118,119 @@ variable "allowed_email_domains" {
   type        = list(string)
   default     = []
 }
+
+# =============================================================================
+# Storage - Raw Parquet Bucket
+# =============================================================================
+
+variable "raw_parquet_bucket_name" {
+  description = "GCS bucket name for raw parquet storage"
+  type        = string
+  default     = "rtbcat-raw-parquet"
+}
+
+variable "raw_parquet_lifecycle_days" {
+  description = "Days to retain raw parquet files before lifecycle deletion"
+  type        = number
+  default     = 180
+}
+
+# =============================================================================
+# Analytics - BigQuery
+# =============================================================================
+
+variable "bigquery_dataset_id" {
+  description = "BigQuery dataset ID for analytics"
+  type        = string
+  default     = "rtbcat_analytics"
+}
+
+variable "bigquery_location" {
+  description = "BigQuery dataset location (should match or align with GCS)"
+  type        = string
+  default     = "EU"
+}
+
+variable "bigquery_raw_facts_table_id" {
+  description = "BigQuery table ID for raw facts"
+  type        = string
+  default     = "raw_facts"
+}
+
+# =============================================================================
+# Database - Cloud SQL for Postgres
+# =============================================================================
+
+variable "cloudsql_database_version" {
+  description = "Cloud SQL Postgres version"
+  type        = string
+  default     = "POSTGRES_15"
+}
+
+variable "cloudsql_tier" {
+  description = "Cloud SQL instance tier (use performance-optimized tier for high I/O)"
+  type        = string
+  default     = "db-perf-optimized-N-2"
+}
+
+variable "cloudsql_availability_type" {
+  description = "Cloud SQL availability type (ZONAL or REGIONAL)"
+  type        = string
+  default     = "REGIONAL"
+}
+
+variable "cloudsql_disk_size_gb" {
+  description = "Cloud SQL disk size in GB"
+  type        = number
+  default     = 100
+}
+
+variable "cloudsql_database_name" {
+  description = "Cloud SQL database name"
+  type        = string
+  default     = "rtbcat_serving"
+}
+
+variable "cloudsql_user_name" {
+  description = "Cloud SQL user name"
+  type        = string
+  default     = "rtbcat_serving"
+}
+
+# =============================================================================
+# Precompute Scheduler + Monitoring
+# =============================================================================
+
+variable "precompute_refresh_days" {
+  description = "Number of days to refresh in scheduled precompute job"
+  type        = number
+  default     = 2
+}
+
+variable "precompute_refresh_max_age_hours" {
+  description = "Maximum age in hours before precompute data is considered stale"
+  type        = number
+  default     = 36
+}
+
+variable "precompute_refresh_schedule" {
+  description = "Cron schedule for Cloud Scheduler precompute refresh"
+  type        = string
+  default     = "0 3 * * *"
+}
+
+# =============================================================================
+# Data Retention (GCS Parquet + BigQuery partitions)
+# =============================================================================
+
+variable "parquet_retention_days" {
+  description = "Retention period for Parquet objects in GCS"
+  type        = number
+  default     = 90
+}
+
+variable "bigquery_partition_retention_days" {
+  description = "Retention period for BigQuery partitions (days)"
+  type        = number
+  default     = 90
+}
