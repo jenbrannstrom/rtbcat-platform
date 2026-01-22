@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from importers.flexible_mapper import (
     map_columns, detect_best_report_type, get_default_value, MappingResult
 )
+from importers.parquet_pipeline import ParquetExportManager
 from importers.utils import DB_PATH, parse_date, parse_float, parse_int
 
 logger = logging.getLogger(__name__)
@@ -266,6 +267,7 @@ def import_to_rtb_daily(
     batch_id: str,
     result: UnifiedImportResult,
     bidder_id: Optional[str] = None,
+    parquet_exporter: Optional["ParquetExportManager"] = None,
 ):
     """Import data to rtb_daily table."""
     conn = sqlite3.connect(db_path)
@@ -391,6 +393,18 @@ def import_to_rtb_daily(
                     # Compute hash
                     row_hash = compute_row_hash(row_data, hash_keys)
 
+                    if parquet_exporter:
+                        parquet_exporter.add_row(
+                            metric_date,
+                            {
+                                **row_data,
+                                "spend_micros": row_data["spend_micros"],
+                                "bidder_id": row_data["bidder_id"],
+                                "row_hash": row_hash,
+                                "import_batch_id": batch_id,
+                            },
+                        )
+
                     rows_to_insert.append((
                         row_data["metric_date"], row_data["hour"], row_data["billing_id"],
                         row_data["creative_id"], row_data["creative_size"], row_data["creative_format"],
@@ -432,6 +446,7 @@ def import_to_rtb_bidstream(
     batch_id: str,
     result: UnifiedImportResult,
     bidder_id: Optional[str] = None,
+    parquet_exporter: Optional["ParquetExportManager"] = None,
 ):
     """Import data to rtb_bidstream table."""
     conn = sqlite3.connect(db_path)
@@ -514,6 +529,17 @@ def import_to_rtb_bidstream(
 
                     row_hash = compute_row_hash(row_data, hash_keys)
 
+                    if parquet_exporter:
+                        parquet_exporter.add_row(
+                            metric_date,
+                            {
+                                **row_data,
+                                "bidder_id": row_data["bidder_id"],
+                                "row_hash": row_hash,
+                                "import_batch_id": batch_id,
+                            },
+                        )
+
                     rows_to_insert.append((
                         row_data["metric_date"], row_data["hour"], row_data["country"],
                         row_data["buyer_account_id"], row_data["publisher_id"], row_data["publisher_name"],
@@ -552,6 +578,7 @@ def import_to_rtb_bid_filtering(
     batch_id: str,
     result: UnifiedImportResult,
     bidder_id: Optional[str] = None,
+    parquet_exporter: Optional["ParquetExportManager"] = None,
 ):
     """Import data to rtb_bid_filtering table."""
     conn = sqlite3.connect(db_path)
@@ -624,6 +651,17 @@ def import_to_rtb_bid_filtering(
                     row_data["opportunity_cost_micros"] = int(opp_cost * 1_000_000) if opp_cost < 1000 else int(opp_cost)
 
                     row_hash = compute_row_hash(row_data, hash_keys)
+
+                    if parquet_exporter:
+                        parquet_exporter.add_row(
+                            metric_date,
+                            {
+                                **row_data,
+                                "bidder_id": row_data["bidder_id"],
+                                "row_hash": row_hash,
+                                "import_batch_id": batch_id,
+                            },
+                        )
 
                     rows_to_insert.append((
                         row_data["metric_date"], row_data["country"], row_data["buyer_account_id"],
@@ -728,15 +766,47 @@ def unified_import(
         )
         return result
 
-    # Import based on target table
-    if target_table == "rtb_daily":
-        import_to_rtb_daily(csv_path, mapping, db_path, result.batch_id, result, bidder_id=bidder_id)
-    elif target_table == "rtb_bidstream":
-        import_to_rtb_bidstream(csv_path, mapping, db_path, result.batch_id, result, bidder_id=bidder_id)
-    elif target_table == "rtb_bid_filtering":
-        import_to_rtb_bid_filtering(csv_path, mapping, db_path, result.batch_id, result, bidder_id=bidder_id)
-    else:
-        result.error_message = f"Unknown target table: {target_table}"
+    parquet_exporter = ParquetExportManager.from_env(
+        target_table, result.batch_id, result.errors
+    )
+
+    try:
+        # Import based on target table
+        if target_table == "rtb_daily":
+            import_to_rtb_daily(
+                csv_path,
+                mapping,
+                db_path,
+                result.batch_id,
+                result,
+                bidder_id=bidder_id,
+                parquet_exporter=parquet_exporter,
+            )
+        elif target_table == "rtb_bidstream":
+            import_to_rtb_bidstream(
+                csv_path,
+                mapping,
+                db_path,
+                result.batch_id,
+                result,
+                bidder_id=bidder_id,
+                parquet_exporter=parquet_exporter,
+            )
+        elif target_table == "rtb_bid_filtering":
+            import_to_rtb_bid_filtering(
+                csv_path,
+                mapping,
+                db_path,
+                result.batch_id,
+                result,
+                bidder_id=bidder_id,
+                parquet_exporter=parquet_exporter,
+            )
+        else:
+            result.error_message = f"Unknown target table: {target_table}"
+    finally:
+        if parquet_exporter:
+            parquet_exporter.finalize()
 
     return result
 
