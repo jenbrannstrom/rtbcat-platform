@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Query
 
 from storage.database import db_query_one
-from .common import get_valid_billing_ids
+from .common import get_precompute_status, get_valid_billing_ids
 
 logger = logging.getLogger(__name__)
 
@@ -24,18 +24,35 @@ async def get_spend_stats(
     """
     Get overall spend statistics for the selected period.
 
-    Returns total spend, impressions, and avg CPM from rtb_daily table.
+    Returns total spend, impressions, and avg CPM from rtb_app_daily precompute table.
     Only includes data for billing_ids that belong to the current account.
     Optionally filter by a specific billing_id.
     """
     try:
+        precompute_status = await get_precompute_status(
+            "rtb_app_daily",
+            days,
+            filters=["billing_id = ?"] if billing_id else None,
+            params=[billing_id] if billing_id else None,
+        )
+        if not precompute_status["has_rows"]:
+            return {
+                "period_days": days,
+                "total_impressions": 0,
+                "total_spend_usd": 0,
+                "avg_cpm_usd": None,
+                "has_spend_data": False,
+                "message": "No precompute available for requested date range.",
+                "precompute_status": {"rtb_app_daily": precompute_status},
+            }
+
         if billing_id:
             # Filter by specific billing_id
             row = await db_query_one("""
                 SELECT
                     COALESCE(SUM(impressions), 0) as total_impressions,
                     COALESCE(SUM(spend_micros), 0) as total_spend_micros
-                FROM rtb_daily
+                FROM rtb_app_daily
                 WHERE metric_date >= date('now', ?)
                   AND billing_id = ?
             """, (f'-{days} days', billing_id))
@@ -50,17 +67,17 @@ async def get_spend_stats(
                     SELECT
                         COALESCE(SUM(impressions), 0) as total_impressions,
                         COALESCE(SUM(spend_micros), 0) as total_spend_micros
-                    FROM rtb_daily
+                    FROM rtb_app_daily
                     WHERE metric_date >= date('now', ?)
                       AND billing_id IN ({placeholders})
                 """, (f'-{days} days', *valid_billing_ids))
             else:
-                # No pretargeting configs synced yet - return all data as fallback
+                # No pretargeting configs synced yet - return no data
                 row = await db_query_one("""
                     SELECT
                         COALESCE(SUM(impressions), 0) as total_impressions,
                         COALESCE(SUM(spend_micros), 0) as total_spend_micros
-                    FROM rtb_daily
+                    FROM rtb_app_daily
                     WHERE metric_date >= date('now', ?)
                 """, (f'-{days} days',))
 
@@ -79,6 +96,7 @@ async def get_spend_stats(
             "total_spend_usd": round(total_spend_usd, 2),
             "avg_cpm_usd": round(avg_cpm, 2) if avg_cpm else None,
             "has_spend_data": total_spend_micros > 0,
+            "precompute_status": {"rtb_app_daily": precompute_status},
         }
     except Exception as e:
         logger.error(f"Failed to get spend stats: {e}")
@@ -88,4 +106,6 @@ async def get_spend_stats(
             "total_spend_usd": 0,
             "avg_cpm_usd": None,
             "has_spend_data": False,
+            "message": "No precompute available for requested date range.",
+            "precompute_status": {"rtb_app_daily": {"table": "rtb_app_daily", "exists": False, "has_rows": False, "row_count": 0}},
         }
