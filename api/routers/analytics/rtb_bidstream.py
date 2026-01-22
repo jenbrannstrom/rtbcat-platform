@@ -16,20 +16,11 @@ from api.dependencies import get_store, get_current_user, resolve_buyer_id
 from storage import SQLiteStore
 from storage.repositories.user_repository import User
 from analytics.rtb_bidstream_analyzer import RTBFunnelAnalyzer
-from .common import get_valid_billing_ids, get_valid_billing_ids_for_buyer
+from .common import get_precompute_status, get_valid_billing_ids_for_buyer
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["RTB Analytics"])
-
-async def _table_exists(table_name: str) -> bool:
-    return await table_exists(table_name)
-
-
-async def _table_has_rows(query: str, params: tuple) -> bool:
-    row = await db_query_one(query, params)
-    return (row["cnt"] or 0) > 0 if row else False
-
 
 @router.get("/analytics/rtb-funnel", tags=["RTB Analytics"])
 async def get_rtb_bidstream(
@@ -61,63 +52,69 @@ async def get_rtb_bidstream(
             buyer_filter = " AND buyer_account_id = ?"
             buyer_params = [buyer_id]
             buyer_filter_applied = True
+        funnel_status = await get_precompute_status(
+            "rtb_funnel_daily",
+            days,
+            filters=["buyer_account_id = ?"] if buyer_id else None,
+            params=[buyer_id] if buyer_id else None,
+        )
+        publisher_status = await get_precompute_status(
+            "rtb_publisher_daily",
+            days,
+            filters=["buyer_account_id = ?"] if buyer_id else None,
+            params=[buyer_id] if buyer_id else None,
+        )
+        geo_status = await get_precompute_status(
+            "rtb_geo_daily",
+            days,
+            filters=["buyer_account_id = ?"] if buyer_id else None,
+            params=[buyer_id] if buyer_id else None,
+        )
 
-            seat_rows = await db_query_one(
-                """
-                SELECT COUNT(*) as cnt
-                FROM rtb_bidstream
-                WHERE metric_date >= date('now', ?)
-                  AND buyer_account_id = ?
-                """,
-                (f'-{days} days', buyer_id),
+        if not funnel_status["has_rows"]:
+            buyer_filter_applied = False if buyer_id else buyer_filter_applied
+            buyer_filter_message = (
+                "No precompute available for requested date range."
+                if not buyer_id
+                else "No precompute available for this seat. Run an RTB refresh after imports."
             )
-            if not seat_rows or (seat_rows["cnt"] or 0) == 0:
-                buyer_filter_applied = False
-                buyer_filter_message = (
-                    "No RTB bidstream rows for this seat. Re-import bidstream CSVs that include buyer_account_id."
-                )
+            return {
+                "has_data": False,
+                "funnel": {
+                    "total_reached_queries": 0,
+                    "total_impressions": 0,
+                    "total_bids": 0,
+                    "win_rate": 0,
+                    "waste_rate": 100,
+                },
+                "publishers": [],
+                "geos": [],
+                "data_sources": {
+                    "publisher_count": 0,
+                    "country_count": 0,
+                    "period_days": days,
+                    "buyer_filter_applied": buyer_filter_applied,
+                    "buyer_filter_message": buyer_filter_message,
+                    "bidder_id_populated": None,
+                    "buyer_account_id_populated": None,
+                    "precompute_status": {
+                        "rtb_funnel_daily": funnel_status,
+                        "rtb_publisher_daily": publisher_status,
+                        "rtb_geo_daily": geo_status,
+                    },
+                },
+            }
 
-        funnel_table_ready = await _table_exists("rtb_funnel_daily")
-        publisher_table_ready = await _table_exists("rtb_publisher_daily")
-        geo_table_ready = await _table_exists("rtb_geo_daily")
-
-        funnel_params = (f'-{days} days', *buyer_params)
-        funnel_row = None
-        if funnel_table_ready:
-            has_funnel_precompute = await _table_has_rows(
-                f"""
-                SELECT COUNT(*) as cnt
-                FROM rtb_funnel_daily
-                WHERE metric_date >= date('now', ?){buyer_filter}
-                """,
-                funnel_params,
-            )
-            if has_funnel_precompute:
-                funnel_row = await db_query_one(f"""
-                    SELECT
-                        SUM(reached_queries) as total_reached,
-                        SUM(impressions) as total_impressions,
-                        SUM(bids) as total_bids,
-                        SUM(successful_responses) as total_successful_responses,
-                        SUM(bid_requests) as total_bid_requests
-                    FROM rtb_funnel_daily
-                    WHERE metric_date >= date('now', ?){buyer_filter}
-                """, funnel_params)
-
-        if not funnel_row:
-            # Get funnel summary from database - use rtb_bidstream for pipeline metrics
-            funnel_row = await db_query_one(f"""
-                SELECT
-                    SUM(reached_queries) as total_reached,
-                    SUM(impressions) as total_impressions,
-                    SUM(bids) as total_bids,
-                    SUM(successful_responses) as total_successful_responses,
-                    SUM(bid_requests) as total_bid_requests,
-                    COUNT(DISTINCT publisher_id) as publisher_count,
-                    COUNT(DISTINCT country) as country_count
-                FROM rtb_bidstream
-                WHERE metric_date >= date('now', ?){buyer_filter}
-            """, (f'-{days} days', *buyer_params))
+        funnel_row = await db_query_one(f"""
+            SELECT
+                SUM(reached_queries) as total_reached,
+                SUM(impressions) as total_impressions,
+                SUM(bids) as total_bids,
+                SUM(successful_responses) as total_successful_responses,
+                SUM(bid_requests) as total_bid_requests
+            FROM rtb_funnel_daily
+            WHERE metric_date >= date('now', ?){buyer_filter}
+        """, (f'-{days} days', *buyer_params))
 
         total_reached = funnel_row["total_reached"] or 0
 
@@ -134,36 +131,7 @@ async def get_rtb_bidstream(
         waste_rate = 100 - win_rate
 
         pub_rows = []
-        if publisher_table_ready:
-            has_pub_precompute = await _table_has_rows(
-                f"""
-                SELECT COUNT(*) as cnt
-                FROM rtb_publisher_daily
-                WHERE metric_date >= date('now', ?)
-                  AND publisher_id != ''{buyer_filter}
-                """,
-                (f'-{days} days', *buyer_params),
-            )
-            if has_pub_precompute:
-                pub_rows = await db_query(f"""
-                    SELECT
-                        publisher_id,
-                        publisher_name,
-                        SUM(reached_queries) as reached,
-                        SUM(impressions) as impressions,
-                        SUM(bids) as total_bids,
-                        SUM(auctions_won) as auctions_won,
-                        SUM(successful_responses) as successful_responses,
-                        SUM(bid_requests) as bid_requests
-                    FROM rtb_publisher_daily
-                    WHERE metric_date >= date('now', ?)
-                      AND publisher_id != ''{buyer_filter}
-                    GROUP BY publisher_id
-                    ORDER BY reached DESC
-                    LIMIT 10
-                """, (f'-{days} days', *buyer_params))
-
-        if not pub_rows:
+        if publisher_status["has_rows"]:
             pub_rows = await db_query(f"""
                 SELECT
                     publisher_id,
@@ -174,9 +142,8 @@ async def get_rtb_bidstream(
                     SUM(auctions_won) as auctions_won,
                     SUM(successful_responses) as successful_responses,
                     SUM(bid_requests) as bid_requests
-                FROM rtb_bidstream
+                FROM rtb_publisher_daily
                 WHERE metric_date >= date('now', ?)
-                  AND publisher_id IS NOT NULL
                   AND publisher_id != ''{buyer_filter}
                 GROUP BY publisher_id
                 ORDER BY reached DESC
@@ -208,35 +175,7 @@ async def get_rtb_bidstream(
             })
 
         geo_rows = []
-        if geo_table_ready:
-            has_geo_precompute = await _table_has_rows(
-                f"""
-                SELECT COUNT(*) as cnt
-                FROM rtb_geo_daily
-                WHERE metric_date >= date('now', ?)
-                  AND country != ''{buyer_filter}
-                """,
-                (f'-{days} days', *buyer_params),
-            )
-            if has_geo_precompute:
-                geo_rows = await db_query(f"""
-                    SELECT
-                        country,
-                        SUM(reached_queries) as reached,
-                        SUM(impressions) as impressions,
-                        SUM(bids) as total_bids,
-                        SUM(auctions_won) as auctions_won,
-                        SUM(successful_responses) as successful_responses,
-                        SUM(bid_requests) as bid_requests
-                    FROM rtb_geo_daily
-                    WHERE metric_date >= date('now', ?)
-                      AND country != ''{buyer_filter}
-                    GROUP BY country
-                    ORDER BY reached DESC
-                    LIMIT 10
-                """, (f'-{days} days', *buyer_params))
-
-        if not geo_rows:
+        if geo_status["has_rows"]:
             geo_rows = await db_query(f"""
                 SELECT
                     country,
@@ -246,8 +185,9 @@ async def get_rtb_bidstream(
                     SUM(auctions_won) as auctions_won,
                     SUM(successful_responses) as successful_responses,
                     SUM(bid_requests) as bid_requests
-                FROM rtb_bidstream
-                WHERE metric_date >= date('now', ?) AND country IS NOT NULL{buyer_filter}
+                FROM rtb_geo_daily
+                WHERE metric_date >= date('now', ?)
+                  AND country != ''{buyer_filter}
                 GROUP BY country
                 ORDER BY reached DESC
                 LIMIT 10
@@ -271,27 +211,9 @@ async def get_rtb_bidstream(
                 "win_rate": round(geo_win_rate, 2),
             })
 
-        bidder_id_row = await db_query_one("""
-            SELECT COUNT(*) as cnt
-            FROM rtb_bidstream
-            WHERE metric_date >= date('now', ?)
-              AND bidder_id IS NOT NULL
-              AND bidder_id != ''
-        """, (f'-{days} days',))
-        bidder_id_populated = (bidder_id_row["cnt"] or 0) > 0 if bidder_id_row else False
-
-        buyer_account_row = await db_query_one("""
-            SELECT COUNT(*) as cnt
-            FROM rtb_bidstream
-            WHERE metric_date >= date('now', ?)
-              AND buyer_account_id IS NOT NULL
-              AND buyer_account_id != ''
-        """, (f'-{days} days',))
-        buyer_account_id_populated = (buyer_account_row["cnt"] or 0) > 0 if buyer_account_row else False
-
         publisher_count = 0
         country_count = 0
-        if publisher_table_ready:
+        if publisher_status["has_rows"]:
             publisher_count_row = await db_query_one(
                 f"""
                 SELECT COUNT(DISTINCT publisher_id) as cnt
@@ -302,7 +224,7 @@ async def get_rtb_bidstream(
                 (f'-{days} days', *buyer_params),
             )
             publisher_count = publisher_count_row["cnt"] or 0 if publisher_count_row else 0
-        if geo_table_ready:
+        if geo_status["has_rows"]:
             country_count_row = await db_query_one(
                 f"""
                 SELECT COUNT(DISTINCT country) as cnt
@@ -314,16 +236,11 @@ async def get_rtb_bidstream(
             )
             country_count = country_count_row["cnt"] or 0 if country_count_row else 0
 
-        if publisher_count == 0 or country_count == 0:
-            fallback_counts = await db_query_one(f"""
-                SELECT
-                    COUNT(DISTINCT publisher_id) as publisher_count,
-                    COUNT(DISTINCT country) as country_count
-                FROM rtb_bidstream
-                WHERE metric_date >= date('now', ?){buyer_filter}
-            """, (f'-{days} days', *buyer_params))
-            publisher_count = fallback_counts["publisher_count"] or publisher_count
-            country_count = fallback_counts["country_count"] or country_count
+        precompute_messages = {}
+        if not publisher_status["has_rows"]:
+            precompute_messages["publishers"] = "No precompute available for publisher breakdown."
+        if not geo_status["has_rows"]:
+            precompute_messages["geos"] = "No precompute available for geo breakdown."
 
         return {
             "has_data": effective_reached > 0,
@@ -342,8 +259,14 @@ async def get_rtb_bidstream(
                 "period_days": days,
                 "buyer_filter_applied": buyer_filter_applied,
                 "buyer_filter_message": buyer_filter_message,
-                "bidder_id_populated": bidder_id_populated,
-                "buyer_account_id_populated": buyer_account_id_populated,
+                "bidder_id_populated": None,
+                "buyer_account_id_populated": None,
+                "precompute_messages": precompute_messages,
+                "precompute_status": {
+                    "rtb_funnel_daily": funnel_status,
+                    "rtb_publisher_daily": publisher_status,
+                    "rtb_geo_daily": geo_status,
+                },
             }
         }
     except Exception as e:
@@ -362,64 +285,37 @@ async def get_rtb_publishers(
     Shows win rates and pretargeting filter rates by publisher.
     """
     try:
-        rows = []
-        count_row = None
-        precompute_ready = await _table_exists("rtb_publisher_daily")
-        if precompute_ready:
-            has_precompute = await _table_has_rows(
-                """
-                SELECT COUNT(*) as cnt
-                FROM rtb_publisher_daily
-                WHERE metric_date >= date('now', ?)
-                  AND publisher_id != ''
-                """,
-                (f'-{days} days',),
-            )
-            if has_precompute:
-                rows = await db_query("""
-                    SELECT
-                        publisher_id,
-                        publisher_name,
-                        SUM(reached_queries) as total_reached,
-                        SUM(impressions) as total_impressions,
-                        SUM(bids) as total_bids
-                    FROM rtb_publisher_daily
-                    WHERE metric_date >= date('now', ?)
-                      AND publisher_id != ''
-                    GROUP BY publisher_id, publisher_name
-                    ORDER BY total_reached DESC
-                    LIMIT ?
-                """, (f'-{days} days', limit))
+        precompute_status = await get_precompute_status("rtb_publisher_daily", days)
+        if not precompute_status["has_rows"]:
+            return {
+                "publishers": [],
+                "count": 0,
+                "period_days": days,
+                "message": "No precompute available for requested date range.",
+                "precompute_status": {"rtb_publisher_daily": precompute_status},
+            }
 
-                count_row = await db_query_one("""
-                    SELECT COUNT(DISTINCT publisher_id) as total
-                    FROM rtb_publisher_daily
-                    WHERE metric_date >= date('now', ?)
-                      AND publisher_id != ''
-                """, (f'-{days} days',))
+        rows = await db_query("""
+            SELECT
+                publisher_id,
+                publisher_name,
+                SUM(reached_queries) as total_reached,
+                SUM(impressions) as total_impressions,
+                SUM(bids) as total_bids
+            FROM rtb_publisher_daily
+            WHERE metric_date >= date('now', ?)
+              AND publisher_id != ''
+            GROUP BY publisher_id, publisher_name
+            ORDER BY total_reached DESC
+            LIMIT ?
+        """, (f'-{days} days', limit))
 
-        if not rows:
-            # Query publisher data from database
-            rows = await db_query("""
-                SELECT
-                    publisher_id,
-                    publisher_name,
-                    SUM(reached_queries) as total_reached,
-                    SUM(impressions) as total_impressions,
-                    SUM(bids) as total_bids
-                FROM rtb_bidstream
-                WHERE metric_date >= date('now', ?)
-                GROUP BY publisher_id, publisher_name
-                ORDER BY total_reached DESC
-                LIMIT ?
-            """, (f'-{days} days', limit))
-
-            # Get total count
-            count_row = await db_query_one("""
-                SELECT COUNT(DISTINCT publisher_id) as total
-                FROM rtb_bidstream
-                WHERE metric_date >= date('now', ?)
-            """, (f'-{days} days',))
+        count_row = await db_query_one("""
+            SELECT COUNT(DISTINCT publisher_id) as total
+            FROM rtb_publisher_daily
+            WHERE metric_date >= date('now', ?)
+              AND publisher_id != ''
+        """, (f'-{days} days',))
 
         publishers = []
         for row in rows:
@@ -446,6 +342,7 @@ async def get_rtb_publishers(
             "publishers": publishers,
             "count": count_row["total"] if count_row else 0,
             "period_days": days,
+            "precompute_status": {"rtb_publisher_daily": precompute_status},
         }
     except Exception as e:
         logger.error(f"Failed to get publisher performance: {e}")
@@ -463,62 +360,36 @@ async def get_rtb_geos(
     Shows win rates and auction participation by country.
     """
     try:
-        rows = []
-        count_row = None
-        precompute_ready = await _table_exists("rtb_geo_daily")
-        if precompute_ready:
-            has_precompute = await _table_has_rows(
-                """
-                SELECT COUNT(*) as cnt
-                FROM rtb_geo_daily
-                WHERE metric_date >= date('now', ?)
-                  AND country != ''
-                """,
-                (f'-{days} days',),
-            )
-            if has_precompute:
-                rows = await db_query("""
-                    SELECT
-                        country,
-                        SUM(reached_queries) as total_reached,
-                        SUM(impressions) as total_impressions,
-                        SUM(bids) as total_bids
-                    FROM rtb_geo_daily
-                    WHERE metric_date >= date('now', ?)
-                      AND country != ''
-                    GROUP BY country
-                    ORDER BY total_reached DESC
-                    LIMIT ?
-                """, (f'-{days} days', limit))
+        precompute_status = await get_precompute_status("rtb_geo_daily", days)
+        if not precompute_status["has_rows"]:
+            return {
+                "geos": [],
+                "count": 0,
+                "period_days": days,
+                "message": "No precompute available for requested date range.",
+                "precompute_status": {"rtb_geo_daily": precompute_status},
+            }
 
-                count_row = await db_query_one("""
-                    SELECT COUNT(DISTINCT country) as total
-                    FROM rtb_geo_daily
-                    WHERE metric_date >= date('now', ?)
-                      AND country != ''
-                """, (f'-{days} days',))
+        rows = await db_query("""
+            SELECT
+                country,
+                SUM(reached_queries) as total_reached,
+                SUM(impressions) as total_impressions,
+                SUM(bids) as total_bids
+            FROM rtb_geo_daily
+            WHERE metric_date >= date('now', ?)
+              AND country != ''
+            GROUP BY country
+            ORDER BY total_reached DESC
+            LIMIT ?
+        """, (f'-{days} days', limit))
 
-        if not rows:
-            # Query geo data from database
-            rows = await db_query("""
-                SELECT
-                    country,
-                    SUM(reached_queries) as total_reached,
-                    SUM(impressions) as total_impressions,
-                    SUM(bids) as total_bids
-                FROM rtb_bidstream
-                WHERE metric_date >= date('now', ?)
-                GROUP BY country
-                ORDER BY total_reached DESC
-                LIMIT ?
-            """, (f'-{days} days', limit))
-
-            # Get total count
-            count_row = await db_query_one("""
-                SELECT COUNT(DISTINCT country) as total
-                FROM rtb_bidstream
-                WHERE metric_date >= date('now', ?)
-            """, (f'-{days} days',))
+        count_row = await db_query_one("""
+            SELECT COUNT(DISTINCT country) as total
+            FROM rtb_geo_daily
+            WHERE metric_date >= date('now', ?)
+              AND country != ''
+        """, (f'-{days} days',))
 
         geos = []
         for row in rows:
@@ -541,6 +412,7 @@ async def get_rtb_geos(
             "geos": geos,
             "count": count_row["total"] if count_row else 0,
             "period_days": days,
+            "precompute_status": {"rtb_geo_daily": precompute_status},
         }
     except Exception as e:
         logger.error(f"Failed to get geo performance: {e}")
@@ -557,8 +429,7 @@ async def get_config_performance(
     """
     Get performance breakdown by pretargeting config (billing_id).
 
-    Reads from the rtb_daily table (populated by CSV import) and aggregates
-    by billing_id to show:
+    Reads from precomputed config breakdown tables and aggregates by billing_id to show:
     - Reached queries and impressions per config
     - Size-level performance within each config
     - Win rate vs waste percentages
@@ -574,112 +445,100 @@ async def get_config_performance(
     try:
         buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
 
-        # Query aggregated data by billing_id from rtb_daily
-        # Use bids_in_auction/auctions_won as they're populated by bids-in-auction CSV
-        # Fall back to reached_queries/impressions if bids data not available
-        if buyer_id:
-            rows = await db_query("""
-                SELECT
-                    billing_id,
-                    creative_size,
-                    creative_format,
-                    country,
-                    platform,
-                    COALESCE(NULLIF(SUM(bids_in_auction), 0), SUM(reached_queries), 0) as total_reached,
-                    COALESCE(NULLIF(SUM(auctions_won), 0), SUM(impressions), 0) as total_impressions
-                FROM rtb_daily
-                WHERE metric_date >= date('now', ?)
-                  AND buyer_account_id = ?
-                  AND billing_id IS NOT NULL
-                  AND billing_id != ''
-                GROUP BY billing_id, creative_size, creative_format, country, platform
-                ORDER BY total_reached DESC
-            """, (f'-{days} days', buyer_id))
-        else:
-            # Get valid billing IDs for the specified buyer seat (or all if not specified)
-            valid_billing_ids = await get_valid_billing_ids_for_buyer(buyer_id)
-            if valid_billing_ids:
-                placeholders = ",".join("?" * len(valid_billing_ids))
-                rows = await db_query(f"""
-                    SELECT
-                        billing_id,
-                        creative_size,
-                        creative_format,
-                        country,
-                        platform,
-                        COALESCE(NULLIF(SUM(bids_in_auction), 0), SUM(reached_queries), 0) as total_reached,
-                        COALESCE(NULLIF(SUM(auctions_won), 0), SUM(impressions), 0) as total_impressions
-                    FROM rtb_daily
-                    WHERE metric_date >= date('now', ?)
-                      AND billing_id IN ({placeholders})
-                    GROUP BY billing_id, creative_size, creative_format, country, platform
-                    ORDER BY total_reached DESC
-                """, (f'-{days} days', *valid_billing_ids))
-            else:
-                # No pretargeting configs synced yet - return all data as fallback
-                rows = await db_query("""
-                    SELECT
-                        billing_id,
-                        creative_size,
-                        creative_format,
-                        country,
-                        platform,
-                        COALESCE(NULLIF(SUM(bids_in_auction), 0), SUM(reached_queries), 0) as total_reached,
-                        COALESCE(NULLIF(SUM(auctions_won), 0), SUM(impressions), 0) as total_impressions
-                    FROM rtb_daily
-                    WHERE metric_date >= date('now', ?)
-                    GROUP BY billing_id, creative_size, creative_format, country, platform
-                    ORDER BY total_reached DESC
-                """, (f'-{days} days',))
-
-        if not rows:
+        precompute_status = await get_precompute_status(
+            "config_size_daily",
+            days,
+            filters=["buyer_account_id = ?"] if buyer_id else None,
+            params=[buyer_id] if buyer_id else None,
+        )
+        if not precompute_status["has_rows"]:
+            message = "No precompute available for requested date range."
             if buyer_id:
-                return {
-                    "period_days": days,
-                    "data_source": "rtb_daily",
-                    "message": "No per-config data for this seat. Re-import catscan-quality with buyer_account_id.",
-                    "configs": [],
-                    "total_reached": 0,
-                    "total_impressions": 0,
-                    "overall_win_rate_pct": 0,
-                    "overall_waste_pct": 100,
-                }
-
-            # No per-config data in rtb_daily - fall back to aggregate from rtb_bidstream
-            # This happens when the imported CSVs don't have billing_id breakdown
-            funnel_agg = await db_query_one("""
-                SELECT
-                    SUM(reached_queries) as total_reached,
-                    SUM(impressions) as total_impressions
-                FROM rtb_bidstream
-                WHERE metric_date >= date('now', ?)
-            """, (f'-{days} days',))
-
-            if funnel_agg and (funnel_agg["total_reached"] or 0) > 0:
-                total_reached = funnel_agg["total_reached"] or 0
-                total_impressions = funnel_agg["total_impressions"] or 0
-                win_rate = (total_impressions / total_reached * 100) if total_reached > 0 else 0
-
-                return {
-                    "period_days": days,
-                    "data_source": "rtb_bidstream_aggregate",
-                    "message": "Per-config breakdown not available. Showing aggregate funnel data.",
-                    "configs": [],
-                    "total_reached": total_reached,
-                    "total_impressions": total_impressions,
-                    "overall_win_rate_pct": round(win_rate, 1),
-                    "overall_waste_pct": round(100 - win_rate, 1),
-                }
-
-            # No data at all
+                message = "No precompute available for this seat. Run a config refresh after imports."
             return {
                 "period_days": days,
-                "data_source": "database",
+                "data_source": "config_precompute",
+                "message": message,
                 "configs": [],
                 "total_reached": 0,
                 "total_impressions": 0,
                 "overall_win_rate_pct": 0,
                 "overall_waste_pct": 100,
+                "precompute_status": {"config_size_daily": precompute_status},
+            }
+
+        valid_billing_ids = None
+        if not buyer_id:
+            valid_billing_ids = await get_valid_billing_ids_for_buyer(buyer_id)
+            if not valid_billing_ids:
+                return {
+                    "period_days": days,
+                    "data_source": "config_precompute",
+                    "message": "No precompute available for requested date range.",
+                    "configs": [],
+                    "total_reached": 0,
+                    "total_impressions": 0,
+                    "overall_win_rate_pct": 0,
+                    "overall_waste_pct": 100,
+                    "precompute_status": {"config_size_daily": precompute_status},
+                }
+
+        size_params: list = [f'-{days} days']
+        size_filters = ["metric_date >= date('now', ?)"]
+        if buyer_id:
+            size_filters.append("buyer_account_id = ?")
+            size_params.append(buyer_id)
+        if valid_billing_ids:
+            placeholders = ",".join("?" * len(valid_billing_ids))
+            size_filters.append(f"billing_id IN ({placeholders})")
+            size_params.extend(valid_billing_ids)
+
+        rows = await db_query(
+            f"""
+            SELECT
+                billing_id,
+                creative_size,
+                SUM(reached_queries) as total_reached,
+                SUM(impressions) as total_impressions
+            FROM config_size_daily
+            WHERE {" AND ".join(size_filters)}
+            GROUP BY billing_id, creative_size
+            ORDER BY total_reached DESC
+            """,
+            tuple(size_params),
+        )
+
+        geo_filters = ["metric_date >= date('now', ?)"]
+        geo_params: list = [f'-{days} days']
+        if buyer_id:
+            geo_filters.append("buyer_account_id = ?")
+            geo_params.append(buyer_id)
+        if valid_billing_ids:
+            placeholders = ",".join("?" * len(valid_billing_ids))
+            geo_filters.append(f"billing_id IN ({placeholders})")
+            geo_params.extend(valid_billing_ids)
+        geo_rows = await db_query(
+            f"""
+            SELECT
+                billing_id,
+                country
+            FROM config_geo_daily
+            WHERE {" AND ".join(geo_filters)}
+            """,
+            tuple(geo_params),
+        )
+
+        if not rows:
+            return {
+                "period_days": days,
+                "data_source": "config_precompute",
+                "message": "No precompute available for requested date range.",
+                "configs": [],
+                "total_reached": 0,
+                "total_impressions": 0,
+                "overall_win_rate_pct": 0,
+                "overall_waste_pct": 100,
+                "precompute_status": {"config_size_daily": precompute_status},
             }
 
         # Aggregate by billing_id
@@ -687,9 +546,7 @@ async def get_config_performance(
             "reached": 0,
             "impressions": 0,
             "sizes": defaultdict(lambda: {"reached": 0, "impressions": 0}),
-            "formats": set(),
             "countries": set(),
-            "platforms": set(),
         })
 
         for row in rows:
@@ -703,13 +560,10 @@ async def get_config_performance(
             config["sizes"][size]["reached"] += row["total_reached"] or 0
             config["sizes"][size]["impressions"] += row["total_impressions"] or 0
 
-            # Track settings
-            if row["creative_format"]:
-                config["formats"].add(row["creative_format"])
-            if row["country"]:
-                config["countries"].add(row["country"])
-            if row["platform"]:
-                config["platforms"].add(row["platform"])
+        for row in geo_rows:
+            billing_id = row["billing_id"]
+            if billing_id in configs_by_billing and row["country"]:
+                configs_by_billing[billing_id]["countries"].add(row["country"])
 
         # Convert to response format
         configs = []
@@ -739,10 +593,6 @@ async def get_config_performance(
                     "waste_pct": round(100 - size_win, 1),
                 })
 
-            # Determine format from collected formats
-            formats = list(config["formats"])
-            primary_format = formats[0] if formats else "BANNER"
-
             configs.append({
                 "billing_id": billing_id,
                 "name": f"Config {billing_id}",
@@ -752,9 +602,9 @@ async def get_config_performance(
                 "win_rate_pct": round(win_rate, 1),
                 "waste_pct": round(waste, 1),
                 "settings": {
-                    "format": primary_format,
+                    "format": "BANNER",
                     "geos": sorted(list(config["countries"]))[:10],
-                    "platforms": sorted(list(config["platforms"])),
+                    "platforms": [],
                     "qps_limit": None,
                     "budget_usd": None,
                 },
@@ -765,12 +615,13 @@ async def get_config_performance(
 
         return {
             "period_days": days,
-            "data_source": "database",
+            "data_source": "config_precompute",
             "configs": configs[:20],
             "total_reached": total_reached,
             "total_impressions": total_impressions,
             "overall_win_rate_pct": round(overall_win, 1),
             "overall_waste_pct": round(100 - overall_win, 1),
+            "precompute_status": {"config_size_daily": precompute_status},
         }
 
     except Exception as e:
@@ -808,11 +659,13 @@ async def get_config_breakdown(
         }
         table_name = table_map.get(by)
         if table_name:
-            table_row = await db_query_one(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
-                (table_name,),
+            table_status = await get_precompute_status(
+                table_name,
+                days,
+                filters=["billing_id = ?"] + (["buyer_account_id = ?"] if buyer_account_id else []),
+                params=[billing_id] + ([buyer_account_id] if buyer_account_id else []),
             )
-            if not table_row:
+            if not table_status["exists"]:
                 return {
                     "billing_id": billing_id,
                     "breakdown_by": by,
@@ -824,18 +677,7 @@ async def get_config_breakdown(
                         "recompute config breakdowns."
                     ),
                 }
-        if buyer_account_id:
-            seat_rows = await db_query_one(
-                """
-                SELECT COUNT(*) as cnt
-                FROM rtb_daily
-                WHERE billing_id = ?
-                  AND metric_date >= date('now', ?)
-                  AND buyer_account_id = ?
-                """,
-                (billing_id, f'-{days} days', buyer_account_id),
-            )
-            if not seat_rows or (seat_rows["cnt"] or 0) == 0:
+            if not table_status["has_rows"]:
                 return {
                     "billing_id": billing_id,
                     "breakdown_by": by,
@@ -843,8 +685,9 @@ async def get_config_breakdown(
                     "is_aggregate": False,
                     "has_funnel_metrics": False,
                     "no_data_reason": (
-                        "No rows found for this seat. Re-import catscan-quality with buyer_account_id populated."
+                        "No precompute available for requested date range. Run a config refresh after imports."
                     ),
+                    "precompute_status": {table_name: table_status},
                 }
         # Note: is_aggregate is always False - we only show per-config data now
         # Account-wide data is shown in the main page sections, not in config breakdown
@@ -1105,19 +948,18 @@ async def get_config_creatives(
     try:
         resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         buyer_account_id = resolved_buyer_id or None
-        if buyer_account_id:
-            seat_rows = await db_query_one(
-                """
-                SELECT COUNT(*) as cnt
-                FROM rtb_daily
-                WHERE billing_id = ?
-                  AND metric_date >= date('now', ?)
-                  AND buyer_account_id = ?
-                """,
-                (billing_id, f'-{days} days', buyer_account_id),
-            )
-            if not seat_rows or (seat_rows["cnt"] or 0) == 0:
-                return {"creatives": [], "message": "No rows found for this seat."}
+        precompute_status = await get_precompute_status(
+            "config_creative_daily",
+            days,
+            filters=["billing_id = ?"] + (["buyer_account_id = ?"] if buyer_account_id else []),
+            params=[billing_id] + ([buyer_account_id] if buyer_account_id else []),
+        )
+        if not precompute_status["has_rows"]:
+            return {
+                "creatives": [],
+                "message": "No precompute available for requested date range.",
+                "precompute_status": {"config_creative_daily": precompute_status},
+            }
 
         where = ["billing_id = ?", "metric_date >= date('now', ?)"]
         params: list = [billing_id, f'-{days} days']
@@ -1131,7 +973,7 @@ async def get_config_creatives(
         rows = await db_query(
             f"""
             SELECT DISTINCT creative_id
-            FROM rtb_daily
+            FROM config_creative_daily
             WHERE {" AND ".join(where)}
               AND creative_id IS NOT NULL
               AND creative_id != ''
@@ -1141,32 +983,7 @@ async def get_config_creatives(
         )
         creative_ids = [row["creative_id"] for row in rows if row["creative_id"]]
         if not creative_ids:
-            return {"creatives": []}
-
-        placeholders = ",".join("?" * len(creative_ids))
-        country_rows = await db_query(
-            f"""
-            SELECT creative_id, country, SUM(impressions) as total_impressions
-            FROM rtb_daily
-            WHERE creative_id IN ({placeholders})
-              AND billing_id = ?
-              AND metric_date >= date('now', ?)
-              AND country IS NOT NULL
-              AND country != ''
-            GROUP BY creative_id, country
-            ORDER BY creative_id, total_impressions DESC
-            """,
-            tuple(creative_ids + [billing_id, f'-{days} days']),
-        )
-        from utils.country_codes import get_country_alpha3
-
-        country_map: dict[str, list[str]] = {}
-        for row in country_rows:
-            creative_id = row["creative_id"]
-            if creative_id not in country_map:
-                country_map[creative_id] = []
-            if len(country_map[creative_id]) < 3:
-                country_map[creative_id].append(get_country_alpha3(row["country"]))
+            return {"creatives": [], "precompute_status": {"config_creative_daily": precompute_status}}
 
         creative_rows = await db_query(
             f"""
@@ -1187,10 +1004,10 @@ async def get_config_creatives(
                 "format": row["format"] if row else None,
                 "width": row["width"] if row else None,
                 "height": row["height"] if row else None,
-                "serving_countries": country_map.get(creative_id, []),
+                "serving_countries": [],
             })
 
-        return {"creatives": creatives}
+        return {"creatives": creatives, "precompute_status": {"config_creative_daily": precompute_status}}
 
     except Exception as e:
         logger.error(f"Failed to get creatives for config {billing_id}: {e}")
@@ -1239,317 +1056,106 @@ async def get_app_drilldown(
     - Breakdown by creative ID (with links to creative details)
     """
     try:
-        app_table_ready = await _table_exists("rtb_app_daily")
-        app_size_ready = await _table_exists("rtb_app_size_daily")
-        app_country_ready = await _table_exists("rtb_app_country_daily")
-        app_creative_ready = await _table_exists("rtb_app_creative_daily")
+        app_summary_status = await get_precompute_status(
+            "rtb_app_daily",
+            days,
+            filters=["app_name = ?"] + (["billing_id = ?"] if billing_id else []),
+            params=[app_name] + ([billing_id] if billing_id else []),
+        )
+        app_size_status = await get_precompute_status(
+            "rtb_app_size_daily",
+            days,
+            filters=["app_name = ?"] + (["billing_id = ?"] if billing_id else []),
+            params=[app_name] + ([billing_id] if billing_id else []),
+        )
+        app_country_status = await get_precompute_status(
+            "rtb_app_country_daily",
+            days,
+            filters=["app_name = ?"] + (["billing_id = ?"] if billing_id else []),
+            params=[app_name] + ([billing_id] if billing_id else []),
+        )
+        app_creative_status = await get_precompute_status(
+            "rtb_app_creative_daily",
+            days,
+            filters=["app_name = ?"] + (["billing_id = ?"] if billing_id else []),
+            params=[app_name] + ([billing_id] if billing_id else []),
+        )
 
-        if app_table_ready and app_size_ready and app_country_ready and app_creative_ready:
-            billing_clause = ""
-            billing_params: list[str] = []
+        if not app_summary_status["has_rows"]:
+            fallback_message = "No precompute available for requested date range."
             if billing_id:
-                billing_clause = " AND billing_id = ?"
-                billing_params.append(billing_id)
-
-            summary_row = await db_query_one(
-                f"""
-                SELECT
-                    app_name,
-                    MAX(app_id) as app_id,
-                    COUNT(DISTINCT metric_date) as days_with_data,
-                    SUM(reached_queries) as total_reached,
-                    SUM(impressions) as total_impressions,
-                    SUM(clicks) as total_clicks,
-                    SUM(spend_micros) as total_spend_micros
-                FROM rtb_app_daily
-                WHERE app_name = ?{billing_clause}
-                  AND metric_date >= date('now', ?)
-                """,
-                (app_name, *billing_params, f'-{days} days'),
-            )
-
-            if summary_row and summary_row["total_reached"]:
-                total_reached = summary_row["total_reached"] or 0
-                total_impressions = summary_row["total_impressions"] or 0
-                win_rate = (total_impressions / total_reached * 100) if total_reached > 0 else 0
-
-                count_params = (app_name, *billing_params, f'-{days} days')
-                creative_count_row = await db_query_one(
-                    f"""
-                    SELECT COUNT(DISTINCT creative_id) as creative_count
-                    FROM rtb_app_creative_daily
-                    WHERE app_name = ?{billing_clause}
-                      AND metric_date >= date('now', ?)
-                    """,
-                    count_params,
+                app_total_status = await get_precompute_status(
+                    "rtb_app_daily",
+                    days,
+                    filters=["app_name = ?"],
+                    params=[app_name],
                 )
-                country_count_row = await db_query_one(
-                    f"""
-                    SELECT COUNT(DISTINCT country) as country_count
-                    FROM rtb_app_country_daily
-                    WHERE app_name = ?{billing_clause}
-                      AND metric_date >= date('now', ?)
-                    """,
-                    count_params,
-                )
+                if app_total_status["has_rows"]:
+                    fallback_message = (
+                        f"Data exists for '{app_name}' but not for this specific pretargeting config "
+                        f"(billing_id={billing_id}). Run RTB precompute for that config."
+                    )
+            return {
+                "app_name": app_name,
+                "has_data": False,
+                "message": fallback_message,
+                "precompute_status": {
+                    "rtb_app_daily": app_summary_status,
+                    "rtb_app_size_daily": app_size_status,
+                    "rtb_app_country_daily": app_country_status,
+                    "rtb_app_creative_daily": app_creative_status,
+                },
+            }
 
-                size_rows = await db_query(
-                    f"""
-                    SELECT
-                        creative_size,
-                        creative_format,
-                        SUM(reached_queries) as reached,
-                        SUM(impressions) as impressions,
-                        SUM(clicks) as clicks,
-                        SUM(spend_micros) as spend_micros
-                    FROM rtb_app_size_daily
-                    WHERE app_name = ?{billing_clause}
-                      AND metric_date >= date('now', ?)
-                    GROUP BY creative_size, creative_format
-                    ORDER BY reached DESC
-                    """,
-                    count_params,
-                )
-
-                sizes = []
-                for row in size_rows:
-                    reached = row["reached"] or 0
-                    imps = row["impressions"] or 0
-                    size_win_rate = (imps / reached * 100) if reached > 0 else 0
-                    is_wasteful = size_win_rate < (win_rate * 0.5) and reached > 10000
-                    sizes.append({
-                        "size": row["creative_size"],
-                        "format": row["creative_format"],
-                        "reached": reached,
-                        "impressions": imps,
-                        "clicks": row["clicks"] or 0,
-                        "spend_usd": (row["spend_micros"] or 0) / 1_000_000,
-                        "win_rate": round(size_win_rate, 1),
-                        "waste_pct": round(100 - size_win_rate, 1),
-                        "pct_of_traffic": round(reached / total_reached * 100, 1) if total_reached > 0 else 0,
-                        "is_wasteful": is_wasteful,
-                    })
-
-                country_rows = await db_query(
-                    f"""
-                    SELECT
-                        country,
-                        SUM(reached_queries) as reached,
-                        SUM(impressions) as impressions,
-                        SUM(clicks) as clicks,
-                        SUM(spend_micros) as spend_micros
-                    FROM rtb_app_country_daily
-                    WHERE app_name = ?{billing_clause}
-                      AND metric_date >= date('now', ?)
-                    GROUP BY country
-                    ORDER BY reached DESC
-                    """,
-                    count_params,
-                )
-
-                countries = []
-                for row in country_rows:
-                    reached = row["reached"] or 0
-                    imps = row["impressions"] or 0
-                    country_win_rate = (imps / reached * 100) if reached > 0 else 0
-                    countries.append({
-                        "country": row["country"],
-                        "reached": reached,
-                        "impressions": imps,
-                        "clicks": row["clicks"] or 0,
-                        "spend_usd": (row["spend_micros"] or 0) / 1_000_000,
-                        "win_rate": round(country_win_rate, 1),
-                        "pct_of_traffic": round(reached / total_reached * 100, 1) if total_reached > 0 else 0,
-                    })
-
-                creative_rows = await db_query(
-                    f"""
-                    SELECT
-                        creative_id,
-                        creative_size,
-                        creative_format,
-                        SUM(reached_queries) as reached,
-                        SUM(impressions) as impressions,
-                        SUM(clicks) as clicks,
-                        SUM(spend_micros) as spend_micros
-                    FROM rtb_app_creative_daily
-                    WHERE app_name = ?{billing_clause}
-                      AND metric_date >= date('now', ?)
-                    GROUP BY creative_id, creative_size, creative_format
-                    ORDER BY reached DESC
-                    LIMIT 10
-                    """,
-                    count_params,
-                )
-
-                creatives = []
-                for row in creative_rows:
-                    reached = row["reached"] or 0
-                    imps = row["impressions"] or 0
-                    creative_win_rate = (imps / reached * 100) if reached > 0 else 0
-                    creatives.append({
-                        "creative_id": row["creative_id"],
-                        "size": row["creative_size"],
-                        "format": row["creative_format"],
-                        "reached": reached,
-                        "impressions": imps,
-                        "clicks": row["clicks"] or 0,
-                        "spend_usd": (row["spend_micros"] or 0) / 1_000_000,
-                        "win_rate": round(creative_win_rate, 1),
-                        "pct_of_traffic": round(reached / total_reached * 100, 1) if total_reached > 0 else 0,
-                    })
-
-                wasteful_sizes = [s for s in sizes if s["is_wasteful"]]
-                waste_insight = None
-                if wasteful_sizes:
-                    worst = max(wasteful_sizes, key=lambda x: x["reached"])
-                    waste_insight = {
-                        "type": "size",
-                        "value": worst["size"],
-                        "message": (
-                            f"{worst['size']} has only {worst['win_rate']}% win rate but accounts for "
-                            f"{worst['pct_of_traffic']}% of traffic"
-                        ),
-                        "wasted_queries": int(worst["reached"] * (1 - worst["win_rate"] / 100)),
-                        "recommendation": f"Consider removing {worst['size']} from pretargeting for this app",
-                    }
-
-                bid_filtering = []
-                creative_ids = [c["creative_id"] for c in creatives]
-                if creative_ids:
-                    try:
-                        table_check = await db_query_one("""
-                            SELECT name FROM sqlite_master
-                            WHERE type='table' AND name='rtb_bid_filtering'
-                        """)
-
-                        if table_check:
-                            placeholders = ",".join(["?" for _ in creative_ids])
-                            filtering_params = creative_ids + [f'-{days} days']
-
-                            filtering_rows = await db_query(f"""
-                                SELECT
-                                    filtering_reason,
-                                    SUM(bids) as total_bids,
-                                    SUM(bids_in_auction) as bids_passed,
-                                    SUM(opportunity_cost_micros) as opportunity_cost_micros
-                                FROM rtb_bid_filtering
-                                WHERE creative_id IN ({placeholders})
-                                  AND metric_date >= date('now', ?)
-                                GROUP BY filtering_reason
-                                ORDER BY total_bids DESC
-                                LIMIT 10
-                            """, tuple(filtering_params))
-
-                            total_filtered_bids = sum(r["total_bids"] or 0 for r in filtering_rows)
-
-                            for row in filtering_rows:
-                                bids = row["total_bids"] or 0
-                                passed = row["bids_passed"] or 0
-                                bid_filtering.append({
-                                    "reason": row["filtering_reason"],
-                                    "bids_filtered": bids,
-                                    "bids_passed": passed,
-                                    "pct_of_filtered": (
-                                        round(bids / total_filtered_bids * 100, 1)
-                                        if total_filtered_bids > 0
-                                        else 0
-                                    ),
-                                    "opportunity_cost_usd": (row["opportunity_cost_micros"] or 0) / 1_000_000,
-                                })
-                    except Exception as e:
-                        logger.warning(f"Could not fetch bid filtering data: {e}")
-
-                return {
-                    "app_name": app_name,
-                    "app_id": summary_row["app_id"],
-                    "has_data": True,
-                    "period_days": days,
-                    "summary": {
-                        "total_reached": total_reached,
-                        "total_impressions": total_impressions,
-                        "total_clicks": summary_row["total_clicks"] or 0,
-                        "total_spend_usd": (summary_row["total_spend_micros"] or 0) / 1_000_000,
-                        "win_rate": round(win_rate, 1),
-                        "waste_rate": round(100 - win_rate, 1),
-                        "days_with_data": summary_row["days_with_data"],
-                        "creative_count": creative_count_row["creative_count"] if creative_count_row else 0,
-                        "country_count": country_count_row["country_count"] if country_count_row else 0,
-                    },
-                    "by_size": sizes,
-                    "by_country": countries,
-                    "by_creative": creatives,
-                    "waste_insight": waste_insight,
-                    "bid_filtering": bid_filtering,
-                }
-
-        # Build base WHERE clause
-        where_clauses = ["app_name = ?"]
-        params = [app_name]
-
+        billing_clause = ""
+        billing_params: list[str] = []
         if billing_id:
-            where_clauses.append("billing_id = ?")
-            params.append(billing_id)
+            billing_clause = " AND billing_id = ?"
+            billing_params.append(billing_id)
 
-        where_clauses.append("metric_date >= date('now', ?)")
-        params.append(f'-{days} days')
-
-        where_sql = " AND ".join(where_clauses)
-
-        # Get summary
-        summary_row = await db_query_one(f"""
+        summary_row = await db_query_one(
+            f"""
             SELECT
                 app_name,
-                app_id,
+                MAX(app_id) as app_id,
                 COUNT(DISTINCT metric_date) as days_with_data,
-                COUNT(DISTINCT creative_id) as creative_count,
-                COUNT(DISTINCT country) as country_count,
                 SUM(reached_queries) as total_reached,
                 SUM(impressions) as total_impressions,
                 SUM(clicks) as total_clicks,
                 SUM(spend_micros) as total_spend_micros
-            FROM rtb_daily
-            WHERE {where_sql}
-        """, tuple(params))
-
-        if not summary_row or not summary_row["total_reached"]:
-            # Try without billing_id filter to see if data exists elsewhere
-            fallback_message = "No data found for this app in rtb_daily table."
-            if billing_id:
-                check_without_filter = await db_query_one("""
-                    SELECT COUNT(*) as cnt FROM rtb_daily
-                    WHERE app_name = ? AND metric_date >= date('now', ?)
-                """, (app_name, f'-{days} days'))
-                if check_without_filter and check_without_filter["cnt"] > 0:
-                    fallback_message = (
-                        f"Data exists for '{app_name}' but not for this specific pretargeting config (billing_id={billing_id}). "
-                        "Try viewing drilldown from the account-wide publisher section, or import CSV reports with billing_id breakdown."
-                    )
-                else:
-                    # Check if it's a publisher_name mismatch
-                    check_publisher = await db_query_one("""
-                        SELECT publisher_name, SUM(reached_queries) as total
-                        FROM rtb_bidstream
-                        WHERE publisher_name = ? AND metric_date >= date('now', ?)
-                        GROUP BY publisher_name
-                    """, (app_name, f'-{days} days'))
-                    if check_publisher and check_publisher["total"]:
-                        fallback_message = (
-                            f"Publisher '{app_name}' found in funnel data but detailed breakdown requires "
-                            "importing a Performance Detail CSV report with app-level breakdown."
-                        )
-            return {
-                "app_name": app_name,
-                "has_data": False,
-                "message": fallback_message
-            }
+            FROM rtb_app_daily
+            WHERE app_name = ?{billing_clause}
+              AND metric_date >= date('now', ?)
+            """,
+            (app_name, *billing_params, f'-{days} days'),
+        )
 
         total_reached = summary_row["total_reached"] or 0
         total_impressions = summary_row["total_impressions"] or 0
         win_rate = (total_impressions / total_reached * 100) if total_reached > 0 else 0
 
-        # Get breakdown by size/format
-        size_rows = await db_query(f"""
+        count_params = (app_name, *billing_params, f'-{days} days')
+        creative_count_row = await db_query_one(
+            f"""
+            SELECT COUNT(DISTINCT creative_id) as creative_count
+            FROM rtb_app_creative_daily
+            WHERE app_name = ?{billing_clause}
+              AND metric_date >= date('now', ?)
+            """,
+            count_params,
+        )
+        country_count_row = await db_query_one(
+            f"""
+            SELECT COUNT(DISTINCT country) as country_count
+            FROM rtb_app_country_daily
+            WHERE app_name = ?{billing_clause}
+              AND metric_date >= date('now', ?)
+            """,
+            count_params,
+        )
+
+        size_rows = await db_query(
+            f"""
             SELECT
                 creative_size,
                 creative_format,
@@ -1557,18 +1163,19 @@ async def get_app_drilldown(
                 SUM(impressions) as impressions,
                 SUM(clicks) as clicks,
                 SUM(spend_micros) as spend_micros
-            FROM rtb_daily
-            WHERE {where_sql}
+            FROM rtb_app_size_daily
+            WHERE app_name = ?{billing_clause}
+              AND metric_date >= date('now', ?)
             GROUP BY creative_size, creative_format
             ORDER BY reached DESC
-        """, tuple(params))
-
+            """,
+            count_params,
+        )
         sizes = []
         for row in size_rows:
             reached = row["reached"] or 0
             imps = row["impressions"] or 0
             size_win_rate = (imps / reached * 100) if reached > 0 else 0
-            # Flag as wasteful if win rate is less than half of overall
             is_wasteful = size_win_rate < (win_rate * 0.5) and reached > 10000
             sizes.append({
                 "size": row["creative_size"],
@@ -1583,19 +1190,22 @@ async def get_app_drilldown(
                 "is_wasteful": is_wasteful,
             })
 
-        # Get breakdown by country
-        country_rows = await db_query(f"""
+        country_rows = await db_query(
+            f"""
             SELECT
                 country,
                 SUM(reached_queries) as reached,
                 SUM(impressions) as impressions,
                 SUM(clicks) as clicks,
                 SUM(spend_micros) as spend_micros
-            FROM rtb_daily
-            WHERE {where_sql}
+            FROM rtb_app_country_daily
+            WHERE app_name = ?{billing_clause}
+              AND metric_date >= date('now', ?)
             GROUP BY country
             ORDER BY reached DESC
-        """, tuple(params))
+            """,
+            count_params,
+        )
 
         countries = []
         for row in country_rows:
@@ -1612,8 +1222,8 @@ async def get_app_drilldown(
                 "pct_of_traffic": round(reached / total_reached * 100, 1) if total_reached > 0 else 0,
             })
 
-        # Get breakdown by creative (top 10)
-        creative_rows = await db_query(f"""
+        creative_rows = await db_query(
+            f"""
             SELECT
                 creative_id,
                 creative_size,
@@ -1622,12 +1232,15 @@ async def get_app_drilldown(
                 SUM(impressions) as impressions,
                 SUM(clicks) as clicks,
                 SUM(spend_micros) as spend_micros
-            FROM rtb_daily
-            WHERE {where_sql}
+            FROM rtb_app_creative_daily
+            WHERE app_name = ?{billing_clause}
+              AND metric_date >= date('now', ?)
             GROUP BY creative_id, creative_size, creative_format
             ORDER BY reached DESC
             LIMIT 10
-        """, tuple(params))
+            """,
+            count_params,
+        )
 
         creatives = []
         for row in creative_rows:
@@ -1646,7 +1259,6 @@ async def get_app_drilldown(
                 "pct_of_traffic": round(reached / total_reached * 100, 1) if total_reached > 0 else 0,
             })
 
-        # Identify the main waste source
         wasteful_sizes = [s for s in sizes if s["is_wasteful"]]
         waste_insight = None
         if wasteful_sizes:
@@ -1654,18 +1266,17 @@ async def get_app_drilldown(
             waste_insight = {
                 "type": "size",
                 "value": worst["size"],
-                "message": f"{worst['size']} has only {worst['win_rate']}% win rate but accounts for {worst['pct_of_traffic']}% of traffic",
+                "message": (
+                    f"{worst['size']} has only {worst['win_rate']}% win rate but accounts for "
+                    f"{worst['pct_of_traffic']}% of traffic"
+                ),
                 "wasted_queries": int(worst["reached"] * (1 - worst["win_rate"] / 100)),
-                "recommendation": f"Consider removing {worst['size']} from pretargeting for this app"
+                "recommendation": f"Consider removing {worst['size']} from pretargeting for this app",
             }
 
-        # Get bid filtering reasons for creatives used in this app
-        # First get the creative IDs used in this app
-        creative_ids = [c["creative_id"] for c in creatives]
         bid_filtering = []
-
+        creative_ids = [c["creative_id"] for c in creatives]
         if creative_ids:
-            # Check if bid_filtering table exists and has data
             try:
                 table_check = await db_query_one("""
                     SELECT name FROM sqlite_master
@@ -1673,7 +1284,6 @@ async def get_app_drilldown(
                 """)
 
                 if table_check:
-                    # Query bid filtering reasons for these creatives
                     placeholders = ",".join(["?" for _ in creative_ids])
                     filtering_params = creative_ids + [f'-{days} days']
 
@@ -1700,7 +1310,11 @@ async def get_app_drilldown(
                             "reason": row["filtering_reason"],
                             "bids_filtered": bids,
                             "bids_passed": passed,
-                            "pct_of_filtered": round(bids / total_filtered_bids * 100, 1) if total_filtered_bids > 0 else 0,
+                            "pct_of_filtered": (
+                                round(bids / total_filtered_bids * 100, 1)
+                                if total_filtered_bids > 0
+                                else 0
+                            ),
                             "opportunity_cost_usd": (row["opportunity_cost_micros"] or 0) / 1_000_000,
                         })
             except Exception as e:
@@ -1719,14 +1333,20 @@ async def get_app_drilldown(
                 "win_rate": round(win_rate, 1),
                 "waste_rate": round(100 - win_rate, 1),
                 "days_with_data": summary_row["days_with_data"],
-                "creative_count": summary_row["creative_count"],
-                "country_count": summary_row["country_count"],
+                "creative_count": creative_count_row["creative_count"] if creative_count_row else 0,
+                "country_count": country_count_row["country_count"] if country_count_row else 0,
             },
             "by_size": sizes,
             "by_country": countries,
             "by_creative": creatives,
             "waste_insight": waste_insight,
             "bid_filtering": bid_filtering,
+            "precompute_status": {
+                "rtb_app_daily": app_summary_status,
+                "rtb_app_size_daily": app_size_status,
+                "rtb_app_country_daily": app_country_status,
+                "rtb_app_creative_daily": app_creative_status,
+            },
         }
     except Exception as e:
         logger.error(f"Failed to get app drilldown: {e}")
