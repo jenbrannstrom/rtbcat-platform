@@ -37,8 +37,7 @@ terraform/gcp/terraform.tfvars
 # Deployment prompts with real infrastructure details (use .example as template)
 prompts/deploy-catscan.md
 
-# Instance-specific documentation (contains project IDs, IPs, emails)
-docs/GCP_CREDENTIALS_SETUP.md
+# Note: docs/GCP_CREDENTIALS_SETUP.md is now tracked (contains setup instructions, not secrets)
 investigations/
 
 # Claude Code settings and agents (instance-specific)
