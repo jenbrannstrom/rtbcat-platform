@@ -196,3 +196,41 @@ variable "cloudsql_user_name" {
   type        = string
   default     = "rtbcat_serving"
 }
+
+# =============================================================================
+# Precompute Scheduler + Monitoring
+# =============================================================================
+
+variable "precompute_refresh_days" {
+  description = "Number of days to refresh in scheduled precompute job"
+  type        = number
+  default     = 2
+}
+
+variable "precompute_refresh_max_age_hours" {
+  description = "Maximum age in hours before precompute data is considered stale"
+  type        = number
+  default     = 36
+}
+
+variable "precompute_refresh_schedule" {
+  description = "Cron schedule for Cloud Scheduler precompute refresh"
+  type        = string
+  default     = "0 3 * * *"
+}
+
+# =============================================================================
+# Data Retention (GCS Parquet + BigQuery partitions)
+# =============================================================================
+
+variable "parquet_retention_days" {
+  description = "Retention period for Parquet objects in GCS"
+  type        = number
+  default     = 90
+}
+
+variable "bigquery_partition_retention_days" {
+  description = "Retention period for BigQuery partitions (days)"
+  type        = number
+  default     = 90
+}
