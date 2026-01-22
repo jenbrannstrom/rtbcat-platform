@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_store, get_current_user, resolve_buyer_id
 from storage import SQLiteStore
-from storage.database import db_query, db_query_one
+from storage.serving_database import db_query, db_query_one
 from storage.repositories.user_repository import User
 from services.home_precompute import refresh_home_summaries
 
