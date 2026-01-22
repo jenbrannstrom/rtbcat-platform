@@ -128,7 +128,7 @@ async def refresh_config_breakdowns(
     buyer_account_id: Optional[str] = None,
     dates: Optional[Sequence[str]] = None,
     days: Optional[int] = None,
-) -> None:
+) -> dict:
     """Refresh config breakdown tables for a date range.
 
     Args:
@@ -311,4 +311,11 @@ async def refresh_config_breakdowns(
             dates=date_list,
         )
 
-    await db_transaction_async(_run)
+        return {
+            "start_date": refresh_start,
+            "end_date": refresh_end,
+            "buyer_account_id": buyer_account_id,
+            "dates": date_list,
+        }
+
+    return await db_transaction_async(_run)
