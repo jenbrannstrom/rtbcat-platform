@@ -18,6 +18,10 @@ ENABLE_HTTPS="${enable_https}"
 GITHUB_REPO="${github_repo}"
 GITHUB_BRANCH="${github_branch}"
 GCS_BUCKET="${gcs_bucket}"
+PRECOMPUTE_REFRESH_SECRET="${precompute_refresh_secret}"
+PRECOMPUTE_MONITOR_SECRET="${precompute_monitor_secret}"
+PRECOMPUTE_REFRESH_DAYS="${precompute_refresh_days}"
+PRECOMPUTE_REFRESH_MAX_AGE_HOURS="${precompute_refresh_max_age}"
 
 # OAuth2 Proxy - Google Authentication (REQUIRED)
 GOOGLE_OAUTH_CLIENT_ID="${google_oauth_client_id}"
@@ -250,6 +254,20 @@ else
     sudo -u catscan git clone -b "$GITHUB_BRANCH" "$GITHUB_SSH_URL" "$APP_DIR"
 fi
 
+# ---------------------------------------------------------------------------
+# 3c. Runtime Environment (Scheduler + Monitoring Secrets)
+# ---------------------------------------------------------------------------
+echo ">>> Writing runtime environment variables..."
+
+cat > /etc/catscan.env << EOF
+PRECOMPUTE_REFRESH_SECRET=$PRECOMPUTE_REFRESH_SECRET
+PRECOMPUTE_MONITOR_SECRET=$PRECOMPUTE_MONITOR_SECRET
+PRECOMPUTE_REFRESH_DAYS=$PRECOMPUTE_REFRESH_DAYS
+PRECOMPUTE_REFRESH_MAX_AGE_HOURS=$PRECOMPUTE_REFRESH_MAX_AGE_HOURS
+EOF
+
+chmod 600 /etc/catscan.env
+
 # -----------------------------------------------------------------------------
 # 4. Configure Services to Bind to 127.0.0.1 ONLY
 # -----------------------------------------------------------------------------
@@ -317,6 +335,17 @@ server {
     # Health check (no auth required - for load balancers/monitoring)
     location /health {
         proxy_pass http://127.0.0.1:8000/health;
+        proxy_set_header Host $host;
+    }
+
+    # Precompute endpoints - allow scheduler/monitoring with secret headers
+    location = /api/precompute/refresh/scheduled {
+        proxy_pass http://127.0.0.1:8000/precompute/refresh/scheduled;
+        proxy_set_header Host $host;
+    }
+
+    location = /api/precompute/health {
+        proxy_pass http://127.0.0.1:8000/precompute/health;
         proxy_set_header Host $host;
     }
 
@@ -492,17 +521,18 @@ chmod 644 /etc/cron.d/catscan-db-cleanup
 
 # Home page precompute - systemd timer runs daily at 3am UTC
 # Refreshes precomputed tables for fast dashboard loading
-cat > /etc/systemd/system/catscan-home-refresh.service << 'EOF'
+cat > /etc/systemd/system/catscan-precompute-refresh.service << 'EOF'
 [Unit]
 Description=Cat-Scan Home Page Data Refresh
 After=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/docker exec catscan-api python -c "from services.home_precompute import refresh_all_home_tables; refresh_all_home_tables()"
+EnvironmentFile=/etc/catscan.env
+ExecStart=/usr/bin/bash -c '/usr/bin/curl -fsS -X POST http://127.0.0.1:8000/precompute/refresh/scheduled -H "X-Precompute-Refresh-Secret: $PRECOMPUTE_REFRESH_SECRET" >> /var/log/catscan-precompute-refresh.log 2>&1'
 EOF
 
-cat > /etc/systemd/system/catscan-home-refresh.timer << 'EOF'
+cat > /etc/systemd/system/catscan-precompute-refresh.timer << 'EOF'
 [Unit]
 Description=Daily refresh of Cat-Scan home page tables
 
@@ -515,12 +545,12 @@ WantedBy=timers.target
 EOF
 
 systemctl daemon-reload
-systemctl enable catscan-home-refresh.timer
+systemctl enable catscan-precompute-refresh.timer
 
 echo "Maintenance jobs configured:"
 echo "  - docker-cleanup: daily 4am UTC"
 echo "  - catscan-db-cleanup: weekly Sunday 2am UTC"
-echo "  - catscan-home-refresh: daily 3am UTC"
+echo "  - catscan-precompute-refresh: daily 3am UTC"
 
 # -----------------------------------------------------------------------------
 # 9. Systemd Service
@@ -536,6 +566,7 @@ Requires=docker.service
 [Service]
 Type=simple
 User=catscan
+EnvironmentFile=/etc/catscan.env
 WorkingDirectory=$APP_DIR
 ExecStart=/usr/bin/docker-compose -f docker-compose.gcp.yml up
 ExecStop=/usr/bin/docker-compose -f docker-compose.gcp.yml down
