@@ -67,7 +67,6 @@ from api.routers import (
     recommendations_router,
     retention_router,
     precompute_router,
-    qps_router,
     performance_router,
     troubleshooting_router,
     collect_router,
@@ -198,7 +197,6 @@ app.include_router(home_router)
 app.include_router(analytics_qps_router)
 app.include_router(traffic_router)
 app.include_router(spend_router)
-app.include_router(qps_router)
 app.include_router(recommendations_router)
 
 # Data import and collection
