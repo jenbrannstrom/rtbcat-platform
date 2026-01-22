@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Query
 
 from api.schemas.qps import QPSSummaryResponse, QPSReportResponse
-from qps import (
+from importers import (
     get_import_summary,
     QpsSizeCoverageAnalyzer,
     ConfigPerformanceTracker,
