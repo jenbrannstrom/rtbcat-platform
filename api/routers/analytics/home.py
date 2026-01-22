@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_store, get_current_user, resolve_buyer_id
 from storage import SQLiteStore
-from storage.database import db_query, db_query_one
+from storage.serving_database import db_query, db_query_one
+from .common import get_precompute_status
 from storage.repositories.user_repository import User
 from services.home_precompute import refresh_home_summaries
 
@@ -35,6 +36,58 @@ async def get_home_funnel(
             buyer_filter = " AND buyer_account_id = ?"
             params.append(buyer_id)
             buyer_filter_applied = True
+
+        seat_status = await get_precompute_status(
+            "home_seat_daily",
+            days,
+            filters=["buyer_account_id = ?"] if buyer_id else None,
+            params=[buyer_id] if buyer_id else None,
+        )
+        publisher_status = await get_precompute_status(
+            "home_publisher_daily",
+            days,
+            filters=["buyer_account_id = ?"] if buyer_id else None,
+            params=[buyer_id] if buyer_id else None,
+        )
+        geo_status = await get_precompute_status(
+            "home_geo_daily",
+            days,
+            filters=["buyer_account_id = ?"] if buyer_id else None,
+            params=[buyer_id] if buyer_id else None,
+        )
+        if not seat_status["has_rows"]:
+            if buyer_id:
+                buyer_filter_applied = False
+                buyer_filter_message = (
+                    "No precomputed data for this seat. Run a refresh after imports."
+                )
+            return {
+                "has_data": False,
+                "funnel": {
+                    "total_reached_queries": 0,
+                    "total_impressions": 0,
+                    "total_bids": 0,
+                    "win_rate": 0,
+                    "waste_rate": 100,
+                },
+                "publishers": [],
+                "geos": [],
+                "data_sources": {
+                    "publisher_count": 0,
+                    "country_count": 0,
+                    "period_days": days,
+                    "buyer_filter_applied": buyer_filter_applied,
+                    "buyer_filter_message": buyer_filter_message or (
+                        "No precompute available for requested date range."
+                    ),
+                    "precomputed": True,
+                    "precompute_status": {
+                        "home_seat_daily": seat_status,
+                        "home_publisher_daily": publisher_status,
+                        "home_geo_daily": geo_status,
+                    },
+                },
+            }
 
         funnel_row = await db_query_one(
             f"""
@@ -179,6 +232,11 @@ async def get_home_funnel(
                 "buyer_filter_applied": buyer_filter_applied,
                 "buyer_filter_message": buyer_filter_message,
                 "precomputed": True,
+                "precompute_status": {
+                    "home_seat_daily": seat_status,
+                    "home_publisher_daily": publisher_status,
+                    "home_geo_daily": geo_status,
+                },
             }
         }
     except Exception as e:
@@ -201,6 +259,25 @@ async def get_home_config_performance(
         if buyer_id:
             buyer_filter = " AND buyer_account_id = ?"
             params.append(buyer_id)
+
+        config_status = await get_precompute_status(
+            "home_config_daily",
+            days,
+            filters=["buyer_account_id = ?"] if buyer_id else None,
+            params=[buyer_id] if buyer_id else None,
+        )
+        if not config_status["has_rows"]:
+            return {
+                "period_days": days,
+                "data_source": "home_precompute",
+                "message": "No precompute available for requested date range.",
+                "configs": [],
+                "total_reached": 0,
+                "total_impressions": 0,
+                "overall_win_rate_pct": 0,
+                "overall_waste_pct": 100,
+                "precompute_status": {"home_config_daily": config_status},
+            }
 
         rows = await db_query(
             f"""
@@ -277,6 +354,7 @@ async def get_home_config_performance(
             "total_impressions": total_impressions,
             "overall_win_rate_pct": round(overall_win, 1),
             "overall_waste_pct": round(100 - overall_win, 1),
+            "precompute_status": {"home_config_daily": config_status},
         }
     except Exception as e:
         logger.error(f"Failed to get home config performance: {e}")
