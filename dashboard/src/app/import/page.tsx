@@ -244,9 +244,6 @@ export default function ImportPage() {
         <h1 className="text-2xl font-bold text-gray-900">
           Import Reports
         </h1>
-        <p className="text-gray-600 mt-1">
-          Upload CSV exports from Google Authorized Buyers
-        </p>
       </div>
 
       {/* Upload Step */}
@@ -260,7 +257,7 @@ export default function ImportPage() {
           {/* Collapsible Instructions */}
           <details className="bg-white rounded-lg border border-gray-200">
             <summary className="p-4 cursor-pointer hover:bg-gray-50 font-medium text-gray-900 flex items-center justify-between">
-              <span>How to export from Google Authorized Buyers</span>
+              <span>Setup: Create 5 scheduled reports in Authorized Buyers</span>
               <ChevronDown className="h-5 w-5 text-gray-500" />
             </summary>
             <div className="p-4 pt-0 border-t border-gray-200">
@@ -271,7 +268,7 @@ export default function ImportPage() {
           {/* Collapsible Required Columns */}
           <details className="bg-white rounded-lg border border-gray-200">
             <summary className="p-4 cursor-pointer hover:bg-gray-50 font-medium text-gray-900 flex items-center justify-between">
-              <span>Required columns</span>
+              <span>Reference: Required columns by report type</span>
               <ChevronDown className="h-5 w-5 text-gray-500" />
             </summary>
             <div className="p-4 pt-0 border-t border-gray-200">
@@ -282,7 +279,7 @@ export default function ImportPage() {
           {/* Collapsible Troubleshooting */}
           <details className="bg-white rounded-lg border border-gray-200">
             <summary className="p-4 cursor-pointer hover:bg-gray-50 font-medium text-gray-900 flex items-center justify-between">
-              <span>Troubleshooting large files</span>
+              <span>Help: Large files and download links</span>
               <ChevronDown className="h-5 w-5 text-gray-500" />
             </summary>
             <div className="p-4 pt-0 border-t border-gray-200">
