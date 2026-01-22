@@ -10,6 +10,49 @@ from pydantic import BaseModel, Field
 
 from storage.database import db_query, db_query_one
 
+
+async def get_precompute_status(
+    table_name: str,
+    days: int,
+    filters: Optional[list[str]] = None,
+    params: Optional[list] = None,
+) -> dict:
+    """Check if a precompute table exists and has rows for the requested range."""
+    table_row = await db_query_one(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+        (table_name,),
+    )
+    if not table_row:
+        return {
+            "table": table_name,
+            "exists": False,
+            "has_rows": False,
+            "row_count": 0,
+        }
+
+    where_clauses = ["metric_date >= date('now', ?)"]
+    query_params: list = [f"-{days} days"]
+    if filters:
+        where_clauses.extend(filters)
+        if params:
+            query_params.extend(params)
+
+    row = await db_query_one(
+        f"""
+        SELECT COUNT(*) as cnt
+        FROM {table_name}
+        WHERE {" AND ".join(where_clauses)}
+        """,
+        tuple(query_params),
+    )
+    row_count = row["cnt"] or 0 if row else 0
+    return {
+        "table": table_name,
+        "exists": True,
+        "has_rows": row_count > 0,
+        "row_count": row_count,
+    }
+
 logger = logging.getLogger(__name__)
 
 
