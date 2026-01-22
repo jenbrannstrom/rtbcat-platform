@@ -27,6 +27,11 @@ WORKDIR /app
 # Create non-root user for security
 RUN groupadd -r rtbcat && useradd -r -g rtbcat rtbcat
 
+# Install runtime dependencies (ffmpeg for video thumbnails)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
