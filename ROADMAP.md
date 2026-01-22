@@ -187,6 +187,36 @@
 
 ---
 
+## Technical Debt
+
+### Large File Refactoring
+- [ ] `dashboard/src/lib/api.ts` - Still has ~30 legacy functions to extract
+- [ ] `storage/sqlite_store.py` (1,384 lines) - Complete migration to repository pattern
+- [ ] `storage/repositories/user_repository.py` (1,188 lines) - Split into auth, permissions, audit repos
+- [ ] `api/routers/creatives.py` (1,181 lines) - Extract language detection, preview generation
+- [ ] `cli/qps_analyzer.py` (1,053 lines) - Split into separate command modules under `cli/commands/`
+
+### Security
+- [ ] XSS via `dangerouslySetInnerHTML` in preview-modal - Sanitize HTML, use sandboxed iframe
+- [ ] API keys logged in plaintext - Mask sensitive data in logs
+
+### Code Quality
+- [ ] Overly broad exception handling (`except Exception`) - Use specific exceptions
+- [ ] Missing type annotations in several Python files
+- [ ] Code duplication in frontend API response handling
+- [ ] Inconsistent patterns (mix of sync/async, different logging approaches)
+
+### Architecture
+- [ ] Business logic mixed into route handlers - Extract to service layer
+- [ ] Environment variables read directly throughout - Centralize config
+- [ ] No structured logging or request ID tracking
+
+### Testing
+- [ ] Current coverage: <5%, target: 70%+ for critical paths
+- [ ] Missing: API endpoint tests, repository tests, frontend component tests, E2E tests
+
+---
+
 ## Completed
 
 - [x] Multi-bidder account support with account switching
