@@ -1,7 +1,7 @@
-"""Unified BigQuery CSV Importer with Strict Validation.
+"""Authorized Buyers Report Importer with Strict Validation.
 
-Imports Authorized Buyers CSV exports. REQUIRES specific columns
-to enable all RTBcat analysis features.
+Imports CSV exports from the Google Authorized Buyers console.
+REQUIRES specific columns to enable all RTBcat analysis features.
 
 Multi-Account Support:
     The importer tracks which account (bidder_id) each import belongs to.
@@ -898,8 +898,14 @@ def get_import_summary(db_path: str = DB_PATH) -> Dict:
     return get_data_summary(db_path)
 
 
+def import_report(csv_path: str, db_path: str = DB_PATH) -> ImportResult:
+    """Import an Authorized Buyers CSV report."""
+    return import_csv(csv_path, db_path)
+
+
+# Deprecated alias - use import_report() instead
 def import_bigquery_csv(csv_path: str, db_path: str = DB_PATH) -> ImportResult:
-    """Backward compatible alias for import_csv."""
+    """Deprecated: use import_report() instead."""
     return import_csv(csv_path, db_path)
 
 

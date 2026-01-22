@@ -1,6 +1,6 @@
 # QPS Data Import Module
 
-This module handles **data import** from BigQuery CSV exports and other RTB data sources.
+This module handles **data import** from Authorized Buyers CSV reports.
 Analysis of imported data happens in the `analytics/` module.
 
 ## Importers
