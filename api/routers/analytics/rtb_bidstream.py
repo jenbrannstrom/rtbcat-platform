@@ -11,7 +11,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 
-from storage.database import db_query, db_query_one
+from storage.serving_database import db_query, db_query_one, table_exists
 from api.dependencies import get_store, get_current_user, resolve_buyer_id
 from storage import SQLiteStore
 from storage.repositories.user_repository import User
@@ -23,11 +23,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["RTB Analytics"])
 
 async def _table_exists(table_name: str) -> bool:
-    row = await db_query_one(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
-        (table_name,),
-    )
-    return bool(row)
+    return await table_exists(table_name)
 
 
 async def _table_has_rows(query: str, params: tuple) -> bool:
