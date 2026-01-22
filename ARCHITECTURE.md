@@ -137,23 +137,23 @@ rtbcat-platform/
 │   ├── endpoints/         # RTB endpoint discovery
 │   └── troubleshooting/   # Real-time bid troubleshooting
 │
-├── analytics/             # RTB analytics & metrics (14 modules)
+├── analytics/             # Primary analysis module (canonical)
+│   ├── recommendation_engine.py  # Structured recommendations
 │   ├── waste_analyzer.py  # Traffic waste analysis
-│   ├── rtb_bidstream_analyzer.py  # Bidstream analysis
-│   ├── qps_optimizer.py   # QPS optimization
-│   ├── size_analyzer.py   # Ad size analysis
+│   ├── size_analyzer.py   # Size mismatch analysis
+│   ├── fraud_analyzer.py  # Fraud detection
 │   ├── geo_analyzer.py    # Geographic analysis
-│   └── fraud_analyzer.py  # Fraud detection
+│   └── qps_optimizer.py   # QPS optimization
 │
-├── analysis/              # Evaluation & recommendations
-│   └── evaluation_engine.py  # Decision intelligence engine
+├── analysis/              # Legacy evaluation (deprecated, use analytics/)
+│   └── evaluation_engine.py  # Sync evaluation engine
 │
-├── qps/                   # CSV import & QPS utilities
+├── qps/                   # Data import module
+│   ├── importer.py        # Core CSV import
 │   ├── smart_importer.py  # Auto-detect CSV type
 │   ├── funnel_importer.py # RTB funnel data import
-│   ├── importer.py        # Core CSV import
-│   ├── size_analyzer.py   # Size coverage analysis
-│   ├── fraud_detector.py  # Fraud signal detection
+│   ├── size_analyzer.py   # (Legacy, use analytics/size_analyzer)
+│   ├── fraud_detector.py  # (Legacy, use analytics/fraud_analyzer)
 │   └── utils.py           # Shared utilities
 │
 ├── utils/                 # Cross-cutting utilities
@@ -174,10 +174,12 @@ rtbcat-platform/
 │   │   └── types/         # TypeScript types
 │   └── package.json
 │
-├── creative-intelligence/ # CLI tools & tests (legacy location)
-│   ├── cli/
-│   │   └── qps_analyzer.py  # CLI for imports & analysis
-│   └── tests/             # Test suite
+├── cli/                   # Command-line tools
+│   └── qps_analyzer.py    # CLI for imports & analysis
+│
+├── tests/                 # Test suite
+│   ├── test_waste_analysis.py
+│   └── test_multi_seat.py
 │
 ├── scripts/               # Utility scripts
 │   ├── gmail_import.py    # Gmail CSV import

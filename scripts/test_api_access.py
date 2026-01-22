@@ -6,11 +6,11 @@ This script verifies that the API credentials are properly configured
 and can access the Real-time Bidding API.
 
 Usage:
-    # From creative-intelligence directory with venv activated:
+    # From project root with venv activated:
     python scripts/test_api_access.py
 
     # Or directly:
-    cd /home/jen/Documents/rtbcat-platform/creative-intelligence
+    cd /home/jen/Documents/rtbcat-platform
     source venv/bin/activate
     python scripts/test_api_access.py
 """

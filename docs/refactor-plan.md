@@ -1,7 +1,7 @@
 # RTBcat Platform Refactor & Migration Plan
 
 > **Last Updated:** January 2026
-> **Status:** 10/10 deliverables complete
+> **Status:** 15/15 deliverables complete (Phase 5 restructuring added)
 
 This plan turns the audit findings into an actionable, phased roadmap focused on safety, correctness, and minimal service disruption. It prioritizes quick wins that reduce duplication and risk, then proceeds to larger migrations with guardrails, while preserving uptime and data integrity.
 
@@ -102,6 +102,37 @@ This plan turns the audit findings into an actionable, phased roadmap focused on
 - Delete dead tables/migrations in safe cycles (as needed)
 - Remove legacy authentication references and stale comments (as needed)
 
+## Phase 5 — Module Restructuring ✅
+
+**Goals**: eliminate confusing directory structure and clarify module boundaries.
+
+1. **Move CLI + tests to root** ✅
+   - Moved `creative-intelligence/cli/` → `cli/`
+   - Moved `creative-intelligence/tests/` → `tests/`
+   - Removed empty `creative-intelligence/` directory
+   - Updated all documentation references
+
+2. **Clarify qps/ as import-only** ✅
+   - Updated `qps/__init__.py` docstring to emphasize data import purpose
+   - Updated `qps/README.md` to document import vs analysis separation
+   - Added deprecation notes to legacy analyzers in `qps/`
+
+3. **Consolidate analyzers in analytics/** ✅
+   - Added cross-references between duplicate analyzers
+   - `analytics/size_analyzer.py` is canonical (async, structured Recommendations)
+   - `qps/size_analyzer.py` maintained for CLI compatibility (sync, text reports)
+   - Same pattern for fraud analyzers
+   - Exported all analyzers from `analytics/__init__.py`
+
+4. **Fold analysis/ into analytics/** ✅
+   - Added deprecation notices to `analysis/` pointing to `analytics/`
+   - Exported Recommendation engine components from `analytics/__init__.py`
+   - `analysis/evaluation_engine.py` maintained for `/api/evaluation` endpoint
+
+5. **Documentation sync** ✅
+   - Updated ARCHITECTURE.md with current module descriptions
+   - Updated this refactor-plan.md
+
 ## Validation & Rollback Strategy
 
 - **Feature flags** for risky migrations (settings and frontend API).
@@ -127,6 +158,11 @@ This plan turns the audit findings into an actionable, phased roadmap focused on
 - [x] Unified database access pattern (repositories + facade pattern)
 - [x] `sqlite_store` refactor completed (1412→1156 lines, extracted AnomalyRepository + migrations.py)
 - [x] Dead code removed (api-legacy.ts, /config/credentials endpoints, legacy credentials functions)
+- [x] CLI + tests moved to root (`cli/`, `tests/`)
+- [x] `creative-intelligence/` directory removed
+- [x] `qps/` clarified as import-only with legacy analyzer deprecation notes
+- [x] `analytics/` consolidated as canonical analyzer module
+- [x] `analysis/` deprecated in favor of `analytics/`
 
 ---
 

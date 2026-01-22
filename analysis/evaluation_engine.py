@@ -1,6 +1,11 @@
 """
 Evaluation Engine
 
+.. deprecated::
+    This module is maintained for the /api/evaluation endpoint. For new code,
+    use ``analytics.recommendation_engine`` which provides structured
+    Recommendation objects with Evidence, Impact, and Action dataclasses.
+
 Combines:
 - Performance data (CSV imports)
 - Troubleshooting metrics (API)
@@ -11,7 +16,10 @@ Produces:
 - AdOps advice
 - Opportunity identification
 
-This is the BRAIN of Cat-Scan - where data becomes decisions.
+Related modules:
+    - ``analytics.recommendation_engine.RecommendationEngine`` - Modern version
+    - ``analytics.SizeAnalyzer`` - Size-specific analysis
+    - ``analytics.FraudAnalyzer`` - Fraud detection
 """
 
 from dataclasses import dataclass, field

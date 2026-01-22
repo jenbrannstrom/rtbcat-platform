@@ -9,7 +9,7 @@ Note: For more options, use the CLI tool instead:
     python cli/qps_analyzer.py full-report --days 7
 
 Usage:
-    cd /home/jen/Documents/rtbcat-platform/creative-intelligence
+    cd /home/jen/Documents/rtbcat-platform
     source venv/bin/activate
     python scripts/generate_qps_report.py
 
