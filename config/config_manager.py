@@ -62,6 +62,10 @@ class DatabaseConfig(BaseModel):
 
     path: str = Field(default="~/.catscan/catscan.db")
     echo: bool = False
+    serving_postgres_dsn: Optional[str] = Field(
+        default=None,
+        description="Optional Postgres DSN for read-only serving queries",
+    )
 
 
 class AppConfig(BaseModel):

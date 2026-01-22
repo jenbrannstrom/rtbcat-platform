@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
-from storage.database import db_query_one
+from storage.serving_database import db_query_one
 from .common import get_valid_billing_ids
 
 logger = logging.getLogger(__name__)
