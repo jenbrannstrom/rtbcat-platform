@@ -5,9 +5,9 @@ Analysis of imported data happens in the `analytics/` module.
 
 ## Importers
 
-Use the importer that matches your CSV format:
+Use the importer that matches your CSV format.
 
-## Recommended entry points
+### Recommended entry points
 
 - **Default for most CSVs:** `qps/unified_importer.py`
   - Auto-detects report type and column mapping.
@@ -15,7 +15,7 @@ Use the importer that matches your CSV format:
 - **Strict/validated performance detail imports:** `qps/importer.py`
   - Requires specific columns for full RTB analysis.
 
-## Specialized importers
+### Specialized importers
 
 - `qps/funnel_importer.py`: RTB funnel pipeline reports (bid requests, bids, auctions won).
 - `qps/quality_importer.py`: Quality signals (fraud/viewability metrics).
@@ -28,6 +28,8 @@ Use the importer that matches your CSV format:
 - `qps/flexible_mapper.py`: Column mapping and report type detection logic used by the unified importer.
 - `qps/models.py`: Data models for import results.
 - `qps/constants.py`: Account IDs, config names, size mappings.
+- `qps/account_mapper.py`: Maps billing account IDs to bidder/seat IDs.
+- `qps/csv_report_types.py`: Defines CSV report type detection and schema validation.
 
 ## Legacy Analyzers (to be consolidated)
 
