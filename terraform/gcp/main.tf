@@ -33,6 +33,29 @@ resource "random_id" "suffix" {
   byte_length = 4
 }
 
+resource "random_password" "precompute_refresh_secret" {
+  length  = 32
+  special = false
+}
+
+resource "random_password" "precompute_monitor_secret" {
+  length  = 32
+  special = false
+}
+
+locals {
+  precompute_refresh_url = var.enable_https && var.domain_name != "" ?
+    "https://${var.domain_name}/api/precompute/refresh/scheduled" :
+    "http://${google_compute_address.catscan.address}/api/precompute/refresh/scheduled"
+
+  precompute_health_url = var.enable_https && var.domain_name != "" ?
+    "https://${var.domain_name}/api/precompute/health" :
+    "http://${google_compute_address.catscan.address}/api/precompute/health"
+
+  precompute_health_host = var.domain_name != "" ? var.domain_name : google_compute_address.catscan.address
+  precompute_health_port = var.enable_https && var.domain_name != "" ? 443 : 80
+}
+
 # =============================================================================
 # NETWORK - VPC and Firewall
 # =============================================================================
@@ -150,6 +173,28 @@ resource "google_storage_bucket" "catscan" {
   lifecycle_rule {
     condition {
       age = 30
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
+  # Lifecycle rule: Delete Parquet exports after retention window
+  lifecycle_rule {
+    condition {
+      age            = var.parquet_retention_days
+      matches_prefix = ["parquet/"]
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
+  # Lifecycle rule: Delete BigQuery exports after retention window
+  lifecycle_rule {
+    condition {
+      age            = var.bigquery_partition_retention_days
+      matches_prefix = ["bigquery/"]
     }
     action {
       type = "Delete"
@@ -390,6 +435,10 @@ resource "google_compute_instance" "catscan" {
     google_oauth_client_id     = var.google_oauth_client_id
     google_oauth_client_secret = var.google_oauth_client_secret
     allowed_email_domains      = var.allowed_email_domains
+    precompute_refresh_secret  = random_password.precompute_refresh_secret.result
+    precompute_monitor_secret  = random_password.precompute_monitor_secret.result
+    precompute_refresh_days    = var.precompute_refresh_days
+    precompute_refresh_max_age = var.precompute_refresh_max_age_hours
   })
 
   # Enable deletion protection in production
@@ -421,6 +470,27 @@ resource "google_compute_instance" "catscan" {
 # Enable Secret Manager API
 resource "google_project_service" "secretmanager" {
   service            = "secretmanager.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "cloudscheduler" {
+  service            = "cloudscheduler.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "monitoring" {
+  service            = "monitoring.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "logging" {
+  service            = "logging.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "bigquery" {
+  count              = var.bigquery_dataset_id != "" ? 1 : 0
+  service            = "bigquery.googleapis.com"
   disable_on_destroy = false
 }
 
@@ -475,6 +545,10 @@ resource "google_secret_manager_secret" "ab_service_account" {
   depends_on = [google_project_service.secretmanager]
 }
 
+# =============================================================================
+# SERVING DB CREDENTIALS (for Postgres read-routing)
+# =============================================================================
+
 resource "google_secret_manager_secret" "serving_db_credentials" {
   secret_id = "${var.app_name}-serving-db-credentials"
 
@@ -500,6 +574,130 @@ resource "google_secret_manager_secret_version" "serving_db_credentials" {
     username                 = google_sql_user.serving_user.name
     password                 = random_password.serving_db_password.result
   })
+}
+
+# =============================================================================
+# BIGQUERY - Optional Dataset (Partition Retention)
+# =============================================================================
+
+resource "google_bigquery_dataset" "catscan" {
+  count                     = var.bigquery_dataset_id != "" ? 1 : 0
+  dataset_id                = var.bigquery_dataset_id
+  location                  = var.gcp_region
+  default_partition_expiration_ms = var.bigquery_partition_retention_days * 86400000
+
+  labels = {
+    app         = var.app_name
+    environment = var.environment
+  }
+
+  depends_on = [google_project_service.bigquery]
+}
+
+# =============================================================================
+# CLOUD SCHEDULER - Precompute Refresh
+# =============================================================================
+
+resource "google_cloud_scheduler_job" "precompute_refresh" {
+  name        = "${var.app_name}-precompute-refresh"
+  description = "Daily precompute refresh for dashboard caches"
+  schedule    = var.precompute_refresh_schedule
+  time_zone   = "Etc/UTC"
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = local.precompute_refresh_url
+    headers = {
+      X-Precompute-Refresh-Secret = random_password.precompute_refresh_secret.result
+    }
+  }
+
+  depends_on = [google_project_service.cloudscheduler]
+}
+
+# =============================================================================
+# MONITORING - Precompute Health + Scheduler Failures
+# =============================================================================
+
+resource "google_monitoring_uptime_check_config" "precompute_health" {
+  display_name = "${var.app_name}-precompute-health"
+  timeout      = "10s"
+  period       = "300s"
+
+  http_check {
+    path         = "/api/precompute/health"
+    port         = local.precompute_health_port
+    use_ssl      = var.enable_https && var.domain_name != ""
+    validate_ssl = var.enable_https && var.domain_name != ""
+    headers = {
+      X-Precompute-Monitor-Secret = random_password.precompute_monitor_secret.result
+    }
+  }
+
+  monitored_resource {
+    type = "uptime_url"
+    labels = {
+      host = local.precompute_health_host
+    }
+  }
+
+  depends_on = [google_project_service.monitoring]
+}
+
+resource "google_logging_metric" "precompute_refresh_failures" {
+  name   = "${var.app_name}-precompute-refresh-failures"
+  filter = "resource.type=\"cloud_scheduler_job\" AND resource.labels.job_id=\"${google_cloud_scheduler_job.precompute_refresh.name}\" AND severity>=ERROR"
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+  }
+
+  depends_on = [google_project_service.logging]
+}
+
+resource "google_monitoring_alert_policy" "precompute_health_gap" {
+  display_name = "${var.app_name}-precompute-health-gap"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Precompute health check failing"
+    condition_threshold {
+      filter          = "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND metric.label.check_id=\"${google_monitoring_uptime_check_config.precompute_health.uptime_check_id}\""
+      comparison      = "COMPARISON_LT"
+      threshold_value = 1
+      duration        = "300s"
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  depends_on = [google_project_service.monitoring]
+}
+
+resource "google_monitoring_alert_policy" "precompute_refresh_failures" {
+  display_name = "${var.app_name}-precompute-refresh-failures"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Precompute refresh failed"
+    condition_threshold {
+      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.precompute_refresh_failures.name}\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "60s"
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  depends_on = [
+    google_project_service.monitoring,
+    google_project_service.logging,
+  ]
 }
 
 # Grant VM service account access to read secrets

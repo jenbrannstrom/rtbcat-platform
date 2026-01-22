@@ -40,6 +40,16 @@ output "api_url" {
   value       = var.enable_https && var.domain_name != "" ? "https://${var.domain_name}/api" : "http://${google_compute_address.catscan.address}/api"
 }
 
+output "precompute_refresh_url" {
+  description = "Precompute refresh endpoint URL"
+  value       = var.enable_https && var.domain_name != "" ? "https://${var.domain_name}/api/precompute/refresh/scheduled" : "http://${google_compute_address.catscan.address}/api/precompute/refresh/scheduled"
+}
+
+output "precompute_health_url" {
+  description = "Precompute health endpoint URL"
+  value       = var.enable_https && var.domain_name != "" ? "https://${var.domain_name}/api/precompute/health" : "http://${google_compute_address.catscan.address}/api/precompute/health"
+}
+
 output "ssh_command" {
   description = "SSH command (via IAP - secure)"
   value       = "gcloud compute ssh ${google_compute_instance.catscan.name} --zone=${google_compute_instance.catscan.zone} --tunnel-through-iap"
