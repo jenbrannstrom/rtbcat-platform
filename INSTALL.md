@@ -1046,6 +1046,161 @@ curl -s https://your-domain.com/api/health
 If the app shows a blank dashboard, verify the import counts in SQLite before
 debugging the UI.
 
+### 11. Set Up VM Maintenance (Required!)
+
+After VM setup, you **must** install these maintenance jobs. Without them, the
+disk fills up with old Docker images, backup files, and stale data.
+
+#### A. Docker Cleanup Cron (prevents disk full)
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap --command="
+cat <<'EOF' | sudo tee /etc/cron.d/docker-cleanup
+# Docker Cleanup - runs daily at 4am UTC
+# Removes unused images, containers, networks older than 24h
+# SAFE: Never removes running containers or volumes
+0 4 * * * root docker system prune -af --filter \"until=24h\" > /var/log/docker-cleanup.log 2>&1
+EOF
+sudo chmod 644 /etc/cron.d/docker-cleanup
+"
+```
+
+#### B. Home Page Precompute Timer (prevents slow dashboard)
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap --command="
+# Create the service
+sudo tee /etc/systemd/system/catscan-home-refresh.service << 'EOF'
+[Unit]
+Description=Cat-Scan Home Page Data Refresh
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec catscan-api python -c \"from services.home_precompute import refresh_all_home_tables; refresh_all_home_tables()\"
+EOF
+
+# Create the timer (runs at 3am UTC daily)
+sudo tee /etc/systemd/system/catscan-home-refresh.timer << 'EOF'
+[Unit]
+Description=Daily refresh of Cat-Scan home page tables
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now catscan-home-refresh.timer
+"
+```
+
+#### C. Database Cleanup Cron (optional, for data retention)
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap --command="
+cat <<'EOF' | sudo tee /etc/cron.d/catscan-db-cleanup
+# Database cleanup - runs weekly on Sunday at 2am UTC
+# Deletes data older than 90 days (configurable via CATSCAN_RETENTION_DAYS)
+0 2 * * 0 root docker exec catscan-api python scripts/cleanup_old_data.py >> /var/log/catscan-db-cleanup.log 2>&1
+EOF
+sudo chmod 644 /etc/cron.d/catscan-db-cleanup
+"
+```
+
+### 12. Verify Maintenance Jobs
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap --command="
+echo '=== Cron Jobs ==='
+ls -la /etc/cron.d/
+
+echo ''
+echo '=== Systemd Timers ==='
+systemctl list-timers --all | grep catscan
+
+echo ''
+echo '=== Docker Disk Usage ==='
+sudo docker system df
+"
+```
+
+**Expected cron.d contents:**
+- `docker-cleanup` - Daily Docker cleanup at 4am UTC
+- `catscan-db-cleanup` - Weekly database cleanup (optional)
+
+**Expected timers:**
+- `catscan-home-refresh.timer` - Daily home page refresh at 3am UTC
+
+---
+
+## VM Maintenance Reference
+
+### What Accumulates on the VM (Must Be Cleaned)
+
+| Item | Location | Cause | Solution |
+|------|----------|-------|----------|
+| Old Docker images | Docker storage | Each deployment pulls new images | `docker-cleanup` cron |
+| Dead containers | Docker storage | Container restarts leave orphans | `docker-cleanup` cron |
+| Large backup files | `/tmp/*.db.gz` | Backup script failures | Fix backup script or delete manually |
+| Old import files | `~/.catscan/imports/` | Gmail imports accumulate | `cleanup_old_data.py` or manual |
+| Stale precomputed tables | SQLite database | Timer not running | `catscan-home-refresh.timer` |
+
+### Manual Cleanup Commands
+
+```bash
+# Check disk usage
+df -h /
+
+# Check Docker usage
+sudo docker system df
+
+# Clean Docker (safe - never removes running containers)
+sudo docker system prune -af
+
+# Find large files in /tmp
+sudo find /tmp -size +100M -exec ls -lh {} \;
+
+# Check import file count
+ls ~/.catscan/imports/ | wc -l
+```
+
+### Deployment Process
+
+Deployments are currently **manual** (auto-deploy was disabled after incidents):
+
+1. Push code to GitHub → GitHub Actions builds Docker images
+2. SSH to VM and pull new images:
+
+```bash
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap --command="
+cd /opt/catscan
+sudo docker-compose -f docker-compose.gcp.yml pull
+sudo docker-compose -f docker-compose.gcp.yml up -d
+sudo docker image prune -f
+"
+```
+
+Or trigger the manual GitHub Action: **Actions → Deploy to GCP → Run workflow**
+
+### Known Issues
+
+**Cloud Run is NOT configured** - Despite being mentioned in some docs, Cloud Run
+API is not enabled on the GCP project. All maintenance runs via VM cron jobs.
+
+**docker-compose 1.29.2 bug** - The VM has an old docker-compose that sometimes
+fails with `KeyError: 'ContainerConfig'`. Fix by stopping and removing containers
+before recreating:
+
+```bash
+sudo docker stop $(docker ps -aq)
+sudo docker rm $(docker ps -aq)
+sudo docker-compose -f docker-compose.gcp.yml up -d
+```
+
 ---
 
 ## Next Steps
