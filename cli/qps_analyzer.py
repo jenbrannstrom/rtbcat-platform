@@ -2,7 +2,7 @@
 """Cat-Scan QPS Analyzer CLI - Unified Data Architecture
 
 Command-line tool for QPS optimization analysis:
-- Validate and import BigQuery CSV exports
+- Validate and import Authorized Buyers CSV reports
 - Analyze size coverage
 - Track config performance
 - Detect fraud signals
@@ -21,8 +21,8 @@ Usage:
     python cli/qps_analyzer.py generate-thumbnails [--limit N] [--force]
 
 Examples:
-    python cli/qps_analyzer.py validate ~/downloads/bigquery_export.csv
-    python cli/qps_analyzer.py import ~/downloads/bigquery_export.csv
+    python cli/qps_analyzer.py validate ~/downloads/report.csv
+    python cli/qps_analyzer.py import ~/downloads/report.csv
     python cli/qps_analyzer.py coverage --days 7
     python cli/qps_analyzer.py full-report --days 7 > qps_report.txt
     python cli/qps_analyzer.py generate-thumbnails --limit 10
@@ -953,8 +953,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s validate ~/downloads/bigquery.csv Validate CSV before import
-  %(prog)s import ~/downloads/bigquery.csv   Import CSV data
+  %(prog)s validate ~/downloads/report.csv   Validate CSV before import
+  %(prog)s import ~/downloads/report.csv     Import CSV data
   %(prog)s coverage --days 7                 Size coverage report
   %(prog)s include-list                      Generate pretargeting sizes
   %(prog)s configs --days 7                  Config performance report
@@ -972,7 +972,7 @@ Examples:
     validate_parser.set_defaults(func=cmd_validate)
 
     # Import command
-    import_parser = subparsers.add_parser("import", help="Import BigQuery CSV file")
+    import_parser = subparsers.add_parser("import", help="Import Authorized Buyers CSV report")
     import_parser.add_argument("file", help="Path to CSV file")
     import_parser.set_defaults(func=cmd_import)
 
