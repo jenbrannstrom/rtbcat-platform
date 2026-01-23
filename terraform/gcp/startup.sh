@@ -209,6 +209,8 @@ gcloud secrets versions access latest --secret="${app_name}-ab-service-account" 
 
 if [ -s "$DATA_DIR/credentials/catscan-service-account.json" ]; then
     echo "    ✓ AB service account loaded"
+    # Ensure BigQuery ADC path exists for precompute jobs
+    ln -sf "$DATA_DIR/credentials/catscan-service-account.json" "$DATA_DIR/credentials/google-credentials.json"
 else
     echo "    ⚠ AB service account not found in Secret Manager"
     echo "    Upload with: gcloud secrets versions add ${app_name}-ab-service-account --data-file=catscan-service-account.json"
@@ -330,7 +332,7 @@ chown catscan:catscan "$APP_DIR/docker-compose.override.yml"
 # -----------------------------------------------------------------------------
 echo ">>> Installing Cloud SQL Auth Proxy..."
 
-CLOUDSQL_PROXY_VERSION="2.12.1"
+CLOUDSQL_PROXY_VERSION="2.14.3"
 CLOUDSQL_INSTANCE_NAME="${app_name}-${environment}-serving"
 CLOUDSQL_CONNECTION_NAME="$${PROJECT_ID}:${gcp_region}:$${CLOUDSQL_INSTANCE_NAME}"
 
