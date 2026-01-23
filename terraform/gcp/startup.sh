@@ -277,6 +277,24 @@ EOF
 
 chmod 600 /etc/catscan.env
 
+# Append Postgres DSN (Cloud SQL Auth Proxy) if serving DB secret is available.
+SERVING_DB_JSON=$(gcloud secrets versions access latest --secret="${app_name}-serving-db-credentials" --project="$PROJECT_ID" 2>/dev/null || true)
+if [ -n "$SERVING_DB_JSON" ]; then
+    DB_ENV_LINES=$(SERVING_DB_JSON="$SERVING_DB_JSON" python3 - << 'PY'
+import json
+import os
+
+data = json.loads(os.environ["SERVING_DB_JSON"])
+user = data["username"]
+password = data["password"]
+database = data["database"]
+print(f"POSTGRES_DSN=postgresql://{user}:{password}@127.0.0.1:5432/{database}")
+print(f"POSTGRES_SERVING_DSN=postgresql://{user}:{password}@127.0.0.1:5432/{database}")
+PY
+)
+    echo "$DB_ENV_LINES" >> /etc/catscan.env
+fi
+
 # -----------------------------------------------------------------------------
 # 4. Configure Services to Bind to 127.0.0.1 ONLY
 # -----------------------------------------------------------------------------
@@ -306,6 +324,39 @@ services:
 EOF
 
 chown catscan:catscan "$APP_DIR/docker-compose.override.yml"
+
+# -----------------------------------------------------------------------------
+# 4b. Cloud SQL Auth Proxy (Postgres)
+# -----------------------------------------------------------------------------
+echo ">>> Installing Cloud SQL Auth Proxy..."
+
+CLOUDSQL_PROXY_VERSION="2.12.1"
+CLOUDSQL_INSTANCE_NAME="${app_name}-${environment}-serving"
+CLOUDSQL_CONNECTION_NAME="${PROJECT_ID}:${gcp_region}:${CLOUDSQL_INSTANCE_NAME}"
+
+curl -sSfL -o /usr/local/bin/cloud-sql-proxy \
+    "https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v${CLOUDSQL_PROXY_VERSION}/cloud-sql-proxy.linux.amd64"
+chmod +x /usr/local/bin/cloud-sql-proxy
+
+cat > /etc/systemd/system/cloud-sql-proxy.service << SERVICEEOF
+[Unit]
+Description=Cloud SQL Auth Proxy
+After=network.target
+
+[Service]
+Type=simple
+User=catscan
+ExecStart=/usr/local/bin/cloud-sql-proxy --address 127.0.0.1 --port 5432 ${CLOUDSQL_CONNECTION_NAME}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
+
+systemctl daemon-reload
+systemctl enable cloud-sql-proxy
+systemctl start cloud-sql-proxy
 
 # -----------------------------------------------------------------------------
 # 5. Configure Nginx as Reverse Proxy
