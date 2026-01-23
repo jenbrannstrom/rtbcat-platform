@@ -8,7 +8,11 @@
 
 - [ ] **Campaigns tab filtering** - Creative ID type mismatch causing empty campaigns view
 - [ ] **Thumbnail placeholders** - Some creatives show placeholder instead of generated thumbnail (ffmpeg)
+- [ ] **FFmpeg missing on install** - Creatives tab fails to render video thumbnails until ffmpeg installed
 - [ ] **CSV import account mismatch** - Imports not linking to correct accounts
+- [ ] **Import Now button fails** - /import does not process queued Gmail reports
+- [ ] **Campaigns create action no-op** - Clicking "Create" on auto cluster does nothing
+- [ ] **Creative modal missing publisher data** - "No publisher data for this config" despite migrated tables
 - [ ] ~~**CI/CD pipeline** - Build images in GitHub Actions and deploy via docker pull (Artifact Registry)~~ **(Done)**
 
 ---
@@ -25,6 +29,8 @@
   - "Rescan, incorrect" button for manual re-analysis
   - Language field is human-editable
   - Mismatch alert when language doesn't match serving countries
+  - Show serving countries (from CSV imports) in creative modal under TARGETING/GEO
+  - Surface MCP-based OCR/image understanding to flag currency/language mismatches
   - API key via `GEMINI_API_KEY` environment variable
 
   **Implementation:**
@@ -72,10 +78,12 @@
      - Types (`dashboard/src/types/api.ts`): Add `LanguageDetectionResponse`, `GeoMismatchAlert`
      - API Client (`dashboard/src/lib/api.ts`): `analyzeCreativeLanguage()`, `updateCreativeLanguage()`, `getCreativeGeoMismatch()`
      - Preview Modal (`dashboard/src/components/preview-modal.tsx`): Add `LanguageSection` component
-       - Detected language with confidence
-       - Mismatch alert (amber warning) if language doesn't match serving countries
-       - "Rescan, incorrect" button
-       - Inline edit form for manual correction
+      - Detected language with confidence
+      - Mismatch alert (amber warning) if language doesn't match serving countries
+      - "Rescan, incorrect" button
+      - Inline edit form for manual correction
+    - Add `TARGETING/GEO` section to creative modal with served countries
+    - Add alert badges on creative cards for geo/lang mismatch
 
   9. **Dependencies** (`requirements.txt`)
      - Add: `google-generativeai>=0.3.0`
@@ -104,6 +112,53 @@
 - [ ] **Pretargeting Write API** - Push config changes to Google (patch, activate, suspend)
 - [ ] **Rollback functionality** - Undo changes and restore previous snapshots
 - [ ] **Change history tracking** - Full audit trail of all pretargeting modifications
+- [ ] **Publisher allow/deny editor** - In-app whitelist/blacklist editing with per-config history and rollback
+- [ ] **Bulk edit UX** - Inline add/remove rows with validation and diff preview before save
+
+  **Publisher Targeting UX (per pretargeting config):**
+  - Add a `Publishers` section under each config with mode toggle:
+    - Whitelist (only these)
+    - Blacklist (block these)
+  - Mode is mutually exclusive; UI and actions adapt:
+    - If Whitelist: show `Add` actions
+    - If Blacklist: show `Block` actions
+  - Inline add/remove with search and manual entry
+  - Bulk Import + Export CSV actions
+  - Pending changes panel with per-item undo and Apply/Discard
+  - Apply changes triggers Google API update (batch)
+
+  **Publisher Table Integration:**
+  - Add column: `Add` or `Block` (depends on current mode)
+  - Staged changes show yellow `pending` indicator
+  - Apply changes pushes to Google and writes audit log
+
+  **History + Rollback:**
+  - Per-config history with timestamp + user
+  - Each entry: summary + list of changes (added/removed/mode change)
+  - Rollback action restores the list + mode to that snapshot
+  - Rollback confirmation modal shows diff impact and warns about newer changes
+
+### Creatives Tab UX
+- [ ] **Approval filter** - Approved count vs not approved count (red)
+- [ ] **Display subtype filter** - "Display image" and "Display HTML" split
+- [ ] **Card data** - Show GEO target, language, mismatch alert on card
+- [ ] **Display thumbnails** - Image thumbnails for display creatives on list view
+- [ ] **HTML copy** - Add "HTML" button to copy creative code
+- [ ] **Card layout density** - Reduce empty whitespace, improve compact layout
+- [ ] **Modal destination truncation** - Shorten long URLs with copy-to-clipboard
+- [ ] **Performance data sourcing** - Resolve "No performance data available" in modal
+
+### Import Page
+- [ ] **Import Now reliability** - Fix Gmail import trigger and queue processing
+- [ ] **Remove redundant section** - Drop "5 Reports to Schedule in Authorized Buyers"
+
+### Creative Clusters (Campaigns)
+- [ ] **Rename Campaigns → Creative Clusters** (UI + routes)
+- [ ] **Cluster create action** - "Create" in auto cluster should persist
+- [ ] **Thumbnail modal** - Clicking cluster thumbnail opens creative modal
+
+### Cosmetic Cleanup
+- [ ] Remove "Go To WASTE optimizer" link from `/settings/accounts`
 
 ---
 
