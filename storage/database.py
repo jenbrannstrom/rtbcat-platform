@@ -1,8 +1,20 @@
 """
-Database access module for Cat-Scan.
+Database access module for Cat-Scan (SQLite backend).
 
 This module provides thread-safe SQLite access for FastAPI's async environment.
 ALL database access should go through this module.
+
+TODO: PostgreSQL Migration
+    For PostgreSQL backend, use storage.postgres_database instead:
+        from storage.postgres_database import pg_query, pg_execute, pg_transaction_async
+
+    The postgres_database module has the same API but uses %s placeholders
+    instead of ? and returns dicts instead of sqlite3.Row objects.
+
+    To switch backends:
+        1. Set CATSCAN_DB_BACKEND=postgres
+        2. Set POSTGRES_DSN=postgresql://user:pass@host:5432/dbname
+        3. Run: python scripts/postgres_migrate.py
 
 Usage:
     from storage.database import db_query, db_execute, db_transaction
