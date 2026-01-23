@@ -44,16 +44,12 @@ resource "random_password" "precompute_monitor_secret" {
 }
 
 locals {
-  precompute_refresh_url = var.enable_https && var.domain_name != "" ?
-    "https://${var.domain_name}/api/precompute/refresh/scheduled" :
-    "http://${google_compute_address.catscan.address}/api/precompute/refresh/scheduled"
+  precompute_refresh_url = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/precompute/refresh/scheduled" : "http://${google_compute_address.catscan.address}/api/precompute/refresh/scheduled"
 
-  precompute_health_url = var.enable_https && var.domain_name != "" ?
-    "https://${var.domain_name}/api/precompute/health" :
-    "http://${google_compute_address.catscan.address}/api/precompute/health"
+  precompute_health_url = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/precompute/health" : "http://${google_compute_address.catscan.address}/api/precompute/health"
 
   precompute_health_host = var.domain_name != "" ? var.domain_name : google_compute_address.catscan.address
-  precompute_health_port = var.enable_https && var.domain_name != "" ? 443 : 80
+  precompute_health_port = (var.enable_https && var.domain_name != "") ? 443 : 80
 }
 
 # =============================================================================
@@ -431,6 +427,7 @@ resource "google_compute_instance" "catscan" {
     enable_https               = var.enable_https
     github_repo                = var.github_repo
     github_branch              = var.github_branch
+    gcp_region                 = var.gcp_region
     gcs_bucket                 = google_storage_bucket.catscan.name
     google_oauth_client_id     = var.google_oauth_client_id
     google_oauth_client_secret = var.google_oauth_client_secret
@@ -450,6 +447,82 @@ resource "google_compute_instance" "catscan" {
   }
 
   # Shielded VM for extra security
+  shielded_instance_config {
+    enable_secure_boot          = true
+    enable_vtpm                 = true
+    enable_integrity_monitoring = true
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# =============================================================================
+# COMPUTE - Parallel SG Instance (for migration, keeps EU intact)
+# =============================================================================
+
+resource "google_compute_address" "catscan_sg" {
+  name   = "${var.app_name}-${var.environment}-sg-ip"
+  region = var.gcp_region
+
+  description = "Static IP for Cat-Scan (SG migration)"
+}
+
+resource "google_compute_instance" "catscan_sg" {
+  name         = "${var.app_name}-${var.environment}-sg"
+  machine_type = var.machine_type
+  zone         = var.gcp_zone
+
+  tags = ["${var.app_name}-server"]
+
+  boot_disk {
+    initialize_params {
+      image = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
+      size  = var.boot_disk_size
+      type  = "pd-ssd"
+    }
+  }
+
+  network_interface {
+    network = data.google_compute_network.default.name
+
+    access_config {
+      nat_ip = google_compute_address.catscan_sg.address
+    }
+  }
+
+  service_account {
+    email  = google_service_account.catscan.email
+    scopes = ["cloud-platform"]
+  }
+
+  # Startup script - hardened setup with OAuth2 Proxy
+  metadata_startup_script = templatefile("${path.module}/startup.sh", {
+    app_name                   = var.app_name
+    environment                = var.environment
+    domain_name                = var.domain_name
+    enable_https               = var.enable_https
+    github_repo                = var.github_repo
+    github_branch              = var.github_branch
+    gcp_region                 = var.gcp_region
+    gcs_bucket                 = google_storage_bucket.catscan.name
+    google_oauth_client_id     = var.google_oauth_client_id
+    google_oauth_client_secret = var.google_oauth_client_secret
+    allowed_email_domains      = var.allowed_email_domains
+    precompute_refresh_secret  = random_password.precompute_refresh_secret.result
+    precompute_monitor_secret  = random_password.precompute_monitor_secret.result
+    precompute_refresh_days    = var.precompute_refresh_days
+    precompute_refresh_max_age = var.precompute_refresh_max_age_hours
+  })
+
+  deletion_protection = var.environment == "production"
+
+  labels = {
+    app         = var.app_name
+    environment = var.environment
+  }
+
   shielded_instance_config {
     enable_secure_boot          = true
     enable_vtpm                 = true
@@ -488,11 +561,7 @@ resource "google_project_service" "logging" {
   disable_on_destroy = false
 }
 
-resource "google_project_service" "bigquery" {
-  count              = var.bigquery_dataset_id != "" ? 1 : 0
-  service            = "bigquery.googleapis.com"
-  disable_on_destroy = false
-}
+# BigQuery API already enabled above (line 245)
 
 # Gmail OAuth Client (gmail-oauth-client.json)
 resource "google_secret_manager_secret" "gmail_oauth_client" {
