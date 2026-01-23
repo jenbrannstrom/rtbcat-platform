@@ -12,17 +12,17 @@ output "instance_zone" {
 
 output "sg_instance_name" {
   description = "Name of the SG migration instance"
-  value       = google_compute_instance.catscan_sg.name
+  value       = var.create_sg_instance ? google_compute_instance.catscan_sg[0].name : ""
 }
 
 output "sg_public_ip" {
   description = "Static public IP for the SG migration instance"
-  value       = google_compute_address.catscan_sg.address
+  value       = var.create_sg_instance ? google_compute_address.catscan_sg[0].address : ""
 }
 
 output "sg_ssh_command" {
   description = "SSH command for the SG migration instance (IAP)"
-  value       = "gcloud compute ssh ${google_compute_instance.catscan_sg.name} --zone=${google_compute_instance.catscan_sg.zone} --tunnel-through-iap"
+  value       = var.create_sg_instance ? "gcloud compute ssh ${google_compute_instance.catscan_sg[0].name} --zone=${google_compute_instance.catscan_sg[0].zone} --tunnel-through-iap" : ""
 }
 
 output "public_ip" {
