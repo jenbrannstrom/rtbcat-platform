@@ -332,10 +332,10 @@ echo ">>> Installing Cloud SQL Auth Proxy..."
 
 CLOUDSQL_PROXY_VERSION="2.12.1"
 CLOUDSQL_INSTANCE_NAME="${app_name}-${environment}-serving"
-CLOUDSQL_CONNECTION_NAME="${PROJECT_ID}:${gcp_region}:${CLOUDSQL_INSTANCE_NAME}"
+CLOUDSQL_CONNECTION_NAME="$${PROJECT_ID}:${gcp_region}:$${CLOUDSQL_INSTANCE_NAME}"
 
 curl -sSfL -o /usr/local/bin/cloud-sql-proxy \
-    "https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v${CLOUDSQL_PROXY_VERSION}/cloud-sql-proxy.linux.amd64"
+    "https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v$${CLOUDSQL_PROXY_VERSION}/cloud-sql-proxy.linux.amd64"
 chmod +x /usr/local/bin/cloud-sql-proxy
 
 cat > /etc/systemd/system/cloud-sql-proxy.service << SERVICEEOF
@@ -346,7 +346,7 @@ After=network.target
 [Service]
 Type=simple
 User=catscan
-ExecStart=/usr/local/bin/cloud-sql-proxy --address 127.0.0.1 --port 5432 ${CLOUDSQL_CONNECTION_NAME}
+ExecStart=/usr/local/bin/cloud-sql-proxy --address 127.0.0.1 --port 5432 $${CLOUDSQL_CONNECTION_NAME}
 Restart=always
 RestartSec=5
 
