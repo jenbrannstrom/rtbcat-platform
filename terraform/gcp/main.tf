@@ -500,6 +500,7 @@ resource "google_compute_instance" "catscan_sg" {
   }
 
   # Startup script - hardened setup with OAuth2 Proxy
+  # Note: Uses existing EU bucket during migration to avoid recreating it
   metadata_startup_script = templatefile("${path.module}/startup.sh", {
     app_name                   = var.app_name
     environment                = var.environment
@@ -508,7 +509,7 @@ resource "google_compute_instance" "catscan_sg" {
     github_repo                = var.github_repo
     github_branch              = var.github_branch
     gcp_region                 = var.gcp_region
-    gcs_bucket                 = google_storage_bucket.catscan.name
+    gcs_bucket                 = "catscan-production-data-99957252"
     google_oauth_client_id     = var.google_oauth_client_id
     google_oauth_client_secret = var.google_oauth_client_secret
     allowed_email_domains      = var.allowed_email_domains
