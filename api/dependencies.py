@@ -1,18 +1,34 @@
 """Shared dependencies for API routers."""
 
-from typing import Optional, List
+import os
+from typing import Optional, List, Union
 from fastapi import HTTPException, Request, Depends
 from storage import SQLiteStore
 from storage.database import init_database, DB_PATH
 from storage.repositories.user_repository import UserRepository, User
 from config import ConfigManager
 
+# TODO: PostgreSQL migration - import PostgresStore when ready
+# from storage.postgres_store import PostgresStore
+
+# Type alias for store (SQLite or Postgres)
+StoreType = SQLiteStore  # TODO: Union[SQLiteStore, PostgresStore] when Postgres is ready
+
 # Global instances - set by main.py lifespan
-_store: Optional[SQLiteStore] = None
+_store: Optional[StoreType] = None
 _config_manager: Optional[ConfigManager] = None
 
 
-def set_store(store: SQLiteStore) -> None:
+def use_postgres() -> bool:
+    """Check if PostgreSQL backend should be used.
+
+    Set CATSCAN_DB_BACKEND=postgres to enable PostgreSQL.
+    Default is sqlite.
+    """
+    return os.getenv("CATSCAN_DB_BACKEND", "sqlite").lower() == "postgres"
+
+
+def set_store(store: StoreType) -> None:
     """Set the global store instance (called from main.py lifespan)."""
     global _store
     _store = store
@@ -24,8 +40,10 @@ def set_config_manager(config_manager: ConfigManager) -> None:
     _config_manager = config_manager
 
 
-def get_store() -> SQLiteStore:
-    """Dependency for getting the SQLite store.
+def get_store() -> StoreType:
+    """Dependency for getting the data store.
+
+    Returns SQLiteStore or PostgresStore depending on CATSCAN_DB_BACKEND.
 
     DEPRECATED: Use storage.database functions directly instead.
     Kept for backward compatibility during migration.
