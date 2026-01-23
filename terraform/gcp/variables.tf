@@ -18,6 +18,12 @@ variable "gcp_zone" {
   default     = "europe-west1-b"
 }
 
+variable "create_sg_instance" {
+  description = "Create parallel SG VM for migration"
+  type        = bool
+  default     = false
+}
+
 variable "app_name" {
   description = "Application name (used for resource naming)"
   type        = string

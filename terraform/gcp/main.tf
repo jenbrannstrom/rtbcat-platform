@@ -463,6 +463,7 @@ resource "google_compute_instance" "catscan" {
 # =============================================================================
 
 resource "google_compute_address" "catscan_sg" {
+  count  = var.create_sg_instance ? 1 : 0
   name   = "${var.app_name}-${var.environment}-sg-ip"
   region = var.gcp_region
 
@@ -470,6 +471,7 @@ resource "google_compute_address" "catscan_sg" {
 }
 
 resource "google_compute_instance" "catscan_sg" {
+  count        = var.create_sg_instance ? 1 : 0
   name         = "${var.app_name}-${var.environment}-sg"
   machine_type = var.machine_type
   zone         = var.gcp_zone
@@ -488,7 +490,7 @@ resource "google_compute_instance" "catscan_sg" {
     network = data.google_compute_network.default.name
 
     access_config {
-      nat_ip = google_compute_address.catscan_sg.address
+      nat_ip = google_compute_address.catscan_sg[0].address
     }
   }
 

@@ -10,6 +10,9 @@ gcp_project = "your-project-id"
 gcp_region = "europe-west1"
 gcp_zone   = "europe-west1-b"
 
+# Parallel SG migration VM (optional)
+create_sg_instance = false
+
 # Application settings
 app_name    = "catscan"
 environment = "production"
