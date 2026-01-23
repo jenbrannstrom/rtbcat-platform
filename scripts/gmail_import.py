@@ -61,6 +61,79 @@ SEAT_ID_ALLOWLIST = {
     if seat_id.strip()
 }
 
+# Pipeline integration - run after successful CSV import
+PIPELINE_ENABLED = os.environ.get("CATSCAN_PIPELINE_ENABLED", "false").lower() == "true"
+
+def run_pipeline_for_file(filepath: Path, seat_id: Optional[str], verbose: bool = True) -> bool:
+    """Run the data pipeline for an imported CSV file.
+    
+    This exports the CSV to Parquet, loads to BigQuery, and aggregates to Postgres.
+    Only runs if CATSCAN_PIPELINE_ENABLED=true environment variable is set.
+    """
+    if not PIPELINE_ENABLED:
+        return True  # Skip silently if not enabled
+    
+    try:
+        from scripts.run_pipeline import run_pipeline
+        
+        # Extract date from CSV content
+        metric_date = None
+        try:
+            import csv as csv_module
+            with open(filepath, "r", encoding="utf-8-sig") as f:
+                reader = csv_module.reader(f)
+                headers = next(reader)
+                date_col_idx = None
+                for i, h in enumerate(headers):
+                    if h.strip() in ("#Day", "Day", "Date"):
+                        date_col_idx = i
+                        break
+                if date_col_idx is not None:
+                    first_row = next(reader)
+                    date_val = first_row[date_col_idx].strip()
+                    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"):
+                        try:
+                            metric_date = datetime.strptime(date_val, fmt).date().isoformat()
+                            break
+                        except ValueError:
+                            continue
+        except Exception:
+            pass
+        
+        if not metric_date:
+            from datetime import date as date_type
+            metric_date = date_type.today().isoformat()
+        
+        buyer_id = seat_id or "unknown"
+        
+        if verbose:
+            print(f"  Running pipeline for {filepath.name}...")
+        
+        result = run_pipeline(
+            csv_path=str(filepath),
+            buyer_id=buyer_id,
+            metric_date=metric_date,
+        )
+        
+        if result.get("success"):
+            if verbose:
+                print("  Pipeline completed successfully")
+            return True
+        else:
+            if verbose:
+                errors = result.get("errors", [])
+                print(f"  Pipeline errors: {errors}")
+            return False
+            
+    except ImportError as e:
+        if verbose:
+            print(f"  Pipeline not available: {e}")
+        return False
+    except Exception as e:
+        if verbose:
+            print(f"  Pipeline error: {e}")
+        return False
+
 # Create directories
 IMPORTS_DIR.mkdir(parents=True, exist_ok=True)
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -799,6 +872,8 @@ def run_import(verbose: bool = True, job_id: Optional[str] = None) -> Dict[str, 
                     )
                     if success:
                         total_imported += 1
+                        # Run pipeline for BigQuery/Postgres
+                        run_pipeline_for_file(filepath, seat_id, verbose=verbose)
 
                 mark_as_read(service, message_id)
                 if verbose:

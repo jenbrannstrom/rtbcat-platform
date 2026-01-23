@@ -140,10 +140,14 @@ def ensure_table_exists(
     except NotFound:
         logger.info(f"Creating table {table_ref}")
 
-        table = bigquery.Table(table_ref, schema=RAW_FACTS_SCHEMA)
+        table = bigquery.Table(table_ref)
 
         # Configure partitioning and clustering
         table.time_partitioning = bigquery.TimePartitioning(
+            type_=bigquery.TimePartitioningType.DAY,
+            field="metric_date",
+        )
+        # table.time_partitioning_old = bigquery.TimePartitioning(
             type_=bigquery.TimePartitioningType.DAY,
             field="event_timestamp",
         )

@@ -123,6 +123,7 @@ SCHEMAS = {
 # Column name mappings from CSV headers to schema fields
 COLUMN_MAPPINGS = {
     "#Day": "metric_date",
+    "#Buyer account ID": "buyer_account_id",
     "Day": "metric_date",
     "Hour": "hour",
     "Country": "country",
@@ -182,7 +183,7 @@ def normalize_value(value: str, field_type: pa.DataType, buyer_id: Optional[str]
 
     if pa.types.is_date32(field_type):
         # Handle various date formats
-        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%Y%m%d"):
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%m/%d/%y", "%Y%m%d"):
             try:
                 return datetime.strptime(value, fmt).date()
             except ValueError:
