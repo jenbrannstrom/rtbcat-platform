@@ -272,6 +272,7 @@ PRECOMPUTE_REFRESH_SECRET=$PRECOMPUTE_REFRESH_SECRET
 PRECOMPUTE_MONITOR_SECRET=$PRECOMPUTE_MONITOR_SECRET
 PRECOMPUTE_REFRESH_DAYS=$PRECOMPUTE_REFRESH_DAYS
 PRECOMPUTE_REFRESH_MAX_AGE_HOURS=$PRECOMPUTE_REFRESH_MAX_AGE_HOURS
+OAUTH2_PROXY_ENABLED=true
 EOF
 
 chmod 600 /etc/catscan.env
@@ -576,7 +577,7 @@ Type=simple
 User=catscan
 EnvironmentFile=/etc/catscan.env
 WorkingDirectory=$APP_DIR
-ExecStart=/usr/bin/docker-compose -f docker-compose.gcp.yml up
+ExecStart=/usr/bin/docker-compose -f docker-compose.gcp.yml up -d
 ExecStop=/usr/bin/docker-compose -f docker-compose.gcp.yml down
 Restart=always
 RestartSec=10
