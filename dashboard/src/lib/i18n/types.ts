@@ -297,6 +297,8 @@ export interface Translations {
     spendAllTime: string;
     video: string;
     display: string;
+    displayImage: string;
+    displayHtml: string;
     native: string;
     generatingThumbnails: string;
     videoThumbnails: string;
@@ -325,6 +327,8 @@ export interface Translations {
     noCreativesFound: string;
     connectAccount: string;
     trySyncingOrSelect: string;
+    approved: string;
+    notApproved: string;
   };
 
   admin: {

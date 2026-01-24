@@ -9,6 +9,7 @@ export interface HtmlPreview {
   snippet: string | null;
   width: number | null;
   height: number | null;
+  thumbnail_url: string | null;
 }
 
 export interface ImagePreview {
@@ -46,6 +47,7 @@ export interface Creative {
   campaign_id: string | null;
   cluster_id: string | null;
   seat_name: string | null;
+  country: string | null;
   // Preview data
   video: VideoPreview | null;
   html: HtmlPreview | null;

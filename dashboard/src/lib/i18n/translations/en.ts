@@ -296,6 +296,8 @@ export const en: Translations = {
     spendAllTime: 'Spend (All Time)',
     video: 'Video',
     display: 'Display',
+    displayImage: 'Display Img',
+    displayHtml: 'Display HTML',
     native: 'Native',
     generatingThumbnails: 'Generating thumbnails...',
     videoThumbnails: 'Video Thumbnails',
@@ -324,6 +326,8 @@ export const en: Translations = {
     noCreativesFound: 'No creatives found',
     connectAccount: 'Connect Account',
     trySyncingOrSelect: 'Try syncing this seat or select a different one',
+    approved: 'Approved',
+    notApproved: 'Not Approved',
   },
 
   admin: {
