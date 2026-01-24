@@ -277,12 +277,13 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                             <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Primary</span>
                           )}
                         </div>
-                        <div className="flex items-start gap-2">
+                        <div className="flex items-start gap-2 min-w-0">
                           <a
                             href={url.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-primary-600 hover:text-primary-700 text-[11px] font-mono break-all leading-relaxed"
+                            className="text-primary-600 hover:text-primary-700 text-[11px] font-mono truncate leading-relaxed flex-1 min-w-0"
+                            title={url.url}
                           >
                             {url.url}
                           </a>

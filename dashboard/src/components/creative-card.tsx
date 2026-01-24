@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, Play, Image, FileCode, Copy, Check, Info } from "lucide-react";
+import { ExternalLink, Play, Image, FileCode, Copy, Check, Info, AlertTriangle } from "lucide-react";
 import type { Creative, CreativePerformanceSummary } from "@/types/api";
 import { cn, getFormatColor, getFormatLabel, getStatusColor } from "@/lib/utils";
 import { getGoogleAuthBuyersUrl, extractBuyerIdFromName } from "@/lib/url-utils";
+import { isLanguageCountryMismatch } from "@/lib/language-country-map";
+import { getCreative } from "@/lib/api";
 
 interface CreativeCardProps {
   creative: Creative;
@@ -42,7 +44,7 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
     const thumbnailUrl = creative.video?.thumbnail_url;
 
     return (
-      <div className="relative h-24 bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center overflow-hidden group/thumb">
+      <div className="relative h-20 bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center overflow-hidden group/thumb">
         {thumbnailUrl ? (
           <>
             <img
@@ -92,7 +94,7 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
   if (creative.format === "NATIVE") {
     const imageUrl = creative.native?.logo?.url || creative.native?.image?.url;
     return (
-      <div className="relative h-24 bg-gradient-to-br from-green-50 to-green-100 flex items-center justify-center overflow-hidden">
+      <div className="relative h-20 bg-gradient-to-br from-green-50 to-green-100 flex items-center justify-center overflow-hidden">
         {imageUrl ? (
           <img
             src={imageUrl}
@@ -111,25 +113,50 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
 
   // For HTML/Display: show code icon placeholder
   if (creative.format === "HTML") {
+    const thumbnailUrl = creative.html?.thumbnail_url;
     return (
-      <div className="relative h-24 bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
-        <FileCode className="h-8 w-8 text-blue-400" />
+      <div className="relative h-20 bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
+        {thumbnailUrl ? (
+          <img
+            src={thumbnailUrl}
+            alt="HTML preview"
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
+          />
+        ) : (
+          <FileCode className="h-8 w-8 text-blue-400" />
+        )}
       </div>
     );
   }
 
   // For IMAGE/Display: show image icon placeholder (same styling as HTML)
   if (creative.format === "IMAGE") {
+    const candidateUrl = creative.display_url || creative.final_url || "";
+    const isImageUrl = /\.(png|jpe?g|gif|webp)(\?.*)?$/i.test(candidateUrl);
     return (
-      <div className="relative h-24 bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
-        <Image className="h-8 w-8 text-blue-400" />
+      <div className="relative h-20 bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
+        {isImageUrl ? (
+          <img
+            src={candidateUrl}
+            alt="Display preview"
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
+          />
+        ) : (
+          <Image className="h-8 w-8 text-blue-400" />
+        )}
       </div>
     );
   }
 
   // Default placeholder for unknown formats
   return (
-    <div className="h-24 bg-gray-100 flex items-center justify-center text-gray-400">
+    <div className="h-20 bg-gray-100 flex items-center justify-center text-gray-400">
       <Image className="h-8 w-8" />
     </div>
   );
@@ -137,7 +164,8 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
 
 export function CreativeCard({ creative, onPreview, performance, sortField }: CreativeCardProps) {
   const [copied, setCopied] = useState(false);
-  const hasPreview = creative.video || creative.html || creative.native;
+  const [htmlCopied, setHtmlCopied] = useState(false);
+  const hasPreview = creative.video || creative.html || creative.native || creative.format === "IMAGE";
   const hasData = performance?.has_data;
 
   // Get Google Console URL
@@ -151,8 +179,31 @@ export function CreativeCard({ creative, onPreview, performance, sortField }: Cr
     setTimeout(() => setCopied(false), 1500);
   };
 
+  const handleCopyHtml = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    let htmlSnippet = creative.html?.snippet;
+    if (!htmlSnippet) {
+      try {
+        const fullCreative = await getCreative(creative.id);
+        htmlSnippet = fullCreative.html?.snippet || null;
+      } catch {
+        htmlSnippet = null;
+      }
+    }
+    if (!htmlSnippet) return;
+    await navigator.clipboard.writeText(htmlSnippet);
+    setHtmlCopied(true);
+    setTimeout(() => setHtmlCopied(false), 1500);
+  };
+
   // Determine if we should show spend first (when sorted by spend)
   const showSpendFirst = sortField === "spend";
+  const languageLabel = creative.detected_language || creative.detected_language_code;
+  const countryLabel = creative.country;
+  const hasMismatch = isLanguageCountryMismatch(
+    creative.detected_language_code,
+    creative.country
+  );
 
   return (
     <div className="card overflow-hidden hover:shadow-md transition-shadow">
@@ -203,6 +254,15 @@ export function CreativeCard({ creative, onPreview, performance, sortField }: Cr
             >
               {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
             </button>
+            {creative.format === "HTML" && (
+              <button
+                onClick={handleCopyHtml}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded"
+                title="Copy HTML"
+              >
+                {htmlCopied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <FileCode className="h-3.5 w-3.5" />}
+              </button>
+            )}
             {googleUrl && (
               <a
                 href={googleUrl}
@@ -222,6 +282,19 @@ export function CreativeCard({ creative, onPreview, performance, sortField }: Cr
         {hasData && (
           <div className="mt-2 text-xs text-gray-500">
             {formatNumber(performance?.total_impressions)} imps · {formatCTR(performance?.ctr_percent)} CTR
+          </div>
+        )}
+
+        {(countryLabel || languageLabel || hasMismatch) && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+            {countryLabel && <span>GEO: {countryLabel}</span>}
+            {languageLabel && <span>Lang: {languageLabel}</span>}
+            {hasMismatch && (
+              <span className="inline-flex items-center gap-1 text-red-600">
+                <AlertTriangle className="h-3 w-3" />
+                Mismatch
+              </span>
+            )}
           </div>
         )}
 

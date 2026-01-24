@@ -71,7 +71,7 @@ function calculateTiers(
 }
 
 // Virtual scrolling constants
-const CARD_HEIGHT = 380;
+const CARD_HEIGHT = 320;
 const GAP = 16;
 
 // Format filters - map API formats to display labels
@@ -79,7 +79,8 @@ const GAP = 16;
 // Labels will be translated in the component
 const FORMAT_FILTER_VALUES: { value: string; formats: string[] }[] = [
   { value: "VIDEO", formats: ["VIDEO"] },
-  { value: "DISPLAY", formats: ["HTML", "IMAGE"] },
+  { value: "DISPLAY_IMAGE", formats: ["IMAGE"] },
+  { value: "DISPLAY_HTML", formats: ["HTML"] },
   { value: "NATIVE", formats: ["NATIVE"] },
 ];
 const COLUMNS = 4; // Fixed 4 columns for simplicity
@@ -324,6 +325,7 @@ function CreativesContent() {
   const [previewCreative, setPreviewCreative] = useState<Creative | null>(null);
   const [sortBy, setSortBy] = useState<PerformancePeriod | "none">("none");
   const [tierFilter, setTierFilter] = useState<PerformanceTier | "all">("all");
+  const [approvalFilter, setApprovalFilter] = useState<"all" | "approved" | "not_approved">("all");
 
   const {
     data: creatives,
@@ -339,6 +341,15 @@ function CreativesContent() {
     queryKey: ["sizes"],
     queryFn: getSizes,
   });
+
+  const approvedCount = useMemo(
+    () => creatives?.filter((c) => c.approval_status === "APPROVED").length ?? 0,
+    [creatives]
+  );
+  const notApprovedCount = useMemo(
+    () => creatives?.filter((c) => c.approval_status !== "APPROVED").length ?? 0,
+    [creatives]
+  );
 
   // Fetch performance data when sorting by spend
   const {
@@ -360,6 +371,16 @@ function CreativesContent() {
   });
 
   const performanceData = performanceResponse?.performance;
+
+  const { data: previewPerformanceResponse } = useQuery({
+    queryKey: ["preview-performance", previewCreative?.id],
+    queryFn: () => {
+      if (!previewCreative) return null;
+      return getBatchPerformance([previewCreative.id], "30d");
+    },
+    enabled: !!previewCreative && !performanceData?.[previewCreative.id],
+    staleTime: 60000,
+  });
 
   // Calculate tier assignments based on spend percentiles
   const tierAssignments = useMemo(() => {
@@ -391,6 +412,7 @@ function CreativesContent() {
     setSelectedSizes(new Set());
     setSearch("");
     setTierFilter("all");
+    setApprovalFilter("all");
   };
 
   // Filter and sort creatives - MUST be before early returns (hooks order)
@@ -430,6 +452,14 @@ function CreativesContent() {
         }
       }
 
+      // Approval filter
+      if (approvalFilter === "approved" && c.approval_status !== "APPROVED") {
+        return false;
+      }
+      if (approvalFilter === "not_approved" && c.approval_status === "APPROVED") {
+        return false;
+      }
+
       // Text search
       if (search) {
         const searchLower = search.toLowerCase();
@@ -456,9 +486,14 @@ function CreativesContent() {
     }
 
     return result;
-  }, [creatives, selectedFormats, selectedSizes, search, sortBy, performanceData, tierFilter, tierAssignments]);
+  }, [creatives, selectedFormats, selectedSizes, search, sortBy, performanceData, tierFilter, tierAssignments, approvalFilter]);
 
-  const hasActiveFilters = selectedFormats.size > 0 || selectedSizes.size > 0 || search || tierFilter !== "all";
+  const hasActiveFilters =
+    selectedFormats.size > 0 ||
+    selectedSizes.size > 0 ||
+    search ||
+    tierFilter !== "all" ||
+    approvalFilter !== "all";
 
   // Early returns AFTER all hooks
   if (isLoading) {
@@ -522,10 +557,37 @@ function CreativesContent() {
               )}
             >
               {filter.value === 'VIDEO' ? t.creatives.video :
-               filter.value === 'DISPLAY' ? t.creatives.display :
+               filter.value === 'DISPLAY_IMAGE' ? t.creatives.displayImage :
+               filter.value === 'DISPLAY_HTML' ? t.creatives.displayHtml :
                t.creatives.native}
             </button>
           ))}
+        </div>
+
+        {/* Approval Filters */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setApprovalFilter(approvalFilter === "approved" ? "all" : "approved")}
+            className={cn(
+              "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+              approvalFilter === "approved"
+                ? "bg-green-600 text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            )}
+          >
+            {t.creatives.approved} ({approvedCount})
+          </button>
+          <button
+            onClick={() => setApprovalFilter(approvalFilter === "not_approved" ? "all" : "not_approved")}
+            className={cn(
+              "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+              approvalFilter === "not_approved"
+                ? "bg-red-600 text-white"
+                : "bg-gray-100 text-red-600 hover:bg-red-100"
+            )}
+          >
+            {t.creatives.notApproved} ({notApprovedCount})
+          </button>
         </div>
 
         {/* Tier Filter - only show when performance data is available */}
@@ -644,7 +706,10 @@ function CreativesContent() {
       {previewCreative && (
         <PreviewModal
           creative={previewCreative}
-          performance={performanceData?.[previewCreative.id]}
+          performance={
+            performanceData?.[previewCreative.id] ||
+            previewPerformanceResponse?.performance?.[previewCreative.id]
+          }
           onClose={() => setPreviewCreative(null)}
         />
       )}
