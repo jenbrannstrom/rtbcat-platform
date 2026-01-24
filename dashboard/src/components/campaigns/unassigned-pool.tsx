@@ -19,9 +19,16 @@ interface UnassignedPoolProps {
   creatives: Map<string, Creative>;
   selectedIds: Set<string>;
   onCreativeSelect: (id: string, event?: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean }) => void;
+  onOpenPreview?: (id: string) => void;
 }
 
-export function UnassignedPool({ creativeIds, creatives, selectedIds, onCreativeSelect }: UnassignedPoolProps) {
+export function UnassignedPool({
+  creativeIds,
+  creatives,
+  selectedIds,
+  onCreativeSelect,
+  onOpenPreview,
+}: UnassignedPoolProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [openPopupId, setOpenPopupId] = useState<string | null>(null);
 
@@ -77,6 +84,7 @@ export function UnassignedPool({ creativeIds, creatives, selectedIds, onCreative
                   isPopupOpen={openPopupId === String(creative.id)}
                   onSelect={onCreativeSelect}
                   onTogglePopup={handleTogglePopup}
+                  onOpenPreview={onOpenPreview}
                 />
               </div>
             ))}

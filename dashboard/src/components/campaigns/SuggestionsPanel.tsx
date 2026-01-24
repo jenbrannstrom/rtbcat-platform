@@ -46,13 +46,16 @@ export function SuggestionsPanel({
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {(showAllSuggestions ? suggestions : suggestions.slice(0, 9)).map((suggestion, index) => {
-          const isCreated = createdSuggestions.has(suggestion.suggested_name);
-          const isApplying = applyingId === suggestion.suggested_name;
+          const suggestionKey = suggestion.suggested_name ||
+            suggestion.domain ||
+            suggestion.creative_ids.join(',');
+          const isCreated = createdSuggestions.has(suggestionKey);
+          const isApplying = applyingId === suggestionKey;
           const displayName = suggestion.suggested_name || generateClusterName(suggestion.domain);
 
           return (
             <div
-              key={`${index}-${suggestion.suggested_name}`}
+              key={`${index}-${suggestionKey}`}
               className={`border rounded-xl p-4 ${isCreated ? 'bg-green-50 border-green-200' : 'bg-purple-50 border-purple-200'}`}
             >
               <div className="flex items-center justify-between mb-2">

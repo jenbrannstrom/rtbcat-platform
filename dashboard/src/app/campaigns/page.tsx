@@ -64,6 +64,7 @@ export default function CampaignsPage() {
   const [lastClickedId, setLastClickedId] = useState<string | null>(null);
   const [creativesMap, setCreativesMap] = useState<Map<string, Creative>>(new Map());
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [campaignError, setCampaignError] = useState<string | null>(null);
 
   // Page-level sort/filter state (Phase 23)
   const [pageSortField, setPageSortField] = useState<SortField>('spend');
@@ -139,9 +140,14 @@ export default function CampaignsPage() {
   const createMutation = useMutation({
     mutationFn: createCampaign,
     onSuccess: (_, variables) => {
+      setCampaignError(null);
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       queryClient.invalidateQueries({ queryKey: ['unclustered'] });
       // Don't reset autoClusterMutation - we want to keep showing suggestions
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Failed to create cluster';
+      setCampaignError(message);
     },
   });
 
@@ -285,7 +291,7 @@ export default function CampaignsPage() {
     // Get all IDs to move (could be multiple if multi-select)
     const idsToMove = draggedIds.length > 0 ? draggedIds : [active.id as string];
 
-    // Handle drop on "new-campaign" zone - create campaign with these items
+    // Handle drop on "new-campaign" zone - create cluster with these items
     if (targetClusterId === 'new-campaign') {
 
       // Remove from source clusters first
@@ -313,9 +319,9 @@ export default function CampaignsPage() {
         });
       }
 
-      // Create the new campaign with the items
+      // Create the new cluster with the items
       await createMutation.mutateAsync({
-        name: `New Campaign (${idsToMove.length})`,
+        name: `New Cluster (${idsToMove.length})`,
         creative_ids: idsToMove,
       });
 
@@ -392,15 +398,28 @@ export default function CampaignsPage() {
 
   // Create new cluster
   async function handleCreateCluster() {
-    await createMutation.mutateAsync({
-      name: 'New Campaign',
-      creative_ids: [],
-    });
+    try {
+      await createMutation.mutateAsync({
+        name: 'New Cluster',
+        creative_ids: [],
+      });
+    } catch {
+      // Error handled via mutation onError
+    }
   }
+
+  const getSuggestionKey = useCallback((suggestion: ClusterSuggestion) => {
+    return (
+      suggestion.suggested_name ||
+      suggestion.domain ||
+      suggestion.creative_ids.join(',')
+    );
+  }, []);
 
   // Apply suggestion - stay on page, mark as created
   async function handleApplySuggestion(suggestion: ClusterSuggestion) {
-    setApplyingId(suggestion.suggested_name);
+    const suggestionKey = getSuggestionKey(suggestion);
+    setApplyingId(suggestionKey);
     try {
       // Use the API-provided name (real app name) first, fall back to domain parsing
       const cleanName = suggestion.suggested_name || generateClusterName(suggestion.domain);
@@ -409,7 +428,7 @@ export default function CampaignsPage() {
         creative_ids: suggestion.creative_ids,
       });
       // Mark this suggestion as created
-      setCreatedSuggestions(prev => new Set(prev).add(suggestion.suggested_name));
+      setCreatedSuggestions(prev => new Set(prev).add(suggestionKey));
     } finally {
       setApplyingId(null);
     }
@@ -621,6 +640,12 @@ export default function CampaignsPage() {
         onShowIssuesOnlyChange={setShowIssuesOnly}
       />
 
+      {campaignError && (
+        <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-4 py-3 text-sm">
+          {campaignError}
+        </div>
+      )}
+
       <DndContext
         sensors={sensors}
         collisionDetection={pointerWithin}
@@ -655,6 +680,7 @@ export default function CampaignsPage() {
               creatives={creativesMap}
               selectedIds={selectedIds}
               onCreativeSelect={handleCreativeSelect}
+              onOpenPreview={handleOpenPreview}
             />
           </>
         ) : (
