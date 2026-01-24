@@ -170,7 +170,7 @@ export default function CampaignDetailPage() {
           className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Campaigns
+          Back to Creative Clusters
         </Link>
         <div className="text-center py-12">
           <p className="text-red-600">{error || "Campaign not found"}</p>
@@ -194,7 +194,7 @@ export default function CampaignDetailPage() {
           className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Campaigns
+          Back to Creative Clusters
         </Link>
 
         <div className="flex justify-between items-start">
