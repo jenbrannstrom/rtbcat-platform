@@ -39,12 +39,19 @@ async def create_pending_change(request: PendingChangeCreate):
         'add_geo', 'remove_geo',
         'add_format', 'remove_format',
         'add_excluded_geo', 'remove_excluded_geo',
-        'change_state'
+        'add_publisher', 'remove_publisher',
+        'set_publisher_mode',
+        'change_state',
     ]
     if request.change_type not in valid_change_types:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid change_type. Must be one of: {', '.join(valid_change_types)}"
+        )
+    if request.change_type == "set_publisher_mode" and request.value not in {"INCLUSIVE", "EXCLUSIVE"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid publisher mode. Must be INCLUSIVE or EXCLUSIVE."
         )
 
     try:
@@ -271,6 +278,10 @@ async def get_pretargeting_config_detail(billing_id: str):
         excluded_geos = json.loads(config["excluded_geos"]) if config["excluded_geos"] else []
         included_formats = json.loads(config["included_formats"]) if config["included_formats"] else []
         included_platforms = json.loads(config["included_platforms"]) if config["included_platforms"] else []
+        raw_config = json.loads(config["raw_config"]) if config["raw_config"] else {}
+        publisher_targeting = raw_config.get("publisherTargeting") or {}
+        publisher_mode = publisher_targeting.get("targetingMode")
+        publisher_values = publisher_targeting.get("values") or []
 
         # Build pending changes list
         pending_changes = [
@@ -294,6 +305,8 @@ async def get_pretargeting_config_detail(billing_id: str):
         effective_sizes = set(included_sizes)
         effective_geos = set(included_geos)
         effective_formats = set(included_formats)
+        effective_publisher_mode = publisher_mode
+        effective_publishers = set(publisher_values)
 
         for change in pending_changes:
             if change.change_type == 'add_size':
@@ -308,10 +321,18 @@ async def get_pretargeting_config_detail(billing_id: str):
                 effective_formats.add(change.value)
             elif change.change_type == 'remove_format':
                 effective_formats.discard(change.value)
+            elif change.change_type == 'set_publisher_mode':
+                effective_publisher_mode = change.value
+                effective_publishers = set()
+            elif change.change_type == 'add_publisher':
+                effective_publishers.add(change.value)
+            elif change.change_type == 'remove_publisher':
+                effective_publishers.discard(change.value)
 
         return ConfigDetailResponse(
             config_id=config["config_id"],
             billing_id=billing_id,
+            bidder_id=config["bidder_id"],
             display_name=config["display_name"],
             user_name=config["user_name"],
             state=config["state"] or "ACTIVE",
@@ -320,11 +341,16 @@ async def get_pretargeting_config_detail(billing_id: str):
             included_sizes=included_sizes,
             included_geos=included_geos,
             excluded_geos=excluded_geos,
+            publisher_targeting_mode=publisher_mode,
+            publisher_targeting_values=publisher_values,
             synced_at=config["synced_at"],
             pending_changes=pending_changes,
+            pending_changes_count=len(pending_changes),
             effective_sizes=sorted(list(effective_sizes)),
             effective_geos=sorted(list(effective_geos)),
             effective_formats=sorted(list(effective_formats)),
+            effective_publisher_targeting_mode=effective_publisher_mode,
+            effective_publisher_targeting_values=sorted(list(effective_publishers)),
         )
 
     except HTTPException:

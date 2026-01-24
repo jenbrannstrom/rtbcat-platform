@@ -10,8 +10,8 @@
 - [ ] **Thumbnail placeholders** - Some creatives show placeholder instead of generated thumbnail (ffmpeg)
 - [ ] **FFmpeg missing on install** - Creatives tab fails to render video thumbnails until ffmpeg installed
 - [ ] **CSV import account mismatch** - Imports not linking to correct accounts
-- [ ] **Import Now button fails** - /import does not process queued Gmail reports
-- [ ] **Campaigns create action no-op** - Clicking "Create" on auto cluster does nothing
+- [x] **Import Now button fails** - /import does not process queued Gmail reports
+- [x] **Campaigns create action no-op** - Clicking "Create" on auto cluster does nothing
 - [ ] **Creative modal missing publisher data** - "No publisher data for this config" despite migrated tables
 - [ ] ~~**CI/CD pipeline** - Build images in GitHub Actions and deploy via docker pull (Artifact Registry)~~ **(Done)**
 
@@ -22,7 +22,8 @@
 ### Core Improvements
 - [ ] **MCP Integration** - Connect AI tools via Model Context Protocol
 - [ ] **Navigation restructure** - Cleaner sidebar organization with unified Settings
-- [ ] **Creative geo display** - Language detection and geo-mismatch alerts
+- [x] **Creative geo display (MVP)** - Serving countries + language mismatch alerts in UI
+- [ ] **Creative language detection (AI)** - Automated OCR/Gemini language detection pipeline
 
   **Requirements:**
   - Gemini API detects language on first creative sync (one-time analysis)
@@ -109,11 +110,11 @@
   3. Sync creatives, verify auto-analysis populates `language_analyzed_at`
 
 ### Pretargeting Management
-- [ ] **Pretargeting Write API** - Push config changes to Google (patch, activate, suspend)
-- [ ] **Rollback functionality** - Undo changes and restore previous snapshots
-- [ ] **Change history tracking** - Full audit trail of all pretargeting modifications
-- [ ] **Publisher allow/deny editor** - In-app whitelist/blacklist editing with per-config history and rollback
-- [ ] **Bulk edit UX** - Inline add/remove rows with validation and diff preview before save
+- [x] **Pretargeting Write API** - Push config changes to Google (patch, activate, suspend)
+- [x] **Rollback functionality** - Undo changes and restore previous snapshots
+- [x] **Change history tracking** - Full audit trail of all pretargeting modifications
+- [x] **Publisher allow/deny editor** - In-app whitelist/blacklist editing with per-config history and rollback
+- [x] **Bulk edit UX** - Inline add/remove rows with validation and diff preview before save
 
   **Publisher Targeting UX (per pretargeting config):**
   - Add a `Publishers` section under each config with mode toggle:
@@ -139,23 +140,23 @@
   - Rollback confirmation modal shows diff impact and warns about newer changes
 
 ### Creatives Tab UX
-- [ ] **Approval filter** - Approved count vs not approved count (red)
-- [ ] **Display subtype filter** - "Display image" and "Display HTML" split
-- [ ] **Card data** - Show GEO target, language, mismatch alert on card
-- [ ] **Display thumbnails** - Image thumbnails for display creatives on list view
-- [ ] **HTML copy** - Add "HTML" button to copy creative code
-- [ ] **Card layout density** - Reduce empty whitespace, improve compact layout
-- [ ] **Modal destination truncation** - Shorten long URLs with copy-to-clipboard
-- [ ] **Performance data sourcing** - Resolve "No performance data available" in modal
+- [x] **Approval filter** - Approved count vs not approved count (red)
+- [x] **Display subtype filter** - "Display image" and "Display HTML" split
+- [x] **Card data** - Show GEO target, language, mismatch alert on card
+- [x] **Display thumbnails** - Image thumbnails for display creatives on list view
+- [x] **HTML copy** - Add "HTML" button to copy creative code
+- [x] **Card layout density** - Reduce empty whitespace, improve compact layout
+- [x] **Modal destination truncation** - Shorten long URLs with copy-to-clipboard
+- [x] **Performance data sourcing** - Resolve "No performance data available" in modal
 
 ### Import Page
-- [ ] **Import Now reliability** - Fix Gmail import trigger and queue processing
-- [ ] **Remove redundant section** - Drop "5 Reports to Schedule in Authorized Buyers"
+- [x] **Import Now reliability** - Fix Gmail import trigger and queue processing
+- [x] **Remove redundant section** - Drop "5 Reports to Schedule in Authorized Buyers"
 
 ### Creative Clusters (Campaigns)
 - [ ] **Rename Campaigns → Creative Clusters** (UI + routes)
-- [ ] **Cluster create action** - "Create" in auto cluster should persist
-- [ ] **Thumbnail modal** - Clicking cluster thumbnail opens creative modal
+- [x] **Cluster create action** - "Create" in auto cluster should persist
+- [x] **Thumbnail modal** - Clicking cluster thumbnail opens creative modal
 
 ### Cosmetic Cleanup
 - [ ] Remove "Go To WASTE optimizer" link from `/settings/accounts`
