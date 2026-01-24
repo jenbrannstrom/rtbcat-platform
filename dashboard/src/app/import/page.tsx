@@ -14,7 +14,6 @@ import { ImportPreview } from "@/components/import-preview";
 import { ImportProgress } from "@/components/import-progress";
 import { ValidationErrors } from "@/components/validation-errors";
 import {
-  ExportInstructions,
   RequiredColumnsTable,
   TroubleshootingSection,
   ImportResultCard,
@@ -253,17 +252,6 @@ export default function ImportPage() {
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <ImportDropzone onFileSelect={handleFileSelect} maxSizeMB={500} />
           </div>
-
-          {/* Collapsible Instructions */}
-          <details className="bg-white rounded-lg border border-gray-200">
-            <summary className="p-4 cursor-pointer hover:bg-gray-50 font-medium text-gray-900 flex items-center justify-between">
-              <span>Setup: Create 5 scheduled reports in Authorized Buyers</span>
-              <ChevronDown className="h-5 w-5 text-gray-500" />
-            </summary>
-            <div className="p-4 pt-0 border-t border-gray-200">
-              <ExportInstructions />
-            </div>
-          </details>
 
           {/* Collapsible Required Columns */}
           <details className="bg-white rounded-lg border border-gray-200">
