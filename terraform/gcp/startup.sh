@@ -217,8 +217,12 @@ else
 fi
 
 # Fix permissions
-chmod 600 "$DATA_DIR/credentials/"*.json 2>/dev/null || true
-chown -R catscan:catscan "$DATA_DIR"
+# Container runs as UID 999 (rtbcat), so credentials must be readable by that UID
+# Make credentials readable (directory is protected)
+chmod 644 "$DATA_DIR/credentials/"*.json 2>/dev/null || true
+chown -R 999:999 "$DATA_DIR/credentials"
+# Keep the rest of DATA_DIR owned by catscan
+chown catscan:catscan "$DATA_DIR"
 
 # -----------------------------------------------------------------------------
 # 3. Setup SSH Deploy Key (for private GitHub repo)

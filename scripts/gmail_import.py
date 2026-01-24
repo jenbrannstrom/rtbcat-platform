@@ -35,9 +35,9 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 # Configuration
+# Only gmail.modify is required - CSV reports come as email attachments
 SCOPES = [
     'https://www.googleapis.com/auth/gmail.modify',
-    'https://www.googleapis.com/auth/devstorage.read_only',  # For GCS report downloads
 ]
 CATSCAN_DIR = Path.home() / '.catscan'
 CREDENTIALS_DIR = CATSCAN_DIR / 'credentials'
@@ -425,9 +425,9 @@ def get_gmail_service():
     """
     creds = None
 
-    # Load existing token
+    # Load existing token (don't enforce scopes - token may have extra scopes)
     if TOKEN_PATH.exists():
-        creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
+        creds = Credentials.from_authorized_user_file(str(TOKEN_PATH))
 
     # Refresh or get new token
     if not creds or not creds.valid:
