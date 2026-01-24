@@ -36,6 +36,14 @@ CREDENTIALS_DIR = CATSCAN_DIR / 'credentials'
 TOKEN_PATH = CREDENTIALS_DIR / 'gmail-token.json'
 CLIENT_SECRET_PATH = CREDENTIALS_DIR / 'gmail-oauth-client.json'
 
+def ensure_token_permissions() -> None:
+    """Ensure the Gmail token is readable by the app container."""
+    try:
+        if TOKEN_PATH.exists():
+            os.chmod(TOKEN_PATH, 0o644)
+    except OSError as exc:
+        print(f"⚠ Could not update token permissions: {exc}")
+
 
 def print_setup_instructions():
     """Print instructions for setting up Gmail OAuth."""
@@ -109,6 +117,7 @@ def check_existing_token():
                 print("⟳ Token expired, refreshing...")
                 creds.refresh(Request())
                 TOKEN_PATH.write_text(creds.to_json())
+                ensure_token_permissions()
                 print(f"✓ Token refreshed and saved")
                 return creds
         except Exception as e:
@@ -135,6 +144,7 @@ def authorize():
         # Save the token
         CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
         TOKEN_PATH.write_text(creds.to_json())
+        ensure_token_permissions()
 
         print()
         print(f"✓ Authorization successful!")

@@ -4,14 +4,12 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle,
-  XCircle,
   Loader2,
   AlertTriangle,
   Mail,
   RefreshCw,
   ExternalLink,
   X,
-  Calendar,
   Inbox,
   Search,
   Download,
@@ -383,153 +381,6 @@ export function GmailReportsTab() {
             </a>
           </div>
         )}
-      </div>
-
-      {/* Expected Reports */}
-      <div className="card p-6">
-        <h4 className="font-medium text-gray-900 mb-4">5 Reports to Schedule in Authorized Buyers</h4>
-        <p className="text-sm text-gray-600 mb-4">
-          Create these 5 scheduled reports in Google Authorized Buyers and set them to email you daily.
-          Google has field incompatibilities that prevent getting all data in one export.
-        </p>
-
-        <div className="space-y-4">
-          <ReportSpecCard
-            reportNumber={1}
-            title="catscan-bidsinauction"
-            filename="catscan-bidsinauction"
-            dimensions={["Day", "Country", "Creative ID", "Buyer account ID"]}
-            metrics={["Bids in auction", "Auctions won", "Bids", "Reached queries", "Impressions", "Spend (buyer currency)"]}
-            purpose="Creative-level performance with bid pipeline metrics by country"
-            color="blue"
-          />
-
-          <ReportSpecCard
-            reportNumber={2}
-            title="catscan-quality"
-            filename="catscan-quality"
-            dimensions={["Day", "Billing ID", "Creative ID", "Creative size", "Creative format"]}
-            metrics={["Reached queries", "Impressions", "Spend (buyer currency)", "Active view viewable", "Active view measurable"]}
-            purpose="Creative-level performance with viewability metrics and Billing ID"
-            color="purple"
-          />
-
-          <ReportSpecCard
-            reportNumber={3}
-            title="catscan-pipeline-geo"
-            filename="catscan-pipeline-geo"
-            dimensions={["Day", "Country", "Hour"]}
-            metrics={["Bid requests", "Inventory matches", "Successful responses", "Bids", "Bids in auction", "Auctions won", "Impressions", "Clicks"]}
-            purpose="Full bid pipeline by country and hour - shows traffic volume"
-            color="green"
-          />
-
-          <ReportSpecCard
-            reportNumber={4}
-            title="catscan-pipeline"
-            filename="catscan-pipeline"
-            dimensions={["Day", "Hour", "Country", "Publisher ID", "Publisher name"]}
-            metrics={["Bid requests", "Inventory matches", "Successful responses", "Reached queries", "Bids", "Bids in auction", "Auctions won", "Impressions", "Clicks"]}
-            purpose="Bid pipeline by publisher - shows which publishers send traffic"
-            color="orange"
-          />
-
-          <ReportSpecCard
-            reportNumber={5}
-            title="catscan-bid-filtering"
-            filename="catscan-bid-filtering"
-            dimensions={["Day", "Country", "Creative ID", "Bid filtering reason"]}
-            metrics={["Bids"]}
-            purpose="Understand why your bids are being filtered/rejected"
-            color="red"
-          />
-        </div>
-
-        <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-          <div className="flex items-start gap-2">
-            <Calendar className="h-5 w-5 text-amber-600 mt-0.5" />
-            <div className="text-sm text-amber-800">
-              <strong>Schedule Settings for All Reports:</strong>
-              <ul className="mt-2 space-y-1 list-disc list-inside">
-                <li>Date range: <strong>Yesterday</strong></li>
-                <li>Schedule: <strong>Daily</strong></li>
-                <li>File format: <strong>CSV</strong></li>
-                <li>Delivery: <strong>Email</strong> (to your Gmail)</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Report specification card for Gmail reports setup.
- */
-function ReportSpecCard({
-  reportNumber,
-  title,
-  filename,
-  dimensions,
-  metrics,
-  purpose,
-  color,
-  optional = false,
-}: {
-  reportNumber: number;
-  title: string;
-  filename: string;
-  dimensions: string[];
-  metrics: string[];
-  purpose: string;
-  color: "blue" | "purple" | "green" | "orange" | "red";
-  optional?: boolean;
-}) {
-  const colorClasses = {
-    blue: { bg: "bg-blue-100", text: "text-blue-800", badge: "bg-blue-100 text-blue-800" },
-    purple: { bg: "bg-purple-100", text: "text-purple-800", badge: "bg-purple-100 text-purple-800" },
-    green: { bg: "bg-green-100", text: "text-green-800", badge: "bg-green-100 text-green-800" },
-    orange: { bg: "bg-orange-100", text: "text-orange-800", badge: "bg-orange-100 text-orange-800" },
-    red: { bg: "bg-red-100", text: "text-red-800", badge: "bg-red-100 text-red-800" },
-  }[color];
-
-  return (
-    <div className={cn("border border-gray-200 rounded-lg p-4", optional && "bg-gray-50")}>
-      <div className="flex items-center gap-2 mb-3">
-        <span className={cn("text-xs font-bold px-2 py-1 rounded", colorClasses.badge)}>
-          Report {reportNumber}
-        </span>
-        <h5 className="font-semibold text-gray-900">{title}</h5>
-        {optional && <span className="text-xs text-gray-500">(optional)</span>}
-      </div>
-      <p className="text-sm text-gray-600 mb-3">{purpose}</p>
-
-      <div className="grid md:grid-cols-2 gap-4">
-        <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Dimensions (in order)</p>
-          <ol className="space-y-1 text-sm text-gray-700 list-decimal list-inside">
-            {dimensions.map((dim) => (
-              <li key={dim}>{dim}</li>
-            ))}
-          </ol>
-        </div>
-        <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Metrics</p>
-          <ul className="space-y-1 text-sm text-gray-700">
-            {metrics.map((metric) => (
-              <li key={metric} className="flex items-center gap-2">
-                <span className="text-green-600">✓</span> {metric}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-
-      <div className="mt-3 pt-3 border-t border-gray-200">
-        <p className="text-xs text-gray-500">
-          Save as: <code className="bg-gray-100 px-1 rounded">{filename}.csv</code>
-        </p>
       </div>
     </div>
   );
