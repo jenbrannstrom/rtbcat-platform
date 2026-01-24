@@ -119,7 +119,7 @@ export function SystemTab() {
             <p className="font-bold text-xl text-gray-900">{stats?.creative_count ?? 0}</p>
           </div>
           <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-500">Campaigns</p>
+            <p className="text-sm text-gray-500">Creative Clusters</p>
             <p className="font-bold text-xl text-gray-900">{stats?.campaign_count ?? 0}</p>
           </div>
           <div className="p-3 bg-gray-50 rounded-lg">
