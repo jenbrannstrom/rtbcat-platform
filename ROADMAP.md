@@ -17,7 +17,7 @@
 
 ---
 
-## Features - Free Tier
+## Features 
 
 ### Core Improvements
 - [ ] **MCP Integration** - Connect AI tools via Model Context Protocol
@@ -226,12 +226,7 @@
 - [ ] **AI/MCP optimization** - Let AI agents analyze and optimize via MCP tools
 - [ ] **Learning from outcomes** - Track before/after results to improve recommendation confidence
 
----
 
-## Features - Paid Tier
-
-- [ ] **Billing/subscription system** - Stripe integration for paid features
-- [ ] **Auto-optimization** - Hands-free pretargeting adjustments based on new creatives
 
 ---
 
@@ -280,8 +275,8 @@
 - [x] Gmail auto-import
 - [x] RTB bidstream visualization (renamed from rtb_funnel)
 - [x] Efficiency analysis with recommendations
-- [x] Campaign clustering
-- [x] Video thumbnail generation
+- [ ] Campaign clustering (faulty)
+- [ ] Video thumbnail generation (failing on the new SG VM)
 - [x] GCP deployment with OAuth2 authentication
 - [x] **UTC timezone standardization** - All CSV reports now require UTC timezone
 - [x] **Data quality flagging** - Legacy (pre-UTC) vs production data separation
