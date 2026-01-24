@@ -4,7 +4,9 @@
 
 **Production URL:** https://scan.rtb.cat (hosted on `catscan-production` VM)
 
-**Infrastructure:** GCE e2-micro (~$6/month) with SQLite database
+**Infrastructure:** GCE e2-medium + Cloud SQL PostgreSQL + BigQuery (see [Cost Summary](#cost-summary))
+
+**Data Pipeline:** Gmail CSV → GCS (Parquet) → BigQuery → PostgreSQL (see [pipeline_gmail_to_bq_to_pg.md](pipeline_gmail_to_bq_to_pg.md))
 
 ---
 
@@ -109,8 +111,8 @@ gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
 # View API logs
 gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- "sudo docker logs catscan-api --tail 50"
 
-# Query the database
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- "sudo sqlite3 /home/catscan/.catscan/catscan.db 'SELECT COUNT(*) FROM rtb_daily;'"
+# Query the database (via Cloud SQL Auth Proxy running on VM)
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- "psql \$POSTGRES_SERVING_DSN -c 'SELECT COUNT(*) FROM home_publisher_daily;'"
 ```
 
 ### VM Details
@@ -207,11 +209,16 @@ Credentials are now stored permanently in Secret Manager.
 
 | Component | Monthly Cost |
 |-----------|-------------|
-| GCE e2-micro | $0-6 (free tier eligible) |
-| 20GB SSD | $3.40 |
+| GCE e2-medium | ~$25 |
+| 30GB SSD (boot disk) | ~$5 |
+| Cloud SQL PostgreSQL (db-perf-optimized-N-2, REGIONAL) | ~$150-200 |
+| BigQuery (analytics) | ~$10-50 (usage-based) |
+| GCS (Parquet storage) | ~$5 |
 | Static IP | $0 (attached to running VM) |
 | SSL | $0 (Let's Encrypt) |
-| **Total** | **~$6/month** |
+| **Total** | **~$200-300/month** |
+
+> **Note:** Cloud SQL is the main cost driver. For lower environments, use `db-f1-micro` (~$10/month) or `db-g1-small` (~$25/month).
 
 ---
 
@@ -360,15 +367,26 @@ Cat-Scan uses ONE GCP project with:
 1. **OAuth2 Proxy** - for user authentication via Google (replaces custom auth)
 2. **Service Account** - for Authorized Buyers API (all AB accounts)
 3. **OAuth Client (Gmail)** - for Gmail API (report import)
-4. **Compute Engine VM** - to host the application
-5. **Nginx** - reverse proxy with SSL termination
-6. **Let's Encrypt** - free SSL certificates (auto-renewal)
+4. **Compute Engine VM** - to host the application (API + Dashboard containers)
+5. **Cloud SQL PostgreSQL** - serving database for dashboard UI (`home_*` tables)
+6. **BigQuery** - analytics storage (`raw_facts` table)
+7. **GCS** - Parquet file storage for data pipeline
+8. **Nginx** - reverse proxy with SSL termination
+9. **Let's Encrypt** - free SSL certificates (auto-renewal)
 
-**Architecture (with OAuth2 Proxy):**
+**Architecture:**
 ```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           DATA PIPELINE                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+Gmail (CSV) → GCS (Parquet) → BigQuery (raw_facts) → Postgres (home_* tables)
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           WEB TRAFFIC                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
 Internet → nginx (443/HTTPS) → OAuth2 Proxy (4180) → Dashboard (3000) + API (8000)
-                                    ↓
-                            Google OAuth
+                                    ↓                           ↓
+                            Google OAuth              Cloud SQL (via Auth Proxy)
                        (validates user login)
 ```
 
@@ -383,7 +401,7 @@ Credentials are stored in `~/.catscan/credentials/` (outside git).
 **Local development:**
 ```
 ~/.catscan/
-├── catscan.db                          # SQLite database
+├── catscan.db                          # SQLite database (local dev only)
 ├── credentials/
 │   ├── catscan-service-account.json    # AB API access (all accounts)
 │   ├── gmail-oauth-client.json         # Gmail OAuth client
@@ -395,21 +413,41 @@ Credentials are stored in `~/.catscan/credentials/` (outside git).
 **Production VM (catscan-production):**
 ```
 /home/catscan/.catscan/
-├── catscan.db                          # SQLite database (~1.3GB with data)
 ├── credentials/
 │   └── ...                             # Same structure as above
-├── imports/
+├── imports/                            # Downloaded CSVs (temporary)
 └── gmail_import_status.json
 
 /opt/catscan/
-├── data/catscan.db                     # Empty DB (schema only, NOT used)
 └── docker-compose.gcp.yml              # Docker deployment config
+
+# Database is NOT on the VM - it's in Cloud SQL PostgreSQL
+# Access via: psql $POSTGRES_SERVING_DSN
 ```
 
-> **Important:** On the production VM, you SSH as your user (e.g., `jen`) but the
-> database is under the `catscan` user's home directory. Use `sudo` to access it:
+**Cloud Resources (Production):**
+```
+Cloud SQL PostgreSQL (rtbcat_serving)
+├── home_publisher_daily                # Publisher aggregates
+├── home_geo_daily                      # Geo aggregates
+├── home_size_daily                     # Size aggregates
+├── home_seat_daily                     # Seat aggregates
+├── home_config_daily                   # Config aggregates
+└── precompute_refresh_log              # Refresh tracking
+
+BigQuery (rtbcat_analytics)
+└── raw_facts                           # Raw metric data (partitioned by day)
+
+GCS (rtbcat-raw-parquet-*)
+└── raw/YYYY/MM/DD/<buyer_id>/*.parquet # Parquet exports
+```
+
+> **Important:** Production uses Cloud SQL, not SQLite. To query:
 > ```bash
-> sudo sqlite3 /home/catscan/.catscan/catscan.db ".tables"
+> # SSH to VM first
+> gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
+> # Then query via the Cloud SQL Auth Proxy
+> psql $POSTGRES_SERVING_DSN -c "SELECT COUNT(*) FROM home_publisher_daily;"
 > ```
 
 ---
@@ -789,22 +827,27 @@ The manual steps below are **deprecated** and kept only for reference. They cont
 
 ### Quick Database Query (One-Liner)
 
+Production uses **Cloud SQL PostgreSQL**, accessed via the Cloud SQL Auth Proxy running on the VM.
+
 ```bash
-# List tables
-gcloud compute ssh catscan-production --zone=europe-west1-b -- \
-  "sudo sqlite3 /home/catscan/.catscan/catscan.db '.tables'"
+# List tables in PostgreSQL
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- \
+  "psql \$POSTGRES_SERVING_DSN -c '\\dt'"
 
 # Run any SQL query
-gcloud compute ssh catscan-production --zone=europe-west1-b -- \
-  "sudo sqlite3 /home/catscan/.catscan/catscan.db 'SELECT COUNT(*) FROM rtb_bidstream;'"
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- \
+  "psql \$POSTGRES_SERVING_DSN -c 'SELECT COUNT(*) FROM home_publisher_daily;'"
 
-# Or via Docker container (for Python queries)
-gcloud compute ssh catscan-production --zone=europe-west1-b -- \
-  "sudo docker exec catscan-api python -c \"import sqlite3; print(sqlite3.connect('/home/rtbcat/.catscan/catscan.db').execute('SELECT COUNT(*) FROM rtb_bidstream').fetchone()[0])\""
+# Check data freshness
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- \
+  "psql \$POSTGRES_SERVING_DSN -c 'SELECT MAX(metric_date) FROM home_publisher_daily;'"
+
+# Query BigQuery (for raw facts)
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- \
+  "bq query --use_legacy_sql=false 'SELECT COUNT(*) FROM rtbcat_analytics.raw_facts'"
 ```
 
-> **Note:** SSH as your user but DB is under `catscan` user, so use `sudo`.
-> Inside Docker, the path is `/home/rtbcat/.catscan/` (volume mounted from `/home/catscan/.catscan/`).
+> **Note:** The `$POSTGRES_SERVING_DSN` environment variable is set in `/etc/catscan.env` and contains the connection string for Cloud SQL via the Auth Proxy (localhost:5432).
 
 **Upgrade if needed:**
 ```bash
@@ -1001,7 +1044,9 @@ scp ~/.catscan/credentials/gmail-token.json \
 
 **IMPORTANT:** The API requires service accounts to be registered in the database, not just present as files.
 
-SSH to VM and run:
+> **Note:** This step is for **local development with SQLite**. In production, service account registration is handled via the Settings UI or Cloud SQL.
+
+SSH to VM and run (for local SQLite dev only):
 
 ```bash
 sqlite3 ~/.catscan/catscan.db "INSERT INTO service_accounts
@@ -1016,9 +1061,31 @@ sqlite3 ~/.catscan/catscan.db "INSERT INTO service_accounts
   );"
 ```
 
+For production (Cloud SQL):
+```bash
+# SSH to VM first
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
+
+# Then use psql
+psql $POSTGRES_SERVING_DSN -c "INSERT INTO service_accounts
+  (id, client_email, project_id, display_name, credentials_path, is_active)
+  VALUES (
+    'sa-1',
+    '<SERVICE_ACCOUNT_EMAIL>',
+    '<GCP_PROJECT_ID>',
+    'Cat-Scan API',
+    '/home/rtbcat/.catscan/credentials/google-credentials.json',
+    true
+  );"
+```
+
 Verify:
 ```bash
+# Local (SQLite)
 sqlite3 ~/.catscan/catscan.db "SELECT * FROM service_accounts;"
+
+# Production (Cloud SQL)
+psql $POSTGRES_SERVING_DSN -c "SELECT * FROM service_accounts;"
 ```
 
 ### Step 7: Production Services (Docker Compose)
@@ -1250,16 +1317,21 @@ sudo systemctl reload nginx
 
 If multi-user mode is enabled but no users exist:
 ```bash
-# Option A: Disable multi-user mode
-sqlite3 ~/.catscan/catscan.db "UPDATE system_settings SET value='0' WHERE key='multi_user_enabled';"
-sudo systemctl restart catscan-api
-
-# Option B: Create admin user (see "Fresh Install Workaround" below)
+# Production uses OAuth2 Proxy - this issue shouldn't occur
+# But if needed, update system_settings via Cloud SQL:
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- \
+  "psql \$POSTGRES_SERVING_DSN -c \"UPDATE system_settings SET value='0' WHERE key='multi_user_enabled';\""
+sudo docker restart catscan-api
 ```
+
+> **Note:** With OAuth2 Proxy enabled, authentication is handled externally and this issue should not occur.
 
 ---
 
-## Debugging Session Summary (2026-01-07)
+## Debugging Session Summary (2026-01-07) [HISTORICAL]
+
+> **Note:** This section documents a past debugging session on the **old SQLite-based deployment**.
+> The current production uses **Cloud SQL PostgreSQL**. These commands are kept for historical reference only.
 
 ### Issue: Blank Dashboard After Fresh Install
 
@@ -1267,7 +1339,7 @@ sudo systemctl restart catscan-api
 
 **Root Cause:** Multi-user authentication was enabled (`multi_user_enabled=1`) but no users existed in the database. The API returned "Authentication required" for all data endpoints.
 
-**Diagnosis steps:**
+**Diagnosis steps (old SQLite setup):**
 ```bash
 # Check if services are running
 ssh jen@104.199.91.219 "sudo systemctl status catscan-api catscan-dashboard"
@@ -1276,39 +1348,50 @@ ssh jen@104.199.91.219 "sudo systemctl status catscan-api catscan-dashboard"
 curl -s http://104.199.91.219:8000/stats
 # Returns: {"detail": "Authentication required. Please log in."}
 
-# Check database settings
+# Check database settings (OLD - SQLite)
 ssh jen@104.199.91.219 "sqlite3 ~/.catscan/catscan.db 'SELECT * FROM system_settings;'"
 # Shows: multi_user_enabled|1
 
-# Check if users exist
+# Check if users exist (OLD - SQLite)
 ssh jen@104.199.91.219 "sqlite3 ~/.catscan/catscan.db 'SELECT * FROM users;'"
 # Returns empty - no users!
 ```
 
-**Quick Fix (for development/testing):**
+**Current production diagnosis (Cloud SQL):**
 ```bash
-ssh jen@104.199.91.219 "sqlite3 ~/.catscan/catscan.db \"UPDATE system_settings SET value='0' WHERE key='multi_user_enabled';\""
-sudo systemctl restart catscan-api
+# SSH via IAP
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
+
+# Check system settings
+psql $POSTGRES_SERVING_DSN -c "SELECT * FROM system_settings;"
+
+# Check users (if using local auth instead of OAuth2 Proxy)
+psql $POSTGRES_SERVING_DSN -c "SELECT * FROM users;"
 ```
 
 **Production Fix:** Ensure OAuth2 Proxy is configured and `allowed_email_domains` is set.
 
 ### Data Verification
 
-After fixing auth, verified data pipeline is working:
-
+**Current production (Cloud SQL + BigQuery):**
 ```bash
-# Check database has data
-sqlite3 ~/.catscan/catscan.db "SELECT COUNT(*) FROM rtb_daily;"
-# Result: 46,346 rows
+# SSH to VM first
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
+
+# Check Cloud SQL has data
+psql $POSTGRES_SERVING_DSN -c "SELECT COUNT(*) FROM home_publisher_daily;"
+
+# Check BigQuery raw facts
+bq query --use_legacy_sql=false "SELECT COUNT(*) FROM rtbcat_analytics.raw_facts"
+
+# Check data freshness
+psql $POSTGRES_SERVING_DSN -c "SELECT MAX(metric_date) FROM home_publisher_daily;"
+
+# Check precompute refresh log
+psql $POSTGRES_SERVING_DSN -c "SELECT * FROM precompute_refresh_log ORDER BY completed_at DESC LIMIT 5;"
 
 # Check Gmail import status
 cat ~/.catscan/gmail_import_status.json
-# Shows: 43 files imported successfully
-
-# Check imports folder
-ls ~/.catscan/imports/ | wc -l
-# Result: 1,232 CSV files
 ```
 
 ### SSH Connection Issues
@@ -1316,9 +1399,9 @@ ls ~/.catscan/imports/ | wc -l
 If SSH fails with "Connection closed by remote host":
 ```bash
 # Reset the VM (fixes systemd user session issues)
-gcloud compute instances reset catscan-prod --zone=europe-west1-b
+gcloud compute instances reset catscan-production --zone=europe-west1-b
 sleep 45
-ssh jen@104.199.91.219 "uptime"
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- "uptime"
 ```
 
 ---
