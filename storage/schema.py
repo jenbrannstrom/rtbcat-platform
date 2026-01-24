@@ -1034,6 +1034,8 @@ MIGRATIONS = [
         included_geos TEXT,
         excluded_geos TEXT,
         state TEXT,
+        publisher_targeting_mode TEXT,
+        publisher_targeting_values TEXT,
         total_impressions INTEGER DEFAULT 0,
         total_clicks INTEGER DEFAULT 0,
         total_spend_usd REAL DEFAULT 0,
@@ -1118,4 +1120,8 @@ MIGRATIONS = [
 
     # OS targeting for pretargeting configs
     "ALTER TABLE pretargeting_configs ADD COLUMN included_operating_systems TEXT",
+
+    # Publisher targeting snapshots
+    "ALTER TABLE pretargeting_snapshots ADD COLUMN publisher_targeting_mode TEXT",
+    "ALTER TABLE pretargeting_snapshots ADD COLUMN publisher_targeting_values TEXT",
 ]
