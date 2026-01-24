@@ -34,9 +34,12 @@ export function CountrySection({ creativeId, detectedLanguage, detectedLanguageC
   if (isLoading) {
     return (
       <div className="bg-gray-50 rounded-lg p-3">
-        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-          Country Targeting
+        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+          Targeting / GEO
         </h4>
+        <p className="text-[11px] text-gray-400 mb-2">
+          Serving countries from performance CSV imports
+        </p>
         <div className="flex items-center gap-2 text-sm text-gray-400">
           <Loader2 className="h-3 w-3 animate-spin" />
           Loading...
@@ -48,9 +51,12 @@ export function CountrySection({ creativeId, detectedLanguage, detectedLanguageC
   if (error || !countryData) {
     return (
       <div className="bg-gray-50 rounded-lg p-3">
-        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-          Country Targeting
+        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+          Targeting / GEO
         </h4>
+        <p className="text-[11px] text-gray-400 mb-2">
+          Serving countries from performance CSV imports
+        </p>
         <p className="text-sm text-gray-400 italic">No country data available</p>
       </div>
     );
@@ -59,9 +65,12 @@ export function CountrySection({ creativeId, detectedLanguage, detectedLanguageC
   if (countryData.countries.length === 0) {
     return (
       <div className="bg-gray-50 rounded-lg p-3">
-        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-          Country Targeting
+        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+          Targeting / GEO
         </h4>
+        <p className="text-[11px] text-gray-400 mb-2">
+          Serving countries from performance CSV imports
+        </p>
         <p className="text-sm text-gray-400 italic">No performance data by country</p>
       </div>
     );
@@ -84,9 +93,12 @@ export function CountrySection({ creativeId, detectedLanguage, detectedLanguageC
 
   return (
     <div className="bg-gray-50 rounded-lg p-3">
-      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-        shown in: ({countryData.total_countries})
+      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+        Targeting / GEO ({countryData.total_countries})
       </h4>
+      <p className="text-[11px] text-gray-400 mb-2">
+        Serving countries from performance CSV imports
+      </p>
 
       {/* Language Match Status */}
       {detectedLanguage && (
