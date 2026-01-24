@@ -58,6 +58,10 @@ gcloud config set project catscan-prod-202601
 **Step 4: Connect to the VM**
 
 ```bash
+# SG instance (primary)
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap
+
+# EU instance (legacy)
 gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
 ```
 
@@ -80,7 +84,9 @@ Keys are stored at `~/.ssh/google_compute_engine` but you never need to touch th
 2. Install gcloud CLI on any computer
 3. Run `gcloud auth login` and sign in
 4. Run `gcloud config set project catscan-prod-202601`
-5. Run `gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap`
+5. Connect to VMs:
+   - **SG (primary):** `gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap`
+   - **EU (legacy):** `gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap`
 6. You're in the VM
 
 ### Granting Access to Other People
@@ -100,30 +106,49 @@ gcloud projects add-iam-policy-binding catscan-prod-202601 \
 ### Running Commands Without Interactive Session
 
 ```bash
+# SG instance (primary)
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- "your command here"
+
+# EU instance (legacy)
 gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- "your command here"
 ```
 
-Examples:
+Examples (using SG instance):
 ```bash
 # Check running containers
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- "sudo docker ps"
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- "sudo docker ps"
 
 # View API logs
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- "sudo docker logs catscan-api --tail 50"
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- "sudo docker logs catscan-api --tail 50"
 
 # Query the database (via Cloud SQL Auth Proxy running on VM)
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- "psql \$POSTGRES_SERVING_DSN -c 'SELECT COUNT(*) FROM home_publisher_daily;'"
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- "psql \$POSTGRES_SERVING_DSN -c 'SELECT COUNT(*) FROM home_publisher_daily;'"
 ```
 
 ### VM Details
 
+**Production runs on TWO instances** (EU legacy + SG primary):
+
+| Property | EU (Legacy) | SG (Primary) |
+|----------|-------------|--------------|
+| VM Name | `catscan-production` | `catscan-production-sg` |
+| Zone | `europe-west1-b` | `asia-southeast1-b` |
+| External IP | `35.205.211.184` | `34.143.222.60` |
+| Domain | `scan.rtb.cat` | (same, via DNS) |
+
 | Property | Value |
 |----------|-------|
-| VM Name | `catscan-production` |
-| Zone | `europe-west1-b` |
-| External IP | `35.205.211.184` |
 | Project ID | `catscan-prod-202601` |
 | GCP Owner Account | `billing@amazingdo.com` |
+
+**SSH Commands:**
+```bash
+# SG instance (primary)
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap
+
+# EU instance (legacy)
+gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
+```
 
 ### Firewall Rules (What's Open)
 
@@ -306,10 +331,11 @@ Wait for GitHub Actions to complete (~3 minutes).
 
 ### Step 2: Pull and restart on VM
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+# SG instance (primary)
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- \
   "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml pull"
 
-gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- \
   "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml up -d"
 ```
 
@@ -317,11 +343,11 @@ gcloud compute ssh catscan-production --zone=europe-west1-b -- \
 
 ```bash
 # Check containers
-gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- \
   "sudo docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'"
 
 # Check API health (internal)
-gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- \
   "curl -s http://localhost:8000/health"
 ```
 
@@ -335,7 +361,7 @@ gcloud artifacts docker tags list \
   europe-west1-docker.pkg.dev/catscan-prod-202601/catscan/catscan-api
 
 # Deploy specific version
-gcloud compute ssh catscan-production --zone=europe-west1-b -- \
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- \
   "cd /opt/catscan && IMAGE_TAG=sha-abc1234 sudo docker-compose -f docker-compose.gcp.yml pull && \
    IMAGE_TAG=sha-abc1234 sudo docker-compose -f docker-compose.gcp.yml up -d"
 ```
@@ -831,19 +857,19 @@ Production uses **Cloud SQL PostgreSQL**, accessed via the Cloud SQL Auth Proxy 
 
 ```bash
 # List tables in PostgreSQL
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- \
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- \
   "psql \$POSTGRES_SERVING_DSN -c '\\dt'"
 
 # Run any SQL query
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- \
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- \
   "psql \$POSTGRES_SERVING_DSN -c 'SELECT COUNT(*) FROM home_publisher_daily;'"
 
 # Check data freshness
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- \
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- \
   "psql \$POSTGRES_SERVING_DSN -c 'SELECT MAX(metric_date) FROM home_publisher_daily;'"
 
 # Query BigQuery (for raw facts)
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- \
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- \
   "bq query --use_legacy_sql=false 'SELECT COUNT(*) FROM rtbcat_analytics.raw_facts'"
 ```
 
@@ -851,9 +877,9 @@ gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
 
 **Upgrade if needed:**
 ```bash
-# If slow, upgrade to e2-small (2GB RAM, ~$13/month)
-gcloud compute instances set-machine-type catscan-production \
-  --machine-type=e2-small --zone=europe-west1-b
+# If slow, upgrade to e2-medium (4GB RAM)
+gcloud compute instances set-machine-type catscan-production-sg \
+  --machine-type=e2-medium --zone=asia-southeast1-b
 ```
 
 **Note:** The old project was `augmented-vim-427407-t8` with IP `104.199.91.219`.
@@ -1319,7 +1345,7 @@ If multi-user mode is enabled but no users exist:
 ```bash
 # Production uses OAuth2 Proxy - this issue shouldn't occur
 # But if needed, update system_settings via Cloud SQL:
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- \
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- \
   "psql \$POSTGRES_SERVING_DSN -c \"UPDATE system_settings SET value='0' WHERE key='multi_user_enabled';\""
 sudo docker restart catscan-api
 ```
@@ -1359,8 +1385,8 @@ ssh jen@104.199.91.219 "sqlite3 ~/.catscan/catscan.db 'SELECT * FROM users;'"
 
 **Current production diagnosis (Cloud SQL):**
 ```bash
-# SSH via IAP
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
+# SSH via IAP (SG instance)
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap
 
 # Check system settings
 psql $POSTGRES_SERVING_DSN -c "SELECT * FROM system_settings;"
@@ -1375,8 +1401,8 @@ psql $POSTGRES_SERVING_DSN -c "SELECT * FROM users;"
 
 **Current production (Cloud SQL + BigQuery):**
 ```bash
-# SSH to VM first
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
+# SSH to VM first (SG instance)
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap
 
 # Check Cloud SQL has data
 psql $POSTGRES_SERVING_DSN -c "SELECT COUNT(*) FROM home_publisher_daily;"
@@ -1399,9 +1425,9 @@ cat ~/.catscan/gmail_import_status.json
 If SSH fails with "Connection closed by remote host":
 ```bash
 # Reset the VM (fixes systemd user session issues)
-gcloud compute instances reset catscan-production --zone=europe-west1-b
+gcloud compute instances reset catscan-production-sg --zone=asia-southeast1-b
 sleep 45
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap -- "uptime"
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- "uptime"
 ```
 
 ---
