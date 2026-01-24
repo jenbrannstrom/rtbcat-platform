@@ -87,7 +87,9 @@ class PretargetingHistoryResponse(BaseModel):
 class SnapshotCreate(BaseModel):
     """Request to create a pretargeting config snapshot."""
     billing_id: str = Field(..., description="Billing ID of the pretargeting config")
-    description: Optional[str] = Field(None, description="Optional description")
+    snapshot_name: Optional[str] = Field(None, description="Snapshot name")
+    notes: Optional[str] = Field(None, description="Optional snapshot notes")
+    snapshot_type: Optional[str] = Field(None, description="manual, auto, before_change")
     created_by: Optional[str] = Field(None, description="User who created the snapshot")
 
 
@@ -95,17 +97,24 @@ class SnapshotResponse(BaseModel):
     """Response model for a pretargeting config snapshot."""
     id: int
     billing_id: str
-    config_id: str
-    bidder_id: str
-    snapshot_data: dict
-    description: Optional[str] = None
+    snapshot_name: Optional[str] = None
+    snapshot_type: Optional[str] = None
+    state: Optional[str] = None
+    included_formats: Optional[str] = None
+    included_platforms: Optional[str] = None
+    included_sizes: Optional[str] = None
+    included_geos: Optional[str] = None
+    excluded_geos: Optional[str] = None
+    total_impressions: Optional[int] = None
+    total_clicks: Optional[int] = None
+    total_spend_usd: Optional[float] = None
+    days_tracked: Optional[int] = None
+    avg_daily_impressions: Optional[float] = None
+    avg_daily_spend_usd: Optional[float] = None
+    ctr_pct: Optional[float] = None
+    cpm_usd: Optional[float] = None
     created_at: str
-    created_by: Optional[str] = None
-    # Summary fields
-    included_formats: Optional[list[str]] = None
-    included_geos_count: int = 0
-    excluded_geos_count: int = 0
-    included_sizes_count: int = 0
+    notes: Optional[str] = None
 
 
 class ComparisonCreate(BaseModel):
@@ -140,9 +149,10 @@ class PendingChangeCreate(BaseModel):
     """Request to create a pending change."""
     billing_id: str
     change_type: str  # 'add_geo', 'remove_geo', 'add_size', 'remove_size', etc.
-    field: str  # 'included_geos', 'excluded_geos', 'included_sizes', etc.
-    values: list[str]  # List of values to add/remove
+    field_name: str  # 'included_geos', 'excluded_geos', 'publisher_targeting', etc.
+    value: str  # Single value to add/remove/update
     reason: Optional[str] = None
+    estimated_qps_impact: Optional[int] = None
     created_by: Optional[str] = None
 
 
@@ -152,9 +162,10 @@ class PendingChangeResponse(BaseModel):
     billing_id: str
     config_id: Optional[str] = None
     change_type: str
-    field: str
-    values: list[str]
+    field_name: str
+    value: str
     reason: Optional[str] = None
+    estimated_qps_impact: Optional[int] = None
     status: str  # 'pending', 'applied', 'cancelled'
     created_at: str
     created_by: Optional[str] = None
@@ -175,9 +186,16 @@ class ConfigDetailResponse(BaseModel):
     included_sizes: list[str] = []
     included_geos: list[str] = []
     excluded_geos: list[str] = []
+    publisher_targeting_mode: Optional[str] = None
+    publisher_targeting_values: list[str] = []
     # Pending changes summary
     pending_changes_count: int = 0
     pending_changes: list[PendingChangeResponse] = []
+    effective_sizes: list[str] = []
+    effective_geos: list[str] = []
+    effective_formats: list[str] = []
+    effective_publisher_targeting_mode: Optional[str] = None
+    effective_publisher_targeting_values: list[str] = []
     # Recent history
     recent_history: list[PretargetingHistoryResponse] = []
     # Metadata
@@ -192,24 +210,25 @@ class ConfigDetailResponse(BaseModel):
 class ApplyChangeRequest(BaseModel):
     """Request to apply a pending change."""
     change_id: int
-    apply_to_api: bool = True  # If true, push to Google API
+    dry_run: bool = True  # If true, preview without applying
 
 
 class ApplyChangeResponse(BaseModel):
     """Response for applying a change."""
     status: str
     change_id: int
-    applied_to_api: bool
+    dry_run: bool
     message: str
-    api_response: Optional[dict] = None
+    updated_config: Optional[PretargetingConfigResponse] = None
 
 
 class ApplyAllResponse(BaseModel):
     """Response for applying all pending changes."""
     status: str
+    dry_run: bool
     changes_applied: int
     changes_failed: int
-    details: list[dict]
+    message: str
 
 
 class SuspendActivateResponse(BaseModel):
@@ -223,13 +242,13 @@ class SuspendActivateResponse(BaseModel):
 class RollbackRequest(BaseModel):
     """Request to rollback to a snapshot."""
     snapshot_id: int
-    apply_to_api: bool = True
+    dry_run: bool = True
 
 
 class RollbackResponse(BaseModel):
     """Response for rollback operation."""
     status: str
-    billing_id: str
+    dry_run: bool
     snapshot_id: int
     changes_made: list[str]
-    applied_to_api: bool
+    message: str

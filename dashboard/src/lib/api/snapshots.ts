@@ -70,6 +70,26 @@ export async function getSnapshots(params?: {
   );
 }
 
+export async function rollbackSnapshot(params: {
+  billing_id: string;
+  snapshot_id: number;
+  dry_run?: boolean;
+}): Promise<{
+  status: string;
+  dry_run: boolean;
+  snapshot_id: number;
+  changes_made: string[];
+  message: string;
+}> {
+  return fetchApi(`/settings/pretargeting/${encodeURIComponent(params.billing_id)}/rollback`, {
+    method: "POST",
+    body: JSON.stringify({
+      snapshot_id: params.snapshot_id,
+      dry_run: params.dry_run ?? true,
+    }),
+  });
+}
+
 export async function createComparison(params: {
   billing_id: string;
   comparison_name: string;

@@ -13,9 +13,11 @@ import {
   suspendPretargeting,
   activatePretargeting,
   syncPretargetingConfigs,
-  type ConfigDetail,
+  getSnapshots,
+  rollbackSnapshot,
   type PendingChange,
   type PretargetingHistoryItem,
+  type PretargetingSnapshot,
 } from '@/lib/api';
 import {
   Settings,
@@ -27,12 +29,14 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Download,
   History,
   Globe,
   LayoutGrid,
   FileType,
+  Shield,
+  Search,
   Ban,
-  ExternalLink,
   Upload,
   Pause,
   Play,
@@ -55,6 +59,34 @@ function formatDate(dateStr: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+const PUBLISHER_MODE_LABELS: Record<string, string> = {
+  EXCLUSIVE: 'Blacklist',
+  INCLUSIVE: 'Whitelist',
+};
+
+function formatPublisherMode(mode: string | null | undefined): string {
+  if (!mode) return 'No publisher targeting';
+  return PUBLISHER_MODE_LABELS[mode] || mode;
+}
+
+function normalizePublisherId(value: string): string {
+  return value.trim();
+}
+
+function isValidPublisherId(value: string): boolean {
+  if (!value.includes('.')) return false;
+  return /^[a-zA-Z0-9][a-zA-Z0-9._-]*\.[a-zA-Z0-9._-]+$/.test(value);
+}
+
+function detectPublisherType(value: string): 'App' | 'Web' {
+  const parts = value.toLowerCase().split('.');
+  const appPrefixes = new Set(['com', 'net', 'org', 'io', 'co', 'app']);
+  if (parts.length >= 3 && appPrefixes.has(parts[0])) {
+    return 'App';
+  }
+  return 'Web';
 }
 
 // Pill component for displaying values with remove action
@@ -95,25 +127,60 @@ function ValuePill({
   );
 }
 
+function describePendingChange(change: PendingChange, publisherMode?: string | null): string {
+  const currentModeLabel = publisherMode === 'INCLUSIVE' ? 'Whitelist' : 'Blacklist';
+  const addLabel = publisherMode === 'INCLUSIVE' ? 'Add' : 'Block';
+  const removeLabel = publisherMode === 'INCLUSIVE' ? 'Remove' : 'Unblock';
+
+  switch (change.change_type) {
+    case 'add_size':
+      return `Add size: ${change.value}`;
+    case 'remove_size':
+      return `Remove size: ${change.value}`;
+    case 'add_geo':
+      return `Add geo: ${change.value}`;
+    case 'remove_geo':
+      return `Remove geo: ${change.value}`;
+    case 'add_format':
+      return `Add format: ${change.value}`;
+    case 'remove_format':
+      return `Remove format: ${change.value}`;
+    case 'add_excluded_geo':
+      return `Exclude geo: ${change.value}`;
+    case 'remove_excluded_geo':
+      return `Unexclude geo: ${change.value}`;
+    case 'add_publisher':
+      return `${addLabel}: ${change.value}`;
+    case 'remove_publisher':
+      return `${removeLabel}: ${change.value}`;
+    case 'set_publisher_mode':
+      return `Mode changed: ${currentModeLabel} → ${formatPublisherMode(change.value)}`;
+    default:
+      return `${change.change_type}: ${change.value}`;
+  }
+}
+
 // Pending change card
 function PendingChangeCard({
   change,
   onCancel,
   onMarkApplied,
+  publisherMode,
 }: {
   change: PendingChange;
   onCancel: () => void;
   onMarkApplied: () => void;
+  publisherMode?: string | null;
 }) {
   const isRemove = change.change_type.startsWith('remove_');
   const Icon = isRemove ? Minus : Plus;
+  const label = describePendingChange(change, publisherMode);
 
   return (
     <div className="flex items-center justify-between p-2 bg-yellow-50 border border-yellow-200 rounded text-sm">
       <div className="flex items-center gap-2">
         <Icon className={cn('h-4 w-4', isRemove ? 'text-red-500' : 'text-green-500')} />
-        <span className="font-medium">{change.value}</span>
-        <span className="text-gray-500">({change.field_name})</span>
+        <span className="font-medium">{label}</span>
         {change.reason && (
           <span className="text-xs text-gray-400 italic">- {change.reason}</span>
         )}
@@ -275,6 +342,428 @@ function TargetingSection({
   );
 }
 
+function PublisherTargetingSection({
+  baseMode,
+  publishers,
+  pendingAdds,
+  pendingRemoves,
+  pendingModeChange,
+  onAddPublisher,
+  onRemovePublisher,
+  onCancelPending,
+  onSetMode,
+  onShowHistory,
+  onBulkAdd,
+  onExportCsv,
+  disabled = false,
+}: {
+  baseMode: string | null | undefined;
+  publishers: string[];
+  pendingAdds: string[];
+  pendingRemoves: string[];
+  pendingModeChange: PendingChange | null;
+  onAddPublisher: (value: string) => void;
+  onRemovePublisher: (value: string) => void;
+  onCancelPending: (changeType: string, value: string) => void;
+  onSetMode: (mode: string) => void;
+  onShowHistory: () => void;
+  onBulkAdd: (values: string[]) => void;
+  onExportCsv: (values: string[]) => void;
+  disabled?: boolean;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [filter, setFilter] = useState('');
+  const [newPublisher, setNewPublisher] = useState('');
+  const [inputError, setInputError] = useState<string | null>(null);
+  const [showModeConfirm, setShowModeConfirm] = useState(false);
+  const [nextMode, setNextMode] = useState<string>('EXCLUSIVE');
+  const [showBulkImport, setShowBulkImport] = useState(false);
+  const [bulkInput, setBulkInput] = useState('');
+  const [bulkPreview, setBulkPreview] = useState<{
+    valid: string[];
+    duplicates: string[];
+    invalid: string[];
+  } | null>(null);
+
+  const pendingMode = pendingModeChange?.value || null;
+  const effectiveMode = pendingMode || baseMode || 'EXCLUSIVE';
+  const basePublishers = pendingMode ? [] : publishers;
+  const effectivePublishers = [
+    ...basePublishers.filter(value => !pendingRemoves.includes(value)),
+    ...pendingAdds.filter(value => !basePublishers.includes(value)),
+  ];
+
+  const filteredPublishers = effectivePublishers.filter((value) =>
+    value.toLowerCase().includes(filter.trim().toLowerCase())
+  );
+  const isWhitelist = effectiveMode === 'INCLUSIVE';
+  const modeLabel = formatPublisherMode(effectiveMode);
+  const statusLabel = isWhitelist ? 'Allowed' : 'Blocked';
+  const addLabel = isWhitelist ? 'Add' : 'Block';
+  const removeLabel = isWhitelist ? 'Remove' : 'Unblock';
+  const actionLabel = isWhitelist ? 'Add' : 'Block';
+
+  const handleAdd = () => {
+    const normalized = normalizePublisherId(newPublisher);
+    if (!normalized) return;
+    if (!isValidPublisherId(normalized)) {
+      setInputError('Invalid publisher ID format.');
+      return;
+    }
+    if (effectivePublishers.includes(normalized) || pendingAdds.includes(normalized)) {
+      setInputError('Publisher already in list.');
+      return;
+    }
+    setInputError(null);
+    onAddPublisher(normalized);
+    setNewPublisher('');
+  };
+
+  const handleModeRequest = (mode: string) => {
+    if (mode === effectiveMode) return;
+    setNextMode(mode);
+    setShowModeConfirm(true);
+  };
+
+  const confirmModeChange = () => {
+    setShowModeConfirm(false);
+    onSetMode(nextMode);
+  };
+
+  const parseBulkInput = () => {
+    const tokens = bulkInput
+      .split(/[\n,]/)
+      .map((item) => normalizePublisherId(item))
+      .filter(Boolean);
+    const valid: string[] = [];
+    const duplicates: string[] = [];
+    const invalid: string[] = [];
+
+    tokens.forEach((value) => {
+      if (!isValidPublisherId(value)) {
+        invalid.push(value);
+        return;
+      }
+      if (effectivePublishers.includes(value) || pendingAdds.includes(value)) {
+        duplicates.push(value);
+        return;
+      }
+      if (!valid.includes(value)) {
+        valid.push(value);
+      }
+    });
+
+    setBulkPreview({ valid, duplicates, invalid });
+  };
+
+  const handleBulkImport = () => {
+    if (!bulkPreview) return;
+    if (bulkPreview.valid.length === 0) return;
+    onBulkAdd(bulkPreview.valid);
+    setBulkInput('');
+    setBulkPreview(null);
+    setShowBulkImport(false);
+  };
+
+  const handleExport = () => {
+    onExportCsv(effectivePublishers);
+  };
+
+  const summaryLabel = effectivePublishers.length === 0 && !pendingMode
+    ? 'No publisher targeting'
+    : `${modeLabel}: ${effectivePublishers.length} ${isWhitelist ? 'allowed' : 'blocked'}`;
+
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <Shield className="h-4 w-4 text-gray-500" />
+          <span className="font-medium text-gray-900">Publishers</span>
+          <span className="text-sm text-gray-500">{summaryLabel}</span>
+          {pendingAdds.length > 0 && (
+            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">
+              +{pendingAdds.length}
+            </span>
+          )}
+          {pendingRemoves.length > 0 && (
+            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">
+              -{pendingRemoves.length}
+            </span>
+          )}
+          {pendingMode && (
+            <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded">
+              mode pending
+            </span>
+          )}
+        </div>
+        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+      </button>
+
+      {isExpanded && (
+        <div className="p-4 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 text-sm font-medium text-gray-700">
+              <span>Mode:</span>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="publisher-mode"
+                  checked={effectiveMode === 'EXCLUSIVE'}
+                  onChange={() => handleModeRequest('EXCLUSIVE')}
+                  disabled={disabled}
+                />
+                Blacklist
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="publisher-mode"
+                  checked={effectiveMode === 'INCLUSIVE'}
+                  onChange={() => handleModeRequest('INCLUSIVE')}
+                  disabled={disabled}
+                />
+                Whitelist
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowBulkImport(true)}
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+              >
+                <Upload className="h-3 w-3" />
+                Bulk Import
+              </button>
+              <button
+                onClick={handleExport}
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+              >
+                <Download className="h-3 w-3" />
+                Export CSV
+              </button>
+              <button
+                onClick={onShowHistory}
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+              >
+                <History className="h-3 w-3" />
+                View History
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Search className="h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filter publishers..."
+              className="flex-1 px-3 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="overflow-hidden rounded border">
+            <div className="grid grid-cols-[1fr_120px_120px_110px] gap-2 px-3 py-2 bg-gray-50 text-xs font-medium text-gray-500">
+              <span>Publisher ID</span>
+              <span>Type</span>
+              <span>Status</span>
+              <span className="text-right">Action</span>
+            </div>
+            {filteredPublishers.length === 0 ? (
+              <div className="px-3 py-6 text-sm text-gray-500 text-center">
+                {publishers.length === 0 && pendingAdds.length === 0
+                  ? `No publishers ${isWhitelist ? 'allowed' : 'blocked'} yet.`
+                  : 'No publishers match the current filter.'}
+              </div>
+            ) : (
+              <div className="divide-y">
+                {filteredPublishers.map((value) => {
+                  const isPendingAdd = pendingAdds.includes(value) && !publishers.includes(value);
+                  const isPendingRemove = pendingRemoves.includes(value);
+                  return (
+                    <div
+                      key={value}
+                      className={cn(
+                        'grid grid-cols-[1fr_120px_120px_110px] gap-2 px-3 py-2 text-sm items-center',
+                        isPendingRemove && 'text-gray-400 line-through'
+                      )}
+                    >
+                      <span className="truncate" title={value}>{value}</span>
+                      <span>{detectPublisherType(value)}</span>
+                      <span>{isPendingAdd ? 'Pending' : isPendingRemove ? 'Removing' : statusLabel}</span>
+                      <div className="text-right">
+                        {isPendingAdd || isPendingRemove ? (
+                          <button
+                            onClick={() => onCancelPending(isPendingAdd ? 'add_publisher' : 'remove_publisher', value)}
+                            className="px-2 py-1 text-xs rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+                          >
+                            Undo
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => onRemovePublisher(value)}
+                            className="px-2 py-1 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          >
+                            {removeLabel}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-gray-500">
+              {isWhitelist ? 'Add publisher to allow:' : 'Add publisher to block:'}
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newPublisher}
+                onChange={(e) => {
+                  setNewPublisher(e.target.value);
+                  setInputError(null);
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+                placeholder="com.example.app or publisher.com"
+                className="flex-1 px-3 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                onClick={handleAdd}
+                disabled={!newPublisher.trim() || disabled}
+                className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              >
+                {actionLabel}
+              </button>
+            </div>
+            {inputError && (
+              <p className="text-xs text-red-600">{inputError}</p>
+            )}
+          </div>
+
+          {showModeConfirm && (
+            <div className="border rounded-lg bg-yellow-50 border-yellow-200 p-3 text-sm">
+              <p className="font-medium text-yellow-900 mb-2">
+                Switch to {formatPublisherMode(nextMode)} mode?
+              </p>
+              <p className="text-yellow-700 text-xs mb-3">
+                This will clear your current publisher list when applied.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={confirmModeChange}
+                  className="px-3 py-1.5 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700"
+                >
+                  Switch to {formatPublisherMode(nextMode)}
+                </button>
+                <button
+                  onClick={() => setShowModeConfirm(false)}
+                  className="px-3 py-1.5 bg-white text-gray-700 text-xs rounded border hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showBulkImport && (
+            <div className="border rounded-lg p-3 bg-white shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-medium text-gray-900">Bulk Import Publishers</h4>
+                <button
+                  onClick={() => {
+                    setShowBulkImport(false);
+                    setBulkPreview(null);
+                    setBulkInput('');
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {!bulkPreview ? (
+                <>
+                  <textarea
+                    value={bulkInput}
+                    onChange={(e) => setBulkInput(e.target.value)}
+                    rows={5}
+                    className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="One publisher per line or comma-separated"
+                  />
+                  <div className="flex justify-end gap-2 mt-3">
+                    <button
+                      onClick={() => {
+                        setShowBulkImport(false);
+                        setBulkInput('');
+                      }}
+                      className="px-3 py-1.5 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={parseBulkInput}
+                      disabled={!bulkInput.trim()}
+                      className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      Preview Import
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-xs text-gray-600 space-y-2">
+                    <div>
+                      <span className="font-medium text-green-700">Valid:</span>{' '}
+                      {bulkPreview.valid.length}
+                    </div>
+                    {bulkPreview.valid.length > 0 && (
+                      <div className="text-gray-500">
+                        {bulkPreview.valid.join(', ')}
+                      </div>
+                    )}
+                    {bulkPreview.duplicates.length > 0 && (
+                      <div>
+                        <span className="font-medium text-yellow-700">Duplicates:</span>{' '}
+                        {bulkPreview.duplicates.join(', ')}
+                      </div>
+                    )}
+                    {bulkPreview.invalid.length > 0 && (
+                      <div>
+                        <span className="font-medium text-red-700">Invalid:</span>{' '}
+                        {bulkPreview.invalid.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex justify-end gap-2 mt-3">
+                    <button
+                      onClick={() => setBulkPreview(null)}
+                      className="px-3 py-1.5 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={handleBulkImport}
+                      disabled={bulkPreview.valid.length === 0}
+                      className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      Import {bulkPreview.valid.length} Publishers
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // History entry component
 function HistoryEntry({ entry }: { entry: PretargetingHistoryItem }) {
   return (
@@ -304,6 +793,11 @@ export function PretargetingSettingsEditor({
   onClose,
 }: PretargetingSettingsEditorProps) {
   const [showHistory, setShowHistory] = useState(false);
+  const [historyView, setHistoryView] = useState<'audit' | 'snapshots'>('audit');
+  const [rollbackPreview, setRollbackPreview] = useState<{
+    snapshot: PretargetingSnapshot;
+    changes: string[];
+  } | null>(null);
   const [showConfirmPush, setShowConfirmPush] = useState(false);
   const [showConfirmSuspend, setShowConfirmSuspend] = useState(false);
   const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -319,7 +813,13 @@ export function PretargetingSettingsEditor({
   const { data: history, isLoading: historyLoading } = useQuery({
     queryKey: ['pretargeting-history', billing_id],
     queryFn: () => getPretargetingHistory({ billing_id, days: 90 }),
-    enabled: showHistory,
+    enabled: showHistory && historyView === 'audit',
+  });
+
+  const { data: snapshots, isLoading: snapshotsLoading } = useQuery({
+    queryKey: ['pretargeting-snapshots', billing_id],
+    queryFn: () => getSnapshots({ billing_id, limit: 50 }),
+    enabled: showHistory && historyView === 'snapshots',
   });
 
   // Mutations
@@ -362,6 +862,23 @@ export function PretargetingSettingsEditor({
     },
   });
 
+  const rollbackMutation = useMutation({
+    mutationFn: (snapshotId: number) =>
+      rollbackSnapshot({ billing_id, snapshot_id: snapshotId, dry_run: false }),
+    onSuccess: async (data) => {
+      setPushResult({ success: true, message: data.message });
+      setRollbackPreview(null);
+      await syncPretargetingConfigs();
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-history', billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-snapshots', billing_id] });
+    },
+    onError: (error: Error) => {
+      setPushResult({ success: false, message: error.message });
+    },
+  });
+
   const suspendMutation = useMutation({
     mutationFn: () => suspendPretargeting(billing_id),
     onSuccess: async (data) => {
@@ -397,6 +914,13 @@ export function PretargetingSettingsEditor({
     return configDetail.pending_changes
       .filter(c => c.change_type === changeType)
       .map(c => c.value);
+  };
+
+  const findPendingChange = (changeType: string, value: string) => {
+    if (!configDetail) return undefined;
+    return configDetail.pending_changes.find(
+      c => c.change_type === changeType && c.value === value
+    );
   };
 
   const handleAddSize = (value: string) => {
@@ -454,6 +978,33 @@ export function PretargetingSettingsEditor({
     });
   };
 
+  const handleAddPublisher = (value: string) => {
+    createChangeMutation.mutate({
+      billing_id,
+      change_type: 'add_publisher',
+      field_name: 'publisher_targeting',
+      value,
+    });
+  };
+
+  const handleRemovePublisher = (value: string) => {
+    createChangeMutation.mutate({
+      billing_id,
+      change_type: 'remove_publisher',
+      field_name: 'publisher_targeting',
+      value,
+    });
+  };
+
+  const handleSetPublisherMode = (mode: string) => {
+    createChangeMutation.mutate({
+      billing_id,
+      change_type: 'set_publisher_mode',
+      field_name: 'publisher_targeting_mode',
+      value: mode,
+    });
+  };
+
   // Bulk action handlers for sizes
   const handleSelectAllSizes = () => {
     if (!configDetail) return;
@@ -498,6 +1049,35 @@ export function PretargetingSettingsEditor({
     });
   };
 
+  const handleBulkAddPublishers = (values: string[]) => {
+    values.forEach((value) => handleAddPublisher(value));
+  };
+
+  const handleExportPublishers = (values: string[]) => {
+    const content = ['publisher_id', ...values].join('\n');
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `publisher-targeting-${billing_id}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleRollbackPreview = async (snapshot: PretargetingSnapshot) => {
+    try {
+      const preview = await rollbackSnapshot({
+        billing_id,
+        snapshot_id: snapshot.id,
+        dry_run: true,
+      });
+      setRollbackPreview({ snapshot, changes: preview.changes_made });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to preview rollback';
+      setPushResult({ success: false, message });
+    }
+  };
+
   if (configLoading) {
     return (
       <div className="p-4 animate-pulse">
@@ -522,6 +1102,12 @@ export function PretargetingSettingsEditor({
 
   const pendingChanges = configDetail.pending_changes || [];
   const hasPendingChanges = pendingChanges.length > 0;
+  const pendingPublisherAdds = getPendingByType('add_publisher');
+  const pendingPublisherRemoves = getPendingByType('remove_publisher');
+  const pendingModeChange = [...pendingChanges]
+    .reverse()
+    .find((change) => change.change_type === 'set_publisher_mode') || null;
+  const publisherMode = configDetail.publisher_targeting_mode || null;
 
   return (
     <div className="border-t bg-white">
@@ -538,7 +1124,10 @@ export function PretargetingSettingsEditor({
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowHistory(!showHistory)}
+            onClick={() => {
+              setHistoryView('audit');
+              setShowHistory(!showHistory);
+            }}
             className={cn(
               'flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors',
               showHistory ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -639,6 +1228,16 @@ export function PretargetingSettingsEditor({
               <p className="text-xs text-blue-700 mt-1">
                 This will modify your live pretargeting configuration. Changes take effect immediately.
               </p>
+              <div className="mt-3 space-y-1">
+                {pendingChanges.map((change) => (
+                  <div key={change.id} className="text-xs text-blue-800">
+                    • {describePendingChange(change, publisherMode)}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-xs text-blue-700">
+                A snapshot will be created automatically so you can roll back if needed.
+              </div>
               <div className="flex gap-2 mt-3">
                 <button
                   onClick={() => applyAllMutation.mutate()}
@@ -739,6 +1338,7 @@ export function PretargetingSettingsEditor({
                   change={change}
                   onCancel={() => cancelChangeMutation.mutate(change.id)}
                   onMarkApplied={() => markAppliedMutation.mutate(change.id)}
+                  publisherMode={publisherMode}
                 />
               ))}
             </div>
@@ -772,6 +1372,28 @@ export function PretargetingSettingsEditor({
           onAddValue={handleAddGeo}
           onRemoveValue={handleRemoveGeo}
           fieldName="included_geos"
+        />
+
+        <PublisherTargetingSection
+          baseMode={publisherMode}
+          publishers={configDetail.publisher_targeting_values || []}
+          pendingAdds={pendingPublisherAdds}
+          pendingRemoves={pendingPublisherRemoves}
+          pendingModeChange={pendingModeChange}
+          onAddPublisher={handleAddPublisher}
+          onRemovePublisher={handleRemovePublisher}
+          onCancelPending={(changeType, value) => {
+            const pending = findPendingChange(changeType, value);
+            if (pending) cancelChangeMutation.mutate(pending.id);
+          }}
+          onSetMode={handleSetPublisherMode}
+          onShowHistory={() => {
+            setHistoryView('snapshots');
+            setShowHistory(true);
+          }}
+          onBulkAdd={handleBulkAddPublishers}
+          onExportCsv={handleExportPublishers}
+          disabled={isPushing}
         />
 
         <TargetingSection
@@ -816,24 +1438,123 @@ export function PretargetingSettingsEditor({
       {/* History panel */}
       {showHistory && (
         <div className="border-t bg-gray-50 p-4">
-          <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-            <History className="h-4 w-4" />
-            Change History
-          </h4>
-          {historyLoading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="h-12 bg-gray-100 rounded animate-pulse" />
-              ))}
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+              <History className="h-4 w-4" />
+              History
+            </h4>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setHistoryView('audit')}
+                className={cn(
+                  'px-2 py-1 text-xs rounded',
+                  historyView === 'audit'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                )}
+              >
+                Audit Log
+              </button>
+              <button
+                onClick={() => setHistoryView('snapshots')}
+                className={cn(
+                  'px-2 py-1 text-xs rounded',
+                  historyView === 'snapshots'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                )}
+              >
+                Rollback
+              </button>
             </div>
-          ) : history && history.length > 0 ? (
-            <div className="max-h-64 overflow-y-auto">
-              {history.map((entry) => (
-                <HistoryEntry key={entry.id} entry={entry} />
-              ))}
+          </div>
+
+          {historyView === 'audit' && (
+            <>
+              {historyLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="h-12 bg-gray-100 rounded animate-pulse" />
+                  ))}
+                </div>
+              ) : history && history.length > 0 ? (
+                <div className="max-h-64 overflow-y-auto">
+                  {history.map((entry) => (
+                    <HistoryEntry key={entry.id} entry={entry} />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 italic">No history available</p>
+              )}
+            </>
+          )}
+
+          {historyView === 'snapshots' && (
+            <>
+              {snapshotsLoading ? (
+                <div className="space-y-2">
+                  {[1, 2].map(i => (
+                    <div key={i} className="h-16 bg-gray-100 rounded animate-pulse" />
+                  ))}
+                </div>
+              ) : snapshots && snapshots.length > 0 ? (
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {snapshots.map((snapshot) => (
+                    <div key={snapshot.id} className="border rounded-lg p-3 bg-white">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {snapshot.snapshot_name || 'Snapshot'}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {snapshot.snapshot_type || 'manual'} • {formatDate(snapshot.created_at)}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleRollbackPreview(snapshot)}
+                          className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                        >
+                          Rollback
+                        </button>
+                      </div>
+                      {snapshot.notes && (
+                        <p className="text-xs text-gray-500 mt-2">{snapshot.notes}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 italic">No snapshots available</p>
+              )}
+            </>
+          )}
+
+          {rollbackPreview && (
+            <div className="mt-4 border rounded-lg p-3 bg-yellow-50 border-yellow-200">
+              <p className="text-sm font-medium text-yellow-900">
+                Roll back to {rollbackPreview.snapshot.snapshot_name || 'snapshot'}?
+              </p>
+              <ul className="text-xs text-yellow-800 mt-2 space-y-1">
+                {rollbackPreview.changes.map((change) => (
+                  <li key={change}>• {change}</li>
+                ))}
+              </ul>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={() => rollbackMutation.mutate(rollbackPreview.snapshot.id)}
+                  disabled={rollbackMutation.isPending}
+                  className="px-3 py-1.5 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700 disabled:opacity-50"
+                >
+                  {rollbackMutation.isPending ? 'Rolling back...' : 'Rollback Now'}
+                </button>
+                <button
+                  onClick={() => setRollbackPreview(null)}
+                  className="px-3 py-1.5 bg-white text-gray-700 text-xs rounded border hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
-          ) : (
-            <p className="text-sm text-gray-500 italic">No history available</p>
           )}
         </div>
       )}

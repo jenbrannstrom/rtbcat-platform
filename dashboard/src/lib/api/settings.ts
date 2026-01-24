@@ -70,11 +70,15 @@ export interface ConfigDetail {
   included_sizes: string[];
   included_geos: string[];
   excluded_geos: string[];
+  publisher_targeting_mode?: string | null;
+  publisher_targeting_values?: string[];
   synced_at: string | null;
   pending_changes: PendingChange[];
   effective_sizes: string[];
   effective_geos: string[];
   effective_formats: string[];
+  effective_publisher_targeting_mode?: string | null;
+  effective_publisher_targeting_values?: string[];
 }
 
 export interface ApplyChangeResponse {

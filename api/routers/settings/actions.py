@@ -12,7 +12,15 @@ from collectors import PretargetingClient
 from storage.database import db_execute, db_query, db_query_one
 from storage.sqlite_store import SQLiteStore
 
-from .models import ApplyAllResponse, ApplyChangeRequest, ApplyChangeResponse, RollbackRequest, RollbackResponse, SuspendActivateResponse
+from .models import (
+    ApplyAllResponse,
+    ApplyChangeRequest,
+    ApplyChangeResponse,
+    RollbackRequest,
+    RollbackResponse,
+    SnapshotCreate,
+    SuspendActivateResponse,
+)
 from .snapshots import create_pretargeting_snapshot
 
 logger = logging.getLogger(__name__)
@@ -67,6 +75,8 @@ async def apply_pending_change(
     - add_size / remove_size
     - add_geo / remove_geo
     - add_format / remove_format
+    - add_publisher / remove_publisher
+    - set_publisher_mode
     """
     try:
         # Get the pending change
@@ -112,6 +122,38 @@ async def apply_pending_change(
             result = await client.add_geos_to_config(config_id, [value], exclude=True)
         elif change_type == "remove_excluded_geo":
             result = await client.remove_geos_from_config(config_id, [value], from_excluded=True)
+        elif change_type in {"add_publisher", "remove_publisher", "set_publisher_mode"}:
+            config_row = await db_query_one(
+                "SELECT raw_config FROM pretargeting_configs WHERE billing_id = ?",
+                (billing_id,)
+            )
+            raw_config = json.loads(config_row["raw_config"]) if config_row and config_row["raw_config"] else {}
+            publisher_targeting = raw_config.get("publisherTargeting") or {}
+            current_mode = publisher_targeting.get("targetingMode") or "EXCLUSIVE"
+            current_values = list(publisher_targeting.get("values") or [])
+
+            if change_type == "set_publisher_mode":
+                updated_mode = value
+                updated_values = []
+            else:
+                updated_mode = current_mode
+                updated_values = current_values.copy()
+                if change_type == "add_publisher" and value not in updated_values:
+                    updated_values.append(value)
+                elif change_type == "remove_publisher" and value in updated_values:
+                    updated_values.remove(value)
+
+            update_body = {
+                "publisherTargeting": {
+                    "targetingMode": updated_mode,
+                    "values": updated_values,
+                }
+            }
+            result = await client.patch_pretargeting_config(
+                config_id=config_id,
+                update_body=update_body,
+                update_mask="publisherTargeting",
+            )
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported change type: {change_type}")
 
@@ -184,6 +226,15 @@ async def apply_all_pending_changes(
                 changes_failed=0,
                 message=f"Would apply {len(changes)} changes: {', '.join(change_list)}",
             )
+
+        # Create snapshot before applying
+        snapshot_request = SnapshotCreate(
+            billing_id=billing_id,
+            snapshot_name="Auto-snapshot before changes",
+            notes="Created before applying pending changes",
+            snapshot_type="before_change",
+        )
+        await create_pretargeting_snapshot(snapshot_request)
 
         # Apply each change
         applied = 0
@@ -418,6 +469,9 @@ async def rollback_to_snapshot(
             if len(parts) == 2:
                 snapshot_dims.append({"width": int(parts[0]), "height": int(parts[1])})
 
+        snapshot_publisher_mode = snapshot.get("publisher_targeting_mode")
+        snapshot_publisher_values = json.loads(snapshot["publisher_targeting_values"]) if snapshot.get("publisher_targeting_values") else []
+
         update_body = {
             "includedCreativeDimensions": snapshot_dims,
             "geoTargeting": {
@@ -426,12 +480,20 @@ async def rollback_to_snapshot(
             },
             "includedFormats": list(snapshot_formats),
         }
+        update_mask = ["includedCreativeDimensions", "geoTargeting", "includedFormats"]
+
+        if snapshot_publisher_mode is not None:
+            update_body["publisherTargeting"] = {
+                "targetingMode": snapshot_publisher_mode,
+                "values": snapshot_publisher_values,
+            }
+            update_mask.append("publisherTargeting")
 
         # Apply the rollback
         await client.patch_pretargeting_config(
             config_id=config_id,
             update_body=update_body,
-            update_mask="includedCreativeDimensions,geoTargeting,includedFormats",
+            update_mask=",".join(update_mask),
         )
 
         # Handle state change if needed

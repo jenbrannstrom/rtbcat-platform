@@ -1,5 +1,6 @@
 """Pretargeting snapshot and comparison routes."""
 
+import json
 import logging
 from typing import Optional
 
@@ -73,27 +74,36 @@ async def create_pretargeting_snapshot(request: SnapshotCreate):
         ctr = (clicks / imps * 100) if imps > 0 else None
         cpm = (spend / imps * 1000) if imps > 0 else None
 
+        raw_config = json.loads(config["raw_config"]) if config["raw_config"] else {}
+        publisher_targeting = raw_config.get("publisherTargeting") or {}
+        publisher_mode = publisher_targeting.get("targetingMode")
+        publisher_values = publisher_targeting.get("values") or []
+
         # Create snapshot
         snapshot_id = await db_insert_returning_id(
             """INSERT INTO pretargeting_snapshots (
                 billing_id, snapshot_name, snapshot_type,
                 included_formats, included_platforms, included_sizes,
                 included_geos, excluded_geos, state,
+                publisher_targeting_mode, publisher_targeting_values,
                 total_impressions, total_clicks, total_spend_usd,
                 days_tracked,
                 avg_daily_impressions, avg_daily_spend_usd, ctr_pct, cpm_usd,
                 notes
-            ) VALUES (?, ?, 'manual', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 request.billing_id,
                 request.snapshot_name,
+                request.snapshot_type or "manual",
                 config["included_formats"],
                 config["included_platforms"],
                 config["included_sizes"],
                 config["included_geos"],
                 config["excluded_geos"],
                 config["state"],
+                publisher_mode,
+                json.dumps(publisher_values) if publisher_values else None,
                 imps, clicks, spend, days,
                 avg_daily_imps, avg_daily_spend, ctr, cpm,
                 request.notes
