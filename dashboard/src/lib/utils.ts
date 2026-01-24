@@ -26,8 +26,8 @@ export function truncate(str: string, length: number): string {
 
 // Display label mapping - API returns HTML/IMAGE but UI shows "Display"
 const FORMAT_LABELS: Record<string, string> = {
-  HTML: "Display",
-  IMAGE: "Display",
+  HTML: "Display HTML",
+  IMAGE: "Display Img",
   DISPLAY: "Display",
   VIDEO: "Video",
   NATIVE: "Native",
