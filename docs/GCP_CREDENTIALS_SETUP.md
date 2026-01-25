@@ -6,7 +6,7 @@
 
 **Infrastructure:** GCE e2-medium + Cloud SQL PostgreSQL + BigQuery (see [Cost Summary](#cost-summary))
 
-**Data Pipeline:** Gmail CSV → GCS (Parquet) → BigQuery → PostgreSQL (see [pipeline_gmail_to_bq_to_pg.md](pipeline_gmail_to_bq_to_pg.md))
+**Data Pipeline:** Gmail CSV → GCS (Parquet) → BigQuery → PostgreSQL (see [Data Pipeline](#data-pipeline))
 
 ---
 
@@ -444,6 +444,9 @@ Credentials are stored in `~/.catscan/credentials/` (outside git).
 ├── imports/                            # Downloaded CSVs (temporary)
 └── gmail_import_status.json
 
+# Container path is bind-mounted from the host:
+# /home/rtbcat/.catscan -> /home/catscan/.catscan
+
 /opt/catscan/
 └── docker-compose.gcp.yml              # Docker deployment config
 
@@ -466,6 +469,49 @@ BigQuery (rtbcat_analytics)
 
 GCS (rtbcat-raw-parquet-*)
 └── raw/YYYY/MM/DD/<buyer_id>/*.parquet # Parquet exports
+```
+
+---
+
+## Data Pipeline
+
+**Flow:** Gmail CSV → GCS (Parquet) → BigQuery (`raw_facts`) → Postgres (`home_*`, `config_*`)
+
+**GCS path:**
+```
+gs://<RAW_PARQUET_BUCKET>/raw/YYYY/MM/DD/<buyer_id>/<report_type>.parquet
+```
+
+**BigQuery raw_facts:**
+- Partitioned by `metric_date` (DAY)
+- Clustered by `buyer_account_id`, `report_type`
+- Required columns: `metric_date`, `buyer_account_id`, `report_type`, `publisher_id`,
+  `publisher_name`, `creative_id`, `creative_size`, `billing_id`, `country`,
+  `bid_requests`, `inventory_matches`, `successful_responses`, `reached_queries`,
+  `bids`, `bids_in_auction`, `auctions_won`, `impressions`, `clicks`,
+  `spend_buyer_currency`, `spend_bidder_currency`, `bid_filtering_reason`
+
+**Environment variables:**
+```
+RAW_PARQUET_BUCKET
+BIGQUERY_PROJECT_ID
+BIGQUERY_DATASET
+BIGQUERY_RAW_FACTS_TABLE   # default: raw_facts
+POSTGRES_DSN
+GOOGLE_APPLICATION_CREDENTIALS
+```
+
+**Pipeline scripts:**
+- `scripts/export_csv_to_parquet.py` (CSV → Parquet → GCS)
+- `scripts/load_parquet_to_bigquery.py` (GCS → BigQuery)
+- `scripts/bq_aggregate_to_pg.py` (BigQuery → Postgres)
+- `scripts/run_pipeline.py` (orchestrator)
+- `scripts/gmail_import.py` (Gmail importer)
+
+**Manual trigger:**
+```bash
+python scripts/run_pipeline.py --csv-path /path/to/report.csv
+python scripts/bq_aggregate_to_pg.py --date 2026-01-23
 ```
 
 > **Important:** Production uses Cloud SQL, not SQLite. To query:
