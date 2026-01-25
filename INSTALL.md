@@ -1178,8 +1178,8 @@ Deployments are currently **manual** (auto-deploy was disabled after incidents):
 ```bash
 gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap --command="
 cd /opt/catscan
-sudo docker-compose -f docker-compose.gcp.yml pull
-sudo docker-compose -f docker-compose.gcp.yml up -d
+sudo docker compose -f docker-compose.gcp.yml pull
+sudo docker compose -f docker-compose.gcp.yml up -d
 sudo docker image prune -f
 "
 ```
@@ -1192,13 +1192,13 @@ Or trigger the manual GitHub Action: **Actions → Deploy to GCP → Run workflo
 API is not enabled on the GCP project. All maintenance runs via VM cron jobs.
 
 **docker-compose 1.29.2 bug** - The VM has an old docker-compose that sometimes
-fails with `KeyError: 'ContainerConfig'`. Fix by stopping and removing containers
-before recreating:
+fails with `KeyError: 'ContainerConfig'`. Fix by installing Compose v2 and using
+`docker compose`:
 
 ```bash
-sudo docker stop $(docker ps -aq)
-sudo docker rm $(docker ps -aq)
-sudo docker-compose -f docker-compose.gcp.yml up -d
+sudo apt update
+sudo apt install -y docker-compose-v2
+sudo docker compose -f docker-compose.gcp.yml up -d
 ```
 
 ---
