@@ -142,14 +142,11 @@ def ensure_table_exists(
 
         table = bigquery.Table(table_ref)
 
+        table.schema = RAW_FACTS_SCHEMA
         # Configure partitioning and clustering
         table.time_partitioning = bigquery.TimePartitioning(
             type_=bigquery.TimePartitioningType.DAY,
             field="metric_date",
-        )
-        # table.time_partitioning_old = bigquery.TimePartitioning(
-            type_=bigquery.TimePartitioningType.DAY,
-            field="event_timestamp",
         )
         table.clustering_fields = ["buyer_account_id", "report_type"]
 

@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 AGG_QUERIES = {
     "home_publisher_daily": """
         SELECT
-            DATE(event_timestamp) as metric_date,
+            metric_date as metric_date,
             buyer_account_id,
             publisher_id,
             MAX(publisher_name) as publisher_name,
@@ -64,7 +64,7 @@ AGG_QUERIES = {
             SUM(COALESCE(bid_requests, 0)) as bid_requests,
             SUM(COALESCE(auctions_won, 0)) as auctions_won
         FROM `{project}.{dataset}.raw_facts`
-        WHERE DATE(event_timestamp) = @metric_date
+        WHERE metric_date = @metric_date
           AND publisher_id IS NOT NULL
           AND report_type = 'funnel_publishers'
         GROUP BY metric_date, buyer_account_id, publisher_id
@@ -72,7 +72,7 @@ AGG_QUERIES = {
 
     "home_geo_daily": """
         SELECT
-            DATE(event_timestamp) as metric_date,
+            metric_date as metric_date,
             buyer_account_id,
             country,
             SUM(COALESCE(reached_queries, 0)) as reached_queries,
@@ -82,7 +82,7 @@ AGG_QUERIES = {
             SUM(COALESCE(bid_requests, 0)) as bid_requests,
             SUM(COALESCE(auctions_won, 0)) as auctions_won
         FROM `{project}.{dataset}.raw_facts`
-        WHERE DATE(event_timestamp) = @metric_date
+        WHERE metric_date = @metric_date
           AND country IS NOT NULL
           AND report_type IN ('funnel_publishers', 'funnel_geo')
         GROUP BY metric_date, buyer_account_id, country
@@ -90,13 +90,13 @@ AGG_QUERIES = {
 
     "home_size_daily": """
         SELECT
-            DATE(event_timestamp) as metric_date,
+            metric_date as metric_date,
             buyer_account_id,
             creative_size,
             SUM(COALESCE(reached_queries, 0)) as reached_queries,
             SUM(COALESCE(impressions, 0)) as impressions
         FROM `{project}.{dataset}.raw_facts`
-        WHERE DATE(event_timestamp) = @metric_date
+        WHERE metric_date = @metric_date
           AND creative_size IS NOT NULL
           AND report_type = 'quality'
         GROUP BY metric_date, buyer_account_id, creative_size
@@ -104,7 +104,7 @@ AGG_QUERIES = {
 
     "home_seat_daily": """
         SELECT
-            DATE(event_timestamp) as metric_date,
+            metric_date as metric_date,
             buyer_account_id,
             SUM(COALESCE(reached_queries, 0)) as reached_queries,
             SUM(COALESCE(impressions, 0)) as impressions,
@@ -113,14 +113,14 @@ AGG_QUERIES = {
             SUM(COALESCE(bid_requests, 0)) as bid_requests,
             SUM(COALESCE(auctions_won, 0)) as auctions_won
         FROM `{project}.{dataset}.raw_facts`
-        WHERE DATE(event_timestamp) = @metric_date
+        WHERE metric_date = @metric_date
           AND report_type IN ('funnel_publishers', 'funnel_geo')
         GROUP BY metric_date, buyer_account_id
     """,
 
     "home_config_daily": """
         SELECT
-            DATE(event_timestamp) as metric_date,
+            metric_date as metric_date,
             buyer_account_id,
             billing_id,
             SUM(COALESCE(reached_queries, 0)) as reached_queries,
@@ -128,7 +128,7 @@ AGG_QUERIES = {
             SUM(COALESCE(bids_in_auction, 0)) as bids_in_auction,
             SUM(COALESCE(auctions_won, 0)) as auctions_won
         FROM `{project}.{dataset}.raw_facts`
-        WHERE DATE(event_timestamp) = @metric_date
+        WHERE metric_date = @metric_date
           AND billing_id IS NOT NULL
           AND report_type = 'quality'
         GROUP BY metric_date, buyer_account_id, billing_id
