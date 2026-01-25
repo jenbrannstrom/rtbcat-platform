@@ -84,6 +84,8 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 | **OAuth-Only Login** | Google OAuth via OAuth2 Proxy (no passwords stored) |
 | **Per-User Access Control** | Role + service account access scoping |
 
+For MCP Chromium setup (browser-based inspection), see `docs/MCP_CHROMIUM.md`.
+
 ### Dashboard Pages
 
 | Page | URL | Purpose |
