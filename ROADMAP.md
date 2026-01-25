@@ -240,6 +240,9 @@
 
 ## Technical Debt
 
+### Naming Standardization (Pre-OSS)
+- [ ] **Rename `rtbcat` → `catscan` in Docker** - Container user is `rtbcat`, VM user is `catscan`. Causes confusion when debugging paths. See [MIGRATION_RTBCAT_TO_CATSCAN.md](docs/MIGRATION_RTBCAT_TO_CATSCAN.md)
+
 ### Large File Refactoring
 - [ ] `dashboard/src/lib/api.ts` - Still has ~30 legacy functions to extract
 - [ ] `storage/sqlite_store.py` (1,384 lines) - Complete migration to repository pattern
