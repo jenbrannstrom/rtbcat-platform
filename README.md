@@ -277,8 +277,8 @@ Cat-Scan uses GitHub Actions for CI/CD. Pushing to `unified-platform` triggers:
 ```bash
 # Deploy latest (on VM)
 cd /opt/catscan
-sudo docker-compose -f docker-compose.gcp.yml pull
-sudo docker-compose -f docker-compose.gcp.yml up -d
+sudo docker compose -f docker-compose.gcp.yml pull
+sudo docker compose -f docker-compose.gcp.yml up -d
 ```
 
 See **[docs/GCP_CREDENTIALS_SETUP.md](docs/GCP_CREDENTIALS_SETUP.md)** for full CI/CD setup.
