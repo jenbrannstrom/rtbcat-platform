@@ -55,6 +55,8 @@ S3_BUCKET = os.environ.get('CATSCAN_S3_BUCKET', 'rtbcat-csv-archive-frankfurt-32
 S3_REGION = os.environ.get('CATSCAN_S3_REGION', 'eu-central-1')
 S3_ARCHIVE_ENABLED = os.environ.get('CATSCAN_S3_ARCHIVE', 'true').lower() == 'true'
 GMAIL_LABEL = os.environ.get('CATSCAN_GMAIL_LABEL', '').strip()
+GMAIL_QUERY = os.environ.get('CATSCAN_GMAIL_QUERY', '').strip()
+INCLUDE_READ = os.environ.get('CATSCAN_GMAIL_INCLUDE_READ', 'false').lower() == 'true'
 SEAT_ID_ALLOWLIST = {
     seat_id.strip()
     for seat_id in os.environ.get('CATSCAN_GMAIL_SEAT_IDS', '').split(',')
@@ -450,13 +452,17 @@ def get_gmail_service():
 
 def find_report_emails(service):
     """Find all unread emails from Google Authorized Buyers (with pagination)."""
-    query_parts = [
-        'from:noreply-google-display-ads-managed-reports@google.com',
-        'is:unread',
-    ]
-    if GMAIL_LABEL:
-        query_parts.append(f"label:{GMAIL_LABEL}")
-    query = " ".join(query_parts)
+    if GMAIL_QUERY:
+        query = GMAIL_QUERY
+    else:
+        query_parts = [
+            'from:noreply-google-display-ads-managed-reports@google.com',
+        ]
+        if not INCLUDE_READ:
+            query_parts.append('is:unread')
+        if GMAIL_LABEL:
+            query_parts.append(f"label:{GMAIL_LABEL}")
+        query = " ".join(query_parts)
 
     all_messages = []
     page_token = None
