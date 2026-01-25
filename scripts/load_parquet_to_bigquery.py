@@ -45,7 +45,6 @@ logger = logging.getLogger(__name__)
 
 # BigQuery schema for raw_facts table
 RAW_FACTS_SCHEMA = [
-    bigquery.SchemaField("event_timestamp", "TIMESTAMP", mode="REQUIRED"),
     bigquery.SchemaField("buyer_account_id", "STRING"),
     bigquery.SchemaField("report_type", "STRING"),
     bigquery.SchemaField("metric_date", "DATE"),

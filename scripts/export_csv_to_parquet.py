@@ -121,6 +121,11 @@ SCHEMAS = {
 }
 
 # Column name mappings from CSV headers to schema fields
+def normalize_header(header: str) -> str:
+    """Normalize header names for mapping/detection."""
+    return header.strip().lstrip("#").strip()
+
+
 COLUMN_MAPPINGS = {
     "#Day": "metric_date",
     "#Buyer account ID": "buyer_account_id",
@@ -158,7 +163,7 @@ COLUMN_MAPPINGS = {
 
 def detect_report_type(headers: List[str]) -> str:
     """Detect report type from CSV headers."""
-    header_set = set(h.strip() for h in headers)
+    header_set = {normalize_header(h) for h in headers}
 
     if "Publisher ID" in header_set or "Publisher id" in header_set:
         return "funnel_publishers"
@@ -228,8 +233,8 @@ def parse_csv_to_records(
         # Build column index mapping
         col_mapping = {}
         for i, header in enumerate(headers):
-            header = header.strip()
-            field_name = COLUMN_MAPPINGS.get(header)
+            normalized = normalize_header(header)
+            field_name = COLUMN_MAPPINGS.get(normalized) or COLUMN_MAPPINGS.get(header.strip())
             if field_name and field_name in schema.names:
                 col_mapping[i] = field_name
 
