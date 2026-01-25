@@ -13,7 +13,7 @@ from google.cloud import bigquery
 
 from storage.bigquery import build_table_ref, get_bigquery_client, run_query
 from storage.postgres import execute_many, pg_transaction_async
-from services.precompute_utils import normalize_refresh_dates, record_refresh_log
+from services.precompute_utils import normalize_refresh_dates, record_refresh_log_postgres
 
 logger = logging.getLogger(__name__)
 
@@ -569,7 +569,7 @@ async def refresh_rtb_summaries(
             ],
         )
 
-        record_refresh_log(
+        record_refresh_log_postgres(
             conn,
             cache_name="rtb_summaries",
             buyer_account_id=buyer_account_id,
