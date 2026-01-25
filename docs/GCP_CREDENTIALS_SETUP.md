@@ -333,10 +333,10 @@ Wait for GitHub Actions to complete (~3 minutes).
 ```bash
 # SG instance (primary)
 gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- \
-  "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml pull"
+  "cd /opt/catscan && sudo docker compose -f docker-compose.gcp.yml pull"
 
 gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- \
-  "cd /opt/catscan && sudo docker-compose -f docker-compose.gcp.yml up -d"
+  "cd /opt/catscan && sudo docker compose -f docker-compose.gcp.yml up -d"
 ```
 
 ### Step 3: Verify
@@ -362,8 +362,8 @@ gcloud artifacts docker tags list \
 
 # Deploy specific version
 gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- \
-  "cd /opt/catscan && IMAGE_TAG=sha-abc1234 sudo docker-compose -f docker-compose.gcp.yml pull && \
-   IMAGE_TAG=sha-abc1234 sudo docker-compose -f docker-compose.gcp.yml up -d"
+  "cd /opt/catscan && IMAGE_TAG=sha-abc1234 sudo docker compose -f docker-compose.gcp.yml pull && \
+   IMAGE_TAG=sha-abc1234 sudo docker compose -f docker-compose.gcp.yml up -d"
 ```
 
 ### Important Notes
@@ -377,11 +377,11 @@ gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-throu
 
 - **Code MUST go through GitHub** - CI builds the images
 - **Never upload directly** - No tarballs, no scp of code files
-- **One deployment at a time** - Wait for docker-compose to finish before starting another
+- **One deployment at a time** - Wait for docker compose to finish before starting another
 
 ### If Deploy Fails
 
-1. Check container logs: `sudo docker-compose -f docker-compose.gcp.yml logs`
+1. Check container logs: `sudo docker compose -f docker-compose.gcp.yml logs`
 2. Fix the issue in code locally
 3. Push fix to GitHub, then SSH and pull again
 
@@ -1120,8 +1120,8 @@ Production uses prebuilt images from Artifact Registry. The VM pulls images and 
 
 ```bash
 cd /opt/catscan
-sudo docker-compose -f docker-compose.gcp.yml pull
-sudo docker-compose -f docker-compose.gcp.yml up -d
+sudo docker compose -f docker-compose.gcp.yml pull
+sudo docker compose -f docker-compose.gcp.yml up -d
 ```
 
 ### Step 7b: Home Cache Refresh Timer (nightly)
@@ -1330,6 +1330,26 @@ Backend services aren't running. Check:
 sudo systemctl status catscan-api catscan-dashboard
 sudo journalctl -u catscan-api -n 50
 ```
+
+### OAuth login loops back to auth screen
+
+This happens when the API ignores the `X-Email` header from oauth2-proxy.
+Ensure the API container has OAuth2 proxy mode enabled:
+```bash
+echo "OAUTH2_PROXY_ENABLED=true" | sudo tee -a /opt/catscan/.env
+cd /opt/catscan
+sudo docker compose -f docker-compose.gcp.yml up -d --force-recreate catscan-api
+```
+Then clear cookies for `scan.rtb.cat` and try again.
+
+### docker-compose "ContainerConfig" error on recreate
+
+This is a known issue with docker-compose v1. Upgrade to Compose v2:
+```bash
+sudo apt update
+sudo apt install -y docker-compose-v2
+```
+Use `docker compose` (v2) instead of `docker-compose` (v1).
 
 ### SSL certificate expired
 
