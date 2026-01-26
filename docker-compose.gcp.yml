@@ -25,7 +25,7 @@ services:
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/home/rtbcat/.catscan/credentials/google-credentials.json
       - DATABASE_PATH=/home/rtbcat/.catscan/catscan.db
-      - OAUTH2_PROXY_ENABLED=${OAUTH2_PROXY_ENABLED:-true}
+      - OAUTH2_PROXY_ENABLED=true
       - GMAIL_IMPORT_SECRET=${GMAIL_IMPORT_SECRET:-}
       - PRECOMPUTE_REFRESH_SECRET=${PRECOMPUTE_REFRESH_SECRET:-}
       - PRECOMPUTE_MONITOR_SECRET=${PRECOMPUTE_MONITOR_SECRET:-}
