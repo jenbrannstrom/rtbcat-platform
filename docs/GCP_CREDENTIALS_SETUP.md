@@ -329,14 +329,15 @@ git push origin unified-platform
 
 Wait for GitHub Actions to complete (~3 minutes).
 
-### Step 2: Pull and restart on VM
+### Step 2: Pull and restart on VM (pinned tag)
 ```bash
 # SG instance (primary)
 gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- \
-  "cd /opt/catscan && sudo docker compose -f docker-compose.gcp.yml pull"
+  "cd /opt/catscan && sudo bash -c 'grep -v \"^IMAGE_TAG=\" .env > .env.tmp || true; printf \"%s\n\" \"IMAGE_TAG=sha-<commit>\" >> .env.tmp; mv .env.tmp .env'"
 
 gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- \
-  "cd /opt/catscan && sudo docker compose -f docker-compose.gcp.yml up -d"
+  "cd /opt/catscan && sudo docker compose -f docker-compose.gcp.yml pull && \
+   sudo docker compose -f docker-compose.gcp.yml up -d --no-build"
 ```
 
 ### Step 3: Verify
@@ -362,8 +363,9 @@ gcloud artifacts docker tags list \
 
 # Deploy specific version
 gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- \
-  "cd /opt/catscan && IMAGE_TAG=sha-abc1234 sudo docker compose -f docker-compose.gcp.yml pull && \
-   IMAGE_TAG=sha-abc1234 sudo docker compose -f docker-compose.gcp.yml up -d"
+  "cd /opt/catscan && sudo bash -c 'grep -v \"^IMAGE_TAG=\" .env > .env.tmp || true; printf \"%s\n\" \"IMAGE_TAG=sha-abc1234\" >> .env.tmp; mv .env.tmp .env' && \
+   sudo docker compose -f docker-compose.gcp.yml pull && \
+   sudo docker compose -f docker-compose.gcp.yml up -d --no-build"
 ```
 
 ### Important Notes
