@@ -44,6 +44,7 @@ jobs:
             -t "$IMAGE_REGISTRY/catscan-api:$IMAGE_TAG" \
             -t "$IMAGE_REGISTRY/catscan-api:latest" \
             --build-arg APP_VERSION="$(cat VERSION)" \
+            --build-arg GIT_SHA="${GITHUB_SHA::7}" \
             -f Dockerfile .
           docker push "$IMAGE_REGISTRY/catscan-api:$IMAGE_TAG"
           docker push "$IMAGE_REGISTRY/catscan-api:latest"
@@ -54,6 +55,7 @@ jobs:
             -t "$IMAGE_REGISTRY/catscan-dashboard:$IMAGE_TAG" \
             -t "$IMAGE_REGISTRY/catscan-dashboard:latest" \
             --build-arg APP_VERSION="$(cat VERSION)" \
+            --build-arg GIT_SHA="${GITHUB_SHA::7}" \
             --build-arg OAUTH2_PROXY_MODE=true \
             -f dashboard/Dockerfile dashboard
           docker push "$IMAGE_REGISTRY/catscan-dashboard:$IMAGE_TAG"

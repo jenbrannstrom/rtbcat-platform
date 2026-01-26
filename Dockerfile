@@ -44,10 +44,12 @@ RUN mkdir -p /home/rtbcat/.catscan && chown rtbcat:rtbcat /home/rtbcat/.catscan
 
 # Read version from VERSION file and set environment variables
 ARG APP_VERSION=0.9.0
+ARG GIT_SHA=unknown
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     DATABASE_PATH=/home/rtbcat/.catscan/catscan.db \
-    APP_VERSION=${APP_VERSION}
+    APP_VERSION=${APP_VERSION} \
+    GIT_SHA=${GIT_SHA}
 
 # Switch to non-root user
 USER rtbcat
