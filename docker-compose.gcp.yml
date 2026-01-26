@@ -31,6 +31,8 @@ services:
       - PRECOMPUTE_MONITOR_SECRET=${PRECOMPUTE_MONITOR_SECRET:-}
       - PRECOMPUTE_REFRESH_DAYS=${PRECOMPUTE_REFRESH_DAYS:-2}
       - PRECOMPUTE_REFRESH_MAX_AGE_HOURS=${PRECOMPUTE_REFRESH_MAX_AGE_HOURS:-36}
+      - BIGQUERY_PROJECT_ID=${BIGQUERY_PROJECT_ID:-}
+      - BIGQUERY_DATASET=${BIGQUERY_DATASET:-}
     restart: always
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
