@@ -7,7 +7,7 @@ Handles both:
   - Small reports (<10MB): Extract CSV attachment from email
 
 Features:
-  - Archives all imported CSVs to S3 with gzip compression
+  - Optionally archives imported CSVs to S3 with gzip compression
   - Tracks import status in ~/.catscan/gmail_import_status.json
 """
 
@@ -17,6 +17,8 @@ import sys
 import json
 import gzip
 import base64
+import html
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from datetime import datetime
@@ -50,10 +52,10 @@ STATUS_PATH = CATSCAN_DIR / 'gmail_import_status.json'
 LOCK_PATH = CATSCAN_DIR / 'gmail_import.lock'
 LOCK_STALE_SECONDS = 6 * 60 * 60
 
-# S3 Archive Configuration (Frankfurt region)
-S3_BUCKET = os.environ.get('CATSCAN_S3_BUCKET', 'rtbcat-csv-archive-frankfurt-328614522524')
+# S3 Archive Configuration (disabled by default)
+S3_BUCKET = os.environ.get('CATSCAN_S3_BUCKET', '')
 S3_REGION = os.environ.get('CATSCAN_S3_REGION', 'eu-central-1')
-S3_ARCHIVE_ENABLED = os.environ.get('CATSCAN_S3_ARCHIVE', 'true').lower() == 'true'
+S3_ARCHIVE_ENABLED = os.environ.get('CATSCAN_S3_ARCHIVE', 'false').lower() == 'true'
 GMAIL_LABEL = os.environ.get('CATSCAN_GMAIL_LABEL', '').strip()
 GMAIL_QUERY = os.environ.get('CATSCAN_GMAIL_QUERY', '').strip()
 INCLUDE_READ = os.environ.get('CATSCAN_GMAIL_INCLUDE_READ', 'false').lower() == 'true'
@@ -367,6 +369,10 @@ def archive_to_s3(filepath: Path, report_type: Optional[str] = None, verbose: bo
         if verbose:
             print("  S3 archival disabled, skipping...")
         return None
+    if not S3_BUCKET:
+        if verbose:
+            print("  S3 bucket not configured, skipping archival")
+        return None
 
     if report_type is None:
         report_type = detect_report_type(filepath)
@@ -487,7 +493,11 @@ def find_report_emails(service):
 
 def extract_download_url(body: str) -> Optional[str]:
     """Extract the GCS download URL from email body."""
-    pattern = r'https://storage\.cloud\.google\.com/buyside-scheduled-report-export/[\w-]+'
+    body = html.unescape(body)
+    pattern = (
+        r"https://storage\.cloud\.google\.com/"
+        r"buyside-scheduled-report-export/[^\s\"'>]+"
+    )
     match = re.search(pattern, body)
     return match.group(0) if match else None
 
@@ -598,11 +608,24 @@ def download_from_url(url: str, message_id: str, access_token: str = None, seat_
 
     print(f"  Downloading from URL: {url[:60]}...")
 
-    # Convert browser URL to API URL for authenticated access
+    # Convert browser URL to API URL
     # https://storage.cloud.google.com/bucket/object -> https://storage.googleapis.com/bucket/object
-    api_url = url.replace('storage.cloud.google.com', 'storage.googleapis.com')
+    api_url = url.replace('storage.cloud.google.com', 'storage.googleapis.com', 1)
+    parsed_url = urllib.parse.urlparse(api_url)
+    is_signed = any(
+        key in parsed_url.query
+        for key in ("X-Goog-Signature", "GoogleAccessId", "X-Goog-Algorithm")
+    )
 
-    if access_token:
+    if is_signed:
+        with requests.get(api_url, stream=True, timeout=60) as response:
+            if response.status_code != 200:
+                raise ValueError(f"GCS download failed: {response.status_code} - {response.text[:200]}")
+            with open(filepath, "wb") as f:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        f.write(chunk)
+    elif access_token:
         headers = {'Authorization': f'Bearer {access_token}'}
         with requests.get(api_url, headers=headers, stream=True, timeout=60) as response:
             if response.status_code != 200:
@@ -612,8 +635,7 @@ def download_from_url(url: str, message_id: str, access_token: str = None, seat_
                     if chunk:
                         f.write(chunk)
     else:
-        # Fallback to unauthenticated (will likely fail for private buckets)
-        urllib.request.urlretrieve(url, filepath)
+        raise ValueError("GCS download failed: missing signed URL and access token")
 
     # Verify it's a valid CSV
     with open(filepath, 'r') as f:
