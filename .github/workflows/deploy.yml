@@ -5,15 +5,6 @@ name: Deploy to GCP
 # with manual SSH deployments, corrupting containers and losing data.
 on:
   workflow_dispatch:  # Manual trigger only - click "Run workflow" in GitHub
-    inputs:
-      image_tag:
-        description: "Image tag to deploy (default: sha-<commit>)"
-        required: false
-        type: string
-      image_registry:
-        description: "Override image registry (default: Artifact Registry)"
-        required: false
-        type: string
 
 # Prevent concurrent deployments
 concurrency:
@@ -30,10 +21,6 @@ env:
   VM_NAME: ${{ vars.VM_NAME || 'catscan-production' }}
   APP_DIR: ${{ vars.APP_DIR || '/opt/catscan' }}
   GIT_BRANCH: ${{ vars.GIT_BRANCH || 'unified-platform' }}
-  PROJECT_ID: ${{ vars.GCP_PROJECT || 'catscan-prod-202601' }}
-  REGION: europe-west1
-  REPOSITORY: catscan
-  REGISTRY_HOST: europe-west1-docker.pkg.dev
 
 jobs:
   deploy:
@@ -55,6 +42,9 @@ jobs:
 
       - name: Deploy to VM via IAP tunnel
         run: |
+          # Get the short SHA for image tag
+          SHORT_SHA="${GITHUB_SHA::7}"
+
           gcloud compute ssh ${{ env.VM_NAME }} \
             --zone=${{ env.GCP_ZONE }} \
             --tunnel-through-iap \
@@ -63,39 +53,24 @@ jobs:
             --command="
               cd ${{ env.APP_DIR }}
 
-              # Pull latest code (docker-compose.gcp.yml + config)
+              # Pull latest code (for docker-compose.gcp.yml updates)
               sudo -u catscan git fetch origin
               sudo -u catscan git checkout ${{ env.GIT_BRANCH }}
               sudo -u catscan git reset --hard origin/${{ env.GIT_BRANCH }}
 
-              # Resolve image tag/registry (pin exact image)
-              IMAGE_TAG_INPUT='${{ github.event.inputs.image_tag }}'
-              IMAGE_REGISTRY_INPUT='${{ github.event.inputs.image_registry }}'
-              if [ -z \"\$IMAGE_TAG_INPUT\" ]; then
-                IMAGE_TAG_INPUT=sha-${GITHUB_SHA::7}
-              fi
-              if [ -z \"\$IMAGE_REGISTRY_INPUT\" ]; then
-                IMAGE_REGISTRY_INPUT=${{ env.REGISTRY_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}
-              fi
-              echo \"Deploying image: \$IMAGE_REGISTRY_INPUT (tag \$IMAGE_TAG_INPUT)\"
+              # Set image registry and tag for prebuilt images
+              export IMAGE_REGISTRY=europe-west1-docker.pkg.dev/catscan-prod-202601/catscan
+              export IMAGE_TAG=sha-${SHORT_SHA}
 
-              # Persist pinned image tag in .env
-              sudo bash -c 'touch .env'
-              sudo bash -c \"grep -v '^IMAGE_TAG=' .env > .env.tmp || true\"
-              sudo bash -c \"grep -v '^IMAGE_REGISTRY=' .env.tmp > .env.tmp2 || true\"
-              sudo bash -c \"printf '%s\n' 'IMAGE_TAG=\$IMAGE_TAG_INPUT' 'IMAGE_REGISTRY=\$IMAGE_REGISTRY_INPUT' >> .env.tmp2\"
-              sudo bash -c 'mv .env.tmp2 .env'
-              sudo rm -f .env.tmp
+              echo \"Deploying version: \$(cat VERSION) (sha-${SHORT_SHA})\"
 
-              # Only stop the app containers (not build processes)
-              sudo docker compose -f docker-compose.gcp.yml down --remove-orphans 2>/dev/null || true
+              # Pull prebuilt images from Artifact Registry (no building on VM)
+              sudo -E docker compose -f docker-compose.gcp.yml pull
 
-              # Pull pinned images and start without rebuilding
-              sudo docker compose -f docker-compose.gcp.yml pull
-              sudo docker compose -f docker-compose.gcp.yml up -d --no-build --force-recreate
+              # Start containers with new images
+              sudo -E docker compose -f docker-compose.gcp.yml up -d --force-recreate
 
               # Clean up old docker images to prevent disk filling up
-              # SAFE: only removes unused images, never volumes
               sudo docker image prune -f
               sudo docker container prune -f
 

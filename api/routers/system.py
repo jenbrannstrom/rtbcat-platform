@@ -42,6 +42,11 @@ def get_version() -> str:
     return "0.9.0"
 
 
+def get_git_sha() -> str:
+    """Get git SHA from environment variable (set during Docker build)."""
+    return os.environ.get("GIT_SHA", "unknown")
+
+
 # =============================================================================
 # Pydantic Models
 # =============================================================================
@@ -51,6 +56,7 @@ class HealthResponse(BaseModel):
     """Response model for health check."""
     status: str
     version: str
+    git_sha: str = "unknown"
     configured: bool
     has_credentials: bool = False
     database_exists: bool = False
@@ -259,6 +265,7 @@ async def health_check(
     return HealthResponse(
         status="healthy",
         version=get_version(),
+        git_sha=get_git_sha(),
         configured=configured,
         has_credentials=has_credentials,
         database_exists=db_path.exists(),

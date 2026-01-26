@@ -15,7 +15,9 @@ COPY . .
 
 # Version passed as build arg, exposed to Next.js at build time
 ARG APP_VERSION=0.9.0
+ARG GIT_SHA=unknown
 ENV NEXT_PUBLIC_APP_VERSION=${APP_VERSION}
+ENV NEXT_PUBLIC_GIT_SHA=${GIT_SHA}
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # OAuth2 Proxy mode - disables API rewrites so requests go through nginx

@@ -633,7 +633,12 @@ export function Sidebar() {
                 </p>
               )}
               <div className="flex items-center gap-2 text-xs text-gray-400">
-                <span>v{process.env.NEXT_PUBLIC_APP_VERSION || "0.9.0"}</span>
+                <span title={process.env.NEXT_PUBLIC_GIT_SHA ? `Build: ${process.env.NEXT_PUBLIC_GIT_SHA}` : undefined}>
+                  v{process.env.NEXT_PUBLIC_APP_VERSION || "0.9.0"}
+                  {process.env.NEXT_PUBLIC_GIT_SHA && process.env.NEXT_PUBLIC_GIT_SHA !== "unknown" && (
+                    <span className="text-gray-300 ml-1">({process.env.NEXT_PUBLIC_GIT_SHA})</span>
+                  )}
+                </span>
                 <span>·</span>
                 <a
                   href="https://docs.rtb.cat"
