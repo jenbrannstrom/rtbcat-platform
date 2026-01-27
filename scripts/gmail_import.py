@@ -634,7 +634,6 @@ def download_from_url(url: str, message_id: str, access_token: str = None, seat_
 
     # Download with retry
     last_error = None
-    download_success = False
     for attempt in range(MAX_RETRIES):
         try:
             with requests.get(api_url, headers=headers, stream=True, timeout=TIMEOUT) as response:
@@ -644,7 +643,6 @@ def download_from_url(url: str, message_id: str, access_token: str = None, seat_
                         for chunk in response.iter_content(chunk_size=1024 * 1024):
                             if chunk:
                                 f.write(chunk)
-                    download_success = True
                     break  # Success, exit retry loop
                 elif response.status_code in RETRYABLE_STATUS_CODES:
                     # Retryable error - clean up partial file
