@@ -595,8 +595,15 @@ def download_from_url(url: str, message_id: str, access_token: str = None, seat_
     """Download CSV from GCS URL (for reports >= 10MB).
 
     Uses OAuth access token for authenticated GCS downloads.
+    Includes retry with exponential backoff for transient errors.
     """
     import requests
+
+    # Retry configuration
+    MAX_RETRIES = 3
+    BACKOFF_BASE = 2  # seconds
+    TIMEOUT = 120  # seconds
+    RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     # Include seat_id in filename so the importer can identify the account
@@ -606,7 +613,7 @@ def download_from_url(url: str, message_id: str, access_token: str = None, seat_
         filename = f"report_{timestamp}_{message_id[:8]}.csv"
     filepath = IMPORTS_DIR / filename
 
-    print(f"  Downloading from URL: {url[:60]}...")
+    print(f"  Downloading from URL: {url[:60]}...", flush=True)
 
     # Convert browser URL to API URL
     # https://storage.cloud.google.com/bucket/object -> https://storage.googleapis.com/bucket/object
@@ -617,25 +624,59 @@ def download_from_url(url: str, message_id: str, access_token: str = None, seat_
         for key in ("X-Goog-Signature", "GoogleAccessId", "X-Goog-Algorithm")
     )
 
-    if is_signed:
-        with requests.get(api_url, stream=True, timeout=60) as response:
-            if response.status_code != 200:
-                raise ValueError(f"GCS download failed: {response.status_code} - {response.text[:200]}")
-            with open(filepath, "wb") as f:
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        f.write(chunk)
-    elif access_token:
-        headers = {'Authorization': f'Bearer {access_token}'}
-        with requests.get(api_url, headers=headers, stream=True, timeout=60) as response:
-            if response.status_code != 200:
-                raise ValueError(f"GCS download failed: {response.status_code} - {response.text[:200]}")
-            with open(filepath, "wb") as f:
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        f.write(chunk)
-    else:
-        raise ValueError("GCS download failed: missing signed URL and access token")
+    # Prepare headers
+    headers = {}
+    if not is_signed:
+        if access_token:
+            headers = {'Authorization': f'Bearer {access_token}'}
+        else:
+            raise ValueError("GCS download failed: missing signed URL and access token")
+
+    # Download with retry
+    last_error = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            with requests.get(api_url, headers=headers, stream=True, timeout=TIMEOUT) as response:
+                if response.status_code == 200:
+                    # Success - write to file
+                    with open(filepath, "wb") as f:
+                        for chunk in response.iter_content(chunk_size=1024 * 1024):
+                            if chunk:
+                                f.write(chunk)
+                    break  # Success, exit retry loop
+                elif response.status_code in RETRYABLE_STATUS_CODES:
+                    # Retryable error
+                    last_error = f"HTTP {response.status_code}"
+                    if attempt < MAX_RETRIES - 1:
+                        sleep_time = BACKOFF_BASE * (2 ** attempt)
+                        print(f"  Retry {attempt + 1}/{MAX_RETRIES} after {sleep_time}s ({last_error})", flush=True)
+                        time.sleep(sleep_time)
+                        continue
+                    else:
+                        raise ValueError(f"GCS download failed after {MAX_RETRIES} retries: {last_error}")
+                else:
+                    # Non-retryable error (4xx except 429) - fail fast
+                    raise ValueError(f"GCS download failed: {response.status_code} - {response.text[:200]}")
+
+        except requests.exceptions.Timeout as e:
+            last_error = f"Timeout after {TIMEOUT}s"
+            if attempt < MAX_RETRIES - 1:
+                sleep_time = BACKOFF_BASE * (2 ** attempt)
+                print(f"  Retry {attempt + 1}/{MAX_RETRIES} after {sleep_time}s ({last_error})", flush=True)
+                time.sleep(sleep_time)
+                continue
+            else:
+                raise ValueError(f"GCS download failed after {MAX_RETRIES} retries: {last_error}") from e
+
+        except requests.exceptions.RequestException as e:
+            last_error = str(e)
+            if attempt < MAX_RETRIES - 1:
+                sleep_time = BACKOFF_BASE * (2 ** attempt)
+                print(f"  Retry {attempt + 1}/{MAX_RETRIES} after {sleep_time}s ({last_error})", flush=True)
+                time.sleep(sleep_time)
+                continue
+            else:
+                raise ValueError(f"GCS download failed after {MAX_RETRIES} retries: {last_error}") from e
 
     # Verify it's a valid CSV
     with open(filepath, 'r') as f:
@@ -644,7 +685,7 @@ def download_from_url(url: str, message_id: str, access_token: str = None, seat_
             filepath.unlink()  # Delete invalid file
             raise ValueError("Downloaded file doesn't appear to be a valid CSV")
 
-    print(f"  Saved: {filepath.name}")
+    print(f"  Saved: {filepath.name}", flush=True)
     return [filepath]
 
 
