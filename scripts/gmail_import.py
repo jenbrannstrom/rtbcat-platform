@@ -36,6 +36,13 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
+# Optional: GCS client for service account authenticated downloads
+try:
+    from google.cloud import storage as gcs_storage
+    HAS_GCS_CLIENT = True
+except ImportError:
+    HAS_GCS_CLIENT = False
+
 # Configuration
 # Only gmail.modify is required - CSV reports come as email attachments
 SCOPES = [
@@ -591,10 +598,81 @@ def extract_attachments(service, message_id: str, payload: Dict) -> List[Path]:
     return downloaded_files
 
 
+def parse_gcs_url(url: str) -> tuple[Optional[str], Optional[str]]:
+    """Parse bucket and object name from a GCS URL.
+
+    Handles URLs like:
+    - https://storage.cloud.google.com/bucket-name/object-path
+    - https://storage.googleapis.com/bucket-name/object-path
+
+    Returns:
+        Tuple of (bucket_name, object_name) or (None, None) if not a valid GCS URL
+    """
+    parsed = urllib.parse.urlparse(url)
+    if parsed.netloc not in ('storage.cloud.google.com', 'storage.googleapis.com'):
+        return None, None
+
+    # Path is /bucket-name/object-path
+    path_parts = parsed.path.strip('/').split('/', 1)
+    if len(path_parts) < 2:
+        return None, None
+
+    return path_parts[0], path_parts[1]
+
+
+def download_via_gcs_client(bucket_name: str, object_name: str, filepath: Path) -> bool:
+    """Download a file from GCS using the google-cloud-storage client.
+
+    Uses service account credentials from GOOGLE_APPLICATION_CREDENTIALS env var.
+
+    Returns:
+        True if download succeeded, False if failed (caller should try fallback)
+    """
+    if not HAS_GCS_CLIENT:
+        print("  GCS client not available, skipping service account download", flush=True)
+        return False
+
+    creds_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+    if not creds_path:
+        print("  GOOGLE_APPLICATION_CREDENTIALS not set, skipping service account download", flush=True)
+        return False
+
+    try:
+        client = gcs_storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(object_name)
+
+        print(f"  Attempting GCS client download (service account)...", flush=True)
+        blob.download_to_filename(str(filepath))
+        print(f"  GCS client download succeeded", flush=True)
+        return True
+
+    except Exception as e:
+        error_msg = str(e)
+        if 'does not have storage.objects.get access' in error_msg:
+            print(f"  GCS client failed: Service account lacks storage.objects.get permission on bucket '{bucket_name}'", flush=True)
+        elif '403' in error_msg or 'Forbidden' in error_msg:
+            print(f"  GCS client failed: Access denied to bucket '{bucket_name}' - check IAM permissions", flush=True)
+        elif '404' in error_msg or 'Not Found' in error_msg:
+            print(f"  GCS client failed: Object not found (may be expired)", flush=True)
+        else:
+            print(f"  GCS client failed: {error_msg[:100]}", flush=True)
+
+        # Clean up partial file if it exists
+        if filepath.exists():
+            filepath.unlink()
+        return False
+
+
 def download_from_url(url: str, message_id: str, access_token: str = None, seat_id: str = None) -> List[Path]:
     """Download CSV from GCS URL (for reports >= 10MB).
 
-    Uses OAuth access token for authenticated GCS downloads.
+    Authentication methods (tried in order):
+    1. GCS client with service account (GOOGLE_APPLICATION_CREDENTIALS env var)
+       - Requires storage.objects.get IAM permission on the bucket
+    2. OAuth access token (Bearer token in Authorization header)
+    3. Pre-signed URL (no auth needed if URL contains signature params)
+
     Includes retry with exponential backoff for transient errors.
     """
     import requests
@@ -615,22 +693,41 @@ def download_from_url(url: str, message_id: str, access_token: str = None, seat_
 
     print(f"  Downloading from URL: {url[:60]}...", flush=True)
 
-    # Convert browser URL to API URL
-    # https://storage.cloud.google.com/bucket/object -> https://storage.googleapis.com/bucket/object
-    api_url = url.replace('storage.cloud.google.com', 'storage.googleapis.com', 1)
-    parsed_url = urllib.parse.urlparse(api_url)
+    # Parse URL to check for signed parameters and extract bucket/object
+    parsed_url = urllib.parse.urlparse(url)
     is_signed = any(
         key in parsed_url.query
         for key in ("X-Goog-Signature", "GoogleAccessId", "X-Goog-Algorithm")
     )
 
-    # Prepare headers
+    # Try GCS client with service account first (for non-signed URLs)
+    if not is_signed:
+        bucket_name, object_name = parse_gcs_url(url)
+        if bucket_name and object_name:
+            if download_via_gcs_client(bucket_name, object_name, filepath):
+                # GCS client download succeeded - verify and return
+                with open(filepath, 'r') as f:
+                    first_line = f.readline()
+                    if not first_line or '\x00' in first_line or first_line.startswith('<!doctype'):
+                        filepath.unlink()
+                        raise ValueError("Downloaded file doesn't appear to be a valid CSV")
+                print(f"  Saved: {filepath.name}", flush=True)
+                return [filepath]
+            # GCS client failed, continue to fallback methods
+
+    # Convert browser URL to API URL for fallback methods
+    # https://storage.cloud.google.com/bucket/object -> https://storage.googleapis.com/bucket/object
+    api_url = url.replace('storage.cloud.google.com', 'storage.googleapis.com', 1)
+
+    # Prepare headers for fallback download
     headers = {}
     if not is_signed:
         if access_token:
             headers = {'Authorization': f'Bearer {access_token}'}
         else:
-            raise ValueError("GCS download failed: missing signed URL and access token")
+            raise ValueError("GCS download failed: Service account download failed and no OAuth access token available. "
+                           "Ensure GOOGLE_APPLICATION_CREDENTIALS is set and the service account has "
+                           "storage.objects.get permission on the bucket.")
 
     # Download with retry
     last_error = None
