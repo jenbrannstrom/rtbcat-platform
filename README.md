@@ -124,9 +124,19 @@ For MCP Chromium setup (browser-based inspection), see `docs/MCP_CHROMIUM.md`.
                          │                                                         │
                          ▼                                                         ▼
           ┌──────────────────────────────┐                      ┌──────────────────────────────┐
-          │ SQLite Database              │                      │ Google Authorized            │
+          │ SQLite (legacy staging)      │                      │ Google Authorized            │
           │ ~/.catscan/catscan.db        │                      │ Buyers API                   │
           └──────────────────────────────┘                      └──────────────────────────────┘
+                         │
+                         ▼
+          ┌──────────────────────────────┐
+          │ GCS + BigQuery (raw_facts)   │
+          └──────────────────────────────┘
+                         │
+                         ▼
+          ┌──────────────────────────────┐
+          │ Postgres (serving/precompute)│
+          └──────────────────────────────┘
 ```
 
 ### API Routers
@@ -146,7 +156,7 @@ For MCP Chromium setup (browser-based inspection), see `docs/MCP_CHROMIUM.md`.
 
 ### Database Schema
 
-See **[DATA_MODEL.md](DATA_MODEL.md)** for the complete 41-table schema and multi-bidder architecture documentation.
+See **[DATA_MODEL.md](DATA_MODEL.md)** for the canonical schema and multi-bidder architecture documentation.
 
 ---
 
@@ -375,7 +385,7 @@ docker compose up -d api
 
 ```
 ~/.catscan/
-├── catscan.db              # SQLite database
+├── catscan.db              # SQLite legacy staging (optional)
 ├── thumbnails/             # Generated video thumbnails
 ├── imports/                # Downloaded CSV reports
 └── credentials/
@@ -388,7 +398,20 @@ Create `.env` in the project root:
 
 ```bash
 GOOGLE_APPLICATION_CREDENTIALS=~/.catscan/credentials/google-credentials.json
+
+# Legacy SQLite (optional)
 DATABASE_PATH=~/.catscan/catscan.db
+
+# Postgres serving (recommended)
+POSTGRES_DSN=postgresql://user:pass@host:5432/rtbcat_serving
+POSTGRES_SERVING_DSN=postgresql://user:pass@host:5432/rtbcat_serving
+
+# Pipeline (CSV → Parquet → GCS → BigQuery)
+CATSCAN_PIPELINE_ENABLED=true
+CATSCAN_GCS_BUCKET=your-bucket
+RAW_PARQUET_BUCKET=your-bucket
+CATSCAN_BQ_DATASET=rtbcat_analytics
+CATSCAN_BQ_PROJECT=your-project
 ```
 
 ---
