@@ -13,6 +13,26 @@ This runbook tracks the four migration tasks:
 - A GCS bucket for raw exports.
 - A BigQuery dataset for staging/partitioned tables.
 - A Postgres instance with the target schema and summary tables.
+- API container must be configured to use Postgres DSNs (not SQLite).
+- Cloud SQL Auth Proxy (or equivalent) must be running on the VM.
+
+## 0) Ensure API uses Postgres (not SQLite)
+
+On SG VM, the API container must receive `POSTGRES_DSN` and `POSTGRES_SERVING_DSN`.
+If `DATABASE_PATH` is set, the API will keep using SQLite.
+
+**Compose patch (SG VM):**
+- Add `env_file: .env` to load `/opt/catscan/.env`
+- Remove `DATABASE_PATH`
+- Add `POSTGRES_DSN` and `POSTGRES_SERVING_DSN` in environment
+
+**Restart:**
+```bash
+cd /opt/catscan
+sudo docker compose -f docker-compose.gcp.yml down
+sudo docker compose -f docker-compose.gcp.yml up -d
+sudo docker exec catscan-api env | grep -i postgres
+```
 
 ## 1) Export SQLite raw tables to CSV/Parquet
 
@@ -90,6 +110,20 @@ FROM YOUR_DATASET.rtb_bidstream_staging;
 ```
 
 Repeat the same pattern for `rtb_daily`, `rtb_bid_filtering`, `rtb_quality`, and `rtb_traffic`.
+
+## 2b) Gmail ingest operational safety (large batches)
+
+For large Gmail batches (200+ emails), use a non-interactive batch runner with checkpointing.
+Recommended commands (after code deploy):
+
+```bash
+cd /opt/catscan && git pull
+nohup python3 scripts/gmail_import_batch.py --batch-size 10 >> ~/.catscan/logs/gmail_batch.log 2>&1 &
+tail -f ~/.catscan/logs/gmail_batch.log
+python3 scripts/gmail_import_batch.py --status
+```
+
+Checkpoint file: `~/.catscan/gmail_batch_checkpoint.json`
 
 ## BigQuery table reference (rtb_daily, rtb_bidstream)
 
@@ -212,3 +246,4 @@ The precompute refresh covers:
 - Partitioned tables in BigQuery include the expected date ranges.
 - Precompute validation passes for the last 90 days.
 - UI analytics pages render with data in the expected date ranges.
+- `precompute_refresh_log` shows recent successful runs covering the date range.
