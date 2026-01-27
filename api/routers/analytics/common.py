@@ -8,7 +8,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from storage.serving_database import db_query, db_query_one
+from storage.serving_database import db_query, db_query_one, table_exists
 
 
 async def get_precompute_status(
@@ -18,11 +18,7 @@ async def get_precompute_status(
     params: Optional[list] = None,
 ) -> dict:
     """Check if a precompute table exists and has rows for the requested range."""
-    table_row = await db_query_one(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
-        (table_name,),
-    )
-    if not table_row:
+    if not await table_exists(table_name):
         return {
             "table": table_name,
             "exists": False,
