@@ -634,6 +634,7 @@ def download_from_url(url: str, message_id: str, access_token: str = None, seat_
 
     # Download with retry
     last_error = None
+    download_success = False
     for attempt in range(MAX_RETRIES):
         try:
             with requests.get(api_url, headers=headers, stream=True, timeout=TIMEOUT) as response:
@@ -643,9 +644,12 @@ def download_from_url(url: str, message_id: str, access_token: str = None, seat_
                         for chunk in response.iter_content(chunk_size=1024 * 1024):
                             if chunk:
                                 f.write(chunk)
+                    download_success = True
                     break  # Success, exit retry loop
                 elif response.status_code in RETRYABLE_STATUS_CODES:
-                    # Retryable error
+                    # Retryable error - clean up partial file
+                    if filepath.exists():
+                        filepath.unlink()
                     last_error = f"HTTP {response.status_code}"
                     if attempt < MAX_RETRIES - 1:
                         sleep_time = BACKOFF_BASE * (2 ** attempt)
@@ -655,10 +659,15 @@ def download_from_url(url: str, message_id: str, access_token: str = None, seat_
                     else:
                         raise ValueError(f"GCS download failed after {MAX_RETRIES} retries: {last_error}")
                 else:
-                    # Non-retryable error (4xx except 429) - fail fast
+                    # Non-retryable error (4xx except 429) - fail fast, clean up
+                    if filepath.exists():
+                        filepath.unlink()
                     raise ValueError(f"GCS download failed: {response.status_code} - {response.text[:200]}")
 
         except requests.exceptions.Timeout as e:
+            # Clean up partial file on timeout
+            if filepath.exists():
+                filepath.unlink()
             last_error = f"Timeout after {TIMEOUT}s"
             if attempt < MAX_RETRIES - 1:
                 sleep_time = BACKOFF_BASE * (2 ** attempt)
@@ -669,6 +678,9 @@ def download_from_url(url: str, message_id: str, access_token: str = None, seat_
                 raise ValueError(f"GCS download failed after {MAX_RETRIES} retries: {last_error}") from e
 
         except requests.exceptions.RequestException as e:
+            # Clean up partial file on request error
+            if filepath.exists():
+                filepath.unlink()
             last_error = str(e)
             if attempt < MAX_RETRIES - 1:
                 sleep_time = BACKOFF_BASE * (2 ** attempt)
