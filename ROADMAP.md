@@ -14,6 +14,7 @@
 - [x] **Campaigns create action no-op** - Clicking "Create" on auto cluster does nothing
 - [ ] **Creative modal missing publisher data** - "No publisher data for this config" despite migrated tables
 - [ ] ~~**CI/CD pipeline** - Build images in GitHub Actions and deploy via docker pull (Artifact Registry)~~ **(Done)**
+- [ ] **BigQuery raw_facts coverage** - Data only through Jan 25; Jan 26–27 pending reprocess after pipeline fix
 
 ---
 
@@ -172,7 +173,9 @@
 - [ ] **Seat scope verification** - Confirm all Home endpoints enforce `buyer_id` and user permissions
 
 ### Phase 1 — Import & Data Model Fixes
-- [ ] **Persist seat identity** - Ensure `bidder_id` is stored for all imports (`rtb_daily`, `rtb_bidstream`, `rtb_bid_filtering`)
+- [x] **Postgres schema alignment** - Raw fact tables + BIGINT upgrades + pretargeting_publishers table
+- [ ] **Backfill raw fact tables** - Load `rtb_daily`, `rtb_bidstream`, `rtb_bid_filtering`, `rtb_quality` into Postgres
+- [ ] **Persist seat identity** - Ensure `bidder_id` stored for all imports (`rtb_daily`, `rtb_bidstream`, `rtb_bid_filtering`)
 - [ ] **Billing ID guarantees** - Enforce `billing_id` for per-config reports; exclude rows missing it from config breakdowns
 - [ ] **Join-safe keys** - Geo/publisher joins must include seat identity (`bidder_id` or `buyer_account_id`)
 
