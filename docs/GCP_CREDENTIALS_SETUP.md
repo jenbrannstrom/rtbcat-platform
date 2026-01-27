@@ -921,7 +921,13 @@ gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-throu
   "bq query --use_legacy_sql=false 'SELECT COUNT(*) FROM rtbcat_analytics.raw_facts'"
 ```
 
-> **Note:** The `$POSTGRES_SERVING_DSN` environment variable is set in `/etc/catscan.env` and contains the connection string for Cloud SQL via the Auth Proxy (localhost:5432).
+> **Note:** The `$POSTGRES_SERVING_DSN` environment variable should be set in `/opt/catscan/.env`. The credentials are stored in GCP Secret Manager:
+> ```bash
+> gcloud secrets versions access latest --secret="catscan-serving-db-credentials" --project=catscan-prod-202601
+> ```
+> This returns JSON with `username`, `password`, and `database`. Build the DSN as:
+> `postgresql://<username>:<url-encoded-password>@localhost:5432/<database>`
+> (The Auth Proxy connects to Cloud SQL on localhost:5432)
 
 **Upgrade if needed:**
 ```bash
