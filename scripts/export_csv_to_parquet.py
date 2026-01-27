@@ -196,11 +196,14 @@ def normalize_value(value: str, field_type: pa.DataType, buyer_id: Optional[str]
         raise ValueError(f"Unable to parse date: {value}")
 
     if pa.types.is_int64(field_type):
-        # Remove commas and convert
-        return int(value.replace(",", "").replace(" ", ""))
+        # Remove commas, currency symbols, and whitespace
+        cleaned = value.replace(",", "").replace(" ", "").replace("$", "").replace("€", "").replace("£", "")
+        return int(float(cleaned)) if "." in cleaned else int(cleaned)
 
     if pa.types.is_float64(field_type):
-        return float(value.replace(",", "").replace(" ", ""))
+        # Remove commas, currency symbols, and whitespace
+        cleaned = value.replace(",", "").replace(" ", "").replace("$", "").replace("€", "").replace("£", "")
+        return float(cleaned)
 
     if pa.types.is_string(field_type):
         return value
