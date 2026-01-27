@@ -179,6 +179,7 @@ def run_batch_import(
             elif not downloaded_files:
                 log("  No CSV found")
                 checkpoint["processed_ids"].append(message_id)
+                mark_as_read(service, message_id)  # Prevent reprocessing
                 session_processed += 1
 
             else:
@@ -221,18 +222,21 @@ def run_batch_import(
         # Update checkpoint every batch
         batch_count += 1
         if batch_count >= batch_size:
-            checkpoint["total_processed"] += batch_count
+            checkpoint["total_processed"] = len(checkpoint["processed_ids"])
             checkpoint["total_imported"] += session_imported
             checkpoint["total_errors"] += session_errors
             save_checkpoint(checkpoint)
             log(f"  Checkpoint saved ({session_processed} processed this session)")
             batch_count = 0
+            # Reset session counters after checkpoint to avoid double-counting
+            session_imported = 0
+            session_errors = 0
 
         # Rate limiting delay
         if delay_seconds > 0 and i < len(pending_messages):
             time.sleep(delay_seconds)
 
-    # Final checkpoint save
+    # Final checkpoint save (only adds remaining unsaved counts)
     checkpoint["total_processed"] = len(checkpoint["processed_ids"])
     checkpoint["total_imported"] += session_imported
     checkpoint["total_errors"] += session_errors
