@@ -1,6 +1,6 @@
 # RTBcat Platform - Data Model Documentation
 
-This document describes the database schema for the RTBcat platform, a real-time bidding (RTB) analytics and creative management system using SQLite.
+This document describes the database schema for the RTBcat platform, a real-time bidding (RTB) analytics and creative management system. SQLite is legacy storage; Postgres is the serving store for analytics and precompute.
 
 ## Table of Contents
 
@@ -13,6 +13,8 @@ This document describes the database schema for the RTBcat platform, a real-time
 7. [Import & Upload Tracking](#import--upload-tracking)
 8. [User Authentication & Security](#user-authentication--security)
 9. [Lookup & Reference Tables](#lookup--reference-tables)
+10. [Canonical QPS Schema Requirements](#canonical-qps-schema-requirements)
+11. [Schema Gaps & Required Fixes](#schema-gaps--required-fixes)
 
 ---
 
@@ -264,6 +266,54 @@ WHERE q.billing_id IS NOT NULL
 ```
 
 This gives you: **Billing ID + Bids + Bids in auction + Auctions won** per creative.
+
+---
+
+## Canonical QPS Schema Requirements
+
+QPS optimization and publisher list management require a canonical set of fields across raw fact tables and summaries. These columns must exist even if some reports do not provide them (NULL defaults allowed).
+
+**Required fields across raw fact tables:**
+- `metric_date`, `hour`, `buyer_account_id`, `bidder_id`
+- `billing_id` (pretargeting config ID)
+- `publisher_id`, `publisher_name`
+- `country`
+- `platform`, `environment`
+- `app_id`, `app_name`
+- `creative_id`, `creative_size`, `creative_format`
+- `reached_queries`, `bid_requests`, `bids`, `bids_in_auction`, `auctions_won`
+- `successful_responses`, `impressions`, `clicks`
+- `spend_micros`
+- `report_type` (funnel_publishers, funnel_geo, quality, bidsinauction, bid_filtering)
+
+**Summary tables required for UI/QPS:**
+- Home: `home_*_daily` (seat, publisher, geo, size, config)
+- RTB: `rtb_funnel_daily`, `rtb_publisher_daily`, `rtb_geo_daily`
+- QPS optimizer: `rtb_daily`, `rtb_bidstream`, `rtb_bid_filtering`, `rtb_quality`
+- Pretargeting: `pretargeting_configs`, `pretargeting_snapshots`, `pretargeting_history`, `pretargeting_pending_changes`
+
+---
+
+## Schema Gaps & Required Fixes
+
+These gaps block full QPS optimization and UI completeness:
+
+1) **Raw fact tables missing from Postgres schema**
+   - `rtb_daily`, `rtb_bidstream`, `rtb_bid_filtering`, `rtb_quality` are required by QPS optimizer but are not defined in Postgres schema/migrations.
+
+2) **Missing fields in raw_facts pipeline**
+   - `report_type`, `creative_size`, `billing_id` must exist to enable size/config aggregations.
+   - `platform`, `environment`, `app_id`, `app_name` required for platform/app drilldowns.
+
+3) **Geo waste analysis uses billing_id**
+   - `performance_metrics` needs `billing_id` or analyzer must be updated.
+
+4) **Pretargeting publisher list not normalized**
+   - UI requires per-publisher state, mode, pending changes, and audit trail.
+   - Add a normalized table for publisher targeting (see Pretargeting section).
+
+5) **Aggregate counters must be BIGINT**
+   - High-volume metrics exceed INT32. Use BIGINT for all aggregated counts in Postgres summary tables.
 
 ---
 
@@ -544,6 +594,8 @@ Billing accounts (simplified seat reference).
 
 ## RTB Performance & Analytics
 
+**Serving requirement:** These raw fact tables must exist in Postgres for QPS optimization. Aggregated counters in Postgres should be BIGINT to avoid overflow.
+
 ### performance_metrics
 
 Granular performance data per creative.
@@ -636,6 +688,7 @@ Detailed RTB metrics imported from CSV reports (Bids in Auction report).
 | buyer_account_id | TEXT | Buyer account ID |
 | buyer_account_name | TEXT | Buyer account name |
 | bidder_id | TEXT | Bidder ID |
+| report_type | TEXT | Source report type (quality, bidsinauction) |
 | hour | INTEGER | Hour (0-23) |
 | reached_queries | INTEGER | Bid requests |
 | impressions | INTEGER | Impressions |
@@ -873,6 +926,23 @@ Queue of pending pretargeting changes.
 | status | TEXT | Status (pending, applied) |
 | applied_at | TIMESTAMP | When applied |
 | applied_by | TEXT | Who applied |
+
+### pretargeting_publishers (Required for Publisher List UI)
+
+Normalized publisher targeting for whitelist/blacklist management. This avoids parsing JSON blobs and supports pending changes and auditability.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER | Primary key |
+| billing_id | TEXT | Pretargeting config billing ID |
+| publisher_id | TEXT | Publisher ID or domain |
+| mode | TEXT | `BLACKLIST` or `WHITELIST` |
+| status | TEXT | `active`, `pending_add`, `pending_remove` |
+| source | TEXT | `api_sync` or `user` |
+| created_at | TIMESTAMP | Creation time |
+| updated_at | TIMESTAMP | Last update time |
+
+**Indexes:** (billing_id), (publisher_id), (billing_id, mode)
 
 ### pretargeting_change_log
 
