@@ -183,6 +183,15 @@ def _bq_schema_for_table(table_name: str) -> list["bigquery.SchemaField"]:
     raise ValueError(f"Unknown table for BigQuery schema: {table_name}")
 
 
+def _clean_numeric_string(value: Any) -> str:
+    """Strip currency symbols and formatting from numeric strings."""
+    s = str(value).strip()
+    # Remove currency symbols and thousands separators
+    for char in ("$", "€", "£", ","):
+        s = s.replace(char, "")
+    return s
+
+
 def _normalize_value(value: Any, field_type: "pa.DataType") -> Any:
     if value is None or value == "":
         return None
@@ -191,7 +200,19 @@ def _normalize_value(value: Any, field_type: "pa.DataType") -> Any:
             return value
         return date.fromisoformat(str(value))
     if pa.types.is_integer(field_type):
-        return int(value)
+        if isinstance(value, int):
+            return value
+        # Handle currency-formatted strings like "$0.49" -> 0
+        cleaned = _clean_numeric_string(value)
+        try:
+            return int(cleaned)
+        except ValueError:
+            # If it's a float string, convert to int (truncate)
+            return int(float(cleaned))
+    if pa.types.is_floating(field_type):
+        if isinstance(value, (int, float)):
+            return float(value)
+        return float(_clean_numeric_string(value))
     if pa.types.is_string(field_type):
         return str(value)
     return value
