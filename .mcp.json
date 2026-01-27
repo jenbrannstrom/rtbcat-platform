@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "chromium": {
+      "command": "/home/x1-7/Documents/rtbcat-platform/scripts/mcp-chromium-cdp.sh"
+    }
+  }
+}
