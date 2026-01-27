@@ -51,6 +51,9 @@ logger = logging.getLogger(__name__)
 # These query BigQuery raw_facts and return aggregated results
 
 AGG_QUERIES = {
+    # NOTE: raw_facts schema does not have report_type, creative_size, or billing_id
+    # Queries updated to use only available columns
+
     "home_publisher_daily": """
         SELECT
             metric_date as metric_date,
@@ -66,7 +69,6 @@ AGG_QUERIES = {
         FROM `{project}.{dataset}.raw_facts`
         WHERE metric_date = @metric_date
           AND publisher_id IS NOT NULL
-          AND report_type = 'funnel_publishers'
         GROUP BY metric_date, buyer_account_id, publisher_id
     """,
 
@@ -84,23 +86,11 @@ AGG_QUERIES = {
         FROM `{project}.{dataset}.raw_facts`
         WHERE metric_date = @metric_date
           AND country IS NOT NULL
-          AND report_type IN ('funnel_publishers', 'funnel_geo')
         GROUP BY metric_date, buyer_account_id, country
     """,
 
-    "home_size_daily": """
-        SELECT
-            metric_date as metric_date,
-            buyer_account_id,
-            creative_size,
-            SUM(COALESCE(reached_queries, 0)) as reached_queries,
-            SUM(COALESCE(impressions, 0)) as impressions
-        FROM `{project}.{dataset}.raw_facts`
-        WHERE metric_date = @metric_date
-          AND creative_size IS NOT NULL
-          AND report_type = 'quality'
-        GROUP BY metric_date, buyer_account_id, creative_size
-    """,
+    # home_size_daily: DISABLED - requires creative_size column not in raw_facts
+    # "home_size_daily": """...""",
 
     "home_seat_daily": """
         SELECT
@@ -114,24 +104,28 @@ AGG_QUERIES = {
             SUM(COALESCE(auctions_won, 0)) as auctions_won
         FROM `{project}.{dataset}.raw_facts`
         WHERE metric_date = @metric_date
-          AND report_type IN ('funnel_publishers', 'funnel_geo')
         GROUP BY metric_date, buyer_account_id
     """,
 
-    "home_config_daily": """
+    # home_config_daily: DISABLED - requires billing_id column not in raw_facts
+    # "home_config_daily": """...""",
+
+    "rtb_publisher_daily": """
         SELECT
             metric_date as metric_date,
             buyer_account_id,
-            billing_id,
+            publisher_id,
+            MAX(publisher_name) as publisher_name,
             SUM(COALESCE(reached_queries, 0)) as reached_queries,
             SUM(COALESCE(impressions, 0)) as impressions,
-            SUM(COALESCE(bids_in_auction, 0)) as bids_in_auction,
+            SUM(COALESCE(bids, 0)) as bids,
+            SUM(COALESCE(successful_responses, 0)) as successful_responses,
+            SUM(COALESCE(bid_requests, 0)) as bid_requests,
             SUM(COALESCE(auctions_won, 0)) as auctions_won
         FROM `{project}.{dataset}.raw_facts`
         WHERE metric_date = @metric_date
-          AND billing_id IS NOT NULL
-          AND report_type = 'quality'
-        GROUP BY metric_date, buyer_account_id, billing_id
+          AND publisher_id IS NOT NULL
+        GROUP BY metric_date, buyer_account_id, publisher_id
     """,
 }
 
@@ -211,6 +205,23 @@ PG_UPSERTS = {
             bids_in_auction = EXCLUDED.bids_in_auction,
             auctions_won = EXCLUDED.auctions_won
     """,
+
+    "rtb_publisher_daily": """
+        INSERT INTO rtb_publisher_daily
+            (metric_date, buyer_account_id, publisher_id, publisher_name,
+             reached_queries, impressions, bids, successful_responses,
+             bid_requests, auctions_won)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (metric_date, buyer_account_id, publisher_id)
+        DO UPDATE SET
+            publisher_name = EXCLUDED.publisher_name,
+            reached_queries = EXCLUDED.reached_queries,
+            impressions = EXCLUDED.impressions,
+            bids = EXCLUDED.bids,
+            successful_responses = EXCLUDED.successful_responses,
+            bid_requests = EXCLUDED.bid_requests,
+            auctions_won = EXCLUDED.auctions_won
+    """,
 }
 
 # Row to tuple mapping for each table
@@ -238,6 +249,12 @@ ROW_EXTRACTORS = {
     "home_config_daily": lambda r: (
         r["metric_date"], r["buyer_account_id"], r["billing_id"],
         r["reached_queries"], r["impressions"], r["bids_in_auction"],
+        r["auctions_won"]
+    ),
+    "rtb_publisher_daily": lambda r: (
+        r["metric_date"], r["buyer_account_id"], r["publisher_id"],
+        r["publisher_name"], r["reached_queries"], r["impressions"],
+        r["bids"], r["successful_responses"], r["bid_requests"],
         r["auctions_won"]
     ),
 }
