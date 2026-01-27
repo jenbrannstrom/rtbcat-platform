@@ -21,4 +21,8 @@ if [ -z "${CDP_ENDPOINT}" ]; then
   exit 1
 fi
 
-exec npx -y @playwright/mcp --cdp-endpoint "${CDP_ENDPOINT}" --host 127.0.0.1 --port 8765
+exec playwright-mcp \
+  --cdp-endpoint "${CDP_ENDPOINT}" \
+  --host localhost \
+  --port 8765 \
+  --allowed-hosts "*"
