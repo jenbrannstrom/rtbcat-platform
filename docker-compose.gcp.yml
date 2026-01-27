@@ -22,9 +22,15 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - "${DATA_DIR:-~/.catscan}:/home/rtbcat/.catscan"
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/home/rtbcat/.catscan/credentials/google-credentials.json
-      - DATABASE_PATH=/home/rtbcat/.catscan/catscan.db
+      # DATABASE_PATH removed - using Postgres via POSTGRES_DSN from .env
+      - POSTGRES_DSN=${POSTGRES_DSN}
+      - POSTGRES_SERVING_DSN=${POSTGRES_SERVING_DSN}
       - OAUTH2_PROXY_ENABLED=true
       - GMAIL_IMPORT_SECRET=${GMAIL_IMPORT_SECRET:-}
       - PRECOMPUTE_REFRESH_SECRET=${PRECOMPUTE_REFRESH_SECRET:-}
@@ -33,6 +39,11 @@ services:
       - PRECOMPUTE_REFRESH_MAX_AGE_HOURS=${PRECOMPUTE_REFRESH_MAX_AGE_HOURS:-36}
       - BIGQUERY_PROJECT_ID=${BIGQUERY_PROJECT_ID:-}
       - BIGQUERY_DATASET=${BIGQUERY_DATASET:-}
+      # GCS bucket for Parquet export pipeline
+      - CATSCAN_GCS_BUCKET=${CATSCAN_GCS_BUCKET:-}
+      - RAW_PARQUET_BUCKET=${RAW_PARQUET_BUCKET:-}
+      - CATSCAN_BQ_DATASET=${CATSCAN_BQ_DATASET:-}
+      - CATSCAN_BQ_PROJECT=${CATSCAN_BQ_PROJECT:-}
     restart: always
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
