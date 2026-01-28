@@ -69,7 +69,7 @@ BQ_QUERIES = {
             buyer_account_id,
             buyer_account_name,
             bidder_id,
-            report_type,
+            NULL as report_type,
             hour,
             COALESCE(reached_queries, 0) as reached_queries,
             COALESCE(impressions, 0) as impressions,
