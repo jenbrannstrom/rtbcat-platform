@@ -69,6 +69,7 @@ SCHEMAS = {
         ("auctions_won", pa.int64()),
         ("impressions", pa.int64()),
         ("clicks", pa.int64()),
+        ("report_type", pa.string()),
     ]),
     "funnel_geo": pa.schema([
         ("metric_date", pa.date32()),
@@ -83,6 +84,7 @@ SCHEMAS = {
         ("auctions_won", pa.int64()),
         ("impressions", pa.int64()),
         ("clicks", pa.int64()),
+        ("report_type", pa.string()),
     ]),
     "bid_filtering": pa.schema([
         ("metric_date", pa.date32()),
@@ -91,6 +93,7 @@ SCHEMAS = {
         ("buyer_account_id", pa.string()),
         ("bid_filtering_reason", pa.string()),
         ("bids", pa.int64()),
+        ("report_type", pa.string()),
     ]),
     "quality": pa.schema([
         ("metric_date", pa.date32()),
@@ -104,6 +107,7 @@ SCHEMAS = {
         ("spend_buyer_currency", pa.float64()),
         ("active_view_viewable", pa.int64()),
         ("active_view_measurable", pa.int64()),
+        ("report_type", pa.string()),
     ]),
     "bidsinauction": pa.schema([
         ("metric_date", pa.date32()),
@@ -117,6 +121,7 @@ SCHEMAS = {
         ("impressions", pa.int64()),
         ("spend_buyer_currency", pa.float64()),
         ("spend_bidder_currency", pa.float64()),
+        ("report_type", pa.string()),
     ]),
 }
 
@@ -260,6 +265,9 @@ def parse_csv_to_records(
                 for field in schema:
                     if field.name not in record:
                         record[field.name] = None
+
+                # Set report_type from detected type
+                record["report_type"] = report_type
 
                 records.append(record)
 
