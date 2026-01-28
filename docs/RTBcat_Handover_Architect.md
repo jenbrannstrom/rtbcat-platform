@@ -123,6 +123,63 @@ You are **senior to Claude** and responsible for **delegation, sequencing, and a
 
 ---
 
+## 🛠️ Quick Commands (Single-Place Reference)
+
+**1) Re-run aggregation (BQ → Postgres):**
+```bash
+python scripts/bq_aggregate_to_pg.py --date-range 2026-01-07 2026-01-25
+```
+
+**2) Verify raw fact row counts:**
+```sql
+SELECT 'rtb_daily' as table_name, COUNT(*), MIN(metric_date), MAX(metric_date) FROM rtb_daily
+UNION ALL
+SELECT 'rtb_bidstream', COUNT(*), MIN(metric_date), MAX(metric_date) FROM rtb_bidstream
+UNION ALL
+SELECT 'rtb_bid_filtering', COUNT(*), MIN(metric_date), MAX(metric_date) FROM rtb_bid_filtering;
+```
+
+**3) QPS join sanity check:**
+```sql
+SELECT f.metric_date, f.publisher_id,
+       SUM(f.bid_requests) as bid_requests,
+       SUM(f.auctions_won) as auctions_won,
+       COALESCE(SUM(d.impressions), 0) as impressions_from_daily
+FROM rtb_bidstream f
+LEFT JOIN rtb_daily d
+  ON f.metric_date = d.metric_date
+ AND f.country = d.country
+ AND f.publisher_id = d.publisher_id
+WHERE f.metric_date >= '2026-01-20'
+  AND f.publisher_id IS NOT NULL
+GROUP BY f.metric_date, f.publisher_id
+ORDER BY bid_requests DESC
+LIMIT 10;
+```
+
+**4) Gmail batch (nohup in container):**
+```bash
+sudo docker exec catscan-api bash -c "nohup python3 scripts/gmail_import_batch.py --batch-size 10 >> /home/rtbcat/.catscan/logs/gmail_batch.log 2>&1 &"
+sudo docker exec catscan-api tail -n 50 /home/rtbcat/.catscan/logs/gmail_batch.log
+sudo docker exec catscan-api cat /home/rtbcat/.catscan/gmail_batch_checkpoint.json
+```
+
+**5) Backfill raw facts from BigQuery (if needed):**
+```bash
+python scripts/bq_backfill_raw_facts.py --table rtb_daily --date-range 2026-01-07 2026-01-25
+python scripts/bq_backfill_raw_facts.py --table rtb_bidstream --date-range 2026-01-07 2026-01-25
+python scripts/bq_backfill_raw_facts.py --table rtb_bid_filtering --date-range 2026-01-13 2026-01-25
+```
+
+**6) Restart API container (SG VM):**
+```bash
+cd /opt/catscan
+sudo docker compose -f docker-compose.gcp.yml down
+sudo docker compose -f docker-compose.gcp.yml up -d
+```
+
+---
+
 ## 📢 Brief for Successor Architect (“Archie2”)
 
 You are taking over the **architect role**. Claude is executing ground tasks and reports via `docs/ai_logs/ai_log_2026-01-27.md`.  
