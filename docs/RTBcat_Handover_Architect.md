@@ -40,10 +40,15 @@ You are **senior to Claude** and responsible for **delegation, sequencing, and a
   - BIGINT upgrades for aggregated tables
 - Gmail batch importer works, including OAuth fallback for link‑only emails.
 - BigQuery raw_facts coverage: 2026‑01‑11 → 2026‑01‑25.
+- Raw fact backfill to Postgres completed:
+  - `rtb_daily`: 9,082,712 rows (2026‑01‑07 → 2026‑01‑25)
+  - `rtb_bidstream`: 3,547,431 rows (2026‑01‑07 → 2026‑01‑25)
+  - `rtb_bid_filtering`: 44,936 rows (2026‑01‑13 → 2026‑01‑25)
+- QPS join verification query succeeded (bidstream → daily join returning impressions).
 
 **Aggregations:**
 - `home_publisher_daily`, `rtb_publisher_daily` populated through 2026‑01‑25.
-- Size/config aggregations disabled previously due to schema gaps; now must be restored after canonical pipeline is complete.
+- Size/config aggregations re‑enabled with corrected join logic (commit 9f78267); **must be re‑run** to populate `home_size_daily` and `home_config_daily`.
 
 **Source of Truth:**
 - `DATA_MODEL.md` updated with canonical QPS requirements and schema gaps.
@@ -70,9 +75,9 @@ You are **senior to Claude** and responsible for **delegation, sequencing, and a
 3. Ensure BIGINT for all aggregated counters (done; verify in remaining tables).
 
 **Phase B — Backfill & Re‑aggregation**
-4. Backfill new Postgres raw fact tables from BigQuery (BQ → Postgres).
-5. Re-enable size/config aggregations once `creative_size` and `billing_id` are consistently present.
-6. Re-run aggregation to populate **all** `home_*_daily` and `rtb_*_daily` tables.
+4. Backfill new Postgres raw fact tables from BigQuery (BQ → Postgres). ✅ Done
+5. Re-enable size/config aggregations once `creative_size` and `billing_id` are consistently present. ✅ Done (commit 9f78267)
+6. Re-run aggregation to populate **all** `home_*_daily` and `rtb_*_daily` tables. 🔄 Pending
 
 **Phase C — QPS Optimizer Readiness**
 7. Verify QPS optimizer joins work (`rtb_daily` + `rtb_bidstream` + `rtb_bid_filtering` + `rtb_quality`).
@@ -86,13 +91,12 @@ You are **senior to Claude** and responsible for **delegation, sequencing, and a
 
 ## 📌 Immediate Tasks (Active)
 
-1) **Backfill Postgres raw fact tables** from BigQuery.  
-2) **Update pipeline** to write required fields consistently:
-   - `report_type`, `billing_id`, `creative_size`, `creative_format`, `publisher_id`, `publisher_name`
-3) **Re-run aggregation** and confirm populated tables:
+1) **Re-run aggregation** and confirm populated tables:
+   - `home_size_daily`, `home_config_daily` (now re‑enabled)
    - `home_publisher_daily`, `home_geo_daily`, `home_seat_daily`
-   - `home_size_daily`, `home_config_daily`
    - `rtb_funnel_daily`, `rtb_publisher_daily`, `rtb_geo_daily`
+2) **Verify QPS optimizer joins** against Postgres raw facts.
+3) **Update UI** to consume normalized publisher list (`pretargeting_publishers`).
 
 ---
 
@@ -117,3 +121,20 @@ You are **senior to Claude** and responsible for **delegation, sequencing, and a
 - **Data correctness over speed**: complete, accurate data is mandatory for QPS optimization.  
 - **Claude executes, Architect decides**: Claude should not make architectural choices without approval.  
 
+---
+
+## 📢 Brief for Successor Architect (“Archie2”)
+
+You are taking over the **architect role**. Claude is executing ground tasks and reports via `docs/ai_logs/ai_log_2026-01-27.md`.  
+Your immediate objectives:
+
+1) **Run aggregation now** using `scripts/bq_aggregate_to_pg.py` after commit `9f78267` (fixes join logic for `home_config_daily` and report_type filters).  
+2) **Verify** `home_size_daily` and `home_config_daily` populate; then validate UI precompute status.  
+3) **Wire UI** to normalized publisher list (`pretargeting_publishers`) via new endpoints in `api/routers/settings/pretargeting.py`.  
+4) **Move to automation**: schedule daily Gmail → BQ → Postgres + aggregation refresh, with health checks.
+
+Commit guidance:
+- **Keep:** `9f78267` (fixes aggregation logic and API wiring).
+- **Hold:** `718f52e` (superseded by 9f78267).
+
+If any conflict arises between code changes and the written docs, **ask the boss first** and propose how to fix and update the docs—do not rewrite the docs unilaterally, since they are coordinated plans.
