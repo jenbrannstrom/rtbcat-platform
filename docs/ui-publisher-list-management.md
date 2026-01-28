@@ -9,39 +9,47 @@ This feature enables users to manage publisher whitelists and blacklists directl
 - All changes are staged locally before applying to Google
 - Full audit trail with timestamps and user tracking
 - One-click rollback to any previous state
+- Clear separation between **Publisher List** and general **Config Settings**
 
 ---
 
-## 1. Entry Point
+## 1. Entry Point (Refined)
 
-The publisher list editor is accessed within an existing pretargeting configuration's settings panel.
+The publisher list editor is accessed via a dedicated **Publisher List** button in the pretargeting config header, not buried under a generic "Edit" button.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Pretargeting Config: "US Mobile Display"        [Sync 🔄]  │
-├─────────────────────────────────────────────────────────────┤
-│  ▸ Formats          [Display, Video]                        │
-│  ▸ Platforms        [Mobile App, Mobile Web]                │
-│  ▸ Sizes            [300x250, 320x50, 728x90]               │
-│  ▸ Geos             [US, CA, MX]                            │
-│  ▾ Publishers       [Blacklist: 12 blocked]    ◀── CLICK    │
-│    ┌─────────────────────────────────────────────────────┐  │
-│    │                                                     │  │
-│    │        (Publisher table expands here)               │  │
-│    │                                                     │  │
-│    └─────────────────────────────────────────────────────┘  │
-│  ▸ History                                                  │
+│ Pretargeting Config: "US Mobile Display"      [Sync 🔄]     │
+│                                                             │
+│ [Publisher List]  [Config Settings]                         │
+│                                                             │
+│ Mode: Blacklist (12 blocked)                                │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 **UX Notes:**
-- The collapsed state shows a summary: mode + count (e.g., "Blacklist: 12 blocked")
-- Click the row to expand and reveal the full publisher table
-- If no publishers are configured, shows "No publisher targeting"
+- Replace any ambiguous "Edit" button with **Publisher List** (primary) and **Config Settings** (secondary).
+- Publisher List opens a **dedicated editor screen** (not a small inline panel).
+- If no publishers are configured, show "No publisher targeting" with a clear CTA.
 
 ---
 
-## 2. Publisher Table - Blacklist Mode
+## 2. Publisher List Screen (Full Page)
+
+The Publisher List opens in a full-page editor for clarity and speed. This avoids cramped inline panels and makes block/unblock the primary workflow.
+
+**Header:**
+- Title: `Publisher List — {Config Name}`
+- Status pill: `Changes pending` (if any)
+- Buttons: **Sync with Google**, **History**
+
+**Mode Toggle:**
+- Large toggle with confirmation when switching to Whitelist
+- Confirmation text explains that switching **clears** the current list
+
+---
+
+## 3. Publisher Table - Blacklist Mode
 
 When the pretargeting config is set to block specific publishers:
 
@@ -78,7 +86,7 @@ When the pretargeting config is set to block specific publishers:
 
 ---
 
-## 3. Publisher Table - Whitelist Mode
+## 4. Publisher Table - Whitelist Mode
 
 When the pretargeting config is set to allow only specific publishers:
 
@@ -112,7 +120,7 @@ When the pretargeting config is set to allow only specific publishers:
 
 ---
 
-## 4. Dynamic Elements by Mode
+## 5. Dynamic Elements by Mode
 
 The UI adapts based on the current targeting mode:
 
@@ -126,7 +134,7 @@ The UI adapts based on the current targeting mode:
 
 ---
 
-## 5. Adding a Publisher
+## 6. Adding a Publisher
 
 ### Step 1: Enter Publisher ID
 
@@ -174,10 +182,11 @@ A panel appears at the bottom showing all uncommitted changes:
 - [Undo] removes the pending change without affecting Google
 - Changes are NOT sent to Google until user clicks [Apply to Google]
 - User can continue adding/removing publishers before applying
+- Pending Changes panel is sticky at the bottom whenever changes exist
 
 ---
 
-## 6. Removing a Publisher
+## 7. Removing a Publisher
 
 ### Step 1: Click Remove
 
@@ -222,7 +231,7 @@ The row changes to show it's pending removal (strikethrough styling):
 
 ---
 
-## 7. Multiple Pending Changes
+## 8. Multiple Pending Changes
 
 Users can batch multiple changes before applying:
 
@@ -264,7 +273,7 @@ Users can batch multiple changes before applying:
 
 ---
 
-## 8. Apply Changes Confirmation
+## 9. Apply Changes Confirmation
 
 When user clicks [Apply to Google], show a confirmation dialog:
 
@@ -296,7 +305,7 @@ When user clicks [Apply to Google], show a confirmation dialog:
 
 ---
 
-## 9. Apply Success State
+## 10. Apply Success State
 
 After successful application:
 
@@ -314,7 +323,7 @@ The table refreshes to show the new state:
 
 ---
 
-## 10. Switching Modes (Blacklist ↔ Whitelist)
+## 11. Switching Modes (Blacklist ↔ Whitelist)
 
 When user clicks the other mode radio button:
 
@@ -378,7 +387,7 @@ When user clicks the other mode radio button:
 
 ---
 
-## 11. Bulk Import
+## 12. Bulk Import
 
 For adding many publishers at once, click [Bulk Import]:
 
@@ -433,7 +442,7 @@ For adding many publishers at once, click [Bulk Import]:
 
 ---
 
-## 12. View History
+## 13. View History
 
 Click [View History] to see the audit log:
 
@@ -486,7 +495,7 @@ Click [View History] to see the audit log:
 
 ---
 
-## 13. Rollback Flow
+## 14. Rollback Flow
 
 ### Step 1: Click Rollback
 
@@ -533,7 +542,7 @@ User clicks [Rollback ↩] on a history entry.
 
 ---
 
-## 14. Empty States
+## 15. Empty States
 
 ### No Publisher Targeting Configured
 
@@ -573,7 +582,7 @@ User clicks [Rollback ↩] on a history entry.
 
 ---
 
-## 15. Error States
+## 16. Error States
 
 ### API Error on Apply
 
@@ -606,7 +615,7 @@ User clicks [Rollback ↩] on a history entry.
 
 ---
 
-## 16. Keyboard Shortcuts
+## 17. Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
@@ -617,7 +626,7 @@ User clicks [Rollback ↩] on a history entry.
 
 ---
 
-## 17. Responsive Behavior
+## 18. Responsive Behavior
 
 On smaller screens, the table collapses:
 
