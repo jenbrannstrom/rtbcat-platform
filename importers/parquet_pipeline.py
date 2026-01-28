@@ -66,6 +66,7 @@ def _parquet_schema_for_table(table_name: str) -> "pa.Schema":
                 ("viewable_impressions", pa.int64()),
                 ("measurable_impressions", pa.int64()),
                 ("bidder_id", pa.string()),
+                ("report_type", pa.string()),
                 ("row_hash", pa.string()),
                 ("import_batch_id", pa.string()),
             ]
@@ -79,6 +80,9 @@ def _parquet_schema_for_table(table_name: str) -> "pa.Schema":
                 ("buyer_account_id", pa.string()),
                 ("publisher_id", pa.string()),
                 ("publisher_name", pa.string()),
+                ("platform", pa.string()),
+                ("environment", pa.string()),
+                ("transaction_type", pa.string()),
                 ("inventory_matches", pa.int64()),
                 ("bid_requests", pa.int64()),
                 ("successful_responses", pa.int64()),
@@ -89,6 +93,7 @@ def _parquet_schema_for_table(table_name: str) -> "pa.Schema":
                 ("impressions", pa.int64()),
                 ("clicks", pa.int64()),
                 ("bidder_id", pa.string()),
+                ("report_type", pa.string()),
                 ("row_hash", pa.string()),
                 ("import_batch_id", pa.string()),
             ]
@@ -142,6 +147,7 @@ def _bq_schema_for_table(table_name: str) -> list["bigquery.SchemaField"]:
             bigquery.SchemaField("viewable_impressions", "INT64"),
             bigquery.SchemaField("measurable_impressions", "INT64"),
             bigquery.SchemaField("bidder_id", "STRING"),
+            bigquery.SchemaField("report_type", "STRING"),
             bigquery.SchemaField("row_hash", "STRING"),
             bigquery.SchemaField("import_batch_id", "STRING"),
         ]
@@ -153,6 +159,9 @@ def _bq_schema_for_table(table_name: str) -> list["bigquery.SchemaField"]:
             bigquery.SchemaField("buyer_account_id", "STRING"),
             bigquery.SchemaField("publisher_id", "STRING"),
             bigquery.SchemaField("publisher_name", "STRING"),
+            bigquery.SchemaField("platform", "STRING"),
+            bigquery.SchemaField("environment", "STRING"),
+            bigquery.SchemaField("transaction_type", "STRING"),
             bigquery.SchemaField("inventory_matches", "INT64"),
             bigquery.SchemaField("bid_requests", "INT64"),
             bigquery.SchemaField("successful_responses", "INT64"),
@@ -163,6 +172,7 @@ def _bq_schema_for_table(table_name: str) -> list["bigquery.SchemaField"]:
             bigquery.SchemaField("impressions", "INT64"),
             bigquery.SchemaField("clicks", "INT64"),
             bigquery.SchemaField("bidder_id", "STRING"),
+            bigquery.SchemaField("report_type", "STRING"),
             bigquery.SchemaField("row_hash", "STRING"),
             bigquery.SchemaField("import_batch_id", "STRING"),
         ]
