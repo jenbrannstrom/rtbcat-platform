@@ -268,6 +268,7 @@ def import_to_rtb_daily(
     result: UnifiedImportResult,
     bidder_id: Optional[str] = None,
     parquet_exporter: Optional["ParquetExportManager"] = None,
+    report_type: Optional[str] = None,
 ):
     """Import data to rtb_daily table."""
     conn = sqlite3.connect(db_path)
@@ -400,6 +401,7 @@ def import_to_rtb_daily(
                                 **row_data,
                                 "spend_micros": row_data["spend_micros"],
                                 "bidder_id": row_data["bidder_id"],
+                                "report_type": report_type,
                                 "row_hash": row_hash,
                                 "import_batch_id": batch_id,
                             },
@@ -447,6 +449,7 @@ def import_to_rtb_bidstream(
     result: UnifiedImportResult,
     bidder_id: Optional[str] = None,
     parquet_exporter: Optional["ParquetExportManager"] = None,
+    report_type: Optional[str] = None,
 ):
     """Import data to rtb_bidstream table."""
     conn = sqlite3.connect(db_path)
@@ -510,6 +513,9 @@ def import_to_rtb_bidstream(
                         "buyer_account_id": get_value(row, mapping, "buyer_account_id", ""),
                         "publisher_id": get_value(row, mapping, "publisher_id", ""),
                         "publisher_name": get_value(row, mapping, "publisher_name", ""),
+                        "platform": get_value(row, mapping, "platform", ""),
+                        "environment": get_value(row, mapping, "environment", ""),
+                        "transaction_type": get_value(row, mapping, "transaction_type", ""),
                         "inventory_matches": parse_int(get_value(row, mapping, "inventory_matches", "0")),
                         "bid_requests": parse_int(get_value(row, mapping, "bid_requests", "0")),
                         "successful_responses": parse_int(get_value(row, mapping, "successful_responses", "0")),
@@ -535,6 +541,7 @@ def import_to_rtb_bidstream(
                             {
                                 **row_data,
                                 "bidder_id": row_data["bidder_id"],
+                                "report_type": report_type,
                                 "row_hash": row_hash,
                                 "import_batch_id": batch_id,
                             },
@@ -579,6 +586,7 @@ def import_to_rtb_bid_filtering(
     result: UnifiedImportResult,
     bidder_id: Optional[str] = None,
     parquet_exporter: Optional["ParquetExportManager"] = None,
+    report_type: Optional[str] = None,
 ):
     """Import data to rtb_bid_filtering table."""
     conn = sqlite3.connect(db_path)
@@ -781,6 +789,7 @@ def unified_import(
                 result,
                 bidder_id=bidder_id,
                 parquet_exporter=parquet_exporter,
+                report_type=report_type,
             )
         elif target_table == "rtb_bidstream":
             import_to_rtb_bidstream(
@@ -791,6 +800,7 @@ def unified_import(
                 result,
                 bidder_id=bidder_id,
                 parquet_exporter=parquet_exporter,
+                report_type=report_type,
             )
         elif target_table == "rtb_bid_filtering":
             import_to_rtb_bid_filtering(
@@ -801,6 +811,7 @@ def unified_import(
                 result,
                 bidder_id=bidder_id,
                 parquet_exporter=parquet_exporter,
+                report_type=report_type,
             )
         else:
             result.error_message = f"Unknown target table: {target_table}"
