@@ -93,11 +93,12 @@ AGG_QUERIES = {
         SELECT
             metric_date as metric_date,
             buyer_account_id,
-            COALESCE(creative_size, 'unknown') as creative_size,
+            creative_size,
             SUM(COALESCE(reached_queries, 0)) as reached_queries,
             SUM(COALESCE(impressions, 0)) as impressions
         FROM `{project}.{dataset}.raw_facts`
         WHERE metric_date = @metric_date
+          AND report_type = 'quality'
           AND creative_size IS NOT NULL
         GROUP BY metric_date, buyer_account_id, creative_size
     """,
@@ -119,17 +120,23 @@ AGG_QUERIES = {
 
     "home_config_daily": """
         SELECT
-            metric_date as metric_date,
-            buyer_account_id,
-            COALESCE(billing_id, 'unknown') as billing_id,
-            SUM(COALESCE(reached_queries, 0)) as reached_queries,
-            SUM(COALESCE(impressions, 0)) as impressions,
-            SUM(COALESCE(bids_in_auction, 0)) as bids_in_auction,
-            SUM(COALESCE(auctions_won, 0)) as auctions_won
-        FROM `{project}.{dataset}.raw_facts`
-        WHERE metric_date = @metric_date
-          AND billing_id IS NOT NULL
-        GROUP BY metric_date, buyer_account_id, billing_id
+            q.metric_date as metric_date,
+            q.buyer_account_id,
+            q.billing_id,
+            SUM(COALESCE(q.reached_queries, 0)) as reached_queries,
+            SUM(COALESCE(q.impressions, 0)) as impressions,
+            SUM(COALESCE(b.bids_in_auction, 0)) as bids_in_auction,
+            SUM(COALESCE(b.auctions_won, 0)) as auctions_won
+        FROM `{project}.{dataset}.raw_facts` q
+        LEFT JOIN `{project}.{dataset}.raw_facts` b
+          ON q.metric_date = b.metric_date
+          AND q.creative_id = b.creative_id
+          AND q.buyer_account_id = b.buyer_account_id
+          AND b.report_type = 'bidsinauction'
+        WHERE q.metric_date = @metric_date
+          AND q.report_type = 'quality'
+          AND q.billing_id IS NOT NULL
+        GROUP BY q.metric_date, q.buyer_account_id, q.billing_id
     """,
 
     "rtb_publisher_daily": """
