@@ -132,6 +132,49 @@ async def sync_pretargeting_configs(
                 ),
             )
 
+        # Extract and store publisher targeting into pretargeting_publishers
+        publishers_synced = 0
+        for cfg in configs:
+            billing_id = str(cfg.get("billingId", "")).strip()
+            if not billing_id:
+                continue
+
+            publisher_targeting = cfg.get("publisherTargeting", {}) or {}
+            included_publishers = publisher_targeting.get("includedIds", [])
+            excluded_publishers = publisher_targeting.get("excludedIds", [])
+
+            # Insert WHITELIST publishers (included)
+            for pub_id in included_publishers:
+                await db_execute(
+                    """
+                    INSERT INTO pretargeting_publishers (billing_id, publisher_id, mode, status, source)
+                    VALUES (?, ?, 'WHITELIST', 'active', 'api_sync')
+                    ON CONFLICT (billing_id, publisher_id, mode) DO UPDATE SET
+                        status = 'active',
+                        source = 'api_sync',
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (billing_id, str(pub_id)),
+                )
+                publishers_synced += 1
+
+            # Insert BLACKLIST publishers (excluded)
+            for pub_id in excluded_publishers:
+                await db_execute(
+                    """
+                    INSERT INTO pretargeting_publishers (billing_id, publisher_id, mode, status, source)
+                    VALUES (?, ?, 'BLACKLIST', 'active', 'api_sync')
+                    ON CONFLICT (billing_id, publisher_id, mode) DO UPDATE SET
+                        status = 'active',
+                        source = 'api_sync',
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (billing_id, str(pub_id)),
+                )
+                publishers_synced += 1
+
+        logger.info(f"Synced {publishers_synced} publisher targeting entries")
+
         return SyncPretargetingResponse(
             status="success",
             configs_synced=len(configs),
@@ -364,3 +407,161 @@ async def get_pretargeting_history(
 
 
 # =============================================================================
+# Publisher Targeting Endpoints
+# =============================================================================
+
+
+@router.get("/settings/pretargeting/{billing_id}/publishers")
+async def get_pretargeting_publishers(
+    billing_id: str,
+    mode: Optional[str] = Query(None, description="Filter by mode (WHITELIST or BLACKLIST)"),
+    status: Optional[str] = Query(None, description="Filter by status (active, pending_add, pending_remove)"),
+):
+    """Get normalized publisher list for a pretargeting config.
+
+    Returns the list of publishers in the whitelist/blacklist with their status.
+    """
+    try:
+        query = """
+            SELECT publisher_id, mode, status, source, created_at, updated_at
+            FROM pretargeting_publishers
+            WHERE billing_id = ?
+        """
+        params = [billing_id]
+
+        if mode:
+            query += " AND mode = ?"
+            params.append(mode.upper())
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+
+        query += " ORDER BY mode, publisher_id"
+
+        rows = await db_query(query, tuple(params))
+
+        return {
+            "billing_id": billing_id,
+            "publishers": [
+                {
+                    "publisher_id": row["publisher_id"],
+                    "mode": row["mode"],
+                    "status": row["status"],
+                    "source": row["source"],
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                }
+                for row in rows
+            ],
+            "count": len(rows),
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get publishers for {billing_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/settings/pretargeting/{billing_id}/publishers")
+async def add_pretargeting_publisher(
+    billing_id: str,
+    publisher_id: str = Query(..., description="Publisher ID to add"),
+    mode: str = Query(..., description="WHITELIST or BLACKLIST"),
+):
+    """Add a publisher to the targeting list with pending_add status.
+
+    The publisher will be added with status 'pending_add' until the changes
+    are applied via the pretargeting API.
+    """
+    try:
+        mode = mode.upper()
+        if mode not in ("WHITELIST", "BLACKLIST"):
+            raise HTTPException(status_code=400, detail="Mode must be WHITELIST or BLACKLIST")
+
+        await db_execute(
+            """
+            INSERT INTO pretargeting_publishers (billing_id, publisher_id, mode, status, source)
+            VALUES (?, ?, ?, 'pending_add', 'user')
+            ON CONFLICT (billing_id, publisher_id, mode) DO UPDATE SET
+                status = 'pending_add',
+                source = 'user',
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (billing_id, publisher_id, mode),
+        )
+
+        return {"status": "success", "message": f"Publisher {publisher_id} queued for addition to {mode}"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to add publisher: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/settings/pretargeting/{billing_id}/publishers/{publisher_id}")
+async def remove_pretargeting_publisher(
+    billing_id: str,
+    publisher_id: str,
+    mode: str = Query(..., description="WHITELIST or BLACKLIST"),
+):
+    """Mark a publisher for removal with pending_remove status.
+
+    The publisher will be marked as 'pending_remove' until the changes
+    are applied via the pretargeting API.
+    """
+    try:
+        mode = mode.upper()
+        if mode not in ("WHITELIST", "BLACKLIST"):
+            raise HTTPException(status_code=400, detail="Mode must be WHITELIST or BLACKLIST")
+
+        result = await db_execute(
+            """
+            UPDATE pretargeting_publishers
+            SET status = 'pending_remove', source = 'user', updated_at = CURRENT_TIMESTAMP
+            WHERE billing_id = ? AND publisher_id = ? AND mode = ?
+            """,
+            (billing_id, publisher_id, mode),
+        )
+
+        return {"status": "success", "message": f"Publisher {publisher_id} queued for removal from {mode}"}
+
+    except Exception as e:
+        logger.error(f"Failed to remove publisher: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/settings/pretargeting/{billing_id}/publishers/pending")
+async def get_pending_publisher_changes(billing_id: str):
+    """Get publishers with pending changes (pending_add or pending_remove).
+
+    Returns publishers that need to be synced to the API.
+    """
+    try:
+        rows = await db_query(
+            """
+            SELECT publisher_id, mode, status, source, updated_at
+            FROM pretargeting_publishers
+            WHERE billing_id = ? AND status IN ('pending_add', 'pending_remove')
+            ORDER BY status, mode, publisher_id
+            """,
+            (billing_id,),
+        )
+
+        return {
+            "billing_id": billing_id,
+            "pending_changes": [
+                {
+                    "publisher_id": row["publisher_id"],
+                    "mode": row["mode"],
+                    "status": row["status"],
+                    "source": row["source"],
+                    "updated_at": row["updated_at"],
+                }
+                for row in rows
+            ],
+            "count": len(rows),
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get pending changes for {billing_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

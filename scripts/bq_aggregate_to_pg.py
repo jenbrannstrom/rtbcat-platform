@@ -89,8 +89,18 @@ AGG_QUERIES = {
         GROUP BY metric_date, buyer_account_id, country
     """,
 
-    # home_size_daily: DISABLED - requires creative_size column not in raw_facts
-    # "home_size_daily": """...""",
+    "home_size_daily": """
+        SELECT
+            metric_date as metric_date,
+            buyer_account_id,
+            COALESCE(creative_size, 'unknown') as creative_size,
+            SUM(COALESCE(reached_queries, 0)) as reached_queries,
+            SUM(COALESCE(impressions, 0)) as impressions
+        FROM `{project}.{dataset}.raw_facts`
+        WHERE metric_date = @metric_date
+          AND creative_size IS NOT NULL
+        GROUP BY metric_date, buyer_account_id, creative_size
+    """,
 
     "home_seat_daily": """
         SELECT
@@ -107,8 +117,20 @@ AGG_QUERIES = {
         GROUP BY metric_date, buyer_account_id
     """,
 
-    # home_config_daily: DISABLED - requires billing_id column not in raw_facts
-    # "home_config_daily": """...""",
+    "home_config_daily": """
+        SELECT
+            metric_date as metric_date,
+            buyer_account_id,
+            COALESCE(billing_id, 'unknown') as billing_id,
+            SUM(COALESCE(reached_queries, 0)) as reached_queries,
+            SUM(COALESCE(impressions, 0)) as impressions,
+            SUM(COALESCE(bids_in_auction, 0)) as bids_in_auction,
+            SUM(COALESCE(auctions_won, 0)) as auctions_won
+        FROM `{project}.{dataset}.raw_facts`
+        WHERE metric_date = @metric_date
+          AND billing_id IS NOT NULL
+        GROUP BY metric_date, buyer_account_id, billing_id
+    """,
 
     "rtb_publisher_daily": """
         SELECT
