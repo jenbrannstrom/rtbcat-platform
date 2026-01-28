@@ -8,8 +8,10 @@ Purpose: fast restart if any terminal or AI session crashes.
 - Postgres DSNs in `/opt/catscan/.env` use `host.docker.internal`.
 - OAuth fallback for GCS link-only Gmail downloads works.
 - BigQuery raw_facts date range currently 2026-01-11 → 2026-01-25.
-- Postgres summary tables populated through 2026-01-25:
-  - `home_publisher_daily` and `rtb_publisher_daily` populated (11,299 rows each).
+- Raw fact backfill to Postgres completed:
+  - `rtb_daily`: 9,082,712 rows (2026-01-07 → 2026-01-25)
+  - `rtb_bidstream`: 3,547,431 rows (2026-01-07 → 2026-01-25)
+  - `rtb_bid_filtering`: 44,936 rows (2026-01-13 → 2026-01-25)
 
 ## Active Log Protocol
 - Use: `docs/ai_logs/ai_log_2026-01-27.md`
@@ -17,12 +19,10 @@ Purpose: fast restart if any terminal or AI session crashes.
 - If >500 lines, start a new part file.
 
 ## Immediate Next Tasks (DB Roadmap)
-1) Backfill new Postgres raw fact tables:
-   - `rtb_daily`, `rtb_bidstream`, `rtb_bid_filtering`, `rtb_quality`
-   - Prefer BigQuery → Postgres load.
-2) Update pipeline to write required fields consistently:
-   - `report_type`, `billing_id`, `creative_size`, `creative_format`, `publisher_id`, `publisher_name`
-3) Re-run aggregation after backfill to populate size/config views.
+1) Re-run aggregation to populate:
+   - `home_size_daily`, `home_config_daily` (now re-enabled with join logic)
+2) Verify QPS optimizer joins against Postgres raw facts.
+3) Wire UI to normalized `pretargeting_publishers` endpoints.
 
 ## SG VM Essentials
 **Env file:** `/opt/catscan/.env`
@@ -65,4 +65,3 @@ sudo docker exec catscan-api cat /home/rtbcat/.catscan/gmail_batch_checkpoint.js
 - `scripts/gmail_import_batch.py` — checkpointed batch import
 - `scripts/bq_aggregate_to_pg.py` — aggregation queries
 - `importers/parquet_pipeline.py` and `scripts/export_csv_to_parquet.py` — schema + currency parsing
-
