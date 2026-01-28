@@ -143,6 +143,12 @@ async def sync_pretargeting_configs(
             included_publishers = publisher_targeting.get("includedIds", [])
             excluded_publishers = publisher_targeting.get("excludedIds", [])
 
+            # Clear stale api_sync entries for this billing_id before inserting new ones
+            await db_execute(
+                "DELETE FROM pretargeting_publishers WHERE billing_id = ? AND source = 'api_sync'",
+                (billing_id,),
+            )
+
             # Insert WHITELIST publishers (included)
             for pub_id in included_publishers:
                 await db_execute(
@@ -473,9 +479,29 @@ async def add_pretargeting_publisher(
     are applied via the pretargeting API.
     """
     try:
-        mode = mode.upper()
+        # Validate mode
+        mode = mode.strip().upper()
         if mode not in ("WHITELIST", "BLACKLIST"):
             raise HTTPException(status_code=400, detail="Mode must be WHITELIST or BLACKLIST")
+
+        # Validate billing_id exists
+        config = await db_query_one(
+            "SELECT billing_id FROM pretargeting_configs WHERE billing_id = ?",
+            (billing_id,),
+        )
+        if not config:
+            raise HTTPException(status_code=404, detail=f"Pretargeting config {billing_id} not found")
+
+        # Check if publisher already exists in opposite mode
+        existing = await db_query_one(
+            "SELECT mode FROM pretargeting_publishers WHERE billing_id = ? AND publisher_id = ? AND mode != ?",
+            (billing_id, publisher_id, mode),
+        )
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Publisher {publisher_id} already exists in {existing['mode']} list"
+            )
 
         await db_execute(
             """
@@ -510,9 +536,18 @@ async def remove_pretargeting_publisher(
     are applied via the pretargeting API.
     """
     try:
-        mode = mode.upper()
+        # Validate mode
+        mode = mode.strip().upper()
         if mode not in ("WHITELIST", "BLACKLIST"):
             raise HTTPException(status_code=400, detail="Mode must be WHITELIST or BLACKLIST")
+
+        # Validate billing_id exists
+        config = await db_query_one(
+            "SELECT billing_id FROM pretargeting_configs WHERE billing_id = ?",
+            (billing_id,),
+        )
+        if not config:
+            raise HTTPException(status_code=404, detail=f"Pretargeting config {billing_id} not found")
 
         result = await db_execute(
             """
