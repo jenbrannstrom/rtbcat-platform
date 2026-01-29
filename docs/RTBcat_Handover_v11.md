@@ -73,15 +73,12 @@ The critical path is: **Gmail → Parquet → BigQuery → Postgres → Aggregat
 1. **Deploy UI changes to VM**
    - Commit `11cb55f` not yet deployed
    - VM running older dashboard image
+   - Need to rebuild and restart `catscan-dashboard` container
 
 2. **MCP Chrome Testing**
    - Need to restart Claude with MCP tools configured
    - Launch Chrome with: `google-chrome --remote-debugging-port=9222`
-   - Test publisher list UI at scan.rtb.cat
-
-3. **TypeScript Verification**
-   - Dashboard `node_modules` missing locally
-   - Run `npm install` before next Claude session (memory intensive)
+   - SSH tunnel to VM dashboard, then test at localhost:3000
 
 ---
 
@@ -123,17 +120,20 @@ gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b \
 ## ✅ Next Steps (Order)
 
 1. **Before next Claude session:**
-   - Run `cd dashboard && npm install` locally
-   - Launch Chrome with `--remote-debugging-port=9222`
+   - Launch Chrome: `google-chrome --remote-debugging-port=9222`
+   - Start MCP server: `./scripts/mcp-chromium-cdp.sh`
+   - (Optional) SSH tunnel to VM: `gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- -L 3000:localhost:3000 -N`
 
 2. **In next Claude session:**
-   - Deploy commit `11cb55f` to VM
-   - Test publisher list UI with MCP Chrome
+   - Deploy commit `11cb55f` to VM (rebuild Docker image)
+   - Test publisher list UI with MCP Chrome at localhost:3000 (via tunnel)
    - Verify status/source chips render correctly
 
 3. **Future:**
    - Add automation (daily Gmail → BQ → Postgres + aggregation)
    - Publisher name enrichment in UI
+
+**Note:** No local `npm install` needed - dashboard runs on VM in Docker.
 
 ---
 
