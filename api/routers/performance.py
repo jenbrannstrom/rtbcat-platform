@@ -890,7 +890,7 @@ async def finalize_import(request: FinalizeImportRequest):
             ))
 
             # Update daily upload summary
-            import_date = cursor.execute("SELECT date('now')").fetchone()[0]
+            import_date = cursor.execute("SELECT CURRENT_DATE").fetchone()[0]
 
             cursor.execute("""
                 INSERT INTO daily_upload_summary (
