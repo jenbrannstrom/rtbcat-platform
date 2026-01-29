@@ -98,7 +98,7 @@ async def get_home_funnel(
                 SUM(successful_responses) as total_successful_responses,
                 SUM(bid_requests) as total_bid_requests
             FROM home_seat_daily
-            WHERE metric_date >= date('now', ?){buyer_filter}
+            WHERE metric_date >= (CURRENT_DATE + ?::interval){buyer_filter}
             """,
             tuple(params),
         )
@@ -125,7 +125,7 @@ async def get_home_funnel(
                 SUM(successful_responses) as successful_responses,
                 SUM(bid_requests) as bid_requests
             FROM home_publisher_daily
-            WHERE metric_date >= date('now', ?){buyer_filter}
+            WHERE metric_date >= (CURRENT_DATE + ?::interval){buyer_filter}
             GROUP BY publisher_id
             ORDER BY reached DESC
             LIMIT ?
@@ -165,7 +165,7 @@ async def get_home_funnel(
                 SUM(successful_responses) as successful_responses,
                 SUM(bid_requests) as bid_requests
             FROM home_geo_daily
-            WHERE metric_date >= date('now', ?){buyer_filter}
+            WHERE metric_date >= (CURRENT_DATE + ?::interval){buyer_filter}
             GROUP BY country
             ORDER BY reached DESC
             LIMIT ?
@@ -201,7 +201,7 @@ async def get_home_funnel(
             f"""
             SELECT COUNT(DISTINCT publisher_id) as cnt
             FROM home_publisher_daily
-            WHERE metric_date >= date('now', ?){buyer_filter}
+            WHERE metric_date >= (CURRENT_DATE + ?::interval){buyer_filter}
             """,
             tuple(params),
         )
@@ -209,7 +209,7 @@ async def get_home_funnel(
             f"""
             SELECT COUNT(DISTINCT country) as cnt
             FROM home_geo_daily
-            WHERE metric_date >= date('now', ?){buyer_filter}
+            WHERE metric_date >= (CURRENT_DATE + ?::interval){buyer_filter}
             """,
             tuple(params),
         )
@@ -288,7 +288,7 @@ async def get_home_config_performance(
                 SUM(bids_in_auction) as total_bids_in_auction,
                 SUM(auctions_won) as total_auctions_won
             FROM home_config_daily
-            WHERE metric_date >= date('now', ?){buyer_filter}
+            WHERE metric_date >= (CURRENT_DATE + ?::interval){buyer_filter}
             GROUP BY billing_id
             ORDER BY total_reached DESC
             """,

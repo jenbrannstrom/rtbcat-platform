@@ -148,7 +148,7 @@ async def _get_creative_countries(creative_ids: list[str], days: int = 30) -> di
             FROM performance_metrics
             WHERE creative_id IN ({placeholders})
               AND geography IS NOT NULL
-              AND metric_date >= date('now', '-{days} days')
+              AND metric_date >= (CURRENT_DATE - INTERVAL '{days} days')
             GROUP BY creative_id, geography
         )
         SELECT creative_id, geography
