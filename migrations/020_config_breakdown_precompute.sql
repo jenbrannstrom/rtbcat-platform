@@ -3,9 +3,9 @@ CREATE TABLE IF NOT EXISTS config_size_daily (
     buyer_account_id TEXT NOT NULL,
     billing_id TEXT NOT NULL,
     creative_size TEXT NOT NULL,
-    reached_queries INTEGER DEFAULT 0,
-    impressions INTEGER DEFAULT 0,
-    spend_micros INTEGER DEFAULT 0,
+    reached_queries BIGINT DEFAULT 0,
+    impressions BIGINT DEFAULT 0,
+    spend_micros BIGINT DEFAULT 0,
     PRIMARY KEY (metric_date, buyer_account_id, billing_id, creative_size)
 );
 
@@ -14,9 +14,9 @@ CREATE TABLE IF NOT EXISTS config_geo_daily (
     buyer_account_id TEXT NOT NULL,
     billing_id TEXT NOT NULL,
     country TEXT NOT NULL,
-    reached_queries INTEGER DEFAULT 0,
-    impressions INTEGER DEFAULT 0,
-    spend_micros INTEGER DEFAULT 0,
+    reached_queries BIGINT DEFAULT 0,
+    impressions BIGINT DEFAULT 0,
+    spend_micros BIGINT DEFAULT 0,
     PRIMARY KEY (metric_date, buyer_account_id, billing_id, country)
 );
 
@@ -26,9 +26,9 @@ CREATE TABLE IF NOT EXISTS config_publisher_daily (
     billing_id TEXT NOT NULL,
     publisher_id TEXT NOT NULL,
     publisher_name TEXT,
-    reached_queries INTEGER DEFAULT 0,
-    impressions INTEGER DEFAULT 0,
-    spend_micros INTEGER DEFAULT 0,
+    reached_queries BIGINT DEFAULT 0,
+    impressions BIGINT DEFAULT 0,
+    spend_micros BIGINT DEFAULT 0,
     PRIMARY KEY (metric_date, buyer_account_id, billing_id, publisher_id)
 );
 
@@ -37,9 +37,9 @@ CREATE TABLE IF NOT EXISTS config_creative_daily (
     buyer_account_id TEXT NOT NULL,
     billing_id TEXT NOT NULL,
     creative_id TEXT NOT NULL,
-    reached_queries INTEGER DEFAULT 0,
-    impressions INTEGER DEFAULT 0,
-    spend_micros INTEGER DEFAULT 0,
+    reached_queries BIGINT DEFAULT 0,
+    impressions BIGINT DEFAULT 0,
+    spend_micros BIGINT DEFAULT 0,
     PRIMARY KEY (metric_date, buyer_account_id, billing_id, creative_id)
 );
 
