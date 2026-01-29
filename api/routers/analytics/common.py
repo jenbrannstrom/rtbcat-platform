@@ -26,7 +26,7 @@ async def get_precompute_status(
             "row_count": 0,
         }
 
-    where_clauses = ["metric_date >= date('now', ?)"]
+    where_clauses = ["metric_date >= (CURRENT_DATE + ?::interval)"]
     query_params: list = [f"-{days} days"]
     if filters:
         where_clauses.extend(filters)

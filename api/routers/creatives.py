@@ -378,7 +378,7 @@ async def _get_waste_flags_for_creatives(
                            SUM(clicks) as total_clicks
                     FROM rtb_daily
                     WHERE creative_id IN ({placeholders})
-                      AND metric_date >= date('now', '-{days} days')
+                      AND metric_date >= (CURRENT_DATE - INTERVAL '{days} days')
                     GROUP BY creative_id
                     """,
                     creative_ids,
@@ -455,7 +455,7 @@ async def _get_primary_countries_for_creatives(
                         FROM performance_metrics
                         WHERE creative_id IN ({placeholders})
                           AND geography IS NOT NULL
-                          AND metric_date >= date('now', '-{days} days')
+                          AND metric_date >= (CURRENT_DATE - INTERVAL '{days} days')
                         GROUP BY creative_id, geography
                     )
                     SELECT creative_id, geography
@@ -502,7 +502,7 @@ async def _get_country_breakdown_for_creative(
                     WHERE creative_id = ?
                       AND country IS NOT NULL
                       AND country != ''
-                      AND metric_date >= date('now', ? || ' days')
+                      AND metric_date >= (CURRENT_DATE + (? || ' days')::interval)
                     GROUP BY country
                     ORDER BY spend_micros DESC
                     """,
@@ -567,7 +567,7 @@ async def list_creatives(
                         SELECT DISTINCT creative_id
                         FROM rtb_daily
                         WHERE creative_id IN ({placeholders})
-                          AND metric_date >= date('now', '-{days} days')
+                          AND metric_date >= (CURRENT_DATE - INTERVAL '{days} days')
                           AND (impressions > 0 OR clicks > 0 OR spend_micros > 0)
                         """,
                         creative_ids,
@@ -696,7 +696,7 @@ async def list_creatives_paginated(
                     SELECT DISTINCT creative_id
                     FROM rtb_daily
                     WHERE creative_id IN ({placeholders})
-                      AND metric_date >= date('now', '-{days} days')
+                      AND metric_date >= (CURRENT_DATE - INTERVAL '{days} days')
                       AND (impressions > 0 OR clicks > 0 OR spend_micros > 0)
                     """,
                     creative_ids,
