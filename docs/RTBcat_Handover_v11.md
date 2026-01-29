@@ -1,104 +1,148 @@
 # RTB.cat Creative Intelligence Platform - Handover Document v11
 
-**Date:** January 28, 2026  
-**Project:** RTB.cat Creative Intelligence & Performance Analytics Platform  
-**Status:** Postgres raw fact backfill complete; QPS join verified; size/config aggregations re‑enabled (pending re‑run)  
-**Developer:** Jen (jen@rtb.cat)  
-**AI Assistants:** Claude CLI, Claude in VSCode, ChatGPT Codex CLI  
+**Date:** January 30, 2026
+**Project:** RTB.cat Creative Intelligence & Performance Analytics Platform
+**Status:** Publisher list UI wired; aggregations fixed and current through Jan 28; MCP testing pending
+**Developer:** Jen (jen@rtb.cat)
+**AI Assistants:** Claude CLI, Claude in VSCode, ChatGPT Codex CLI
 
 ---
 
 ## 🎯 Executive Summary
 
-RTB.cat Creative Intelligence is a **QPS optimization platform** for Google Authorized Buyers.  
-The critical path is: **Gmail → Parquet → BigQuery raw_facts → Postgres → Aggregations → UI/QPS**.
+RTB.cat Creative Intelligence is a **QPS optimization platform** for Google Authorized Buyers.
+The critical path is: **Gmail → Parquet → BigQuery → Postgres → Aggregations → UI/QPS**.
 
-**Current State (as of Jan 28, 2026):**
-- ✅ Postgres schema alignment applied (migration 027)
-- ✅ Raw fact tables populated in Postgres:
-  - `rtb_daily` 9,082,712 rows (2026‑01‑07 → 2026‑01‑25)
-  - `rtb_bidstream` 3,547,431 rows (2026‑01‑07 → 2026‑01‑25)
-  - `rtb_bid_filtering` 44,936 rows (2026‑01‑13 → 2026‑01‑25)
-- ✅ QPS join verification query returns valid results
-- ✅ `home_publisher_daily` and `rtb_publisher_daily` populated through 2026‑01‑25
-- 🔄 `home_size_daily` and `home_config_daily` re‑enabled but need re‑aggregation run
-- 🔄 UI needs to consume normalized publisher list (`pretargeting_publishers`)
+**Current State (as of Jan 30, 2026):**
+- ✅ Publisher list UI wired to `/settings/pretargeting/{billing_id}/publishers` endpoint (commit `11cb55f`)
+- ✅ All aggregations fixed - switched from `raw_facts` to `rtb_daily`/`rtb_bidstream`
+- ✅ BigQuery data current through Jan 28 (rtb_daily: 1.4M rows for Jan 28)
+- ✅ Postgres summary tables populated through Jan 28
+- ✅ Gmail import fix deployed (timeouts for parquet pipeline)
+- 🔄 UI changes need deployment to VM for testing
+- 🔄 MCP Chrome testing pending (need to restart Claude with MCP tools)
 
 ---
 
-## ✅ Completed Milestones
+## ✅ Completed Milestones (Jan 29-30)
 
-1) **Postgres schema alignment** (`027_schema_alignment.sql`)
-   - Added raw fact tables + normalized publisher targeting
-   - BIGINT upgrades for aggregate counters
+1. **Gmail Import Fix** (commit `f2be2fc`)
+   - Added timeouts to GCS upload (5min) and BigQuery load (10min)
+   - Fixed hanging on large parquet files
 
-2) **Gmail ingest reliability**
-   - Batch importer + OAuth fallback for link‑only GCS downloads
+2. **Aggregation Fixes** (commits `8fc2c5c`, `a9ddb6a`)
+   - Switched `home_size_daily` and `home_config_daily` from `raw_facts` to `rtb_daily`
+   - Switched `home_geo_daily`, `home_seat_daily`, `home_publisher_daily`, `rtb_publisher_daily` from `raw_facts` to `rtb_bidstream`
+   - Removed obsolete `report_type` filters
 
-3) **Raw fact backfill**
-   - BigQuery → Postgres backfill completed
+3. **Publisher List UI Wiring** (commit `11cb55f`)
+   - Added API functions: `getPretargetingPublishers`, `addPretargetingPublisher`, `removePretargetingPublisher`
+   - Status chips: Active (green), Pending Add (yellow), Pending Remove (red)
+   - Source chips: API (blue), User (purple)
+   - Counts by status in section header
+   - Pending changes bar directing to "Push to Google" button
 
-4) **QPS join verified**
-   - `rtb_bidstream` → `rtb_daily` join returns impressions and bid metrics
+4. **BigQuery Schema Fix**
+   - Added `report_type` STRING column to `rtb_daily` table (was blocking parquet loads)
+
+---
+
+## 📊 Current Data Status
+
+**BigQuery (Jan 28 data):**
+| Table | Jan 28 Rows |
+|-------|-------------|
+| rtb_daily | 1,385,922 |
+| rtb_bidstream | 979,360 |
+| rtb_bid_filtering | 18,025 |
+
+**Postgres Summary Tables:**
+| Table | Rows | Date Range |
+|-------|------|------------|
+| home_config_daily | 391 | Jan 7-28 |
+| home_geo_daily | 887 | Jan 7-28 |
+| home_publisher_daily | 103,591 | Jan 13-28 |
+| home_seat_daily | 64 | Jan 7-28 |
+| home_size_daily | 180,555 | Jan 7-28 |
+| rtb_publisher_daily | 103,591 | Jan 13-28 |
 
 ---
 
 ## 📌 Active Tasks
 
-1) **Re‑run aggregation** now that size/config logic is corrected:
-   - `home_size_daily`
-   - `home_config_daily`
+1. **Deploy UI changes to VM**
+   - Commit `11cb55f` not yet deployed
+   - VM running older dashboard image
 
-2) **Verify UI precompute status**
-   - Ensure all `home_*_daily` and `rtb_*_daily` tables show non‑zero rows.
+2. **MCP Chrome Testing**
+   - Need to restart Claude with MCP tools configured
+   - Launch Chrome with: `google-chrome --remote-debugging-port=9222`
+   - Test publisher list UI at scan.rtb.cat
 
-3) **Wire UI to normalized publisher list**
-   - Use `pretargeting_publishers` endpoints in the settings UI.
-
----
-
-## 🔎 Key Verification Queries
-
-Row counts + date range:
-```sql
-SELECT 'rtb_daily' as table_name, COUNT(*), MIN(metric_date), MAX(metric_date) FROM rtb_daily
-UNION ALL
-SELECT 'rtb_bidstream', COUNT(*), MIN(metric_date), MAX(metric_date) FROM rtb_bidstream
-UNION ALL
-SELECT 'rtb_bid_filtering', COUNT(*), MIN(metric_date), MAX(metric_date) FROM rtb_bid_filtering;
-```
-
-QPS join check:
-```sql
-SELECT f.metric_date, f.publisher_id,
-       SUM(f.bid_requests) as bid_requests,
-       SUM(f.auctions_won) as auctions_won,
-       COALESCE(SUM(d.impressions), 0) as impressions_from_daily
-FROM rtb_bidstream f
-LEFT JOIN rtb_daily d
-  ON f.metric_date = d.metric_date
- AND f.country = d.country
- AND f.publisher_id = d.publisher_id
-WHERE f.metric_date >= '2026-01-20'
-  AND f.publisher_id IS NOT NULL
-GROUP BY f.metric_date, f.publisher_id
-ORDER BY bid_requests DESC
-LIMIT 10;
-```
+3. **TypeScript Verification**
+   - Dashboard `node_modules` missing locally
+   - Run `npm install` before next Claude session (memory intensive)
 
 ---
 
-## 🧪 MCP Chromium Status
+## 🧪 MCP Chromium Setup
 
-See `docs/MCP_CHROMIUM.md` for the unified MCP setup.  
-Current MCP URL: `http://localhost:8765/mcp`
+**Before starting Claude session:**
+```bash
+# 1. Launch Chrome with debugging
+google-chrome --remote-debugging-port=9222
+
+# 2. Start MCP server (from repo root)
+./scripts/mcp-chromium-cdp.sh
+
+# 3. Verify
+curl http://127.0.0.1:9222/json/version
+curl http://localhost:8765/health
+```
+
+See `docs/MCP_CHROMIUM.md` for full setup.
+
+---
+
+## 🖥️ VM Status
+
+**SG VM (`catscan-production-sg`):**
+```
+catscan-dashboard   Up (port 3000, localhost only)
+catscan-api         Up (port 8000, localhost only)
+```
+
+**Access via SSH tunnel:**
+```bash
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b \
+  --tunnel-through-iap -- -L 3000:localhost:3000 -N
+```
 
 ---
 
 ## ✅ Next Steps (Order)
 
-1) Re‑run aggregation (`scripts/bq_aggregate_to_pg.py`) for 2026‑01‑07 → 2026‑01‑25.  
-2) Verify `home_size_daily` and `home_config_daily` populated.  
-3) Update UI to use `pretargeting_publishers`.  
-4) Add automation (daily Gmail → BQ → Postgres + aggregation).
+1. **Before next Claude session:**
+   - Run `cd dashboard && npm install` locally
+   - Launch Chrome with `--remote-debugging-port=9222`
 
+2. **In next Claude session:**
+   - Deploy commit `11cb55f` to VM
+   - Test publisher list UI with MCP Chrome
+   - Verify status/source chips render correctly
+
+3. **Future:**
+   - Add automation (daily Gmail → BQ → Postgres + aggregation)
+   - Publisher name enrichment in UI
+
+---
+
+## 🔗 Key Files
+
+| Purpose | File |
+|---------|------|
+| Publisher list UI | `dashboard/src/components/rtb/pretargeting-settings-editor.tsx` |
+| Publisher API | `dashboard/src/lib/api/settings.ts` |
+| UI Spec | `docs/ui-publisher-list-management.md` |
+| AI Log | `docs/ai_logs/ai_log_2026-01-29.md` |
+| MCP Setup | `docs/MCP_CHROMIUM.md` |
