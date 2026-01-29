@@ -51,8 +51,9 @@ logger = logging.getLogger(__name__)
 # These query BigQuery tables and return aggregated results
 
 AGG_QUERIES = {
-    # NOTE: Most queries use raw_facts, but home_size_daily and home_config_daily
-    # use rtb_daily which has creative_size and billing_id columns
+    # NOTE: Queries use specific BQ tables:
+    # - rtb_bidstream: has bid_requests, successful_responses (for geo/seat/publisher)
+    # - rtb_daily: has creative_size, billing_id (for size/config)
 
     "home_publisher_daily": """
         SELECT
@@ -66,7 +67,7 @@ AGG_QUERIES = {
             SUM(COALESCE(successful_responses, 0)) as successful_responses,
             SUM(COALESCE(bid_requests, 0)) as bid_requests,
             SUM(COALESCE(auctions_won, 0)) as auctions_won
-        FROM `{project}.{dataset}.raw_facts`
+        FROM `{project}.{dataset}.rtb_bidstream`
         WHERE metric_date = @metric_date
           AND publisher_id IS NOT NULL
         GROUP BY metric_date, buyer_account_id, publisher_id
@@ -83,7 +84,7 @@ AGG_QUERIES = {
             SUM(COALESCE(successful_responses, 0)) as successful_responses,
             SUM(COALESCE(bid_requests, 0)) as bid_requests,
             SUM(COALESCE(auctions_won, 0)) as auctions_won
-        FROM `{project}.{dataset}.raw_facts`
+        FROM `{project}.{dataset}.rtb_bidstream`
         WHERE metric_date = @metric_date
           AND country IS NOT NULL
         GROUP BY metric_date, buyer_account_id, country
@@ -112,7 +113,7 @@ AGG_QUERIES = {
             SUM(COALESCE(successful_responses, 0)) as successful_responses,
             SUM(COALESCE(bid_requests, 0)) as bid_requests,
             SUM(COALESCE(auctions_won, 0)) as auctions_won
-        FROM `{project}.{dataset}.raw_facts`
+        FROM `{project}.{dataset}.rtb_bidstream`
         WHERE metric_date = @metric_date
         GROUP BY metric_date, buyer_account_id
     """,
@@ -144,7 +145,7 @@ AGG_QUERIES = {
             SUM(COALESCE(successful_responses, 0)) as successful_responses,
             SUM(COALESCE(bid_requests, 0)) as bid_requests,
             SUM(COALESCE(auctions_won, 0)) as auctions_won
-        FROM `{project}.{dataset}.raw_facts`
+        FROM `{project}.{dataset}.rtb_bidstream`
         WHERE metric_date = @metric_date
           AND publisher_id IS NOT NULL
         GROUP BY metric_date, buyer_account_id, publisher_id
