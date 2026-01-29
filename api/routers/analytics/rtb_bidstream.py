@@ -113,7 +113,7 @@ async def get_rtb_bidstream(
                 SUM(successful_responses) as total_successful_responses,
                 SUM(bid_requests) as total_bid_requests
             FROM rtb_funnel_daily
-            WHERE metric_date >= (CURRENT_DATE + ?::interval){buyer_filter}
+            WHERE metric_date::date >= (CURRENT_DATE + ?::interval){buyer_filter}
         """, (f'-{days} days', *buyer_params))
 
         total_reached = funnel_row["total_reached"] or 0
@@ -143,7 +143,7 @@ async def get_rtb_bidstream(
                     SUM(successful_responses) as successful_responses,
                     SUM(bid_requests) as bid_requests
                 FROM rtb_publisher_daily
-                WHERE metric_date >= (CURRENT_DATE + ?::interval)
+                WHERE metric_date::date >= (CURRENT_DATE + ?::interval)
                   AND publisher_id != ''{buyer_filter}
                 GROUP BY publisher_id
                 ORDER BY reached DESC
@@ -186,7 +186,7 @@ async def get_rtb_bidstream(
                     SUM(successful_responses) as successful_responses,
                     SUM(bid_requests) as bid_requests
                 FROM rtb_geo_daily
-                WHERE metric_date >= (CURRENT_DATE + ?::interval)
+                WHERE metric_date::date >= (CURRENT_DATE + ?::interval)
                   AND country != ''{buyer_filter}
                 GROUP BY country
                 ORDER BY reached DESC
@@ -218,7 +218,7 @@ async def get_rtb_bidstream(
                 f"""
                 SELECT COUNT(DISTINCT publisher_id) as cnt
                 FROM rtb_publisher_daily
-                WHERE metric_date >= (CURRENT_DATE + ?::interval)
+                WHERE metric_date::date >= (CURRENT_DATE + ?::interval)
                   AND publisher_id != ''{buyer_filter}
                 """,
                 (f'-{days} days', *buyer_params),
@@ -229,7 +229,7 @@ async def get_rtb_bidstream(
                 f"""
                 SELECT COUNT(DISTINCT country) as cnt
                 FROM rtb_geo_daily
-                WHERE metric_date >= (CURRENT_DATE + ?::interval)
+                WHERE metric_date::date >= (CURRENT_DATE + ?::interval)
                   AND country != ''{buyer_filter}
                 """,
                 (f'-{days} days', *buyer_params),
@@ -303,7 +303,7 @@ async def get_rtb_publishers(
                 SUM(impressions) as total_impressions,
                 SUM(bids) as total_bids
             FROM rtb_publisher_daily
-            WHERE metric_date >= (CURRENT_DATE + ?::interval)
+            WHERE metric_date::date >= (CURRENT_DATE + ?::interval)
               AND publisher_id != ''
             GROUP BY publisher_id, publisher_name
             ORDER BY total_reached DESC
@@ -313,7 +313,7 @@ async def get_rtb_publishers(
         count_row = await db_query_one("""
             SELECT COUNT(DISTINCT publisher_id) as total
             FROM rtb_publisher_daily
-            WHERE metric_date >= (CURRENT_DATE + ?::interval)
+            WHERE metric_date::date >= (CURRENT_DATE + ?::interval)
               AND publisher_id != ''
         """, (f'-{days} days',))
 
@@ -377,7 +377,7 @@ async def get_rtb_geos(
                 SUM(impressions) as total_impressions,
                 SUM(bids) as total_bids
             FROM rtb_geo_daily
-            WHERE metric_date >= (CURRENT_DATE + ?::interval)
+            WHERE metric_date::date >= (CURRENT_DATE + ?::interval)
               AND country != ''
             GROUP BY country
             ORDER BY total_reached DESC
@@ -387,7 +387,7 @@ async def get_rtb_geos(
         count_row = await db_query_one("""
             SELECT COUNT(DISTINCT country) as total
             FROM rtb_geo_daily
-            WHERE metric_date >= (CURRENT_DATE + ?::interval)
+            WHERE metric_date::date >= (CURRENT_DATE + ?::interval)
               AND country != ''
         """, (f'-{days} days',))
 
@@ -484,7 +484,7 @@ async def get_config_performance(
                 }
 
         size_params: list = [f'-{days} days']
-        size_filters = ["metric_date >= (CURRENT_DATE + ?::interval)"]
+        size_filters = ["metric_date::date >= (CURRENT_DATE + ?::interval)"]
         if buyer_id:
             size_filters.append("buyer_account_id = ?")
             size_params.append(buyer_id)
@@ -508,7 +508,7 @@ async def get_config_performance(
             tuple(size_params),
         )
 
-        geo_filters = ["metric_date >= (CURRENT_DATE + ?::interval)"]
+        geo_filters = ["metric_date::date >= (CURRENT_DATE + ?::interval)"]
         geo_params: list = [f'-{days} days']
         if buyer_id:
             geo_filters.append("buyer_account_id = ?")
@@ -742,7 +742,7 @@ async def get_config_breakdown(
                         COALESCE(SUM(spend_micros), 0) as total_spend_micros
                     FROM config_geo_daily
                     WHERE billing_id = ?
-                      AND metric_date >= (CURRENT_DATE + ?::interval)
+                      AND metric_date::date >= (CURRENT_DATE + ?::interval)
                       {seat_clause}
                     GROUP BY country
                     ORDER BY total_reached DESC
@@ -760,7 +760,7 @@ async def get_config_breakdown(
                         COALESCE(SUM(spend_micros), 0) as total_spend_micros
                     FROM config_publisher_daily
                     WHERE billing_id = ?
-                      AND metric_date >= (CURRENT_DATE + ?::interval)
+                      AND metric_date::date >= (CURRENT_DATE + ?::interval)
                       {seat_clause}
                     GROUP BY COALESCE(publisher_name, publisher_id)
                     ORDER BY total_reached DESC
@@ -806,7 +806,7 @@ async def get_config_breakdown(
                 LEFT JOIN creatives c
                     ON c.id = d.creative_id
                 WHERE d.billing_id = ?
-                  AND d.metric_date >= (CURRENT_DATE + ?::interval)
+                  AND d.metric_date::date >= (CURRENT_DATE + ?::interval)
                   {seat_clause}
                 GROUP BY d.creative_id
                 ORDER BY total_reached DESC
@@ -843,7 +843,7 @@ async def get_config_breakdown(
                     COALESCE(SUM(spend_micros), 0) as total_spend_micros
                 FROM config_size_daily
                 WHERE billing_id = ?
-                  AND metric_date >= (CURRENT_DATE + ?::interval)
+                  AND metric_date::date >= (CURRENT_DATE + ?::interval)
                   {seat_clause}
                 GROUP BY creative_size
                 ORDER BY total_reached DESC
@@ -961,7 +961,7 @@ async def get_config_creatives(
                 "precompute_status": {"config_creative_daily": precompute_status},
             }
 
-        where = ["billing_id = ?", "metric_date >= (CURRENT_DATE + ?::interval)"]
+        where = ["billing_id = ?", "metric_date::date >= (CURRENT_DATE + ?::interval)"]
         params: list = [billing_id, f'-{days} days']
         if size:
             where.append("creative_size = ?")
@@ -1125,7 +1125,7 @@ async def get_app_drilldown(
                 SUM(spend_micros) as total_spend_micros
             FROM rtb_app_daily
             WHERE app_name = ?{billing_clause}
-              AND metric_date >= (CURRENT_DATE + ?::interval)
+              AND metric_date::date >= (CURRENT_DATE + ?::interval)
             """,
             (app_name, *billing_params, f'-{days} days'),
         )
@@ -1140,7 +1140,7 @@ async def get_app_drilldown(
             SELECT COUNT(DISTINCT creative_id) as creative_count
             FROM rtb_app_creative_daily
             WHERE app_name = ?{billing_clause}
-              AND metric_date >= (CURRENT_DATE + ?::interval)
+              AND metric_date::date >= (CURRENT_DATE + ?::interval)
             """,
             count_params,
         )
@@ -1149,7 +1149,7 @@ async def get_app_drilldown(
             SELECT COUNT(DISTINCT country) as country_count
             FROM rtb_app_country_daily
             WHERE app_name = ?{billing_clause}
-              AND metric_date >= (CURRENT_DATE + ?::interval)
+              AND metric_date::date >= (CURRENT_DATE + ?::interval)
             """,
             count_params,
         )
@@ -1165,7 +1165,7 @@ async def get_app_drilldown(
                 SUM(spend_micros) as spend_micros
             FROM rtb_app_size_daily
             WHERE app_name = ?{billing_clause}
-              AND metric_date >= (CURRENT_DATE + ?::interval)
+              AND metric_date::date >= (CURRENT_DATE + ?::interval)
             GROUP BY creative_size, creative_format
             ORDER BY reached DESC
             """,
@@ -1200,7 +1200,7 @@ async def get_app_drilldown(
                 SUM(spend_micros) as spend_micros
             FROM rtb_app_country_daily
             WHERE app_name = ?{billing_clause}
-              AND metric_date >= (CURRENT_DATE + ?::interval)
+              AND metric_date::date >= (CURRENT_DATE + ?::interval)
             GROUP BY country
             ORDER BY reached DESC
             """,
@@ -1234,7 +1234,7 @@ async def get_app_drilldown(
                 SUM(spend_micros) as spend_micros
             FROM rtb_app_creative_daily
             WHERE app_name = ?{billing_clause}
-              AND metric_date >= (CURRENT_DATE + ?::interval)
+              AND metric_date::date >= (CURRENT_DATE + ?::interval)
             GROUP BY creative_id, creative_size, creative_format
             ORDER BY reached DESC
             LIMIT 10
@@ -1295,7 +1295,7 @@ async def get_app_drilldown(
                             SUM(opportunity_cost_micros) as opportunity_cost_micros
                         FROM rtb_bid_filtering
                         WHERE creative_id IN ({placeholders})
-                          AND metric_date >= (CURRENT_DATE + ?::interval)
+                          AND metric_date::date >= (CURRENT_DATE + ?::interval)
                         GROUP BY filtering_reason
                         ORDER BY total_bids DESC
                         LIMIT 10
