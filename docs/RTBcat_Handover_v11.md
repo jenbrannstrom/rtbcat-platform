@@ -2,147 +2,117 @@
 
 **Date:** January 30, 2026
 **Project:** RTB.cat Creative Intelligence & Performance Analytics Platform
-**Status:** Publisher list UI wired; aggregations fixed and current through Jan 28; MCP testing pending
+**Status:** BLOCKED - SQLite→Postgres date syntax migration incomplete
 **Developer:** Jen (jen@rtb.cat)
 **AI Assistants:** Claude CLI, Claude in VSCode, ChatGPT Codex CLI
 
 ---
 
-## 🎯 Executive Summary
+## 🚨 CRITICAL BLOCKER
 
-RTB.cat Creative Intelligence is a **QPS optimization platform** for Google Authorized Buyers.
-The critical path is: **Gmail → Parquet → BigQuery → Postgres → Aggregations → UI/QPS**.
-
-**Current State (as of Jan 30, 2026):**
-- ✅ Publisher list UI wired to `/settings/pretargeting/{billing_id}/publishers` endpoint (commit `11cb55f`)
-- ✅ All aggregations fixed - switched from `raw_facts` to `rtb_daily`/`rtb_bidstream`
-- ✅ BigQuery data current through Jan 28 (rtb_daily: 1.4M rows for Jan 28)
-- ✅ Postgres summary tables populated through Jan 28
-- ✅ Gmail import fix deployed (timeouts for parquet pipeline)
-- 🔄 UI changes need deployment to VM for testing
-- 🔄 MCP Chrome testing pending (need to restart Claude with MCP tools)
-
----
-
-## ✅ Completed Milestones (Jan 29-30)
-
-1. **Gmail Import Fix** (commit `f2be2fc`)
-   - Added timeouts to GCS upload (5min) and BigQuery load (10min)
-   - Fixed hanging on large parquet files
-
-2. **Aggregation Fixes** (commits `8fc2c5c`, `a9ddb6a`)
-   - Switched `home_size_daily` and `home_config_daily` from `raw_facts` to `rtb_daily`
-   - Switched `home_geo_daily`, `home_seat_daily`, `home_publisher_daily`, `rtb_publisher_daily` from `raw_facts` to `rtb_bidstream`
-   - Removed obsolete `report_type` filters
-
-3. **Publisher List UI Wiring** (commit `11cb55f`)
-   - Added API functions: `getPretargetingPublishers`, `addPretargetingPublisher`, `removePretargetingPublisher`
-   - Status chips: Active (green), Pending Add (yellow), Pending Remove (red)
-   - Source chips: API (blue), User (purple)
-   - Counts by status in section header
-   - Pending changes bar directing to "Push to Google" button
-
-4. **BigQuery Schema Fix**
-   - Added `report_type` STRING column to `rtb_daily` table (was blocking parquet loads)
-
----
-
-## 📊 Current Data Status
-
-**BigQuery (Jan 28 data):**
-| Table | Jan 28 Rows |
-|-------|-------------|
-| rtb_daily | 1,385,922 |
-| rtb_bidstream | 979,360 |
-| rtb_bid_filtering | 18,025 |
-
-**Postgres Summary Tables:**
-| Table | Rows | Date Range |
-|-------|------|------------|
-| home_config_daily | 391 | Jan 7-28 |
-| home_geo_daily | 887 | Jan 7-28 |
-| home_publisher_daily | 103,591 | Jan 13-28 |
-| home_seat_daily | 64 | Jan 7-28 |
-| home_size_daily | 180,555 | Jan 7-28 |
-| rtb_publisher_daily | 103,591 | Jan 13-28 |
-
----
-
-## 📌 Active Tasks
-
-1. **Deploy UI changes to VM**
-   - Commit `11cb55f` not yet deployed
-   - VM running older dashboard image
-   - Need to rebuild and restart `catscan-dashboard` container
-
-2. **MCP Chrome Testing**
-   - Need to restart Claude with MCP tools configured
-   - Launch Chrome with: `google-chrome --remote-debugging-port=9222`
-   - SSH tunnel to VM dashboard, then test at localhost:3000
-
----
-
-## 🧪 MCP Chromium Setup
-
-**Before starting Claude session:**
-```bash
-# 1. Launch Chrome with debugging
-google-chrome --remote-debugging-port=9222
-
-# 2. Start MCP server (from repo root)
-./scripts/mcp-chromium-cdp.sh
-
-# 3. Verify
-curl http://127.0.0.1:9222/json/version
-curl http://localhost:8765/health
+**API returns 500 errors** on breakdown endpoints due to SQLite date syntax in Postgres:
+```
+operator does not exist: text >= timestamp without time zone
 ```
 
-See `docs/MCP_CHROMIUM.md` for full setup.
+### Files Needing Fix (SQLite → Postgres)
 
----
+| File | Occurrences | Status |
+|------|-------------|--------|
+| `api/routers/analytics/rtb_bidstream.py` | 23 | ✅ Fixed (commit `b719926`) |
+| `api/routers/analytics/home.py` | 6 | ❌ Needs fix |
+| `api/routers/analytics/spend.py` | 3 | ❌ Needs fix |
+| `api/routers/analytics/common.py` | 1 | ❌ Needs fix |
+| `api/routers/creatives.py` | 5 | ❌ Needs fix |
+| `api/campaigns_router.py` | 1 | ❌ Needs fix |
+| `api/routers/performance.py` | 1 | ❌ Needs fix |
 
-## 🖥️ VM Status
-
-**SG VM (`catscan-production-sg`):**
-```
-catscan-dashboard   Up (port 3000, localhost only)
-catscan-api         Up (port 8000, localhost only)
-```
-
-**Access via SSH tunnel:**
-```bash
-gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b \
-  --tunnel-through-iap -- -L 3000:localhost:3000 -N
+### The Fix
+Replace:
+```sql
+date('now', ?)           →  (CURRENT_DATE + ?::interval)
+date('now', '-7 days')   →  (CURRENT_DATE - INTERVAL '7 days')
 ```
 
 ---
 
-## ✅ Next Steps (Order)
+## 🎯 Current State
 
-1. **Before next Claude session:**
-   - Launch Chrome: `google-chrome --remote-debugging-port=9222`
-   - Start MCP server: `./scripts/mcp-chromium-cdp.sh`
-   - (Optional) SSH tunnel to VM: `gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- -L 3000:localhost:3000 -N`
+**Publisher List UI (Task B):** Code complete, deployed as `sha-67e6658`
+- Cannot visually test until API fix is deployed
 
-2. **In next Claude session:**
-   - Deploy commit `11cb55f` to VM (rebuild Docker image)
-   - Test publisher list UI with MCP Chrome at localhost:3000 (via tunnel)
-   - Verify status/source chips render correctly
+**API:** Partially fixed, deployed as `sha-b719926`
+- Breakdown tables still fail due to unfixed files
 
-3. **Future:**
-   - Add automation (daily Gmail → BQ → Postgres + aggregation)
-   - Publisher name enrichment in UI
-
-**Note:** No local `npm install` needed - dashboard runs on VM in Docker.
+**VM:** `catscan-production-sg` (asia-southeast1-b)
+- Dashboard: `sha-67e6658` ✅
+- API: `sha-b719926` (partial fix)
 
 ---
 
-## 🔗 Key Files
+## ✅ Next Steps (Priority Order)
 
-| Purpose | File |
+1. **Fix remaining SQLite date syntax** in 6 API files listed above
+
+2. **Build and deploy API:**
+   ```bash
+   git add -A && git commit -m "Fix SQLite to Postgres date syntax in remaining files"
+   gcloud builds submit --tag europe-west1-docker.pkg.dev/catscan-prod-202601/catscan/catscan-api:sha-NEWCOMMIT .
+   ```
+
+3. **Deploy to VM:**
+   ```bash
+   gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap
+   cd /opt/catscan
+   sudo sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=sha-NEWCOMMIT/' .env
+   sudo docker compose -f docker-compose.gcp.yml up -d api
+   ```
+
+4. **Verify site loads** at https://scan.rtb.cat
+
+5. **Test Publisher List UI** - see QA checklist in AI log
+
+---
+
+## 📁 Key Paths
+
+| Purpose | Path |
 |---------|------|
-| Publisher list UI | `dashboard/src/components/rtb/pretargeting-settings-editor.tsx` |
-| Publisher API | `dashboard/src/lib/api/settings.ts` |
-| UI Spec | `docs/ui-publisher-list-management.md` |
+| VM config | `/opt/catscan/.env` |
+| Docker compose | `/opt/catscan/docker-compose.gcp.yml` |
+| Image registry | `europe-west1-docker.pkg.dev/catscan-prod-202601/catscan/` |
 | AI Log | `docs/ai_logs/ai_log_2026-01-29.md` |
-| MCP Setup | `docs/MCP_CHROMIUM.md` |
+
+---
+
+## 🔧 Key Commands
+
+```bash
+# SSH to VM
+gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap
+
+# Check containers
+sudo docker ps
+
+# Check API logs
+sudo docker logs catscan-api --tail 50
+
+# Restart services
+cd /opt/catscan && sudo docker compose -f docker-compose.gcp.yml up -d
+
+# Build images (from repo root)
+gcloud builds submit --tag europe-west1-docker.pkg.dev/catscan-prod-202601/catscan/catscan-api:sha-XXX .
+gcloud builds submit --tag europe-west1-docker.pkg.dev/catscan-prod-202601/catscan/catscan-dashboard:sha-XXX ./dashboard
+```
+
+---
+
+## 📊 Data Status (as of Jan 28)
+
+All summary tables populated through Jan 28:
+- `home_config_daily`: 391 rows
+- `home_geo_daily`: 887 rows
+- `home_publisher_daily`: 103,591 rows
+- `home_seat_daily`: 64 rows
+- `home_size_daily`: 180,555 rows
+- `rtb_publisher_daily`: 103,591 rows
