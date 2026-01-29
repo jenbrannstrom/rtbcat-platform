@@ -34,6 +34,10 @@ BQ_DATASET = os.getenv("CATSCAN_BQ_DATASET", "")
 BQ_PROJECT = os.getenv("CATSCAN_BQ_PROJECT", "")
 BQ_LOAD_MODE = os.getenv("CATSCAN_BQ_LOAD_MODE", "load").lower().strip()
 
+# Timeouts for cloud operations (seconds)
+GCS_UPLOAD_TIMEOUT = int(os.getenv("CATSCAN_GCS_UPLOAD_TIMEOUT", "300"))  # 5 minutes
+BQ_LOAD_TIMEOUT = int(os.getenv("CATSCAN_BQ_LOAD_TIMEOUT", "600"))  # 10 minutes
+
 
 def _parquet_schema_for_table(table_name: str) -> "pa.Schema":
     if table_name == "rtb_daily":
@@ -305,15 +309,19 @@ class ParquetExportManager:
     def finalize(self) -> list[str]:
         if not self.enabled:
             return []
+        logger.info("Parquet export: flushing buffers...")
         for day in list(self._buffers.keys()):
             self._flush_day(day)
         for writer in self._writers.values():
             writer.close()
+        logger.info("Parquet export: uploading %d files to GCS...", len(self._paths))
         uploaded = self._upload_files()
         if uploaded and _HAS_BQ and BQ_DATASET:
+            logger.info("Parquet export: loading %d files to BigQuery...", len(uploaded))
             self._register_bigquery(uploaded)
         elif uploaded and not _HAS_BQ and BQ_DATASET:
             self._append_error("BigQuery dependencies missing; skipping BigQuery registration.")
+        logger.info("Parquet export: finalize complete")
         return uploaded
 
     def _upload_files(self) -> list[str]:
@@ -322,14 +330,18 @@ class ParquetExportManager:
             return []
         if not GCS_BUCKET:
             return []
-        client = storage.Client()
+        try:
+            client = storage.Client()
+        except Exception as exc:
+            self._append_error(f"GCS client creation failed: {exc}")
+            return []
         bucket = client.bucket(GCS_BUCKET)
         uploaded = []
         for day, path in self._paths.items():
             gcs_key = f"{GCS_PREFIX}/{self.table_name}/day={day}/{path.name}"
             try:
                 blob = bucket.blob(gcs_key)
-                blob.upload_from_filename(str(path))
+                blob.upload_from_filename(str(path), timeout=GCS_UPLOAD_TIMEOUT)
                 gcs_uri = f"gs://{GCS_BUCKET}/{gcs_key}"
                 uploaded.append(gcs_uri)
                 logger.info("Uploaded Parquet to %s", gcs_uri)
@@ -340,7 +352,11 @@ class ParquetExportManager:
     def _register_bigquery(self, gcs_uris: Iterable[str]) -> None:
         if not BQ_DATASET:
             return
-        client = bigquery.Client(project=BQ_PROJECT or None)
+        try:
+            client = bigquery.Client(project=BQ_PROJECT or None)
+        except Exception as exc:
+            self._append_error(f"BigQuery client creation failed: {exc}")
+            return
         table_id = f"{client.project}.{BQ_DATASET}.{self.table_name}"
         schema = _bq_schema_for_table(self.table_name)
         if BQ_LOAD_MODE == "external":
@@ -355,7 +371,7 @@ class ParquetExportManager:
                 )
                 config.time_partitioning = bigquery.TimePartitioning(field="metric_date")
                 job = client.load_table_from_uri(gcs_uri, table_id, job_config=config)
-                job.result()
+                job.result(timeout=BQ_LOAD_TIMEOUT)
                 logger.info("Loaded Parquet into BigQuery table %s", table_id)
             except Exception as exc:
                 self._append_error(f"BigQuery load failed for {gcs_uri}: {exc}")
