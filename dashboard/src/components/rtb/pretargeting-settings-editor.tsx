@@ -15,9 +15,13 @@ import {
   syncPretargetingConfigs,
   getSnapshots,
   rollbackSnapshot,
+  getPretargetingPublishers,
+  addPretargetingPublisher,
+  removePretargetingPublisher,
   type PendingChange,
   type PretargetingHistoryItem,
   type PretargetingSnapshot,
+  type PretargetingPublisher,
 } from '@/lib/api';
 import {
   Settings,
@@ -256,14 +260,14 @@ function TargetingSection({
           <Icon className="h-4 w-4 text-gray-500" />
           <span className="font-medium text-gray-900">{title}</span>
           <span className="text-sm text-gray-500">({effectiveValues.length} values)</span>
-          {pendingAdds.length > 0 && (
+          {pendingAddCount > 0 && (
             <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">
-              +{pendingAdds.length}
+              +{pendingAddCount}
             </span>
           )}
-          {pendingRemoves.length > 0 && (
+          {pendingRemoveCount > 0 && (
             <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">
-              -{pendingRemoves.length}
+              -{pendingRemoveCount}
             </span>
           )}
         </div>
@@ -343,28 +347,26 @@ function TargetingSection({
 }
 
 function PublisherTargetingSection({
+  billingId,
   baseMode,
   publishers,
-  pendingAdds,
-  pendingRemoves,
   pendingModeChange,
   onAddPublisher,
   onRemovePublisher,
-  onCancelPending,
+  onUndoPublisher,
   onSetMode,
   onShowHistory,
   onBulkAdd,
   onExportCsv,
   disabled = false,
 }: {
+  billingId: string;
   baseMode: string | null | undefined;
-  publishers: string[];
-  pendingAdds: string[];
-  pendingRemoves: string[];
+  publishers: PretargetingPublisher[];
   pendingModeChange: PendingChange | null;
   onAddPublisher: (value: string) => void;
-  onRemovePublisher: (value: string) => void;
-  onCancelPending: (changeType: string, value: string) => void;
+  onRemovePublisher: (publisherId: string) => void;
+  onUndoPublisher: (publisherId: string) => void;
   onSetMode: (mode: string) => void;
   onShowHistory: () => void;
   onBulkAdd: (values: string[]) => void;
@@ -387,19 +389,21 @@ function PublisherTargetingSection({
 
   const pendingMode = pendingModeChange?.value || null;
   const effectiveMode = pendingMode || baseMode || 'EXCLUSIVE';
-  const basePublishers = pendingMode ? [] : publishers;
-  const effectivePublishers = [
-    ...basePublishers.filter(value => !pendingRemoves.includes(value)),
-    ...pendingAdds.filter(value => !basePublishers.includes(value)),
-  ];
 
-  const filteredPublishers = effectivePublishers.filter((value) =>
-    value.toLowerCase().includes(filter.trim().toLowerCase())
+  // Count publishers by status
+  const activeCount = publishers.filter(p => p.status === 'active').length;
+  const pendingAddCount = publishers.filter(p => p.status === 'pending_add').length;
+  const pendingRemoveCount = publishers.filter(p => p.status === 'pending_remove').length;
+  const totalPendingCount = pendingAddCount + pendingRemoveCount;
+
+  // Filter publishers
+  const filteredPublishers = publishers.filter((p) =>
+    p.publisher_id.toLowerCase().includes(filter.trim().toLowerCase())
   );
+
   const isWhitelist = effectiveMode === 'INCLUSIVE';
   const modeLabel = formatPublisherMode(effectiveMode);
   const statusLabel = isWhitelist ? 'Allowed' : 'Blocked';
-  const addLabel = isWhitelist ? 'Add' : 'Block';
   const removeLabel = isWhitelist ? 'Remove' : 'Unblock';
   const actionLabel = isWhitelist ? 'Add' : 'Block';
 
@@ -407,10 +411,12 @@ function PublisherTargetingSection({
     const normalized = normalizePublisherId(newPublisher);
     if (!normalized) return;
     if (!isValidPublisherId(normalized)) {
-      setInputError('Invalid publisher ID format.');
+      setInputError('Invalid publisher ID format. Use bundle ID (com.example.app) or domain (example.com).');
       return;
     }
-    if (effectivePublishers.includes(normalized) || pendingAdds.includes(normalized)) {
+    // Check if already exists
+    const existingPublisher = publishers.find(p => p.publisher_id === normalized);
+    if (existingPublisher && existingPublisher.status !== 'pending_remove') {
       setInputError('Publisher already in list.');
       return;
     }
@@ -438,13 +444,14 @@ function PublisherTargetingSection({
     const valid: string[] = [];
     const duplicates: string[] = [];
     const invalid: string[] = [];
+    const existingIds = new Set(publishers.filter(p => p.status !== 'pending_remove').map(p => p.publisher_id));
 
     tokens.forEach((value) => {
       if (!isValidPublisherId(value)) {
         invalid.push(value);
         return;
       }
-      if (effectivePublishers.includes(value) || pendingAdds.includes(value)) {
+      if (existingIds.has(value)) {
         duplicates.push(value);
         return;
       }
@@ -466,12 +473,34 @@ function PublisherTargetingSection({
   };
 
   const handleExport = () => {
-    onExportCsv(effectivePublishers);
+    onExportCsv(publishers.filter(p => p.status !== 'pending_remove').map(p => p.publisher_id));
   };
 
-  const summaryLabel = effectivePublishers.length === 0 && !pendingMode
+  const summaryLabel = publishers.length === 0 && !pendingMode
     ? 'No publisher targeting'
-    : `${modeLabel}: ${effectivePublishers.length} ${isWhitelist ? 'allowed' : 'blocked'}`;
+    : `${modeLabel}: ${activeCount} ${isWhitelist ? 'allowed' : 'blocked'}`;
+
+  // Status chip renderer
+  const renderStatusChip = (status: string) => {
+    switch (status) {
+      case 'active':
+        return <span className="px-1.5 py-0.5 text-xs rounded bg-green-100 text-green-700">Active</span>;
+      case 'pending_add':
+        return <span className="px-1.5 py-0.5 text-xs rounded bg-yellow-100 text-yellow-700">Pending Add</span>;
+      case 'pending_remove':
+        return <span className="px-1.5 py-0.5 text-xs rounded bg-red-100 text-red-700">Pending Remove</span>;
+      default:
+        return <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600">{status}</span>;
+    }
+  };
+
+  // Source chip renderer
+  const renderSourceChip = (source: string) => {
+    if (source === 'api_sync') {
+      return <span className="px-1.5 py-0.5 text-xs rounded bg-blue-50 text-blue-600">API</span>;
+    }
+    return <span className="px-1.5 py-0.5 text-xs rounded bg-purple-50 text-purple-600">User</span>;
+  };
 
   return (
     <div className="border rounded-lg overflow-hidden">
@@ -483,14 +512,14 @@ function PublisherTargetingSection({
           <Shield className="h-4 w-4 text-gray-500" />
           <span className="font-medium text-gray-900">Publishers</span>
           <span className="text-sm text-gray-500">{summaryLabel}</span>
-          {pendingAdds.length > 0 && (
+          {pendingAddCount > 0 && (
             <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">
-              +{pendingAdds.length}
+              +{pendingAddCount}
             </span>
           )}
-          {pendingRemoves.length > 0 && (
+          {pendingRemoveCount > 0 && (
             <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">
-              -{pendingRemoves.length}
+              -{pendingRemoveCount}
             </span>
           )}
           {pendingMode && (
@@ -564,47 +593,62 @@ function PublisherTargetingSection({
             />
           </div>
 
+          {/* Counts by status */}
+          <div className="flex items-center gap-4 text-xs text-gray-500">
+            <span>Active: <strong className="text-gray-700">{activeCount}</strong></span>
+            {pendingAddCount > 0 && (
+              <span>Pending Add: <strong className="text-yellow-600">{pendingAddCount}</strong></span>
+            )}
+            {pendingRemoveCount > 0 && (
+              <span>Pending Remove: <strong className="text-red-600">{pendingRemoveCount}</strong></span>
+            )}
+          </div>
+
           <div className="overflow-hidden rounded border">
-            <div className="grid grid-cols-[1fr_120px_120px_110px] gap-2 px-3 py-2 bg-gray-50 text-xs font-medium text-gray-500">
+            <div className="grid grid-cols-[1fr_80px_100px_80px_100px] gap-2 px-3 py-2 bg-gray-50 text-xs font-medium text-gray-500">
               <span>Publisher ID</span>
               <span>Type</span>
               <span>Status</span>
+              <span>Source</span>
               <span className="text-right">Action</span>
             </div>
             {filteredPublishers.length === 0 ? (
               <div className="px-3 py-6 text-sm text-gray-500 text-center">
-                {publishers.length === 0 && pendingAdds.length === 0
+                {publishers.length === 0
                   ? `No publishers ${isWhitelist ? 'allowed' : 'blocked'} yet.`
                   : 'No publishers match the current filter.'}
               </div>
             ) : (
-              <div className="divide-y">
-                {filteredPublishers.map((value) => {
-                  const isPendingAdd = pendingAdds.includes(value) && !publishers.includes(value);
-                  const isPendingRemove = pendingRemoves.includes(value);
+              <div className="divide-y max-h-80 overflow-y-auto">
+                {filteredPublishers.map((pub) => {
+                  const isPendingAdd = pub.status === 'pending_add';
+                  const isPendingRemove = pub.status === 'pending_remove';
                   return (
                     <div
-                      key={value}
+                      key={pub.publisher_id}
                       className={cn(
-                        'grid grid-cols-[1fr_120px_120px_110px] gap-2 px-3 py-2 text-sm items-center',
-                        isPendingRemove && 'text-gray-400 line-through'
+                        'grid grid-cols-[1fr_80px_100px_80px_100px] gap-2 px-3 py-2 text-sm items-center',
+                        isPendingRemove && 'bg-red-50 text-gray-400 line-through'
                       )}
                     >
-                      <span className="truncate" title={value}>{value}</span>
-                      <span>{detectPublisherType(value)}</span>
-                      <span>{isPendingAdd ? 'Pending' : isPendingRemove ? 'Removing' : statusLabel}</span>
+                      <span className="truncate" title={pub.publisher_id}>{pub.publisher_id}</span>
+                      <span className="text-gray-500">{detectPublisherType(pub.publisher_id)}</span>
+                      <span>{renderStatusChip(pub.status)}</span>
+                      <span>{renderSourceChip(pub.source)}</span>
                       <div className="text-right">
                         {isPendingAdd || isPendingRemove ? (
                           <button
-                            onClick={() => onCancelPending(isPendingAdd ? 'add_publisher' : 'remove_publisher', value)}
+                            onClick={() => onUndoPublisher(pub.publisher_id)}
                             className="px-2 py-1 text-xs rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+                            disabled={disabled}
                           >
                             Undo
                           </button>
                         ) : (
                           <button
-                            onClick={() => onRemovePublisher(value)}
+                            onClick={() => onRemovePublisher(pub.publisher_id)}
                             className="px-2 py-1 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            disabled={disabled}
                           >
                             {removeLabel}
                           </button>
@@ -616,6 +660,29 @@ function PublisherTargetingSection({
               </div>
             )}
           </div>
+
+          {/* Pending Changes Bar */}
+          {totalPendingCount > 0 && (
+            <div className="border rounded-lg p-3 bg-yellow-50 border-yellow-200">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                <span className="text-sm font-medium text-yellow-800">
+                  {totalPendingCount} pending publisher change{totalPendingCount !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="mt-2 text-xs text-yellow-700 space-y-1">
+                {pendingAddCount > 0 && (
+                  <div>• {pendingAddCount} publisher{pendingAddCount !== 1 ? 's' : ''} to {isWhitelist ? 'add' : 'block'}</div>
+                )}
+                {pendingRemoveCount > 0 && (
+                  <div>• {pendingRemoveCount} publisher{pendingRemoveCount !== 1 ? 's' : ''} to {isWhitelist ? 'remove' : 'unblock'}</div>
+                )}
+              </div>
+              <p className="mt-2 text-xs text-yellow-600">
+                Use "Push to Google" button above to apply these changes.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-1">
             <label className="text-xs text-gray-500">
@@ -809,6 +876,12 @@ export function PretargetingSettingsEditor({
     queryFn: () => getPretargetingConfigDetail(billing_id),
   });
 
+  // Fetch publishers from dedicated endpoint
+  const { data: publishersData, isLoading: publishersLoading, refetch: refetchPublishers } = useQuery({
+    queryKey: ['pretargeting-publishers', billing_id],
+    queryFn: () => getPretargetingPublishers(billing_id),
+  });
+
   // Fetch history
   const { data: history, isLoading: historyLoading } = useQuery({
     queryKey: ['pretargeting-history', billing_id],
@@ -842,6 +915,22 @@ export function PretargetingSettingsEditor({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-history', billing_id] });
+    },
+  });
+
+  // Publisher mutations
+  const addPublisherMutation = useMutation({
+    mutationFn: ({ publisherId, mode }: { publisherId: string; mode: "BLACKLIST" | "WHITELIST" }) =>
+      addPretargetingPublisher(billing_id, publisherId, mode),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', billing_id] });
+    },
+  });
+
+  const removePublisherMutation = useMutation({
+    mutationFn: (publisherId: string) => removePretargetingPublisher(billing_id, publisherId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', billing_id] });
     },
   });
 
@@ -1375,25 +1464,35 @@ export function PretargetingSettingsEditor({
         />
 
         <PublisherTargetingSection
+          billingId={billing_id}
           baseMode={publisherMode}
-          publishers={configDetail.publisher_targeting_values || []}
-          pendingAdds={pendingPublisherAdds}
-          pendingRemoves={pendingPublisherRemoves}
+          publishers={publishersData?.publishers || []}
           pendingModeChange={pendingModeChange}
-          onAddPublisher={handleAddPublisher}
-          onRemovePublisher={handleRemovePublisher}
-          onCancelPending={(changeType, value) => {
-            const pending = findPendingChange(changeType, value);
-            if (pending) cancelChangeMutation.mutate(pending.id);
+          onAddPublisher={(publisherId) => {
+            const mode = publisherMode === 'INCLUSIVE' ? 'WHITELIST' : 'BLACKLIST';
+            addPublisherMutation.mutate({ publisherId, mode: mode as "BLACKLIST" | "WHITELIST" });
+          }}
+          onRemovePublisher={(publisherId) => {
+            removePublisherMutation.mutate(publisherId);
+          }}
+          onUndoPublisher={(publisherId) => {
+            // For undo, we just re-fetch after removing from pending
+            // The API DELETE endpoint handles both pending_add (removes row) and pending_remove (resets to active)
+            removePublisherMutation.mutate(publisherId);
           }}
           onSetMode={handleSetPublisherMode}
           onShowHistory={() => {
             setHistoryView('snapshots');
             setShowHistory(true);
           }}
-          onBulkAdd={handleBulkAddPublishers}
+          onBulkAdd={(values) => {
+            const mode = publisherMode === 'INCLUSIVE' ? 'WHITELIST' : 'BLACKLIST';
+            values.forEach(publisherId => {
+              addPublisherMutation.mutate({ publisherId, mode: mode as "BLACKLIST" | "WHITELIST" });
+            });
+          }}
           onExportCsv={handleExportPublishers}
-          disabled={isPushing}
+          disabled={isPushing || addPublisherMutation.isPending || removePublisherMutation.isPending}
         />
 
         <TargetingSection

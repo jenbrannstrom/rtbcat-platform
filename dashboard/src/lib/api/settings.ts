@@ -341,3 +341,59 @@ export async function rollbackPretargeting(
     }
   );
 }
+
+// Publisher list management
+export interface PretargetingPublisher {
+  publisher_id: string;
+  mode: "BLACKLIST" | "WHITELIST";
+  status: "active" | "pending_add" | "pending_remove";
+  source: "api_sync" | "user";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PretargetingPublishersResponse {
+  billing_id: string;
+  publishers: PretargetingPublisher[];
+  count: number;
+}
+
+export async function getPretargetingPublishers(
+  billingId: string,
+  params?: { mode?: string; status?: string }
+): Promise<PretargetingPublishersResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.mode) searchParams.set("mode", params.mode);
+  if (params?.status) searchParams.set("status", params.status);
+  const query = searchParams.toString();
+  return fetchApi<PretargetingPublishersResponse>(
+    `/settings/pretargeting/${encodeURIComponent(billingId)}/publishers${query ? `?${query}` : ""}`
+  );
+}
+
+export async function addPretargetingPublisher(
+  billingId: string,
+  publisherId: string,
+  mode: "BLACKLIST" | "WHITELIST"
+): Promise<{ status: string; publisher_id: string; mode: string }> {
+  return fetchApi<{ status: string; publisher_id: string; mode: string }>(
+    `/settings/pretargeting/${encodeURIComponent(billingId)}/publishers`,
+    {
+      method: "POST",
+      body: JSON.stringify({ publisher_id: publisherId, mode }),
+    }
+  );
+}
+
+export async function removePretargetingPublisher(
+  billingId: string,
+  publisherId: string
+): Promise<{ status: string; publisher_id: string }> {
+  return fetchApi<{ status: string; publisher_id: string }>(
+    `/settings/pretargeting/${encodeURIComponent(billingId)}/publishers/${encodeURIComponent(publisherId)}`,
+    { method: "DELETE" }
+  );
+}
+
+// Note: Publisher changes are applied via the main apply-all endpoint
+// The publisher pending changes bar directs users to use "Push to Google"
