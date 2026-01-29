@@ -48,11 +48,11 @@ logger = logging.getLogger(__name__)
 
 
 # Aggregation query templates
-# These query BigQuery raw_facts and return aggregated results
+# These query BigQuery tables and return aggregated results
 
 AGG_QUERIES = {
-    # NOTE: raw_facts schema does not have report_type, creative_size, or billing_id
-    # Queries updated to use only available columns
+    # NOTE: Most queries use raw_facts, but home_size_daily and home_config_daily
+    # use rtb_daily which has creative_size and billing_id columns
 
     "home_publisher_daily": """
         SELECT
@@ -96,9 +96,8 @@ AGG_QUERIES = {
             creative_size,
             SUM(COALESCE(reached_queries, 0)) as reached_queries,
             SUM(COALESCE(impressions, 0)) as impressions
-        FROM `{project}.{dataset}.raw_facts`
+        FROM `{project}.{dataset}.rtb_daily`
         WHERE metric_date = @metric_date
-          AND report_type = 'quality'
           AND creative_size IS NOT NULL
         GROUP BY metric_date, buyer_account_id, creative_size
     """,
@@ -120,23 +119,17 @@ AGG_QUERIES = {
 
     "home_config_daily": """
         SELECT
-            q.metric_date as metric_date,
-            q.buyer_account_id,
-            q.billing_id,
-            SUM(COALESCE(q.reached_queries, 0)) as reached_queries,
-            SUM(COALESCE(q.impressions, 0)) as impressions,
-            SUM(COALESCE(b.bids_in_auction, 0)) as bids_in_auction,
-            SUM(COALESCE(b.auctions_won, 0)) as auctions_won
-        FROM `{project}.{dataset}.raw_facts` q
-        LEFT JOIN `{project}.{dataset}.raw_facts` b
-          ON q.metric_date = b.metric_date
-          AND q.creative_id = b.creative_id
-          AND q.buyer_account_id = b.buyer_account_id
-          AND b.report_type = 'bidsinauction'
-        WHERE q.metric_date = @metric_date
-          AND q.report_type = 'quality'
-          AND q.billing_id IS NOT NULL
-        GROUP BY q.metric_date, q.buyer_account_id, q.billing_id
+            metric_date as metric_date,
+            buyer_account_id,
+            billing_id,
+            SUM(COALESCE(reached_queries, 0)) as reached_queries,
+            SUM(COALESCE(impressions, 0)) as impressions,
+            SUM(COALESCE(bids_in_auction, 0)) as bids_in_auction,
+            SUM(COALESCE(auctions_won, 0)) as auctions_won
+        FROM `{project}.{dataset}.rtb_daily`
+        WHERE metric_date = @metric_date
+          AND billing_id IS NOT NULL
+        GROUP BY metric_date, buyer_account_id, billing_id
     """,
 
     "rtb_publisher_daily": """
