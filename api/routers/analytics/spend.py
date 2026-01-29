@@ -53,7 +53,7 @@ async def get_spend_stats(
                     COALESCE(SUM(impressions), 0) as total_impressions,
                     COALESCE(SUM(spend_micros), 0) as total_spend_micros
                 FROM rtb_app_daily
-                WHERE metric_date >= (CURRENT_DATE + ?::interval)
+                WHERE metric_date::date >= (CURRENT_DATE + ?::interval)
                   AND billing_id = ?
             """, (f'-{days} days', billing_id))
         else:
@@ -68,7 +68,7 @@ async def get_spend_stats(
                         COALESCE(SUM(impressions), 0) as total_impressions,
                         COALESCE(SUM(spend_micros), 0) as total_spend_micros
                     FROM rtb_app_daily
-                    WHERE metric_date >= (CURRENT_DATE + ?::interval)
+                    WHERE metric_date::date >= (CURRENT_DATE + ?::interval)
                       AND billing_id IN ({placeholders})
                 """, (f'-{days} days', *valid_billing_ids))
             else:
@@ -78,7 +78,7 @@ async def get_spend_stats(
                         COALESCE(SUM(impressions), 0) as total_impressions,
                         COALESCE(SUM(spend_micros), 0) as total_spend_micros
                     FROM rtb_app_daily
-                    WHERE metric_date >= (CURRENT_DATE + ?::interval)
+                    WHERE metric_date::date >= (CURRENT_DATE + ?::interval)
                 """, (f'-{days} days',))
 
         total_impressions = row["total_impressions"] if row else 0
