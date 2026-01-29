@@ -87,6 +87,7 @@ AGG_QUERIES = {
         FROM `{project}.{dataset}.rtb_bidstream`
         WHERE metric_date = @metric_date
           AND country IS NOT NULL
+          AND report_type = 'rtb_bidstream_publisher'
         GROUP BY metric_date, buyer_account_id, country
     """,
 
@@ -115,6 +116,7 @@ AGG_QUERIES = {
             SUM(COALESCE(auctions_won, 0)) as auctions_won
         FROM `{project}.{dataset}.rtb_bidstream`
         WHERE metric_date = @metric_date
+          AND report_type = 'rtb_bidstream_publisher'
         GROUP BY metric_date, buyer_account_id
     """,
 
