@@ -260,14 +260,14 @@ function TargetingSection({
           <Icon className="h-4 w-4 text-gray-500" />
           <span className="font-medium text-gray-900">{title}</span>
           <span className="text-sm text-gray-500">({effectiveValues.length} values)</span>
-          {pendingAddCount > 0 && (
+          {pendingAdds.length > 0 && (
             <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">
-              +{pendingAddCount}
+              +{pendingAdds.length}
             </span>
           )}
-          {pendingRemoveCount > 0 && (
+          {pendingRemoves.length > 0 && (
             <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">
-              -{pendingRemoveCount}
+              -{pendingRemoves.length}
             </span>
           )}
         </div>
