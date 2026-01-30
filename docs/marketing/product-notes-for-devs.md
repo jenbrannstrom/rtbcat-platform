@@ -15,6 +15,23 @@ A common issue is ingesting ~50,000 QPS.
 (Think of it like rainfall.)
 About 30,000 of that QPS can be low‑value signal that your bidder ignores because the media buyer doesn’t want that inventory.
 
+```
+                QPS "rainfall"
+                     ↓
+            ┌─────────────────┐
+            │ 50,000 QPS in   │
+            └─────────────────┘
+                     ↓
+     ┌────────────────────────────┐
+     │ 30,000 QPS low‑value       │
+     │ signal ignored by bidder   │
+     └────────────────────────────┘
+                     ↓
+     ┌────────────────────────────┐
+     │ 20,000 QPS worth bidding   │
+     └────────────────────────────┘
+```
+
 You only get 10 pretargeting settings per seat, plus a broad geo bucket (EUS, WUS, EU, Asia).
 This app is about using those 10 settings as effectively as possible.
 
