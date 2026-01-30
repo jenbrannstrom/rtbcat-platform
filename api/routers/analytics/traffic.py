@@ -12,11 +12,6 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile, Depends
 
 from .common import ImportTrafficResponse
 from api.dependencies import get_store, get_current_user, resolve_buyer_id, get_allowed_buyer_ids
-from storage import SQLiteStore
-from storage.postgres_store import PostgresStore
-
-# Store type can be either SQLite or Postgres
-StoreType = Union[SQLiteStore, PostgresStore]
 from storage.repositories.user_repository import User
 
 logger = logging.getLogger(__name__)
@@ -27,7 +22,7 @@ router = APIRouter(tags=["Traffic Import"])
 @router.post("/analytics/import-traffic", response_model=ImportTrafficResponse)
 async def import_traffic_data(
     file: UploadFile = File(..., description="CSV file with traffic data"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Import RTB traffic data from CSV file.
@@ -140,7 +135,7 @@ async def generate_mock_traffic_endpoint(
     buyer_id: Optional[str] = Query(None, description="Buyer ID to associate"),
     base_daily_requests: int = Query(100000, ge=1000, le=1000000, description="Base daily request volume"),
     waste_bias: float = Query(0.3, ge=0.0, le=1.0, description="Bias towards waste traffic (0-1)"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Generate mock RTB traffic data for testing and demos.
