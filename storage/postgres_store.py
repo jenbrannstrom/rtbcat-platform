@@ -1457,6 +1457,59 @@ class PostgresStore:
         )
         return rows > 0
 
+    async def get_performance_aggregates(
+        self, billing_id: str
+    ) -> dict:
+        """Get aggregated performance metrics for a billing_id.
+
+        Tries rtb_daily first (new schema), falls back to performance_metrics.
+
+        Returns:
+            Dict with days_tracked, total_impressions, total_clicks, total_spend_usd.
+        """
+        # Try rtb_daily first (new schema)
+        perf = await pg_query_one(
+            """
+            SELECT
+                COUNT(DISTINCT metric_date) as days_tracked,
+                COALESCE(SUM(impressions), 0) as total_impressions,
+                COALESCE(SUM(clicks), 0) as total_clicks,
+                COALESCE(SUM(spend_micros), 0) / 1000000.0 as total_spend_usd
+            FROM rtb_daily
+            WHERE billing_id = %s
+            """,
+            (billing_id,)
+        )
+
+        if perf and perf["days_tracked"] > 0:
+            return {
+                "days_tracked": perf["days_tracked"],
+                "total_impressions": perf["total_impressions"],
+                "total_clicks": perf["total_clicks"],
+                "total_spend_usd": perf["total_spend_usd"],
+            }
+
+        # Fallback to performance_metrics (old schema)
+        perf = await pg_query_one(
+            """
+            SELECT
+                COUNT(DISTINCT metric_date) as days_tracked,
+                COALESCE(SUM(impressions), 0) as total_impressions,
+                COALESCE(SUM(clicks), 0) as total_clicks,
+                COALESCE(SUM(spend_micros), 0) / 1000000.0 as total_spend_usd
+            FROM performance_metrics
+            WHERE billing_id = %s
+            """,
+            (billing_id,)
+        )
+
+        return {
+            "days_tracked": perf["days_tracked"] if perf else 0,
+            "total_impressions": perf["total_impressions"] if perf else 0,
+            "total_clicks": perf["total_clicks"] if perf else 0,
+            "total_spend_usd": perf["total_spend_usd"] if perf else 0,
+        }
+
     # =========================================================================
     # PRETARGETING SNAPSHOTS (Tier 2)
     # =========================================================================
@@ -1468,6 +1521,8 @@ class PostgresStore:
         snapshot_type: str = "manual",
         config_data: Optional[dict] = None,
         performance_data: Optional[dict] = None,
+        publisher_targeting_mode: Optional[str] = None,
+        publisher_targeting_values: Optional[str] = None,
         notes: Optional[str] = None,
     ) -> int:
         """Create a pretargeting snapshot. Returns the new ID."""
@@ -1480,11 +1535,12 @@ class PostgresStore:
             (billing_id, snapshot_name, snapshot_type,
              included_formats, included_platforms, included_sizes,
              included_geos, excluded_geos, state,
+             publisher_targeting_mode, publisher_targeting_values,
              total_impressions, total_clicks, total_spend_usd,
              total_reached_queries, days_tracked,
              avg_daily_impressions, avg_daily_spend_usd, ctr_pct, cpm_usd,
              notes, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
             RETURNING id
             """,
             (
@@ -1497,6 +1553,8 @@ class PostgresStore:
                 cfg.get("included_geos"),
                 cfg.get("excluded_geos"),
                 cfg.get("state"),
+                publisher_targeting_mode,
+                publisher_targeting_values,
                 perf.get("total_impressions", 0),
                 perf.get("total_clicks", 0),
                 perf.get("total_spend_usd", 0),
