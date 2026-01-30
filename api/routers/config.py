@@ -20,9 +20,8 @@ from pydantic import BaseModel, Field
 
 from config import ConfigManager
 from config.config_manager import AuthorizedBuyersConfig, AppConfig
-from api.dependencies import get_config, get_store, use_postgres, StoreType
-from storage.sqlite_store import SQLiteStore, ServiceAccount
-from storage.postgres_store import PostgresStore
+from api.dependencies import get_config, get_store
+from storage.models import ServiceAccount
 from collectors import BuyerSeatsClient
 
 logger = logging.getLogger(__name__)
@@ -104,7 +103,7 @@ async def get_gcp_status():
 @router.post("/config/gcp-discover", response_model=DiscoveryResponse)
 async def discover_via_adc(
     request: GCPDiscoverRequest,
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Discover buyer seats using GCP Application Default Credentials.
 
@@ -210,7 +209,7 @@ class DeleteResponse(BaseModel):
 @router.get("/config/service-accounts", response_model=ServiceAccountListResponse)
 async def list_service_accounts(
     active_only: bool = False,
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """List all configured service accounts."""
     accounts = await store.get_service_accounts(active_only=active_only)
@@ -234,7 +233,7 @@ async def list_service_accounts(
 @router.post("/config/service-accounts", response_model=CredentialsUploadResponse)
 async def add_service_account(
     request: CredentialsUploadRequest,
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Add a new Google service account.
 
@@ -355,7 +354,7 @@ async def add_service_account(
 @router.get("/config/service-accounts/{account_id}", response_model=ServiceAccountResponse)
 async def get_service_account(
     account_id: str,
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Get a specific service account by ID."""
     account = await store.get_service_account(account_id)
@@ -376,7 +375,7 @@ async def get_service_account(
 @router.post("/config/service-accounts/{account_id}/discover", response_model=DiscoveryResponse)
 async def discover_bidders_for_account(
     account_id: str,
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Discover bidder accounts accessible by this service account.
 
@@ -427,7 +426,7 @@ async def discover_bidders_for_account(
 @router.delete("/config/service-accounts/{account_id}", response_model=DeleteResponse)
 async def delete_service_account(
     account_id: str,
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Delete a service account and its credentials file."""
     # Get the account first to find credentials path
@@ -491,20 +490,14 @@ def _mask_api_key(key: str) -> str:
 
 @router.get("/config/gemini-key", response_model=GeminiKeyStatusResponse)
 async def get_gemini_key_status(
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Get Gemini API key configuration status.
 
     The key is used for AI-powered language detection in creatives.
     Returns masked key for security.
     """
-    # Use store directly for PostgresStore, otherwise use UserRepository
-    if isinstance(store, PostgresStore):
-        stored_key = await store.get_setting("gemini_api_key")
-    else:
-        from storage.repositories.user_repository import UserRepository
-        repo = UserRepository(store.db_path)
-        stored_key = await repo.get_setting("gemini_api_key")
+    stored_key = await store.get_setting("gemini_api_key")
 
     if stored_key:
         return GeminiKeyStatusResponse(
@@ -531,7 +524,7 @@ async def get_gemini_key_status(
 @router.put("/config/gemini-key", response_model=GeminiKeyUpdateResponse)
 async def update_gemini_key(
     request: GeminiKeyUpdateRequest,
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Update Gemini API key.
 
@@ -548,12 +541,7 @@ async def update_gemini_key(
             )
 
         # Store in database
-        if isinstance(store, PostgresStore):
-            await store.set_setting("gemini_api_key", api_key, updated_by="api")
-        else:
-            from storage.repositories.user_repository import UserRepository
-            repo = UserRepository(store.db_path)
-            await repo.set_setting("gemini_api_key", api_key, updated_by="api")
+        await store.set_setting("gemini_api_key", api_key, updated_by="api")
 
         logger.info("Gemini API key updated")
         return GeminiKeyUpdateResponse(
@@ -572,19 +560,14 @@ async def update_gemini_key(
 
 @router.delete("/config/gemini-key", response_model=GeminiKeyUpdateResponse)
 async def delete_gemini_key(
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Delete Gemini API key from database.
 
     Note: If GEMINI_API_KEY environment variable is set, it will be used as fallback.
     """
     try:
-        if isinstance(store, PostgresStore):
-            await store.set_setting("gemini_api_key", "", updated_by="api")
-        else:
-            from storage.repositories.user_repository import UserRepository
-            repo = UserRepository(store.db_path)
-            await repo.set_setting("gemini_api_key", "", updated_by="api")
+        await store.set_setting("gemini_api_key", "", updated_by="api")
 
         logger.info("Gemini API key removed")
         return GeminiKeyUpdateResponse(
@@ -597,5 +580,3 @@ async def delete_gemini_key(
             status_code=500,
             detail=f"Failed to delete API key: {str(e)}",
         )
-
-
