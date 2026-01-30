@@ -24,7 +24,7 @@ from typing import Union
 
 # Store type can be either SQLite or Postgres
 StoreType = Union[SQLiteStore, PostgresStore]
-from storage.database import db_query, db_execute, DB_PATH
+from storage.serving_database import db_query, db_execute, table_exists
 from config import ConfigManager
 
 logger = logging.getLogger(__name__)
@@ -298,16 +298,6 @@ async def get_thumbnail_status(
     """
     ffmpeg_available = _check_ffmpeg()
 
-    if not DB_PATH.exists():
-        return ThumbnailStatusSummary(
-            total_videos=0,
-            with_thumbnails=0,
-            pending=0,
-            failed=0,
-            coverage_percent=0.0,
-            ffmpeg_available=ffmpeg_available,
-        )
-
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
 
     # Build WHERE clause with optional buyer_id filter
@@ -376,7 +366,8 @@ async def get_system_status():
         except Exception:
             pass
 
-    database_size_mb = DB_PATH.stat().st_size / (1024 * 1024) if DB_PATH.exists() else 0
+    # Database size not available for Postgres via file stat
+    database_size_mb = 0.0
 
     thumbnails_dir = Path.home() / ".catscan" / "thumbnails"
     thumbnails_count = len(list(thumbnails_dir.glob("*.jpg"))) if thumbnails_dir.exists() else 0
@@ -386,14 +377,13 @@ async def get_system_status():
 
     creatives_count = 0
     videos_count = 0
-    if DB_PATH.exists():
-        try:
-            rows = await db_query("SELECT COUNT(*) as cnt FROM creatives")
-            creatives_count = rows[0]["cnt"] if rows else 0
-            video_rows = await db_query("SELECT COUNT(*) as cnt FROM creatives WHERE format = 'VIDEO'")
-            videos_count = video_rows[0]["cnt"] if video_rows else 0
-        except Exception:
-            pass
+    try:
+        rows = await db_query("SELECT COUNT(*) as cnt FROM creatives")
+        creatives_count = rows[0]["cnt"] if rows else 0
+        video_rows = await db_query("SELECT COUNT(*) as cnt FROM creatives WHERE format = 'VIDEO'")
+        videos_count = video_rows[0]["cnt"] if video_rows else 0
+    except Exception:
+        pass
 
     return SystemStatusResponse(
         python_version=python_version,
@@ -764,14 +754,14 @@ async def lookup_geo_names(
 
 
 @router.get("/stats", response_model=StatsResponse)
-async def get_stats(store: SQLiteStore = Depends(get_store)):
+async def get_stats(store: StoreType = Depends(get_store)):
     """Get database statistics."""
     stats = await store.get_stats()
     return StatsResponse(**stats)
 
 
 @router.get("/sizes", response_model=SizesResponse)
-async def get_sizes(store: SQLiteStore = Depends(get_store)):
+async def get_sizes(store: StoreType = Depends(get_store)):
     """Get available creative sizes from the database."""
     sizes = await store.get_available_sizes()
     return SizesResponse(sizes=sizes)
