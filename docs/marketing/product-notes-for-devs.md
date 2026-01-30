@@ -28,28 +28,31 @@ Even with that limit, it’s still a better control surface than what most SSPs 
 2) **History & rollback for pretargeting changes**
    - Every change is recorded and can be rolled back. Changes are staged before applying for safety.
 
-3) **Publisher allow/deny editor (per config)**
+3) **Language mismatch detection (BONUS)**
+   - Catch localization errors like Spanish ads running in Arabic markets or AED pricing targeting India, using your own AI subscription to scan creatives.
+
+4) **Publisher allow/deny editor (per config)**
    - You can block or allow individual publishers directly, without CSV uploads or the AB UI.
 
-4) **Clear win‑rate and waste visibility**
+5) **Clear win‑rate and waste visibility**
    - The app shows where bids drop off in the funnel so you can target the biggest waste first.
 
-5) **Creative size waste**
+6) **Creative size waste**
    - Google sends ~400 different sizes to your bidder. This is fine for HTML creatives, but for fixed-size display ads this can be a huge drain on your effective QPS. You can see which sizes get traffic but have no matching creatives, and decide to add or block.
 
-6) **Creative‑level diagnostics**
+7) **Creative‑level diagnostics**
    - You can inspect individual creatives with targeting context to find assets that underperform or mismatch.
 
-7) **App/publisher drill‑downs**
+8) **App/publisher drill‑downs**
    - You can trace performance drops to specific apps or sites and act on them quickly.
 
-8) **Fast UI on large datasets**
+9) **Fast UI on large datasets**
    - Precomputed summaries keep the dashboard responsive even when daily volume is large.
 
-9) **Deduplicated imports**
+10) **Deduplicated imports**
    - Re‑processing Gmail reports won’t double‑count results, so metrics stay accurate.
 
-10) **Operational traceability**
+11) **Operational traceability**
    - Refresh logs show what ran and when, so you can trust the numbers you are looking at.
 
 ## Intended users
