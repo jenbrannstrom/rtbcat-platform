@@ -1,6 +1,6 @@
 # RTBcat Platform - Data Model Documentation
 
-This document describes the database schema for the RTBcat platform, a real-time bidding (RTB) analytics and creative management system. SQLite is legacy storage; Postgres is the serving store for analytics and precompute.
+This document describes the database schema for the RTBcat platform, a real-time bidding (RTB) analytics and creative management system. Postgres is the serving database for analytics and precompute. SQLite is deprecated and should not be used for serving or analytics.
 
 ## Table of Contents
 
