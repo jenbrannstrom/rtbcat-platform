@@ -84,7 +84,7 @@ See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 | **OAuth-Only Login** | Google OAuth via OAuth2 Proxy (no passwords stored) |
 | **Per-User Access Control** | Role + service account access scoping |
 
-For MCP Chromium setup (browser-based inspection), see `docs/MCP_CHROMIUM.md`.
+MCP Chrome setup (browser-based inspection) uses `scripts/chrome-cdp.sh` and `scripts/mcp-chromium-cdp.sh`.
 
 ### Dashboard Pages
 
@@ -107,7 +107,7 @@ For MCP Chromium setup (browser-based inspection), see `docs/MCP_CHROMIUM.md`.
 
 ```
                          ┌─────────────────────────────────────┐
-                         │         Nginx Reverse Proxy         │
+                         │     Caddy (default) or Nginx        │
                          │         (Port 443 - HTTPS)          │
                          │         SSL via Let's Encrypt       │
                          └─────────────────────────────────────┘
@@ -294,12 +294,12 @@ sudo docker compose -f docker-compose.gcp.yml up -d --no-build
 
 See **[docs/GCP_CREDENTIALS_SETUP.md](docs/GCP_CREDENTIALS_SETUP.md)** for full CI/CD setup.
 
-### Production Architecture (Nginx + SSL)
+### Production Architecture (Caddy by Default, Nginx Optional)
 
-For production, use nginx as a reverse proxy with Let's Encrypt SSL:
+For production, the docker stack uses Caddy as the reverse proxy with automatic HTTPS. Nginx is still supported as an optional alternative:
 
 ```
-Internet → nginx (443/HTTPS) → Dashboard (3000) + API (8000)
+Internet → Caddy or nginx (443/HTTPS) → Dashboard (3000) + API (8000)
 ```
 
 **Setup:**
