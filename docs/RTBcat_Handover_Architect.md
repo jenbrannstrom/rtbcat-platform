@@ -1,6 +1,6 @@
 # RTB.cat Platform - Architect Handover
 
-**Date:** January 28, 2026  
+**Date:** January 30, 2026  
 **Role:** Senior Developer & Architect (Codex)  
 **Scope:** Own the roadmap, system architecture, and cross‑cutting decisions.  
 **Team:** Claude CLI is the ground‑level implementer.  
@@ -31,7 +31,7 @@ You are **senior to Claude** and responsible for **delegation, sequencing, and a
 
 ---
 
-## ✅ Current System Status (Jan 28, 2026)
+## ✅ Current System Status (Jan 30, 2026)
 
 **Schema & Pipeline:**
 - Postgres schema alignment migration `027_schema_alignment.sql` applied on SG VM.
@@ -39,16 +39,13 @@ You are **senior to Claude** and responsible for **delegation, sequencing, and a
   - Added normalized `pretargeting_publishers`
   - BIGINT upgrades for aggregated tables
 - Gmail batch importer works, including OAuth fallback for link‑only emails.
-- BigQuery raw_facts coverage: 2026‑01‑11 → 2026‑01‑25.
-- Raw fact backfill to Postgres completed:
-  - `rtb_daily`: 9,082,712 rows (2026‑01‑07 → 2026‑01‑25)
-  - `rtb_bidstream`: 3,547,431 rows (2026‑01‑07 → 2026‑01‑25)
-  - `rtb_bid_filtering`: 44,936 rows (2026‑01‑13 → 2026‑01‑25)
-- QPS join verification query succeeded (bidstream → daily join returning impressions).
+- BigQuery raw facts coverage: through **2026‑01‑28** (Jan 28 loaded).
+- Raw fact backfill to Postgres completed (current through 2026‑01‑28).
+- QPS join verification query succeeds (bidstream → daily join returning impressions).
 
 **Aggregations:**
-- `home_publisher_daily`, `rtb_publisher_daily` populated through 2026‑01‑25.
-- Size/config aggregations re‑enabled with corrected join logic (commit 9f78267); **must be re‑run** to populate `home_size_daily` and `home_config_daily`.
+- All `home_*_daily` and `rtb_publisher_daily` populated through **2026‑01‑28**.
+- Aggregations now source `rtb_daily` / `rtb_bidstream` (raw_facts no longer used).
 
 **Source of Truth:**
 - `DATA_MODEL.md` updated with canonical QPS requirements and schema gaps.
@@ -77,7 +74,7 @@ You are **senior to Claude** and responsible for **delegation, sequencing, and a
 **Phase B — Backfill & Re‑aggregation**
 4. Backfill new Postgres raw fact tables from BigQuery (BQ → Postgres). ✅ Done
 5. Re-enable size/config aggregations once `creative_size` and `billing_id` are consistently present. ✅ Done (commit 9f78267)
-6. Re-run aggregation to populate **all** `home_*_daily` and `rtb_*_daily` tables. 🔄 Pending
+6. Re-run aggregation to populate **all** `home_*_daily` and `rtb_*_daily` tables. ✅ Done
 
 **Phase C — QPS Optimizer Readiness**
 7. Verify QPS optimizer joins work (`rtb_daily` + `rtb_bidstream` + `rtb_bid_filtering` + `rtb_quality`).
@@ -91,12 +88,9 @@ You are **senior to Claude** and responsible for **delegation, sequencing, and a
 
 ## 📌 Immediate Tasks (Active)
 
-1) **Re-run aggregation** and confirm populated tables:
-   - `home_size_daily`, `home_config_daily` (now re‑enabled)
-   - `home_publisher_daily`, `home_geo_daily`, `home_seat_daily`
-   - `rtb_funnel_daily`, `rtb_publisher_daily`, `rtb_geo_daily`
-2) **Verify QPS optimizer joins** against Postgres raw facts.
-3) **Update UI** to consume normalized publisher list (`pretargeting_publishers`).
+1) **Fix Win Rate > 100%** (metric correctness / join grain)
+2) **Resolve UI inconsistencies** (size shows impressions but no creatives; drill‑down says no precompute)
+3) **Publisher list UX deploy** (commits `b8112a6`, `fa7295b`)
 
 ---
 
@@ -111,6 +105,8 @@ You are **senior to Claude** and responsible for **delegation, sequencing, and a
 - `scripts/load_parquet_to_bigquery.py`
 - `scripts/bq_aggregate_to_pg.py`
 - `scripts/bq_backfill_raw_facts.py`
+- **Primary VM:** `catscan-production-sg` (asia-southeast1-b)
+- **Legacy VM:** `catscan-production` (europe-west1-b) — do not use for Postgres
 
 ---
 
@@ -127,7 +123,7 @@ You are **senior to Claude** and responsible for **delegation, sequencing, and a
 
 **1) Re-run aggregation (BQ → Postgres):**
 ```bash
-python scripts/bq_aggregate_to_pg.py --date-range 2026-01-07 2026-01-25
+python scripts/bq_aggregate_to_pg.py --date-range 2026-01-07 2026-01-28
 ```
 
 **2) Verify raw fact row counts:**
@@ -182,16 +178,15 @@ sudo docker compose -f docker-compose.gcp.yml up -d
 
 ## 📢 Brief for Successor Architect (“Archie2”)
 
-You are taking over the **architect role**. Claude is executing ground tasks and reports via `docs/ai_logs/ai_log_2026-01-27.md`.  
+You are taking over the **architect role**. Claude reports via `docs/ai_logs/ai_log_2026-01-30.md`.  
 Your immediate objectives:
 
-1) **Run aggregation now** using `scripts/bq_aggregate_to_pg.py` after commit `9f78267` (fixes join logic for `home_config_daily` and report_type filters).  
-2) **Verify** `home_size_daily` and `home_config_daily` populate; then validate UI precompute status.  
-3) **Wire UI** to normalized publisher list (`pretargeting_publishers`) via new endpoints in `api/routers/settings/pretargeting.py`.  
-4) **Move to automation**: schedule daily Gmail → BQ → Postgres + aggregation refresh, with health checks.
+1) **Fix Win Rate > 100%** (investigate data sources + join grain).
+2) **Resolve UI mismatches** (impressions with no creatives; drill‑down no data).
+3) **Deploy publisher list UX** (commits `b8112a6`, `fa7295b`).
+4) **Plan automation**: daily Gmail → BQ → Postgres + aggregation refresh, with health checks.
 
 Commit guidance:
-- **Keep:** `9f78267` (fixes aggregation logic and API wiring).
-- **Hold:** `718f52e` (superseded by 9f78267).
+- **Keep:** `9f78267` (aggregation join fix), `b8112a6`, `fa7295b` (publisher UX).
 
 If any conflict arises between code changes and the written docs, **ask the boss first** and propose how to fix and update the docs—do not rewrite the docs unilaterally, since they are coordinated plans.
