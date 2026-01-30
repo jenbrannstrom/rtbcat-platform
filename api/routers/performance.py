@@ -41,7 +41,7 @@ from typing import Union
 
 # Store type can be either SQLite or Postgres
 StoreType = Union[SQLiteStore, PostgresStore]
-from storage.database import db_execute, db_query_one, db_transaction_async
+from storage.serving_database import db_execute, db_query_one
 from services.home_precompute import refresh_home_summaries
 from services.precompute_validation import run_precompute_validation
 from services.config_precompute import refresh_config_breakdowns
@@ -358,38 +358,34 @@ async def import_performance_csv(
                 columns_found.append(col)
                 seen_columns.add(col)
 
-        def _record_import_history(conn):
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO import_history (
-                    batch_id, filename, rows_read, rows_imported, rows_skipped, rows_duplicate,
-                    date_range_start, date_range_end, columns_found, columns_missing,
-                    total_reached, total_impressions, total_spend_usd, status, error_message,
-                    file_size_bytes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    result.batch_id,
-                    file.filename,
-                    result.rows_read,
-                    result.rows_imported,
-                    result.rows_skipped,
-                    result.rows_duplicate,
-                    result.date_range_start,
-                    result.date_range_end,
-                    ",".join(columns_found) if columns_found else None,
-                    None,
-                    0,
-                    0,
-                    0,
-                    "complete" if result.success else "failed",
-                    result.error_message or None,
-                    file_size_bytes,
-                ),
-            )
-
-        await db_transaction_async(_record_import_history)
+        await db_execute(
+            """
+            INSERT INTO import_history (
+                batch_id, filename, rows_read, rows_imported, rows_skipped, rows_duplicate,
+                date_range_start, date_range_end, columns_found, columns_missing,
+                total_reached, total_impressions, total_spend_usd, status, error_message,
+                file_size_bytes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                result.batch_id,
+                file.filename,
+                result.rows_read,
+                result.rows_imported,
+                result.rows_skipped,
+                result.rows_duplicate,
+                result.date_range_start,
+                result.date_range_end,
+                ",".join(columns_found) if columns_found else None,
+                None,
+                0,
+                0,
+                0,
+                "complete" if result.success else "failed",
+                result.error_message or None,
+                file_size_bytes,
+            ),
+        )
         if result.success and result.date_range_start and result.date_range_end:
             background_tasks.add_task(
                 refresh_home_summaries,
@@ -868,58 +864,54 @@ async def import_performance_batch(
 async def finalize_import(request: FinalizeImportRequest):
     """Finalize a chunked import session and record in import_history."""
     try:
-        def _do_finalize(conn):
-            cursor = conn.cursor()
+        # Record in import_history
+        await db_execute("""
+            INSERT INTO import_history (
+                batch_id, filename, rows_read, rows_imported, rows_skipped, rows_duplicate,
+                date_range_start, date_range_end, total_reached, total_impressions,
+                total_spend_usd, status, file_size_bytes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            request.batch_id,
+            request.filename,
+            request.rows_read,
+            request.rows_imported,
+            request.rows_skipped,
+            request.rows_duplicate,
+            request.date_range_start,
+            request.date_range_end,
+            request.total_reached,
+            request.total_impressions,
+            request.total_spend_usd,
+            "complete",
+            request.file_size_bytes,
+        ))
 
-            # Record in import_history
-            cursor.execute("""
-                INSERT INTO import_history (
-                    batch_id, filename, rows_read, rows_imported, rows_skipped, rows_duplicate,
-                    date_range_start, date_range_end, total_reached, total_impressions,
-                    total_spend_usd, status, file_size_bytes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                request.batch_id,
-                request.filename,
-                request.rows_read,
-                request.rows_imported,
-                request.rows_skipped,
-                request.rows_duplicate,
-                request.date_range_start,
-                request.date_range_end,
-                request.total_reached,
-                request.total_impressions,
-                request.total_spend_usd,
-                "complete",
-                request.file_size_bytes,
-            ))
+        # Update daily upload summary
+        import_date_row = await db_query_one("SELECT CURRENT_DATE as dt")
+        import_date = import_date_row["dt"] if import_date_row else None
 
-            # Update daily upload summary
-            import_date = cursor.execute("SELECT CURRENT_DATE").fetchone()[0]
-
-            cursor.execute("""
-                INSERT INTO daily_upload_summary (
-                    upload_date, total_uploads, successful_uploads, failed_uploads,
-                    total_rows_written, total_file_size_bytes, min_rows, max_rows, avg_rows_per_upload
-                ) VALUES (?, 1, 1, 0, ?, ?, ?, ?, ?)
-                ON CONFLICT(upload_date) DO UPDATE SET
-                    total_uploads = total_uploads + 1,
-                    successful_uploads = successful_uploads + 1,
-                    total_rows_written = total_rows_written + excluded.total_rows_written,
-                    total_file_size_bytes = total_file_size_bytes + excluded.total_file_size_bytes,
-                    min_rows = MIN(min_rows, excluded.min_rows),
-                    max_rows = MAX(max_rows, excluded.max_rows),
-                    avg_rows_per_upload = (total_rows_written + excluded.total_rows_written) / (total_uploads + 1)
-            """, (
-                import_date,
-                request.rows_imported,
-                request.file_size_bytes,
-                request.rows_imported,
-                request.rows_imported,
-                request.rows_imported,
-            ))
-
-        await db_transaction_async(_do_finalize)
+        await db_execute("""
+            INSERT INTO daily_upload_summary (
+                upload_date, total_uploads, successful_uploads, failed_uploads,
+                total_rows_written, total_file_size_bytes, min_rows, max_rows, avg_rows_per_upload
+            ) VALUES (?, 1, 1, 0, ?, ?, ?, ?, ?)
+            ON CONFLICT(upload_date) DO UPDATE SET
+                total_uploads = daily_upload_summary.total_uploads + 1,
+                successful_uploads = daily_upload_summary.successful_uploads + 1,
+                total_rows_written = daily_upload_summary.total_rows_written + EXCLUDED.total_rows_written,
+                total_file_size_bytes = daily_upload_summary.total_file_size_bytes + EXCLUDED.total_file_size_bytes,
+                min_rows = LEAST(daily_upload_summary.min_rows, EXCLUDED.min_rows),
+                max_rows = GREATEST(daily_upload_summary.max_rows, EXCLUDED.max_rows),
+                avg_rows_per_upload = (daily_upload_summary.total_rows_written + EXCLUDED.total_rows_written) / (daily_upload_summary.total_uploads + 1)
+        """, (
+            import_date,
+            request.rows_imported,
+            request.file_size_bytes,
+            request.rows_imported,
+            request.rows_imported,
+            request.rows_imported,
+        ))
 
         logger.info(f"Import finalized: batch_id={request.batch_id}, rows={request.rows_imported}")
 

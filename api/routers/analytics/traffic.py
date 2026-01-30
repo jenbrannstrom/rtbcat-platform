@@ -106,14 +106,17 @@ async def import_traffic_data(
         if not records:
             raise HTTPException(status_code=400, detail="No valid records found in CSV")
 
-        # Store traffic data - use db_execute for inserts
-        from storage.database import db_execute
+        # Store traffic data
+        from storage.serving_database import db_execute
         count = 0
         for r in records:
             await db_execute(
-                """INSERT OR REPLACE INTO rtb_traffic
+                """INSERT INTO rtb_traffic
                 (canonical_size, raw_size, request_count, traffic_date, buyer_id)
-                VALUES (?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (canonical_size, traffic_date, buyer_id) DO UPDATE SET
+                    raw_size = EXCLUDED.raw_size,
+                    request_count = EXCLUDED.request_count""",
                 (r["canonical_size"], r["raw_size"], r["request_count"], r["date"], r["buyer_id"])
             )
             count += 1
@@ -154,7 +157,7 @@ async def generate_mock_traffic_endpoint(
     - 1.0 = heavy waste traffic
     """
     from analytics import generate_mock_traffic
-    from storage.database import db_execute
+    from storage.serving_database import db_execute
 
     try:
         buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
@@ -170,9 +173,12 @@ async def generate_mock_traffic_endpoint(
         count = 0
         for r in traffic_records:
             await db_execute(
-                """INSERT OR REPLACE INTO rtb_traffic
+                """INSERT INTO rtb_traffic
                 (canonical_size, raw_size, request_count, traffic_date, buyer_id)
-                VALUES (?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (canonical_size, traffic_date, buyer_id) DO UPDATE SET
+                    raw_size = EXCLUDED.raw_size,
+                    request_count = EXCLUDED.request_count""",
                 (r.canonical_size, r.raw_size, r.request_count, r.date, r.buyer_id)
             )
             count += 1

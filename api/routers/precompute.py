@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sqlite3
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Request
@@ -16,7 +15,7 @@ from services.home_precompute import refresh_home_summaries
 from services.precompute_utils import normalize_refresh_dates, refresh_window
 from services.precompute_validation import run_precompute_validation
 from services.rtb_precompute import refresh_rtb_summaries
-from storage.database import db_transaction_async
+from storage.serving_database import db_query
 
 logger = logging.getLogger(__name__)
 
@@ -94,28 +93,16 @@ async def precompute_health(request: Request):
     required_caches = ["home_summaries", "config_breakdowns", "rtb_summaries"]
     cutoff = datetime.utcnow() - timedelta(hours=max_age_hours)
 
-    def _run(conn):
-        try:
-            rows = conn.execute(
-                """
-                SELECT cache_name, MAX(refreshed_at) AS refreshed_at
-                FROM precompute_refresh_log
-                GROUP BY cache_name
-                """
-            ).fetchall()
-        except sqlite3.OperationalError:
-            return []
-
-        return [
-            {
-                "cache_name": row[0],
-                "refreshed_at": row[1],
-            }
-            for row in rows
-            if row[0]
-        ]
-
-    rows = await db_transaction_async(_run)
+    try:
+        rows = await db_query(
+            """
+            SELECT cache_name, MAX(refreshed_at) AS refreshed_at
+            FROM precompute_refresh_log
+            GROUP BY cache_name
+            """
+        )
+    except Exception:
+        rows = []
     refresh_map = {
         row["cache_name"]: row["refreshed_at"] for row in rows if row.get("refreshed_at")
     }

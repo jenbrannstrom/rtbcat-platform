@@ -89,6 +89,22 @@ async def db_query_one(sql: str, params: tuple = ()) -> Optional[dict[str, Any]]
     return await _postgres_query_one(sql, params)
 
 
+async def db_execute(sql: str, params: tuple = ()) -> int:
+    """Execute an INSERT/UPDATE/DELETE statement. Returns rowcount."""
+    _ensure_postgres_available()
+    loop = asyncio.get_event_loop()
+    converted_sql = _convert_sqlite_sql(sql)
+
+    def _execute() -> int:
+        with psycopg.connect(_serving_postgres_dsn) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(converted_sql, params)
+                conn.commit()
+                return cursor.rowcount
+
+    return await loop.run_in_executor(None, _execute)
+
+
 async def table_exists(table_name: str) -> bool:
     """Check if a table exists in the serving database."""
     row = await _postgres_query_one(

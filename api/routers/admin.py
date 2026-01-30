@@ -622,10 +622,7 @@ async def get_admin_stats(
     active_users = [u for u in users if u.is_active]
     admin_users = [u for u in users if u.role == "admin"]
 
-    from api.dependencies import get_store
-    from storage.sqlite_store import SQLiteStore
-
-    store: SQLiteStore = get_store()
+    from storage.serving_database import db_query
 
     expected_report_kinds = [
         "catscan-quality",
@@ -635,82 +632,52 @@ async def get_admin_stats(
         "catscan-bid-filtering",
     ]
 
-    async with store._connection() as conn:
-        import asyncio
-        loop = asyncio.get_event_loop()
+    report_health = {
+        "expected_per_seat": len(expected_report_kinds),
+        "seats": [],
+    }
 
-        def _get_report_health():
-            report_health = {
-                "expected_per_seat": len(expected_report_kinds),
-                "seats": [],
-            }
+    seats_rows = await db_query(
+        "SELECT DISTINCT buyer_id FROM buyer_seats WHERE active = 1 ORDER BY buyer_id"
+    )
+    seats = [row["buyer_id"] for row in seats_rows]
 
-            cursor = conn.execute(
-                """
-                SELECT DISTINCT buyer_id
-                FROM buyer_seats
-                WHERE active = 1
-                ORDER BY buyer_id
-                """
-            )
-            seats = [row[0] for row in cursor.fetchall()]
+    for seat_id in seats:
+        latest_rows = await db_query(
+            "SELECT MAX(report_date) as latest FROM gmail_import_runs WHERE buyer_account_id = ?",
+            (seat_id,),
+        )
+        latest_date = latest_rows[0]["latest"] if latest_rows else None
+        if not latest_date:
+            report_health["seats"].append({
+                "buyer_id": seat_id,
+                "latest_date": None,
+                "received": 0,
+                "missing": expected_report_kinds,
+                "failed": [],
+            })
+            continue
 
-            for seat_id in seats:
-                cursor = conn.execute(
-                    """
-                    SELECT MAX(report_date)
-                    FROM gmail_import_runs
-                    WHERE buyer_account_id = ?
-                    """,
-                    (seat_id,),
-                )
-                latest_date = cursor.fetchone()[0]
-                if not latest_date:
-                    report_health["seats"].append(
-                        {
-                            "buyer_id": seat_id,
-                            "latest_date": None,
-                            "received": 0,
-                            "missing": expected_report_kinds,
-                            "failed": [],
-                        }
-                    )
-                    continue
+        report_rows = await db_query(
+            "SELECT report_kind, success FROM gmail_import_runs WHERE buyer_account_id = ? AND report_date = ?",
+            (seat_id, latest_date),
+        )
+        received_kinds = set()
+        failed_kinds = set()
+        for row in report_rows:
+            if row["success"]:
+                received_kinds.add(row["report_kind"])
+            else:
+                failed_kinds.add(row["report_kind"])
 
-                cursor = conn.execute(
-                    """
-                    SELECT report_kind, success
-                    FROM gmail_import_runs
-                    WHERE buyer_account_id = ?
-                      AND report_date = ?
-                    """,
-                    (seat_id, latest_date),
-                )
-                received_kinds = set()
-                failed_kinds = set()
-                for report_kind, success in cursor.fetchall():
-                    if success:
-                        received_kinds.add(report_kind)
-                    else:
-                        failed_kinds.add(report_kind)
-
-                missing_kinds = [
-                    kind for kind in expected_report_kinds if kind not in received_kinds
-                ]
-
-                report_health["seats"].append(
-                    {
-                        "buyer_id": seat_id,
-                        "latest_date": latest_date,
-                        "received": len(received_kinds),
-                        "missing": missing_kinds,
-                        "failed": sorted(failed_kinds),
-                    }
-                )
-
-            return report_health
-
-        report_health = await loop.run_in_executor(None, _get_report_health)
+        missing_kinds = [kind for kind in expected_report_kinds if kind not in received_kinds]
+        report_health["seats"].append({
+            "buyer_id": seat_id,
+            "latest_date": latest_date,
+            "received": len(received_kinds),
+            "missing": missing_kinds,
+            "failed": sorted(failed_kinds),
+        })
 
     return {
         "total_users": len(users),
@@ -741,132 +708,100 @@ async def get_diagnostics(
     - Issue 3: Thumbnail placeholders
     - Issue 5: CSV import account mismatch
     """
-    from api.dependencies import get_store
-    from storage.sqlite_store import SQLiteStore
+    from storage.serving_database import db_query
 
-    store: SQLiteStore = get_store()
+    diagnostics = {}
 
-    diagnostics = {
-        "buyer_seats": [],
-        "campaigns_status": {},
-        "thumbnail_status": {},
-        "import_history": {},
+    # 1. All buyer seats (including inactive)
+    seats_rows = await db_query("""
+        SELECT bs.buyer_id, bs.bidder_id, bs.display_name, bs.active,
+               COALESCE(c.cnt, 0) as creative_count,
+               bs.last_synced, bs.service_account_id
+        FROM buyer_seats bs
+        LEFT JOIN (
+            SELECT account_id, COUNT(*) as cnt FROM creatives GROUP BY account_id
+        ) c ON c.account_id = bs.buyer_id
+        ORDER BY bs.display_name, bs.buyer_id
+    """)
+    diagnostics["buyer_seats"] = [
+        {
+            "buyer_id": row["buyer_id"],
+            "bidder_id": row["bidder_id"],
+            "display_name": row["display_name"],
+            "active": bool(row["active"]),
+            "creative_count": row["creative_count"],
+            "last_synced": row["last_synced"],
+            "service_account_id": row["service_account_id"],
+        }
+        for row in seats_rows
+    ]
+
+    # 2. Campaigns with creative_id counts
+    campaigns_rows = await db_query("SELECT id, name, creative_ids FROM campaigns LIMIT 20")
+    campaigns_data = []
+    for row in campaigns_rows:
+        creative_ids_raw = row["creative_ids"] or "[]"
+        try:
+            creative_ids = json.loads(creative_ids_raw) if isinstance(creative_ids_raw, str) else creative_ids_raw
+        except Exception:
+            creative_ids = []
+        campaigns_data.append({
+            "id": row["id"],
+            "name": row["name"],
+            "creative_ids_count": len(creative_ids) if creative_ids else 0,
+            "sample_ids": creative_ids[:5] if creative_ids else [],
+        })
+    diagnostics["campaigns_status"] = {
+        "campaigns": campaigns_data,
+        "total_campaigns": len(campaigns_data),
     }
 
-    async with store._connection() as conn:
-        import asyncio
-        loop = asyncio.get_event_loop()
+    # 3. Thumbnail status summary
+    thumbnail_rows = await db_query("""
+        SELECT
+            format,
+            COUNT(*) as total,
+            SUM(CASE WHEN thumbnail_url IS NOT NULL AND thumbnail_url != '' THEN 1 ELSE 0 END) as with_thumbnail
+        FROM creatives
+        GROUP BY format
+    """)
+    thumbnail_data = {}
+    for row in thumbnail_rows:
+        fmt = row["format"] or "UNKNOWN"
+        thumbnail_data[fmt] = {
+            "total": row["total"],
+            "with_thumbnail": row["with_thumbnail"],
+            "missing_thumbnail": row["total"] - row["with_thumbnail"],
+        }
+    diagnostics["thumbnail_status"] = thumbnail_data
 
-        def _run_diagnostics():
-            results = {}
+    # 4. Import history by account
+    import_rows = await db_query("""
+        SELECT
+            buyer_id,
+            COUNT(*) as import_count,
+            MAX(imported_at) as last_import,
+            SUM(rows_imported) as total_records
+        FROM import_history
+        GROUP BY buyer_id
+        ORDER BY last_import DESC
+    """)
+    diagnostics["import_history"] = [
+        {
+            "buyer_id": row["buyer_id"],
+            "import_count": row["import_count"],
+            "last_import": str(row["last_import"]) if row["last_import"] else None,
+            "total_records": row["total_records"],
+        }
+        for row in import_rows
+    ]
 
-            # 1. All buyer seats (including inactive)
-            cursor = conn.execute("""
-                SELECT bs.buyer_id, bs.bidder_id, bs.display_name, bs.active,
-                       COALESCE(c.cnt, 0) as creative_count,
-                       bs.last_synced, bs.service_account_id
-                FROM buyer_seats bs
-                LEFT JOIN (
-                    SELECT account_id, COUNT(*) as cnt FROM creatives GROUP BY account_id
-                ) c ON c.account_id = bs.buyer_id
-                ORDER BY bs.display_name, bs.buyer_id
-            """)
-            results["buyer_seats"] = [
-                {
-                    "buyer_id": row[0],
-                    "bidder_id": row[1],
-                    "display_name": row[2],
-                    "active": bool(row[3]),
-                    "creative_count": row[4],
-                    "last_synced": row[5],
-                    "service_account_id": row[6],
-                }
-                for row in cursor.fetchall()
-            ]
-
-            # 2. Campaigns with creative_id counts
-            cursor = conn.execute("""
-                SELECT
-                    c.id,
-                    c.name,
-                    c.creative_ids,
-                    (SELECT COUNT(*) FROM creatives cr WHERE cr.id IN (
-                        SELECT value FROM json_each(c.creative_ids)
-                    )) as found_in_creatives
-                FROM campaigns c
-                LIMIT 20
-            """)
-            campaigns_data = []
-            for row in cursor.fetchall():
-                creative_ids_raw = row[2] or "[]"
-                try:
-                    import json as json_mod
-                    creative_ids = json_mod.loads(creative_ids_raw) if isinstance(creative_ids_raw, str) else creative_ids_raw
-                except:
-                    creative_ids = []
-                campaigns_data.append({
-                    "id": row[0],
-                    "name": row[1],
-                    "creative_ids_count": len(creative_ids) if creative_ids else 0,
-                    "found_in_creatives_table": row[3],
-                    "sample_ids": creative_ids[:5] if creative_ids else [],
-                })
-            results["campaigns_status"] = {
-                "campaigns": campaigns_data,
-                "total_campaigns": len(campaigns_data),
-            }
-
-            # 3. Thumbnail status summary
-            cursor = conn.execute("""
-                SELECT
-                    format,
-                    COUNT(*) as total,
-                    SUM(CASE WHEN thumbnail_url IS NOT NULL AND thumbnail_url != '' THEN 1 ELSE 0 END) as with_thumbnail
-                FROM creatives
-                GROUP BY format
-            """)
-            thumbnail_data = {}
-            for row in cursor.fetchall():
-                thumbnail_data[row[0] or "UNKNOWN"] = {
-                    "total": row[1],
-                    "with_thumbnail": row[2],
-                    "missing_thumbnail": row[1] - row[2],
-                }
-            results["thumbnail_status"] = thumbnail_data
-
-            # 4. Import history by account
-            cursor = conn.execute("""
-                SELECT
-                    buyer_id,
-                    COUNT(*) as import_count,
-                    MAX(imported_at) as last_import,
-                    SUM(records_imported) as total_records
-                FROM import_history
-                GROUP BY buyer_id
-                ORDER BY last_import DESC
-            """)
-            import_data = []
-            for row in cursor.fetchall():
-                import_data.append({
-                    "buyer_id": row[0],
-                    "import_count": row[1],
-                    "last_import": row[2],
-                    "total_records": row[3],
-                })
-            results["import_history"] = import_data
-
-            # 5. Creative ID type check (are they stored as strings or integers?)
-            cursor = conn.execute("""
-                SELECT id, typeof(id), account_id FROM creatives LIMIT 5
-            """)
-            results["creative_id_samples"] = [
-                {"id": row[0], "type": row[1], "account_id": row[2]}
-                for row in cursor.fetchall()
-            ]
-
-            return results
-
-        diagnostics = await loop.run_in_executor(None, _run_diagnostics)
+    # 5. Creative ID type check
+    id_rows = await db_query("SELECT id, pg_typeof(id)::text as type, account_id FROM creatives LIMIT 5")
+    diagnostics["creative_id_samples"] = [
+        {"id": row["id"], "type": row["type"], "account_id": row["account_id"]}
+        for row in id_rows
+    ]
 
     return diagnostics
 
@@ -880,30 +815,17 @@ async def fix_inactive_seats(
     Use this to fix Issue 2: Missing third account showing only 2 of 3 accounts.
     Sets active=1 for all buyer_seats entries.
     """
-    from api.dependencies import get_store
-    from storage.sqlite_store import SQLiteStore
+    from storage.serving_database import db_query, db_execute
 
-    store: SQLiteStore = get_store()
+    # Count inactive before
+    count_rows = await db_query("SELECT COUNT(*) as cnt FROM buyer_seats WHERE active = 0")
+    inactive_count = count_rows[0]["cnt"] if count_rows else 0
 
-    async with store._connection() as conn:
-        import asyncio
-        loop = asyncio.get_event_loop()
-
-        def _fix():
-            # Count inactive before
-            cursor = conn.execute("SELECT COUNT(*) FROM buyer_seats WHERE active = 0")
-            inactive_count = cursor.fetchone()[0]
-
-            # Activate all
-            conn.execute("UPDATE buyer_seats SET active = 1 WHERE active = 0")
-            conn.commit()
-
-            return inactive_count
-
-        fixed_count = await loop.run_in_executor(None, _fix)
+    # Activate all
+    await db_execute("UPDATE buyer_seats SET active = 1 WHERE active = 0")
 
     return {
         "status": "success",
-        "message": f"Activated {fixed_count} buyer seat(s)",
-        "seats_activated": fixed_count,
+        "message": f"Activated {inactive_count} buyer seat(s)",
+        "seats_activated": inactive_count,
     }
