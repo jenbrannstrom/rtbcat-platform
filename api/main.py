@@ -102,10 +102,12 @@ async def lifespan(app: FastAPI):
         config = _config_manager.load()
     except Exception:
         config = None
-    if config:
-        configure_serving_database(config.database.serving_postgres_dsn)
-    else:
-        configure_serving_database()
+    serving_dsn = config.database.serving_postgres_dsn if config else os.getenv("POSTGRES_SERVING_DSN")
+    if not serving_dsn:
+        raise RuntimeError(
+            "POSTGRES_SERVING_DSN must be set. SQLite serving is deprecated and unsupported."
+        )
+    configure_serving_database(serving_dsn)
     _store = SQLiteStore()
     await _store.initialize()
 
