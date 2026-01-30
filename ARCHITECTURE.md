@@ -12,7 +12,7 @@ This document describes the technical architecture of Cat-Scan, a QPS optimizati
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              EXTERNAL SERVICES                               │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  Google Authorized Buyers API    │    Gmail API    │    AWS S3 (Archive)    │
+│  Google Authorized Buyers API    │    Gmail API    │    GCS (Archive)       │
 │  - Creatives                     │    - CSV Import │    - Data retention    │
 │  - Pretargeting Configs          │    - Reports    │    - Backups           │
 │  - RTB Endpoints                 │                 │                        │
@@ -51,11 +51,11 @@ This document describes the technical architecture of Cat-Scan, a QPS optimizati
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                         STORAGE LAYER                                │   │
 │  ├─────────────────────────────────────────────────────────────────────┤   │
-│  │  SQLiteStore         │  Repositories            │  S3Writer         │   │
-│  │  - 41 tables         │  - repositories/         │  - Archive        │   │
-│  │  - WAL mode          │    - campaign_repository │  - Backup         │   │
-│  │                      │    - seat_repository     │                   │   │
-│  │                      │    - performance_repository                 │   │
+│  │  Postgres (serving)  │  Repositories            │  Archive writer   │   │
+│  │  - precompute tables │  - repositories/         │  - GCS (current)  │   │
+│  │  - raw facts         │    - campaign_repository │  - S3 (legacy)    │   │
+│  │  SQLite (legacy)     │    - seat_repository     │                   │   │
+│  │  - staging only      │    - performance_repository                 │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -205,10 +205,10 @@ Google Authorized Buyers API
     collectors/creatives/client.py
             │
             ▼
-    storage/sqlite_store.py
+    storage/repositories/* (Postgres)
             │
             ▼
-    creatives table (600+ records)
+    creatives table (Postgres)
 ```
 
 ### 2. CSV Import Flow
@@ -226,7 +226,7 @@ Gmail (scheduled reports)          Manual Upload
         ┌──────────────┼──────────────┐
         ▼              ▼              ▼
     rtb_daily     rtb_bidstream    rtb_quality
-   (Performance)  (Bid pipeline) (Traffic quality)
+   (Postgres)     (Postgres)      (Postgres)
 ```
 
 ### 3. Analysis Flow
@@ -384,27 +384,26 @@ dashboard/src/lib/i18n/
 
 ## Deployment Architecture
 
-### Production (AWS)
+### Production (GCP)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                      AWS Cloud                           │
+│                      GCP Cloud                           │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
 │  ┌─────────────────┐      ┌─────────────────┐          │
-│  │   EC2 Instance  │      │      S3         │          │
+│  │    GCE VM       │      │      GCS        │          │
 │  │                 │      │                 │          │
-│  │  - FastAPI      │◄────►│  - CSV Archive  │          │
+│  │  - FastAPI      │◄────►│  - CSV/Parquet  │          │
 │  │  - Next.js      │      │  - Backups      │          │
-│  │  - SQLite       │      │                 │          │
-│  │  - systemd      │      └─────────────────┘          │
+│  │  - Caddy        │      └─────────────────┘          │
 │  │                 │                                    │
 │  └────────┬────────┘                                    │
 │           │                                             │
-│  ┌────────▼────────┐                                    │
-│  │   Route 53      │                                    │
-│  │  scan.rtb.cat   │                                    │
-│  └─────────────────┘                                    │
+│  ┌────────▼────────┐      ┌─────────────────┐          │
+│  │  Cloud SQL      │      │   BigQuery      │          │
+│  │  (Postgres)     │◄────►│  raw_facts      │          │
+│  └─────────────────┘      └─────────────────┘          │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -420,13 +419,12 @@ dashboard/src/lib/i18n/
 
 ## Key Design Decisions
 
-### 1. SQLite with Multi-Account Support
+### 1. Postgres Serving + SQLite Legacy Staging
 
-**Why:** Cat-Scan uses SQLite with a multi-account architecture supporting multiple Google Authorized Buyers accounts and buyer seats within a single deployment. SQLite provides:
-- Zero configuration
-- Single-file database for easy backup
-- WAL mode for concurrent reads
-- Sufficient for multiple accounts with 600+ creatives each and millions of daily rows
+**Why:** Production serving uses Postgres (Cloud SQL) for raw facts, precompute tables, and UI queries. SQLite remains a legacy/staging store for local workflows. This provides:
+- Scalable serving for large daily volumes
+- Stable joins for QPS optimization across raw facts
+- Clear separation of staging vs serving data
 
 **Multi-Account Model:**
 - **Service Accounts**: Multiple Google service account credentials can be configured
