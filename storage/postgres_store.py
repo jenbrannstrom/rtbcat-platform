@@ -40,6 +40,7 @@ from .models import (
     ServiceAccount,
     BuyerSeat,
     PerformanceMetric,
+    RTBEndpoint,
 )
 
 # Import user models from user_repository for Tier 1 auth support
@@ -1810,3 +1811,119 @@ class PostgresStore:
             """,
             (creative_id, status, error_reason)
         )
+
+    # =========================================================================
+    # RTB ENDPOINTS
+    # =========================================================================
+
+    async def get_bidder_id_for_service_account(
+        self, service_account_id: str
+    ) -> Optional[str]:
+        """Get bidder_id for a service account from buyer_seats."""
+        row = await pg_query_one(
+            "SELECT bidder_id FROM buyer_seats WHERE service_account_id = %s LIMIT 1",
+            (service_account_id,)
+        )
+        return row["bidder_id"] if row else None
+
+    async def get_first_bidder_id(self) -> Optional[str]:
+        """Get the first available bidder_id (for single-account scenarios)."""
+        row = await pg_query_one("SELECT bidder_id FROM buyer_seats LIMIT 1")
+        return row["bidder_id"] if row else None
+
+    async def get_buyer_seat_with_bidder(
+        self, buyer_id: str
+    ) -> Optional[dict]:
+        """Get buyer seat info including bidder_id and display_name."""
+        row = await pg_query_one(
+            "SELECT bidder_id, display_name FROM buyer_seats WHERE buyer_id = %s",
+            (buyer_id,)
+        )
+        return dict(row) if row else None
+
+    async def sync_rtb_endpoints(
+        self, bidder_id: str, endpoints: list[dict]
+    ) -> int:
+        """Sync RTB endpoints from API response.
+
+        Upserts endpoints for a bidder account.
+
+        Args:
+            bidder_id: The bidder account ID.
+            endpoints: List of endpoint dicts from API.
+
+        Returns:
+            Number of endpoints synced.
+        """
+        if not endpoints:
+            return 0
+
+        data = [
+            (
+                bidder_id,
+                ep["endpointId"],
+                ep.get("url"),
+                ep.get("maximumQps"),
+                ep.get("tradingLocation"),
+                ep.get("bidProtocol"),
+            )
+            for ep in endpoints
+        ]
+
+        await pg_execute_many(
+            """
+            INSERT INTO rtb_endpoints
+            (bidder_id, endpoint_id, url, maximum_qps, trading_location, bid_protocol, synced_at)
+            VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (bidder_id, endpoint_id) DO UPDATE SET
+                url = EXCLUDED.url,
+                maximum_qps = EXCLUDED.maximum_qps,
+                trading_location = EXCLUDED.trading_location,
+                bid_protocol = EXCLUDED.bid_protocol,
+                synced_at = CURRENT_TIMESTAMP
+            """,
+            data
+        )
+        return len(endpoints)
+
+    async def get_rtb_endpoints(
+        self, bidder_id: Optional[str] = None
+    ) -> list[dict]:
+        """Get RTB endpoints, optionally filtered by bidder.
+
+        Returns:
+            List of endpoint dicts with endpoint info and sync timestamp.
+        """
+        if bidder_id:
+            rows = await pg_query(
+                """
+                SELECT * FROM rtb_endpoints
+                WHERE bidder_id = %s
+                ORDER BY trading_location, endpoint_id
+                """,
+                (bidder_id,)
+            )
+        else:
+            rows = await pg_query(
+                "SELECT * FROM rtb_endpoints ORDER BY trading_location, endpoint_id"
+            )
+        return [dict(row) for row in rows]
+
+    async def get_rtb_endpoints_current_qps(
+        self, bidder_id: Optional[str] = None
+    ) -> Optional[int]:
+        """Get aggregated current QPS from rtb_endpoints_current table.
+
+        Returns:
+            Total current QPS, or None if no data.
+        """
+        if bidder_id:
+            row = await pg_query_one(
+                "SELECT SUM(current_qps) as current_qps FROM rtb_endpoints_current WHERE bidder_id = %s",
+                (bidder_id,)
+            )
+        else:
+            row = await pg_query_one(
+                "SELECT SUM(current_qps) as current_qps FROM rtb_endpoints_current"
+            )
+        return row["current_qps"] if row else None

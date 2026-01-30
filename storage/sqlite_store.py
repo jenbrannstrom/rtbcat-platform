@@ -36,6 +36,9 @@ from .models import (
 # Import schema for initialization
 from .schema import SCHEMA, MIGRATIONS
 
+# Import database functions for direct queries
+from .database import db_query, db_query_one, db_execute
+
 # Import repositories
 from .repositories import (
     CreativeRepository, AccountRepository, TrafficRepository, ThumbnailRepository,
@@ -333,6 +336,90 @@ class SQLiteStore:
         await self._account_repo.link_buyer_seat_to_service_account(
             buyer_id, service_account_id
         )
+
+    async def get_bidder_id_for_service_account(
+        self, service_account_id: str
+    ) -> Optional[str]:
+        """Get bidder_id for a service account from buyer_seats."""
+        row = await db_query_one(
+            "SELECT bidder_id FROM buyer_seats WHERE service_account_id = ? LIMIT 1",
+            (service_account_id,)
+        )
+        return row["bidder_id"] if row else None
+
+    async def get_first_bidder_id(self) -> Optional[str]:
+        """Get the first available bidder_id (for single-account scenarios)."""
+        row = await db_query_one("SELECT bidder_id FROM buyer_seats LIMIT 1")
+        return row["bidder_id"] if row else None
+
+    async def get_buyer_seat_with_bidder(
+        self, buyer_id: str
+    ) -> Optional[dict]:
+        """Get buyer seat info including bidder_id and display_name."""
+        row = await db_query_one(
+            "SELECT bidder_id, display_name FROM buyer_seats WHERE buyer_id = ?",
+            (buyer_id,)
+        )
+        return dict(row) if row else None
+
+    # =========================================================================
+    # RTB Endpoints Methods
+    # =========================================================================
+
+    async def sync_rtb_endpoints(
+        self, bidder_id: str, endpoints: list[dict]
+    ) -> int:
+        """Sync RTB endpoints from API response."""
+        if not endpoints:
+            return 0
+
+        for ep in endpoints:
+            await db_execute(
+                """
+                INSERT OR REPLACE INTO rtb_endpoints
+                (bidder_id, endpoint_id, url, maximum_qps, trading_location, bid_protocol, synced_at)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (
+                    bidder_id,
+                    ep["endpointId"],
+                    ep.get("url"),
+                    ep.get("maximumQps"),
+                    ep.get("tradingLocation"),
+                    ep.get("bidProtocol"),
+                ),
+            )
+        return len(endpoints)
+
+    async def get_rtb_endpoints(
+        self, bidder_id: Optional[str] = None
+    ) -> list[dict]:
+        """Get RTB endpoints, optionally filtered by bidder."""
+        if bidder_id:
+            rows = await db_query(
+                "SELECT * FROM rtb_endpoints WHERE bidder_id = ? ORDER BY trading_location, endpoint_id",
+                (bidder_id,)
+            )
+        else:
+            rows = await db_query(
+                "SELECT * FROM rtb_endpoints ORDER BY trading_location, endpoint_id"
+            )
+        return [dict(row) for row in rows]
+
+    async def get_rtb_endpoints_current_qps(
+        self, bidder_id: Optional[str] = None
+    ) -> Optional[int]:
+        """Get aggregated current QPS from rtb_endpoints_current table."""
+        if bidder_id:
+            row = await db_query_one(
+                "SELECT SUM(current_qps) as current_qps FROM rtb_endpoints_current WHERE bidder_id = ?",
+                (bidder_id,)
+            )
+        else:
+            row = await db_query_one(
+                "SELECT SUM(current_qps) as current_qps FROM rtb_endpoints_current"
+            )
+        return row["current_qps"] if row else None
 
     # =========================================================================
     # Traffic Data Methods - Delegate to TrafficRepository
