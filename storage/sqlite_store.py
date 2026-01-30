@@ -303,6 +303,11 @@ class SQLiteStore:
         """Get bidder IDs for a set of buyer IDs."""
         return await self._account_repo.get_bidder_ids_for_buyer_ids(buyer_ids)
 
+    async def get_distinct_bidder_ids(self) -> list[str]:
+        """Get all distinct bidder IDs from buyer_seats table."""
+        rows = await db_query("SELECT DISTINCT bidder_id FROM buyer_seats")
+        return [row["bidder_id"] for row in rows if row["bidder_id"]]
+
     async def get_buyer_seat(self, buyer_id: str) -> Optional[BuyerSeat]:
         """Get a specific buyer seat."""
         return await self._account_repo.get_buyer_seat(buyer_id)
@@ -735,6 +740,215 @@ class SQLiteStore:
             (change_id,)
         )
         return row is not None and row["status"] == "applied"
+
+    # =========================================================================
+    # Pretargeting Methods
+    # =========================================================================
+
+    async def save_pretargeting_config(self, config: dict) -> None:
+        """Save or update a pretargeting config."""
+        await db_execute(
+            """
+            INSERT INTO pretargeting_configs
+            (bidder_id, config_id, billing_id, display_name, user_name, state,
+             included_formats, included_platforms, included_sizes,
+             included_geos, excluded_geos, included_operating_systems, raw_config, synced_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(bidder_id, config_id) DO UPDATE SET
+                billing_id = excluded.billing_id,
+                display_name = excluded.display_name,
+                state = excluded.state,
+                included_formats = excluded.included_formats,
+                included_platforms = excluded.included_platforms,
+                included_sizes = excluded.included_sizes,
+                included_geos = excluded.included_geos,
+                excluded_geos = excluded.excluded_geos,
+                included_operating_systems = excluded.included_operating_systems,
+                raw_config = excluded.raw_config,
+                synced_at = CURRENT_TIMESTAMP
+            """,
+            (
+                config.get("bidder_id"),
+                config.get("config_id"),
+                config.get("billing_id"),
+                config.get("display_name"),
+                config.get("user_name"),
+                config.get("state", "ACTIVE"),
+                config.get("included_formats"),
+                config.get("included_platforms"),
+                config.get("included_sizes"),
+                config.get("included_geos"),
+                config.get("excluded_geos"),
+                config.get("included_operating_systems"),
+                config.get("raw_config"),
+            ),
+        )
+
+    async def get_pretargeting_configs(
+        self,
+        bidder_id: Optional[str] = None,
+    ) -> list[dict]:
+        """Get pretargeting configs, optionally filtered by bidder."""
+        if bidder_id:
+            rows = await db_query(
+                "SELECT * FROM pretargeting_configs WHERE bidder_id = ? ORDER BY billing_id",
+                (bidder_id,)
+            )
+        else:
+            rows = await db_query(
+                "SELECT * FROM pretargeting_configs ORDER BY billing_id"
+            )
+        return [dict(row) for row in rows]
+
+    async def update_pretargeting_user_name(
+        self, billing_id: str, user_name: str
+    ) -> bool:
+        """Update user-defined name for a pretargeting config."""
+        await db_execute(
+            "UPDATE pretargeting_configs SET user_name = ? WHERE billing_id = ?",
+            (user_name, billing_id)
+        )
+        return True
+
+    async def update_pretargeting_state(
+        self, billing_id: str, state: str
+    ) -> bool:
+        """Update the state (ACTIVE/SUSPENDED) for a pretargeting config."""
+        await db_execute(
+            "UPDATE pretargeting_configs SET state = ? WHERE billing_id = ?",
+            (state, billing_id)
+        )
+        return True
+
+    async def get_pretargeting_history(
+        self,
+        config_id: Optional[str] = None,
+        billing_id: Optional[str] = None,
+        days: int = 30,
+        limit: int = 500,
+    ) -> list[dict]:
+        """Get pretargeting change history."""
+        query = """
+            SELECT ph.* FROM pretargeting_history ph
+            LEFT JOIN pretargeting_configs pc ON ph.config_id = pc.config_id
+            WHERE ph.changed_at >= datetime('now', ?)
+        """
+        params = [f"-{days} days"]
+
+        if config_id:
+            query += " AND ph.config_id = ?"
+            params.append(config_id)
+        if billing_id:
+            query += " AND pc.billing_id = ?"
+            params.append(billing_id)
+
+        query += f" ORDER BY ph.changed_at DESC LIMIT {limit}"
+
+        rows = await db_query(query, tuple(params))
+        return [dict(row) for row in rows]
+
+    # =========================================================================
+    # Pretargeting Publisher Methods
+    # =========================================================================
+
+    async def get_pretargeting_publishers(
+        self,
+        billing_id: str,
+        mode: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> list[dict]:
+        """Get publishers for a pretargeting config."""
+        query = """
+            SELECT publisher_id, mode, status, source, created_at, updated_at
+            FROM pretargeting_publishers
+            WHERE billing_id = ?
+        """
+        params = [billing_id]
+
+        if mode:
+            query += " AND mode = ?"
+            params.append(mode.upper())
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+
+        query += " ORDER BY mode, publisher_id"
+
+        rows = await db_query(query, tuple(params))
+        return [dict(row) for row in rows]
+
+    async def add_pretargeting_publisher(
+        self,
+        billing_id: str,
+        publisher_id: str,
+        mode: str,
+        status: str = "pending_add",
+        source: str = "user",
+    ) -> None:
+        """Add a publisher to pretargeting list."""
+        await db_execute(
+            """
+            INSERT INTO pretargeting_publishers (billing_id, publisher_id, mode, status, source)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (billing_id, publisher_id, mode) DO UPDATE SET
+                status = excluded.status,
+                source = excluded.source,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (billing_id, publisher_id, mode.upper(), status, source)
+        )
+
+    async def update_publisher_status(
+        self,
+        billing_id: str,
+        publisher_id: str,
+        mode: str,
+        status: str,
+    ) -> bool:
+        """Update a publisher's status."""
+        await db_execute(
+            """
+            UPDATE pretargeting_publishers
+            SET status = ?, source = 'user', updated_at = CURRENT_TIMESTAMP
+            WHERE billing_id = ? AND publisher_id = ? AND mode = ?
+            """,
+            (status, billing_id, publisher_id, mode.upper())
+        )
+        return True
+
+    async def get_pending_publisher_changes(self, billing_id: str) -> list[dict]:
+        """Get publishers with pending changes."""
+        rows = await db_query(
+            """
+            SELECT publisher_id, mode, status, source, updated_at
+            FROM pretargeting_publishers
+            WHERE billing_id = ? AND status IN ('pending_add', 'pending_remove')
+            ORDER BY status, mode, publisher_id
+            """,
+            (billing_id,)
+        )
+        return [dict(row) for row in rows]
+
+    async def clear_api_sync_publishers(self, billing_id: str) -> int:
+        """Clear all api_sync publishers for a billing_id before re-syncing."""
+        await db_execute(
+            "DELETE FROM pretargeting_publishers WHERE billing_id = ? AND source = 'api_sync'",
+            (billing_id,)
+        )
+        return 0  # SQLite doesn't easily return affected rows here
+
+    async def check_publisher_in_opposite_mode(
+        self,
+        billing_id: str,
+        publisher_id: str,
+        mode: str,
+    ) -> Optional[dict]:
+        """Check if publisher exists in the opposite mode."""
+        row = await db_query_one(
+            "SELECT mode FROM pretargeting_publishers WHERE billing_id = ? AND publisher_id = ? AND mode != ?",
+            (billing_id, publisher_id, mode.upper())
+        )
+        return dict(row) if row else None
 
     # =========================================================================
     # Traffic Data Methods - Delegate to TrafficRepository

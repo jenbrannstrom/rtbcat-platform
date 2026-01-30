@@ -3,14 +3,14 @@
 import json
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_store
 from collectors import PretargetingClient
-from storage.database import db_execute, db_query, db_query_one
 from storage.sqlite_store import SQLiteStore
+from storage.postgres_store import PostgresStore
 
 from .models import (
     PretargetingConfigResponse,
@@ -18,6 +18,9 @@ from .models import (
     SetPretargetingNameRequest,
     SyncPretargetingResponse,
 )
+
+# Store type can be either SQLite or Postgres
+StoreType = Union[SQLiteStore, PostgresStore]
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +30,7 @@ router = APIRouter(tags=["RTB Settings"])
 @router.post("/settings/pretargeting/sync", response_model=SyncPretargetingResponse)
 async def sync_pretargeting_configs(
     service_account_id: Optional[str] = Query(None, description="Service account ID to use"),
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
 ):
     """Sync pretargeting configs from Google Authorized Buyers API.
 
@@ -55,21 +58,15 @@ async def sync_pretargeting_configs(
         )
 
     # Get bidder account ID from buyer_seats table (linked to service account)
-    bidder_row = await db_query_one(
-        "SELECT bidder_id FROM buyer_seats WHERE service_account_id = ? LIMIT 1",
-        (service_account.id,)
-    )
-    if not bidder_row:
+    account_id = await store.get_bidder_id_for_service_account(service_account.id)
+    if not account_id:
         # Fallback: Get any buyer_seat (single-account scenario)
-        bidder_row = await db_query_one(
-            "SELECT bidder_id FROM buyer_seats LIMIT 1"
-        )
-    if not bidder_row:
+        account_id = await store.get_first_bidder_id()
+    if not account_id:
         raise HTTPException(
             status_code=400,
             detail="No buyer seats discovered. Use /seats/discover first."
         )
-    account_id = bidder_row["bidder_id"]
     logger.info(f"Using bidder_id: {account_id} for pretargeting sync")
 
     try:
@@ -79,7 +76,7 @@ async def sync_pretargeting_configs(
         )
         configs = await client.fetch_all_pretargeting_configs()
 
-        # Store configs in database using new db module
+        # Store configs in database using store methods
         for cfg in configs:
             # Extract sizes as strings
             sizes = []
@@ -95,42 +92,20 @@ async def sync_pretargeting_configs(
             # Extract OS targeting IDs (iOS = 30001, Android = 30002)
             included_os = cfg.get("includedMobileOperatingSystemIds", [])
 
-            await db_execute(
-                """
-                INSERT INTO pretargeting_configs
-                (bidder_id, config_id, billing_id, display_name, state,
-                 included_formats, included_platforms, included_sizes,
-                 included_geos, excluded_geos, included_operating_systems, raw_config, synced_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(bidder_id, config_id) DO UPDATE SET
-                    billing_id = excluded.billing_id,
-                    display_name = excluded.display_name,
-                    state = excluded.state,
-                    included_formats = excluded.included_formats,
-                    included_platforms = excluded.included_platforms,
-                    included_sizes = excluded.included_sizes,
-                    included_geos = excluded.included_geos,
-                    excluded_geos = excluded.excluded_geos,
-                    included_operating_systems = excluded.included_operating_systems,
-                    raw_config = excluded.raw_config,
-                    synced_at = CURRENT_TIMESTAMP
-                """,
-                (
-                    account_id,
-                    cfg["configId"],
-                    # Normalize billing_id to match CSV import (strip whitespace)
-                    str(cfg.get("billingId", "")).strip() or None,
-                    cfg.get("displayName"),
-                    cfg.get("state", "ACTIVE"),
-                    json.dumps(cfg.get("includedFormats", [])),
-                    json.dumps(cfg.get("includedPlatforms", [])),
-                    json.dumps(sizes),
-                    json.dumps(included_geos),
-                    json.dumps(excluded_geos),
-                    json.dumps(included_os) if included_os else None,
-                    json.dumps(cfg),
-                ),
-            )
+            await store.save_pretargeting_config({
+                "bidder_id": account_id,
+                "config_id": cfg["configId"],
+                "billing_id": str(cfg.get("billingId", "")).strip() or None,
+                "display_name": cfg.get("displayName"),
+                "state": cfg.get("state", "ACTIVE"),
+                "included_formats": json.dumps(cfg.get("includedFormats", [])),
+                "included_platforms": json.dumps(cfg.get("includedPlatforms", [])),
+                "included_sizes": json.dumps(sizes),
+                "included_geos": json.dumps(included_geos),
+                "excluded_geos": json.dumps(excluded_geos),
+                "included_operating_systems": json.dumps(included_os) if included_os else None,
+                "raw_config": json.dumps(cfg),
+            })
 
         # Extract and store publisher targeting into pretargeting_publishers
         publishers_synced = 0
@@ -144,38 +119,27 @@ async def sync_pretargeting_configs(
             excluded_publishers = publisher_targeting.get("excludedIds", [])
 
             # Clear stale api_sync entries for this billing_id before inserting new ones
-            await db_execute(
-                "DELETE FROM pretargeting_publishers WHERE billing_id = ? AND source = 'api_sync'",
-                (billing_id,),
-            )
+            await store.clear_api_sync_publishers(billing_id)
 
             # Insert WHITELIST publishers (included)
             for pub_id in included_publishers:
-                await db_execute(
-                    """
-                    INSERT INTO pretargeting_publishers (billing_id, publisher_id, mode, status, source)
-                    VALUES (?, ?, 'WHITELIST', 'active', 'api_sync')
-                    ON CONFLICT (billing_id, publisher_id, mode) DO UPDATE SET
-                        status = 'active',
-                        source = 'api_sync',
-                        updated_at = CURRENT_TIMESTAMP
-                    """,
-                    (billing_id, str(pub_id)),
+                await store.add_pretargeting_publisher(
+                    billing_id=billing_id,
+                    publisher_id=str(pub_id),
+                    mode="WHITELIST",
+                    status="active",
+                    source="api_sync",
                 )
                 publishers_synced += 1
 
             # Insert BLACKLIST publishers (excluded)
             for pub_id in excluded_publishers:
-                await db_execute(
-                    """
-                    INSERT INTO pretargeting_publishers (billing_id, publisher_id, mode, status, source)
-                    VALUES (?, ?, 'BLACKLIST', 'active', 'api_sync')
-                    ON CONFLICT (billing_id, publisher_id, mode) DO UPDATE SET
-                        status = 'active',
-                        source = 'api_sync',
-                        updated_at = CURRENT_TIMESTAMP
-                    """,
-                    (billing_id, str(pub_id)),
+                await store.add_pretargeting_publisher(
+                    billing_id=billing_id,
+                    publisher_id=str(pub_id),
+                    mode="BLACKLIST",
+                    status="active",
+                    source="api_sync",
                 )
                 publishers_synced += 1
 
@@ -196,7 +160,7 @@ async def sync_pretargeting_configs(
 async def get_pretargeting_configs(
     buyer_id: Optional[str] = Query(None, description="Buyer/seat ID to get configs for"),
     service_account_id: Optional[str] = Query(None, description="Service account ID (deprecated, use buyer_id)"),
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
 ):
     """Get stored pretargeting configs for the current account.
 
@@ -215,57 +179,31 @@ async def get_pretargeting_configs(
 
         # Priority 1: Use buyer_id to look up bidder_id
         if buyer_id:
-            bidder_row = await db_query_one(
-                "SELECT bidder_id FROM buyer_seats WHERE buyer_id = ?",
-                (buyer_id,)
-            )
-            if bidder_row:
-                current_bidder_id = bidder_row["bidder_id"]
+            seat_info = await store.get_buyer_seat_with_bidder(buyer_id)
+            if seat_info:
+                current_bidder_id = seat_info["bidder_id"]
                 logger.debug(f"Found bidder_id {current_bidder_id} for buyer_id {buyer_id}")
 
         # Priority 2: Fall back to service_account_id (legacy support)
         if not current_bidder_id and service_account_id:
             service_account = await store.get_service_account(service_account_id)
             if service_account:
-                bidder_row = await db_query_one(
-                    "SELECT bidder_id FROM buyer_seats WHERE service_account_id = ? LIMIT 1",
-                    (service_account.id,)
-                )
-                if bidder_row:
-                    current_bidder_id = bidder_row["bidder_id"]
+                current_bidder_id = await store.get_bidder_id_for_service_account(service_account.id)
 
         # Priority 3: Fall back to first active service account
         if not current_bidder_id:
             accounts = await store.get_service_accounts(active_only=True)
             if accounts:
-                service_account = accounts[0]
-                bidder_row = await db_query_one(
-                    "SELECT bidder_id FROM buyer_seats WHERE service_account_id = ? LIMIT 1",
-                    (service_account.id,)
-                )
-                if bidder_row:
-                    current_bidder_id = bidder_row["bidder_id"]
+                current_bidder_id = await store.get_bidder_id_for_service_account(accounts[0].id)
 
         # Priority 4: Fallback to any buyer_seat
         if not current_bidder_id:
-            bidder_row = await db_query_one(
-                "SELECT bidder_id FROM buyer_seats LIMIT 1"
-            )
-            if bidder_row:
-                current_bidder_id = bidder_row["bidder_id"]
+            current_bidder_id = await store.get_first_bidder_id()
+            if current_bidder_id:
                 logger.info(f"Using fallback bidder_id: {current_bidder_id} for pretargeting list")
 
-        if current_bidder_id:
-            # Filter by current account's bidder_id
-            rows = await db_query(
-                "SELECT * FROM pretargeting_configs WHERE bidder_id = ? ORDER BY billing_id",
-                (current_bidder_id,)
-            )
-        else:
-            # Fallback: return all configs if no account configured
-            rows = await db_query(
-                "SELECT * FROM pretargeting_configs ORDER BY billing_id"
-            )
+        # Get configs filtered by bidder_id
+        rows = await store.get_pretargeting_configs(bidder_id=current_bidder_id)
 
         results = []
         for row in rows:
@@ -306,6 +244,7 @@ async def get_pretargeting_configs(
 async def set_pretargeting_name(
     billing_id: str,
     body: SetPretargetingNameRequest,
+    store: StoreType = Depends(get_store),
 ):
     """Set a custom user-defined name for a pretargeting config.
 
@@ -314,10 +253,7 @@ async def set_pretargeting_name(
     """
     try:
         # Get current value for history tracking
-        current = await db_query_one(
-            "SELECT user_name, config_id, bidder_id FROM pretargeting_configs WHERE billing_id = ?",
-            (billing_id,),
-        )
+        current = await store.get_pretargeting_config_by_billing_id(billing_id)
 
         if not current:
             raise HTTPException(
@@ -330,18 +266,19 @@ async def set_pretargeting_name(
         bidder_id = current["bidder_id"]
 
         # Update the name
-        await db_execute(
-            "UPDATE pretargeting_configs SET user_name = ? WHERE billing_id = ?",
-            (body.user_name, billing_id),
-        )
+        await store.update_pretargeting_user_name(billing_id, body.user_name)
 
         # Record history if value changed
         if old_name != body.user_name:
-            await db_execute(
-                """INSERT INTO pretargeting_history
-                (config_id, bidder_id, change_type, field_changed, old_value, new_value, change_source)
-                VALUES (?, ?, 'update', 'user_name', ?, ?, 'user')""",
-                (config_id, bidder_id, old_name, body.user_name),
+            await store.add_pretargeting_history(
+                config_id=config_id,
+                bidder_id=bidder_id,
+                change_type="update",
+                field_changed="user_name",
+                old_value=old_name,
+                new_value=body.user_name,
+                changed_by="ui",
+                change_source="user",
             )
 
         return {
@@ -362,6 +299,7 @@ async def get_pretargeting_history(
     config_id: Optional[str] = Query(None, description="Filter by config_id"),
     billing_id: Optional[str] = Query(None, description="Filter by billing_id"),
     days: int = Query(30, description="Number of days of history to retrieve", ge=1, le=365),
+    store: StoreType = Depends(get_store),
 ):
     """Get pretargeting settings change history.
 
@@ -369,24 +307,12 @@ async def get_pretargeting_history(
     including who made the change and when.
     """
     try:
-        # Build query based on filters
-        query = """
-            SELECT ph.* FROM pretargeting_history ph
-            LEFT JOIN pretargeting_configs pc ON ph.config_id = pc.config_id
-            WHERE ph.changed_at >= datetime('now', ?)
-        """
-        params = [f"-{days} days"]
-
-        if config_id:
-            query += " AND ph.config_id = ?"
-            params.append(config_id)
-        if billing_id:
-            query += " AND pc.billing_id = ?"
-            params.append(billing_id)
-
-        query += " ORDER BY ph.changed_at DESC LIMIT 500"
-
-        rows = await db_query(query, tuple(params))
+        rows = await store.get_pretargeting_history(
+            config_id=config_id,
+            billing_id=billing_id,
+            days=days,
+            limit=500,
+        )
 
         results = []
         for row in rows:
@@ -422,29 +348,18 @@ async def get_pretargeting_publishers(
     billing_id: str,
     mode: Optional[str] = Query(None, description="Filter by mode (WHITELIST or BLACKLIST)"),
     status: Optional[str] = Query(None, description="Filter by status (active, pending_add, pending_remove)"),
+    store: StoreType = Depends(get_store),
 ):
     """Get normalized publisher list for a pretargeting config.
 
     Returns the list of publishers in the whitelist/blacklist with their status.
     """
     try:
-        query = """
-            SELECT publisher_id, mode, status, source, created_at, updated_at
-            FROM pretargeting_publishers
-            WHERE billing_id = ?
-        """
-        params = [billing_id]
-
-        if mode:
-            query += " AND mode = ?"
-            params.append(mode.upper())
-        if status:
-            query += " AND status = ?"
-            params.append(status)
-
-        query += " ORDER BY mode, publisher_id"
-
-        rows = await db_query(query, tuple(params))
+        rows = await store.get_pretargeting_publishers(
+            billing_id=billing_id,
+            mode=mode,
+            status=status,
+        )
 
         return {
             "billing_id": billing_id,
@@ -472,6 +387,7 @@ async def add_pretargeting_publisher(
     billing_id: str,
     publisher_id: str = Query(..., description="Publisher ID to add"),
     mode: str = Query(..., description="WHITELIST or BLACKLIST"),
+    store: StoreType = Depends(get_store),
 ):
     """Add a publisher to the targeting list with pending_add status.
 
@@ -485,34 +401,24 @@ async def add_pretargeting_publisher(
             raise HTTPException(status_code=400, detail="Mode must be WHITELIST or BLACKLIST")
 
         # Validate billing_id exists
-        config = await db_query_one(
-            "SELECT billing_id FROM pretargeting_configs WHERE billing_id = ?",
-            (billing_id,),
-        )
+        config = await store.get_pretargeting_config_by_billing_id(billing_id)
         if not config:
             raise HTTPException(status_code=404, detail=f"Pretargeting config {billing_id} not found")
 
         # Check if publisher already exists in opposite mode
-        existing = await db_query_one(
-            "SELECT mode FROM pretargeting_publishers WHERE billing_id = ? AND publisher_id = ? AND mode != ?",
-            (billing_id, publisher_id, mode),
-        )
+        existing = await store.check_publisher_in_opposite_mode(billing_id, publisher_id, mode)
         if existing:
             raise HTTPException(
                 status_code=400,
                 detail=f"Publisher {publisher_id} already exists in {existing['mode']} list"
             )
 
-        await db_execute(
-            """
-            INSERT INTO pretargeting_publishers (billing_id, publisher_id, mode, status, source)
-            VALUES (?, ?, ?, 'pending_add', 'user')
-            ON CONFLICT (billing_id, publisher_id, mode) DO UPDATE SET
-                status = 'pending_add',
-                source = 'user',
-                updated_at = CURRENT_TIMESTAMP
-            """,
-            (billing_id, publisher_id, mode),
+        await store.add_pretargeting_publisher(
+            billing_id=billing_id,
+            publisher_id=publisher_id,
+            mode=mode,
+            status="pending_add",
+            source="user",
         )
 
         return {"status": "success", "message": f"Publisher {publisher_id} queued for addition to {mode}"}
@@ -529,6 +435,7 @@ async def remove_pretargeting_publisher(
     billing_id: str,
     publisher_id: str,
     mode: str = Query(..., description="WHITELIST or BLACKLIST"),
+    store: StoreType = Depends(get_store),
 ):
     """Mark a publisher for removal with pending_remove status.
 
@@ -542,20 +449,15 @@ async def remove_pretargeting_publisher(
             raise HTTPException(status_code=400, detail="Mode must be WHITELIST or BLACKLIST")
 
         # Validate billing_id exists
-        config = await db_query_one(
-            "SELECT billing_id FROM pretargeting_configs WHERE billing_id = ?",
-            (billing_id,),
-        )
+        config = await store.get_pretargeting_config_by_billing_id(billing_id)
         if not config:
             raise HTTPException(status_code=404, detail=f"Pretargeting config {billing_id} not found")
 
-        result = await db_execute(
-            """
-            UPDATE pretargeting_publishers
-            SET status = 'pending_remove', source = 'user', updated_at = CURRENT_TIMESTAMP
-            WHERE billing_id = ? AND publisher_id = ? AND mode = ?
-            """,
-            (billing_id, publisher_id, mode),
+        await store.update_publisher_status(
+            billing_id=billing_id,
+            publisher_id=publisher_id,
+            mode=mode,
+            status="pending_remove",
         )
 
         return {"status": "success", "message": f"Publisher {publisher_id} queued for removal from {mode}"}
@@ -566,21 +468,16 @@ async def remove_pretargeting_publisher(
 
 
 @router.get("/settings/pretargeting/{billing_id}/publishers/pending")
-async def get_pending_publisher_changes(billing_id: str):
+async def get_pending_publisher_changes(
+    billing_id: str,
+    store: StoreType = Depends(get_store),
+):
     """Get publishers with pending changes (pending_add or pending_remove).
 
     Returns publishers that need to be synced to the API.
     """
     try:
-        rows = await db_query(
-            """
-            SELECT publisher_id, mode, status, source, updated_at
-            FROM pretargeting_publishers
-            WHERE billing_id = ? AND status IN ('pending_add', 'pending_remove')
-            ORDER BY status, mode, publisher_id
-            """,
-            (billing_id,),
-        )
+        rows = await store.get_pending_publisher_changes(billing_id)
 
         return {
             "billing_id": billing_id,

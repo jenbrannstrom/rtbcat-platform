@@ -414,6 +414,11 @@ class PostgresStore:
         )
         return BuyerSeat(**row) if row else None
 
+    async def get_distinct_bidder_ids(self) -> list[str]:
+        """Get all distinct bidder IDs from buyer_seats table."""
+        rows = await pg_query("SELECT DISTINCT bidder_id FROM buyer_seats")
+        return [row["bidder_id"] for row in rows if row["bidder_id"]]
+
     async def save_buyer_seat(self, seat: BuyerSeat) -> None:
         """Save or update a buyer seat."""
         await pg_execute(
@@ -1312,6 +1317,16 @@ class PostgresStore:
         )
         return rows > 0
 
+    async def update_pretargeting_state(
+        self, billing_id: str, state: str
+    ) -> bool:
+        """Update the state (ACTIVE/SUSPENDED) for a pretargeting config."""
+        rows = await pg_execute(
+            "UPDATE pretargeting_configs SET state = %s WHERE billing_id = %s",
+            (state, billing_id)
+        )
+        return rows > 0
+
     # =========================================================================
     # PRETARGETING HISTORY (Tier 2)
     # =========================================================================
@@ -1756,6 +1771,19 @@ class PostgresStore:
             "DELETE FROM pretargeting_publishers WHERE billing_id = %s AND source = 'api_sync'",
             (billing_id,)
         )
+
+    async def check_publisher_in_opposite_mode(
+        self,
+        billing_id: str,
+        publisher_id: str,
+        mode: str,
+    ) -> Optional[dict]:
+        """Check if publisher exists in the opposite mode."""
+        row = await pg_query_one(
+            "SELECT mode FROM pretargeting_publishers WHERE billing_id = %s AND publisher_id = %s AND mode != %s",
+            (billing_id, publisher_id, mode.upper())
+        )
+        return dict(row) if row else None
 
     # =========================================================================
     # SNAPSHOT COMPARISONS (Tier 2)

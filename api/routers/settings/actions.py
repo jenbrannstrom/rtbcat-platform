@@ -3,14 +3,14 @@
 import json
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_store
 from collectors import PretargetingClient
-from storage.database import db_execute, db_query, db_query_one
 from storage.sqlite_store import SQLiteStore
+from storage.postgres_store import PostgresStore
 
 from .models import (
     ApplyAllResponse,
@@ -23,18 +23,18 @@ from .models import (
 )
 from .snapshots import create_pretargeting_snapshot
 
+# Store type can be either SQLite or Postgres
+StoreType = Union[SQLiteStore, PostgresStore]
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["RTB Settings"])
 
 
-async def _get_pretargeting_client(billing_id: str, store: SQLiteStore):
+async def _get_pretargeting_client(billing_id: str, store: StoreType):
     """Helper to get PretargetingClient for a billing_id."""
     # Get config and bidder_id
-    config = await db_query_one(
-        "SELECT bidder_id, config_id FROM pretargeting_configs WHERE billing_id = ?",
-        (billing_id,)
-    )
+    config = await store.get_pretargeting_config_by_billing_id(billing_id)
     if not config:
         raise HTTPException(status_code=404, detail=f"Config not found for billing_id: {billing_id}")
 
@@ -63,7 +63,7 @@ async def _get_pretargeting_client(billing_id: str, store: SQLiteStore):
 async def apply_pending_change(
     billing_id: str,
     request: ApplyChangeRequest,
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
 ):
     """
     Apply a single pending change to Google Authorized Buyers.
@@ -80,12 +80,9 @@ async def apply_pending_change(
     """
     try:
         # Get the pending change
-        change = await db_query_one(
-            "SELECT * FROM pretargeting_pending_changes WHERE id = ? AND billing_id = ?",
-            (request.change_id, billing_id)
-        )
+        change = await store.get_pending_change(request.change_id)
 
-        if not change:
+        if not change or change["billing_id"] != billing_id:
             raise HTTPException(status_code=404, detail="Pending change not found")
 
         if change["status"] != "pending":
@@ -123,11 +120,8 @@ async def apply_pending_change(
         elif change_type == "remove_excluded_geo":
             result = await client.remove_geos_from_config(config_id, [value], from_excluded=True)
         elif change_type in {"add_publisher", "remove_publisher", "set_publisher_mode"}:
-            config_row = await db_query_one(
-                "SELECT raw_config FROM pretargeting_configs WHERE billing_id = ?",
-                (billing_id,)
-            )
-            raw_config = json.loads(config_row["raw_config"]) if config_row and config_row["raw_config"] else {}
+            config_row = await store.get_pretargeting_config_by_billing_id(billing_id)
+            raw_config = json.loads(config_row["raw_config"]) if config_row and config_row.get("raw_config") else {}
             publisher_targeting = raw_config.get("publisherTargeting") or {}
             current_mode = publisher_targeting.get("targetingMode") or "EXCLUSIVE"
             current_values = list(publisher_targeting.get("values") or [])
@@ -158,19 +152,18 @@ async def apply_pending_change(
             raise HTTPException(status_code=400, detail=f"Unsupported change type: {change_type}")
 
         # Mark change as applied
-        await db_execute(
-            """UPDATE pretargeting_pending_changes
-            SET status = 'applied', applied_at = CURRENT_TIMESTAMP
-            WHERE id = ?""",
-            (request.change_id,)
-        )
+        await store.mark_pending_change_applied(request.change_id, applied_by="system")
 
         # Record in history
-        await db_execute(
-            """INSERT INTO pretargeting_history
-            (config_id, bidder_id, change_type, field_changed, new_value, change_source, changed_by)
-            VALUES (?, ?, 'api_write', ?, ?, 'api', 'system')""",
-            (config_id, bidder_id, change["field_name"], f"{change_type}:{value}")
+        await store.add_pretargeting_history(
+            config_id=config_id,
+            bidder_id=bidder_id,
+            change_type="api_write",
+            field_changed=change["field_name"],
+            old_value=None,
+            new_value=f"{change_type}:{value}",
+            changed_by="system",
+            change_source="api",
         )
 
         return ApplyChangeResponse(
@@ -191,7 +184,7 @@ async def apply_pending_change(
 async def apply_all_pending_changes(
     billing_id: str,
     dry_run: bool = Query(True, description="Preview changes without applying"),
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
 ):
     """
     Apply all pending changes for a billing_id to Google.
@@ -201,12 +194,7 @@ async def apply_all_pending_changes(
     """
     try:
         # Get all pending changes for this billing_id
-        changes = await db_query(
-            """SELECT * FROM pretargeting_pending_changes
-            WHERE billing_id = ? AND status = 'pending'
-            ORDER BY created_at ASC""",
-            (billing_id,)
-        )
+        changes = await store.get_pending_changes(billing_id=billing_id, status="pending", limit=500)
 
         if not changes:
             return ApplyAllResponse(
@@ -234,7 +222,7 @@ async def apply_all_pending_changes(
             notes="Created before applying pending changes",
             snapshot_type="before_change",
         )
-        await create_pretargeting_snapshot(snapshot_request)
+        await create_pretargeting_snapshot(snapshot_request, store)
 
         # Apply each change
         applied = 0
@@ -270,7 +258,7 @@ async def apply_all_pending_changes(
 @router.post("/settings/pretargeting/{billing_id}/suspend", response_model=SuspendActivateResponse)
 async def suspend_pretargeting_config(
     billing_id: str,
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
 ):
     """
     Suspend a pretargeting configuration.
@@ -284,10 +272,10 @@ async def suspend_pretargeting_config(
         # Create auto-snapshot before suspending
         snapshot_request = SnapshotCreate(
             billing_id=billing_id,
-            snapshot_name=f"Auto-snapshot before suspend",
+            snapshot_name="Auto-snapshot before suspend",
             notes="Automatically created before suspend operation"
         )
-        await create_pretargeting_snapshot(snapshot_request)
+        await create_pretargeting_snapshot(snapshot_request, store)
 
         # Get client
         client, config_id, bidder_id = await _get_pretargeting_client(billing_id, store)
@@ -296,17 +284,18 @@ async def suspend_pretargeting_config(
         result = await client.suspend_pretargeting_config(config_id)
 
         # Update local database
-        await db_execute(
-            "UPDATE pretargeting_configs SET state = 'SUSPENDED' WHERE billing_id = ?",
-            (billing_id,)
-        )
+        await store.update_pretargeting_state(billing_id, "SUSPENDED")
 
         # Record in history
-        await db_execute(
-            """INSERT INTO pretargeting_history
-            (config_id, bidder_id, change_type, field_changed, old_value, new_value, change_source)
-            VALUES (?, ?, 'state_change', 'state', 'ACTIVE', 'SUSPENDED', 'api')""",
-            (config_id, bidder_id)
+        await store.add_pretargeting_history(
+            config_id=config_id,
+            bidder_id=bidder_id,
+            change_type="state_change",
+            field_changed="state",
+            old_value="ACTIVE",
+            new_value="SUSPENDED",
+            changed_by="system",
+            change_source="api",
         )
 
         return SuspendActivateResponse(
@@ -326,7 +315,7 @@ async def suspend_pretargeting_config(
 @router.post("/settings/pretargeting/{billing_id}/activate", response_model=SuspendActivateResponse)
 async def activate_pretargeting_config(
     billing_id: str,
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
 ):
     """
     Activate a suspended pretargeting configuration.
@@ -343,17 +332,18 @@ async def activate_pretargeting_config(
         result = await client.activate_pretargeting_config(config_id)
 
         # Update local database
-        await db_execute(
-            "UPDATE pretargeting_configs SET state = 'ACTIVE' WHERE billing_id = ?",
-            (billing_id,)
-        )
+        await store.update_pretargeting_state(billing_id, "ACTIVE")
 
         # Record in history
-        await db_execute(
-            """INSERT INTO pretargeting_history
-            (config_id, bidder_id, change_type, field_changed, old_value, new_value, change_source)
-            VALUES (?, ?, 'state_change', 'state', 'SUSPENDED', 'ACTIVE', 'api')""",
-            (config_id, bidder_id)
+        await store.add_pretargeting_history(
+            config_id=config_id,
+            bidder_id=bidder_id,
+            change_type="state_change",
+            field_changed="state",
+            old_value="SUSPENDED",
+            new_value="ACTIVE",
+            changed_by="system",
+            change_source="api",
         )
 
         return SuspendActivateResponse(
@@ -374,7 +364,7 @@ async def activate_pretargeting_config(
 async def rollback_to_snapshot(
     billing_id: str,
     request: RollbackRequest,
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
 ):
     """
     Rollback a pretargeting config to a previous snapshot state.
@@ -386,19 +376,13 @@ async def rollback_to_snapshot(
     """
     try:
         # Get the snapshot
-        snapshot = await db_query_one(
-            "SELECT * FROM pretargeting_snapshots WHERE id = ? AND billing_id = ?",
-            (request.snapshot_id, billing_id)
-        )
+        snapshot = await store.get_snapshot(request.snapshot_id)
 
-        if not snapshot:
+        if not snapshot or snapshot["billing_id"] != billing_id:
             raise HTTPException(status_code=404, detail="Snapshot not found")
 
         # Get current config
-        current = await db_query_one(
-            "SELECT * FROM pretargeting_configs WHERE billing_id = ?",
-            (billing_id,)
-        )
+        current = await store.get_pretargeting_config_by_billing_id(billing_id)
 
         if not current:
             raise HTTPException(status_code=404, detail="Config not found")
@@ -503,11 +487,15 @@ async def rollback_to_snapshot(
             await client.activate_pretargeting_config(config_id)
 
         # Record in history
-        await db_execute(
-            """INSERT INTO pretargeting_history
-            (config_id, bidder_id, change_type, field_changed, new_value, change_source)
-            VALUES (?, ?, 'rollback', 'all', ?, 'api')""",
-            (config_id, bidder_id, f"snapshot_{request.snapshot_id}")
+        await store.add_pretargeting_history(
+            config_id=config_id,
+            bidder_id=bidder_id,
+            change_type="rollback",
+            field_changed="all",
+            old_value=None,
+            new_value=f"snapshot_{request.snapshot_id}",
+            changed_by="system",
+            change_source="api",
         )
 
         return RollbackResponse(
