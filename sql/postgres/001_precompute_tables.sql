@@ -212,6 +212,7 @@ CREATE TABLE IF NOT EXISTS config_creative_daily (
     buyer_account_id TEXT NOT NULL,
     billing_id TEXT NOT NULL,
     creative_id TEXT NOT NULL,
+    creative_size TEXT,
     reached_queries BIGINT DEFAULT 0,
     impressions BIGINT DEFAULT 0,
     spend_micros BIGINT DEFAULT 0,
@@ -226,3 +227,5 @@ CREATE INDEX IF NOT EXISTS idx_cfg_pub_date ON config_publisher_daily(metric_dat
 CREATE INDEX IF NOT EXISTS idx_cfg_pub_billing ON config_publisher_daily(billing_id);
 CREATE INDEX IF NOT EXISTS idx_cfg_creative_date ON config_creative_daily(metric_date);
 CREATE INDEX IF NOT EXISTS idx_cfg_creative_billing ON config_creative_daily(billing_id);
+CREATE INDEX IF NOT EXISTS idx_cfg_creative_date_buyer_billing_size
+    ON config_creative_daily(metric_date, buyer_account_id, billing_id, creative_size);
