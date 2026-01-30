@@ -76,12 +76,7 @@ export default function ConnectedAccountsPage() {
               </span>
             </div>
           </div>
-          <Link
-            href="/"
-            className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-          >
-            {t.setup?.goToWasteOptimizer || "Go to Waste Optimizer"} →
-          </Link>
+          <div />
         </div>
       </div>
 
