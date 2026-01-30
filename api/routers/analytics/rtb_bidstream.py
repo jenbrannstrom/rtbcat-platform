@@ -14,6 +14,10 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from storage.serving_database import db_query, db_query_one, table_exists
 from api.dependencies import get_store, get_current_user, resolve_buyer_id
 from storage import SQLiteStore
+from storage.postgres_store import PostgresStore
+
+# Store type can be either SQLite or Postgres
+StoreType = Union[SQLiteStore, PostgresStore]
 from storage.repositories.user_repository import User
 from analytics.rtb_bidstream_analyzer import RTBFunnelAnalyzer
 from .common import get_precompute_status, get_valid_billing_ids_for_buyer
@@ -26,7 +30,7 @@ router = APIRouter(tags=["RTB Analytics"])
 async def get_rtb_bidstream(
     days: int = Query(7, ge=1, le=90),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """
@@ -423,7 +427,7 @@ async def get_rtb_geos(
 async def get_config_performance(
     days: int = Query(7, ge=1, le=30),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """
@@ -635,7 +639,7 @@ async def get_config_breakdown(
     by: str = Query("size", pattern="^(size|geo|publisher|creative)$"),
     days: int = Query(7, ge=1, le=30),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """
@@ -941,7 +945,7 @@ async def get_config_creatives(
     size: Optional[str] = Query(None, description="Filter by creative size (e.g. 320x50)"),
     days: int = Query(30, ge=1, le=90),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """List creatives for a config (optionally filtered by size)."""

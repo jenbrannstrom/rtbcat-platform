@@ -1,16 +1,20 @@
 """Home page analytics from precomputed tables."""
 
 import logging
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_store, get_current_user, resolve_buyer_id
 from storage import SQLiteStore
+from storage.postgres_store import PostgresStore
 from storage.serving_database import db_query, db_query_one
 from .common import get_precompute_status
 from storage.repositories.user_repository import User
 from services.home_precompute import refresh_home_summaries
+
+# Store type can be either SQLite or Postgres
+StoreType = Union[SQLiteStore, PostgresStore]
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +26,7 @@ async def get_home_funnel(
     days: int = Query(7, ge=1, le=90),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     limit: int = Query(30, ge=1, le=200),
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Get Home funnel summary + publishers/geos from precomputed tables."""
@@ -248,7 +252,7 @@ async def get_home_funnel(
 async def get_home_config_performance(
     days: int = Query(7, ge=1, le=30),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Get per-config performance from precomputed data."""
@@ -368,7 +372,7 @@ async def refresh_home_cache(
     dates: Optional[list[str]] = Query(None, description="Explicit YYYY-MM-DD dates to refresh"),
     days: int = Query(7, ge=1, le=90),
     buyer_id: Optional[str] = None,
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Refresh Home precomputed tables for a date range."""
