@@ -10,11 +10,12 @@
 - [ ] **Thumbnail placeholders** - Some creatives show placeholder instead of generated thumbnail (ffmpeg)
 - [ ] **FFmpeg missing on install** - Creatives tab fails to render video thumbnails until ffmpeg installed
 - [ ] **CSV import account mismatch** - Imports not linking to correct accounts
+- [ ] **Login loop / empty analytics** - Missing `POSTGRES_SERVING_DSN` breaks analytics; enforce Postgres-only and set DSN
 - [ ] **Size drill-down shows no creatives** - fix is in config_precompute (creative_size) but needs deploy + config precompute refresh; no SQLite migration required
 - [x] **Import Now button fails** - /import does not process queued Gmail reports
 - [x] **Campaigns create action no-op** - Clicking "Create" on auto cluster does nothing
 - [ ] **Creative modal missing publisher data** - "No publisher data for this config" despite migrated tables
-- [ ] **Duplicate migration numbers (SQLite runner)** - 018/019/021 duplicates cause skipped migrations; renumber needed
+- [ ] **Duplicate migration numbers (SQLite runner)** - 018/019/021 duplicates cause skipped migrations; remove/archive as SQLite is deprecated
 - [ ] ~~**CI/CD pipeline** - Build images in GitHub Actions and deploy via docker pull (Artifact Registry)~~ **(Done)**
 - [ ] **BigQuery raw_facts coverage** - Data only through Jan 25; Jan 26–28 pending reprocess after pipeline fix
 
@@ -118,7 +119,7 @@
 - [x] **Change history tracking** - Full audit trail of all pretargeting modifications
 - [x] **Publisher allow/deny editor** - In-app whitelist/blacklist editing with per-config history and rollback
 - [x] **Bulk edit UX** - Inline add/remove rows with validation and diff preview before save
-- [ ] **Publisher List UI layout** - Align table layout with spec (Mode toggle header, Publisher ID/Type/Status/Action); pending deploy
+- [x] **Publisher List UI layout** - Full-page editor + spec-aligned layout (pending deploy)
 
   **Publisher Targeting UX (per pretargeting config):**
   - Add a `Publishers` section under each config with mode toggle:
@@ -251,7 +252,7 @@
 
 ### Large File Refactoring
 - [ ] `dashboard/src/lib/api.ts` - Still has ~30 legacy functions to extract
-- [ ] `storage/sqlite_store.py` (1,384 lines) - Complete migration to repository pattern
+- [ ] **Postgres-only migration** - Replace SQLiteStore with PostgresStore + repositories; remove SQLite dependencies
 - [ ] `storage/repositories/user_repository.py` (1,188 lines) - Split into auth, permissions, audit repos
 - [ ] `api/routers/creatives.py` (1,181 lines) - Extract language detection, preview generation
 - [ ] `cli/qps_analyzer.py` (1,053 lines) - Split into separate command modules under `cli/commands/`
