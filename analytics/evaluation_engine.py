@@ -86,12 +86,19 @@ class EvaluationEngine:
 
     def __init__(self):
         """Initialize with Postgres connection from environment."""
-        self.dsn = os.getenv("POSTGRES_SERVING_DSN", "")
+        self.dsn = (
+            os.getenv("POSTGRES_SERVING_DSN")
+            or os.getenv("POSTGRES_DSN")
+            or os.getenv("DATABASE_URL")
+            or ""
+        )
 
     def _get_connection(self) -> Any:
         """Get Postgres database connection."""
         if not self.dsn:
-            raise RuntimeError("POSTGRES_SERVING_DSN environment variable not set")
+            raise RuntimeError(
+                "POSTGRES_SERVING_DSN, POSTGRES_DSN, or DATABASE_URL must be set"
+            )
         return psycopg.connect(self.dsn, row_factory=dict_row)
 
     def run_full_evaluation(self, days: int = 7) -> Dict[str, Any]:
@@ -154,10 +161,13 @@ class EvaluationEngine:
 
         # Check performance data
         try:
-            cursor.execute(f"""
+            cursor.execute(
+                """
                 SELECT COUNT(*) as cnt FROM rtb_daily
-                WHERE metric_date >= CURRENT_DATE - INTERVAL '{days} days'
-            """)
+                WHERE metric_date >= CURRENT_DATE - make_interval(days => %s)
+                """,
+                (days,),
+            )
             row = cursor.fetchone()
             perf_count = row["cnt"] if row else 0
             if perf_count > 0:
@@ -170,10 +180,13 @@ class EvaluationEngine:
 
         # Check troubleshooting data
         try:
-            cursor.execute(f"""
+            cursor.execute(
+                """
                 SELECT COUNT(*) as cnt FROM troubleshooting_data
-                WHERE collection_date >= CURRENT_DATE - INTERVAL '{days} days'
-            """)
+                WHERE collection_date >= CURRENT_DATE - make_interval(days => %s)
+                """,
+                (days,),
+            )
             row = cursor.fetchone()
             ts_count = row["cnt"] if row else 0
             if ts_count > 0:
@@ -212,7 +225,8 @@ class EvaluationEngine:
         cursor = conn.cursor()
 
         try:
-            cursor.execute(f"""
+            cursor.execute(
+                """
                 SELECT
                     status_name,
                     SUM(bid_count) as total_bids,
@@ -220,13 +234,15 @@ class EvaluationEngine:
                     ROUND(100.0 * SUM(bid_count) /
                         (SELECT SUM(bid_count) FROM troubleshooting_data
                          WHERE metric_type = 'filtered_bids'
-                         AND collection_date >= CURRENT_DATE - INTERVAL '{days} days'), 2) as pct_of_filtered
+                         AND collection_date >= CURRENT_DATE - make_interval(days => %s)), 2) as pct_of_filtered
                 FROM troubleshooting_data
                 WHERE metric_type = 'filtered_bids'
-                  AND collection_date >= CURRENT_DATE - INTERVAL '{days} days'
+                  AND collection_date >= CURRENT_DATE - make_interval(days => %s)
                 GROUP BY status_name
                 ORDER BY total_bids DESC
-            """)
+                """,
+                (days, days),
+            )
             filtered = [dict(row) for row in cursor.fetchall()]
         except:
             filtered = []
@@ -290,17 +306,20 @@ class EvaluationEngine:
 
         # Get sizes we receive traffic for
         try:
-            cursor.execute(f"""
+            cursor.execute(
+                """
                 SELECT creative_size,
                        SUM(reached_queries) as reached_queries,
                        SUM(impressions) as impressions
                 FROM rtb_daily
-                WHERE metric_date >= CURRENT_DATE - INTERVAL '{days} days'
+                WHERE metric_date >= CURRENT_DATE - make_interval(days => %s)
                   AND creative_size IS NOT NULL
                 GROUP BY creative_size
                 HAVING SUM(reached_queries) > 1000
                 ORDER BY SUM(reached_queries) DESC
-            """)
+                """,
+                (days,),
+            )
             traffic_sizes = {row["creative_size"]: dict(row) for row in cursor.fetchall()}
         except:
             traffic_sizes = {}
@@ -363,19 +382,22 @@ class EvaluationEngine:
         cursor = conn.cursor()
 
         try:
-            cursor.execute(f"""
+            cursor.execute(
+                """
                 SELECT country,
                        SUM(reached_queries) as reached_queries,
                        SUM(impressions) as impressions,
                        ROUND(100.0 * (SUM(reached_queries) - SUM(impressions)) /
                              NULLIF(SUM(reached_queries), 0), 2) as waste_pct
                 FROM rtb_daily
-                WHERE metric_date >= CURRENT_DATE - INTERVAL '{days} days'
+                WHERE metric_date >= CURRENT_DATE - make_interval(days => %s)
                   AND country IS NOT NULL
                 GROUP BY country
                 HAVING SUM(reached_queries) > 10000
                 ORDER BY waste_pct DESC
-            """)
+                """,
+                (days,),
+            )
             geo_stats = [dict(row) for row in cursor.fetchall()]
         except:
             geo_stats = []
@@ -427,19 +449,22 @@ class EvaluationEngine:
 
         # High traffic, zero engagement (potential fraud)
         try:
-            cursor.execute(f"""
+            cursor.execute(
+                """
                 SELECT publisher_id, publisher_name,
                        SUM(impressions) as impressions,
                        SUM(clicks) as clicks,
                        'high_traffic_zero_clicks' as signal_type
                 FROM rtb_daily
-                WHERE metric_date >= CURRENT_DATE - INTERVAL '{days} days'
+                WHERE metric_date >= CURRENT_DATE - make_interval(days => %s)
                   AND publisher_id IS NOT NULL
                 GROUP BY publisher_id, publisher_name
                 HAVING SUM(impressions) > 10000 AND SUM(clicks) = 0
                 ORDER BY SUM(impressions) DESC
                 LIMIT 10
-            """)
+                """,
+                (days,),
+            )
             fraud_signals = [dict(row) for row in cursor.fetchall()]
         except:
             fraud_signals = []
@@ -471,20 +496,23 @@ class EvaluationEngine:
 
         # Find sizes with high win rate but low volume (could increase allocation)
         try:
-            cursor.execute(f"""
+            cursor.execute(
+                """
                 SELECT creative_size,
                        SUM(reached_queries) as queries,
                        SUM(impressions) as impressions,
                        ROUND(100.0 * SUM(impressions) / NULLIF(SUM(reached_queries), 0), 2) as win_rate
                 FROM rtb_daily
-                WHERE metric_date >= CURRENT_DATE - INTERVAL '{days} days'
+                WHERE metric_date >= CURRENT_DATE - make_interval(days => %s)
                   AND creative_size IS NOT NULL
                 GROUP BY creative_size
                 HAVING SUM(reached_queries) > 1000 AND
                        ROUND(100.0 * SUM(impressions) / NULLIF(SUM(reached_queries), 0), 2) > 20
                 ORDER BY win_rate DESC
                 LIMIT 5
-            """)
+                """,
+                (days,),
+            )
             size_opps = [dict(row) for row in cursor.fetchall()]
         except:
             size_opps = []
@@ -534,7 +562,8 @@ class EvaluationEngine:
         cursor = conn.cursor()
 
         try:
-            cursor.execute(f"""
+            cursor.execute(
+                """
                 SELECT
                     status_name,
                     SUM(bid_count) as total_bids,
@@ -542,13 +571,15 @@ class EvaluationEngine:
                     ROUND(100.0 * SUM(bid_count) /
                         (SELECT SUM(bid_count) FROM troubleshooting_data
                          WHERE metric_type = 'filtered_bids'
-                         AND collection_date >= CURRENT_DATE - INTERVAL '{days} days'), 2) as pct_of_filtered
+                         AND collection_date >= CURRENT_DATE - make_interval(days => %s)), 2) as pct_of_filtered
                 FROM troubleshooting_data
                 WHERE metric_type = 'filtered_bids'
-                  AND collection_date >= CURRENT_DATE - INTERVAL '{days} days'
+                  AND collection_date >= CURRENT_DATE - make_interval(days => %s)
                 GROUP BY status_name
                 ORDER BY total_bids DESC
-            """)
+                """,
+                (days, days),
+            )
             result = [dict(row) for row in cursor.fetchall()]
         except:
             result = []
@@ -570,12 +601,15 @@ class EvaluationEngine:
         }
 
         try:
-            cursor.execute(f"""
+            cursor.execute(
+                """
                 SELECT raw_data
                 FROM troubleshooting_data
                 WHERE metric_type = 'bid_metrics'
-                  AND collection_date >= CURRENT_DATE - INTERVAL '{days} days'
-            """)
+                  AND collection_date >= CURRENT_DATE - make_interval(days => %s)
+                """,
+                (days,),
+            )
 
             for row in cursor.fetchall():
                 try:
