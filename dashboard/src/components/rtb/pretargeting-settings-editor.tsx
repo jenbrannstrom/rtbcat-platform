@@ -357,6 +357,7 @@ function PublisherTargetingSection({
   onUndoPublisher,
   onSetMode,
   onShowHistory,
+  onApplyPending,
   onBulkAdd,
   onExportCsv,
   disabled = false,
@@ -370,6 +371,7 @@ function PublisherTargetingSection({
   onUndoPublisher: (publisherId: string) => void;
   onSetMode: (mode: string) => void;
   onShowHistory: () => void;
+  onApplyPending: () => void;
   onBulkAdd: (values: string[]) => void;
   onExportCsv: (values: string[]) => void;
   disabled?: boolean;
@@ -607,7 +609,7 @@ function PublisherTargetingSection({
 
           <div className="overflow-hidden rounded border">
             <div className="grid grid-cols-[1fr_80px_100px_80px_100px] gap-2 px-3 py-2 bg-gray-50 text-xs font-medium text-gray-500">
-              <span>Publisher ID</span>
+              <span>Publisher</span>
               <span>Type</span>
               <span>Status</span>
               <span>Source</span>
@@ -632,7 +634,16 @@ function PublisherTargetingSection({
                         isPendingRemove && 'bg-red-50 text-gray-400 line-through'
                       )}
                     >
-                      <span className="truncate" title={pub.publisher_id}>{pub.publisher_id}</span>
+                      <div className="min-w-0">
+                        {pub.publisher_name && (
+                          <div className="truncate font-medium text-gray-900" title={pub.publisher_name}>
+                            {pub.publisher_name}
+                          </div>
+                        )}
+                        <div className="truncate text-xs text-gray-500" title={pub.publisher_id}>
+                          {pub.publisher_id}
+                        </div>
+                      </div>
                       <span className="text-gray-500">{detectPublisherType(pub.publisher_id)}</span>
                       <span>{renderStatusChip(pub.status)}</span>
                       <span>{renderSourceChip(pub.source)}</span>
@@ -679,9 +690,17 @@ function PublisherTargetingSection({
                   <div>• {pendingRemoveCount} publisher{pendingRemoveCount !== 1 ? 's' : ''} to {isWhitelist ? 'remove' : 'unblock'}</div>
                 )}
               </div>
-              <p className="mt-2 text-xs text-yellow-600">
-                Use "Push to Google" button above to apply these changes.
-              </p>
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={onApplyPending}
+                  className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Apply to Google
+                </button>
+                <span className="text-xs text-yellow-600">
+                  Changes apply immediately on Google.
+                </span>
+              </div>
             </div>
           )}
 
@@ -1218,11 +1237,24 @@ export function PretargetingSettingsEditor({
           <span className="font-medium text-gray-900">{headerTitle}</span>
           {hasPendingChanges && (
             <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full">
-              {pendingChanges.length} pending
+              Changes pending{pendingChanges.length ? ` (${pendingChanges.length})` : ''}
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
+          {activeTab === 'publishers' && (
+            <button
+              onClick={async () => {
+                await syncPretargetingConfigs();
+                refetchDetail();
+                refetchPublishers();
+              }}
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Sync with Google
+            </button>
+          )}
           <button
             onClick={() => {
               setHistoryView('audit');
@@ -1296,51 +1328,53 @@ export function PretargetingSettingsEditor({
       )}
 
       {/* Status & Actions bar */}
-      <div className="px-4 py-2 bg-gray-50 border-b flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className={cn(
-            "px-2 py-0.5 text-xs font-medium rounded",
-            configDetail.state === 'ACTIVE' ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
-          )}>
-            {configDetail.state}
-          </span>
-          <span className="text-xs text-gray-500">
-            Config: {configDetail.config_id}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {configDetail.state === 'ACTIVE' ? (
+      {activeTab === 'settings' && (
+        <div className="px-4 py-2 bg-gray-50 border-b flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className={cn(
+              "px-2 py-0.5 text-xs font-medium rounded",
+              configDetail.state === 'ACTIVE' ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
+            )}>
+              {configDetail.state}
+            </span>
+            <span className="text-xs text-gray-500">
+              Config: {configDetail.config_id}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {configDetail.state === 'ACTIVE' ? (
+              <button
+                onClick={() => setShowConfirmSuspend(true)}
+                disabled={isPushing}
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 disabled:opacity-50"
+              >
+                <Pause className="h-3 w-3" />
+                Suspend
+              </button>
+            ) : (
+              <button
+                onClick={() => activateMutation.mutate()}
+                disabled={isPushing}
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50"
+              >
+                {activateMutation.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Play className="h-3 w-3" />
+                )}
+                Activate
+              </button>
+            )}
             <button
-              onClick={() => setShowConfirmSuspend(true)}
-              disabled={isPushing}
-              className="flex items-center gap-1 px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 disabled:opacity-50"
+              onClick={() => refetchDetail()}
+              className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+              title="Refresh from Google"
             >
-              <Pause className="h-3 w-3" />
-              Suspend
+              <RefreshCw className="h-3 w-3" />
             </button>
-          ) : (
-            <button
-              onClick={() => activateMutation.mutate()}
-              disabled={isPushing}
-              className="flex items-center gap-1 px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50"
-            >
-              {activateMutation.isPending ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Play className="h-3 w-3" />
-              )}
-              Activate
-            </button>
-          )}
-          <button
-            onClick={() => refetchDetail()}
-            className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
-            title="Refresh from Google"
-          >
-            <RefreshCw className="h-3 w-3" />
-          </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Confirmation dialogs */}
       {showConfirmPush && (
@@ -1497,6 +1531,7 @@ export function PretargetingSettingsEditor({
               setHistoryView('snapshots');
               setShowHistory(true);
             }}
+            onApplyPending={() => setShowConfirmPush(true)}
             onBulkAdd={(values) => {
               const mode = publisherMode === 'INCLUSIVE' ? 'WHITELIST' : 'BLACKLIST';
               values.forEach(publisherId => {

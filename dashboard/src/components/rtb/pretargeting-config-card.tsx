@@ -357,50 +357,51 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
             </div>
           )}
 
-          {/* Detailed metrics */}
-          <div className="grid grid-cols-4 gap-4">
-            <div className="bg-white rounded-lg p-3 border">
-              <div className="text-xs text-gray-500 mb-1">Reached</div>
-              <div className="text-xl font-bold text-gray-900">
-                {formatNumber(config.reached)}
+          {!showSettingsEditor && (
+            <div className="grid grid-cols-4 gap-4">
+              <div className="bg-white rounded-lg p-3 border">
+                <div className="text-xs text-gray-500 mb-1">Reached</div>
+                <div className="text-xl font-bold text-gray-900">
+                  {formatNumber(config.reached)}
+                </div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border">
+                <div className="text-xs text-gray-500 mb-1">Impressions</div>
+                <div className="text-xl font-bold text-gray-900">
+                  {formatNumber(config.impressions)}
+                </div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border">
+                <div className="text-xs text-gray-500 mb-1">Win Rate</div>
+                <div
+                  className={cn(
+                    'text-xl font-bold',
+                    config.has_performance && config.win_rate >= 50 && 'text-green-600',
+                    config.has_performance && config.win_rate >= 30 && config.win_rate < 50 && 'text-yellow-600',
+                    config.has_performance && config.win_rate < 30 && 'text-red-600',
+                    !config.has_performance && 'text-gray-400'
+                  )}
+                >
+                  {config.has_performance ? `${config.win_rate.toFixed(1)}%` : '--'}
+                </div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border">
+                <div className="text-xs text-gray-500 mb-1">Waste Rate</div>
+                <div
+                  className={cn(
+                    'text-xl font-bold',
+                    config.has_performance && config.waste_rate < 50 && 'text-gray-700',
+                    config.has_performance && config.waste_rate >= 50 && config.waste_rate < 70 && 'text-yellow-600',
+                    config.has_performance && config.waste_rate >= 70 && config.waste_rate < 90 && 'text-orange-600',
+                    config.has_performance && config.waste_rate >= 90 && 'text-red-600',
+                    !config.has_performance && 'text-gray-400'
+                  )}
+                >
+                  {config.has_performance ? `${config.waste_rate.toFixed(1)}%` : '--'}
+                </div>
               </div>
             </div>
-            <div className="bg-white rounded-lg p-3 border">
-              <div className="text-xs text-gray-500 mb-1">Impressions</div>
-              <div className="text-xl font-bold text-gray-900">
-                {formatNumber(config.impressions)}
-              </div>
-            </div>
-            <div className="bg-white rounded-lg p-3 border">
-              <div className="text-xs text-gray-500 mb-1">Win Rate</div>
-              <div
-                className={cn(
-                  'text-xl font-bold',
-                  config.has_performance && config.win_rate >= 50 && 'text-green-600',
-                  config.has_performance && config.win_rate >= 30 && config.win_rate < 50 && 'text-yellow-600',
-                  config.has_performance && config.win_rate < 30 && 'text-red-600',
-                  !config.has_performance && 'text-gray-400'
-                )}
-              >
-                {config.has_performance ? `${config.win_rate.toFixed(1)}%` : '--'}
-              </div>
-            </div>
-            <div className="bg-white rounded-lg p-3 border">
-              <div className="text-xs text-gray-500 mb-1">Waste Rate</div>
-              <div
-                className={cn(
-                  'text-xl font-bold',
-                  config.has_performance && config.waste_rate < 50 && 'text-gray-700',
-                  config.has_performance && config.waste_rate >= 50 && config.waste_rate < 70 && 'text-yellow-600',
-                  config.has_performance && config.waste_rate >= 70 && config.waste_rate < 90 && 'text-orange-600',
-                  config.has_performance && config.waste_rate >= 90 && 'text-red-600',
-                  !config.has_performance && 'text-gray-400'
-                )}
-              >
-                {config.has_performance ? `${config.waste_rate.toFixed(1)}%` : '--'}
-              </div>
-            </div>
-          </div>
+          )}
 
           {/* A/B Comparison Panel */}
           <div className="mt-4">
