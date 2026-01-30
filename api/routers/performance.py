@@ -651,25 +651,15 @@ async def import_performance_stream(
 
     Accepts NDJSON (newline-delimited JSON) stream of performance rows.
     """
-    from storage.repositories.performance_repository import PerformanceRepository
-    from storage.database import _get_connection
-
-    BATCH_SIZE = 1000
-    batch: list[dict] = []
     total_processed = 0
     total_imported = 0
     total_skipped = 0
-    batch_count = 0
     errors: list[dict] = []
     min_date: Optional[str] = None
     max_date: Optional[str] = None
     total_spend = 0.0
 
     try:
-        # Use connection from database module
-        db_conn = _get_connection()
-        repo = PerformanceRepository(db_conn)
-
         body = b""
         async for chunk in request.stream():
             body += chunk
@@ -684,34 +674,59 @@ async def import_performance_stream(
                 row = json.loads(line)
 
                 date = row.get("date") or row.get("metric_date")
-                if date:
-                    if min_date is None or date < min_date:
-                        min_date = date
-                    if max_date is None or date > max_date:
-                        max_date = date
+                if not date:
+                    total_skipped += 1
+                    continue
+
+                if min_date is None or date < min_date:
+                    min_date = date
+                if max_date is None or date > max_date:
+                    max_date = date
 
                 spend = row.get("spend", 0)
                 if isinstance(spend, str):
                     spend = float(spend.replace("$", "").replace(",", ""))
+                spend_micros = int(float(spend) * 1_000_000)
                 total_spend += float(spend)
 
-                batch.append(row)
-                total_processed += 1
+                impressions = int(row.get("impressions", 0) or 0)
+                clicks = int(row.get("clicks", 0) or 0)
+                reached = int(row.get("reached_queries", 0) or 0)
+                geography = row.get("geography") or row.get("country") or None
+                device_type = row.get("device_type") or row.get("platform") or None
+                placement = row.get("placement") or None
+                campaign_id = row.get("campaign_id") or None
+                billing_id = row.get("billing_id") or None
 
-                if len(batch) >= BATCH_SIZE:
-                    try:
-                        count = repo.insert_batch(batch)
-                        total_imported += count
-                        batch_count += 1
-                    except Exception as e:
-                        logger.warning(f"Batch insert failed: {e}")
-                        total_skipped += len(batch)
-                        errors.append({
-                            "batch": batch_count + 1,
-                            "error": str(e),
-                            "rows_affected": len(batch),
-                        })
-                    batch = []
+                await db_execute("""
+                    INSERT INTO performance_metrics (
+                        creative_id, campaign_id, metric_date,
+                        impressions, clicks, spend_micros,
+                        geography, device_type, placement, reached_queries,
+                        billing_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (creative_id, metric_date, COALESCE(geography, ''), COALESCE(device_type, ''), COALESCE(placement, ''))
+                    DO UPDATE SET
+                        impressions = performance_metrics.impressions + EXCLUDED.impressions,
+                        clicks = performance_metrics.clicks + EXCLUDED.clicks,
+                        spend_micros = performance_metrics.spend_micros + EXCLUDED.spend_micros,
+                        reached_queries = performance_metrics.reached_queries + EXCLUDED.reached_queries
+                """, (
+                    row.get("creative_id"),
+                    campaign_id,
+                    date,
+                    impressions,
+                    clicks,
+                    spend_micros,
+                    geography,
+                    device_type,
+                    placement,
+                    reached,
+                    billing_id,
+                ))
+
+                total_imported += 1
+                total_processed += 1
 
             except json.JSONDecodeError as e:
                 total_skipped += 1
@@ -729,29 +744,12 @@ async def import_performance_stream(
                         "error": str(e),
                     })
 
-        if batch:
-            try:
-                count = repo.insert_batch(batch)
-                total_imported += count
-                batch_count += 1
-            except Exception as e:
-                logger.warning(f"Final batch insert failed: {e}")
-                total_skipped += len(batch)
-                errors.append({
-                    "batch": batch_count + 1,
-                    "error": str(e),
-                    "rows_affected": len(batch),
-                })
-
-        db_conn.commit()
-        db_conn.close()
-
         return StreamingImportResult(
             status="completed",
             total_rows=total_processed,
             imported=total_imported,
             skipped=total_skipped,
-            batches=batch_count,
+            batches=1,
             errors=[str(e) for e in errors[:50]],
             date_range={"start": min_date, "end": max_date} if min_date else None,
             total_spend=round(total_spend, 2) if total_spend > 0 else None,
@@ -777,72 +775,67 @@ async def import_performance_batch(
         imported = 0
         skipped = 0
 
-        def _do_batch_import(conn):
-            nonlocal min_date, max_date, total_spend, imported, skipped
-            cursor = conn.cursor()
-
-            for row in request.rows:
-                try:
-                    date = row.get("date") or row.get("metric_date")
-                    if not date:
-                        skipped += 1
-                        continue
-
-                    if min_date is None or date < min_date:
-                        min_date = date
-                    if max_date is None or date > max_date:
-                        max_date = date
-
-                    spend = row.get("spend", 0)
-                    if isinstance(spend, str):
-                        spend = float(spend.replace("$", "").replace(",", ""))
-                    spend_micros = int(float(spend) * 1_000_000)
-                    total_spend += float(spend)
-
-                    impressions = int(row.get("impressions", 0) or 0)
-                    clicks = int(row.get("clicks", 0) or 0)
-                    reached = int(row.get("reached_queries", 0) or 0)
-
-                    geography = row.get("geography") or row.get("country") or None
-                    device_type = row.get("device_type") or row.get("platform") or None
-                    placement = row.get("placement") or None
-                    campaign_id = row.get("campaign_id") or None
-                    billing_id = row.get("billing_id") or None
-
-                    cursor.execute("""
-                        INSERT OR REPLACE INTO performance_metrics (
-                            creative_id, campaign_id, metric_date,
-                            impressions, clicks, spend_micros,
-                            geography, device_type, placement, reached_queries,
-                            billing_id
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        row.get("creative_id"),
-                        campaign_id,
-                        date,
-                        impressions,
-                        clicks,
-                        spend_micros,
-                        geography,
-                        device_type,
-                        placement,
-                        reached,
-                        billing_id,
-                    ))
-
-                    if cursor.rowcount > 0:
-                        imported += 1
-                    else:
-                        skipped += 1
-
-                except Exception as row_err:
-                    logger.warning(f"Row error: {row_err}")
+        for row in request.rows:
+            try:
+                date = row.get("date") or row.get("metric_date")
+                if not date:
                     skipped += 1
                     continue
 
-            return imported
+                if min_date is None or date < min_date:
+                    min_date = date
+                if max_date is None or date > max_date:
+                    max_date = date
 
-        await db_transaction_async(_do_batch_import)
+                spend = row.get("spend", 0)
+                if isinstance(spend, str):
+                    spend = float(spend.replace("$", "").replace(",", ""))
+                spend_micros = int(float(spend) * 1_000_000)
+                total_spend += float(spend)
+
+                impressions = int(row.get("impressions", 0) or 0)
+                clicks = int(row.get("clicks", 0) or 0)
+                reached = int(row.get("reached_queries", 0) or 0)
+
+                geography = row.get("geography") or row.get("country") or None
+                device_type = row.get("device_type") or row.get("platform") or None
+                placement = row.get("placement") or None
+                campaign_id = row.get("campaign_id") or None
+                billing_id = row.get("billing_id") or None
+
+                await db_execute("""
+                    INSERT INTO performance_metrics (
+                        creative_id, campaign_id, metric_date,
+                        impressions, clicks, spend_micros,
+                        geography, device_type, placement, reached_queries,
+                        billing_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (creative_id, metric_date, COALESCE(geography, ''), COALESCE(device_type, ''), COALESCE(placement, ''))
+                    DO UPDATE SET
+                        impressions = performance_metrics.impressions + EXCLUDED.impressions,
+                        clicks = performance_metrics.clicks + EXCLUDED.clicks,
+                        spend_micros = performance_metrics.spend_micros + EXCLUDED.spend_micros,
+                        reached_queries = performance_metrics.reached_queries + EXCLUDED.reached_queries
+                """, (
+                    row.get("creative_id"),
+                    campaign_id,
+                    date,
+                    impressions,
+                    clicks,
+                    spend_micros,
+                    geography,
+                    device_type,
+                    placement,
+                    reached,
+                    billing_id,
+                ))
+
+                imported += 1
+
+            except Exception as row_err:
+                logger.warning(f"Row error: {row_err}")
+                skipped += 1
+                continue
 
         return StreamingImportResult(
             status="completed",

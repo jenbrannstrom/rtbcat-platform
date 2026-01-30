@@ -7,7 +7,10 @@ This helps identify geos that should be excluded from pretargeting.
 
 from dataclasses import dataclass
 from typing import Optional
-import sqlite3
+import os
+
+import psycopg
+from psycopg.rows import dict_row
 
 
 @dataclass
@@ -71,8 +74,9 @@ COUNTRY_CODES = {
 class GeoWasteAnalyzer:
     """Analyze geographic QPS waste."""
 
-    def __init__(self, db_path: str):
-        self.db_path = db_path
+    def __init__(self, db_path_or_dsn: str):
+        # Accept either path (ignored) or use env var for Postgres DSN
+        self.dsn = os.getenv("POSTGRES_SERVING_DSN", db_path_or_dsn)
 
     def analyze(
         self,
@@ -96,14 +100,13 @@ class GeoWasteAnalyzer:
             low_ctr_threshold: Geos with CTR below this fraction of average are flagged
             low_cpm_threshold: Geos with CPM below this fraction of average are flagged
         """
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
+        conn = psycopg.connect(self.dsn, row_factory=dict_row)
 
         # Get geo performance
         billing_filter = ""
         billing_params = []
         if billing_ids:
-            placeholders = ",".join("?" * len(billing_ids))
+            placeholders = ",".join("%s" for _ in billing_ids)
             billing_filter = f" AND pm.billing_id IN ({placeholders})"
             billing_params.extend(billing_ids)
 
@@ -115,7 +118,7 @@ class GeoWasteAnalyzer:
                 SUM(pm.spend_micros) / 1000000.0 as spend_usd,
                 COUNT(DISTINCT pm.creative_id) as creative_count
             FROM performance_metrics pm
-            WHERE pm.metric_date >= date('now', '-{days} days')
+            WHERE pm.metric_date >= CURRENT_DATE - INTERVAL '{days} days'
               AND pm.geography IS NOT NULL
               AND pm.geography != ''
               {billing_filter}

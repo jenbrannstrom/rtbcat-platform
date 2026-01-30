@@ -6,7 +6,10 @@ This is THE core Cat-Scan analysis - identifying QPS waste from size mismatches.
 
 from dataclasses import dataclass
 from typing import Optional
-import sqlite3
+import os
+
+import psycopg
+from psycopg.rows import dict_row
 
 
 @dataclass
@@ -37,8 +40,9 @@ class SizeCoverageSummary:
 class SizeCoverageAnalyzer:
     """Analyze size-based QPS waste."""
 
-    def __init__(self, db_path: str):
-        self.db_path = db_path
+    def __init__(self, db_path_or_dsn: str):
+        # Accept either path (ignored) or use env var for Postgres DSN
+        self.dsn = os.getenv("POSTGRES_SERVING_DSN", db_path_or_dsn)
 
     def analyze(
         self,
@@ -58,8 +62,7 @@ class SizeCoverageAnalyzer:
         Returns:
             Summary of size coverage with specific gaps.
         """
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
+        conn = psycopg.connect(self.dsn, row_factory=dict_row)
 
         # Get all sizes we have approved creatives for
         # Normalize sizes to just WxH format (strip descriptions like "(Mobile Banner)")
@@ -67,7 +70,7 @@ class SizeCoverageAnalyzer:
         creative_params = []
         creative_filter = ""
         if buyer_id:
-            creative_filter = " AND buyer_id = ?"
+            creative_filter = " AND buyer_id = %s"
             creative_params.append(buyer_id)
 
         cursor = conn.execute(f"""
@@ -77,8 +80,8 @@ class SizeCoverageAnalyzer:
                     THEN CAST(width AS TEXT) || 'x' || CAST(height AS TEXT)
                     ELSE
                         CASE
-                            WHEN canonical_size LIKE '%(%'
-                            THEN TRIM(SUBSTR(canonical_size, 1, INSTR(canonical_size, '(') - 1))
+                            WHEN canonical_size LIKE '%%(%%'
+                            THEN TRIM(SUBSTRING(canonical_size FROM 1 FOR POSITION('(' IN canonical_size) - 1))
                             ELSE canonical_size
                         END
                 END as normalized_size,
@@ -90,7 +93,7 @@ class SizeCoverageAnalyzer:
                   (width IS NOT NULL AND height IS NOT NULL AND width > 0 AND height > 0)
                   OR (canonical_size IS NOT NULL AND canonical_size != '')
               ){creative_filter}
-            GROUP BY normalized_size, format
+            GROUP BY 1, 2
         """, creative_params)
         for row in cursor:
             size = row['normalized_size']
@@ -130,15 +133,15 @@ class SizeCoverageAnalyzer:
         billing_filter = ""
         params = [days]
         if billing_ids:
-            placeholders = ",".join("?" * len(billing_ids))
+            placeholders = ",".join("%s" for _ in billing_ids)
             billing_filter = f" AND billing_id IN ({placeholders})"
             params.extend(billing_ids)
         elif billing_id:
-            billing_filter = " AND billing_id = ?"
+            billing_filter = " AND billing_id = %s"
             params.append(billing_id)
         buyer_filter = ""
         if buyer_id:
-            buyer_filter = " AND buyer_account_id = ?"
+            buyer_filter = " AND buyer_account_id = %s"
             params.append(buyer_id)
 
         cursor = conn.execute(f"""
@@ -150,7 +153,7 @@ class SizeCoverageAnalyzer:
                 SUM(COALESCE(spend_micros, 0)) / 1000000.0 as spend_usd,
                 SUM(COALESCE(clicks, 0)) as clicks
             FROM rtb_daily
-            WHERE metric_date >= date('now', '-' || ? || ' days')
+            WHERE metric_date >= CURRENT_DATE - (%s || ' days')::interval
               AND creative_size IS NOT NULL
               AND creative_size != ''
             {billing_filter}
@@ -177,7 +180,7 @@ class SizeCoverageAnalyzer:
                 COALESCE(creative_format, 'BANNER') as format,
                 COUNT(DISTINCT creative_id) as creative_count
             FROM rtb_daily
-            WHERE metric_date >= date('now', '-' || ? || ' days')
+            WHERE metric_date >= CURRENT_DATE - (%s || ' days')::interval
               AND creative_size IS NOT NULL
               AND creative_size != ''
             {billing_filter}

@@ -45,7 +45,7 @@ async def get_size_coverage(
     """
     try:
         # SizeCoverageAnalyzer uses its own db connection pattern
-        from storage.database import DB_PATH
+        import os
         resolved_buyer_id = None
         billing_ids = None
         if buyer_id:
@@ -57,7 +57,7 @@ async def get_size_coverage(
                 billing_ids = []
                 for allowed_buyer in allowed:
                     billing_ids.extend(await get_valid_billing_ids_for_buyer(allowed_buyer))
-        analyzer = SizeCoverageAnalyzer(str(DB_PATH))
+        analyzer = SizeCoverageAnalyzer(os.getenv("POSTGRES_SERVING_DSN", ""))
         summary = analyzer.analyze(
             days,
             billing_id=billing_id,
@@ -116,7 +116,7 @@ async def get_geo_waste(
     Returns geos with poor performance that should be excluded from pretargeting.
     """
     try:
-        from storage.database import DB_PATH
+        import os
         resolved_buyer_id = None
         billing_ids = None
         if buyer_id:
@@ -128,7 +128,7 @@ async def get_geo_waste(
                 billing_ids = []
                 for allowed_buyer in allowed:
                     billing_ids.extend(await get_valid_billing_ids_for_buyer(allowed_buyer))
-        analyzer = GeoWasteAnalyzer(str(DB_PATH))
+        analyzer = GeoWasteAnalyzer(os.getenv("POSTGRES_SERVING_DSN", ""))
         summary = analyzer.analyze(days, billing_ids=billing_ids if billing_ids else None)
         return {
             "period_days": days,
@@ -173,8 +173,8 @@ async def get_pretargeting_recommendations(
     maximum QPS efficiency.
     """
     try:
-        from storage.database import DB_PATH
-        recommender = PretargetingRecommender(str(DB_PATH))
+        import os
+        recommender = PretargetingRecommender(os.getenv("POSTGRES_SERVING_DSN", ""))
         recommendation = recommender.generate_recommendations(days, max_configs)
         return {
             "config_limit": recommendation.config_limit,
@@ -203,7 +203,7 @@ async def get_qps_summary(
     Combines size coverage and geo waste analysis into a single dashboard view.
     """
     try:
-        from storage.database import DB_PATH
+        import os
         resolved_buyer_id = None
         billing_ids = None
         if buyer_id:
@@ -215,8 +215,8 @@ async def get_qps_summary(
                 billing_ids = []
                 for allowed_buyer in allowed:
                     billing_ids.extend(await get_valid_billing_ids_for_buyer(allowed_buyer))
-        size_analyzer = SizeCoverageAnalyzer(str(DB_PATH))
-        geo_analyzer = GeoWasteAnalyzer(str(DB_PATH))
+        size_analyzer = SizeCoverageAnalyzer(os.getenv("POSTGRES_SERVING_DSN", ""))
+        geo_analyzer = GeoWasteAnalyzer(os.getenv("POSTGRES_SERVING_DSN", ""))
 
         size_summary = size_analyzer.analyze(
             days,
@@ -267,8 +267,8 @@ async def get_geo_pretargeting_config(days: int = Query(7, ge=1, le=90)):
     Returns include and exclude lists for geo targeting.
     """
     try:
-        from storage.database import DB_PATH
-        analyzer = GeoWasteAnalyzer(str(DB_PATH))
+        import os
+        analyzer = GeoWasteAnalyzer(os.getenv("POSTGRES_SERVING_DSN", ""))
         config = analyzer.get_pretargeting_geo_config(days)
         return {
             "period_days": days,
