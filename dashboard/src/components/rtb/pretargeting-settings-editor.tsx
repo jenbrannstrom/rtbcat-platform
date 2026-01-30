@@ -507,6 +507,13 @@ function PublisherTargetingSection({
               checked={effectiveMode === 'EXCLUSIVE'}
               onChange={() => handleModeRequest('EXCLUSIVE')}
               disabled={disabled}
+              className="sr-only"
+            />
+            <span
+              className={cn(
+                "h-2 w-2 rounded-full border",
+                effectiveMode === 'EXCLUSIVE' ? "bg-gray-900 border-gray-900" : "bg-white border-gray-300"
+              )}
             />
             Blacklist
           </label>
@@ -517,6 +524,13 @@ function PublisherTargetingSection({
               checked={effectiveMode === 'INCLUSIVE'}
               onChange={() => handleModeRequest('INCLUSIVE')}
               disabled={disabled}
+              className="sr-only"
+            />
+            <span
+              className={cn(
+                "h-2 w-2 rounded-full border",
+                effectiveMode === 'INCLUSIVE' ? "bg-gray-900 border-gray-900" : "bg-white border-gray-300"
+              )}
             />
             Whitelist
           </label>
@@ -599,37 +613,6 @@ function PublisherTargetingSection({
           )}
         </div>
 
-        {/* Pending Changes Bar */}
-        {totalPendingCount > 0 && (
-          <div className="border rounded-lg p-3 bg-yellow-50 border-yellow-200">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-yellow-600" />
-              <span className="text-sm font-medium text-yellow-800">
-                {totalPendingCount} pending publisher change{totalPendingCount !== 1 ? 's' : ''}
-              </span>
-            </div>
-            <div className="mt-2 text-xs text-yellow-700 space-y-1">
-              {pendingAddCount > 0 && (
-                <div>• {pendingAddCount} publisher{pendingAddCount !== 1 ? 's' : ''} to {isWhitelist ? 'add' : 'block'}</div>
-              )}
-              {pendingRemoveCount > 0 && (
-                <div>• {pendingRemoveCount} publisher{pendingRemoveCount !== 1 ? 's' : ''} to {isWhitelist ? 'remove' : 'unblock'}</div>
-              )}
-            </div>
-            <div className="mt-3 flex items-center gap-2">
-              <button
-                onClick={onApplyPending}
-                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Apply to Google
-              </button>
-              <span className="text-xs text-yellow-600">
-                Changes apply immediately on Google.
-              </span>
-            </div>
-          </div>
-        )}
-
         <div className="space-y-1">
           <label className="text-xs text-gray-500">
             {isWhitelist ? 'Add publisher to allow:' : 'Add publisher to block:'}
@@ -682,6 +665,39 @@ function PublisherTargetingSection({
             View History
           </button>
         </div>
+
+        {/* Pending Changes Bar (sticky) */}
+        {totalPendingCount > 0 && (
+          <div className="sticky bottom-4 z-10">
+            <div className="border rounded-lg p-3 bg-yellow-50 border-yellow-200 shadow-sm">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                <span className="text-sm font-medium text-yellow-800">
+                  {totalPendingCount} pending publisher change{totalPendingCount !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="mt-2 text-xs text-yellow-700 space-y-1">
+                {pendingAddCount > 0 && (
+                  <div>• {pendingAddCount} publisher{pendingAddCount !== 1 ? 's' : ''} to {isWhitelist ? 'add' : 'block'}</div>
+                )}
+                {pendingRemoveCount > 0 && (
+                  <div>• {pendingRemoveCount} publisher{pendingRemoveCount !== 1 ? 's' : ''} to {isWhitelist ? 'remove' : 'unblock'}</div>
+                )}
+              </div>
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={onApplyPending}
+                  className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Apply to Google
+                </button>
+                <span className="text-xs text-yellow-600">
+                  Changes apply immediately on Google.
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showModeConfirm && (
           <div className="border rounded-lg bg-yellow-50 border-yellow-200 p-3 text-sm">
