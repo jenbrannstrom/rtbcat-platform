@@ -9,18 +9,13 @@ import re
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from storage import SQLiteStore
-from storage.postgres_store import PostgresStore
 from api.dependencies import get_store, get_current_user, resolve_buyer_id, require_buyer_access
 from storage.repositories.user_repository import User
-
-# Store type can be either SQLite or Postgres
-StoreType = Union[SQLiteStore, PostgresStore]
 
 logger = logging.getLogger(__name__)
 
@@ -310,7 +305,7 @@ def _extract_preview_data(creative, slim: bool = False, html_thumbnail_url: Opti
 
 
 async def _get_thumbnail_status_for_creatives(
-    store: StoreType, creative_ids: list[str]
+    store: Any, creative_ids: list[str]
 ) -> dict[str, ThumbnailStatusResponse]:
     """Get thumbnail status for multiple creatives.
 
@@ -346,7 +341,7 @@ async def _get_thumbnail_status_for_creatives(
 
 
 async def _get_waste_flags_for_creatives(
-    store: StoreType,
+    store: Any,
     creative_ids: list[str],
     thumbnail_statuses: dict[str, ThumbnailStatusResponse],
     days: int = 7,
@@ -421,7 +416,7 @@ async def _get_waste_flags_for_creatives(
 
 
 async def _get_primary_countries_for_creatives(
-    store: StoreType,
+    store: Any,
     creative_ids: list[str],
     days: int = 7,
 ) -> dict[str, str]:
@@ -479,7 +474,7 @@ async def _get_primary_countries_for_creatives(
 
 
 async def _get_country_breakdown_for_creative(
-    store: StoreType,
+    store: Any,
     creative_id: str,
     days: int = 7,
 ) -> list[dict]:
@@ -536,7 +531,7 @@ async def list_creatives(
     slim: bool = Query(True, description="Exclude large fields (vast_xml, html snippets) for faster loading"),
     days: int = Query(7, ge=1, le=365, description="Timeframe for waste detection (default 7 days)"),
     active_only: bool = Query(False, description="Only return creatives with activity (impressions/clicks/spend) in timeframe"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """List creatives with optional filtering.
@@ -649,7 +644,7 @@ async def list_creatives_paginated(
     slim: bool = Query(True, description="Exclude large fields for faster loading"),
     days: int = Query(7, ge=1, le=365, description="Timeframe for waste detection"),
     active_only: bool = Query(False, description="Only return creatives with activity in timeframe"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """List creatives with pagination metadata.
@@ -782,7 +777,7 @@ async def get_newly_uploaded_creatives(
     limit: int = Query(100, description="Maximum number of creatives to return", ge=1, le=1000),
     format: Optional[str] = Query(None, description="Filter by format (HTML, VIDEO, NATIVE)"),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Get creatives that were first seen within the specified time period.
@@ -879,7 +874,7 @@ async def get_newly_uploaded_creatives(
 async def get_creative(
     creative_id: str,
     days: int = Query(7, ge=1, le=365, description="Timeframe for waste detection (default 7 days)"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Get a specific creative by ID.
@@ -942,7 +937,7 @@ async def get_creative(
 @router.delete("/creatives/{creative_id}")
 async def delete_creative(
     creative_id: str,
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Delete a creative by ID."""
@@ -958,7 +953,7 @@ async def delete_creative(
 @router.post("/creatives/cluster")
 async def assign_cluster(
     assignment: ClusterAssignment,
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Assign a creative to a cluster."""
@@ -977,7 +972,7 @@ async def assign_cluster(
 @router.delete("/creatives/{creative_id}/campaign")
 async def remove_from_campaign(
     creative_id: str,
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Remove a creative from its campaign."""
@@ -995,7 +990,7 @@ async def remove_from_campaign(
 async def get_creative_countries(
     creative_id: str,
     days: int = Query(7, ge=1, le=90, description="Days to look back"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Get country breakdown for a specific creative.
@@ -1048,7 +1043,7 @@ async def get_creative_countries(
 async def analyze_creative_language(
     creative_id: str,
     force: bool = Query(False, description="Force re-analysis even if already analyzed"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Analyze a creative's content to detect its language.
@@ -1136,7 +1131,7 @@ async def analyze_creative_language(
 async def update_creative_language(
     creative_id: str,
     update: ManualLanguageUpdate,
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Manually update a creative's detected language.
@@ -1176,7 +1171,7 @@ async def update_creative_language(
 async def get_creative_geo_mismatch(
     creative_id: str,
     days: int = Query(7, ge=1, le=90, description="Days to look back for serving data"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Check if a creative's language matches its serving countries.

@@ -14,14 +14,13 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from config import ConfigManager
-from storage import SQLiteStore, creative_dicts_to_storage
-from storage.postgres_store import PostgresStore
+from storage import creative_dicts_to_storage
 from api.dependencies import (
     get_store,
     get_config,
@@ -32,8 +31,7 @@ from api.dependencies import (
 from storage.repositories.user_repository import User
 from collectors import BuyerSeatsClient, CreativesClient, EndpointsClient, PretargetingClient
 
-# Store type can be either SQLite or Postgres
-StoreType = Union[SQLiteStore, PostgresStore]
+StoreType = Any
 
 logger = logging.getLogger(__name__)
 
