@@ -11,7 +11,7 @@ VM rebuilds. The previous `docs/vm-rebuild-runbook.md` has been merged here.
 | Node.js | 18+ | `node --version` | `curl -fsSL https://deb.nodesource.com/setup_20.x \| sudo -E bash - && sudo apt install nodejs` |
 | npm | 9+ | `npm --version` | (included with Node.js) |
 | ffmpeg | 4.0+ | `ffmpeg -version` | `sudo apt install ffmpeg` |
-| SQLite | 3.35+ | `sqlite3 --version` | `sudo apt install sqlite3` |
+| Postgres | 14+ | `psql --version` | `sudo apt install postgresql-client` |
 
 ### Optional but Recommended
 
@@ -62,21 +62,7 @@ This will:
 6. Authorize in [Authorized Buyers](https://authorized-buyers.google.com/):
    - Settings → API Access → Add the service account email (from the JSON file)
 
-### 4. Enable WAL Mode (Important!)
-
-Before running Cat-Scan, enable Write-Ahead Logging for better concurrent performance:
-
-```bash
-sqlite3 ~/.catscan/catscan.db "PRAGMA journal_mode=WAL;"
-```
-
-Verify it worked:
-```bash
-sqlite3 ~/.catscan/catscan.db "PRAGMA journal_mode;"
-# Should return: wal
-```
-
-### 5. Start Cat-Scan
+### 4. Start Cat-Scan
 
 ```bash
 ./run.sh
@@ -116,11 +102,8 @@ python3.11 -m venv venv
 ./venv/bin/pip install --upgrade pip
 ./venv/bin/pip install -r requirements.txt
 
-# Initialize database
-./venv/bin/python -c "from storage.sqlite_store import SQLiteStore; SQLiteStore()"
-
-# Enable WAL mode
-sqlite3 ~/.catscan/catscan.db "PRAGMA journal_mode=WAL;"
+# Postgres is required for serving/analytics.
+# Ensure POSTGRES_DSN and POSTGRES_SERVING_DSN are set before starting the API.
 ```
 
 ### Frontend (Node.js)
@@ -762,36 +745,13 @@ sudo systemctl status catscan-api
 
 ---
 
-## Database Maintenance
+## Database Maintenance (Postgres)
 
-### Monthly Maintenance
-
+Production uses Cloud SQL Postgres. Use standard Postgres tooling and Cloud SQL backups.
+For basic checks:
 ```bash
-# Reclaim space from deleted rows
-sqlite3 ~/.catscan/catscan.db "VACUUM;"
-
-# Check database health
-sqlite3 ~/.catscan/catscan.db "PRAGMA integrity_check;"
-
-# Check size
-ls -lh ~/.catscan/catscan.db
-```
-
-### Data Retention (Optional)
-
-Keep only the last 90 days of data:
-```bash
-sqlite3 ~/.catscan/catscan.db "DELETE FROM rtb_daily WHERE day < date('now', '-90 days'); VACUUM;"
-```
-
-### Backups
-
-```bash
-# Simple backup (safe with WAL mode)
-cp ~/.catscan/catscan.db ~/backups/catscan_$(date +%Y%m%d).db
-
-# Or use SQLite's backup command
-sqlite3 ~/.catscan/catscan.db ".backup ~/backups/catscan_$(date +%Y%m%d).db"
+psql $POSTGRES_SERVING_DSN -c "SELECT COUNT(*) FROM home_publisher_daily;"
+psql $POSTGRES_SERVING_DSN -c "SELECT MAX(metric_date) FROM home_publisher_daily;"
 ```
 
 ---
@@ -856,13 +816,8 @@ Fix options:
 ### Database errors
 
 ```bash
-# Check WAL mode is enabled
-sqlite3 ~/.catscan/catscan.db "PRAGMA journal_mode;"
-
-# Reset database (WARNING: deletes all data)
-rm ~/.catscan/catscan.db
-python -c "from storage.sqlite_store import SQLiteStore; SQLiteStore()"
-sqlite3 ~/.catscan/catscan.db "PRAGMA journal_mode=WAL;"
+# Verify Postgres connectivity
+psql $POSTGRES_SERVING_DSN -c "SELECT 1;"
 ```
 
 ---
@@ -894,9 +849,6 @@ After installation, Cat-Scan uses these directories:
 
 ```
 ~/.catscan/
-├── catscan.db              # SQLite database
-├── catscan.db-wal          # Write-ahead log (normal)
-├── catscan.db-shm          # Shared memory (normal)
 ├── thumbnails/             # Generated video thumbnails
 ├── imports/                # Downloaded CSV reports
 ├── logs/                   # Import logs
@@ -976,30 +928,13 @@ sudo docker compose -f docker-compose.gcp.yml up -d
 
 ```bash
 gcloud compute ssh catscan-production --zone=europe-west1-b --project=YOUR_PROJECT_ID --command="
-sudo docker exec catscan-api python -c '
-import sqlite3, json, uuid
-from datetime import datetime
-db_path = \"/home/rtbcat/.catscan/catscan.db\"
-with open(\"/home/rtbcat/.catscan/credentials/catscan-service-account.json\") as f:
-    sa = json.load(f)
-conn = sqlite3.connect(db_path)
-cur = conn.cursor()
-sa_id = str(uuid.uuid4())
-cur.execute(\"\"\"
-    INSERT OR REPLACE INTO service_accounts
-    (id, name, email, credentials_json, is_active, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-\"\"\", (
-    sa_id,
-    \"Cat-Scan Service Account\",
-    sa.get(\"client_email\", \"\"),
-    json.dumps(sa),
-    1,
-    datetime.now().isoformat()
-))
-conn.commit()
-print(f\"Service account registered: {sa_id}\")
-'
+psql \$POSTGRES_SERVING_DSN -c \"
+INSERT INTO service_accounts
+  (id, client_email, project_id, display_name, credentials_path, is_active)
+VALUES
+  ('sa-1', '<SERVICE_ACCOUNT_EMAIL>', '<GCP_PROJECT_ID>', 'Cat-Scan API',
+   '/home/rtbcat/.catscan/credentials/google-credentials.json', true);
+\"
 "
 ```
 
@@ -1017,34 +952,11 @@ sudo docker exec catscan-api python -c 'from services.config_precompute import r
 "
 ```
 
-### 9. Restore From Backup (optional)
-
-If you need to restore the SQLite DB from GCS:
-
-```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --project=YOUR_PROJECT_ID --command="
-export CATSCAN_GCS_BUCKET=catscan-backups
-/opt/catscan/scripts/restore_backup.sh
-"
-```
-
-You can also restore a specific date:
-
-```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --project=YOUR_PROJECT_ID --command="
-export CATSCAN_GCS_BUCKET=catscan-backups
-/opt/catscan/scripts/restore_backup.sh 20260117
-"
-```
-
 ### 10. Verify Health
 
 ```bash
 curl -s https://your-domain.com/api/health
 ```
-
-If the app shows a blank dashboard, verify the import counts in SQLite before
-debugging the UI.
 
 ### 11. Set Up VM Maintenance (Required!)
 
@@ -1147,7 +1059,7 @@ sudo docker system df
 | Dead containers | Docker storage | Container restarts leave orphans | `docker-cleanup` cron |
 | Large backup files | `/tmp/*.db.gz` | Backup script failures | Fix backup script or delete manually |
 | Old import files | `~/.catscan/imports/` | Gmail imports accumulate | `cleanup_old_data.py` or manual |
-| Stale precomputed tables | SQLite database | Timer not running | `catscan-home-refresh.timer` |
+| Stale precomputed tables | Postgres serving | Timer not running | `catscan-home-refresh.timer` |
 
 ### Manual Cleanup Commands
 
