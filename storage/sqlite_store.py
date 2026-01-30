@@ -422,6 +422,208 @@ class SQLiteStore:
         return row["current_qps"] if row else None
 
     # =========================================================================
+    # Pretargeting Config Methods
+    # =========================================================================
+
+    async def get_pretargeting_config_by_billing_id(
+        self, billing_id: str
+    ) -> Optional[dict]:
+        """Get a single pretargeting config by billing_id."""
+        row = await db_query_one(
+            "SELECT * FROM pretargeting_configs WHERE billing_id = ?",
+            (billing_id,)
+        )
+        return dict(row) if row else None
+
+    async def get_performance_aggregates(
+        self, billing_id: str
+    ) -> dict:
+        """Get aggregated performance metrics for a billing_id."""
+        # Try rtb_daily first
+        perf = await db_query_one(
+            """
+            SELECT
+                COUNT(DISTINCT metric_date) as days_tracked,
+                COALESCE(SUM(impressions), 0) as total_impressions,
+                COALESCE(SUM(clicks), 0) as total_clicks,
+                COALESCE(SUM(spend_micros), 0) / 1000000.0 as total_spend_usd
+            FROM rtb_daily
+            WHERE billing_id = ?
+            """,
+            (billing_id,)
+        )
+
+        if perf and perf["days_tracked"] > 0:
+            return {
+                "days_tracked": perf["days_tracked"],
+                "total_impressions": perf["total_impressions"],
+                "total_clicks": perf["total_clicks"],
+                "total_spend_usd": perf["total_spend_usd"],
+            }
+
+        # Fallback to performance_metrics
+        perf = await db_query_one(
+            """
+            SELECT
+                COUNT(DISTINCT metric_date) as days_tracked,
+                COALESCE(SUM(impressions), 0) as total_impressions,
+                COALESCE(SUM(clicks), 0) as total_clicks,
+                COALESCE(SUM(spend_micros), 0) / 1000000.0 as total_spend_usd
+            FROM performance_metrics
+            WHERE billing_id = ?
+            """,
+            (billing_id,)
+        )
+
+        return {
+            "days_tracked": perf["days_tracked"] if perf else 0,
+            "total_impressions": perf["total_impressions"] if perf else 0,
+            "total_clicks": perf["total_clicks"] if perf else 0,
+            "total_spend_usd": perf["total_spend_usd"] if perf else 0,
+        }
+
+    # =========================================================================
+    # Snapshot Methods
+    # =========================================================================
+
+    async def create_snapshot(
+        self,
+        billing_id: str,
+        snapshot_name: Optional[str] = None,
+        snapshot_type: str = "manual",
+        config_data: Optional[dict] = None,
+        performance_data: Optional[dict] = None,
+        publisher_targeting_mode: Optional[str] = None,
+        publisher_targeting_values: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> int:
+        """Create a pretargeting snapshot. Returns the new ID."""
+        from storage.database import db_insert_returning_id
+
+        cfg = config_data or {}
+        perf = performance_data or {}
+
+        snapshot_id = await db_insert_returning_id(
+            """
+            INSERT INTO pretargeting_snapshots
+            (billing_id, snapshot_name, snapshot_type,
+             included_formats, included_platforms, included_sizes,
+             included_geos, excluded_geos, state,
+             publisher_targeting_mode, publisher_targeting_values,
+             total_impressions, total_clicks, total_spend_usd,
+             days_tracked,
+             avg_daily_impressions, avg_daily_spend_usd, ctr_pct, cpm_usd,
+             notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                billing_id,
+                snapshot_name,
+                snapshot_type,
+                cfg.get("included_formats"),
+                cfg.get("included_platforms"),
+                cfg.get("included_sizes"),
+                cfg.get("included_geos"),
+                cfg.get("excluded_geos"),
+                cfg.get("state"),
+                publisher_targeting_mode,
+                publisher_targeting_values,
+                perf.get("total_impressions", 0),
+                perf.get("total_clicks", 0),
+                perf.get("total_spend_usd", 0),
+                perf.get("days_tracked", 0),
+                perf.get("avg_daily_impressions"),
+                perf.get("avg_daily_spend_usd"),
+                perf.get("ctr_pct"),
+                perf.get("cpm_usd"),
+                notes,
+            )
+        )
+        return snapshot_id
+
+    async def get_snapshot(self, snapshot_id: int) -> Optional[dict]:
+        """Get a snapshot by ID."""
+        row = await db_query_one(
+            "SELECT * FROM pretargeting_snapshots WHERE id = ?",
+            (snapshot_id,)
+        )
+        return dict(row) if row else None
+
+    async def list_snapshots(
+        self,
+        billing_id: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """List pretargeting snapshots."""
+        if billing_id:
+            rows = await db_query(
+                "SELECT * FROM pretargeting_snapshots WHERE billing_id = ? ORDER BY created_at DESC LIMIT ?",
+                (billing_id, limit)
+            )
+        else:
+            rows = await db_query(
+                "SELECT * FROM pretargeting_snapshots ORDER BY created_at DESC LIMIT ?",
+                (limit,)
+            )
+        return [dict(row) for row in rows]
+
+    # =========================================================================
+    # Comparison Methods
+    # =========================================================================
+
+    async def create_comparison(
+        self,
+        billing_id: str,
+        comparison_name: Optional[str],
+        before_snapshot_id: int,
+        before_start_date: Optional[str] = None,
+        before_end_date: Optional[str] = None,
+    ) -> int:
+        """Create a snapshot comparison. Returns the new ID."""
+        from storage.database import db_insert_returning_id
+
+        comparison_id = await db_insert_returning_id(
+            """
+            INSERT INTO snapshot_comparisons
+            (billing_id, comparison_name, before_snapshot_id, before_start_date, before_end_date, status)
+            VALUES (?, ?, ?, ?, ?, 'in_progress')
+            """,
+            (billing_id, comparison_name, before_snapshot_id, before_start_date, before_end_date)
+        )
+        return comparison_id
+
+    async def get_comparison(self, comparison_id: int) -> Optional[dict]:
+        """Get a comparison by ID."""
+        row = await db_query_one(
+            "SELECT * FROM snapshot_comparisons WHERE id = ?",
+            (comparison_id,)
+        )
+        return dict(row) if row else None
+
+    async def list_comparisons(
+        self,
+        billing_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """List snapshot comparisons."""
+        query = "SELECT * FROM snapshot_comparisons WHERE 1=1"
+        params = []
+
+        if billing_id:
+            query += " AND billing_id = ?"
+            params.append(billing_id)
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+
+        rows = await db_query(query, tuple(params))
+        return [dict(row) for row in rows]
+
+    # =========================================================================
     # Traffic Data Methods - Delegate to TrafficRepository
     # =========================================================================
 
