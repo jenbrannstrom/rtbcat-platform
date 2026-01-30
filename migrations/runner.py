@@ -1,5 +1,9 @@
 """Migration runner for RTBcat database.
 
+DEPRECATED: This runner is for SQLite migrations only.
+As of Jan 2026, the platform uses Postgres-only for state and analytics.
+Postgres migrations are in sql/postgres/*.sql and are applied manually or via init scripts.
+
 Handles applying SQL migrations in order, tracking which have been applied,
 and providing status/create commands.
 
