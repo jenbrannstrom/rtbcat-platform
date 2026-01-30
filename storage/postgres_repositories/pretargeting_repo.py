@@ -35,38 +35,42 @@ class PretargetingRepository:
         await pg_execute(
             """
             INSERT INTO pretargeting_configs
-            (config_id, billing_id, name, user_name, state, bidder_id,
-             query_targeting, geo_targeting, language_targeting, technology_targeting,
-             inventory_targeting, creative_size_targeting, created_at, updated_at)
+            (bidder_id, config_id, billing_id, display_name, user_name, state,
+             included_formats, included_platforms, included_sizes,
+             included_geos, excluded_geos, included_operating_systems,
+             raw_config, synced_at)
             VALUES (%s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s,
-                    %s, %s, NOW(), NOW())
-            ON CONFLICT (config_id) DO UPDATE SET
-                name = EXCLUDED.name,
+                    %s, %s, %s,
+                    %s, %s, %s,
+                    %s, NOW())
+            ON CONFLICT (bidder_id, config_id) DO UPDATE SET
+                billing_id = EXCLUDED.billing_id,
+                display_name = EXCLUDED.display_name,
                 user_name = EXCLUDED.user_name,
                 state = EXCLUDED.state,
-                bidder_id = EXCLUDED.bidder_id,
-                query_targeting = EXCLUDED.query_targeting,
-                geo_targeting = EXCLUDED.geo_targeting,
-                language_targeting = EXCLUDED.language_targeting,
-                technology_targeting = EXCLUDED.technology_targeting,
-                inventory_targeting = EXCLUDED.inventory_targeting,
-                creative_size_targeting = EXCLUDED.creative_size_targeting,
-                updated_at = NOW()
+                included_formats = EXCLUDED.included_formats,
+                included_platforms = EXCLUDED.included_platforms,
+                included_sizes = EXCLUDED.included_sizes,
+                included_geos = EXCLUDED.included_geos,
+                excluded_geos = EXCLUDED.excluded_geos,
+                included_operating_systems = EXCLUDED.included_operating_systems,
+                raw_config = EXCLUDED.raw_config,
+                synced_at = NOW()
             """,
             (
+                config.get("bidder_id"),
                 config.get("config_id"),
                 config.get("billing_id"),
-                config.get("name"),
+                config.get("display_name"),
                 config.get("user_name"),
                 config.get("state"),
-                config.get("bidder_id"),
-                config.get("query_targeting"),
-                config.get("geo_targeting"),
-                config.get("language_targeting"),
-                config.get("technology_targeting"),
-                config.get("inventory_targeting"),
-                config.get("creative_size_targeting"),
+                config.get("included_formats"),
+                config.get("included_platforms"),
+                config.get("included_sizes"),
+                config.get("included_geos"),
+                config.get("excluded_geos"),
+                config.get("included_operating_systems"),
+                config.get("raw_config"),
             ),
         )
 
@@ -82,54 +86,96 @@ class PretargetingRepository:
             (state, billing_id),
         )
 
-    async def list_history(self, billing_id: str, limit: int = 100) -> list[dict[str, Any]]:
-        return await pg_query(
-            """
+    async def list_history(
+        self,
+        config_id: str | None = None,
+        billing_id: str | None = None,
+        days: int = 30,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        conditions = ["ph.changed_at >= CURRENT_TIMESTAMP - make_interval(days => %s)"]
+        params: list[Any] = [days]
+
+        if config_id:
+            conditions.append("ph.config_id = %s")
+            params.append(config_id)
+        if billing_id:
+            conditions.append("pc.billing_id = %s")
+            params.append(billing_id)
+
+        params.append(limit)
+        where_clause = " AND ".join(conditions)
+
+        rows = await pg_query(
+            f"""
             SELECT ph.* FROM pretargeting_history ph
             LEFT JOIN pretargeting_configs pc ON ph.config_id = pc.config_id
-            WHERE pc.billing_id = %s
-            ORDER BY ph.created_at DESC
-            LIMIT %s
+            WHERE {where_clause}
+            ORDER BY ph.changed_at DESC LIMIT %s
             """,
-            (billing_id, limit),
+            tuple(params),
         )
+        return [dict(row) for row in rows]
 
     async def add_history(
         self,
-        config_id: int,
-        user_id: str,
-        action: str,
-        summary: str,
-        details: dict[str, Any],
+        config_id: str,
+        bidder_id: str,
+        change_type: str,
+        field_changed: str | None,
+        old_value: str | None,
+        new_value: str | None,
+        changed_by: str | None,
+        change_source: str,
+        raw_config_snapshot: dict[str, Any] | None = None,
     ) -> int:
         return await pg_insert_returning_id(
             """
             INSERT INTO pretargeting_history
-            (config_id, user_id, action, summary, details)
-            VALUES (%s, %s, %s, %s, %s)
+            (config_id, bidder_id, change_type, field_changed, old_value, new_value,
+             changed_by, change_source, raw_config_snapshot, changed_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
             RETURNING id
             """,
-            (config_id, user_id, action, summary, details),
+            (
+                config_id,
+                bidder_id,
+                change_type,
+                field_changed,
+                old_value,
+                new_value,
+                changed_by,
+                change_source,
+                raw_config_snapshot,
+            ),
         )
 
-    async def list_publishers(self, billing_id: str, mode: str | None = None) -> list[dict[str, Any]]:
+    async def list_publishers(
+        self,
+        billing_id: str,
+        mode: str | None = None,
+        status: str | None = None,
+    ) -> list[dict[str, Any]]:
+        conditions = ["billing_id = %s"]
+        params: list[Any] = [billing_id]
+
         if mode:
-            return await pg_query(
-                """
-                SELECT * FROM pretargeting_publishers
-                WHERE billing_id = %s AND mode = %s
-                ORDER BY publisher_id
-                """,
-                (billing_id, mode),
-            )
-        return await pg_query(
-            """
+            conditions.append("mode = %s")
+            params.append(mode)
+        if status:
+            conditions.append("status = %s")
+            params.append(status)
+
+        where_clause = " AND ".join(conditions)
+        rows = await pg_query(
+            f"""
             SELECT * FROM pretargeting_publishers
-            WHERE billing_id = %s
+            WHERE {where_clause}
             ORDER BY publisher_id
             """,
-            (billing_id,),
+            tuple(params),
         )
+        return [dict(row) for row in rows]
 
     async def add_publisher(
         self,
@@ -190,3 +236,15 @@ class PretargetingRepository:
             """,
             (billing_id, publisher_id, mode),
         )
+
+    async def list_pending_publisher_changes(self, billing_id: str) -> list[dict[str, Any]]:
+        rows = await pg_query(
+            """
+            SELECT publisher_id, mode, status, source, updated_at
+            FROM pretargeting_publishers
+            WHERE billing_id = %s AND status IN ('pending_add', 'pending_remove')
+            ORDER BY status, mode, publisher_id
+            """,
+            (billing_id,),
+        )
+        return [dict(row) for row in rows]
