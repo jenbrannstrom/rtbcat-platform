@@ -624,6 +624,119 @@ class SQLiteStore:
         return [dict(row) for row in rows]
 
     # =========================================================================
+    # Pending Changes Methods
+    # =========================================================================
+
+    async def add_pretargeting_history(
+        self,
+        config_id: str,
+        bidder_id: str,
+        change_type: str,
+        field_changed: Optional[str] = None,
+        old_value: Optional[str] = None,
+        new_value: Optional[str] = None,
+        changed_by: Optional[str] = None,
+        change_source: str = "user",
+    ) -> int:
+        """Add a pretargeting history entry. Returns the new ID."""
+        from storage.database import db_insert_returning_id
+
+        history_id = await db_insert_returning_id(
+            """
+            INSERT INTO pretargeting_history
+            (config_id, bidder_id, change_type, field_changed, old_value, new_value,
+             changed_by, change_source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (config_id, bidder_id, change_type, field_changed, old_value, new_value,
+             changed_by, change_source)
+        )
+        return history_id
+
+    async def get_pending_changes(
+        self,
+        billing_id: Optional[str] = None,
+        status: str = "pending",
+        limit: int = 100,
+    ) -> list[dict]:
+        """Get pending pretargeting changes."""
+        query = "SELECT * FROM pretargeting_pending_changes WHERE status = ?"
+        params = [status]
+
+        if billing_id:
+            query += " AND billing_id = ?"
+            params.append(billing_id)
+
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+
+        rows = await db_query(query, tuple(params))
+        return [dict(row) for row in rows]
+
+    async def create_pending_change(
+        self,
+        billing_id: str,
+        config_id: str,
+        change_type: str,
+        field_name: str,
+        value: str,
+        reason: Optional[str] = None,
+        estimated_qps_impact: Optional[float] = None,
+        created_by: Optional[str] = None,
+    ) -> int:
+        """Create a pending change. Returns the new ID."""
+        from storage.database import db_insert_returning_id
+
+        change_id = await db_insert_returning_id(
+            """
+            INSERT INTO pretargeting_pending_changes
+            (billing_id, config_id, change_type, field_name, value,
+             reason, estimated_qps_impact, created_by, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+            """,
+            (billing_id, config_id, change_type, field_name, value,
+             reason, estimated_qps_impact, created_by)
+        )
+        return change_id
+
+    async def get_pending_change(self, change_id: int) -> Optional[dict]:
+        """Get a single pending change by ID."""
+        row = await db_query_one(
+            "SELECT * FROM pretargeting_pending_changes WHERE id = ?",
+            (change_id,)
+        )
+        return dict(row) if row else None
+
+    async def cancel_pending_change(self, change_id: int) -> bool:
+        """Mark a pending change as cancelled."""
+        await db_execute(
+            "UPDATE pretargeting_pending_changes SET status = 'cancelled' WHERE id = ? AND status = 'pending'",
+            (change_id,)
+        )
+        # Check if it was actually updated
+        row = await db_query_one(
+            "SELECT status FROM pretargeting_pending_changes WHERE id = ?",
+            (change_id,)
+        )
+        return row is not None and row["status"] == "cancelled"
+
+    async def mark_pending_change_applied(self, change_id: int, applied_by: Optional[str] = None) -> bool:
+        """Mark a pending change as applied."""
+        await db_execute(
+            """
+            UPDATE pretargeting_pending_changes
+            SET status = 'applied', applied_at = CURRENT_TIMESTAMP, applied_by = ?
+            WHERE id = ? AND status = 'pending'
+            """,
+            (applied_by, change_id)
+        )
+        row = await db_query_one(
+            "SELECT status FROM pretargeting_pending_changes WHERE id = ?",
+            (change_id,)
+        )
+        return row is not None and row["status"] == "applied"
+
+    # =========================================================================
     # Traffic Data Methods - Delegate to TrafficRepository
     # =========================================================================
 
