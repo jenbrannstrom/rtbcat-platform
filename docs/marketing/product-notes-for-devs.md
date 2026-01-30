@@ -1,6 +1,24 @@
 # RTBcat Platform – Notes for RTB Developers
 
-This is a practical summary of what the app does and why it matters. No marketing language.
+This app optimizes QPS for Google Authorized Buyers seats.
+It exists because AB does not provide a Reporting API, so reporting has to be rebuilt from exports.
+
+Blocking specific publishers is much simpler here than in the AB pretargeting UI.
+
+It’s not a perfect app: we still depend on CSV imports because there is no other data source.
+
+The practical goal is to reduce bidder bandwidth and improve efficiency.
+
+DIAGRAM:
+
+A common issue is ingesting ~50,000 QPS.
+(Think of it like rainfall.)
+About 30,000 of that QPS can be low‑value signal that your bidder ignores because the media buyer doesn’t want that inventory.
+
+You only get 10 pretargeting settings per seat, plus a broad geo bucket (EUS, WUS, EU, Asia).
+This app is about using those 10 settings as effectively as possible.
+
+Even with that limit, it’s still a better control surface than what most SSPs provide.
 
 ## Features and why they matter
 
