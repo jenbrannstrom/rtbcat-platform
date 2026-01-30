@@ -419,12 +419,12 @@ dashboard/src/lib/i18n/
 
 ## Key Design Decisions
 
-### 1. Postgres Serving + SQLite Legacy Staging
+### 1. Postgres-Only Serving (SQLite Deprecated)
 
-**Why:** Production serving uses Postgres (Cloud SQL) for raw facts, precompute tables, and UI queries. SQLite remains a legacy/staging store for local workflows. This provides:
+**Why:** Production serving uses Postgres (Cloud SQL) for raw facts, precompute tables, and UI queries. SQLite is deprecated and should not be used for analytics or serving. This provides:
+- Single source of truth for analytics and UI
 - Scalable serving for large daily volumes
 - Stable joins for QPS optimization across raw facts
-- Clear separation of staging vs serving data
 
 **Multi-Account Model:**
 - **Service Accounts**: Multiple Google service account credentials can be configured
