@@ -24,7 +24,6 @@ import {
   type PretargetingPublisher,
 } from '@/lib/api';
 import {
-  Settings,
   X,
   Plus,
   Minus,
@@ -485,7 +484,7 @@ function PublisherTargetingSection({
 
   const renderStatusLabel = (status: string) => {
     if (status === 'pending_add' || status === 'pending_remove') {
-      return 'Pending';
+      return '⏳ Pending';
     }
     return statusLabel;
   };
@@ -576,11 +575,6 @@ function PublisherTargetingSection({
                     )}
                   >
                     <div className="min-w-0">
-                      {pub.publisher_name && (
-                        <div className="truncate font-medium text-gray-900" title={pub.publisher_name}>
-                          {pub.publisher_name}
-                        </div>
-                      )}
                       <div className="truncate text-xs text-gray-500" title={pub.publisher_id}>
                         {pub.publisher_id}
                       </div>
@@ -1203,7 +1197,6 @@ export function PretargetingSettingsEditor({
       {/* Header */}
       <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Settings className="h-4 w-4 text-gray-500" />
           <span className="font-medium text-gray-900">{headerTitle}</span>
           {hasPendingChanges && (
             <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full">
