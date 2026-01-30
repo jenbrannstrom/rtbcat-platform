@@ -345,6 +345,7 @@ export async function rollbackPretargeting(
 // Publisher list management
 export interface PretargetingPublisher {
   publisher_id: string;
+  publisher_name?: string | null;
   mode: "BLACKLIST" | "WHITELIST";
   status: "active" | "pending_add" | "pending_remove";
   source: "api_sync" | "user";
