@@ -15,6 +15,10 @@ from analytics.pretargeting_recommender import PretargetingRecommender
 from analytics.qps_optimizer import QPSOptimizer
 from api.dependencies import get_store, get_current_user, resolve_buyer_id, get_allowed_buyer_ids
 from storage import SQLiteStore
+from storage.postgres_store import PostgresStore
+
+# Store type can be either SQLite or Postgres
+StoreType = Union[SQLiteStore, PostgresStore]
 from storage.repositories.user_repository import User
 from .common import get_valid_billing_ids_for_buyer
 
@@ -28,7 +32,7 @@ async def get_size_coverage(
     days: int = Query(7, ge=1, le=90),
     billing_id: Optional[str] = Query(None, description="Filter by billing account ID (pretargeting config)"),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer/seat ID"),
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """
@@ -103,7 +107,7 @@ async def get_size_coverage(
 async def get_geo_waste(
     days: int = Query(7, ge=1, le=90),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer/seat ID"),
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """
@@ -190,7 +194,7 @@ async def get_pretargeting_recommendations(
 async def get_qps_summary(
     days: int = Query(7, ge=1, le=90),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer/seat ID"),
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """
