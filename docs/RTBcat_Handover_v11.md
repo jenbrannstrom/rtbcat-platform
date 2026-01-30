@@ -2,47 +2,38 @@
 
 **Date:** January 30, 2026
 **Project:** RTB.cat Creative Intelligence & Performance Analytics Platform
-**Status:** BLOCKED - SQLite→Postgres date syntax migration incomplete
+**Status:** UNBLOCKED - DB fixes complete; focus shifts to UX + metric correctness
 **Developer:** Jen (jen@rtb.cat)
 **AI Assistants:** Claude CLI, Claude in VSCode, ChatGPT Codex CLI
 
 ---
 
-## 🚨 CRITICAL BLOCKER
+## ✅ Resolved Blockers (Jan 29)
 
-**API returns 500 errors** on breakdown endpoints due to SQLite date syntax in Postgres:
-```
-operator does not exist: text >= timestamp without time zone
-```
+**Breakdown endpoints fixed:** SQLite→Postgres date syntax migration completed and deployed.  
+**metric_date casts:** fixed to avoid timestamp/text compare issues.  
+**Integer overflow:** precompute counters migrated to BIGINT.
 
-### Files Needing Fix (SQLite → Postgres)
-
-| File | Occurrences | Status |
-|------|-------------|--------|
-| `api/routers/analytics/rtb_bidstream.py` | 23 | ✅ Fixed (commit `b719926`) |
-| `api/routers/analytics/home.py` | 6 | ❌ Needs fix |
-| `api/routers/analytics/spend.py` | 3 | ❌ Needs fix |
-| `api/routers/analytics/common.py` | 1 | ❌ Needs fix |
-| `api/routers/creatives.py` | 5 | ❌ Needs fix |
-| `api/campaigns_router.py` | 1 | ❌ Needs fix |
-| `api/routers/performance.py` | 1 | ❌ Needs fix |
-
-### The Fix
-Replace:
-```sql
-date('now', ?)           →  (CURRENT_DATE + ?::interval)
-date('now', '-7 days')   →  (CURRENT_DATE - INTERVAL '7 days')
-```
+Commits / actions:
+- SQLite→Postgres date syntax: `5bdec2a` (deployed)
+- metric_date::date cast fix: `ae0ca64` (deployed)
+- BIGINT migration for precompute counters: `930840b` (applied to VM Postgres)
 
 ---
 
 ## 🎯 Current State
 
-**Publisher List UI (Task B):** Code complete, deployed as `sha-67e6658`
-- Cannot visually test until API fix is deployed
+**DB & Aggregations:** Up to date through Jan 28 (see Data Status below).  
+**Breakdown tabs:** load with data (confirmed via MCP).  
+**Publisher List UI (Task B):** UX refinements committed and pushed; deploy pending CI.  
 
-**API:** Partially fixed, deployed as `sha-b719926`
-- Breakdown tables still fail due to unfixed files
+**Open Issues (Need Root Cause):**
+1) **Win Rate > 100%** (e.g., Reached 33.2M, Impressions 68.4M, Win Rate 205.9%).  
+   Likely mismatched data sources (rtb_daily vs rtb_bidstream) or join fan‑out.
+2) **Sizes show impressions but “No creatives found for this size.”**  
+   Likely size normalization mismatch or creative_id/join gaps between creatives and performance rows.
+3) **Drill‑down “No precompute” for AdMob + AdSense.**  
+   Likely precompute date coverage or app_name mismatch across report types.
 
 **VM:** `catscan-production-sg` (asia-southeast1-b)
 - Dashboard: `sha-67e6658` ✅
@@ -52,25 +43,15 @@ date('now', '-7 days')   →  (CURRENT_DATE - INTERVAL '7 days')
 
 ## ✅ Next Steps (Priority Order)
 
-1. **Fix remaining SQLite date syntax** in 6 API files listed above
+1. **Investigate Win Rate > 100%**
+   - Identify exact endpoint/query computing win_rate.
+   - Verify numerator/denominator sources and join keys.
+   - Fix computation to use aligned grain (prefer single table).
 
-2. **Build and deploy API:**
-   ```bash
-   git add -A && git commit -m "Fix SQLite to Postgres date syntax in remaining files"
-   gcloud builds submit --tag europe-west1-docker.pkg.dev/catscan-prod-202601/catscan/catscan-api:sha-NEWCOMMIT .
-   ```
-
-3. **Deploy to VM:**
-   ```bash
-   gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap
-   cd /opt/catscan
-   sudo sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=sha-NEWCOMMIT/' .env
-   sudo docker compose -f docker-compose.gcp.yml up -d api
-   ```
-
-4. **Verify site loads** at https://scan.rtb.cat
-
-5. **Test Publisher List UI** - see QA checklist in AI log
+2. **UX Changes**
+   - Proceed with publisher list UX per `docs/ui-publisher-list-management.md`.
+   - Use MCP Chrome for visual validation if available.
+   - Deploy dashboard after CI: commits `b8112a6` and `fa7295b`.
 
 ---
 
@@ -81,7 +62,10 @@ date('now', '-7 days')   →  (CURRENT_DATE - INTERVAL '7 days')
 | VM config | `/opt/catscan/.env` |
 | Docker compose | `/opt/catscan/docker-compose.gcp.yml` |
 | Image registry | `europe-west1-docker.pkg.dev/catscan-prod-202601/catscan/` |
-| AI Log | `docs/ai_logs/ai_log_2026-01-29.md` |
+| AI Log | `docs/ai_logs/ai_log_2026-01-30.md` |
+| MCP Chrome scripts | `scripts/chrome-cdp.sh`, `scripts/mcp-chromium-cdp.sh` |
+| Primary VM | `catscan-production-sg` (asia-southeast1-b) |
+| Legacy VM | `catscan-production` (europe-west1-b) — do not use for Postgres |
 
 ---
 
@@ -100,9 +84,7 @@ sudo docker logs catscan-api --tail 50
 # Restart services
 cd /opt/catscan && sudo docker compose -f docker-compose.gcp.yml up -d
 
-# Build images (from repo root)
-gcloud builds submit --tag europe-west1-docker.pkg.dev/catscan-prod-202601/catscan/catscan-api:sha-XXX .
-gcloud builds submit --tag europe-west1-docker.pkg.dev/catscan-prod-202601/catscan/catscan-dashboard:sha-XXX ./dashboard
+# Build images: use CI (GitHub Actions) and deploy by sha tag
 ```
 
 ---
@@ -116,3 +98,7 @@ All summary tables populated through Jan 28:
 - `home_seat_daily`: 64 rows
 - `home_size_daily`: 180,555 rows
 - `rtb_publisher_daily`: 103,591 rows
+
+## 🧩 UX Commits (Pending Deploy)
+- `b8112a6` — Add publisher list entry + tabbed editor
+- `fa7295b` — Publisher list UX refinements (name+ID, Apply CTA, Sync button)
