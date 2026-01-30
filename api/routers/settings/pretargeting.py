@@ -3,14 +3,13 @@
 import json
 import logging
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_store
 from collectors import PretargetingClient
-from storage.sqlite_store import SQLiteStore
-from storage.postgres_store import PostgresStore
+from services.pretargeting_service import PretargetingService
 
 from .models import (
     PretargetingConfigResponse,
@@ -18,9 +17,6 @@ from .models import (
     SetPretargetingNameRequest,
     SyncPretargetingResponse,
 )
-
-# Store type can be either SQLite or Postgres
-StoreType = Union[SQLiteStore, PostgresStore]
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +26,7 @@ router = APIRouter(tags=["RTB Settings"])
 @router.post("/settings/pretargeting/sync", response_model=SyncPretargetingResponse)
 async def sync_pretargeting_configs(
     service_account_id: Optional[str] = Query(None, description="Service account ID to use"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Sync pretargeting configs from Google Authorized Buyers API.
 
@@ -70,6 +66,7 @@ async def sync_pretargeting_configs(
     logger.info(f"Using bidder_id: {account_id} for pretargeting sync")
 
     try:
+        pretargeting_service = PretargetingService()
         client = PretargetingClient(
             credentials_path=str(creds_path),
             account_id=account_id,
@@ -92,7 +89,7 @@ async def sync_pretargeting_configs(
             # Extract OS targeting IDs (iOS = 30001, Android = 30002)
             included_os = cfg.get("includedMobileOperatingSystemIds", [])
 
-            await store.save_pretargeting_config({
+            await pretargeting_service.save_config({
                 "bidder_id": account_id,
                 "config_id": cfg["configId"],
                 "billing_id": str(cfg.get("billingId", "")).strip() or None,
@@ -119,11 +116,11 @@ async def sync_pretargeting_configs(
             excluded_publishers = publisher_targeting.get("excludedIds", [])
 
             # Clear stale api_sync entries for this billing_id before inserting new ones
-            await store.clear_api_sync_publishers(billing_id)
+            await pretargeting_service.clear_sync_publishers(billing_id)
 
             # Insert WHITELIST publishers (included)
             for pub_id in included_publishers:
-                await store.add_pretargeting_publisher(
+                await pretargeting_service.add_publisher(
                     billing_id=billing_id,
                     publisher_id=str(pub_id),
                     mode="WHITELIST",
@@ -134,7 +131,7 @@ async def sync_pretargeting_configs(
 
             # Insert BLACKLIST publishers (excluded)
             for pub_id in excluded_publishers:
-                await store.add_pretargeting_publisher(
+                await pretargeting_service.add_publisher(
                     billing_id=billing_id,
                     publisher_id=str(pub_id),
                     mode="BLACKLIST",
@@ -160,7 +157,7 @@ async def sync_pretargeting_configs(
 async def get_pretargeting_configs(
     buyer_id: Optional[str] = Query(None, description="Buyer/seat ID to get configs for"),
     service_account_id: Optional[str] = Query(None, description="Service account ID (deprecated, use buyer_id)"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Get stored pretargeting configs for the current account.
 
@@ -203,7 +200,8 @@ async def get_pretargeting_configs(
                 logger.info(f"Using fallback bidder_id: {current_bidder_id} for pretargeting list")
 
         # Get configs filtered by bidder_id
-        rows = await store.get_pretargeting_configs(bidder_id=current_bidder_id)
+        pretargeting_service = PretargetingService()
+        rows = await pretargeting_service.list_configs(bidder_id=current_bidder_id)
 
         results = []
         for row in rows:
@@ -244,7 +242,6 @@ async def get_pretargeting_configs(
 async def set_pretargeting_name(
     billing_id: str,
     body: SetPretargetingNameRequest,
-    store: StoreType = Depends(get_store),
 ):
     """Set a custom user-defined name for a pretargeting config.
 
@@ -253,7 +250,8 @@ async def set_pretargeting_name(
     """
     try:
         # Get current value for history tracking
-        current = await store.get_pretargeting_config_by_billing_id(billing_id)
+        pretargeting_service = PretargetingService()
+        current = await pretargeting_service.get_config(billing_id)
 
         if not current:
             raise HTTPException(
@@ -266,13 +264,13 @@ async def set_pretargeting_name(
         bidder_id = current["bidder_id"]
 
         # Update the name
-        await store.update_pretargeting_user_name(billing_id, body.user_name)
+        await pretargeting_service.update_user_name(billing_id, body.user_name)
 
         # Record history if value changed
         if old_name != body.user_name:
-            await store.add_pretargeting_history(
-                config_id=config_id,
-                bidder_id=bidder_id,
+            await pretargeting_service.add_history(
+                config_id=str(config_id),
+                bidder_id=str(bidder_id),
                 change_type="update",
                 field_changed="user_name",
                 old_value=old_name,
@@ -299,7 +297,6 @@ async def get_pretargeting_history(
     config_id: Optional[str] = Query(None, description="Filter by config_id"),
     billing_id: Optional[str] = Query(None, description="Filter by billing_id"),
     days: int = Query(30, description="Number of days of history to retrieve", ge=1, le=365),
-    store: StoreType = Depends(get_store),
 ):
     """Get pretargeting settings change history.
 
@@ -307,7 +304,8 @@ async def get_pretargeting_history(
     including who made the change and when.
     """
     try:
-        rows = await store.get_pretargeting_history(
+        pretargeting_service = PretargetingService()
+        rows = await pretargeting_service.list_history(
             config_id=config_id,
             billing_id=billing_id,
             days=days,
@@ -348,14 +346,14 @@ async def get_pretargeting_publishers(
     billing_id: str,
     mode: Optional[str] = Query(None, description="Filter by mode (WHITELIST or BLACKLIST)"),
     status: Optional[str] = Query(None, description="Filter by status (active, pending_add, pending_remove)"),
-    store: StoreType = Depends(get_store),
 ):
     """Get normalized publisher list for a pretargeting config.
 
     Returns the list of publishers in the whitelist/blacklist with their status.
     """
     try:
-        rows = await store.get_pretargeting_publishers(
+        pretargeting_service = PretargetingService()
+        rows = await pretargeting_service.list_publishers(
             billing_id=billing_id,
             mode=mode,
             status=status,
@@ -387,7 +385,6 @@ async def add_pretargeting_publisher(
     billing_id: str,
     publisher_id: str = Query(..., description="Publisher ID to add"),
     mode: str = Query(..., description="WHITELIST or BLACKLIST"),
-    store: StoreType = Depends(get_store),
 ):
     """Add a publisher to the targeting list with pending_add status.
 
@@ -401,19 +398,20 @@ async def add_pretargeting_publisher(
             raise HTTPException(status_code=400, detail="Mode must be WHITELIST or BLACKLIST")
 
         # Validate billing_id exists
-        config = await store.get_pretargeting_config_by_billing_id(billing_id)
+        pretargeting_service = PretargetingService()
+        config = await pretargeting_service.get_config(billing_id)
         if not config:
             raise HTTPException(status_code=404, detail=f"Pretargeting config {billing_id} not found")
 
         # Check if publisher already exists in opposite mode
-        existing = await store.check_publisher_in_opposite_mode(billing_id, publisher_id, mode)
+        existing = await pretargeting_service.check_publisher_in_opposite_mode(billing_id, publisher_id, mode)
         if existing:
             raise HTTPException(
                 status_code=400,
                 detail=f"Publisher {publisher_id} already exists in {existing['mode']} list"
             )
 
-        await store.add_pretargeting_publisher(
+        await pretargeting_service.add_publisher(
             billing_id=billing_id,
             publisher_id=publisher_id,
             mode=mode,
@@ -435,7 +433,6 @@ async def remove_pretargeting_publisher(
     billing_id: str,
     publisher_id: str,
     mode: str = Query(..., description="WHITELIST or BLACKLIST"),
-    store: StoreType = Depends(get_store),
 ):
     """Mark a publisher for removal with pending_remove status.
 
@@ -449,11 +446,12 @@ async def remove_pretargeting_publisher(
             raise HTTPException(status_code=400, detail="Mode must be WHITELIST or BLACKLIST")
 
         # Validate billing_id exists
-        config = await store.get_pretargeting_config_by_billing_id(billing_id)
+        pretargeting_service = PretargetingService()
+        config = await pretargeting_service.get_config(billing_id)
         if not config:
             raise HTTPException(status_code=404, detail=f"Pretargeting config {billing_id} not found")
 
-        await store.update_publisher_status(
+        await pretargeting_service.update_publisher_status(
             billing_id=billing_id,
             publisher_id=publisher_id,
             mode=mode,
@@ -470,14 +468,14 @@ async def remove_pretargeting_publisher(
 @router.get("/settings/pretargeting/{billing_id}/publishers/pending")
 async def get_pending_publisher_changes(
     billing_id: str,
-    store: StoreType = Depends(get_store),
 ):
     """Get publishers with pending changes (pending_add or pending_remove).
 
     Returns publishers that need to be synced to the API.
     """
     try:
-        rows = await store.get_pending_publisher_changes(billing_id)
+        pretargeting_service = PretargetingService()
+        rows = await pretargeting_service.list_pending_publisher_changes(billing_id)
 
         return {
             "billing_id": billing_id,

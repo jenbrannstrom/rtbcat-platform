@@ -22,8 +22,10 @@ class PretargetingService:
         return await self._repo.get_config_by_billing_id(billing_id)
 
     async def save_config(self, config: dict[str, Any]) -> None:
-        if not config.get("billing_id"):
-            raise ValueError("billing_id is required")
+        if not config.get("config_id"):
+            raise ValueError("config_id is required")
+        if not config.get("bidder_id"):
+            raise ValueError("bidder_id is required")
         await self._repo.save_config(config)
 
     async def update_user_name(self, billing_id: str, user_name: str | None) -> int:
@@ -38,29 +40,54 @@ class PretargetingService:
             raise ValueError("state is required")
         return await self._repo.update_state(billing_id, state)
 
-    async def list_history(self, billing_id: str, limit: int = 100) -> list[dict[str, Any]]:
-        if not billing_id:
-            raise ValueError("billing_id is required")
-        return await self._repo.list_history(billing_id, limit=limit)
+    async def list_history(
+        self,
+        config_id: str | None = None,
+        billing_id: str | None = None,
+        days: int = 30,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        return await self._repo.list_history(
+            config_id=config_id,
+            billing_id=billing_id,
+            days=days,
+            limit=limit,
+        )
 
     async def add_history(
         self,
-        config_id: int,
-        user_id: str,
-        action: str,
-        summary: str,
-        details: dict[str, Any],
+        config_id: str,
+        bidder_id: str,
+        change_type: str,
+        field_changed: str | None,
+        old_value: str | None,
+        new_value: str | None,
+        changed_by: str | None,
+        change_source: str = "user",
+        raw_config_snapshot: dict[str, Any] | None = None,
     ) -> int:
-        if not user_id:
-            raise ValueError("user_id is required")
-        return await self._repo.add_history(config_id, user_id, action, summary, details)
+        if not bidder_id:
+            raise ValueError("bidder_id is required")
+        if not change_type:
+            raise ValueError("change_type is required")
+        return await self._repo.add_history(
+            config_id=config_id,
+            bidder_id=bidder_id,
+            change_type=change_type,
+            field_changed=field_changed,
+            old_value=old_value,
+            new_value=new_value,
+            changed_by=changed_by,
+            change_source=change_source,
+            raw_config_snapshot=raw_config_snapshot,
+        )
 
     async def list_publishers(
-        self, billing_id: str, mode: str | None = None
+        self, billing_id: str, mode: str | None = None, status: str | None = None
     ) -> list[dict[str, Any]]:
         if not billing_id:
             raise ValueError("billing_id is required")
-        return await self._repo.list_publishers(billing_id, mode=mode)
+        return await self._repo.list_publishers(billing_id, mode=mode, status=status)
 
     async def add_publisher(
         self,
@@ -110,3 +137,8 @@ class PretargetingService:
         return await self._repo.check_publisher_in_opposite_mode(
             billing_id, publisher_id, mode
         )
+
+    async def list_pending_publisher_changes(self, billing_id: str) -> list[dict[str, Any]]:
+        if not billing_id:
+            raise ValueError("billing_id is required")
+        return await self._repo.list_pending_publisher_changes(billing_id)
