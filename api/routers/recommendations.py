@@ -4,17 +4,12 @@ Handles generation, listing, and resolution of actionable optimization recommend
 """
 
 import logging
-from typing import Optional, Union
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from storage import SQLiteStore
-from storage.postgres_store import PostgresStore
 from api.dependencies import get_store
-
-# Store type can be either SQLite or Postgres
-StoreType = Union[SQLiteStore, PostgresStore]
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +90,7 @@ class RecommendationSummaryResponse(BaseModel):
 async def get_recommendations(
     days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
     min_severity: str = Query("low", description="Minimum severity: low, medium, high, critical"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """
     Get actionable optimization recommendations.
@@ -126,7 +121,7 @@ async def get_recommendations(
 @router.get("/recommendations/summary", response_model=RecommendationSummaryResponse)
 async def get_recommendations_summary(
     days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """
     Get high-level waste summary with recommendation counts.
@@ -149,7 +144,7 @@ async def get_recommendations_summary(
 async def resolve_recommendation(
     recommendation_id: str,
     notes: Optional[str] = Query(None, description="Resolution notes"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """
     Mark a recommendation as resolved.
@@ -178,7 +173,7 @@ async def resolve_recommendation(
 async def get_recommendations_by_type(
     rec_type: str,
     days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """
     Get recommendations filtered by type.

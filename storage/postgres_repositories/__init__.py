@@ -6,6 +6,7 @@ from .changes_repo import ChangesRepository
 from .pretargeting_repo import PretargetingRepository
 from .comparisons_repo import ComparisonsRepository
 from .performance_repo import PerformanceRepository
+from .retention_repo import RetentionRepository
 from .evaluation_repo import EvaluationRepository
 from .campaign_repo import CampaignRepository
 
@@ -16,6 +17,7 @@ __all__ = [
     "PretargetingRepository",
     "ComparisonsRepository",
     "PerformanceRepository",
+    "RetentionRepository",
     "EvaluationRepository",
     "CampaignRepository",
 ]
