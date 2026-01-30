@@ -20,43 +20,37 @@ This app is about using those 10 settings as effectively as possible.
 
 Even with that limit, it’s still a better control surface than what most SSPs provide.
 
-## Features and why they matter
+## Features and user benefits
 
-1) **Multi‑report ingestion (Gmail CSV → Parquet → BigQuery → Postgres)**
-   - AB reporting is split across report types. The pipeline joins them into one schema so bids, wins, spend, and quality can be analyzed together.
+1) **Works with single‑seat or multi‑seat AB accounts**
+   - You can scope analysis and actions per seat so decisions match how the buyer account is actually set up.
 
-2) **Canonical schema for QPS analysis**
-   - One data model reduces join errors and duplicate logic. This is needed for correct win rate and waste rate.
+2) **History & rollback for pretargeting changes**
+   - Every change is recorded and can be rolled back. Changes are staged before applying for safety.
 
-3) **Precompute tables for UI speed**
-   - Summary tables (home_*, config_*, rtb_*) keep the UI fast without expensive queries on every page load.
+3) **Publisher allow/deny editor (per config)**
+   - You can block or allow publishers directly, without CSV uploads or the AB UI.
 
-4) **Seat‑scoped analytics**
-   - Buyers run multiple seats. Seat scoping avoids cross‑seat leakage and keeps optimization decisions accurate.
+4) **Clear win‑rate and waste visibility**
+   - The app shows where bids drop off in the funnel so you can target the biggest waste first.
 
-5) **Pretargeting config management with history**
-   - Pretargeting changes are risky. The app stages changes, applies them in batches, and records rollback history.
+5) **Size coverage insight**
+   - You can see which sizes get traffic but have no matching creatives, and decide to add or block.
 
-6) **Publisher allow/deny editor**
-   - Publisher lists are a direct lever on wasted QPS. The editor avoids CSV uploads and tracks pending changes.
+6) **Creative‑level diagnostics**
+   - You can inspect individual creatives with targeting context to find assets that underperform or mismatch.
 
-7) **Creative‑level breakdowns and mismatch flags**
-   - Creative issues are a common waste source. Creative‑level data helps you find assets that don’t match targeting or performance.
+7) **App/publisher drill‑downs**
+   - You can trace performance drops to specific apps or sites and act on them quickly.
 
-8) **Size coverage and waste analysis**
-   - Size gaps reduce win rate. The size view shows request volume without matching creatives so you can add or block sizes.
+8) **Fast UI on large datasets**
+   - Precomputed summaries keep the dashboard responsive even when daily volume is large.
 
-9) **Bidstream funnel metrics**
-   - Reached → bids → impressions is the core funnel. Keeping these together makes loss points obvious.
+9) **Deduplicated imports**
+   - Re‑processing Gmail reports won’t double‑count results, so metrics stay accurate.
 
-10) **App/publisher drill‑downs**
-   - When performance drops, you need to find the inventory causing it. Drill‑downs make that visible.
-
-11) **Deduplicated imports**
-   - Gmail reports can repeat. The importer dedupes rows so metrics stay accurate after re‑processing.
-
-12) **Operational traceability**
-   - Refresh logs and precompute status show what ran, when it ran, and what data it produced.
+10) **Operational traceability**
+   - Refresh logs show what ran and when, so you can trust the numbers you are looking at.
 
 ## Intended users
 
