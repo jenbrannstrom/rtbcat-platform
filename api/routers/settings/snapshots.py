@@ -2,13 +2,18 @@
 
 import json
 import logging
-from typing import Optional
+from typing import Optional, Union
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from storage.database import db_execute, db_insert_returning_id, db_query, db_query_one
+from api.dependencies import get_store
+from storage.sqlite_store import SQLiteStore
+from storage.postgres_store import PostgresStore
 
 from .models import ComparisonCreate, ComparisonResponse, SnapshotCreate, SnapshotResponse
+
+# Store type can be either SQLite or Postgres
+StoreType = Union[SQLiteStore, PostgresStore]
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +21,10 @@ router = APIRouter(tags=["RTB Settings"])
 
 
 @router.post("/settings/pretargeting/snapshot", response_model=SnapshotResponse)
-async def create_pretargeting_snapshot(request: SnapshotCreate):
+async def create_pretargeting_snapshot(
+    request: SnapshotCreate,
+    store: StoreType = Depends(get_store),
+):
     """
     Create a snapshot of a pretargeting config's current state and performance.
 
@@ -29,44 +37,18 @@ async def create_pretargeting_snapshot(request: SnapshotCreate):
     """
     try:
         # Get current config state
-        config = await db_query_one(
-            """SELECT * FROM pretargeting_configs WHERE billing_id = ?""",
-            (request.billing_id,)
-        )
+        config = await store.get_pretargeting_config_by_billing_id(request.billing_id)
 
         if not config:
             raise HTTPException(status_code=404, detail=f"Config not found for billing_id: {request.billing_id}")
 
         # Get accumulated performance for this billing_id
-        # Try rtb_daily first (new schema), fallback to performance_metrics (old schema)
-        perf = await db_query_one(
-            """SELECT
-                COUNT(DISTINCT metric_date) as days_tracked,
-                SUM(impressions) as total_impressions,
-                SUM(clicks) as total_clicks,
-                SUM(spend_micros) / 1000000.0 as total_spend_usd
-            FROM rtb_daily
-            WHERE billing_id = ?""",
-            (request.billing_id,)
-        )
+        perf = await store.get_performance_aggregates(request.billing_id)
 
-        # If no data in rtb_daily, try performance_metrics
-        if not perf or perf["days_tracked"] == 0:
-            perf = await db_query_one(
-                """SELECT
-                    COUNT(DISTINCT metric_date) as days_tracked,
-                    SUM(impressions) as total_impressions,
-                    SUM(clicks) as total_clicks,
-                    SUM(spend_micros) / 1000000.0 as total_spend_usd
-                FROM performance_metrics
-                WHERE billing_id = ?""",
-                (request.billing_id,)
-            )
-
-        days = perf["days_tracked"] or 0 if perf else 0
-        imps = perf["total_impressions"] or 0 if perf else 0
-        clicks = perf["total_clicks"] or 0 if perf else 0
-        spend = perf["total_spend_usd"] or 0 if perf else 0
+        days = perf.get("days_tracked", 0) or 0
+        imps = perf.get("total_impressions", 0) or 0
+        clicks = perf.get("total_clicks", 0) or 0
+        spend = perf.get("total_spend_usd", 0) or 0
 
         # Compute averages
         avg_daily_imps = imps / days if days > 0 else None
@@ -74,47 +56,44 @@ async def create_pretargeting_snapshot(request: SnapshotCreate):
         ctr = (clicks / imps * 100) if imps > 0 else None
         cpm = (spend / imps * 1000) if imps > 0 else None
 
-        raw_config = json.loads(config["raw_config"]) if config["raw_config"] else {}
+        raw_config = json.loads(config["raw_config"]) if config.get("raw_config") else {}
         publisher_targeting = raw_config.get("publisherTargeting") or {}
         publisher_mode = publisher_targeting.get("targetingMode")
         publisher_values = publisher_targeting.get("values") or []
 
-        # Create snapshot
-        snapshot_id = await db_insert_returning_id(
-            """INSERT INTO pretargeting_snapshots (
-                billing_id, snapshot_name, snapshot_type,
-                included_formats, included_platforms, included_sizes,
-                included_geos, excluded_geos, state,
-                publisher_targeting_mode, publisher_targeting_values,
-                total_impressions, total_clicks, total_spend_usd,
-                days_tracked,
-                avg_daily_impressions, avg_daily_spend_usd, ctr_pct, cpm_usd,
-                notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                request.billing_id,
-                request.snapshot_name,
-                request.snapshot_type or "manual",
-                config["included_formats"],
-                config["included_platforms"],
-                config["included_sizes"],
-                config["included_geos"],
-                config["excluded_geos"],
-                config["state"],
-                publisher_mode,
-                json.dumps(publisher_values) if publisher_values else None,
-                imps, clicks, spend, days,
-                avg_daily_imps, avg_daily_spend, ctr, cpm,
-                request.notes
-            )
+        # Create snapshot using store method
+        config_data = {
+            "included_formats": config.get("included_formats"),
+            "included_platforms": config.get("included_platforms"),
+            "included_sizes": config.get("included_sizes"),
+            "included_geos": config.get("included_geos"),
+            "excluded_geos": config.get("excluded_geos"),
+            "state": config.get("state"),
+        }
+        performance_data = {
+            "total_impressions": imps,
+            "total_clicks": clicks,
+            "total_spend_usd": spend,
+            "days_tracked": days,
+            "avg_daily_impressions": avg_daily_imps,
+            "avg_daily_spend_usd": avg_daily_spend,
+            "ctr_pct": ctr,
+            "cpm_usd": cpm,
+        }
+
+        snapshot_id = await store.create_snapshot(
+            billing_id=request.billing_id,
+            snapshot_name=request.snapshot_name,
+            snapshot_type=request.snapshot_type or "manual",
+            config_data=config_data,
+            performance_data=performance_data,
+            publisher_targeting_mode=publisher_mode,
+            publisher_targeting_values=json.dumps(publisher_values) if publisher_values else None,
+            notes=request.notes,
         )
 
         # Fetch the created snapshot
-        row = await db_query_one(
-            "SELECT * FROM pretargeting_snapshots WHERE id = ?",
-            (snapshot_id,)
-        )
+        row = await store.get_snapshot(snapshot_id)
 
         return SnapshotResponse(
             id=row["id"],
@@ -150,24 +129,11 @@ async def create_pretargeting_snapshot(request: SnapshotCreate):
 async def list_pretargeting_snapshots(
     billing_id: Optional[str] = Query(None, description="Filter by billing account"),
     limit: int = Query(50, ge=1, le=200),
+    store: StoreType = Depends(get_store),
 ):
     """List pretargeting snapshots, optionally filtered by billing account."""
     try:
-        if billing_id:
-            rows = await db_query(
-                """SELECT * FROM pretargeting_snapshots
-                WHERE billing_id = ?
-                ORDER BY created_at DESC
-                LIMIT ?""",
-                (billing_id, limit)
-            )
-        else:
-            rows = await db_query(
-                """SELECT * FROM pretargeting_snapshots
-                ORDER BY created_at DESC
-                LIMIT ?""",
-                (limit,)
-            )
+        rows = await store.list_snapshots(billing_id=billing_id, limit=limit)
 
         return [
             SnapshotResponse(
@@ -201,7 +167,10 @@ async def list_pretargeting_snapshots(
 
 
 @router.post("/settings/pretargeting/comparison", response_model=ComparisonResponse)
-async def create_comparison(request: ComparisonCreate):
+async def create_comparison(
+    request: ComparisonCreate,
+    store: StoreType = Depends(get_store),
+):
     """
     Start a new A/B comparison for a pretargeting config.
 
@@ -211,33 +180,21 @@ async def create_comparison(request: ComparisonCreate):
     """
     try:
         # Verify before_snapshot exists
-        snapshot = await db_query_one(
-            "SELECT * FROM pretargeting_snapshots WHERE id = ?",
-            (request.before_snapshot_id,)
-        )
+        snapshot = await store.get_snapshot(request.before_snapshot_id)
 
         if not snapshot:
             raise HTTPException(status_code=404, detail="Before snapshot not found")
 
         # Create comparison
-        comparison_id = await db_insert_returning_id(
-            """INSERT INTO snapshot_comparisons (
-                billing_id, comparison_name, before_snapshot_id,
-                before_start_date, before_end_date, status
-            ) VALUES (?, ?, ?, ?, ?, 'in_progress')""",
-            (
-                request.billing_id,
-                request.comparison_name,
-                request.before_snapshot_id,
-                request.before_start_date,
-                request.before_end_date,
-            )
+        comparison_id = await store.create_comparison(
+            billing_id=request.billing_id,
+            comparison_name=request.comparison_name,
+            before_snapshot_id=request.before_snapshot_id,
+            before_start_date=request.before_start_date,
+            before_end_date=request.before_end_date,
         )
 
-        row = await db_query_one(
-            "SELECT * FROM snapshot_comparisons WHERE id = ?",
-            (comparison_id,)
-        )
+        row = await store.get_comparison(comparison_id)
 
         return ComparisonResponse(
             id=row["id"],
@@ -273,23 +230,11 @@ async def list_comparisons(
     billing_id: Optional[str] = Query(None, description="Filter by billing account"),
     status: Optional[str] = Query(None, description="Filter by status (in_progress, completed)"),
     limit: int = Query(50, ge=1, le=200),
+    store: StoreType = Depends(get_store),
 ):
     """List A/B comparisons, optionally filtered by billing account or status."""
     try:
-        query = "SELECT * FROM snapshot_comparisons WHERE 1=1"
-        params = []
-
-        if billing_id:
-            query += " AND billing_id = ?"
-            params.append(billing_id)
-        if status:
-            query += " AND status = ?"
-            params.append(status)
-
-        query += " ORDER BY created_at DESC LIMIT ?"
-        params.append(limit)
-
-        rows = await db_query(query, tuple(params))
+        rows = await store.list_comparisons(billing_id=billing_id, status=status, limit=limit)
 
         return [
             ComparisonResponse(
