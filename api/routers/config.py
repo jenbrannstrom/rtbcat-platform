@@ -20,8 +20,9 @@ from pydantic import BaseModel, Field
 
 from config import ConfigManager
 from config.config_manager import AuthorizedBuyersConfig, AppConfig
-from api.dependencies import get_config, get_store
+from api.dependencies import get_config, get_store, use_postgres, StoreType
 from storage.sqlite_store import SQLiteStore, ServiceAccount
+from storage.postgres_store import PostgresStore
 from collectors import BuyerSeatsClient
 
 logger = logging.getLogger(__name__)
@@ -490,18 +491,20 @@ def _mask_api_key(key: str) -> str:
 
 @router.get("/config/gemini-key", response_model=GeminiKeyStatusResponse)
 async def get_gemini_key_status(
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
 ):
     """Get Gemini API key configuration status.
 
     The key is used for AI-powered language detection in creatives.
     Returns masked key for security.
     """
-    from storage.repositories.user_repository import UserRepository
-
-    # Check database setting first
-    repo = UserRepository(store.db_path)
-    stored_key = await repo.get_setting("gemini_api_key")
+    # Use store directly for PostgresStore, otherwise use UserRepository
+    if isinstance(store, PostgresStore):
+        stored_key = await store.get_setting("gemini_api_key")
+    else:
+        from storage.repositories.user_repository import UserRepository
+        repo = UserRepository(store.db_path)
+        stored_key = await repo.get_setting("gemini_api_key")
 
     if stored_key:
         return GeminiKeyStatusResponse(
@@ -528,15 +531,13 @@ async def get_gemini_key_status(
 @router.put("/config/gemini-key", response_model=GeminiKeyUpdateResponse)
 async def update_gemini_key(
     request: GeminiKeyUpdateRequest,
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
 ):
     """Update Gemini API key.
 
     The key is stored securely in the database and used for AI-powered
     language detection in creatives.
     """
-    from storage.repositories.user_repository import UserRepository
-
     try:
         # Validate key format (basic check)
         api_key = request.api_key.strip()
@@ -547,8 +548,12 @@ async def update_gemini_key(
             )
 
         # Store in database
-        repo = UserRepository(store.db_path)
-        await repo.set_setting("gemini_api_key", api_key, updated_by="api")
+        if isinstance(store, PostgresStore):
+            await store.set_setting("gemini_api_key", api_key, updated_by="api")
+        else:
+            from storage.repositories.user_repository import UserRepository
+            repo = UserRepository(store.db_path)
+            await repo.set_setting("gemini_api_key", api_key, updated_by="api")
 
         logger.info("Gemini API key updated")
         return GeminiKeyUpdateResponse(
@@ -567,17 +572,19 @@ async def update_gemini_key(
 
 @router.delete("/config/gemini-key", response_model=GeminiKeyUpdateResponse)
 async def delete_gemini_key(
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
 ):
     """Delete Gemini API key from database.
 
     Note: If GEMINI_API_KEY environment variable is set, it will be used as fallback.
     """
-    from storage.repositories.user_repository import UserRepository
-
     try:
-        repo = UserRepository(store.db_path)
-        await repo.set_setting("gemini_api_key", "", updated_by="api")
+        if isinstance(store, PostgresStore):
+            await store.set_setting("gemini_api_key", "", updated_by="api")
+        else:
+            from storage.repositories.user_repository import UserRepository
+            repo = UserRepository(store.db_path)
+            await repo.set_setting("gemini_api_key", "", updated_by="api")
 
         logger.info("Gemini API key removed")
         return GeminiKeyUpdateResponse(
