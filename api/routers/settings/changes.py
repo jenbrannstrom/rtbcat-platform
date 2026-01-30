@@ -84,10 +84,13 @@ async def create_pending_change(
         if bidder_id:
             await pretargeting_service.add_history(
                 config_id=config_id,
-                user_id=bidder_id,
-                action="pending_change",
-                summary=request.field_name,
-                details={"change": f"{request.change_type}:{request.value}"},
+                bidder_id=bidder_id,
+                change_type="pending_change",
+                field_changed=request.field_name,
+                old_value=None,
+                new_value=f"{request.change_type}:{request.value}",
+                changed_by="ui",
+                change_source="user",
             )
 
         row = await change_service.get_pending_change(change_id)
