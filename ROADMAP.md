@@ -10,11 +10,12 @@
 - [ ] **Thumbnail placeholders** - Some creatives show placeholder instead of generated thumbnail (ffmpeg)
 - [ ] **FFmpeg missing on install** - Creatives tab fails to render video thumbnails until ffmpeg installed
 - [ ] **CSV import account mismatch** - Imports not linking to correct accounts
+- [ ] **Size drill-down shows no creatives** - config_creative_daily missing creative_size; fix staged, deploy + refresh pending
 - [x] **Import Now button fails** - /import does not process queued Gmail reports
 - [x] **Campaigns create action no-op** - Clicking "Create" on auto cluster does nothing
 - [ ] **Creative modal missing publisher data** - "No publisher data for this config" despite migrated tables
 - [ ] ~~**CI/CD pipeline** - Build images in GitHub Actions and deploy via docker pull (Artifact Registry)~~ **(Done)**
-- [ ] **BigQuery raw_facts coverage** - Data only through Jan 25; Jan 26–27 pending reprocess after pipeline fix
+- [ ] **BigQuery raw_facts coverage** - Data only through Jan 25; Jan 26–28 pending reprocess after pipeline fix
 
 ---
 
@@ -174,7 +175,7 @@
 
 ### Phase 1 — Import & Data Model Fixes
 - [x] **Postgres schema alignment** - Raw fact tables + BIGINT upgrades + pretargeting_publishers table
-- [ ] **Backfill raw fact tables** - Load `rtb_daily`, `rtb_bidstream`, `rtb_bid_filtering`, `rtb_quality` into Postgres
+- [x] **Backfill raw fact tables** - Load `rtb_daily`, `rtb_bidstream`, `rtb_bid_filtering`, `rtb_quality` into Postgres (through 2026-01-25)
 - [ ] **Persist seat identity** - Ensure `bidder_id` stored for all imports (`rtb_daily`, `rtb_bidstream`, `rtb_bid_filtering`)
 - [ ] **Billing ID guarantees** - Enforce `billing_id` for per-config reports; exclude rows missing it from config breakdowns
 - [ ] **Join-safe keys** - Geo/publisher joins must include seat identity (`bidder_id` or `buyer_account_id`)
@@ -189,7 +190,7 @@
 
 ### Phase 4 — UI Refactor & Features
 - [ ] **Pretargeting configs** - “No data” state when performance missing; seat-only list (10 active)
-- [ ] **By Size** - Billing ID scoped; add size drill-down to list creatives + modal icon per creative
+- [ ] **By Size** - Billing ID scoped; add size drill-down to list creatives + modal icon per creative (backend fix staged; deploy + refresh pending)
 - [ ] **By Geo / By Publisher** - Re-enable once join-safe keys are available; seat-only
 - [ ] **By Creative** - Confirm billing_id scoping; add creative modal icon; move country targeting near top
 - [ ] **Publisher Performance** - Title “overall for {seat}”; fix blank publisher name fallback
