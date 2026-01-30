@@ -4,6 +4,8 @@ from .endpoints_repo import EndpointsRepository
 from .snapshots_repo import SnapshotsRepository
 from .changes_repo import ChangesRepository
 from .pretargeting_repo import PretargetingRepository
+from .comparisons_repo import ComparisonsRepository
+from .performance_repo import PerformanceRepository
 from .evaluation_repo import EvaluationRepository
 from .campaign_repo import CampaignRepository
 
@@ -12,6 +14,8 @@ __all__ = [
     "SnapshotsRepository",
     "ChangesRepository",
     "PretargetingRepository",
+    "ComparisonsRepository",
+    "PerformanceRepository",
     "EvaluationRepository",
     "CampaignRepository",
 ]

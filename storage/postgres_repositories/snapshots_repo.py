@@ -1,10 +1,10 @@
-"""Postgres repository for snapshots (SQL only)."""
+"""Postgres repository for pretargeting snapshots (SQL only)."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from storage.postgres_database import pg_execute, pg_query, pg_insert_returning_id
+from storage.postgres_database import pg_query, pg_query_one
 
 
 class SnapshotsRepository:
@@ -12,52 +12,79 @@ class SnapshotsRepository:
 
     async def create_snapshot(
         self,
-        user_id: str,
-        config_id: int,
         billing_id: str,
-        snapshot_data: dict[str, Any],
+        snapshot_name: str | None,
+        snapshot_type: str,
+        config_data: dict[str, Any],
+        performance_data: dict[str, Any],
+        publisher_targeting_mode: str | None,
+        publisher_targeting_values: str | None,
+        notes: str | None,
     ) -> int:
-        snapshot_id = await pg_insert_returning_id(
+        row = await pg_query_one(
             """
             INSERT INTO pretargeting_snapshots
-            (config_id, billing_id, snapshot_data, created_by)
-            VALUES (%s, %s, %s, %s)
+            (billing_id, snapshot_name, snapshot_type,
+             included_formats, included_platforms, included_sizes,
+             included_geos, excluded_geos, state,
+             publisher_targeting_mode, publisher_targeting_values,
+             total_impressions, total_clicks, total_spend_usd,
+             total_reached_queries, days_tracked,
+             avg_daily_impressions, avg_daily_spend_usd, ctr_pct, cpm_usd,
+             notes, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
             RETURNING id
             """,
-            (config_id, billing_id, snapshot_data, user_id),
+            (
+                billing_id,
+                snapshot_name,
+                snapshot_type,
+                config_data.get("included_formats"),
+                config_data.get("included_platforms"),
+                config_data.get("included_sizes"),
+                config_data.get("included_geos"),
+                config_data.get("excluded_geos"),
+                config_data.get("state"),
+                publisher_targeting_mode,
+                publisher_targeting_values,
+                performance_data.get("total_impressions", 0),
+                performance_data.get("total_clicks", 0),
+                performance_data.get("total_spend_usd", 0),
+                performance_data.get("total_reached_queries", 0),
+                performance_data.get("days_tracked", 0),
+                performance_data.get("avg_daily_impressions"),
+                performance_data.get("avg_daily_spend_usd"),
+                performance_data.get("ctr_pct"),
+                performance_data.get("cpm_usd"),
+                notes,
+            ),
         )
-        await pg_execute(
-            """
-            UPDATE pretargeting_configs
-            SET last_snapshot_id = %s, updated_at = NOW()
-            WHERE id = %s
-            """,
-            (snapshot_id, config_id),
-        )
-        return snapshot_id
+        return row["id"] if row else 0
 
-    async def list_snapshots(
-        self,
-        billing_id: str,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> list[dict[str, Any]]:
-        return await pg_query(
-            """
-            SELECT s.id, s.config_id, s.billing_id, s.snapshot_data, s.created_by,
-                   s.created_at, c.name as config_name
-            FROM pretargeting_snapshots s
-            LEFT JOIN pretargeting_configs c ON s.config_id = c.id
-            WHERE s.billing_id = %s
-            ORDER BY s.created_at DESC
-            LIMIT %s OFFSET %s
-            """,
-            (billing_id, limit, offset),
-        )
-
-    async def get_snapshot_by_id(self, snapshot_id: int) -> dict[str, Any] | None:
-        rows = await pg_query(
+    async def get_snapshot(self, snapshot_id: int) -> dict[str, Any] | None:
+        row = await pg_query_one(
             "SELECT * FROM pretargeting_snapshots WHERE id = %s",
             (snapshot_id,),
         )
-        return rows[0] if rows else None
+        return dict(row) if row else None
+
+    async def list_snapshots(
+        self,
+        billing_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        if billing_id:
+            rows = await pg_query(
+                """
+                SELECT * FROM pretargeting_snapshots
+                WHERE billing_id = %s
+                ORDER BY created_at DESC LIMIT %s
+                """,
+                (billing_id, limit),
+            )
+        else:
+            rows = await pg_query(
+                "SELECT * FROM pretargeting_snapshots ORDER BY created_at DESC LIMIT %s",
+                (limit,),
+            )
+        return [dict(row) for row in rows]

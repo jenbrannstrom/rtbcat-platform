@@ -118,26 +118,35 @@ class SnapshotResponse(BaseModel):
 
 
 class ComparisonCreate(BaseModel):
-    """Request to create a config comparison."""
+    """Request to create a snapshot comparison."""
     billing_id: str = Field(..., description="Billing ID to compare")
-    snapshot_id: int = Field(..., description="Snapshot ID to compare against")
-    description: Optional[str] = Field(None, description="Optional description")
+    comparison_name: Optional[str] = Field(None, description="Comparison name")
+    before_snapshot_id: int = Field(..., description="Snapshot ID to compare against")
+    before_start_date: Optional[str] = Field(None, description="Comparison start date (before)")
+    before_end_date: Optional[str] = Field(None, description="Comparison end date (before)")
 
 
 class ComparisonResponse(BaseModel):
-    """Response model for a pretargeting config comparison."""
+    """Response model for a snapshot comparison."""
     id: int
     billing_id: str
-    snapshot_id: int
-    snapshot_description: Optional[str] = None
-    comparison_data: dict
+    comparison_name: Optional[str] = None
+    before_snapshot_id: int
+    after_snapshot_id: Optional[int] = None
+    before_start_date: Optional[str] = None
+    before_end_date: Optional[str] = None
+    after_start_date: Optional[str] = None
+    after_end_date: Optional[str] = None
+    impressions_delta: Optional[int] = None
+    impressions_delta_pct: Optional[float] = None
+    spend_delta_usd: Optional[float] = None
+    spend_delta_pct: Optional[float] = None
+    ctr_delta_pct: Optional[float] = None
+    cpm_delta_pct: Optional[float] = None
+    status: Optional[str] = None
+    conclusion: Optional[str] = None
     created_at: str
-    # Summary of differences
-    has_differences: bool = False
-    fields_changed: list[str] = []
-    geos_added: int = 0
-    geos_removed: int = 0
-    sizes_added: int = 0
+    completed_at: Optional[str] = None
     sizes_removed: int = 0
 
 
