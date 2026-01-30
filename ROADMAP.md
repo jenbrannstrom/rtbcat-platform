@@ -10,10 +10,11 @@
 - [ ] **Thumbnail placeholders** - Some creatives show placeholder instead of generated thumbnail (ffmpeg)
 - [ ] **FFmpeg missing on install** - Creatives tab fails to render video thumbnails until ffmpeg installed
 - [ ] **CSV import account mismatch** - Imports not linking to correct accounts
-- [ ] **Size drill-down shows no creatives** - config_creative_daily missing creative_size; fix staged, deploy + refresh pending
+- [ ] **Size drill-down shows no creatives** - fix is in config_precompute (creative_size) but needs deploy + config precompute refresh; no SQLite migration required
 - [x] **Import Now button fails** - /import does not process queued Gmail reports
 - [x] **Campaigns create action no-op** - Clicking "Create" on auto cluster does nothing
 - [ ] **Creative modal missing publisher data** - "No publisher data for this config" despite migrated tables
+- [ ] **Duplicate migration numbers (SQLite runner)** - 018/019/021 duplicates cause skipped migrations; renumber needed
 - [ ] ~~**CI/CD pipeline** - Build images in GitHub Actions and deploy via docker pull (Artifact Registry)~~ **(Done)**
 - [ ] **BigQuery raw_facts coverage** - Data only through Jan 25; Jan 26–28 pending reprocess after pipeline fix
 
@@ -117,6 +118,7 @@
 - [x] **Change history tracking** - Full audit trail of all pretargeting modifications
 - [x] **Publisher allow/deny editor** - In-app whitelist/blacklist editing with per-config history and rollback
 - [x] **Bulk edit UX** - Inline add/remove rows with validation and diff preview before save
+- [ ] **Publisher List UI layout** - Align table layout with spec (Mode toggle header, Publisher ID/Type/Status/Action); pending deploy
 
   **Publisher Targeting UX (per pretargeting config):**
   - Add a `Publishers` section under each config with mode toggle:
