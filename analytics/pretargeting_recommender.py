@@ -6,8 +6,11 @@ Goal: Maximize QPS efficiency with minimal configs.
 """
 
 from dataclasses import dataclass, field
-import sqlite3
+import os
 from typing import Optional
+
+import psycopg
+from psycopg.rows import dict_row
 
 from .geo_waste_analyzer import COUNTRY_CODES
 
@@ -48,8 +51,9 @@ class PretargetingRecommendation:
 class PretargetingRecommender:
     """Generate optimal pretargeting configs."""
 
-    def __init__(self, db_path: str):
-        self.db_path = db_path
+    def __init__(self, db_path_or_dsn: str):
+        # Accept either path (ignored) or use env var for Postgres DSN
+        self.dsn = os.getenv("POSTGRES_SERVING_DSN", db_path_or_dsn)
 
     def generate_recommendations(
         self,
@@ -65,8 +69,7 @@ class PretargetingRecommender:
         3. Group by format (BANNER, VIDEO, NATIVE)
         4. Create configs that maximize coverage with minimal waste
         """
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
+        conn = psycopg.connect(self.dsn, row_factory=dict_row)
 
         configs = []
         priority = 1
@@ -77,7 +80,7 @@ class PretargetingRecommender:
             SELECT
                 c.format,
                 COUNT(*) as creative_count,
-                GROUP_CONCAT(DISTINCT c.canonical_size) as sizes
+                STRING_AGG(DISTINCT c.canonical_size, ',') as sizes
             FROM creatives c
             WHERE c.approval_status = 'APPROVED'
             GROUP BY c.format
@@ -100,7 +103,7 @@ class PretargetingRecommender:
                 SUM(pm.clicks) as clicks
             FROM performance_metrics pm
             JOIN creatives c ON pm.creative_id = c.id
-            WHERE pm.metric_date >= date('now', '-{days} days')
+            WHERE pm.metric_date >= CURRENT_DATE - INTERVAL '{days} days'
               AND pm.geography IS NOT NULL
             GROUP BY c.format, pm.geography
             ORDER BY impressions DESC
@@ -128,7 +131,7 @@ class PretargetingRecommender:
         cursor = conn.execute(f"""
             SELECT SUM(impressions) as imps, SUM(clicks) as clicks
             FROM performance_metrics
-            WHERE metric_date >= date('now', '-{days} days')
+            WHERE metric_date >= CURRENT_DATE - INTERVAL '{days} days'
         """)
         row = cursor.fetchone()
         if row:
