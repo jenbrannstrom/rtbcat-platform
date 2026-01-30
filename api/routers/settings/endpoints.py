@@ -2,16 +2,19 @@
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_store
 from collectors import EndpointsClient
-from storage.database import db_execute, db_query, db_query_one
 from storage.sqlite_store import SQLiteStore
+from storage.postgres_store import PostgresStore
 
 from .models import RTBEndpointItem, RTBEndpointsResponse, SyncEndpointsResponse
+
+# Store type can be either SQLite or Postgres
+StoreType = Union[SQLiteStore, PostgresStore]
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +24,7 @@ router = APIRouter(tags=["RTB Settings"])
 @router.post("/settings/endpoints/sync", response_model=SyncEndpointsResponse)
 async def sync_rtb_endpoints(
     service_account_id: Optional[str] = Query(None, description="Service account ID to use"),
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
 ):
     """Sync RTB endpoints from Google Authorized Buyers API.
 
@@ -49,21 +52,15 @@ async def sync_rtb_endpoints(
         )
 
     # Get bidder account ID from buyer_seats table (linked to service account)
-    bidder_row = await db_query_one(
-        "SELECT bidder_id FROM buyer_seats WHERE service_account_id = ? LIMIT 1",
-        (service_account.id,),
-    )
-    if not bidder_row:
+    account_id = await store.get_bidder_id_for_service_account(service_account.id)
+    if not account_id:
         # Fallback: Get any buyer_seat (single-account scenario)
-        bidder_row = await db_query_one(
-            "SELECT bidder_id FROM buyer_seats LIMIT 1"
-        )
-    if not bidder_row:
+        account_id = await store.get_first_bidder_id()
+    if not account_id:
         raise HTTPException(
             status_code=400,
             detail="No buyer seats discovered. Use /seats/discover first."
         )
-    account_id = bidder_row["bidder_id"]
     logger.info(f"Using bidder_id: {account_id} for RTB endpoints sync")
 
     try:
@@ -73,27 +70,12 @@ async def sync_rtb_endpoints(
         )
         endpoints = await client.list_endpoints()
 
-        # Store endpoints in database using new db module
-        for ep in endpoints:
-            await db_execute(
-                """
-                INSERT OR REPLACE INTO rtb_endpoints
-                (bidder_id, endpoint_id, url, maximum_qps, trading_location, bid_protocol, synced_at)
-                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                """,
-                (
-                    account_id,
-                    ep["endpointId"],
-                    ep["url"],
-                    ep.get("maximumQps"),
-                    ep.get("tradingLocation"),
-                    ep.get("bidProtocol"),
-                ),
-            )
+        # Store endpoints in database using store method
+        count = await store.sync_rtb_endpoints(account_id, endpoints)
 
         return SyncEndpointsResponse(
             status="success",
-            endpoints_synced=len(endpoints),
+            endpoints_synced=count,
             bidder_id=account_id,
         )
 
@@ -106,7 +88,7 @@ async def sync_rtb_endpoints(
 async def get_rtb_endpoints(
     buyer_id: Optional[str] = Query(None, description="Buyer/seat ID to get endpoints for"),
     service_account_id: Optional[str] = Query(None, description="Service account ID (deprecated, use buyer_id)"),
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
 ):
     """Get stored RTB endpoints with aggregated QPS data.
 
@@ -123,13 +105,10 @@ async def get_rtb_endpoints(
 
         # Priority 1: Use buyer_id to look up bidder_id
         if buyer_id:
-            bidder_row = await db_query_one(
-                "SELECT bidder_id, display_name FROM buyer_seats WHERE buyer_id = ?",
-                (buyer_id,),
-            )
-            if bidder_row:
-                bidder_id = bidder_row["bidder_id"]
-                account_name = bidder_row["display_name"]
+            seat_info = await store.get_buyer_seat_with_bidder(buyer_id)
+            if seat_info:
+                bidder_id = seat_info["bidder_id"]
+                account_name = seat_info["display_name"]
                 logger.debug(f"Found bidder_id {bidder_id} for buyer_id {buyer_id}")
 
         # Priority 2: Fall back to service_account_id (legacy support)
@@ -137,36 +116,19 @@ async def get_rtb_endpoints(
             service_account = await store.get_service_account(service_account_id)
             if service_account:
                 account_name = service_account.display_name
-                bidder_row = await db_query_one(
-                    "SELECT bidder_id FROM buyer_seats WHERE service_account_id = ? LIMIT 1",
-                    (service_account.id,),
-                )
-                if bidder_row:
-                    bidder_id = bidder_row["bidder_id"]
+                bidder_id = await store.get_bidder_id_for_service_account(service_account.id)
 
         # Priority 3: Fall back to first active service account
         if not bidder_id:
             accounts = await store.get_service_accounts(active_only=True)
             if accounts:
                 account_name = accounts[0].display_name
-                bidder_row = await db_query_one(
-                    "SELECT bidder_id FROM buyer_seats WHERE service_account_id = ? LIMIT 1",
-                    (accounts[0].id,),
-                )
-                if bidder_row:
-                    bidder_id = bidder_row["bidder_id"]
+                bidder_id = await store.get_bidder_id_for_service_account(accounts[0].id)
+                if bidder_id:
                     logger.info(f"Using fallback bidder_id: {bidder_id} for endpoints list")
 
         # Get endpoints, optionally filtered by bidder_id
-        if bidder_id:
-            rows = await db_query(
-                "SELECT * FROM rtb_endpoints WHERE bidder_id = ? ORDER BY trading_location, endpoint_id",
-                (bidder_id,),
-            )
-        else:
-            rows = await db_query(
-                "SELECT * FROM rtb_endpoints ORDER BY trading_location, endpoint_id"
-            )
+        rows = await store.get_rtb_endpoints(bidder_id if bidder_id else None)
 
         endpoints = []
         total_qps = 0
@@ -189,17 +151,7 @@ async def get_rtb_endpoints(
                     latest_sync = row["synced_at"]
 
         # Get current QPS usage from rtb_endpoints_current table
-        qps_current = None
-        if bidder_id:
-            row = await db_query_one(
-                "SELECT SUM(current_qps) as current_qps FROM rtb_endpoints_current WHERE bidder_id = ?",
-                (bidder_id,),
-            )
-        else:
-            row = await db_query_one("SELECT SUM(current_qps) as current_qps FROM rtb_endpoints_current")
-
-        if row:
-            qps_current = row["current_qps"]
+        qps_current = await store.get_rtb_endpoints_current_qps(bidder_id if bidder_id else None)
 
         return RTBEndpointsResponse(
             bidder_id=bidder_id or "unknown",

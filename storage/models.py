@@ -294,3 +294,27 @@ class DailyUploadSummary:
     id: Optional[int] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+
+@dataclass
+class RTBEndpoint:
+    """RTB endpoint record from Google Authorized Buyers API.
+
+    Attributes:
+        endpoint_id: Unique endpoint identifier.
+        bidder_id: Parent bidder account ID.
+        url: Endpoint URL for bid requests.
+        maximum_qps: Maximum queries per second allocated.
+        trading_location: Geographic trading location.
+        bid_protocol: Protocol used for bidding (OPENRTB, etc.).
+        synced_at: Timestamp of last sync from API.
+    """
+
+    endpoint_id: str
+    bidder_id: str
+    url: Optional[str] = None
+    maximum_qps: Optional[int] = None
+    trading_location: Optional[str] = None
+    bid_protocol: Optional[str] = None
+    synced_at: Optional[datetime] = None
+    id: Optional[int] = None
