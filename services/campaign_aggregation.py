@@ -7,10 +7,12 @@ Joins campaigns → creatives → rtb_daily to calculate:
 - Warning counts: broken videos, zero engagement, etc.
 """
 
-import sqlite3
-from pathlib import Path
-from typing import Optional
+import os
+from typing import Any, Optional
 from dataclasses import dataclass, field
+
+import psycopg
+from psycopg.rows import dict_row
 
 
 @dataclass
@@ -55,15 +57,15 @@ class CampaignAggregationService:
     Implements Phase 11.1: Decision Context Foundation
     """
 
-    def __init__(self, db_path: Optional[Path] = None):
-        """Initialize with database path."""
-        self.db_path = db_path or Path.home() / ".catscan" / "catscan.db"
+    def __init__(self):
+        """Initialize with Postgres connection from environment."""
+        self.dsn = os.getenv("POSTGRES_SERVING_DSN", "")
 
-    def _get_connection(self) -> sqlite3.Connection:
-        """Get database connection."""
-        conn = sqlite3.connect(str(self.db_path))
-        conn.row_factory = sqlite3.Row
-        return conn
+    def _get_connection(self) -> Any:
+        """Get Postgres database connection."""
+        if not self.dsn:
+            raise RuntimeError("POSTGRES_SERVING_DSN environment variable not set")
+        return psycopg.connect(self.dsn, row_factory=dict_row)
 
     def get_campaigns_with_metrics(
         self,
@@ -97,7 +99,7 @@ class CampaignAggregationService:
 
             # Get creative IDs for this campaign
             cursor.execute(
-                "SELECT creative_id FROM creative_campaigns WHERE campaign_id = ?",
+                "SELECT creative_id FROM creative_campaigns WHERE campaign_id = %s",
                 (campaign_id,)
             )
             creative_ids = [r["creative_id"] for r in cursor.fetchall()]
@@ -146,7 +148,7 @@ class CampaignAggregationService:
         cursor = conn.cursor()
 
         cursor.execute(
-            "SELECT id, name, created_at, updated_at FROM campaigns WHERE id = ?",
+            "SELECT id, name, created_at, updated_at FROM campaigns WHERE id = %s",
             (campaign_id,)
         )
         camp_row = cursor.fetchone()
@@ -157,7 +159,7 @@ class CampaignAggregationService:
 
         # Get creative IDs
         cursor.execute(
-            "SELECT creative_id FROM creative_campaigns WHERE campaign_id = ?",
+            "SELECT creative_id FROM creative_campaigns WHERE campaign_id = %s",
             (campaign_id,)
         )
         creative_ids = [r["creative_id"] for r in cursor.fetchall()]
@@ -182,7 +184,7 @@ class CampaignAggregationService:
 
     def _get_campaign_metrics(
         self,
-        cursor: sqlite3.Cursor,
+        cursor: Any,
         creative_ids: list[str],
         days: int,
     ) -> CampaignMetrics:
@@ -190,7 +192,6 @@ class CampaignAggregationService:
         if not creative_ids:
             return CampaignMetrics()
 
-        placeholders = ",".join("?" * len(creative_ids))
         cursor.execute(f"""
             SELECT
                 COALESCE(SUM(spend_micros), 0) as total_spend,
@@ -198,9 +199,9 @@ class CampaignAggregationService:
                 COALESCE(SUM(clicks), 0) as total_clicks,
                 COALESCE(SUM(reached_queries), 0) as total_reached
             FROM rtb_daily
-            WHERE creative_id IN ({placeholders})
-              AND metric_date >= date('now', '-{days} days')
-        """, creative_ids)
+            WHERE creative_id = ANY(%s)
+              AND metric_date >= CURRENT_DATE - INTERVAL '{days} days'
+        """, (creative_ids,))
 
         row = cursor.fetchone()
 
@@ -234,7 +235,7 @@ class CampaignAggregationService:
 
     def _get_campaign_warnings(
         self,
-        cursor: sqlite3.Cursor,
+        cursor: Any,
         creative_ids: list[str],
         days: int,
     ) -> CampaignWarnings:
@@ -242,17 +243,15 @@ class CampaignAggregationService:
         if not creative_ids:
             return CampaignWarnings()
 
-        placeholders = ",".join("?" * len(creative_ids))
-
         # Broken video count (from thumbnail_status)
-        cursor.execute(f"""
+        cursor.execute("""
             SELECT COUNT(*) as count
             FROM thumbnail_status ts
             JOIN creatives c ON ts.creative_id = c.id
-            WHERE c.id IN ({placeholders})
+            WHERE c.id = ANY(%s)
               AND ts.status = 'failed'
               AND c.format = 'VIDEO'
-        """, creative_ids)
+        """, (creative_ids,))
         broken_video_count = cursor.fetchone()["count"] or 0
 
         # Zero engagement count (impressions > threshold but clicks = 0 over days)
@@ -264,12 +263,12 @@ class CampaignAggregationService:
                        SUM(clicks) as total_clicks,
                        COUNT(DISTINCT metric_date) as days_active
                 FROM rtb_daily
-                WHERE creative_id IN ({placeholders})
-                  AND metric_date >= date('now', '-{days} days')
+                WHERE creative_id = ANY(%s)
+                  AND metric_date >= CURRENT_DATE - INTERVAL '{days} days'
                 GROUP BY creative_id
-                HAVING total_imps > 1000 AND total_clicks = 0 AND days_active >= 3
-            )
-        """, creative_ids)
+                HAVING SUM(impressions) > 1000 AND SUM(clicks) = 0 AND COUNT(DISTINCT metric_date) >= 3
+            ) sub
+        """, (creative_ids,))
         zero_engagement_count = cursor.fetchone()["count"] or 0
 
         # High spend low performance (spend > $10 but CTR < 0.01%)
@@ -281,23 +280,23 @@ class CampaignAggregationService:
                        SUM(impressions) as total_imps,
                        SUM(clicks) as total_clicks
                 FROM rtb_daily
-                WHERE creative_id IN ({placeholders})
-                  AND metric_date >= date('now', '-{days} days')
+                WHERE creative_id = ANY(%s)
+                  AND metric_date >= CURRENT_DATE - INTERVAL '{days} days'
                 GROUP BY creative_id
-                HAVING total_spend > 10000000  -- $10
-                   AND total_imps > 0
-                   AND (CAST(total_clicks AS FLOAT) / total_imps) < 0.0001
-            )
-        """, creative_ids)
+                HAVING SUM(spend_micros) > 10000000  -- $10
+                   AND SUM(impressions) > 0
+                   AND (CAST(SUM(clicks) AS FLOAT) / SUM(impressions)) < 0.0001
+            ) sub
+        """, (creative_ids,))
         high_spend_low_perf = cursor.fetchone()["count"] or 0
 
         # Disapproved creatives
-        cursor.execute(f"""
+        cursor.execute("""
             SELECT COUNT(*) as count
             FROM creatives
-            WHERE id IN ({placeholders})
+            WHERE id = ANY(%s)
               AND approval_status = 'DISAPPROVED'
-        """, creative_ids)
+        """, (creative_ids,))
         disapproved_count = cursor.fetchone()["count"] or 0
 
         return CampaignWarnings(
@@ -328,7 +327,7 @@ class CampaignAggregationService:
             FROM rtb_daily p
             LEFT JOIN creative_campaigns cc ON p.creative_id = cc.creative_id
             WHERE cc.creative_id IS NULL
-              AND p.metric_date >= date('now', '-{days} days')
+              AND p.metric_date >= CURRENT_DATE - INTERVAL '{days} days'
               AND (p.impressions > 0 OR p.clicks > 0 OR p.spend_micros > 0)
             ORDER BY p.creative_id
         """)

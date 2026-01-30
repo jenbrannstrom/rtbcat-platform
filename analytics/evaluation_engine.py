@@ -26,10 +26,12 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any
 from enum import Enum
 from datetime import datetime
-import sqlite3
-from pathlib import Path
+import os
 import json
 import logging
+
+import psycopg
+from psycopg.rows import dict_row
 
 from collectors.troubleshooting import CREATIVE_STATUS_CODES, CALLOUT_STATUS_CODES
 
@@ -82,14 +84,15 @@ class EvaluationEngine:
     Philosophy: Intelligence without assumptions. Facts that drive action.
     """
 
-    def __init__(self, db_path: Optional[Path] = None):
-        self.db_path = db_path or Path.home() / ".catscan" / "catscan.db"
+    def __init__(self):
+        """Initialize with Postgres connection from environment."""
+        self.dsn = os.getenv("POSTGRES_SERVING_DSN", "")
 
-    def _get_connection(self) -> sqlite3.Connection:
-        """Get database connection."""
-        conn = sqlite3.connect(str(self.db_path))
-        conn.row_factory = sqlite3.Row
-        return conn
+    def _get_connection(self) -> Any:
+        """Get Postgres database connection."""
+        if not self.dsn:
+            raise RuntimeError("POSTGRES_SERVING_DSN environment variable not set")
+        return psycopg.connect(self.dsn, row_factory=dict_row)
 
     def run_full_evaluation(self, days: int = 7) -> Dict[str, Any]:
         """
@@ -152,10 +155,11 @@ class EvaluationEngine:
         # Check performance data
         try:
             cursor.execute(f"""
-                SELECT COUNT(*) FROM rtb_daily
-                WHERE metric_date >= date('now', '-{days} days')
+                SELECT COUNT(*) as cnt FROM rtb_daily
+                WHERE metric_date >= CURRENT_DATE - INTERVAL '{days} days'
             """)
-            perf_count = cursor.fetchone()[0]
+            row = cursor.fetchone()
+            perf_count = row["cnt"] if row else 0
             if perf_count > 0:
                 quality["available"].append(f"rtb_daily ({perf_count:,} rows)")
                 quality["score"] += 0.4
@@ -167,10 +171,11 @@ class EvaluationEngine:
         # Check troubleshooting data
         try:
             cursor.execute(f"""
-                SELECT COUNT(*) FROM troubleshooting_data
-                WHERE collection_date >= date('now', '-{days} days')
+                SELECT COUNT(*) as cnt FROM troubleshooting_data
+                WHERE collection_date >= CURRENT_DATE - INTERVAL '{days} days'
             """)
-            ts_count = cursor.fetchone()[0]
+            row = cursor.fetchone()
+            ts_count = row["cnt"] if row else 0
             if ts_count > 0:
                 quality["available"].append(f"troubleshooting_data ({ts_count:,} rows)")
                 quality["score"] += 0.3
@@ -181,8 +186,9 @@ class EvaluationEngine:
 
         # Check creative inventory
         try:
-            cursor.execute("SELECT COUNT(*) FROM creatives")
-            creative_count = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) as cnt FROM creatives")
+            row = cursor.fetchone()
+            creative_count = row["cnt"] if row else 0
             if creative_count > 0:
                 quality["available"].append(f"creatives ({creative_count:,})")
                 quality["score"] += 0.3
@@ -214,10 +220,10 @@ class EvaluationEngine:
                     ROUND(100.0 * SUM(bid_count) /
                         (SELECT SUM(bid_count) FROM troubleshooting_data
                          WHERE metric_type = 'filtered_bids'
-                         AND collection_date >= date('now', '-{days} days')), 2) as pct_of_filtered
+                         AND collection_date >= CURRENT_DATE - INTERVAL '{days} days'), 2) as pct_of_filtered
                 FROM troubleshooting_data
                 WHERE metric_type = 'filtered_bids'
-                  AND collection_date >= date('now', '-{days} days')
+                  AND collection_date >= CURRENT_DATE - INTERVAL '{days} days'
                 GROUP BY status_name
                 ORDER BY total_bids DESC
             """)
@@ -289,11 +295,11 @@ class EvaluationEngine:
                        SUM(reached_queries) as reached_queries,
                        SUM(impressions) as impressions
                 FROM rtb_daily
-                WHERE metric_date >= date('now', '-{days} days')
+                WHERE metric_date >= CURRENT_DATE - INTERVAL '{days} days'
                   AND creative_size IS NOT NULL
                 GROUP BY creative_size
-                HAVING reached_queries > 1000
-                ORDER BY reached_queries DESC
+                HAVING SUM(reached_queries) > 1000
+                ORDER BY SUM(reached_queries) DESC
             """)
             traffic_sizes = {row["creative_size"]: dict(row) for row in cursor.fetchall()}
         except:
@@ -364,10 +370,10 @@ class EvaluationEngine:
                        ROUND(100.0 * (SUM(reached_queries) - SUM(impressions)) /
                              NULLIF(SUM(reached_queries), 0), 2) as waste_pct
                 FROM rtb_daily
-                WHERE metric_date >= date('now', '-{days} days')
+                WHERE metric_date >= CURRENT_DATE - INTERVAL '{days} days'
                   AND country IS NOT NULL
                 GROUP BY country
-                HAVING reached_queries > 10000
+                HAVING SUM(reached_queries) > 10000
                 ORDER BY waste_pct DESC
             """)
             geo_stats = [dict(row) for row in cursor.fetchall()]
@@ -427,11 +433,11 @@ class EvaluationEngine:
                        SUM(clicks) as clicks,
                        'high_traffic_zero_clicks' as signal_type
                 FROM rtb_daily
-                WHERE metric_date >= date('now', '-{days} days')
+                WHERE metric_date >= CURRENT_DATE - INTERVAL '{days} days'
                   AND publisher_id IS NOT NULL
-                GROUP BY publisher_id
-                HAVING impressions > 10000 AND clicks = 0
-                ORDER BY impressions DESC
+                GROUP BY publisher_id, publisher_name
+                HAVING SUM(impressions) > 10000 AND SUM(clicks) = 0
+                ORDER BY SUM(impressions) DESC
                 LIMIT 10
             """)
             fraud_signals = [dict(row) for row in cursor.fetchall()]
@@ -471,10 +477,11 @@ class EvaluationEngine:
                        SUM(impressions) as impressions,
                        ROUND(100.0 * SUM(impressions) / NULLIF(SUM(reached_queries), 0), 2) as win_rate
                 FROM rtb_daily
-                WHERE metric_date >= date('now', '-{days} days')
+                WHERE metric_date >= CURRENT_DATE - INTERVAL '{days} days'
                   AND creative_size IS NOT NULL
                 GROUP BY creative_size
-                HAVING queries > 1000 AND win_rate > 20
+                HAVING SUM(reached_queries) > 1000 AND
+                       ROUND(100.0 * SUM(impressions) / NULLIF(SUM(reached_queries), 0), 2) > 20
                 ORDER BY win_rate DESC
                 LIMIT 5
             """)
@@ -535,10 +542,10 @@ class EvaluationEngine:
                     ROUND(100.0 * SUM(bid_count) /
                         (SELECT SUM(bid_count) FROM troubleshooting_data
                          WHERE metric_type = 'filtered_bids'
-                         AND collection_date >= date('now', '-{days} days')), 2) as pct_of_filtered
+                         AND collection_date >= CURRENT_DATE - INTERVAL '{days} days'), 2) as pct_of_filtered
                 FROM troubleshooting_data
                 WHERE metric_type = 'filtered_bids'
-                  AND collection_date >= date('now', '-{days} days')
+                  AND collection_date >= CURRENT_DATE - INTERVAL '{days} days'
                 GROUP BY status_name
                 ORDER BY total_bids DESC
             """)
@@ -567,7 +574,7 @@ class EvaluationEngine:
                 SELECT raw_data
                 FROM troubleshooting_data
                 WHERE metric_type = 'bid_metrics'
-                  AND collection_date >= date('now', '-{days} days')
+                  AND collection_date >= CURRENT_DATE - INTERVAL '{days} days'
             """)
 
             for row in cursor.fetchall():
