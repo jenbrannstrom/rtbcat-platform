@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getPretargetingConfigDetail,
@@ -53,6 +53,7 @@ interface PretargetingSettingsEditorProps {
   billing_id: string;
   configName: string;
   onClose?: () => void;
+  initialTab?: 'publishers' | 'settings';
 }
 
 function formatDate(dateStr: string): string {
@@ -858,9 +859,11 @@ export function PretargetingSettingsEditor({
   billing_id,
   configName,
   onClose,
+  initialTab = 'settings',
 }: PretargetingSettingsEditorProps) {
   const [showHistory, setShowHistory] = useState(false);
   const [historyView, setHistoryView] = useState<'audit' | 'snapshots'>('audit');
+  const [activeTab, setActiveTab] = useState<'publishers' | 'settings'>(initialTab);
   const [rollbackPreview, setRollbackPreview] = useState<{
     snapshot: PretargetingSnapshot;
     changes: string[];
@@ -869,6 +872,10 @@ export function PretargetingSettingsEditor({
   const [showConfirmSuspend, setShowConfirmSuspend] = useState(false);
   const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   // Fetch config detail
   const { data: configDetail, isLoading: configLoading, refetch: refetchDetail } = useQuery({
@@ -1198,13 +1205,17 @@ export function PretargetingSettingsEditor({
     .find((change) => change.change_type === 'set_publisher_mode') || null;
   const publisherMode = configDetail.publisher_targeting_mode || null;
 
+  const headerTitle = activeTab === 'publishers'
+    ? `Publisher List — ${configName}`
+    : 'Pretargeting Settings';
+
   return (
     <div className="border-t bg-white">
       {/* Header */}
       <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Settings className="h-4 w-4 text-gray-500" />
-          <span className="font-medium text-gray-900">Pretargeting Settings</span>
+          <span className="font-medium text-gray-900">{headerTitle}</span>
           {hasPendingChanges && (
             <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full">
               {pendingChanges.length} pending
@@ -1231,6 +1242,32 @@ export function PretargetingSettingsEditor({
             </button>
           )}
         </div>
+      </div>
+
+      {/* Tab selector */}
+      <div className="px-4 py-2 border-b bg-white flex items-center gap-2">
+        <button
+          onClick={() => setActiveTab('publishers')}
+          className={cn(
+            'px-3 py-1.5 text-xs font-medium rounded transition-colors',
+            activeTab === 'publishers'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          )}
+        >
+          Publisher List
+        </button>
+        <button
+          onClick={() => setActiveTab('settings')}
+          className={cn(
+            'px-3 py-1.5 text-xs font-medium rounded transition-colors',
+            activeTab === 'settings'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          )}
+        >
+          Config Settings
+        </button>
       </div>
 
       {/* Result notification */}
@@ -1392,8 +1429,8 @@ export function PretargetingSettingsEditor({
 
       {/* Content */}
       <div className="p-4 space-y-4">
-        {/* Pending changes section */}
-        {hasPendingChanges && (
+        {/* Pending changes section (settings tab only) */}
+        {activeTab === 'settings' && hasPendingChanges && (
           <div className="space-y-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-medium text-yellow-800 flex items-center gap-2">
@@ -1437,100 +1474,103 @@ export function PretargetingSettingsEditor({
           </div>
         )}
 
-        {/* Targeting sections */}
-        <TargetingSection
-          title="Ad Sizes"
-          icon={LayoutGrid}
-          values={configDetail.included_sizes}
-          pendingAdds={getPendingByType('add_size')}
-          pendingRemoves={getPendingByType('remove_size')}
-          onAddValue={handleAddSize}
-          onRemoveValue={handleRemoveSize}
-          onSelectAll={handleSelectAllSizes}
-          onInvertAll={handleInvertSizesSelection}
-          fieldName="included_sizes"
-          showBulkActions={true}
-        />
-
-        <TargetingSection
-          title="Geographic Targeting"
-          icon={Globe}
-          values={configDetail.included_geos}
-          pendingAdds={getPendingByType('add_geo')}
-          pendingRemoves={getPendingByType('remove_geo')}
-          onAddValue={handleAddGeo}
-          onRemoveValue={handleRemoveGeo}
-          fieldName="included_geos"
-        />
-
-        <PublisherTargetingSection
-          billingId={billing_id}
-          baseMode={publisherMode}
-          publishers={publishersData?.publishers || []}
-          pendingModeChange={pendingModeChange}
-          onAddPublisher={(publisherId) => {
-            const mode = publisherMode === 'INCLUSIVE' ? 'WHITELIST' : 'BLACKLIST';
-            addPublisherMutation.mutate({ publisherId, mode: mode as "BLACKLIST" | "WHITELIST" });
-          }}
-          onRemovePublisher={(publisherId) => {
-            removePublisherMutation.mutate(publisherId);
-          }}
-          onUndoPublisher={(publisherId) => {
-            // For undo, we just re-fetch after removing from pending
-            // The API DELETE endpoint handles both pending_add (removes row) and pending_remove (resets to active)
-            removePublisherMutation.mutate(publisherId);
-          }}
-          onSetMode={handleSetPublisherMode}
-          onShowHistory={() => {
-            setHistoryView('snapshots');
-            setShowHistory(true);
-          }}
-          onBulkAdd={(values) => {
-            const mode = publisherMode === 'INCLUSIVE' ? 'WHITELIST' : 'BLACKLIST';
-            values.forEach(publisherId => {
+        {activeTab === 'publishers' ? (
+          <PublisherTargetingSection
+            billingId={billing_id}
+            baseMode={publisherMode}
+            publishers={publishersData?.publishers || []}
+            pendingModeChange={pendingModeChange}
+            onAddPublisher={(publisherId) => {
+              const mode = publisherMode === 'INCLUSIVE' ? 'WHITELIST' : 'BLACKLIST';
               addPublisherMutation.mutate({ publisherId, mode: mode as "BLACKLIST" | "WHITELIST" });
-            });
-          }}
-          onExportCsv={handleExportPublishers}
-          disabled={isPushing || addPublisherMutation.isPending || removePublisherMutation.isPending}
-        />
+            }}
+            onRemovePublisher={(publisherId) => {
+              removePublisherMutation.mutate(publisherId);
+            }}
+            onUndoPublisher={(publisherId) => {
+              // For undo, we just re-fetch after removing from pending
+              // The API DELETE endpoint handles both pending_add (removes row) and pending_remove (resets to active)
+              removePublisherMutation.mutate(publisherId);
+            }}
+            onSetMode={handleSetPublisherMode}
+            onShowHistory={() => {
+              setHistoryView('snapshots');
+              setShowHistory(true);
+            }}
+            onBulkAdd={(values) => {
+              const mode = publisherMode === 'INCLUSIVE' ? 'WHITELIST' : 'BLACKLIST';
+              values.forEach(publisherId => {
+                addPublisherMutation.mutate({ publisherId, mode: mode as "BLACKLIST" | "WHITELIST" });
+              });
+            }}
+            onExportCsv={handleExportPublishers}
+            disabled={isPushing || addPublisherMutation.isPending || removePublisherMutation.isPending}
+          />
+        ) : (
+          <>
+            <TargetingSection
+              title="Ad Sizes"
+              icon={LayoutGrid}
+              values={configDetail.included_sizes}
+              pendingAdds={getPendingByType('add_size')}
+              pendingRemoves={getPendingByType('remove_size')}
+              onAddValue={handleAddSize}
+              onRemoveValue={handleRemoveSize}
+              onSelectAll={handleSelectAllSizes}
+              onInvertAll={handleInvertSizesSelection}
+              fieldName="included_sizes"
+              showBulkActions={true}
+            />
 
-        <TargetingSection
-          title="Formats"
-          icon={FileType}
-          values={configDetail.included_formats}
-          pendingAdds={getPendingByType('add_format')}
-          pendingRemoves={getPendingByType('remove_format')}
-          onAddValue={handleAddFormat}
-          onRemoveValue={handleRemoveFormat}
-          fieldName="included_formats"
-        />
+            <TargetingSection
+              title="Geographic Targeting"
+              icon={Globe}
+              values={configDetail.included_geos}
+              pendingAdds={getPendingByType('add_geo')}
+              pendingRemoves={getPendingByType('remove_geo')}
+              onAddValue={handleAddGeo}
+              onRemoveValue={handleRemoveGeo}
+              fieldName="included_geos"
+            />
 
-        {/* Excluded geos (read-only for now) */}
-        {configDetail.excluded_geos.length > 0 && (
-          <div className="border rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Ban className="h-4 w-4 text-red-500" />
-              <span className="font-medium text-gray-900">Excluded Geos</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {configDetail.excluded_geos.map((geo) => (
-                <span
-                  key={geo}
-                  className="px-2 py-0.5 bg-red-50 text-red-700 rounded text-xs"
-                >
-                  {geo}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
+            <TargetingSection
+              title="Formats"
+              icon={FileType}
+              values={configDetail.included_formats}
+              pendingAdds={getPendingByType('add_format')}
+              pendingRemoves={getPendingByType('remove_format')}
+              onAddValue={handleAddFormat}
+              onRemoveValue={handleRemoveFormat}
+              fieldName="included_formats"
+            />
 
-        {/* Last sync info */}
-        {configDetail.synced_at && (
-          <p className="text-xs text-gray-400 text-center">
-            Last synced from Google: {formatDate(configDetail.synced_at)}
-          </p>
+            {/* Excluded geos (read-only for now) */}
+            {configDetail.excluded_geos.length > 0 && (
+              <div className="border rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Ban className="h-4 w-4 text-red-500" />
+                  <span className="font-medium text-gray-900">Excluded Geos</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {configDetail.excluded_geos.map((geo) => (
+                    <span
+                      key={geo}
+                      className="px-2 py-0.5 bg-red-50 text-red-700 rounded text-xs"
+                    >
+                      {geo}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Last sync info */}
+            {configDetail.synced_at && (
+              <p className="text-xs text-gray-400 text-center">
+                Last synced from Google: {formatDate(configDetail.synced_at)}
+              </p>
+            )}
+          </>
         )}
       </div>
 
