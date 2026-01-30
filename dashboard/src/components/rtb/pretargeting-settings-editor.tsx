@@ -51,9 +51,10 @@ import { cn } from '@/lib/utils';
 
 interface PretargetingSettingsEditorProps {
   billing_id: string;
-  configName: string;
+  configName?: string;
   onClose?: () => void;
   initialTab?: 'publishers' | 'settings';
+  hideTabs?: boolean;
 }
 
 function formatDate(dateStr: string): string {
@@ -826,6 +827,7 @@ export function PretargetingSettingsEditor({
   configName,
   onClose,
   initialTab = 'settings',
+  hideTabs = false,
 }: PretargetingSettingsEditorProps) {
   const [showHistory, setShowHistory] = useState(false);
   const [historyView, setHistoryView] = useState<'audit' | 'snapshots'>('audit');
@@ -1171,8 +1173,12 @@ export function PretargetingSettingsEditor({
     .find((change) => change.change_type === 'set_publisher_mode') || null;
   const publisherMode = configDetail.publisher_targeting_mode || null;
 
+  const resolvedConfigName = configName
+    || configDetail?.user_name
+    || configDetail?.display_name
+    || billing_id;
   const headerTitle = activeTab === 'publishers'
-    ? `Publisher List — ${configName}`
+    ? `Publisher List — ${resolvedConfigName}`
     : 'Pretargeting Settings';
 
   return (
@@ -1224,30 +1230,32 @@ export function PretargetingSettingsEditor({
       </div>
 
       {/* Tab selector */}
-      <div className="px-4 py-2 border-b bg-white flex items-center gap-2">
-        <button
-          onClick={() => setActiveTab('publishers')}
-          className={cn(
-            'px-3 py-1.5 text-xs font-medium rounded transition-colors',
-            activeTab === 'publishers'
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          )}
-        >
-          Publisher List
-        </button>
-        <button
-          onClick={() => setActiveTab('settings')}
-          className={cn(
-            'px-3 py-1.5 text-xs font-medium rounded transition-colors',
-            activeTab === 'settings'
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          )}
-        >
-          Config Settings
-        </button>
-      </div>
+      {!hideTabs && (
+        <div className="px-4 py-2 border-b bg-white flex items-center gap-2">
+          <button
+            onClick={() => setActiveTab('publishers')}
+            className={cn(
+              'px-3 py-1.5 text-xs font-medium rounded transition-colors',
+              activeTab === 'publishers'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            )}
+          >
+            Publisher List
+          </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={cn(
+              'px-3 py-1.5 text-xs font-medium rounded transition-colors',
+              activeTab === 'settings'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            )}
+          >
+            Config Settings
+          </button>
+        </div>
+      )}
 
       {/* Result notification */}
       {pushResult && (
