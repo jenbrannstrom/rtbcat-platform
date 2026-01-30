@@ -2,12 +2,29 @@
 
 Business logic services for campaign management and creative health analysis.
 
+## Layering Rules (Postgres-only)
+
+- Routers parse input and call services; no SQL or multi-step logic in routers.
+- Services hold business rules and workflows; no SQL in services.
+- Repositories hold SQL + row mapping only.
+- `PostgresStore` is a temporary shim and should shrink over time.
+
 ## Services
 
 | Class | File | Purpose |
 |-------|------|---------|
 | `CreativeHealthService` | waste_analyzer.py | Evidence-based health signals for creatives (broken videos, low CTR, fraud, etc.) |
 | `CampaignAggregationService` | campaign_aggregation.py | Aggregates campaign performance with timeframe context |
+
+## Planned Services
+
+These services are expected as we unmix business logic from data access:
+
+- `PretargetingService` (pretargeting workflows + validation)
+- `EndpointsService` (RTB endpoints workflows)
+- `SnapshotsService` (snapshot create/list/rollback)
+- `ChangesService` (pending changes lifecycle)
+
 
 ## CreativeHealthService
 
