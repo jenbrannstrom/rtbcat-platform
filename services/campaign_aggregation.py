@@ -59,12 +59,19 @@ class CampaignAggregationService:
 
     def __init__(self):
         """Initialize with Postgres connection from environment."""
-        self.dsn = os.getenv("POSTGRES_SERVING_DSN", "")
+        self.dsn = (
+            os.getenv("POSTGRES_SERVING_DSN")
+            or os.getenv("POSTGRES_DSN")
+            or os.getenv("DATABASE_URL")
+            or ""
+        )
 
     def _get_connection(self) -> Any:
         """Get Postgres database connection."""
         if not self.dsn:
-            raise RuntimeError("POSTGRES_SERVING_DSN environment variable not set")
+            raise RuntimeError(
+                "POSTGRES_SERVING_DSN, POSTGRES_DSN, or DATABASE_URL must be set"
+            )
         return psycopg.connect(self.dsn, row_factory=dict_row)
 
     def get_campaigns_with_metrics(
@@ -192,7 +199,8 @@ class CampaignAggregationService:
         if not creative_ids:
             return CampaignMetrics()
 
-        cursor.execute(f"""
+        cursor.execute(
+            """
             SELECT
                 COALESCE(SUM(spend_micros), 0) as total_spend,
                 COALESCE(SUM(impressions), 0) as total_impressions,
@@ -200,8 +208,10 @@ class CampaignAggregationService:
                 COALESCE(SUM(reached_queries), 0) as total_reached
             FROM rtb_daily
             WHERE creative_id = ANY(%s)
-              AND metric_date >= CURRENT_DATE - INTERVAL '{days} days'
-        """, (creative_ids,))
+              AND metric_date >= CURRENT_DATE - make_interval(days => %s)
+            """,
+            (creative_ids, days),
+        )
 
         row = cursor.fetchone()
 
@@ -255,7 +265,8 @@ class CampaignAggregationService:
         broken_video_count = cursor.fetchone()["count"] or 0
 
         # Zero engagement count (impressions > threshold but clicks = 0 over days)
-        cursor.execute(f"""
+        cursor.execute(
+            """
             SELECT COUNT(DISTINCT creative_id) as count
             FROM (
                 SELECT creative_id,
@@ -264,15 +275,18 @@ class CampaignAggregationService:
                        COUNT(DISTINCT metric_date) as days_active
                 FROM rtb_daily
                 WHERE creative_id = ANY(%s)
-                  AND metric_date >= CURRENT_DATE - INTERVAL '{days} days'
+                  AND metric_date >= CURRENT_DATE - make_interval(days => %s)
                 GROUP BY creative_id
                 HAVING SUM(impressions) > 1000 AND SUM(clicks) = 0 AND COUNT(DISTINCT metric_date) >= 3
             ) sub
-        """, (creative_ids,))
+            """,
+            (creative_ids, days),
+        )
         zero_engagement_count = cursor.fetchone()["count"] or 0
 
         # High spend low performance (spend > $10 but CTR < 0.01%)
-        cursor.execute(f"""
+        cursor.execute(
+            """
             SELECT COUNT(DISTINCT creative_id) as count
             FROM (
                 SELECT creative_id,
@@ -281,13 +295,15 @@ class CampaignAggregationService:
                        SUM(clicks) as total_clicks
                 FROM rtb_daily
                 WHERE creative_id = ANY(%s)
-                  AND metric_date >= CURRENT_DATE - INTERVAL '{days} days'
+                  AND metric_date >= CURRENT_DATE - make_interval(days => %s)
                 GROUP BY creative_id
                 HAVING SUM(spend_micros) > 10000000  -- $10
                    AND SUM(impressions) > 0
                    AND (CAST(SUM(clicks) AS FLOAT) / SUM(impressions)) < 0.0001
             ) sub
-        """, (creative_ids,))
+            """,
+            (creative_ids, days),
+        )
         high_spend_low_perf = cursor.fetchone()["count"] or 0
 
         # Disapproved creatives
@@ -322,15 +338,18 @@ class CampaignAggregationService:
         conn = self._get_connection()
         cursor = conn.cursor()
 
-        cursor.execute(f"""
+        cursor.execute(
+            """
             SELECT DISTINCT p.creative_id
             FROM rtb_daily p
             LEFT JOIN creative_campaigns cc ON p.creative_id = cc.creative_id
             WHERE cc.creative_id IS NULL
-              AND p.metric_date >= CURRENT_DATE - INTERVAL '{days} days'
+              AND p.metric_date >= CURRENT_DATE - make_interval(days => %s)
               AND (p.impressions > 0 OR p.clicks > 0 OR p.spend_micros > 0)
             ORDER BY p.creative_id
-        """)
+            """,
+            (days,),
+        )
 
         result = [row["creative_id"] for row in cursor.fetchall()]
         conn.close()

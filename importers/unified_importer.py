@@ -31,10 +31,17 @@ IMPORT_BATCH_SIZE = int(os.getenv("CATSCAN_IMPORT_BATCH_SIZE", "1000"))
 
 
 def get_postgres_connection() -> Any:
-    """Get Postgres connection using POSTGRES_SERVING_DSN."""
-    dsn = os.getenv("POSTGRES_SERVING_DSN", "")
+    """Get Postgres connection using POSTGRES_SERVING_DSN/POSTGRES_DSN/DATABASE_URL."""
+    dsn = (
+        os.getenv("POSTGRES_SERVING_DSN")
+        or os.getenv("POSTGRES_DSN")
+        or os.getenv("DATABASE_URL")
+        or ""
+    )
     if not dsn:
-        raise RuntimeError("POSTGRES_SERVING_DSN environment variable not set")
+        raise RuntimeError(
+            "POSTGRES_SERVING_DSN, POSTGRES_DSN, or DATABASE_URL must be set"
+        )
     return psycopg.connect(dsn, row_factory=dict_row)
 
 
