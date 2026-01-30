@@ -2,10 +2,10 @@
 
 **Date:** January 27, 2026  
 **Project:** RTB.cat Creative Intelligence & Performance Analytics Platform  
-**Status:** Postgres migration in progress (blocking precompute); MCP Chromium running on localhost:8765 but Codex visibility still flaky; UI precompute status bug fixed locally  
+**Status:** Postgres migration in progress (blocking precompute); MCP Chrome running on localhost:8765 but Codex visibility still flaky; UI precompute status bug fixed locally  
 **Developer:** Jen (jen@rtb.cat)  
 **AI Assistants:** Claude CLI, Claude in VSCode, ChatGPT Codex CLI  
-**Latest Updates:** Postgres serving precompute status bug fixed; MCP Chromium server running with localhost allowlist; GMail ingest attempted but failed due to schema readiness; Claude CLI can access MCP Chrome for screenshots
+**Latest Updates:** Postgres serving precompute status bug fixed; MCP Chrome server running with localhost allowlist; GMail ingest attempted but failed due to schema readiness; Claude CLI can access MCP Chrome for screenshots
 
 ---
 
@@ -22,7 +22,7 @@ RTB.cat Creative Intelligence is a **comprehensive RTB (Real-Time Bidding) analy
 
 **Current State:**
 - ✅ Postgres instance set up on Singapore VM (per report)
-- ✅ MCP Chromium server listening on `localhost:8765` (required by host allowlist)
+- ✅ MCP Chrome server listening on `localhost:8765` (required by host allowlist)
 - ⚠️ Codex CLI still fails to see MCP tools reliably; Claude CLI can access MCP Chrome
 - ⚠️ GMail ingest run but failed with many errors (schema not fully ready)
 - ⚠️ UI shows “No precomputed data for this seat. Run a refresh after imports.” on all tables
@@ -37,7 +37,7 @@ RTB.cat Creative Intelligence is a **comprehensive RTB (Real-Time Bidding) analy
 2. [What’s New in v10](#whats-new-in-v10)
 3. [Postgres Migration Status](#postgres-migration-status)
 4. [Precompute Status Issue](#precompute-status-issue)
-5. [MCP Chromium Status](#mcp-chromium-status)
+5. [MCP Chrome Status](#mcp-chrome-status)
 6. [Known Issues & Bugs](#known-issues--bugs)
 7. [Server Management](#server-management)
 8. [File Locations](#file-locations)
@@ -92,7 +92,7 @@ psql $POSTGRES_SERVING_DSN -c "SELECT * FROM precompute_refresh_log ORDER BY com
 
 **File:** `api/routers/analytics/common.py`
 
-### 2. MCP Chromium server already running ✅
+### 2. MCP Chrome server already running ✅
 
 - `./scripts/mcp-chromium-cdp.sh` runs:
   `playwright-mcp --cdp-endpoint ... --host localhost --port 8765 --allowed-hosts "*"`
@@ -207,9 +207,9 @@ cat ~/.catscan/gmail_batch_checkpoint.json
 
 ---
 
-## 🧪 MCP Chromium Status
+## 🧪 MCP Chrome Status
 
-**Docs:** `docs/MCP_CHROMIUM.md`, `docs/MCP_STATUS_NEW.md`
+**Docs:** Use `scripts/chrome-cdp.sh` + `scripts/mcp-chromium-cdp.sh` (no dedicated doc).
 
 **Current:**
 - Server is listening on `http://localhost:8765` and attached to Chrome CDP (`http://127.0.0.1:9222/json/version`).
@@ -244,7 +244,7 @@ cat ~/.catscan/gmail_batch_checkpoint.json
    - Root cause unknown until DSNs + Postgres checks.
 3. **GMail ingest errors**
    - Failed due to schema readiness; likely blocking raw data completeness.
-4. **MCP Chromium docs partially inaccurate**
+4. **MCP Chrome docs partially inaccurate**
    - Port already in use; config already present.
 5. **SG API container still using SQLite (fixed in compose patch)**
    - `docker-compose.gcp.yml` forced `DATABASE_PATH`; DSNs in `/opt/catscan/.env` were ignored.
@@ -285,8 +285,7 @@ curl http://localhost:8000/health
 ## 📁 File Locations
 
 - Postgres migration runbook: `docs/POSTGRES_MIGRATION_RUNBOOK.md`
-- MCP Chromium notes: `docs/MCP_CHROMIUM.md`
-- MCP Chromium status checklist: `docs/MCP_STATUS_NEW.md`
+- MCP Chrome notes: see `scripts/chrome-cdp.sh` + `scripts/mcp-chromium-cdp.sh`
 - Precompute refresh script: `scripts/refresh_precompute.py`
 - Precompute helpers: `services/home_precompute.py`, `services/rtb_precompute.py`, `services/config_precompute.py`
 - Serving DB router: `storage/serving_database.py`
@@ -297,7 +296,7 @@ curl http://localhost:8000/health
 ## ✅ Next Steps
 
 1. Restart API to pick up precompute status fix.
-2. Restart Codex CLI to attach to MCP Chromium server; validate by tool usage (screenshot) not resources.
+2. Restart Codex CLI to attach to MCP Chrome server; validate by tool usage (screenshot) not resources.
 3. Retrieve `POSTGRES_DSN` and `POSTGRES_SERVING_DSN`.
 4. Run Postgres checks (counts + refresh log) to confirm whether tables are populated.
 5. If tables are empty, rerun precompute refresh after confirming BigQuery raw tables and schema readiness.

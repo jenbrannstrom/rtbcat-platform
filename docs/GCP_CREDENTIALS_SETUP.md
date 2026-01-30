@@ -150,6 +150,8 @@ gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-throu
 gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
 ```
 
+**Important:** Use **SG (primary)** for all current work. The EU VM is legacy and does not have Postgres configured.
+
 ### Firewall Rules (What's Open)
 
 | Port | Access | Purpose |
@@ -338,6 +340,8 @@ gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-throu
 gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap -- \
   "cd /opt/catscan && sudo docker compose -f docker-compose.gcp.yml pull && \
    sudo docker compose -f docker-compose.gcp.yml up -d --no-build"
+
+**Rule:** Never deploy a local commit directly. Always push to `unified-platform`, wait for CI success, then deploy by sha tag from the CI build.
 ```
 
 ### Step 3: Verify

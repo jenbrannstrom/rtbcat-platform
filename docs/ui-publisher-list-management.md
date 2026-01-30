@@ -493,6 +493,34 @@ Click [View History] to see the audit log:
 - Date filter: Last 7 days, Last 30 days, Last 90 days, Custom range
 - [Export ↓] downloads history as CSV
 
+### History (Table View)
+
+Compact, export-friendly view for power users.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Publisher Targeting History — US Mobile Display             [Back to List] │
+│  Filter: [All Actions ▼] [Last 30 days ▼]  Search: [___________]   [Export]  │
+├───────────────┬────────────┬───────────┬────────────┬───────────────────────┤
+│ Time (SG)     │ User       │ Action    │ Mode       │ Publisher              │
+├───────────────┼────────────┼───────────┼────────────┼───────────────────────┤
+│ 01‑28 21:42   │ jen@rtb.cat│ Add       │ Blacklist  │ com.fakegame.slots     │
+│ 01‑28 21:42   │ jen@rtb.cat│ Add       │ Blacklist  │ clickbait-news.com     │
+│ 01‑28 21:42   │ jen@rtb.cat│ Add       │ Blacklist  │ spammy-site.net        │
+│ 01‑28 20:11   │ api_sync   │ Sync      │ Whitelist  │ com.trusted.app        │
+│ 01‑28 20:11   │ api_sync   │ Sync      │ Whitelist  │ premium-news.com       │
+│ 01‑27 18:06   │ jen@rtb.cat│ Remove    │ Blacklist  │ com.oldgame.app        │
+│ 01‑27 18:06   │ jen@rtb.cat│ Remove    │ Blacklist  │ gambling-news.net      │
+│ 01‑27 17:02   │ jen@rtb.cat│ Mode      │ →Whitelist │ —                      │
+└───────────────┴────────────┴───────────┴────────────┴───────────────────────┘
+```
+
+**UX Notes:**
+- Filters by action (Add/Remove/Mode/Sync/Apply)
+- Search matches publisher ID or name
+- Optional "Group by batch" toggle merges rows with the same timestamp + user
+- Export includes: timestamp, user, action, publisher_id, publisher_name, mode, source, billing_id
+
 ---
 
 ## 14. Rollback Flow
@@ -653,6 +681,67 @@ On smaller screens, the table collapses:
 │  [Discard]              [Apply to Google]   │
 └─────────────────────────────────────────────┘
 ```
+
+---
+
+## 19. Implementation Plan (System + UX)
+
+This section defines the required data flow and UX behavior to make the Publisher List reliable, glanceable, and low-error for operators.
+
+### Data Source of Truth
+
+- Use `pretargeting_publishers` as the authoritative list for the UI.
+- `pretargeting_configs.raw_config.publisherTargeting` remains source for "detail" fields (sizes/geos/formats), but **publisher list view must not parse raw_config**.
+- Publisher **names are optional** and should be resolved from Postgres if available.
+
+### Backend API
+
+**Read path (UI list):**
+- `GET /settings/pretargeting/{billing_id}/publishers`
+  - Return: `publisher_id`, `publisher_name` (optional), `mode`, `status`, `source`, `created_at`, `updated_at`.
+  - Filter by `mode` and `status` query params.
+
+**Write path (pending changes):**
+- `POST /settings/pretargeting/{billing_id}/publishers` to add a pending publisher.
+- `DELETE /settings/pretargeting/{billing_id}/publishers` to mark pending remove (existing endpoint already supports update).
+
+**Name enrichment (optional but recommended):**
+- Join `pretargeting_publishers.publisher_id` to one of:
+  - `publishers` lookup table, or
+  - latest aggregated `rtb_publisher_daily` / `home_publisher_daily`.
+- If no name found, return `publisher_name = NULL` and UI falls back to ID.
+
+### UI Data Wiring
+
+- Replace `publisher_targeting_values` in pretargeting detail view with the publishers endpoint for list rendering.
+- Use list items with `{publisher_id, publisher_name?, mode, status, source}`.
+- Keep `pending_changes` from `/settings/pretargeting/{billing_id}/detail` for cross-field pending actions (sizes/geos/formats).
+
+### Operator Workflow (Low-Error)
+
+1. **Mode toggle** (Whitelist/Blacklist) is always visible and shows counts by status.
+2. **Table rows** show:
+   - Name (if present) + ID (always)
+   - Status chip: `Active`, `Pending Add`, `Pending Remove`
+   - Source chip: `API` or `User`
+3. **Primary action**: "Add publisher" with inline validation (bundle ID or domain).
+4. **Pending changes bar** appears when any pending items exist:
+   - Shows count by action and a single "Apply to Google" CTA.
+5. **Bulk import** supports paste/CSV with immediate validation and error summary.
+6. **No silent changes**: all edits remain pending until user clicks "Apply to Google".
+
+### Validation Rules
+
+- Accept IDs matching app bundle format (e.g., `com.example.app`) or domain format (e.g., `example.com`).
+- Reject any ID with spaces, uppercase-only invalids, or missing dot segments.
+- If duplicate or conflicting mode exists, show a clear error and no-op.
+
+### Acceptance Checks
+
+- `GET /settings/pretargeting/{billing_id}/publishers` returns list matching DB rows.
+- UI shows pending/active states correctly (add/remove).
+- Switching mode clears visible list (per spec) and records pending change.
+- Bulk import reports all invalid IDs without applying.
 
 ---
 

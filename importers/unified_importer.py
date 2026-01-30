@@ -14,6 +14,7 @@ import os
 import hashlib
 import uuid
 import logging
+import time
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 
@@ -26,6 +27,31 @@ from importers.utils import DB_PATH, parse_date, parse_float, parse_int
 logger = logging.getLogger(__name__)
 
 IMPORT_BATCH_SIZE = int(os.getenv("CATSCAN_IMPORT_BATCH_SIZE", "1000"))
+SQLITE_TIMEOUT = int(os.getenv("CATSCAN_SQLITE_TIMEOUT", "30"))  # seconds
+SQLITE_RETRY_COUNT = int(os.getenv("CATSCAN_SQLITE_RETRY_COUNT", "3"))
+SQLITE_RETRY_DELAY = int(os.getenv("CATSCAN_SQLITE_RETRY_DELAY", "5"))  # seconds
+
+
+def connect_with_retry(db_path: str, timeout: int = SQLITE_TIMEOUT) -> sqlite3.Connection:
+    """Connect to SQLite with timeout and retry logic to handle lock contention."""
+    last_error = None
+    for attempt in range(1, SQLITE_RETRY_COUNT + 1):
+        try:
+            conn = sqlite3.connect(db_path, timeout=timeout)
+            if attempt > 1:
+                logger.info("SQLite connection succeeded on attempt %d", attempt)
+            return conn
+        except sqlite3.OperationalError as e:
+            last_error = e
+            if "database is locked" in str(e).lower():
+                logger.warning(
+                    "SQLite database locked (attempt %d/%d), retrying in %ds...",
+                    attempt, SQLITE_RETRY_COUNT, SQLITE_RETRY_DELAY
+                )
+                time.sleep(SQLITE_RETRY_DELAY)
+            else:
+                raise
+    raise last_error
 
 
 @dataclass
@@ -271,7 +297,7 @@ def import_to_rtb_daily(
     report_type: Optional[str] = None,
 ):
     """Import data to rtb_daily table."""
-    conn = sqlite3.connect(db_path)
+    conn = connect_with_retry(db_path)
     cursor = conn.cursor()
     configure_import_connection(conn)
     ensure_table_exists(cursor, "rtb_daily")
@@ -452,9 +478,8 @@ def import_to_rtb_bidstream(
     report_type: Optional[str] = None,
 ):
     """Import data to rtb_bidstream table."""
-    conn = sqlite3.connect(db_path)
+    conn = connect_with_retry(db_path)
     cursor = conn.cursor()
-    configure_import_connection(conn)
     configure_import_connection(conn)
 
     # Check if table exists, if not create it
@@ -589,7 +614,7 @@ def import_to_rtb_bid_filtering(
     report_type: Optional[str] = None,
 ):
     """Import data to rtb_bid_filtering table."""
-    conn = sqlite3.connect(db_path)
+    conn = connect_with_retry(db_path)
     cursor = conn.cursor()
     configure_import_connection(conn)
     ensure_table_exists(cursor, "rtb_bid_filtering")
