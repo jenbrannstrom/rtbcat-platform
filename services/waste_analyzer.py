@@ -14,11 +14,14 @@ Signal Types:
 """
 
 import json
-import sqlite3
+import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
+
+import psycopg
+from psycopg.rows import dict_row
 
 
 @dataclass
@@ -86,14 +89,12 @@ class CreativeHealthService:
     FRAUD_CTR_THRESHOLD = 0.50  # 50% CTR is suspicious
 
     def __init__(self, db_path: Optional[Path] = None):
-        """Initialize with database path."""
-        self.db_path = db_path or Path.home() / ".catscan" / "catscan.db"
+        """Initialize with database path (ignored, uses POSTGRES_SERVING_DSN)."""
+        self.dsn = os.getenv("POSTGRES_SERVING_DSN", "")
 
-    def _get_connection(self) -> sqlite3.Connection:
+    def _get_connection(self) -> Any:
         """Get database connection."""
-        conn = sqlite3.connect(str(self.db_path))
-        conn.row_factory = sqlite3.Row
-        return conn
+        return psycopg.connect(self.dsn, row_factory=dict_row)
 
     def analyze_creative(
         self,
@@ -117,7 +118,7 @@ class CreativeHealthService:
         # Get creative metadata
         cursor.execute("""
             SELECT id, format, approval_status, advertiser_name
-            FROM creatives WHERE id = ?
+            FROM creatives WHERE id = %s
         """, (creative_id,))
         creative = cursor.fetchone()
 
@@ -136,8 +137,8 @@ class CreativeHealthService:
                 COALESCE(SUM(video_completions), 0) as video_completions,
                 COUNT(DISTINCT metric_date) as days_observed
             FROM rtb_daily
-            WHERE creative_id = ?
-              AND metric_date >= date('now', '-{days} days')
+            WHERE creative_id = %s
+              AND metric_date >= CURRENT_DATE - INTERVAL '{days} days'
         """, (creative_id,))
         perf = cursor.fetchone()
 
@@ -148,7 +149,7 @@ class CreativeHealthService:
             cursor.execute("""
                 SELECT status, error_reason
                 FROM thumbnail_status
-                WHERE creative_id = ?
+                WHERE creative_id = %s
             """, (creative_id,))
             thumb = cursor.fetchone()
             if thumb:
@@ -218,7 +219,7 @@ class CreativeHealthService:
         cursor.execute(f"""
             SELECT DISTINCT creative_id
             FROM rtb_daily
-            WHERE metric_date >= date('now', '-{days} days')
+            WHERE metric_date >= CURRENT_DATE - INTERVAL '{days} days'
         """)
         creative_ids = [row["creative_id"] for row in cursor.fetchall()]
         conn.close()
@@ -254,13 +255,13 @@ class CreativeHealthService:
         if include_resolved:
             cursor.execute("""
                 SELECT * FROM waste_signals
-                WHERE creative_id = ?
+                WHERE creative_id = %s
                 ORDER BY detected_at DESC
             """, (creative_id,))
         else:
             cursor.execute("""
                 SELECT * FROM waste_signals
-                WHERE creative_id = ? AND resolved_at IS NULL
+                WHERE creative_id = %s AND resolved_at IS NULL
                 ORDER BY detected_at DESC
             """, (creative_id,))
 
@@ -303,9 +304,9 @@ class CreativeHealthService:
         cursor.execute("""
             UPDATE waste_signals
             SET resolved_at = CURRENT_TIMESTAMP,
-                resolved_by = ?,
-                resolution_notes = ?
-            WHERE id = ?
+                resolved_by = %s,
+                resolution_notes = %s
+            WHERE id = %s
         """, (resolved_by, notes, signal_id))
         conn.commit()
         affected = cursor.rowcount
@@ -322,7 +323,7 @@ class CreativeHealthService:
             # Check if signal already exists (same creative + type, unresolved)
             cursor.execute("""
                 SELECT id FROM waste_signals
-                WHERE creative_id = ? AND signal_type = ? AND resolved_at IS NULL
+                WHERE creative_id = %s AND signal_type = %s AND resolved_at IS NULL
             """, (signal.creative_id, signal.signal_type))
             existing = cursor.fetchone()
 
@@ -330,12 +331,12 @@ class CreativeHealthService:
                 # Update existing signal with new evidence
                 cursor.execute("""
                     UPDATE waste_signals
-                    SET evidence = ?,
-                        observation = ?,
-                        recommendation = ?,
-                        confidence = ?,
+                    SET evidence = %s,
+                        observation = %s,
+                        recommendation = %s,
+                        confidence = %s,
                         detected_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
+                    WHERE id = %s
                 """, (
                     json.dumps(signal.evidence.to_dict()),
                     signal.observation,
@@ -348,7 +349,7 @@ class CreativeHealthService:
                 cursor.execute("""
                     INSERT INTO waste_signals
                     (creative_id, signal_type, confidence, evidence, observation, recommendation)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                 """, (
                     signal.creative_id,
                     signal.signal_type,
@@ -368,7 +369,7 @@ class CreativeHealthService:
     def _create_broken_video_signal(
         self,
         creative_id: str,
-        perf: sqlite3.Row,
+        perf: dict,
         error_type: Optional[str],
     ) -> WasteSignal:
         """Create a broken video signal."""
@@ -395,7 +396,7 @@ class CreativeHealthService:
     def _create_zero_engagement_signal(
         self,
         creative_id: str,
-        perf: sqlite3.Row,
+        perf: dict,
     ) -> WasteSignal:
         """Create a zero engagement signal."""
         evidence = WasteEvidence(
@@ -422,7 +423,7 @@ class CreativeHealthService:
     def _create_high_spend_low_perf_signal(
         self,
         creative_id: str,
-        perf: sqlite3.Row,
+        perf: dict,
         spend_usd: float,
         ctr: float,
     ) -> WasteSignal:
@@ -449,7 +450,7 @@ class CreativeHealthService:
     def _create_low_vcr_signal(
         self,
         creative_id: str,
-        perf: sqlite3.Row,
+        perf: dict,
         vcr: float,
     ) -> WasteSignal:
         """Create a low video completion rate signal."""
@@ -474,7 +475,7 @@ class CreativeHealthService:
     def _create_disapproved_signal(
         self,
         creative_id: str,
-        perf: sqlite3.Row,
+        perf: dict,
     ) -> WasteSignal:
         """Create a disapproved creative signal."""
         evidence = WasteEvidence(
