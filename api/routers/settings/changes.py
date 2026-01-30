@@ -2,13 +2,18 @@
 
 import json
 import logging
-from typing import Optional
+from typing import Optional, Union
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from storage.database import db_execute, db_insert_returning_id, db_query, db_query_one
+from api.dependencies import get_store
+from storage.sqlite_store import SQLiteStore
+from storage.postgres_store import PostgresStore
 
 from .models import ConfigDetailResponse, PendingChangeCreate, PendingChangeResponse
+
+# Store type can be either SQLite or Postgres
+StoreType = Union[SQLiteStore, PostgresStore]
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +21,10 @@ router = APIRouter(tags=["RTB Settings"])
 
 
 @router.post("/settings/pretargeting/pending-change", response_model=PendingChangeResponse)
-async def create_pending_change(request: PendingChangeCreate):
+async def create_pending_change(
+    request: PendingChangeCreate,
+    store: StoreType = Depends(get_store),
+):
     """
     Create a pending change to a pretargeting configuration.
 
@@ -56,10 +64,7 @@ async def create_pending_change(request: PendingChangeCreate):
 
     try:
         # Verify the config exists and get config_id
-        config = await db_query_one(
-            "SELECT config_id FROM pretargeting_configs WHERE billing_id = ?",
-            (request.billing_id,)
-        )
+        config = await store.get_pretargeting_config_by_billing_id(request.billing_id)
 
         if not config:
             raise HTTPException(
@@ -68,43 +73,35 @@ async def create_pending_change(request: PendingChangeCreate):
             )
 
         config_id = config["config_id"]
+        bidder_id = config.get("bidder_id")
 
         # Insert the pending change
-        change_id = await db_insert_returning_id(
-            """INSERT INTO pretargeting_pending_changes (
-                billing_id, config_id, change_type, field_name, value,
-                reason, estimated_qps_impact, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')""",
-            (
-                request.billing_id,
-                config_id,
-                request.change_type,
-                request.field_name,
-                request.value,
-                request.reason,
-                request.estimated_qps_impact,
-            )
+        change_id = await store.create_pending_change(
+            billing_id=request.billing_id,
+            config_id=config_id,
+            change_type=request.change_type,
+            field_name=request.field_name,
+            value=request.value,
+            reason=request.reason,
+            estimated_qps_impact=request.estimated_qps_impact,
+            created_by="ui",
         )
 
         # Also log to pretargeting_history
-        bidder_row = await db_query_one(
-            "SELECT bidder_id FROM pretargeting_configs WHERE billing_id = ?",
-            (request.billing_id,)
-        )
-        if bidder_row:
-            await db_execute(
-                """INSERT INTO pretargeting_history (
-                    config_id, bidder_id, change_type, field_changed,
-                    old_value, new_value, change_source, changed_by
-                ) VALUES (?, ?, 'pending_change', ?, NULL, ?, 'user', 'ui')""",
-                (config_id, bidder_row["bidder_id"], request.field_name, f"{request.change_type}:{request.value}")
+        if bidder_id:
+            await store.add_pretargeting_history(
+                config_id=config_id,
+                bidder_id=bidder_id,
+                change_type="pending_change",
+                field_changed=request.field_name,
+                old_value=None,
+                new_value=f"{request.change_type}:{request.value}",
+                changed_by="ui",
+                change_source="user",
             )
 
         # Fetch the created change
-        row = await db_query_one(
-            "SELECT * FROM pretargeting_pending_changes WHERE id = ?",
-            (change_id,)
-        )
+        row = await store.get_pending_change(change_id)
 
         return PendingChangeResponse(
             id=row["id"],
@@ -132,20 +129,11 @@ async def list_pending_changes(
     billing_id: Optional[str] = Query(None, description="Filter by billing account"),
     status: str = Query("pending", description="Filter by status (pending, applied, cancelled)"),
     limit: int = Query(100, ge=1, le=500),
+    store: StoreType = Depends(get_store),
 ):
     """List pending changes to pretargeting configurations."""
     try:
-        query = "SELECT * FROM pretargeting_pending_changes WHERE status = ?"
-        params = [status]
-
-        if billing_id:
-            query += " AND billing_id = ?"
-            params.append(billing_id)
-
-        query += " ORDER BY created_at DESC LIMIT ?"
-        params.append(limit)
-
-        rows = await db_query(query, tuple(params))
+        rows = await store.get_pending_changes(billing_id=billing_id, status=status, limit=limit)
 
         return [
             PendingChangeResponse(
@@ -170,14 +158,14 @@ async def list_pending_changes(
 
 
 @router.delete("/settings/pretargeting/pending-change/{change_id}")
-async def cancel_pending_change(change_id: int):
+async def cancel_pending_change(
+    change_id: int,
+    store: StoreType = Depends(get_store),
+):
     """Cancel a pending change (mark as cancelled, not deleted)."""
     try:
         # Check if change exists and is pending
-        change = await db_query_one(
-            "SELECT * FROM pretargeting_pending_changes WHERE id = ?",
-            (change_id,)
-        )
+        change = await store.get_pending_change(change_id)
 
         if not change:
             raise HTTPException(status_code=404, detail="Pending change not found")
@@ -189,10 +177,7 @@ async def cancel_pending_change(change_id: int):
             )
 
         # Mark as cancelled
-        await db_execute(
-            "UPDATE pretargeting_pending_changes SET status = 'cancelled' WHERE id = ?",
-            (change_id,)
-        )
+        await store.cancel_pending_change(change_id)
 
         return {"status": "cancelled", "id": change_id}
 
@@ -204,17 +189,17 @@ async def cancel_pending_change(change_id: int):
 
 
 @router.post("/settings/pretargeting/pending-change/{change_id}/mark-applied")
-async def mark_change_applied(change_id: int):
+async def mark_change_applied(
+    change_id: int,
+    store: StoreType = Depends(get_store),
+):
     """
     Mark a pending change as applied (user has manually applied it in Google UI).
 
     This is for tracking purposes only - it does NOT make any API calls.
     """
     try:
-        change = await db_query_one(
-            "SELECT * FROM pretargeting_pending_changes WHERE id = ?",
-            (change_id,)
-        )
+        change = await store.get_pending_change(change_id)
 
         if not change:
             raise HTTPException(status_code=404, detail="Pending change not found")
@@ -225,12 +210,7 @@ async def mark_change_applied(change_id: int):
                 detail=f"Change is not pending - current status: {change['status']}"
             )
 
-        await db_execute(
-            """UPDATE pretargeting_pending_changes
-            SET status = 'applied', applied_at = CURRENT_TIMESTAMP
-            WHERE id = ?""",
-            (change_id,)
-        )
+        await store.mark_pending_change_applied(change_id)
 
         return {"status": "applied", "id": change_id}
 
@@ -242,7 +222,10 @@ async def mark_change_applied(change_id: int):
 
 
 @router.get("/settings/pretargeting/{billing_id}/detail", response_model=ConfigDetailResponse)
-async def get_pretargeting_config_detail(billing_id: str):
+async def get_pretargeting_config_detail(
+    billing_id: str,
+    store: StoreType = Depends(get_store),
+):
     """
     Get detailed pretargeting config including current state and pending changes.
 
@@ -253,10 +236,7 @@ async def get_pretargeting_config_detail(billing_id: str):
     """
     try:
         # Get config
-        config = await db_query_one(
-            "SELECT * FROM pretargeting_configs WHERE billing_id = ?",
-            (billing_id,)
-        )
+        config = await store.get_pretargeting_config_by_billing_id(billing_id)
 
         if not config:
             raise HTTPException(
@@ -264,21 +244,18 @@ async def get_pretargeting_config_detail(billing_id: str):
                 detail=f"Config not found for billing_id: {billing_id}"
             )
 
-        # Get pending changes
-        pending_rows = await db_query(
-            """SELECT * FROM pretargeting_pending_changes
-            WHERE billing_id = ? AND status = 'pending'
-            ORDER BY created_at ASC""",
-            (billing_id,)
-        )
+        # Get pending changes (only pending status, ordered by created_at ASC)
+        pending_rows = await store.get_pending_changes(billing_id=billing_id, status="pending", limit=500)
+        # Reverse to get ASC order (store returns DESC)
+        pending_rows = list(reversed(pending_rows))
 
         # Parse current values
-        included_sizes = json.loads(config["included_sizes"]) if config["included_sizes"] else []
-        included_geos = json.loads(config["included_geos"]) if config["included_geos"] else []
-        excluded_geos = json.loads(config["excluded_geos"]) if config["excluded_geos"] else []
-        included_formats = json.loads(config["included_formats"]) if config["included_formats"] else []
-        included_platforms = json.loads(config["included_platforms"]) if config["included_platforms"] else []
-        raw_config = json.loads(config["raw_config"]) if config["raw_config"] else {}
+        included_sizes = json.loads(config["included_sizes"]) if config.get("included_sizes") else []
+        included_geos = json.loads(config["included_geos"]) if config.get("included_geos") else []
+        excluded_geos = json.loads(config["excluded_geos"]) if config.get("excluded_geos") else []
+        included_formats = json.loads(config["included_formats"]) if config.get("included_formats") else []
+        included_platforms = json.loads(config["included_platforms"]) if config.get("included_platforms") else []
+        raw_config = json.loads(config["raw_config"]) if config.get("raw_config") else {}
         publisher_targeting = raw_config.get("publisherTargeting") or {}
         publisher_mode = publisher_targeting.get("targetingMode")
         publisher_values = publisher_targeting.get("values") or []
