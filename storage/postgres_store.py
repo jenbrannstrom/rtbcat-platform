@@ -107,13 +107,109 @@ class PostgresStore:
     # =========================================================================
 
     async def save_creatives(self, creatives: list["CreativeDict"]) -> int:
-        """Save or update multiple creatives.
+        """Save or update multiple creatives using batch upsert."""
+        import json
+        from .repositories.creative_repository import compute_canonical_size, get_size_category
 
-        TODO: Implement full upsert logic with JSONB fields.
-        """
-        # TODO: Implement - stub for now
-        logger.warning("PostgresStore.save_creatives() is a stub")
-        return 0
+        if not creatives:
+            return 0
+
+        # Prepare data tuples for batch insert
+        data = []
+        for c in creatives:
+            # Handle both dict and Creative object
+            if hasattr(c, "id"):
+                # Creative object
+                width = c.width
+                height = c.height
+                canonical = c.canonical_size
+                category = c.size_category
+                if canonical is None and width is not None and height is not None:
+                    canonical = compute_canonical_size(width, height)
+                    category = get_size_category(canonical)
+
+                data.append((
+                    c.id, c.name, c.format, c.account_id, c.buyer_id, c.approval_status,
+                    width, height, canonical, category,
+                    c.final_url, c.display_url,
+                    c.utm_source, c.utm_medium, c.utm_campaign,
+                    c.utm_content, c.utm_term, c.advertiser_name,
+                    c.campaign_id, c.cluster_id,
+                    json.dumps(c.raw_data) if c.raw_data else None,
+                    c.app_id, c.app_name, c.app_store,
+                    json.dumps(c.disapproval_reasons) if c.disapproval_reasons else None,
+                    json.dumps(c.serving_restrictions) if c.serving_restrictions else None,
+                ))
+            else:
+                # Dict (CreativeDict)
+                width = c.get("width")
+                height = c.get("height")
+                canonical = c.get("canonical_size")
+                category = c.get("size_category")
+                if canonical is None and width is not None and height is not None:
+                    canonical = compute_canonical_size(width, height)
+                    category = get_size_category(canonical)
+
+                data.append((
+                    c.get("id"), c.get("name"), c.get("format"),
+                    c.get("account_id"), c.get("buyer_id"), c.get("approval_status"),
+                    width, height, canonical, category,
+                    c.get("final_url"), c.get("display_url"),
+                    c.get("utm_source"), c.get("utm_medium"), c.get("utm_campaign"),
+                    c.get("utm_content"), c.get("utm_term"), c.get("advertiser_name"),
+                    c.get("campaign_id"), c.get("cluster_id"),
+                    json.dumps(c.get("raw_data")) if c.get("raw_data") else None,
+                    c.get("app_id"), c.get("app_name"), c.get("app_store"),
+                    json.dumps(c.get("disapproval_reasons")) if c.get("disapproval_reasons") else None,
+                    json.dumps(c.get("serving_restrictions")) if c.get("serving_restrictions") else None,
+                ))
+
+        # Batch upsert using pg_execute_many
+        await pg_execute_many(
+            """
+            INSERT INTO creatives (
+                id, name, format, account_id, buyer_id, approval_status,
+                width, height, canonical_size, size_category,
+                final_url, display_url,
+                utm_source, utm_medium, utm_campaign,
+                utm_content, utm_term, advertiser_name,
+                campaign_id, cluster_id, raw_data,
+                app_id, app_name, app_store,
+                disapproval_reasons, serving_restrictions,
+                updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (id) DO UPDATE SET
+                name = EXCLUDED.name,
+                format = EXCLUDED.format,
+                account_id = EXCLUDED.account_id,
+                buyer_id = EXCLUDED.buyer_id,
+                approval_status = EXCLUDED.approval_status,
+                width = EXCLUDED.width,
+                height = EXCLUDED.height,
+                canonical_size = EXCLUDED.canonical_size,
+                size_category = EXCLUDED.size_category,
+                final_url = EXCLUDED.final_url,
+                display_url = EXCLUDED.display_url,
+                utm_source = EXCLUDED.utm_source,
+                utm_medium = EXCLUDED.utm_medium,
+                utm_campaign = EXCLUDED.utm_campaign,
+                utm_content = EXCLUDED.utm_content,
+                utm_term = EXCLUDED.utm_term,
+                advertiser_name = EXCLUDED.advertiser_name,
+                campaign_id = EXCLUDED.campaign_id,
+                cluster_id = EXCLUDED.cluster_id,
+                raw_data = EXCLUDED.raw_data,
+                app_id = EXCLUDED.app_id,
+                app_name = EXCLUDED.app_name,
+                app_store = EXCLUDED.app_store,
+                disapproval_reasons = EXCLUDED.disapproval_reasons,
+                serving_restrictions = EXCLUDED.serving_restrictions,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            data
+        )
+
+        return len(creatives)
 
     async def get_creative(self, creative_id: str) -> Optional[Creative]:
         """Get a creative by ID."""
@@ -193,6 +289,68 @@ class PostgresStore:
             (creative_id,)
         )
         return rows > 0
+
+    async def get_available_sizes(self) -> list[dict]:
+        """Get all unique canonical sizes with counts."""
+        rows = await pg_query(
+            """
+            SELECT canonical_size, size_category, COUNT(*) as count
+            FROM creatives
+            WHERE canonical_size IS NOT NULL
+            GROUP BY canonical_size, size_category
+            ORDER BY count DESC
+            """
+        )
+        return [
+            {
+                "canonical_size": row["canonical_size"],
+                "size_category": row["size_category"],
+                "count": row["count"],
+            }
+            for row in rows
+        ]
+
+    async def update_creative_cluster(
+        self, creative_id: str, cluster_id: Optional[str]
+    ) -> bool:
+        """Update the cluster assignment for a creative."""
+        rows = await pg_execute(
+            "UPDATE creatives SET cluster_id = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+            (cluster_id, creative_id)
+        )
+        return rows > 0
+
+    async def update_creative_campaign(
+        self, creative_id: str, campaign_id: Optional[str]
+    ) -> bool:
+        """Update the campaign assignment for a creative."""
+        rows = await pg_execute(
+            "UPDATE creatives SET campaign_id = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+            (campaign_id, creative_id)
+        )
+        return rows > 0
+
+    async def get_thumbnail_statuses(self, creative_ids: list[str]) -> dict[str, dict]:
+        """Get thumbnail statuses for multiple creatives."""
+        if not creative_ids:
+            return {}
+        placeholders = ", ".join(["%s"] * len(creative_ids))
+        rows = await pg_query(
+            f"""
+            SELECT creative_id, status, error_reason, updated_at
+            FROM creative_thumbnails
+            WHERE creative_id IN ({placeholders})
+            """,
+            tuple(creative_ids)
+        )
+        return {
+            row["creative_id"]: {
+                "status": row["status"],
+                "error_reason": row["error_reason"],
+                "updated_at": row["updated_at"],
+            }
+            for row in rows
+        }
 
     # =========================================================================
     # BUYER SEAT OPERATIONS
@@ -1617,16 +1775,38 @@ class PostgresStore:
         return []
 
     # =========================================================================
-    # THUMBNAIL STATUS - STUB
+    # THUMBNAIL STATUS (Tier 3)
     # =========================================================================
 
     async def get_thumbnail_status(self, creative_id: str) -> Optional[dict]:
-        """Get thumbnail status for a creative. TODO: Implement."""
-        logger.warning("PostgresStore.get_thumbnail_status() is a stub")
+        """Get thumbnail status for a single creative."""
+        row = await pg_query_one(
+            """
+            SELECT creative_id, status, error_reason, updated_at
+            FROM creative_thumbnails WHERE creative_id = %s
+            """,
+            (creative_id,)
+        )
+        if row:
+            return {
+                "status": row["status"],
+                "error_reason": row["error_reason"],
+                "updated_at": row["updated_at"],
+            }
         return None
 
     async def save_thumbnail_status(
         self, creative_id: str, status: str, error_reason: Optional[str] = None
     ) -> None:
-        """Save thumbnail generation status. TODO: Implement."""
-        logger.warning("PostgresStore.save_thumbnail_status() is a stub")
+        """Save thumbnail generation status."""
+        await pg_execute(
+            """
+            INSERT INTO creative_thumbnails (creative_id, status, error_reason, updated_at)
+            VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (creative_id) DO UPDATE SET
+                status = EXCLUDED.status,
+                error_reason = EXCLUDED.error_reason,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (creative_id, status, error_reason)
+        )
