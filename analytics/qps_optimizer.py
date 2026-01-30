@@ -19,7 +19,7 @@ import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 
-from storage.database import db_query, db_query_one
+from storage.serving_database import db_query, db_query_one
 
 logger = logging.getLogger(__name__)
 
