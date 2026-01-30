@@ -1,18 +1,15 @@
 """Campaign Aggregation Service for Phase 11.1.
 
 Provides timeframe-aware campaign metrics and waste detection.
-Joins campaigns → creatives → rtb_daily to calculate:
-- Aggregated spend, impressions, clicks
-- Waste score: (reached_queries - impressions) / reached_queries * 100
-- Warning counts: broken videos, zero engagement, etc.
+Business logic only - calls repo for data access.
 """
 
-import os
-from typing import Any, Optional
-from dataclasses import dataclass, field
+from __future__ import annotations
 
-import psycopg
-from psycopg.rows import dict_row
+from dataclasses import dataclass, field
+from typing import Optional
+
+from storage.postgres_repositories.campaign_repo import CampaignRepository
 
 
 @dataclass
@@ -24,7 +21,7 @@ class CampaignMetrics:
     total_reached_queries: int = 0
     avg_cpm: Optional[float] = None
     avg_ctr: Optional[float] = None
-    waste_score: Optional[float] = None  # (reached - imps) / reached * 100
+    waste_score: Optional[float] = None
 
 
 @dataclass
@@ -53,71 +50,27 @@ class CampaignWithMetrics:
 class CampaignAggregationService:
     """
     Service for aggregating campaign performance with timeframe context.
-
-    Implements Phase 11.1: Decision Context Foundation
+    Business logic only - calls CampaignRepository for data.
     """
 
-    def __init__(self):
-        """Initialize with Postgres connection from environment."""
-        self.dsn = (
-            os.getenv("POSTGRES_SERVING_DSN")
-            or os.getenv("POSTGRES_DSN")
-            or os.getenv("DATABASE_URL")
-            or ""
-        )
+    def __init__(self, repo: Optional[CampaignRepository] = None):
+        self.repo = repo or CampaignRepository()
 
-    def _get_connection(self) -> Any:
-        """Get Postgres database connection."""
-        if not self.dsn:
-            raise RuntimeError(
-                "POSTGRES_SERVING_DSN, POSTGRES_DSN, or DATABASE_URL must be set"
-            )
-        return psycopg.connect(self.dsn, row_factory=dict_row)
-
-    def get_campaigns_with_metrics(
+    async def get_campaigns_with_metrics(
         self,
         days: int = 7,
         include_empty: bool = True,
     ) -> list[CampaignWithMetrics]:
-        """
-        Get all campaigns with aggregated metrics for the given timeframe.
-
-        Args:
-            days: Number of days to aggregate (default 7)
-            include_empty: Include campaigns with no activity in timeframe
-
-        Returns:
-            List of CampaignWithMetrics objects
-        """
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        # Get all campaigns with their creative IDs
-        cursor.execute("""
-            SELECT c.id, c.name, c.created_at, c.updated_at
-            FROM campaigns c
-            ORDER BY c.updated_at DESC
-        """)
-        campaigns_raw = cursor.fetchall()
-
+        """Get all campaigns with aggregated metrics for the given timeframe."""
+        campaigns_raw = await self.repo.get_all_campaigns()
         results = []
+
         for camp_row in campaigns_raw:
             campaign_id = camp_row["id"]
+            creative_ids = await self.repo.get_creative_ids_for_campaign(campaign_id)
+            metrics = await self._compute_metrics(creative_ids, days)
+            warnings = await self._compute_warnings(creative_ids, days)
 
-            # Get creative IDs for this campaign
-            cursor.execute(
-                "SELECT creative_id FROM creative_campaigns WHERE campaign_id = %s",
-                (campaign_id,)
-            )
-            creative_ids = [r["creative_id"] for r in cursor.fetchall()]
-
-            # Get aggregated metrics from rtb_daily
-            metrics = self._get_campaign_metrics(cursor, creative_ids, days)
-
-            # Get warnings
-            warnings = self._get_campaign_warnings(cursor, creative_ids, days)
-
-            # Skip empty campaigns if requested
             if not include_empty and metrics.total_impressions == 0 and metrics.total_spend_micros == 0:
                 continue
 
@@ -133,49 +86,21 @@ class CampaignAggregationService:
                 updated_at=str(camp_row["updated_at"]) if camp_row["updated_at"] else None,
             ))
 
-        conn.close()
         return results
 
-    def get_campaign_with_metrics(
+    async def get_campaign_with_metrics(
         self,
         campaign_id: str,
         days: int = 7,
     ) -> Optional[CampaignWithMetrics]:
-        """
-        Get a single campaign with metrics.
-
-        Args:
-            campaign_id: Campaign ID
-            days: Number of days to aggregate
-
-        Returns:
-            CampaignWithMetrics or None
-        """
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            "SELECT id, name, created_at, updated_at FROM campaigns WHERE id = %s",
-            (campaign_id,)
-        )
-        camp_row = cursor.fetchone()
-
+        """Get a single campaign with metrics."""
+        camp_row = await self.repo.get_campaign_by_id(campaign_id)
         if not camp_row:
-            conn.close()
             return None
 
-        # Get creative IDs
-        cursor.execute(
-            "SELECT creative_id FROM creative_campaigns WHERE campaign_id = %s",
-            (campaign_id,)
-        )
-        creative_ids = [r["creative_id"] for r in cursor.fetchall()]
-
-        # Get metrics and warnings
-        metrics = self._get_campaign_metrics(cursor, creative_ids, days)
-        warnings = self._get_campaign_warnings(cursor, creative_ids, days)
-
-        conn.close()
+        creative_ids = await self.repo.get_creative_ids_for_campaign(campaign_id)
+        metrics = await self._compute_metrics(creative_ids, days)
+        warnings = await self._compute_warnings(creative_ids, days)
 
         return CampaignWithMetrics(
             id=campaign_id,
@@ -189,38 +114,20 @@ class CampaignAggregationService:
             updated_at=str(camp_row["updated_at"]) if camp_row["updated_at"] else None,
         )
 
-    def _get_campaign_metrics(
-        self,
-        cursor: Any,
-        creative_ids: list[str],
-        days: int,
+    async def _compute_metrics(
+        self, creative_ids: list[str], days: int
     ) -> CampaignMetrics:
-        """Get aggregated metrics for creatives in timeframe."""
+        """Compute aggregated metrics - business logic."""
         if not creative_ids:
             return CampaignMetrics()
 
-        cursor.execute(
-            """
-            SELECT
-                COALESCE(SUM(spend_micros), 0) as total_spend,
-                COALESCE(SUM(impressions), 0) as total_impressions,
-                COALESCE(SUM(clicks), 0) as total_clicks,
-                COALESCE(SUM(reached_queries), 0) as total_reached
-            FROM rtb_daily
-            WHERE creative_id = ANY(%s)
-              AND metric_date >= CURRENT_DATE - make_interval(days => %s)
-            """,
-            (creative_ids, days),
-        )
+        data = await self.repo.get_campaign_metrics(creative_ids, days)
 
-        row = cursor.fetchone()
+        total_spend = data["total_spend"] or 0
+        total_impressions = data["total_impressions"] or 0
+        total_clicks = data["total_clicks"] or 0
+        total_reached = data["total_reached"] or 0
 
-        total_spend = row["total_spend"] or 0
-        total_impressions = row["total_impressions"] or 0
-        total_clicks = row["total_clicks"] or 0
-        total_reached = row["total_reached"] or 0
-
-        # Calculate derived metrics
         avg_cpm = None
         if total_impressions > 0:
             avg_cpm = (total_spend / 1_000_000) / total_impressions * 1000
@@ -243,77 +150,17 @@ class CampaignAggregationService:
             waste_score=round(waste_score, 2) if waste_score else None,
         )
 
-    def _get_campaign_warnings(
-        self,
-        cursor: Any,
-        creative_ids: list[str],
-        days: int,
+    async def _compute_warnings(
+        self, creative_ids: list[str], days: int
     ) -> CampaignWarnings:
-        """Get warning counts for creatives in campaign."""
+        """Compute warning counts - business logic."""
         if not creative_ids:
             return CampaignWarnings()
 
-        # Broken video count (from thumbnail_status)
-        cursor.execute("""
-            SELECT COUNT(*) as count
-            FROM thumbnail_status ts
-            JOIN creatives c ON ts.creative_id = c.id
-            WHERE c.id = ANY(%s)
-              AND ts.status = 'failed'
-              AND c.format = 'VIDEO'
-        """, (creative_ids,))
-        broken_video_count = cursor.fetchone()["count"] or 0
-
-        # Zero engagement count (impressions > threshold but clicks = 0 over days)
-        cursor.execute(
-            """
-            SELECT COUNT(DISTINCT creative_id) as count
-            FROM (
-                SELECT creative_id,
-                       SUM(impressions) as total_imps,
-                       SUM(clicks) as total_clicks,
-                       COUNT(DISTINCT metric_date) as days_active
-                FROM rtb_daily
-                WHERE creative_id = ANY(%s)
-                  AND metric_date >= CURRENT_DATE - make_interval(days => %s)
-                GROUP BY creative_id
-                HAVING SUM(impressions) > 1000 AND SUM(clicks) = 0 AND COUNT(DISTINCT metric_date) >= 3
-            ) sub
-            """,
-            (creative_ids, days),
-        )
-        zero_engagement_count = cursor.fetchone()["count"] or 0
-
-        # High spend low performance (spend > $10 but CTR < 0.01%)
-        cursor.execute(
-            """
-            SELECT COUNT(DISTINCT creative_id) as count
-            FROM (
-                SELECT creative_id,
-                       SUM(spend_micros) as total_spend,
-                       SUM(impressions) as total_imps,
-                       SUM(clicks) as total_clicks
-                FROM rtb_daily
-                WHERE creative_id = ANY(%s)
-                  AND metric_date >= CURRENT_DATE - make_interval(days => %s)
-                GROUP BY creative_id
-                HAVING SUM(spend_micros) > 10000000  -- $10
-                   AND SUM(impressions) > 0
-                   AND (CAST(SUM(clicks) AS FLOAT) / SUM(impressions)) < 0.0001
-            ) sub
-            """,
-            (creative_ids, days),
-        )
-        high_spend_low_perf = cursor.fetchone()["count"] or 0
-
-        # Disapproved creatives
-        cursor.execute("""
-            SELECT COUNT(*) as count
-            FROM creatives
-            WHERE id = ANY(%s)
-              AND approval_status = 'DISAPPROVED'
-        """, (creative_ids,))
-        disapproved_count = cursor.fetchone()["count"] or 0
+        broken_video_count = await self.repo.get_broken_video_count(creative_ids)
+        zero_engagement_count = await self.repo.get_zero_engagement_count(creative_ids, days)
+        high_spend_low_perf = await self.repo.get_high_spend_low_perf_count(creative_ids, days)
+        disapproved_count = await self.repo.get_disapproved_count(creative_ids)
 
         return CampaignWarnings(
             broken_video_count=broken_video_count,
@@ -322,35 +169,6 @@ class CampaignAggregationService:
             disapproved_count=disapproved_count,
         )
 
-    def get_unclustered_with_activity(
-        self,
-        days: int = 7,
-    ) -> list[str]:
-        """
-        Get unclustered creative IDs that have activity in timeframe.
-
-        Args:
-            days: Number of days to check for activity
-
-        Returns:
-            List of creative IDs with recent activity
-        """
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            SELECT DISTINCT p.creative_id
-            FROM rtb_daily p
-            LEFT JOIN creative_campaigns cc ON p.creative_id = cc.creative_id
-            WHERE cc.creative_id IS NULL
-              AND p.metric_date >= CURRENT_DATE - make_interval(days => %s)
-              AND (p.impressions > 0 OR p.clicks > 0 OR p.spend_micros > 0)
-            ORDER BY p.creative_id
-            """,
-            (days,),
-        )
-
-        result = [row["creative_id"] for row in cursor.fetchall()]
-        conn.close()
-        return result
+    async def get_unclustered_with_activity(self, days: int = 7) -> list[str]:
+        """Get unclustered creative IDs that have activity in timeframe."""
+        return await self.repo.get_unclustered_with_activity(days)

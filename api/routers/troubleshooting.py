@@ -12,7 +12,7 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 
-from analytics.evaluation_engine import EvaluationEngine, RecommendationType
+from services.evaluation_service import EvaluationService, RecommendationType
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +30,8 @@ async def get_evaluation(
     Combines all data sources (CSV, API, troubleshooting) to produce
     prioritized recommendations for QPS optimization.
     """
-    engine = EvaluationEngine()
-    results = engine.run_full_evaluation(days)
+    service = EvaluationService()
+    results = await service.run_full_evaluation(days)
 
     # Convert Recommendation dataclasses to dicts for JSON
     results["recommendations"] = [r.to_dict() for r in results["recommendations"]]
@@ -49,8 +49,8 @@ async def get_filtered_bids(
     Phase 11: RTB Troubleshooting API
     Shows breakdown of filtered bid reasons - the key insight for understanding waste.
     """
-    engine = EvaluationEngine()
-    return engine.get_filtered_bids_summary(days)
+    service = EvaluationService()
+    return await service.get_filtered_bids_summary(days)
 
 
 @router.get("/api/troubleshooting/funnel")
@@ -63,8 +63,8 @@ async def get_bid_funnel(
     Phase 11: RTB Troubleshooting API
     Shows the conversion funnel from bid requests to wins.
     """
-    engine = EvaluationEngine()
-    return engine.get_bid_funnel(days)
+    service = EvaluationService()
+    return await service.get_bid_funnel(days)
 
 
 @router.post("/api/troubleshooting/collect")
