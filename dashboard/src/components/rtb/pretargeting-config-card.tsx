@@ -117,6 +117,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(config.name);
   const [showSettingsEditor, setShowSettingsEditor] = useState(false);
+  const [editorTab, setEditorTab] = useState<'publishers' | 'settings'>('settings');
   const inputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -306,7 +307,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
       {/* Expanded content */}
       {expanded && (
         <div className="px-4 pb-4 pt-1 border-t bg-gray-50/50">
-          {/* Settings pills with Edit button */}
+          {/* Settings pills with entry buttons */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex flex-wrap gap-2">
               <GeoSettingPill geoIds={config.included_geos} max={5} />
@@ -314,21 +315,34 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
               <SettingPill label="Platforms" values={config.platforms} />
               <SettingPill label="Sizes" values={config.sizes} max={4} />
             </div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowSettingsEditor(!showSettingsEditor);
-              }}
-              className={cn(
-                'flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors',
-                showSettingsEditor
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              )}
-            >
-              <Settings className="h-3 w-3" />
-              {showSettingsEditor ? 'Hide Settings' : 'Edit Settings'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditorTab('publishers');
+                  setShowSettingsEditor(true);
+                }}
+                className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors bg-blue-600 text-white hover:bg-blue-700"
+              >
+                Publisher List
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditorTab('settings');
+                  setShowSettingsEditor(!showSettingsEditor);
+                }}
+                className={cn(
+                  'flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors',
+                  showSettingsEditor && editorTab === 'settings'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                )}
+              >
+                <Settings className="h-3 w-3" />
+                {showSettingsEditor && editorTab === 'settings' ? 'Hide Settings' : 'Config Settings'}
+              </button>
+            </div>
           </div>
 
           {/* Settings Editor */}
@@ -337,6 +351,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
               <PretargetingSettingsEditor
                 billing_id={config.billing_id}
                 configName={config.name}
+                initialTab={editorTab}
                 onClose={() => setShowSettingsEditor(false)}
               />
             </div>
