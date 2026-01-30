@@ -4,15 +4,13 @@ import os
 from typing import Optional, List, Union
 from fastapi import HTTPException, Request, Depends
 from storage import SQLiteStore
+from storage.postgres_store import PostgresStore
 from storage.database import init_database, DB_PATH
 from storage.repositories.user_repository import UserRepository, User
 from config import ConfigManager
 
-# TODO: PostgreSQL migration - import PostgresStore when ready
-# from storage.postgres_store import PostgresStore
-
 # Type alias for store (SQLite or Postgres)
-StoreType = SQLiteStore  # TODO: Union[SQLiteStore, PostgresStore] when Postgres is ready
+StoreType = Union[SQLiteStore, PostgresStore]
 
 # Global instances - set by main.py lifespan
 _store: Optional[StoreType] = None
@@ -22,10 +20,12 @@ _config_manager: Optional[ConfigManager] = None
 def use_postgres() -> bool:
     """Check if PostgreSQL backend should be used.
 
-    Set CATSCAN_DB_BACKEND=postgres to enable PostgreSQL.
-    Default is sqlite.
+    Set CATSCAN_DB_BACKEND=postgres or POSTGRES_SERVING_DSN to enable PostgreSQL.
+    Default is sqlite for backward compatibility.
     """
-    return os.getenv("CATSCAN_DB_BACKEND", "sqlite").lower() == "postgres"
+    backend = os.getenv("CATSCAN_DB_BACKEND", "").lower()
+    has_postgres_dsn = bool(os.getenv("POSTGRES_SERVING_DSN") or os.getenv("POSTGRES_DSN"))
+    return backend == "postgres" or has_postgres_dsn
 
 
 def set_store(store: StoreType) -> None:
@@ -70,8 +70,14 @@ async def startup_event():
 
 # ==================== User Authentication Dependencies ====================
 
-def _get_user_repo() -> UserRepository:
-    """Get the user repository instance."""
+def _get_user_repo() -> Union[UserRepository, PostgresStore]:
+    """Get the user repository instance.
+
+    Returns PostgresStore when using Postgres backend (has user methods built-in).
+    Returns UserRepository for SQLite backend.
+    """
+    if use_postgres() and _store is not None and isinstance(_store, PostgresStore):
+        return _store
     return UserRepository(DB_PATH)
 
 

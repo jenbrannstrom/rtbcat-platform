@@ -11,13 +11,14 @@ Password-based login has been removed - Google Auth only.
 
 import json
 import uuid
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from storage.database import DB_PATH
 from storage.repositories.user_repository import UserRepository
+from api.dependencies import use_postgres
 
 # Session cookie name (used by OAuth2 Proxy flow)
 SESSION_COOKIE_NAME = "rtbcat_session"
@@ -40,8 +41,16 @@ class UserInfo(BaseModel):
 
 # ==================== Helper Functions ====================
 
-def _get_user_repo() -> UserRepository:
-    """Get the user repository instance."""
+def _get_user_repo() -> Union[UserRepository, "PostgresStore"]:
+    """Get the user repository instance.
+
+    Returns PostgresStore when using Postgres backend (has user methods built-in).
+    Returns UserRepository for SQLite backend.
+    """
+    if use_postgres():
+        from api.dependencies import _store
+        if _store is not None:
+            return _store
     return UserRepository(DB_PATH)
 
 
