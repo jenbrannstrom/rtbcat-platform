@@ -101,6 +101,11 @@ class SnapshotsService:
             limit=limit,
         )
 
+    async def get_snapshot(self, snapshot_id: int) -> dict[str, Any] | None:
+        if snapshot_id <= 0:
+            raise ValueError("snapshot_id must be positive")
+        return await self._snapshots.get_snapshot(snapshot_id)
+
     async def create_comparison(
         self,
         billing_id: str,
