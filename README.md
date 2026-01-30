@@ -405,6 +405,11 @@ CATSCAN_BQ_DATASET=rtbcat_analytics
 CATSCAN_BQ_PROJECT=your-project
 ```
 
+### Local Development Note
+
+Postgres is required for serving/analytics. The legacy `docker-compose.simple.yml`
+uses SQLite and is deprecated.
+
 ---
 
 ## Documentation

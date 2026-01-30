@@ -246,6 +246,6 @@ If you discover a security issue in Cat-Scan:
 | `.env` (real values) | | ✅ |
 | `terraform.tfvars` | | ✅ |
 | Service account JSON | | ✅ |
-| SQLite database | | ✅ |
+| Postgres backups/exports | | ✅ |
 | CSV imports | | ✅ |
 | Deploy prompts (real) | | ✅ |

@@ -4,14 +4,14 @@
 
 This runbook tracks the four migration tasks:
 
-1. Export existing SQLite raw tables to CSV/Parquet.
+1. Export legacy SQLite raw tables to CSV/Parquet (if a legacy DB still exists).
 2. Load into GCS and BigQuery partitions.
 3. Run precompute jobs for the last 90 days to fill Postgres summary tables.
 4. Switch the UI to Postgres once validated.
 
 ## Prerequisites
 
-- Access to the SQLite database file (typically `~/.catscan/catscan.db`).
+- Access to a legacy SQLite database file (if it exists).
 - A GCS bucket for raw exports.
 - A BigQuery dataset for staging/partitioned tables.
 - A Postgres instance with the target schema and summary tables.
