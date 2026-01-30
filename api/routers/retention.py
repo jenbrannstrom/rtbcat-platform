@@ -4,17 +4,12 @@ Handles retention configuration, storage statistics, and running retention jobs.
 """
 
 import logging
-from typing import Optional, Union
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from api.dependencies import get_store
-from storage import SQLiteStore
-from storage.postgres_store import PostgresStore
-
-# Store type can be either SQLite or Postgres
-StoreType = Union[SQLiteStore, PostgresStore]
+from services.retention_service import RetentionService
 
 logger = logging.getLogger(__name__)
 
@@ -62,11 +57,11 @@ class RetentionJobResponse(BaseModel):
 
 @router.get("/retention/config", response_model=RetentionConfigResponse)
 async def get_retention_config(
-    store: StoreType = Depends(get_store),
 ):
     """Get current retention configuration."""
     try:
-        config = await store.get_retention_config()
+        service = RetentionService()
+        config = await service.get_config()
 
         return RetentionConfigResponse(
             raw_retention_days=config.get('raw_retention_days', 90),
@@ -86,11 +81,11 @@ async def get_retention_config(
 @router.post("/retention/config", response_model=RetentionConfigResponse)
 async def set_retention_config(
     request: RetentionConfigRequest,
-    store: StoreType = Depends(get_store),
 ):
     """Update retention configuration."""
     try:
-        await store.set_retention_config(
+        service = RetentionService()
+        await service.set_config(
             raw_retention_days=request.raw_retention_days,
             summary_retention_days=request.summary_retention_days,
             auto_aggregate_after_days=request.auto_aggregate_after_days,
@@ -108,11 +103,11 @@ async def set_retention_config(
 
 @router.get("/retention/stats", response_model=StorageStatsResponse)
 async def get_storage_stats(
-    store: StoreType = Depends(get_store),
 ):
     """Get storage statistics for performance data."""
     try:
-        stats = await store.get_storage_stats()
+        service = RetentionService()
+        stats = await service.get_storage_stats()
         return StorageStatsResponse(**stats)
     except Exception as e:
         logger.error(f"Failed to get storage stats: {e}")
@@ -128,11 +123,11 @@ async def get_storage_stats(
 
 @router.post("/retention/run", response_model=RetentionJobResponse)
 async def run_retention_job(
-    store: StoreType = Depends(get_store),
 ):
     """Run the retention job to aggregate and clean up old data."""
     try:
-        result = await store.run_retention_job()
+        service = RetentionService()
+        result = await service.run_retention_job()
         return RetentionJobResponse(**result)
     except Exception as e:
         logger.error(f"Failed to run retention job: {e}")
