@@ -18,18 +18,17 @@ About 30,000 of that QPS can be low‑value signal that your bidder ignores beca
 ```
                 QPS "rainfall"
                      ↓
-            ┌─────────────────┐
-            │ 50,000 QPS in   │
-            └─────────────────┘
+          ┌──────────────────────┐
+          │ 50,000 QPS incoming  │
+          └──────────────────────┘
                      ↓
-     ┌────────────────────────────┐
-     │ 30,000 QPS low‑value       │
-     │ signal ignored by bidder   │
-     └────────────────────────────┘
+     ┌────────────────────────────────┐
+     │ 30,000 QPS waste filtered out  │
+     └────────────────────────────────┘
                      ↓
-     ┌────────────────────────────┐
-     │ 20,000 QPS worth bidding   │
-     └────────────────────────────┘
+          ┌──────────────────────┐
+          │ 20,000 QPS worth it  │
+          └──────────────────────┘
 ```
 
 You only get 10 pretargeting settings per seat, plus a broad geo bucket (EUS, WUS, EU, Asia).
