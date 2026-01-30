@@ -1,5 +1,7 @@
 # SQLite → GCS/BigQuery → Postgres migration runbook
 
+**Decision (Jan 30, 2026):** Analytics and serving are Postgres-only. SQLite is deprecated and must not be used for serving or analytics. Any fallback to SQLite should be treated as a misconfiguration.
+
 This runbook tracks the four migration tasks:
 
 1. Export existing SQLite raw tables to CSV/Parquet.
@@ -16,10 +18,10 @@ This runbook tracks the four migration tasks:
 - API container must be configured to use Postgres DSNs (not SQLite).
 - Cloud SQL Auth Proxy (or equivalent) must be running on the VM.
 
-## 0) Ensure API uses Postgres (not SQLite)
+## 0) Ensure API uses Postgres (no SQLite fallback)
 
 On SG VM, the API container must receive `POSTGRES_DSN` and `POSTGRES_SERVING_DSN`.
-If `DATABASE_PATH` is set, the API will keep using SQLite.
+If `DATABASE_PATH` is set, the API will keep using SQLite and analytics will fail.
 
 **Compose patch (SG VM):**
 - Add `env_file: .env` to load `/opt/catscan/.env`
