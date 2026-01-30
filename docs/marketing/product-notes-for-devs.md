@@ -29,13 +29,13 @@ Even with that limit, it’s still a better control surface than what most SSPs 
    - Every change is recorded and can be rolled back. Changes are staged before applying for safety.
 
 3) **Publisher allow/deny editor (per config)**
-   - You can block or allow publishers directly, without CSV uploads or the AB UI.
+   - You can block or allow individual publishers directly, without CSV uploads or the AB UI.
 
 4) **Clear win‑rate and waste visibility**
    - The app shows where bids drop off in the funnel so you can target the biggest waste first.
 
-5) **Size coverage insight**
-   - You can see which sizes get traffic but have no matching creatives, and decide to add or block.
+5) **Creative size waste**
+   - Google sends ~400 different sizes to your bidder. This is fine for HTML creatives, but for fixed-size display ads this can be a huge drain on your effective QPS. You can see which sizes get traffic but have no matching creatives, and decide to add or block.
 
 6) **Creative‑level diagnostics**
    - You can inspect individual creatives with targeting context to find assets that underperform or mismatch.
@@ -54,7 +54,7 @@ Even with that limit, it’s still a better control surface than what most SSPs 
 
 ## Intended users
 
-- RTB/AB engineers maintaining pipelines and metrics.
+- Media buyers, Google campaign managers, RTB/AB engineers maintaining pipelines and metrics.
 - Optimization engineers reducing wasted QPS.
 - Teams managing pretargeting at scale who need safe rollbacks.
 
