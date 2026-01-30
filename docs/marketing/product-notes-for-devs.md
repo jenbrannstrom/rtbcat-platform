@@ -16,19 +16,19 @@ A common issue is ingesting ~50,000 QPS.
 About 30,000 of that QPS can be low‑value signal that your bidder ignores because the media buyer doesn’t want that inventory.
 
 ```
-                QPS "rainfall"
-                     ↓
-          ┌──────────────────────┐
-          │ 50,000 QPS incoming  │
-          └──────────────────────┘
-                     ↓
-     ┌────────────────────────────────┐
-     │ 30,000 QPS waste filtered out  │
-     └────────────────────────────────┘
-                     ↓
-          ┌──────────────────────┐
-          │ 20,000 QPS worth it  │
-          └──────────────────────┘
+                 QPS "rainfall"
+                      ↓
+            ┌──────────────────────┐
+            │ 50,000 QPS incoming  │
+            └──────────────────────┘
+                      ↓
+               ┌──────────┐
+               │ FILTER   │
+               └──────────┘
+                 ↙      ↘
+┌──────────────────────────┐   ┌──────────────────────┐
+│ 30,000 QPS wasted signal │   │ 20,000 QPS usable    │
+└──────────────────────────┘   └──────────────────────┘
 ```
 
 You only get 10 pretargeting settings per seat, plus a broad geo bucket (EUS, WUS, EU, Asia).
