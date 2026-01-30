@@ -9,49 +9,33 @@ This is the recommended importer for all CSVs.
 """
 
 import csv
-import sqlite3
 import os
 import hashlib
 import uuid
 import logging
-import time
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
+
+import psycopg
+from psycopg.rows import dict_row
 
 from importers.flexible_mapper import (
     map_columns, detect_best_report_type, get_default_value, MappingResult
 )
 from importers.parquet_pipeline import ParquetExportManager
-from importers.utils import DB_PATH, parse_date, parse_float, parse_int
+from importers.utils import parse_date, parse_float, parse_int
 
 logger = logging.getLogger(__name__)
 
 IMPORT_BATCH_SIZE = int(os.getenv("CATSCAN_IMPORT_BATCH_SIZE", "1000"))
-SQLITE_TIMEOUT = int(os.getenv("CATSCAN_SQLITE_TIMEOUT", "30"))  # seconds
-SQLITE_RETRY_COUNT = int(os.getenv("CATSCAN_SQLITE_RETRY_COUNT", "3"))
-SQLITE_RETRY_DELAY = int(os.getenv("CATSCAN_SQLITE_RETRY_DELAY", "5"))  # seconds
 
 
-def connect_with_retry(db_path: str, timeout: int = SQLITE_TIMEOUT) -> sqlite3.Connection:
-    """Connect to SQLite with timeout and retry logic to handle lock contention."""
-    last_error = None
-    for attempt in range(1, SQLITE_RETRY_COUNT + 1):
-        try:
-            conn = sqlite3.connect(db_path, timeout=timeout)
-            if attempt > 1:
-                logger.info("SQLite connection succeeded on attempt %d", attempt)
-            return conn
-        except sqlite3.OperationalError as e:
-            last_error = e
-            if "database is locked" in str(e).lower():
-                logger.warning(
-                    "SQLite database locked (attempt %d/%d), retrying in %ds...",
-                    attempt, SQLITE_RETRY_COUNT, SQLITE_RETRY_DELAY
-                )
-                time.sleep(SQLITE_RETRY_DELAY)
-            else:
-                raise
-    raise last_error
+def get_postgres_connection() -> Any:
+    """Get Postgres connection using POSTGRES_SERVING_DSN."""
+    dsn = os.getenv("POSTGRES_SERVING_DSN", "")
+    if not dsn:
+        raise RuntimeError("POSTGRES_SERVING_DSN environment variable not set")
+    return psycopg.connect(dsn, row_factory=dict_row)
 
 
 @dataclass
@@ -111,25 +95,30 @@ def parse_bidder_id_from_filename(csv_path: str) -> Optional[str]:
 
 def ensure_columns_exist(cursor, table_name: str, columns: List[Tuple[str, str]]):
     """Ensure columns exist in table, adding them if missing."""
-    # Get existing columns
-    cursor.execute(f"PRAGMA table_info({table_name})")
-    existing = {row[1] for row in cursor.fetchall()}
+    # Get existing columns from Postgres information_schema
+    cursor.execute("""
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = %s
+    """, (table_name,))
+    existing = {row["column_name"] for row in cursor.fetchall()}
 
     for col_name, col_type in columns:
+        # Convert SQLite types to Postgres types
+        pg_type = col_type.replace("INTEGER", "INTEGER").replace("TEXT", "TEXT")
         if col_name not in existing:
             try:
-                cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}")
+                cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {pg_type}")
                 logger.info(f"Added column {col_name} to {table_name}")
             except Exception as e:
                 logger.warning(f"Could not add column {col_name}: {e}")
 
 
 def ensure_table_exists(cursor, table_name: str):
-    """Ensure the target table exists."""
+    """Ensure the target table exists (Postgres DDL)."""
     if table_name == "rtb_daily":
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS rtb_daily (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 metric_date DATE NOT NULL,
                 hour INTEGER DEFAULT 0,
                 billing_id TEXT,
@@ -148,7 +137,7 @@ def ensure_table_exists(cursor, table_name: str):
                 reached_queries INTEGER DEFAULT 0,
                 impressions INTEGER DEFAULT 0,
                 clicks INTEGER DEFAULT 0,
-                spend_micros INTEGER DEFAULT 0,
+                spend_micros BIGINT DEFAULT 0,
                 bids INTEGER DEFAULT 0,
                 bids_in_auction INTEGER DEFAULT 0,
                 auctions_won INTEGER DEFAULT 0,
@@ -186,12 +175,11 @@ def ensure_table_exists(cursor, table_name: str):
             "CREATE INDEX IF NOT EXISTS idx_rtb_daily_metric_country "
             "ON rtb_daily(metric_date, country)"
         )
-        ensure_unique_index(cursor, "rtb_daily", "row_hash", "idx_rtb_daily_row_hash")
 
     elif table_name == "rtb_bidstream":
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS rtb_bidstream (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 metric_date DATE NOT NULL,
                 hour INTEGER DEFAULT 0,
                 country TEXT,
@@ -230,12 +218,11 @@ def ensure_table_exists(cursor, table_name: str):
             "CREATE INDEX IF NOT EXISTS idx_rtb_bidstream_date_country "
             "ON rtb_bidstream(metric_date, country)"
         )
-        ensure_unique_index(cursor, "rtb_bidstream", "row_hash", "idx_rtb_bidstream_row_hash")
 
     elif table_name == "rtb_bid_filtering":
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS rtb_bid_filtering (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 metric_date DATE NOT NULL,
                 country TEXT,
                 buyer_account_id TEXT,
@@ -243,7 +230,7 @@ def ensure_table_exists(cursor, table_name: str):
                 creative_id TEXT,
                 bids INTEGER DEFAULT 0,
                 bids_in_auction INTEGER DEFAULT 0,
-                opportunity_cost_micros INTEGER DEFAULT 0,
+                opportunity_cost_micros BIGINT DEFAULT 0,
                 bidder_id TEXT,
                 row_hash TEXT UNIQUE,
                 import_batch_id TEXT,
@@ -252,56 +239,24 @@ def ensure_table_exists(cursor, table_name: str):
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_bid_filtering_date ON rtb_bid_filtering(metric_date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_bid_filtering_reason ON rtb_bid_filtering(filtering_reason)")
-        ensure_unique_index(cursor, "rtb_bid_filtering", "row_hash", "idx_rtb_bid_filtering_row_hash")
 
 
-def configure_import_connection(conn: sqlite3.Connection) -> None:
-    """Apply SQLite pragmas tuned for bulk imports."""
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA synchronous = NORMAL")
-    conn.execute("PRAGMA temp_store = MEMORY")
-
-
-def ensure_unique_index(cursor, table_name: str, column_name: str, index_name: str) -> None:
-    """Ensure a unique index exists, warn if duplicates prevent creation."""
-    try:
-        cursor.execute(
-            f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} ON {table_name}({column_name})"
-        )
-    except sqlite3.IntegrityError as e:
-        logger.warning(
-            "Could not create unique index %s on %s.%s due to duplicates: %s",
-            index_name,
-            table_name,
-            column_name,
-            e,
-        )
-    except sqlite3.OperationalError as e:
-        logger.warning(
-            "Could not create unique index %s on %s.%s: %s",
-            index_name,
-            table_name,
-            column_name,
-            e,
-        )
 
 
 def import_to_rtb_daily(
     csv_path: str,
     mapping: MappingResult,
-    db_path: str,
     batch_id: str,
     result: UnifiedImportResult,
     bidder_id: Optional[str] = None,
     parquet_exporter: Optional["ParquetExportManager"] = None,
     report_type: Optional[str] = None,
 ):
-    """Import data to rtb_daily table."""
-    conn = connect_with_retry(db_path)
+    """Import data to rtb_daily table (Postgres)."""
+    conn = get_postgres_connection()
     cursor = conn.cursor()
-    configure_import_connection(conn)
     ensure_table_exists(cursor, "rtb_daily")
-    ensure_unique_index(cursor, "rtb_daily", "row_hash", "idx_rtb_daily_row_hash")
+    conn.commit()
 
     # Ensure all potentially needed columns exist
     ensure_columns_exist(cursor, "rtb_daily", [
@@ -314,6 +269,7 @@ def import_to_rtb_daily(
         ("buyer_account_id", "TEXT"),
         ("bidder_id", "TEXT"),
     ])
+    conn.commit()
 
     hash_keys = [
         "metric_date", "hour", "billing_id", "creative_id", "creative_size",
@@ -322,27 +278,28 @@ def import_to_rtb_daily(
     min_date, max_date = None, None
 
     insert_sql = """
-        INSERT OR IGNORE INTO rtb_daily (
+        INSERT INTO rtb_daily (
             metric_date, hour, billing_id, creative_id, creative_size, creative_format,
             country, platform, environment, publisher_id, publisher_name, publisher_domain,
             app_id, app_name, buyer_account_id, reached_queries, impressions, clicks, spend_micros,
             bids, bids_in_auction, auctions_won,
             video_starts, video_completions, viewable_impressions, measurable_impressions,
             bidder_id, row_hash, import_batch_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (row_hash) DO NOTHING
     """
     rows_to_insert: list[tuple] = []
 
     def flush_rows():
+        nonlocal rows_to_insert
         if not rows_to_insert:
             return
-        before = conn.total_changes
+        batch_count = len(rows_to_insert)
         cursor.executemany(insert_sql, rows_to_insert)
-        inserted = conn.total_changes - before
+        inserted = cursor.rowcount if cursor.rowcount >= 0 else batch_count
         result.rows_imported += inserted
-        if inserted >= 0:
-            result.rows_duplicate += len(rows_to_insert) - inserted
-        rows_to_insert.clear()
+        result.rows_duplicate += batch_count - inserted
+        rows_to_insert = []
 
     try:
         with open(csv_path, 'r', encoding='utf-8') as f:
@@ -396,7 +353,7 @@ def import_to_rtb_daily(
                     if not bidder_id:
                         try:
                             from importers.account_mapper import get_bidder_id_for_billing_id
-                            bidder_id = get_bidder_id_for_billing_id(row_data["billing_id"], db_path=db_path)
+                            bidder_id = get_bidder_id_for_billing_id(row_data["billing_id"])
                         except Exception:
                             bidder_id = None
                     row_data["bidder_id"] = bidder_id
@@ -404,12 +361,6 @@ def import_to_rtb_daily(
                     # If buyer_account_id missing from CSV, use bidder_id from filename
                     if not row_data["buyer_account_id"] and bidder_id:
                         row_data["buyer_account_id"] = bidder_id
-                    if not row_data["buyer_account_id"]:
-                        raise ValueError("buyer_account_id missing and no seat ID detected in filename")
-                    if not row_data["buyer_account_id"]:
-                        raise ValueError("buyer_account_id missing and no seat ID detected in filename")
-                    if not row_data["buyer_account_id"]:
-                        raise ValueError("buyer_account_id missing and no seat ID detected in filename")
                     if not row_data["buyer_account_id"]:
                         raise ValueError("buyer_account_id missing and no seat ID detected in filename")
 
@@ -470,48 +421,43 @@ def import_to_rtb_daily(
 def import_to_rtb_bidstream(
     csv_path: str,
     mapping: MappingResult,
-    db_path: str,
     batch_id: str,
     result: UnifiedImportResult,
     bidder_id: Optional[str] = None,
     parquet_exporter: Optional["ParquetExportManager"] = None,
     report_type: Optional[str] = None,
 ):
-    """Import data to rtb_bidstream table."""
-    conn = connect_with_retry(db_path)
+    """Import data to rtb_bidstream table (Postgres)."""
+    conn = get_postgres_connection()
     cursor = conn.cursor()
-    configure_import_connection(conn)
-
-    # Check if table exists, if not create it
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='rtb_bidstream'")
-    if not cursor.fetchone():
-        ensure_table_exists(cursor, "rtb_bidstream")
-    ensure_unique_index(cursor, "rtb_bidstream", "row_hash", "idx_rtb_bidstream_row_hash")
+    ensure_table_exists(cursor, "rtb_bidstream")
     ensure_columns_exist(cursor, "rtb_bidstream", [("bidder_id", "TEXT")])
+    conn.commit()
 
     hash_keys = ["metric_date", "hour", "country", "buyer_account_id", "publisher_id", "bidder_id"]
     min_date, max_date = None, None
 
     insert_sql = """
-        INSERT OR IGNORE INTO rtb_bidstream (
+        INSERT INTO rtb_bidstream (
             metric_date, hour, country, buyer_account_id, publisher_id, publisher_name,
             inventory_matches, bid_requests, successful_responses, reached_queries,
             bids, bids_in_auction, auctions_won, impressions, clicks,
             bidder_id, row_hash, import_batch_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (row_hash) DO NOTHING
     """
     rows_to_insert: list[tuple] = []
 
     def flush_rows():
+        nonlocal rows_to_insert
         if not rows_to_insert:
             return
-        before = conn.total_changes
+        batch_count = len(rows_to_insert)
         cursor.executemany(insert_sql, rows_to_insert)
-        inserted = conn.total_changes - before
+        inserted = cursor.rowcount if cursor.rowcount >= 0 else batch_count
         result.rows_imported += inserted
-        if inserted >= 0:
-            result.rows_duplicate += len(rows_to_insert) - inserted
-        rows_to_insert.clear()
+        result.rows_duplicate += batch_count - inserted
+        rows_to_insert = []
 
     try:
         with open(csv_path, 'r', encoding='utf-8') as f:
@@ -606,42 +552,41 @@ def import_to_rtb_bidstream(
 def import_to_rtb_bid_filtering(
     csv_path: str,
     mapping: MappingResult,
-    db_path: str,
     batch_id: str,
     result: UnifiedImportResult,
     bidder_id: Optional[str] = None,
     parquet_exporter: Optional["ParquetExportManager"] = None,
     report_type: Optional[str] = None,
 ):
-    """Import data to rtb_bid_filtering table."""
-    conn = connect_with_retry(db_path)
+    """Import data to rtb_bid_filtering table (Postgres)."""
+    conn = get_postgres_connection()
     cursor = conn.cursor()
-    configure_import_connection(conn)
     ensure_table_exists(cursor, "rtb_bid_filtering")
-    ensure_unique_index(cursor, "rtb_bid_filtering", "row_hash", "idx_rtb_bid_filtering_row_hash")
+    conn.commit()
 
     hash_keys = ["metric_date", "country", "filtering_reason", "creative_id", "bidder_id"]
     min_date, max_date = None, None
 
     insert_sql = """
-        INSERT OR IGNORE INTO rtb_bid_filtering (
+        INSERT INTO rtb_bid_filtering (
             metric_date, country, buyer_account_id, filtering_reason, creative_id,
             bids, bids_in_auction, opportunity_cost_micros,
             bidder_id, row_hash, import_batch_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (row_hash) DO NOTHING
     """
     rows_to_insert: list[tuple] = []
 
     def flush_rows():
+        nonlocal rows_to_insert
         if not rows_to_insert:
             return
-        before = conn.total_changes
+        batch_count = len(rows_to_insert)
         cursor.executemany(insert_sql, rows_to_insert)
-        inserted = conn.total_changes - before
+        inserted = cursor.rowcount if cursor.rowcount >= 0 else batch_count
         result.rows_imported += inserted
-        if inserted >= 0:
-            result.rows_duplicate += len(rows_to_insert) - inserted
-        rows_to_insert.clear()
+        result.rows_duplicate += batch_count - inserted
+        rows_to_insert = []
 
     try:
         with open(csv_path, 'r', encoding='utf-8') as f:
@@ -726,15 +671,14 @@ def import_to_rtb_bid_filtering(
 
 def unified_import(
     csv_path: str,
-    db_path: str = DB_PATH,
     bidder_id: Optional[str] = None,
 ) -> UnifiedImportResult:
     """
-    Import any CSV using flexible column mapping.
+    Import any CSV using flexible column mapping (Postgres).
 
     Args:
         csv_path: Path to CSV file
-        db_path: Database path
+        bidder_id: Optional bidder ID override
 
     Returns:
         UnifiedImportResult with success status and details
@@ -809,7 +753,6 @@ def unified_import(
             import_to_rtb_daily(
                 csv_path,
                 mapping,
-                db_path,
                 result.batch_id,
                 result,
                 bidder_id=bidder_id,
@@ -820,7 +763,6 @@ def unified_import(
             import_to_rtb_bidstream(
                 csv_path,
                 mapping,
-                db_path,
                 result.batch_id,
                 result,
                 bidder_id=bidder_id,
@@ -831,7 +773,6 @@ def unified_import(
             import_to_rtb_bid_filtering(
                 csv_path,
                 mapping,
-                db_path,
                 result.batch_id,
                 result,
                 bidder_id=bidder_id,
