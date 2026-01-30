@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_store
 from collectors import EndpointsClient
+from services.endpoints_service import EndpointsService
 from storage.sqlite_store import SQLiteStore
 from storage.postgres_store import PostgresStore
 
@@ -70,8 +71,9 @@ async def sync_rtb_endpoints(
         )
         endpoints = await client.list_endpoints()
 
-        # Store endpoints in database using store method
-        count = await store.sync_rtb_endpoints(account_id, endpoints)
+        # Store endpoints in database using service/repo
+        endpoint_service = EndpointsService()
+        count = await endpoint_service.sync_endpoints(account_id, endpoints)
 
         return SyncEndpointsResponse(
             status="success",
@@ -128,7 +130,8 @@ async def get_rtb_endpoints(
                     logger.info(f"Using fallback bidder_id: {bidder_id} for endpoints list")
 
         # Get endpoints, optionally filtered by bidder_id
-        rows = await store.get_rtb_endpoints(bidder_id if bidder_id else None)
+        endpoint_service = EndpointsService()
+        rows = await endpoint_service.list_endpoints(bidder_id if bidder_id else None)
 
         endpoints = []
         total_qps = 0
@@ -151,7 +154,7 @@ async def get_rtb_endpoints(
                     latest_sync = row["synced_at"]
 
         # Get current QPS usage from rtb_endpoints_current table
-        qps_current = await store.get_rtb_endpoints_current_qps(bidder_id if bidder_id else None)
+        qps_current = await endpoint_service.get_current_qps(bidder_id if bidder_id else None)
 
         return RTBEndpointsResponse(
             bidder_id=bidder_id or "unknown",
