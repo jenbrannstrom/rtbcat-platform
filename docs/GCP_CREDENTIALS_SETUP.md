@@ -433,7 +433,6 @@ Credentials are stored in `~/.catscan/credentials/` (outside git).
 **Local development:**
 ```
 ~/.catscan/
-├── catscan.db                          # SQLite database (local dev only)
 ├── credentials/
 │   ├── catscan-service-account.json    # AB API access (all accounts)
 │   ├── gmail-oauth-client.json         # Gmail OAuth client
@@ -520,7 +519,7 @@ python scripts/run_pipeline.py --csv-path /path/to/report.csv
 python scripts/bq_aggregate_to_pg.py --date 2026-01-23
 ```
 
-> **Important:** Production uses Cloud SQL, not SQLite. To query:
+> **Important:** Production uses Cloud SQL (Postgres). To query:
 > ```bash
 > # SSH to VM first
 > gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
@@ -1128,23 +1127,6 @@ scp ~/.catscan/credentials/gmail-token.json \
 
 **IMPORTANT:** The API requires service accounts to be registered in the database, not just present as files.
 
-> **Note:** This step is for **local development with SQLite**. In production, service account registration is handled via the Settings UI or Cloud SQL.
-
-SSH to VM and run (for local SQLite dev only):
-
-```bash
-sqlite3 ~/.catscan/catscan.db "INSERT INTO service_accounts
-  (id, client_email, project_id, display_name, credentials_path, is_active)
-  VALUES (
-    'sa-1',
-    '<SERVICE_ACCOUNT_EMAIL>',
-    '<GCP_PROJECT_ID>',
-    'Cat-Scan API',
-    '~/.catscan/credentials/catscan-service-account.json',
-    1
-  );"
-```
-
 For production (Cloud SQL):
 ```bash
 # SSH to VM first
@@ -1165,10 +1147,6 @@ psql $POSTGRES_SERVING_DSN -c "INSERT INTO service_accounts
 
 Verify:
 ```bash
-# Local (SQLite)
-sqlite3 ~/.catscan/catscan.db "SELECT * FROM service_accounts;"
-
-# Production (Cloud SQL)
 psql $POSTGRES_SERVING_DSN -c "SELECT * FROM service_accounts;"
 ```
 
@@ -1434,46 +1412,7 @@ sudo docker restart catscan-api
 
 ## Debugging Session Summary (2026-01-07) [HISTORICAL]
 
-> **Note:** This section documents a past debugging session on the **old SQLite-based deployment**.
-> The current production uses **Cloud SQL PostgreSQL**. These commands are kept for historical reference only.
-
-### Issue: Blank Dashboard After Fresh Install
-
-**Symptom:** Dashboard at `http://104.199.91.219:3000` loads but shows blank content.
-
-**Root Cause:** Multi-user authentication was enabled (`multi_user_enabled=1`) but no users existed in the database. The API returned "Authentication required" for all data endpoints.
-
-**Diagnosis steps (old SQLite setup):**
-```bash
-# Check if services are running
-ssh jen@104.199.91.219 "sudo systemctl status catscan-api catscan-dashboard"
-
-# Test API authentication
-curl -s http://104.199.91.219:8000/stats
-# Returns: {"detail": "Authentication required. Please log in."}
-
-# Check database settings (OLD - SQLite)
-ssh jen@104.199.91.219 "sqlite3 ~/.catscan/catscan.db 'SELECT * FROM system_settings;'"
-# Shows: multi_user_enabled|1
-
-# Check if users exist (OLD - SQLite)
-ssh jen@104.199.91.219 "sqlite3 ~/.catscan/catscan.db 'SELECT * FROM users;'"
-# Returns empty - no users!
-```
-
-**Current production diagnosis (Cloud SQL):**
-```bash
-# SSH via IAP (SG instance)
-gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap
-
-# Check system settings
-psql $POSTGRES_SERVING_DSN -c "SELECT * FROM system_settings;"
-
-# Check users (if using local auth instead of OAuth2 Proxy)
-psql $POSTGRES_SERVING_DSN -c "SELECT * FROM users;"
-```
-
-**Production Fix:** Ensure OAuth2 Proxy is configured and `allowed_email_domains` is set.
+This section previously documented an old SQLite-based deployment. It has been removed to avoid confusion now that Postgres-only serving is required.
 
 ### Data Verification
 
