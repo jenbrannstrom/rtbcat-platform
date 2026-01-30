@@ -1,19 +1,14 @@
 """Pretargeting pending changes routes (local-only)."""
 
-import json
 import logging
-from typing import Optional, Union
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 
-from api.dependencies import get_store
-from storage.sqlite_store import SQLiteStore
-from storage.postgres_store import PostgresStore
+from services.changes_service import ChangesService
+from services.pretargeting_service import PretargetingService
 
 from .models import ConfigDetailResponse, PendingChangeCreate, PendingChangeResponse
-
-# Store type can be either SQLite or Postgres
-StoreType = Union[SQLiteStore, PostgresStore]
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +18,6 @@ router = APIRouter(tags=["RTB Settings"])
 @router.post("/settings/pretargeting/pending-change", response_model=PendingChangeResponse)
 async def create_pending_change(
     request: PendingChangeCreate,
-    store: StoreType = Depends(get_store),
 ):
     """
     Create a pending change to a pretargeting configuration.
@@ -63,9 +57,10 @@ async def create_pending_change(
         )
 
     try:
-        # Verify the config exists and get config_id
-        config = await store.get_pretargeting_config_by_billing_id(request.billing_id)
+        change_service = ChangesService()
+        pretargeting_service = PretargetingService()
 
+        config = await pretargeting_service.get_config(request.billing_id)
         if not config:
             raise HTTPException(
                 status_code=404,
@@ -75,8 +70,7 @@ async def create_pending_change(
         config_id = config["config_id"]
         bidder_id = config.get("bidder_id")
 
-        # Insert the pending change
-        change_id = await store.create_pending_change(
+        change_id = await change_service.create_pending_change(
             billing_id=request.billing_id,
             config_id=config_id,
             change_type=request.change_type,
@@ -87,21 +81,16 @@ async def create_pending_change(
             created_by="ui",
         )
 
-        # Also log to pretargeting_history
         if bidder_id:
-            await store.add_pretargeting_history(
+            await pretargeting_service.add_history(
                 config_id=config_id,
-                bidder_id=bidder_id,
-                change_type="pending_change",
-                field_changed=request.field_name,
-                old_value=None,
-                new_value=f"{request.change_type}:{request.value}",
-                changed_by="ui",
-                change_source="user",
+                user_id=bidder_id,
+                action="pending_change",
+                summary=request.field_name,
+                details={"change": f"{request.change_type}:{request.value}"},
             )
 
-        # Fetch the created change
-        row = await store.get_pending_change(change_id)
+        row = await change_service.get_pending_change(change_id)
 
         return PendingChangeResponse(
             id=row["id"],
@@ -117,8 +106,8 @@ async def create_pending_change(
             status=row["status"],
         )
 
-    except HTTPException:
-        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to create pending change: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create pending change: {str(e)}")
@@ -129,11 +118,13 @@ async def list_pending_changes(
     billing_id: Optional[str] = Query(None, description="Filter by billing account"),
     status: str = Query("pending", description="Filter by status (pending, applied, cancelled)"),
     limit: int = Query(100, ge=1, le=500),
-    store: StoreType = Depends(get_store),
 ):
     """List pending changes to pretargeting configurations."""
     try:
-        rows = await store.get_pending_changes(billing_id=billing_id, status=status, limit=limit)
+        change_service = ChangesService()
+        rows = await change_service.list_pending_changes(
+            billing_id=billing_id, status=status, limit=limit
+        )
 
         return [
             PendingChangeResponse(
@@ -160,12 +151,11 @@ async def list_pending_changes(
 @router.delete("/settings/pretargeting/pending-change/{change_id}")
 async def cancel_pending_change(
     change_id: int,
-    store: StoreType = Depends(get_store),
 ):
     """Cancel a pending change (mark as cancelled, not deleted)."""
     try:
-        # Check if change exists and is pending
-        change = await store.get_pending_change(change_id)
+        change_service = ChangesService()
+        change = await change_service.get_pending_change(change_id)
 
         if not change:
             raise HTTPException(status_code=404, detail="Pending change not found")
@@ -176,13 +166,12 @@ async def cancel_pending_change(
                 detail=f"Change cannot be cancelled - current status: {change['status']}"
             )
 
-        # Mark as cancelled
-        await store.cancel_pending_change(change_id)
+        await change_service.cancel_pending_change(change_id)
 
         return {"status": "cancelled", "id": change_id}
 
-    except HTTPException:
-        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to cancel pending change: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to cancel pending change: {str(e)}")
@@ -191,7 +180,6 @@ async def cancel_pending_change(
 @router.post("/settings/pretargeting/pending-change/{change_id}/mark-applied")
 async def mark_change_applied(
     change_id: int,
-    store: StoreType = Depends(get_store),
 ):
     """
     Mark a pending change as applied (user has manually applied it in Google UI).
@@ -199,7 +187,8 @@ async def mark_change_applied(
     This is for tracking purposes only - it does NOT make any API calls.
     """
     try:
-        change = await store.get_pending_change(change_id)
+        change_service = ChangesService()
+        change = await change_service.get_pending_change(change_id)
 
         if not change:
             raise HTTPException(status_code=404, detail="Pending change not found")
@@ -210,12 +199,12 @@ async def mark_change_applied(
                 detail=f"Change is not pending - current status: {change['status']}"
             )
 
-        await store.mark_pending_change_applied(change_id)
+        await change_service.mark_pending_change_applied(change_id)
 
         return {"status": "applied", "id": change_id}
 
-    except HTTPException:
-        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to mark change as applied: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to mark change as applied: {str(e)}")
@@ -224,7 +213,6 @@ async def mark_change_applied(
 @router.get("/settings/pretargeting/{billing_id}/detail", response_model=ConfigDetailResponse)
 async def get_pretargeting_config_detail(
     billing_id: str,
-    store: StoreType = Depends(get_store),
 ):
     """
     Get detailed pretargeting config including current state and pending changes.
@@ -235,8 +223,9 @@ async def get_pretargeting_config_detail(
     - Effective values (what the config would look like after pending changes)
     """
     try:
-        # Get config
-        config = await store.get_pretargeting_config_by_billing_id(billing_id)
+        pretargeting_service = PretargetingService()
+        change_service = ChangesService()
+        config = await pretargeting_service.get_config(billing_id)
 
         if not config:
             raise HTTPException(
@@ -245,8 +234,10 @@ async def get_pretargeting_config_detail(
             )
 
         # Get pending changes (only pending status, ordered by created_at ASC)
-        pending_rows = await store.get_pending_changes(billing_id=billing_id, status="pending", limit=500)
-        # Reverse to get ASC order (store returns DESC)
+        pending_rows = await change_service.list_pending_changes(
+            billing_id=billing_id, status="pending", limit=500
+        )
+        # Reverse to get ASC order (service returns DESC)
         pending_rows = list(reversed(pending_rows))
 
         # Parse current values
@@ -330,8 +321,8 @@ async def get_pretargeting_config_detail(
             effective_publisher_targeting_values=sorted(list(effective_publishers)),
         )
 
-    except HTTPException:
-        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to get config detail: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get config detail: {str(e)}")

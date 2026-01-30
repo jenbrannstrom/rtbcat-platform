@@ -10,57 +10,83 @@ from storage.postgres_database import pg_execute, pg_insert_returning_id, pg_que
 class ChangesRepository:
     """SQL-only repository for pending changes."""
 
-    async def create_change(
+    async def create_pending_change(
         self,
-        config_id: int,
         billing_id: str,
-        action_type: str,
-        payload: dict[str, Any],
-        created_by: str,
+        config_id: str,
+        change_type: str,
+        field_name: str,
+        value: str,
+        reason: str | None,
+        estimated_qps_impact: float | None,
+        created_by: str | None,
     ) -> int:
         return await pg_insert_returning_id(
             """
-            INSERT INTO pretargeting_changes
-            (config_id, billing_id, action_type, payload, status, created_by)
-            VALUES (%s, %s, %s, %s, 'PENDING', %s)
+            INSERT INTO pretargeting_pending_changes
+            (billing_id, config_id, change_type, field_name, value,
+             reason, estimated_qps_impact, created_by, status, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending', CURRENT_TIMESTAMP)
             RETURNING id
             """,
-            (config_id, billing_id, action_type, payload, created_by),
+            (
+                billing_id,
+                config_id,
+                change_type,
+                field_name,
+                value,
+                reason,
+                estimated_qps_impact,
+                created_by,
+            ),
         )
 
-    async def list_changes(
-        self, billing_id: str, limit: int = 100, offset: int = 0
+    async def list_pending_changes(
+        self,
+        billing_id: str | None = None,
+        status: str = "pending",
+        limit: int = 100,
     ) -> list[dict[str, Any]]:
+        conditions = ["status = %s"]
+        params: list[Any] = [status]
+
+        if billing_id:
+            conditions.append("billing_id = %s")
+            params.append(billing_id)
+
+        params.append(limit)
+        where_clause = " AND ".join(conditions)
+
         return await pg_query(
-            """
-            SELECT *
-            FROM pretargeting_changes
-            WHERE billing_id = %s
-            ORDER BY created_at DESC
-            LIMIT %s OFFSET %s
+            f"""
+            SELECT * FROM pretargeting_pending_changes
+            WHERE {where_clause}
+            ORDER BY created_at DESC LIMIT %s
             """,
-            (billing_id, limit, offset),
+            tuple(params),
         )
 
-    async def get_change(self, change_id: int) -> dict[str, Any] | None:
+    async def get_pending_change(self, change_id: int) -> dict[str, Any] | None:
         rows = await pg_query(
-            "SELECT * FROM pretargeting_changes WHERE id = %s",
+            "SELECT * FROM pretargeting_pending_changes WHERE id = %s",
             (change_id,),
         )
         return rows[0] if rows else None
 
-    async def update_change_status(self, change_id: int, status: str) -> int:
+    async def cancel_pending_change(self, change_id: int) -> int:
         return await pg_execute(
-            """
-            UPDATE pretargeting_changes
-            SET status = %s, updated_at = NOW()
-            WHERE id = %s
-            """,
-            (status, change_id),
+            "UPDATE pretargeting_pending_changes SET status = 'cancelled' WHERE id = %s AND status = 'pending'",
+            (change_id,),
         )
 
-    async def delete_change(self, change_id: int) -> int:
+    async def mark_pending_change_applied(
+        self, change_id: int, applied_by: str | None = None
+    ) -> int:
         return await pg_execute(
-            "DELETE FROM pretargeting_changes WHERE id = %s",
-            (change_id,),
+            """
+            UPDATE pretargeting_pending_changes
+            SET status = 'applied', applied_at = CURRENT_TIMESTAMP, applied_by = %s
+            WHERE id = %s AND status = 'pending'
+            """,
+            (applied_by, change_id),
         )
