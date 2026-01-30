@@ -238,6 +238,7 @@ function TargetingSection({
   showBulkActions?: boolean;
 }) {
   const [newValue, setNewValue] = useState('');
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const handleAdd = () => {
     if (newValue.trim()) {
