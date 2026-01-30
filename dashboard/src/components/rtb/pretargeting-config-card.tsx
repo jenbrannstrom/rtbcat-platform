@@ -5,6 +5,7 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { setPretargetingName, lookupGeoNames } from '@/lib/api';
 import { ChevronRight, Pencil, Check, X, AlertTriangle, AlertCircle, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
 import { SnapshotComparisonPanel } from './snapshot-comparison-panel';
 import { PretargetingSettingsEditor } from './pretargeting-settings-editor';
 
@@ -119,6 +120,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   const [showSettingsEditor, setShowSettingsEditor] = useState(false);
   const [editorTab, setEditorTab] = useState<'publishers' | 'settings'>('settings');
   const inputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
   const queryClient = useQueryClient();
 
   const nameMutation = useMutation({
@@ -319,10 +321,17 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  setEditorTab('publishers');
-                  setShowSettingsEditor(true);
+                  if (config.billing_id) {
+                    router.push(`/pretargeting/${encodeURIComponent(config.billing_id)}/publishers`);
+                  }
                 }}
-                className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors bg-blue-600 text-white hover:bg-blue-700"
+                disabled={!config.billing_id}
+                className={cn(
+                  "flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors",
+                  config.billing_id
+                    ? "bg-blue-600 text-white hover:bg-blue-700"
+                    : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                )}
               >
                 Publisher List
               </button>
