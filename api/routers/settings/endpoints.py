@@ -2,20 +2,15 @@
 
 import logging
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_store
 from collectors import EndpointsClient
 from services.endpoints_service import EndpointsService
-from storage.sqlite_store import SQLiteStore
-from storage.postgres_store import PostgresStore
 
 from .models import RTBEndpointItem, RTBEndpointsResponse, SyncEndpointsResponse
-
-# Store type can be either SQLite or Postgres
-StoreType = Union[SQLiteStore, PostgresStore]
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +20,7 @@ router = APIRouter(tags=["RTB Settings"])
 @router.post("/settings/endpoints/sync", response_model=SyncEndpointsResponse)
 async def sync_rtb_endpoints(
     service_account_id: Optional[str] = Query(None, description="Service account ID to use"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Sync RTB endpoints from Google Authorized Buyers API.
 
@@ -90,7 +85,7 @@ async def sync_rtb_endpoints(
 async def get_rtb_endpoints(
     buyer_id: Optional[str] = Query(None, description="Buyer/seat ID to get endpoints for"),
     service_account_id: Optional[str] = Query(None, description="Service account ID (deprecated, use buyer_id)"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Get stored RTB endpoints with aggregated QPS data.
 
