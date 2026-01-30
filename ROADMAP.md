@@ -21,6 +21,27 @@
 
 ---
 
+## Refactor Tracking — Services/Repositories Split (Postgres-only)
+
+Goal: unmix business logic from data access. Routers call services; services call repos; repos hold SQL only. PostgresStore becomes a thin shim and then is removed.
+
+| Domain | Repo | Service | Router | Owner | Status | Notes |
+|--------|------|---------|--------|-------|--------|-------|
+| Endpoints | ☐ | ☐ | ☐ | Codex | Pending | Low-conflict first slice |
+| Snapshots | ☐ | ☐ | ☐ | Codex | Pending | Small surface area |
+| Changes | ☐ | ☐ | ☐ | Codex | Pending | Depends on snapshots |
+| Pretargeting | ☐ | ☐ | ☐ | Codex | Pending | Larger, do after small slices |
+| Actions | ☐ | ☐ | ☐ | Codex | Pending | Tied to pretargeting workflows |
+| Seats Sync | ☐ | ☐ | ☐ | Claude | Pending | Avoid overlap until his router work lands |
+| Uploads | ☐ | ☐ | ☐ | Claude | Pending | Read-only queries |
+| Retention | ☐ | ☐ | ☐ | Claude | Pending | Uses RetentionManager |
+| System/Thumbnails | ☐ | ☐ | ☐ | Claude | Pending | Local file + db ops |
+| Analytics/Performance | ☐ | ☐ | ☐ | Claude | Pending | Complex queries/transactions |
+
+Legend: ☐ = not started, ☑ = done, ◐ = in progress. Start after Claude completes current router migrations.
+
+---
+
 ## Features 
 
 ### Core Improvements
