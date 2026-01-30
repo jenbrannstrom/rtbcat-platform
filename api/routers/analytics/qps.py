@@ -5,7 +5,7 @@ publisher waste, bid filtering, platform efficiency, and hourly patterns.
 """
 
 import logging
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 
@@ -16,10 +16,10 @@ from analytics.qps_optimizer import QPSOptimizer
 from api.dependencies import get_store, get_current_user, resolve_buyer_id, get_allowed_buyer_ids
 from storage import SQLiteStore
 from storage.postgres_store import PostgresStore
+from storage.repositories.user_repository import User
 
 # Store type can be either SQLite or Postgres
 StoreType = Union[SQLiteStore, PostgresStore]
-from storage.repositories.user_repository import User
 from .common import get_valid_billing_ids_for_buyer
 
 logger = logging.getLogger(__name__)

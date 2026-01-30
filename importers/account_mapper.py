@@ -7,30 +7,35 @@ The mapping is stored in the pretargeting_configs table which is populated
 when the user syncs their Google Authorized Buyers account.
 """
 
-import sqlite3
+import os
 import logging
-from pathlib import Path
 from typing import Optional
-from functools import lru_cache
+
+import psycopg
+from psycopg.rows import dict_row
 
 logger = logging.getLogger(__name__)
 
-# Default database path
-DB_PATH = Path.home() / ".catscan" / "catscan.db"
+
+def _get_connection():
+    """Get Postgres connection using POSTGRES_SERVING_DSN."""
+    dsn = os.getenv("POSTGRES_SERVING_DSN", "")
+    if not dsn:
+        raise RuntimeError("POSTGRES_SERVING_DSN environment variable not set")
+    return psycopg.connect(dsn, row_factory=dict_row)
 
 
 class AccountMapper:
     """Maps billing_ids to bidder_ids using pretargeting_configs table."""
 
-    def __init__(self, db_path: str | Path = DB_PATH):
-        self.db_path = str(db_path)
+    def __init__(self):
         self._cache: dict[str, Optional[str]] = {}
         self._load_mappings()
 
     def _load_mappings(self) -> None:
         """Load all billing_id -> bidder_id mappings into cache."""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = _get_connection()
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT billing_id, bidder_id
@@ -39,8 +44,8 @@ class AccountMapper:
             """)
             for row in cursor.fetchall():
                 # Normalize billing_id (strip whitespace) to match CSV import format
-                normalized_billing_id = str(row[0]).strip()
-                self._cache[normalized_billing_id] = row[1]
+                normalized_billing_id = str(row["billing_id"]).strip()
+                self._cache[normalized_billing_id] = row["bidder_id"]
             conn.close()
             logger.debug(f"Loaded {len(self._cache)} billing_id -> bidder_id mappings")
         except Exception as e:
@@ -66,18 +71,17 @@ class AccountMapper:
             return self._cache[normalized_billing_id]
 
         # Try database lookup (cache miss or new billing_id)
-        # Use TRIM() in SQL to handle any existing un-normalized data
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = _get_connection()
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT bidder_id FROM pretargeting_configs
-                WHERE TRIM(billing_id) = ?
+                WHERE TRIM(billing_id) = %s
             """, (normalized_billing_id,))
             row = cursor.fetchone()
             conn.close()
 
-            bidder_id = row[0] if row else None
+            bidder_id = row["bidder_id"] if row else None
             self._cache[normalized_billing_id] = bidder_id
             return bidder_id
         except Exception as e:
@@ -123,13 +127,13 @@ class AccountMapper:
             List of billing_ids belonging to this bidder
         """
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = _get_connection()
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT billing_id FROM pretargeting_configs
-                WHERE bidder_id = ? AND billing_id IS NOT NULL
+                WHERE bidder_id = %s AND billing_id IS NOT NULL
             """, (bidder_id,))
-            billing_ids = [row[0] for row in cursor.fetchall()]
+            billing_ids = [row["billing_id"] for row in cursor.fetchall()]
             conn.close()
             return billing_ids
         except Exception as e:
@@ -143,14 +147,14 @@ class AccountMapper:
             List of unique bidder_ids
         """
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = _get_connection()
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT DISTINCT bidder_id FROM pretargeting_configs
                 WHERE bidder_id IS NOT NULL
                 ORDER BY bidder_id
             """)
-            bidder_ids = [row[0] for row in cursor.fetchall()]
+            bidder_ids = [row["bidder_id"] for row in cursor.fetchall()]
             conn.close()
             return bidder_ids
         except Exception as e:
@@ -167,29 +171,25 @@ class AccountMapper:
 _mapper: Optional[AccountMapper] = None
 
 
-def get_account_mapper(db_path: str | Path = DB_PATH) -> AccountMapper:
+def get_account_mapper() -> AccountMapper:
     """Get or create the singleton AccountMapper instance.
-
-    Args:
-        db_path: Database path (only used on first call)
 
     Returns:
         AccountMapper instance
     """
     global _mapper
     if _mapper is None:
-        _mapper = AccountMapper(db_path)
+        _mapper = AccountMapper()
     return _mapper
 
 
-def get_bidder_id_for_billing_id(billing_id: str, db_path: str | Path = DB_PATH) -> Optional[str]:
+def get_bidder_id_for_billing_id(billing_id: str) -> Optional[str]:
     """Convenience function to get bidder_id for a billing_id.
 
     Args:
         billing_id: The billing ID to look up
-        db_path: Database path
 
     Returns:
         The bidder_id, or None if not found
     """
-    return get_account_mapper(db_path).get_bidder_id(billing_id)
+    return get_account_mapper().get_bidder_id(billing_id)
