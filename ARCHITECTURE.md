@@ -254,6 +254,21 @@ Gmail (scheduled reports)          Manual Upload
 
 ---
 
+## Code Structure Rules (Postgres-Only)
+
+These rules prevent data access bloat and keep business logic testable.
+
+1. **API Routers**: orchestrate only. No SQL or multi-step business rules.
+2. **Services** (`services/*_service.py`): business logic + workflows + validation. No SQL.
+3. **Repos** (`storage/repositories/*_repo.py`): SQL only + row mapping. No business rules.
+4. **PostgresStore**: compatibility shim only. No new logic methods without repo/service split + tests.
+5. **File size cap**: keep data-access files ~300–500 LOC. Split into domain repos when growing.
+6. **Tests required**: new repo methods require repo tests; new service flows require service tests.
+
+Incremental refactors should move the highest-churn/longest methods first and leave `PostgresStore` as a thin delegator until fully retired.
+
+---
+
 ## Database Schema Overview
 
 ### Core Tables (41 total)
