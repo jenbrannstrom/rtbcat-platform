@@ -54,6 +54,10 @@ AGG_QUERIES = {
     # NOTE: Queries use specific BQ tables:
     # - rtb_bidstream: has bid_requests, successful_responses (for geo/seat/publisher)
     # - rtb_daily: has creative_size, billing_id (for size/config)
+    #
+    # IMPORTANT: rtb_bidstream queries MUST filter by report_type = 'rtb_bidstream_publisher'.
+    # Other report_types (e.g., rtb_bidstream_geo, NULL) have impressions but reached_queries=0,
+    # causing win_rate > 100% if included. See commit eb4b5b6.
 
     "home_publisher_daily": """
         SELECT
@@ -70,6 +74,7 @@ AGG_QUERIES = {
         FROM `{project}.{dataset}.rtb_bidstream`
         WHERE metric_date = @metric_date
           AND publisher_id IS NOT NULL
+          AND report_type = 'rtb_bidstream_publisher'
         GROUP BY metric_date, buyer_account_id, publisher_id
     """,
 
