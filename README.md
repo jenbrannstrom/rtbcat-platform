@@ -124,18 +124,13 @@ MCP Chrome setup (browser-based inspection) uses `scripts/chrome-cdp.sh` and `sc
                          │                                                         │
                          ▼                                                         ▼
           ┌──────────────────────────────┐                      ┌──────────────────────────────┐
-          │ SQLite (legacy staging)      │                      │ Google Authorized            │
-          │ ~/.catscan/catscan.db        │                      │ Buyers API                   │
+          │ Postgres (serving)           │                      │ Google Authorized            │
+          │ Cloud SQL / local Postgres   │                      │ Buyers API                   │
           └──────────────────────────────┘                      └──────────────────────────────┘
+                         ▲
                          │
-                         ▼
           ┌──────────────────────────────┐
           │ GCS + BigQuery (raw_facts)   │
-          └──────────────────────────────┘
-                         │
-                         ▼
-          ┌──────────────────────────────┐
-          │ Postgres (serving/precompute)│
           └──────────────────────────────┘
 ```
 
@@ -385,7 +380,6 @@ docker compose up -d api
 
 ```
 ~/.catscan/
-├── catscan.db              # SQLite legacy staging (optional)
 ├── thumbnails/             # Generated video thumbnails
 ├── imports/                # Downloaded CSV reports
 └── credentials/
@@ -399,10 +393,7 @@ Create `.env` in the project root:
 ```bash
 GOOGLE_APPLICATION_CREDENTIALS=~/.catscan/credentials/google-credentials.json
 
-# Legacy SQLite (optional)
-DATABASE_PATH=~/.catscan/catscan.db
-
-# Postgres serving (recommended)
+# Postgres serving (required)
 POSTGRES_DSN=postgresql://user:pass@host:5432/rtbcat_serving
 POSTGRES_SERVING_DSN=postgresql://user:pass@host:5432/rtbcat_serving
 
