@@ -1770,3 +1770,198 @@ class SQLiteStore:
                 }
 
             return await loop.run_in_executor(None, _process_batch)
+
+    # =========================================================================
+    # Retention Methods
+    # =========================================================================
+
+    async def get_retention_config(self, seat_id: str | None = None) -> dict:
+        """Get retention configuration for a seat or global defaults."""
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _get_config():
+                if seat_id:
+                    cursor = conn.execute(
+                        "SELECT * FROM retention_config WHERE seat_id = ?",
+                        (seat_id,),
+                    )
+                else:
+                    cursor = conn.execute(
+                        "SELECT * FROM retention_config WHERE seat_id IS NULL LIMIT 1"
+                    )
+                row = cursor.fetchone()
+                if row:
+                    return dict(row)
+                return {
+                    "raw_retention_days": 90,
+                    "summary_retention_days": 365,
+                    "auto_aggregate_after_days": 30,
+                }
+
+            return await loop.run_in_executor(None, _get_config)
+
+    async def set_retention_config(
+        self,
+        raw_retention_days: int,
+        summary_retention_days: int,
+        auto_aggregate_after_days: int = 30,
+        seat_id: str | None = None,
+    ) -> None:
+        """Set retention configuration for a seat or global defaults."""
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _set_config():
+                conn.execute(
+                    """
+                    INSERT INTO retention_config (seat_id, raw_retention_days, summary_retention_days, auto_aggregate_after_days, updated_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(seat_id) DO UPDATE SET
+                        raw_retention_days = excluded.raw_retention_days,
+                        summary_retention_days = excluded.summary_retention_days,
+                        auto_aggregate_after_days = excluded.auto_aggregate_after_days,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (seat_id, raw_retention_days, summary_retention_days, auto_aggregate_after_days),
+                )
+                conn.commit()
+
+            await loop.run_in_executor(None, _set_config)
+
+    async def get_storage_stats(self, seat_id: str | None = None) -> dict:
+        """Get storage statistics for raw and summary data."""
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _get_stats():
+                if seat_id:
+                    raw_cursor = conn.execute(
+                        """
+                        SELECT COUNT(*) as cnt, MIN(metric_date) as earliest, MAX(metric_date) as latest
+                        FROM performance_metrics WHERE seat_id = ?
+                        """,
+                        (seat_id,),
+                    )
+                else:
+                    raw_cursor = conn.execute(
+                        "SELECT COUNT(*) as cnt, MIN(metric_date) as earliest, MAX(metric_date) as latest FROM performance_metrics"
+                    )
+                raw = raw_cursor.fetchone()
+
+                if seat_id:
+                    summary_cursor = conn.execute(
+                        """
+                        SELECT COUNT(*) as cnt, MIN(summary_date) as earliest, MAX(summary_date) as latest
+                        FROM daily_creative_summary WHERE seat_id = ?
+                        """,
+                        (seat_id,),
+                    )
+                else:
+                    summary_cursor = conn.execute(
+                        "SELECT COUNT(*) as cnt, MIN(summary_date) as earliest, MAX(summary_date) as latest FROM daily_creative_summary"
+                    )
+                summary = summary_cursor.fetchone()
+
+                return {
+                    "raw_rows": raw["cnt"] or 0,
+                    "raw_earliest_date": raw["earliest"],
+                    "raw_latest_date": raw["latest"],
+                    "summary_rows": summary["cnt"] or 0 if summary else 0,
+                    "summary_earliest_date": summary["earliest"] if summary else None,
+                    "summary_latest_date": summary["latest"] if summary else None,
+                }
+
+            return await loop.run_in_executor(None, _get_stats)
+
+    async def run_retention_job(self, seat_id: str | None = None) -> dict:
+        """Run retention job to aggregate and clean up old data."""
+        async with self._connection() as conn:
+            loop = asyncio.get_event_loop()
+
+            def _run_job():
+                # Get retention config
+                if seat_id:
+                    cursor = conn.execute(
+                        "SELECT * FROM retention_config WHERE seat_id = ?",
+                        (seat_id,),
+                    )
+                else:
+                    cursor = conn.execute(
+                        "SELECT * FROM retention_config WHERE seat_id IS NULL LIMIT 1"
+                    )
+                config = cursor.fetchone()
+                raw_retention = config["raw_retention_days"] if config else 90
+                summary_retention = config["summary_retention_days"] if config else 365
+                auto_aggregate = config["auto_aggregate_after_days"] if config else 30
+
+                aggregated = 0
+                deleted_raw = 0
+                deleted_summary = 0
+
+                # Aggregate old raw data into daily summaries
+                cutoff_date = f"date('now', '-{auto_aggregate} days')"
+                if seat_id:
+                    agg_cursor = conn.execute(
+                        f"""
+                        INSERT OR REPLACE INTO daily_creative_summary
+                        (seat_id, creative_id, summary_date, total_queries, total_impressions, total_clicks, total_spend, created_at)
+                        SELECT seat_id, creative_id, metric_date,
+                               SUM(queries), SUM(impressions), SUM(clicks), SUM(spend_micros)/1000000.0,
+                               CURRENT_TIMESTAMP
+                        FROM performance_metrics
+                        WHERE seat_id = ? AND metric_date < {cutoff_date}
+                        GROUP BY seat_id, creative_id, metric_date
+                        """,
+                        (seat_id,),
+                    )
+                else:
+                    agg_cursor = conn.execute(
+                        f"""
+                        INSERT OR REPLACE INTO daily_creative_summary
+                        (seat_id, creative_id, summary_date, total_queries, total_impressions, total_clicks, total_spend, created_at)
+                        SELECT seat_id, creative_id, metric_date,
+                               SUM(queries), SUM(impressions), SUM(clicks), SUM(spend_micros)/1000000.0,
+                               CURRENT_TIMESTAMP
+                        FROM performance_metrics
+                        WHERE metric_date < {cutoff_date}
+                        GROUP BY seat_id, creative_id, metric_date
+                        """
+                    )
+                aggregated = agg_cursor.rowcount
+
+                # Delete old raw data
+                raw_cutoff = f"date('now', '-{raw_retention} days')"
+                if seat_id:
+                    del_cursor = conn.execute(
+                        f"DELETE FROM performance_metrics WHERE seat_id = ? AND metric_date < {raw_cutoff}",
+                        (seat_id,),
+                    )
+                else:
+                    del_cursor = conn.execute(
+                        f"DELETE FROM performance_metrics WHERE metric_date < {raw_cutoff}"
+                    )
+                deleted_raw = del_cursor.rowcount
+
+                # Delete old summary data if retention is not forever (-1)
+                if summary_retention > 0:
+                    summary_cutoff = f"date('now', '-{summary_retention} days')"
+                    if seat_id:
+                        sum_cursor = conn.execute(
+                            f"DELETE FROM daily_creative_summary WHERE seat_id = ? AND summary_date < {summary_cutoff}",
+                            (seat_id,),
+                        )
+                    else:
+                        sum_cursor = conn.execute(
+                            f"DELETE FROM daily_creative_summary WHERE summary_date < {summary_cutoff}"
+                        )
+                    deleted_summary = sum_cursor.rowcount
+
+                conn.commit()
+                return {
+                    "aggregated_rows": aggregated,
+                    "deleted_raw_rows": deleted_raw,
+                    "deleted_summary_rows": deleted_summary,
+                }
+
+            return await loop.run_in_executor(None, _run_job)

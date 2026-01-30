@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 
-from storage.database import db_query, DB_PATH
+from storage.serving_database import db_query, table_exists
 from api.dependencies import get_current_user, get_allowed_bidder_ids
 from storage.repositories.user_repository import User
 
@@ -109,7 +109,7 @@ async def get_upload_tracking(
             total_rows=0,
             days_with_anomalies=0,
         )
-    if not DB_PATH.exists():
+    if not await table_exists("daily_upload_summary"):
         return UploadTrackingResponse(
             daily_summaries=[],
             total_days=0,
@@ -177,7 +177,7 @@ async def get_import_history(
     user: User = Depends(get_current_user),
 ):
     """Get import history records."""
-    if not DB_PATH.exists():
+    if not await table_exists("import_history"):
         return []
 
     try:
@@ -268,7 +268,7 @@ async def get_daily_uploads_grid(
     user: User = Depends(get_current_user),
 ):
     """Get daily uploads in a simple grid format."""
-    if not DB_PATH.exists():
+    if not await table_exists("import_history"):
         return DailyUploadsGridResponse(days=[], expected_uploads_per_day=expected_per_day)
 
     try:
@@ -395,7 +395,7 @@ async def get_accounts_upload_summary(
     user: User = Depends(get_current_user),
 ):
     """Get upload statistics grouped by account (bidder_id)."""
-    if not DB_PATH.exists():
+    if not await table_exists("import_history"):
         return AccountsUploadSummaryResponse(
             accounts=[],
             total_accounts=0,
@@ -418,7 +418,7 @@ async def get_accounts_upload_summary(
                     COUNT(*) as upload_count,
                     SUM(rows_imported) as total_rows,
                     MAX(imported_at) as latest_upload,
-                    GROUP_CONCAT(DISTINCT billing_ids_found) as all_billing_ids
+                    STRING_AGG(DISTINCT billing_ids_found, ',') as all_billing_ids
                 FROM import_history
                 WHERE bidder_id IS NOT NULL
                 GROUP BY bidder_id
@@ -438,7 +438,7 @@ async def get_accounts_upload_summary(
                     COUNT(*) as upload_count,
                     SUM(rows_imported) as total_rows,
                     MAX(imported_at) as latest_upload,
-                    GROUP_CONCAT(DISTINCT billing_ids_found) as all_billing_ids
+                    STRING_AGG(DISTINCT billing_ids_found, ',') as all_billing_ids
                 FROM import_history
                 WHERE bidder_id IN ({placeholders})
                 GROUP BY bidder_id
