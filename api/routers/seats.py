@@ -9,17 +9,19 @@ Credential modes:
 3. ADC (GCP): Application Default Credentials from VM's attached service account
 """
 
+import json
 import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from config import ConfigManager
 from storage import SQLiteStore, creative_dicts_to_storage
+from storage.postgres_store import PostgresStore
 from api.dependencies import (
     get_store,
     get_config,
@@ -29,7 +31,9 @@ from api.dependencies import (
 )
 from storage.repositories.user_repository import User
 from collectors import BuyerSeatsClient, CreativesClient, EndpointsClient, PretargetingClient
-from storage.database import db_query, db_query_one, db_execute
+
+# Store type can be either SQLite or Postgres
+StoreType = Union[SQLiteStore, PostgresStore]
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +44,7 @@ def is_gcp_mode() -> bool:
 
 
 async def get_credentials_for_seat(
-    store: SQLiteStore,
+    store: StoreType,
     seat,
     config: ConfigManager,
 ) -> Optional[str]:
@@ -96,7 +100,7 @@ async def get_credentials_for_seat(
 
 
 async def _trigger_background_language_analysis(
-    store: SQLiteStore,
+    store: StoreType,
     limit: int = 50,
 ) -> int:
     """Trigger background language analysis for unanalyzed creatives.
@@ -247,7 +251,7 @@ class UpdateSeatRequest(BaseModel):
 async def list_seats(
     bidder_id: Optional[str] = Query(None, description="Filter by bidder ID"),
     active_only: bool = Query(True, description="Only return active seats"),
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """List all known buyer seats.
@@ -280,7 +284,7 @@ async def list_seats(
 @router.get("/seats/{buyer_id}", response_model=BuyerSeatResponse)
 async def get_seat(
     buyer_id: str,
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Get a specific buyer seat by ID."""
@@ -304,7 +308,7 @@ async def get_seat(
 async def discover_seats(
     request: DiscoverSeatsRequest,
     config: ConfigManager = Depends(get_config),
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
 ):
     """Discover buyer seats under a bidder account.
 
@@ -416,7 +420,7 @@ async def sync_seat_creatives(
     buyer_id: str,
     filter_query: Optional[str] = Query(None, description="Optional API filter"),
     config: ConfigManager = Depends(get_config),
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Sync creatives for a specific buyer seat.
@@ -474,7 +478,7 @@ async def sync_seat_creatives(
 async def update_seat(
     buyer_id: str,
     request: UpdateSeatRequest,
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Update a buyer seat's display name."""
@@ -501,7 +505,7 @@ async def update_seat(
 
 @router.post("/seats/populate")
 async def populate_seats_from_creatives(
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
 ):
     """Populate buyer_seats table from existing creatives.
 
@@ -518,7 +522,7 @@ async def populate_seats_from_creatives(
 
 @router.post("/seats/sync-all", response_model=SyncAllResponse)
 async def sync_all_data(
-    store: SQLiteStore = Depends(get_store),
+    store: StoreType = Depends(get_store),
     config: ConfigManager = Depends(get_config),
     user: User = Depends(get_current_user),
 ):
@@ -598,14 +602,11 @@ async def sync_all_data(
     # Get all unique bidder_ids for endpoints and pretargeting sync
     # Each bidder may have different endpoints and pretargeting configs
     if user.role == "admin":
-        bidder_rows = await db_query("SELECT DISTINCT bidder_id FROM buyer_seats")
+        bidder_ids_list = await store.get_distinct_bidder_ids()
     else:
-        bidder_ids = {seat.bidder_id for seat in seats}
-        bidder_rows = [{"bidder_id": bidder_id} for bidder_id in bidder_ids]
-    import json
+        bidder_ids_list = list({seat.bidder_id for seat in seats})
 
-    for bidder_row in bidder_rows:
-        account_id = bidder_row["bidder_id"]
+    for account_id in bidder_ids_list:
         logger.info(f"Syncing endpoints and pretargeting for bidder {account_id}")
 
         # 2. Sync RTB endpoints for this bidder
@@ -615,25 +616,9 @@ async def sync_all_data(
                 account_id=account_id,
             )
             endpoints = await endpoints_client.list_endpoints()
-
-            for ep in endpoints:
-                await db_execute(
-                    """
-                    INSERT OR REPLACE INTO rtb_endpoints
-                    (bidder_id, endpoint_id, url, maximum_qps, trading_location, bid_protocol, synced_at)
-                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                    """,
-                    (
-                        account_id,
-                        ep["endpointId"],
-                        ep["url"],
-                        ep.get("maximumQps"),
-                        ep.get("tradingLocation"),
-                        ep.get("bidProtocol"),
-                    ),
-                )
-            endpoints_synced += len(endpoints)
-            logger.info(f"Synced {len(endpoints)} endpoints for bidder {account_id}")
+            count = await store.sync_rtb_endpoints(account_id, endpoints)
+            endpoints_synced += count
+            logger.info(f"Synced {count} endpoints for bidder {account_id}")
         except Exception as e:
             logger.error(f"Failed to sync RTB endpoints for bidder {account_id}: {e}")
             errors.append(f"RTB endpoints for {account_id}: {str(e)}")
@@ -656,39 +641,19 @@ async def sync_all_data(
                 included_geos = geo_targeting.get("includedIds", [])
                 excluded_geos = geo_targeting.get("excludedIds", [])
 
-                await db_execute(
-                    """
-                    INSERT INTO pretargeting_configs
-                    (bidder_id, config_id, billing_id, display_name, state,
-                     included_formats, included_platforms, included_sizes,
-                     included_geos, excluded_geos, raw_config, synced_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                    ON CONFLICT(bidder_id, config_id) DO UPDATE SET
-                        billing_id = excluded.billing_id,
-                        display_name = excluded.display_name,
-                        state = excluded.state,
-                        included_formats = excluded.included_formats,
-                        included_platforms = excluded.included_platforms,
-                        included_sizes = excluded.included_sizes,
-                        included_geos = excluded.included_geos,
-                        excluded_geos = excluded.excluded_geos,
-                        raw_config = excluded.raw_config,
-                        synced_at = CURRENT_TIMESTAMP
-                    """,
-                    (
-                        account_id,
-                        cfg["configId"],
-                        cfg.get("billingId"),
-                        cfg.get("displayName"),
-                        cfg.get("state", "ACTIVE"),
-                        json.dumps(cfg.get("includedFormats", [])),
-                        json.dumps(cfg.get("includedPlatforms", [])),
-                        json.dumps(sizes),
-                        json.dumps(included_geos),
-                        json.dumps(excluded_geos),
-                        json.dumps(cfg),
-                    ),
-                )
+                await store.save_pretargeting_config({
+                    "bidder_id": account_id,
+                    "config_id": cfg["configId"],
+                    "billing_id": cfg.get("billingId"),
+                    "display_name": cfg.get("displayName"),
+                    "state": cfg.get("state", "ACTIVE"),
+                    "included_formats": json.dumps(cfg.get("includedFormats", [])),
+                    "included_platforms": json.dumps(cfg.get("includedPlatforms", [])),
+                    "included_sizes": json.dumps(sizes),
+                    "included_geos": json.dumps(included_geos),
+                    "excluded_geos": json.dumps(excluded_geos),
+                    "raw_config": json.dumps(cfg),
+                })
             pretargeting_synced += len(configs)
             logger.info(f"Synced {len(configs)} pretargeting configs for bidder {account_id}")
         except Exception as e:
