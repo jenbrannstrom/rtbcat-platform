@@ -73,6 +73,7 @@ def _ensure_tables(conn) -> None:
             buyer_account_id TEXT NOT NULL,
             billing_id TEXT NOT NULL,
             creative_id TEXT NOT NULL,
+            creative_size TEXT,
             reached_queries INTEGER DEFAULT 0,
             impressions INTEGER DEFAULT 0,
             spend_micros INTEGER DEFAULT 0,
@@ -120,6 +121,10 @@ def _ensure_tables(conn) -> None:
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_cfg_creative_billing ON config_creative_daily(billing_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cfg_creative_date_buyer_billing_size "
+        "ON config_creative_daily(metric_date, buyer_account_id, billing_id, creative_size)"
     )
 
 
@@ -266,6 +271,7 @@ async def refresh_config_breakdowns(
                 buyer_account_id,
                 billing_id,
                 creative_id,
+                creative_size,
                 SUM(reached_queries) AS reached_queries,
                 SUM(impressions) AS impressions,
                 SUM(spend_micros) AS spend_micros
@@ -277,7 +283,7 @@ async def refresh_config_breakdowns(
               AND buyer_account_id != ''
               AND creative_id IS NOT NULL
               AND creative_id != ''{buyer_clause}
-            GROUP BY metric_date, buyer_account_id, billing_id, creative_id
+            GROUP BY metric_date, buyer_account_id, billing_id, creative_id, creative_size
         """,
         params=[
             bigquery.ArrayQueryParameter("dates", "DATE", dates_param),
@@ -378,8 +384,8 @@ async def refresh_config_breakdowns(
             conn,
             sql=(
                 "INSERT INTO config_creative_daily "
-                "(metric_date, buyer_account_id, billing_id, creative_id, reached_queries, "
-                "impressions, spend_micros) VALUES (%s, %s, %s, %s, %s, %s, %s)"
+                "(metric_date, buyer_account_id, billing_id, creative_id, creative_size, "
+                "reached_queries, impressions, spend_micros) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
             ),
             rows=[
                 (
@@ -387,6 +393,7 @@ async def refresh_config_breakdowns(
                     row.buyer_account_id,
                     row.billing_id,
                     row.creative_id,
+                    row.creative_size,
                     row.reached_queries,
                     row.impressions,
                     row.spend_micros,
