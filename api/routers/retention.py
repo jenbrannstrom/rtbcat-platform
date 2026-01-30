@@ -4,13 +4,17 @@ Handles retention configuration, storage statistics, and running retention jobs.
 """
 
 import logging
-from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
-from storage.database import db_query, db_execute, db_transaction_async, DB_PATH
+from api.dependencies import get_store
+from storage import SQLiteStore
+from storage.postgres_store import PostgresStore
+
+# Store type can be either SQLite or Postgres
+StoreType = Union[SQLiteStore, PostgresStore]
 
 logger = logging.getLogger(__name__)
 
@@ -57,24 +61,12 @@ class RetentionJobResponse(BaseModel):
 # =============================================================================
 
 @router.get("/retention/config", response_model=RetentionConfigResponse)
-async def get_retention_config():
+async def get_retention_config(
+    store: StoreType = Depends(get_store),
+):
     """Get current retention configuration."""
-    from storage.retention_manager import RetentionManager
-
-    if not DB_PATH.exists():
-        # Return defaults if no database
-        return RetentionConfigResponse(
-            raw_retention_days=90,
-            summary_retention_days=365,
-            auto_aggregate_after_days=30,
-        )
-
     try:
-        def _get_config(conn):
-            manager = RetentionManager(conn)
-            return manager.get_retention_config()
-
-        config = await db_transaction_async(_get_config)
+        config = await store.get_retention_config()
 
         return RetentionConfigResponse(
             raw_retention_days=config.get('raw_retention_days', 90),
@@ -92,36 +84,17 @@ async def get_retention_config():
 
 
 @router.post("/retention/config", response_model=RetentionConfigResponse)
-async def set_retention_config(request: RetentionConfigRequest):
+async def set_retention_config(
+    request: RetentionConfigRequest,
+    store: StoreType = Depends(get_store),
+):
     """Update retention configuration."""
-    from storage.retention_manager import RetentionManager
-
-    if not DB_PATH.exists():
-        raise HTTPException(status_code=404, detail="Database not found")
-
     try:
-        def _set_config(conn):
-            # Ensure retention_config table exists
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS retention_config (
-                    id INTEGER PRIMARY KEY,
-                    seat_id INTEGER,
-                    raw_retention_days INTEGER NOT NULL DEFAULT 90,
-                    summary_retention_days INTEGER NOT NULL DEFAULT 365,
-                    auto_aggregate_after_days INTEGER NOT NULL DEFAULT 30,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(seat_id)
-                )
-            """)
-
-            manager = RetentionManager(conn)
-            manager.set_retention_config(
-                raw_retention_days=request.raw_retention_days,
-                summary_retention_days=request.summary_retention_days,
-                auto_aggregate_after_days=request.auto_aggregate_after_days,
-            )
-
-        await db_transaction_async(_set_config)
+        await store.set_retention_config(
+            raw_retention_days=request.raw_retention_days,
+            summary_retention_days=request.summary_retention_days,
+            auto_aggregate_after_days=request.auto_aggregate_after_days,
+        )
 
         return RetentionConfigResponse(
             raw_retention_days=request.raw_retention_days,
@@ -134,48 +107,12 @@ async def set_retention_config(request: RetentionConfigRequest):
 
 
 @router.get("/retention/stats", response_model=StorageStatsResponse)
-async def get_storage_stats():
+async def get_storage_stats(
+    store: StoreType = Depends(get_store),
+):
     """Get storage statistics for performance data."""
-    from storage.retention_manager import RetentionManager
-
-    if not DB_PATH.exists():
-        return StorageStatsResponse(
-            raw_rows=0,
-            raw_earliest_date=None,
-            raw_latest_date=None,
-            summary_rows=0,
-            summary_earliest_date=None,
-            summary_latest_date=None,
-        )
-
     try:
-        def _get_stats(conn):
-            # Ensure daily_creative_summary table exists
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS daily_creative_summary (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    seat_id INTEGER,
-                    creative_id TEXT NOT NULL,
-                    date DATE NOT NULL,
-                    total_queries INTEGER DEFAULT 0,
-                    total_impressions INTEGER DEFAULT 0,
-                    total_clicks INTEGER DEFAULT 0,
-                    total_spend REAL DEFAULT 0,
-                    win_rate REAL,
-                    ctr REAL,
-                    cpm REAL,
-                    unique_geos INTEGER DEFAULT 0,
-                    unique_apps INTEGER DEFAULT 0,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(seat_id, creative_id, date)
-                )
-            """)
-
-            manager = RetentionManager(conn)
-            return manager.get_storage_stats()
-
-        stats = await db_transaction_async(_get_stats)
-
+        stats = await store.get_storage_stats()
         return StorageStatsResponse(**stats)
     except Exception as e:
         logger.error(f"Failed to get storage stats: {e}")
@@ -190,52 +127,12 @@ async def get_storage_stats():
 
 
 @router.post("/retention/run", response_model=RetentionJobResponse)
-async def run_retention_job():
+async def run_retention_job(
+    store: StoreType = Depends(get_store),
+):
     """Run the retention job to aggregate and clean up old data."""
-    from storage.retention_manager import RetentionManager
-
-    if not DB_PATH.exists():
-        raise HTTPException(status_code=404, detail="Database not found")
-
     try:
-        def _run_job(conn):
-            # Ensure required tables exist
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS retention_config (
-                    id INTEGER PRIMARY KEY,
-                    seat_id INTEGER,
-                    raw_retention_days INTEGER NOT NULL DEFAULT 90,
-                    summary_retention_days INTEGER NOT NULL DEFAULT 365,
-                    auto_aggregate_after_days INTEGER NOT NULL DEFAULT 30,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(seat_id)
-                )
-            """)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS daily_creative_summary (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    seat_id INTEGER,
-                    creative_id TEXT NOT NULL,
-                    date DATE NOT NULL,
-                    total_queries INTEGER DEFAULT 0,
-                    total_impressions INTEGER DEFAULT 0,
-                    total_clicks INTEGER DEFAULT 0,
-                    total_spend REAL DEFAULT 0,
-                    win_rate REAL,
-                    ctr REAL,
-                    cpm REAL,
-                    unique_geos INTEGER DEFAULT 0,
-                    unique_apps INTEGER DEFAULT 0,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(seat_id, creative_id, date)
-                )
-            """)
-
-            manager = RetentionManager(conn)
-            return manager.run_retention_job()
-
-        result = await db_transaction_async(_run_job)
-
+        result = await store.run_retention_job()
         return RetentionJobResponse(**result)
     except Exception as e:
         logger.error(f"Failed to run retention job: {e}")

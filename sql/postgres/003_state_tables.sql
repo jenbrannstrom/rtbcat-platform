@@ -336,3 +336,97 @@ CREATE TABLE IF NOT EXISTS precompute_refresh_log (
 
 CREATE INDEX IF NOT EXISTS idx_refresh_log_cache ON precompute_refresh_log(cache_name);
 CREATE INDEX IF NOT EXISTS idx_refresh_log_buyer ON precompute_refresh_log(buyer_account_id);
+
+-- ============================================================================
+-- Import History (Upload Tracking)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS import_history (
+    id SERIAL PRIMARY KEY,
+    batch_id TEXT NOT NULL,
+    filename TEXT,
+    imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    rows_read INTEGER DEFAULT 0,
+    rows_imported INTEGER DEFAULT 0,
+    rows_skipped INTEGER DEFAULT 0,
+    rows_duplicate INTEGER DEFAULT 0,
+    date_range_start DATE,
+    date_range_end DATE,
+    total_spend_usd REAL DEFAULT 0,
+    total_impressions BIGINT DEFAULT 0,
+    total_reached BIGINT DEFAULT 0,
+    file_size_bytes BIGINT DEFAULT 0,
+    status TEXT DEFAULT 'complete',
+    error_message TEXT,
+    bidder_id TEXT,
+    buyer_id TEXT,
+    billing_ids_found TEXT,
+    columns_found TEXT,
+    columns_missing TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_history_batch ON import_history(batch_id);
+CREATE INDEX IF NOT EXISTS idx_import_history_imported ON import_history(imported_at DESC);
+CREATE INDEX IF NOT EXISTS idx_import_history_bidder ON import_history(bidder_id);
+CREATE INDEX IF NOT EXISTS idx_import_history_buyer ON import_history(buyer_id);
+
+-- ============================================================================
+-- Daily Upload Summary (Aggregated Upload Stats)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS daily_upload_summary (
+    id SERIAL PRIMARY KEY,
+    upload_date DATE NOT NULL UNIQUE,
+    total_uploads INTEGER DEFAULT 0,
+    successful_uploads INTEGER DEFAULT 0,
+    failed_uploads INTEGER DEFAULT 0,
+    total_rows_written BIGINT DEFAULT 0,
+    total_file_size_bytes BIGINT DEFAULT 0,
+    min_rows INTEGER,
+    max_rows INTEGER,
+    avg_rows_per_upload REAL DEFAULT 0,
+    has_anomaly INTEGER DEFAULT 0,
+    anomaly_reason TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_upload_date ON daily_upload_summary(upload_date DESC);
+
+-- ============================================================================
+-- Retention Configuration
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS retention_config (
+    id SERIAL PRIMARY KEY,
+    seat_id TEXT,
+    raw_retention_days INTEGER NOT NULL DEFAULT 90,
+    summary_retention_days INTEGER NOT NULL DEFAULT 365,
+    auto_aggregate_after_days INTEGER NOT NULL DEFAULT 30,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(seat_id)
+);
+
+-- ============================================================================
+-- Daily Creative Summary (For Retention/Aggregation)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS daily_creative_summary (
+    id SERIAL PRIMARY KEY,
+    seat_id TEXT,
+    creative_id TEXT NOT NULL,
+    summary_date DATE NOT NULL,
+    total_queries BIGINT DEFAULT 0,
+    total_impressions BIGINT DEFAULT 0,
+    total_clicks BIGINT DEFAULT 0,
+    total_spend REAL DEFAULT 0,
+    win_rate REAL,
+    ctr REAL,
+    cpm REAL,
+    unique_geos INTEGER DEFAULT 0,
+    unique_apps INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(seat_id, creative_id, summary_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_creative_summary_seat ON daily_creative_summary(seat_id);
+CREATE INDEX IF NOT EXISTS idx_creative_summary_date ON daily_creative_summary(summary_date);
+CREATE INDEX IF NOT EXISTS idx_creative_summary_creative ON daily_creative_summary(creative_id);
