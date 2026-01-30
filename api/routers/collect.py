@@ -7,7 +7,7 @@ Authorized Buyers RTB API:
 """
 
 import logging
-from typing import Union
+from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
@@ -15,11 +15,7 @@ from api.dependencies import get_store, get_config
 from api.schemas.system import CollectRequest, CollectResponse
 from collectors import CreativesClient
 from config import ConfigManager
-from storage import SQLiteStore, creative_dicts_to_storage
-from storage.postgres_store import PostgresStore
-
-# Store type can be either SQLite or Postgres
-StoreType = Union[SQLiteStore, PostgresStore]
+from storage import creative_dicts_to_storage
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +26,7 @@ async def collect_creatives_task(
     credentials_path: str,
     account_id: str,
     filter_query: str | None,
-    store: StoreType,
+    store: Any,
 ) -> None:
     """Background task to collect creatives from API."""
     try:
@@ -59,7 +55,7 @@ async def start_collection(
     request: CollectRequest,
     background_tasks: BackgroundTasks,
     config: ConfigManager = Depends(get_config),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Start a creative collection job.
 
@@ -103,7 +99,7 @@ async def start_collection(
 async def collect_sync(
     request: CollectRequest,
     config: ConfigManager = Depends(get_config),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Synchronously collect creatives (waits for completion).
 

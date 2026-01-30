@@ -19,11 +19,6 @@ from api.dependencies import (
     require_buyer_access,
     resolve_bidder_id,
 )
-from storage import SQLiteStore
-from storage.postgres_store import PostgresStore
-
-# Store type can be either SQLite or Postgres
-StoreType = Union[SQLiteStore, PostgresStore]
 from storage.repositories.user_repository import User
 from .common import (
     SizeGapResponse,
@@ -43,7 +38,7 @@ router = APIRouter(tags=["Waste Analysis"])
 async def get_waste_report(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     days: int = Query(7, ge=1, le=90, description="Days of traffic to analyze"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Get waste analysis report comparing bid requests vs creative inventory.

@@ -35,12 +35,7 @@ from api.schemas.performance import (
     StreamingImportResult,
 )
 from importers.unified_importer import unified_import
-from storage import SQLiteStore, PerformanceMetric
-from storage.postgres_store import PostgresStore
-from typing import Union
-
-# Store type can be either SQLite or Postgres
-StoreType = Union[SQLiteStore, PostgresStore]
+from storage import PerformanceMetric
 from storage.serving_database import db_execute, db_query_one
 from services.home_precompute import refresh_home_summaries
 from services.precompute_validation import run_precompute_validation
@@ -165,7 +160,7 @@ def _build_import_response(result) -> CSVImportResult:
 @router.post("/import", response_model=ImportPerformanceResponse)
 async def import_performance_metrics(
     request: ImportPerformanceRequest,
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Import performance metrics in bulk.
 
@@ -206,7 +201,7 @@ async def import_performance_metrics(
 async def get_creative_performance(
     creative_id: str,
     days: int = Query(30, ge=1, le=365, description="Days to aggregate"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Get aggregated performance summary for a creative."""
@@ -247,7 +242,7 @@ async def list_performance_metrics(
     geography: Optional[str] = Query(None, description="Filter by country code"),
     device_type: Optional[str] = Query(None, description="Filter by device type"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum results"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """List performance metrics with optional filtering."""
     try:
@@ -287,7 +282,7 @@ async def list_performance_metrics(
 @router.post("/campaign/{campaign_id}/refresh-cache")
 async def refresh_campaign_performance_cache(
     campaign_id: str,
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Refresh cached performance aggregates for a campaign."""
     try:
@@ -309,7 +304,7 @@ async def refresh_campaign_performance_cache(
 @router.delete("/cleanup")
 async def cleanup_old_rtb_daily(
     days_to_keep: int = Query(90, ge=7, le=365, description="Days of data to retain"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Delete performance data older than the retention period."""
     try:
@@ -568,7 +563,7 @@ async def complete_stream_import(
 @router.post("/metrics/batch", response_model=BatchPerformanceResponse)
 async def get_batch_performance(
     request: BatchPerformanceRequest,
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Get performance summaries for multiple creatives in a single request."""

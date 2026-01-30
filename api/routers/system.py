@@ -18,12 +18,6 @@ from pydantic import BaseModel, Field
 
 from api.dependencies import get_store, get_config, get_current_user, resolve_buyer_id
 from storage.repositories.user_repository import User
-from storage import SQLiteStore
-from storage.postgres_store import PostgresStore
-from typing import Union
-
-# Store type can be either SQLite or Postgres
-StoreType = Union[SQLiteStore, PostgresStore]
 from storage.serving_database import db_query, db_execute, table_exists
 from config import ConfigManager
 
@@ -240,7 +234,7 @@ def _extract_video_url_from_vast(vast_xml: str) -> str | None:
 @router.get("/health", response_model=HealthResponse)
 async def health_check(
     config: ConfigManager = Depends(get_config),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Check API health status including credential and database state.
 
@@ -289,7 +283,7 @@ async def get_thumbnail(creative_id: str):
 @router.get("/thumbnails/status", response_model=ThumbnailStatusSummary, tags=["Thumbnails"])
 async def get_thumbnail_status(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Get summary of thumbnail generation status.
@@ -402,7 +396,7 @@ async def get_system_status():
 @router.post("/thumbnails/generate", response_model=ThumbnailGenerateResponse, tags=["Thumbnails"])
 async def generate_single_thumbnail(
     request: ThumbnailGenerateRequest,
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Generate thumbnail for a single video creative."""
     if not _check_ffmpeg():
@@ -497,7 +491,7 @@ async def generate_single_thumbnail(
 @router.post("/thumbnails/generate-batch", response_model=ThumbnailBatchResponse, tags=["Thumbnails"])
 async def generate_batch_thumbnails(
     request: ThumbnailBatchRequest,
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Generate thumbnails for multiple video creatives.
 
@@ -615,7 +609,7 @@ async def generate_batch_thumbnails(
 @router.post("/thumbnails/extract-html", response_model=HTMLThumbnailResponse, tags=["Thumbnails"])
 async def extract_html_thumbnails(
     request: HTMLThumbnailRequest = HTMLThumbnailRequest(),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
 ):
     """Extract thumbnail URLs from HTML creatives.
 
@@ -754,14 +748,14 @@ async def lookup_geo_names(
 
 
 @router.get("/stats", response_model=StatsResponse)
-async def get_stats(store: StoreType = Depends(get_store)):
+async def get_stats(store=Depends(get_store)):
     """Get database statistics."""
     stats = await store.get_stats()
     return StatsResponse(**stats)
 
 
 @router.get("/sizes", response_model=SizesResponse)
-async def get_sizes(store: StoreType = Depends(get_store)):
+async def get_sizes(store=Depends(get_store)):
     """Get available creative sizes from the database."""
     sizes = await store.get_available_sizes()
     return SizesResponse(sizes=sizes)
