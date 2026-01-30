@@ -14,7 +14,7 @@ import asyncio
 import logging
 import os
 import uuid
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -22,8 +22,12 @@ from starlette.responses import JSONResponse
 
 from storage.database import DB_PATH
 from storage.repositories.user_repository import UserRepository, User
+from api.dependencies import use_postgres
 
 logger = logging.getLogger(__name__)
+
+# Type for user repository (SQLite or Postgres)
+UserRepoType = Union[UserRepository, "PostgresStore"]
 
 # Session cookie name (must match auth_oauth_proxy.py)
 SESSION_COOKIE_NAME = "rtbcat_session"
@@ -62,6 +66,20 @@ def is_public_path(path: str) -> bool:
             return True
 
     return False
+
+
+def _get_user_repo() -> UserRepoType:
+    """Get the appropriate user repository based on backend.
+
+    Returns PostgresStore when using Postgres backend.
+    Returns UserRepository for SQLite backend.
+    """
+    if use_postgres():
+        # Import here to avoid circular imports
+        from api.dependencies import _store
+        if _store is not None:
+            return _store
+    return UserRepository(DB_PATH)
 
 
 def is_oauth2_proxy_enabled() -> bool:
@@ -107,7 +125,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             return self._multi_user_enabled
 
         try:
-            repo = UserRepository(DB_PATH)
+            repo = _get_user_repo()
             self._multi_user_enabled = await repo.is_multi_user_enabled()
             self._multi_user_checked = True
         except Exception as e:
@@ -119,7 +137,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
     async def _validate_session(self, session_id: str) -> Optional[User]:
         """Validate session and return user if valid."""
         try:
-            repo = UserRepository(DB_PATH)
+            repo = _get_user_repo()
             return await repo.validate_session(session_id)
         except Exception as e:
             logger.warning(f"Session validation failed: {e}")
@@ -132,7 +150,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
         Users are auto-created on first access with admin role.
         """
         try:
-            repo = UserRepository(DB_PATH)
+            repo = _get_user_repo()
             email = email.lower().strip()
 
             # Try to find existing user
