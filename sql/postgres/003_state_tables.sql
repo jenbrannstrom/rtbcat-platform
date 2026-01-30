@@ -205,6 +205,55 @@ CREATE INDEX IF NOT EXISTS idx_changelog_detected ON pretargeting_change_log(det
 CREATE INDEX IF NOT EXISTS idx_changelog_type ON pretargeting_change_log(change_type);
 
 -- ============================================================================
+-- Pretargeting Publishers (Normalized Publisher List)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS pretargeting_publishers (
+    id SERIAL PRIMARY KEY,
+    billing_id TEXT NOT NULL,
+    publisher_id TEXT NOT NULL,
+    mode TEXT NOT NULL CHECK(mode IN ('WHITELIST', 'BLACKLIST')),
+    status TEXT DEFAULT 'active' CHECK(status IN ('active', 'pending_add', 'pending_remove')),
+    source TEXT DEFAULT 'user' CHECK(source IN ('user', 'api_sync')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(billing_id, publisher_id, mode)
+);
+
+CREATE INDEX IF NOT EXISTS idx_publishers_billing ON pretargeting_publishers(billing_id);
+CREATE INDEX IF NOT EXISTS idx_publishers_status ON pretargeting_publishers(status);
+CREATE INDEX IF NOT EXISTS idx_publishers_mode ON pretargeting_publishers(mode);
+
+-- ============================================================================
+-- Snapshot Comparisons (A/B Testing)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS snapshot_comparisons (
+    id SERIAL PRIMARY KEY,
+    billing_id TEXT NOT NULL,
+    comparison_name TEXT,
+    before_snapshot_id INTEGER REFERENCES pretargeting_snapshots(id),
+    after_snapshot_id INTEGER REFERENCES pretargeting_snapshots(id),
+    before_start_date DATE,
+    before_end_date DATE,
+    after_start_date DATE,
+    after_end_date DATE,
+    impressions_delta BIGINT,
+    impressions_delta_pct REAL,
+    spend_delta_usd REAL,
+    spend_delta_pct REAL,
+    ctr_delta_pct REAL,
+    cpm_delta_pct REAL,
+    status TEXT DEFAULT 'in_progress' CHECK(status IN ('in_progress', 'completed', 'cancelled')),
+    conclusion TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_comparisons_billing ON snapshot_comparisons(billing_id);
+CREATE INDEX IF NOT EXISTS idx_comparisons_status ON snapshot_comparisons(status);
+
+-- ============================================================================
 -- RTB Endpoints
 -- ============================================================================
 
