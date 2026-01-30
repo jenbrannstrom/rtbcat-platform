@@ -1,0 +1,22 @@
+Why we use both BQ & PostGre:
+
+A few reasons:                                                               
+                                                                                              
+  1. Cost - BigQuery charges per query based on data scanned. Every dashboard refresh = a     
+  query = money. With users refreshing constantly, costs would explode. Postgres has fixed    
+  hosting costs regardless of query volume.                                                   
+  2. Latency - BigQuery is optimized for massive analytical queries, not quick lookups. Even  
+  simple queries have 1-3 second overhead. Postgres returns results in milliseconds -         
+  essential for responsive UI.                                                                
+  3. Pre-aggregation - Raw data in BQ is millions of rows per day. The UI needs daily         
+  summaries, not raw granular data. Running aggregations on every page load would be slow and 
+  expensive. Better to compute once, store in Postgres, serve fast.                           
+  4. Connection handling - BigQuery isn't built for hundreds of concurrent API connections.   
+  Postgres is.                                                                                
+                                                                                              
+  Common pattern:                                                                             
+  - BigQuery = data warehouse (store everything, run batch analytics)                         
+  - Postgres = operational database (serve the app with pre-computed data)                    
+                                                                                              
+  It's like the difference between a giant archive warehouse and a store shelf. You don't send
+   customers to rummage through the warehouse - you stock the shelf with what they need.  

@@ -29,8 +29,8 @@ The Cat-Scan repository contains only application code. All sensitive data lives
 
 | File Pattern | Contains | Risk if Leaked |
 |--------------|----------|----------------|
-| `*.db`, `*.sqlite` | All RTB performance data | Competitive intelligence leak |
-| `~/.catscan/catscan.db` | Creatives, campaigns, analytics | Business data exposure |
+| `*.db`, `*.sqlite` | Legacy database dumps (if any) | Competitive intelligence leak |
+| `*.sql`, `*.dump` | Postgres exports/backups | Business data exposure |
 | `*.csv` | Imported Google reports | Revenue and traffic data |
 | `~/.catscan/imports/` | Downloaded CSV archives | Historical business data |
 
