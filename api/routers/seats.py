@@ -11,7 +11,6 @@ Credential modes:
 
 import json
 import logging
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Any
@@ -30,7 +29,7 @@ from api.dependencies import (
 )
 from services.auth_service import User
 from collectors import BuyerSeatsClient, CreativesClient, EndpointsClient, PretargetingClient
-from services.seats_service import SeatsService, BuyerSeat
+from services.seats_service import SeatsService, BuyerSeat, is_gcp_mode
 
 StoreType = Any
 
@@ -42,51 +41,20 @@ def get_seats_service() -> SeatsService:
 logger = logging.getLogger(__name__)
 
 
-def is_gcp_mode() -> bool:
-    """Check if running in GCP mode with ADC (OAuth2 Proxy enabled)."""
-    return os.environ.get("OAUTH2_PROXY_ENABLED", "").lower() in ("1", "true", "yes")
-
-
 async def get_credentials_for_seat_with_fallback(
     seats_service: SeatsService,
     seat: BuyerSeat,
     config: ConfigManager,
 ) -> Optional[str]:
-    """Get credentials path for a buyer seat.
+    """Get credentials path for a buyer seat with full fallback chain.
 
-    Tries credentials in this order:
-    1. Multi-account credentials (via service_account_id)
-    2. First available service account
-    3. Legacy ConfigManager credentials
-    4. ADC (GCP mode) - returns None to trigger Application Default Credentials
-
-    Returns:
-        Path to service account JSON file, or None for ADC mode.
-
-    Raises:
-        HTTPException: If no valid credentials found and not in GCP mode.
+    Delegates to SeatsService.get_credentials_with_fallback() and converts
+    ValueError to HTTPException for API error handling.
     """
-    # Try multi-account via SeatsService
-    creds_path = await seats_service.get_credentials_for_seat(seat)
-    if creds_path:
-        return creds_path
-
-    # Fall back to legacy ConfigManager
-    if config.is_configured():
-        try:
-            return str(config.get_service_account_path())
-        except Exception:
-            pass
-
-    # GCP mode: use Application Default Credentials (VM's attached service account)
-    if is_gcp_mode():
-        logger.info("Using ADC (Application Default Credentials) for GCP mode")
-        return None
-
-    raise HTTPException(
-        status_code=400,
-        detail="No service account credentials configured. Add a service account in Setup.",
-    )
+    try:
+        return await seats_service.get_credentials_with_fallback(seat, config)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 async def _trigger_background_language_analysis(
@@ -257,18 +225,7 @@ async def list_seats(
             bidder_id=bidder_id,
             active_only=active_only,
         )
-    return [
-        BuyerSeatResponse(
-            buyer_id=s.buyer_id,
-            bidder_id=s.bidder_id,
-            display_name=s.display_name,
-            active=s.active,
-            creative_count=s.creative_count,
-            last_synced=s.last_synced if isinstance(s.last_synced, str) else (s.last_synced.isoformat() if s.last_synced else None),
-            created_at=s.created_at if isinstance(s.created_at, str) else (s.created_at.isoformat() if s.created_at else None),
-        )
-        for s in seats
-    ]
+    return [BuyerSeatResponse(**s.to_response_dict()) for s in seats]
 
 
 @router.get("/seats/{buyer_id}", response_model=BuyerSeatResponse)
@@ -284,15 +241,7 @@ async def get_seat(
     if not seat:
         raise HTTPException(status_code=404, detail="Buyer seat not found")
 
-    return BuyerSeatResponse(
-        buyer_id=seat.buyer_id,
-        bidder_id=seat.bidder_id,
-        display_name=seat.display_name,
-        active=seat.active,
-        creative_count=seat.creative_count,
-        last_synced=seat.last_synced if isinstance(seat.last_synced, str) else (seat.last_synced.isoformat() if seat.last_synced else None),
-        created_at=seat.created_at if isinstance(seat.created_at, str) else (seat.created_at.isoformat() if seat.created_at else None),
-    )
+    return BuyerSeatResponse(**seat.to_response_dict())
 
 
 @router.post("/seats/discover", response_model=DiscoverSeatsResponse)
@@ -394,18 +343,7 @@ async def discover_seats(
             status="completed",
             bidder_id=request.bidder_id,
             seats_discovered=len(saved_seats),
-            seats=[
-                BuyerSeatResponse(
-                    buyer_id=s.buyer_id,
-                    bidder_id=s.bidder_id,
-                    display_name=s.display_name,
-                    active=s.active,
-                    creative_count=s.creative_count,
-                    last_synced=s.last_synced if isinstance(s.last_synced, str) else (s.last_synced.isoformat() if s.last_synced else None),
-                    created_at=s.created_at if isinstance(s.created_at, str) else (s.created_at.isoformat() if s.created_at else None),
-                )
-                for s in saved_seats
-            ],
+            seats=[BuyerSeatResponse(**s.to_response_dict()) for s in saved_seats],
             sync_result=sync_result,
         )
 
@@ -494,15 +432,7 @@ async def update_seat(
     if not seat:
         raise HTTPException(status_code=404, detail="Buyer seat not found")
 
-    return BuyerSeatResponse(
-        buyer_id=seat.buyer_id,
-        bidder_id=seat.bidder_id,
-        display_name=seat.display_name,
-        active=seat.active,
-        creative_count=seat.creative_count,
-        last_synced=seat.last_synced if isinstance(seat.last_synced, str) else (seat.last_synced.isoformat() if seat.last_synced else None),
-        created_at=seat.created_at if isinstance(seat.created_at, str) else (seat.created_at.isoformat() if seat.created_at else None),
-    )
+    return BuyerSeatResponse(**seat.to_response_dict())
 
 
 @router.post("/seats/populate")
