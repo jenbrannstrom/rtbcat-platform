@@ -6,9 +6,9 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.dependencies import get_store
 from collectors import EndpointsClient
 from services.endpoints_service import EndpointsService
+from services.seats_service import SeatsService
 
 from .models import RTBEndpointItem, RTBEndpointsResponse, SyncEndpointsResponse
 
@@ -17,10 +17,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["RTB Settings"])
 
 
+def get_seats_service() -> SeatsService:
+    """Dependency to get SeatsService instance."""
+    return SeatsService()
+
+
 @router.post("/settings/endpoints/sync", response_model=SyncEndpointsResponse)
 async def sync_rtb_endpoints(
     service_account_id: Optional[str] = Query(None, description="Service account ID to use"),
-    store=Depends(get_store),
+    seats_service: SeatsService = Depends(get_seats_service),
 ):
     """Sync RTB endpoints from Google Authorized Buyers API.
 
@@ -29,17 +34,24 @@ async def sync_rtb_endpoints(
     """
     # Get service account from new multi-account system
     if service_account_id:
-        service_account = await store.get_service_account(service_account_id)
+        service_account = await seats_service.get_service_account(service_account_id)
         if not service_account:
             raise HTTPException(status_code=404, detail="Service account not found")
     else:
-        accounts = await store.get_service_accounts(active_only=True)
+        accounts = await seats_service.get_service_accounts(active_only=True)
         if not accounts:
             raise HTTPException(
                 status_code=400,
                 detail="No service account configured. Upload credentials via /setup."
             )
         service_account = accounts[0]
+
+    if not service_account.credentials_path:
+        raise HTTPException(
+            status_code=400,
+            detail="Service account credentials path not configured."
+        )
+
     creds_path = Path(service_account.credentials_path).expanduser()
     if not creds_path.exists():
         raise HTTPException(
@@ -48,10 +60,10 @@ async def sync_rtb_endpoints(
         )
 
     # Get bidder account ID from buyer_seats table (linked to service account)
-    account_id = await store.get_bidder_id_for_service_account(service_account.id)
+    account_id = await seats_service.get_bidder_id_for_service_account(service_account.id)
     if not account_id:
         # Fallback: Get any buyer_seat (single-account scenario)
-        account_id = await store.get_first_bidder_id()
+        account_id = await seats_service.get_first_bidder_id()
     if not account_id:
         raise HTTPException(
             status_code=400,
@@ -85,7 +97,7 @@ async def sync_rtb_endpoints(
 async def get_rtb_endpoints(
     buyer_id: Optional[str] = Query(None, description="Buyer/seat ID to get endpoints for"),
     service_account_id: Optional[str] = Query(None, description="Service account ID (deprecated, use buyer_id)"),
-    store=Depends(get_store),
+    seats_service: SeatsService = Depends(get_seats_service),
 ):
     """Get stored RTB endpoints with aggregated QPS data.
 
@@ -102,7 +114,7 @@ async def get_rtb_endpoints(
 
         # Priority 1: Use buyer_id to look up bidder_id
         if buyer_id:
-            seat_info = await store.get_buyer_seat_with_bidder(buyer_id)
+            seat_info = await seats_service.get_buyer_seat_with_bidder(buyer_id)
             if seat_info:
                 bidder_id = seat_info["bidder_id"]
                 account_name = seat_info["display_name"]
@@ -110,17 +122,17 @@ async def get_rtb_endpoints(
 
         # Priority 2: Fall back to service_account_id (legacy support)
         if not bidder_id and service_account_id:
-            service_account = await store.get_service_account(service_account_id)
+            service_account = await seats_service.get_service_account(service_account_id)
             if service_account:
                 account_name = service_account.display_name
-                bidder_id = await store.get_bidder_id_for_service_account(service_account.id)
+                bidder_id = await seats_service.get_bidder_id_for_service_account(service_account.id)
 
         # Priority 3: Fall back to first active service account
         if not bidder_id:
-            accounts = await store.get_service_accounts(active_only=True)
+            accounts = await seats_service.get_service_accounts(active_only=True)
             if accounts:
                 account_name = accounts[0].display_name
-                bidder_id = await store.get_bidder_id_for_service_account(accounts[0].id)
+                bidder_id = await seats_service.get_bidder_id_for_service_account(accounts[0].id)
                 if bidder_id:
                     logger.info(f"Using fallback bidder_id: {bidder_id} for endpoints list")
 

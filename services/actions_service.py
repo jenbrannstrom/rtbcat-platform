@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from collectors import PretargetingClient
 from services.changes_service import ChangesService
 from services.pretargeting_service import PretargetingService
 from services.snapshots_service import SnapshotsService
+
+if TYPE_CHECKING:
+    from services.seats_service import SeatsService
 
 
 class ActionsService:
@@ -20,10 +23,16 @@ class ActionsService:
         changes_service: ChangesService | None = None,
         pretargeting_service: PretargetingService | None = None,
         snapshots_service: SnapshotsService | None = None,
+        seats_service: "SeatsService | None" = None,
     ) -> None:
         self._changes = changes_service or ChangesService()
         self._pretargeting = pretargeting_service or PretargetingService()
         self._snapshots = snapshots_service or SnapshotsService()
+        # Lazily import to avoid circular imports
+        if seats_service is None:
+            from services.seats_service import SeatsService
+            seats_service = SeatsService()
+        self._seats = seats_service
 
     @staticmethod
     def _parse_json_list(value: Any) -> list:
@@ -38,7 +47,7 @@ class ActionsService:
                 return []
         return list(value)
 
-    async def _get_pretargeting_client(self, billing_id: str, store: Any):
+    async def _get_pretargeting_client(self, billing_id: str):
         config = await self._pretargeting.get_config(billing_id)
         if not config:
             raise ValueError(f"Config not found for billing_id: {billing_id}")
@@ -46,11 +55,14 @@ class ActionsService:
         bidder_id = config["bidder_id"]
         config_id = config["config_id"]
 
-        accounts = await store.get_service_accounts(active_only=True)
+        accounts = await self._seats.get_service_accounts(active_only=True)
         if not accounts:
             raise ValueError("No service account configured")
 
         service_account = accounts[0]
+        if not service_account.credentials_path:
+            raise ValueError("Credentials path not configured")
+
         creds_path = Path(service_account.credentials_path).expanduser()
         if not creds_path.exists():
             raise ValueError("Credentials file not found")
@@ -66,7 +78,6 @@ class ActionsService:
         billing_id: str,
         change_id: int,
         dry_run: bool,
-        store: Any,
     ) -> dict[str, Any]:
         change = await self._changes.get_pending_change(change_id)
         if not change or change["billing_id"] != billing_id:
@@ -82,7 +93,7 @@ class ActionsService:
                 "message": f"Would apply {change['change_type']}: {change['value']} to {change['field_name']}",
             }
 
-        client, config_id, bidder_id = await self._get_pretargeting_client(billing_id, store)
+        client, config_id, bidder_id = await self._get_pretargeting_client(billing_id)
         await self._apply_change_to_client(change, client, config_id, billing_id)
 
         await self._changes.mark_pending_change_applied(change_id, applied_by="system")
@@ -108,7 +119,6 @@ class ActionsService:
         self,
         billing_id: str,
         dry_run: bool,
-        store: Any,
     ) -> dict[str, Any]:
         changes = await self._changes.list_pending_changes(
             billing_id=billing_id, status="pending", limit=500
@@ -148,7 +158,6 @@ class ActionsService:
                     billing_id=billing_id,
                     change_id=change["id"],
                     dry_run=False,
-                    store=store,
                 )
                 applied += 1
             except Exception:
@@ -162,7 +171,7 @@ class ActionsService:
             "message": f"Applied {applied} changes, {failed} failed",
         }
 
-    async def suspend_config(self, billing_id: str, store: Any) -> dict[str, Any]:
+    async def suspend_config(self, billing_id: str) -> dict[str, Any]:
         await self._snapshots.create_snapshot(
             billing_id=billing_id,
             snapshot_name="Auto-snapshot before suspend",
@@ -170,7 +179,7 @@ class ActionsService:
             notes="Automatically created before suspend operation",
         )
 
-        client, config_id, bidder_id = await self._get_pretargeting_client(billing_id, store)
+        client, config_id, bidder_id = await self._get_pretargeting_client(billing_id)
         await client.suspend_pretargeting_config(config_id)
         await self._pretargeting.update_state(billing_id, "SUSPENDED")
         await self._pretargeting.add_history(
@@ -190,8 +199,8 @@ class ActionsService:
             "message": "Config suspended. Auto-snapshot created for rollback.",
         }
 
-    async def activate_config(self, billing_id: str, store: Any) -> dict[str, Any]:
-        client, config_id, bidder_id = await self._get_pretargeting_client(billing_id, store)
+    async def activate_config(self, billing_id: str) -> dict[str, Any]:
+        client, config_id, bidder_id = await self._get_pretargeting_client(billing_id)
         await client.activate_pretargeting_config(config_id)
         await self._pretargeting.update_state(billing_id, "ACTIVE")
         await self._pretargeting.add_history(
@@ -216,7 +225,6 @@ class ActionsService:
         billing_id: str,
         snapshot_id: int,
         dry_run: bool,
-        store: Any,
     ) -> dict[str, Any]:
         snapshot = await self._snapshots.get_snapshot(snapshot_id)
         if not snapshot or snapshot["billing_id"] != billing_id:
@@ -267,7 +275,7 @@ class ActionsService:
                 "message": f"Would apply {len(changes)} changes to restore snapshot",
             }
 
-        client, config_id, bidder_id = await self._get_pretargeting_client(billing_id, store)
+        client, config_id, bidder_id = await self._get_pretargeting_client(billing_id)
 
         snapshot_dims = []
         for size_str in snapshot_sizes:
