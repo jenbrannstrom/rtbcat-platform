@@ -327,3 +327,63 @@ The precompute refresh covers:
 - UI analytics pages render with data in the expected date ranges.
 - `precompute_refresh_log` shows recent successful runs covering the date range.
 - `home_publisher_daily` and `rtb_publisher_daily` both populated (row count > 0).
+
+## 5) Automated Precompute Refresh (Cloud Scheduler)
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PRECOMPUTE_REFRESH_SECRET` | (required) | Secret for scheduled refresh endpoint |
+| `PRECOMPUTE_MONITOR_SECRET` | (required) | Secret for health check endpoint |
+| `PRECOMPUTE_REFRESH_DAYS` | 2 | Days to refresh on each scheduled run |
+| `PRECOMPUTE_REFRESH_MAX_AGE_HOURS` | 36 | Staleness threshold for health check |
+
+### Cloud Scheduler Setup
+
+**Endpoint:** `POST /precompute/refresh/scheduled`
+
+**Recommended schedule:** Every 6 hours (4x daily)
+
+```bash
+# Create Cloud Scheduler job
+gcloud scheduler jobs create http precompute-refresh \
+  --location=asia-southeast1 \
+  --schedule="0 */6 * * *" \
+  --uri="https://api.rtb.cat/precompute/refresh/scheduled" \
+  --http-method=POST \
+  --headers="X-Precompute-Refresh-Secret=YOUR_SECRET" \
+  --time-zone="Asia/Singapore"
+```
+
+### Health Monitoring
+
+**Endpoint:** `GET /precompute/health`
+
+Returns 200 if all caches refreshed within `PRECOMPUTE_REFRESH_MAX_AGE_HOURS`, otherwise 503.
+
+```bash
+curl -H "X-Precompute-Monitor-Secret: $SECRET" https://api.rtb.cat/precompute/health
+```
+
+**Sample healthy response:**
+```json
+{
+  "ok": true,
+  "max_age_hours": 36,
+  "stale_caches": [],
+  "cache_refresh_times": {
+    "home_publisher_daily": "2026-02-01T06:00:00Z",
+    "rtb_publisher_daily": "2026-02-01T06:00:00Z"
+  }
+}
+```
+
+### Trigger Rules Summary
+
+| Trigger | Scope | Days | Notes |
+|---------|-------|------|-------|
+| Scheduled (6h) | All seats | 2 | Catches late-arriving data |
+| After import | Affected seat | 7 | Via import completion hook |
+| Nightly (03:00) | All seats | 90 | Full refresh, low traffic |
+| Weekly (Sun) | All seats | 90 | Validation run with `--validate` |
