@@ -12,13 +12,13 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 
-from storage.database import db_query, db_transaction_async, DB_PATH
+from storage.postgres_database import db_query, db_transaction_async
 from storage.repositories.campaign_repository import CampaignRepository, AICampaign
 from api.clustering.rule_based import pre_cluster_creatives, merge_small_clusters
 from api.clustering.ai_clusterer import AICampaignClusterer, apply_ai_suggestions
 from utils.app_parser import format_package_id_as_name, parse_app_store_url
 from api.dependencies import get_store, get_current_user, resolve_buyer_id
-from storage import SQLiteStore
+from storage.postgres_store import PostgresStore
 from storage.repositories.user_repository import User
 
 logger = logging.getLogger(__name__)
@@ -136,7 +136,7 @@ async def _get_creative_countries(creative_ids: list[str], days: int = 30) -> di
     if not creative_ids:
         return {}
 
-    placeholders = ",".join("?" * len(creative_ids))
+    placeholders = ",".join("%s" * len(creative_ids))
     rows = await db_query(f"""
         WITH ranked AS (
             SELECT creative_id, geography,
@@ -186,7 +186,7 @@ def _split_clusters_by_country(
 @router.post("/auto-cluster", response_model=AutoClusterResponse)
 async def auto_cluster_creatives(
     request: AutoClusterRequest,
-    store: SQLiteStore = Depends(get_store),
+    store: PostgresStore = Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """
@@ -206,7 +206,7 @@ async def auto_cluster_creatives(
                 FROM creatives c
                 LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
                 WHERE cc.creative_id IS NULL
-                  AND c.buyer_id = ?
+                  AND c.buyer_id = %s
                 ORDER BY c.id
             """, (buyer_id,))
         else:
@@ -304,7 +304,7 @@ async def auto_cluster_creatives(
 @router.get("/unclustered")
 async def get_unclustered_creatives(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer_id"),
-    store: SQLiteStore = Depends(get_store),
+    store: PostgresStore = Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """
@@ -322,7 +322,7 @@ async def get_unclustered_creatives(
                 FROM creatives c
                 LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
                 WHERE cc.creative_id IS NULL
-                  AND c.buyer_id = ?
+                  AND c.buyer_id = %s
                 ORDER BY c.id
             """, (buyer_id,))
         else:
@@ -529,7 +529,7 @@ async def list_campaigns(
                 # Phase 29: Count disapproved creatives in this campaign
                 disapproved_count = 0
                 if creative_ids:
-                    placeholders = ",".join("?" * len(creative_ids))
+                    placeholders = ",".join("%s" * len(creative_ids))
                     cursor = conn.cursor()
                     cursor.execute(f"""
                         SELECT COUNT(*) as count
@@ -662,7 +662,7 @@ async def get_campaign(
             # Phase 29: Count disapproved creatives
             disapproved_count = 0
             if creative_ids:
-                placeholders = ",".join("?" * len(creative_ids))
+                placeholders = ",".join("%s" * len(creative_ids))
                 cursor = conn.cursor()
                 cursor.execute(f"""
                     SELECT COUNT(*) as count
