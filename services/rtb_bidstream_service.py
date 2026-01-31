@@ -125,6 +125,8 @@ class RtbBidstreamService:
                 if buyer_id
                 else "No precompute available for requested date range."
             )
+            if buyer_id:
+                buyer_filter_applied = False
             return {
                 "has_data": False,
                 "funnel": {
