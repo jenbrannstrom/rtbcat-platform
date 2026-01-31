@@ -210,7 +210,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 
 ### Phase 2 — Precompute & Caching
 - [ ] **Materialized aggregates** - Precompute seat-wide and billing_id-level metrics (size/geo/publisher/config)
-- [ ] **Refresh strategy** - On each import: refresh last 7 days for the affected buyer_id. Nightly: full refresh last 90 days (all seats). Weekly: validate row counts + min/max dates + precompute_refresh_log.
+- [x] **Refresh strategy** - Documented in runbook: 6h scheduled (2 days), per-import (7 days), nightly (90 days), weekly validation. See `docs/POSTGRES_MIGRATION_RUNBOOK.md` § 5.
 
 ### Phase 3 — API Refactor
 - [ ] **Seat-scoped endpoints** - `/analytics/home/*` endpoints that return precomputed data for a buyer_id
