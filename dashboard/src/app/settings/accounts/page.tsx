@@ -52,6 +52,7 @@ export default function ConnectedAccountsPage() {
   }
 
   const isConfigured = health?.configured === true;
+  const apiConnected = !healthError;
   return (
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
@@ -69,10 +70,19 @@ export default function ConnectedAccountsPage() {
             <div className="flex items-center gap-2">
               <div className={cn(
                 "w-2 h-2 rounded-full",
+                apiConnected ? "bg-green-500" : "bg-red-500"
+              )} />
+              <span className="text-sm text-gray-600">
+                API: {apiConnected ? (t.setup?.connected || "Connected") : (t.setup?.notConnected || "Not connected")}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className={cn(
+                "w-2 h-2 rounded-full",
                 isConfigured ? "bg-green-500" : "bg-yellow-500"
               )} />
               <span className="text-sm text-gray-600">
-                API: {isConfigured ? (t.setup?.connected || "Connected") : (t.setup?.notConnected || "Not connected")}
+                Accounts: {isConfigured ? "Configured" : "Not configured"}
               </span>
             </div>
           </div>
