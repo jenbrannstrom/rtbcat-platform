@@ -62,6 +62,7 @@ async def audit_missing_identity() -> dict:
                 SELECT
                     COUNT(*) as total_rows,
                     COUNT(*) FILTER (WHERE bidder_id IS NULL) as missing_bidder_id,
+                    COUNT(*) FILTER (WHERE import_batch_id IS NULL) as missing_import_batch_id,
                     MIN(metric_date) as min_date,
                     MAX(metric_date) as max_date
                 FROM {table}
@@ -71,8 +72,14 @@ async def audit_missing_identity() -> dict:
             results[table] = {
                 "total_rows": row["total_rows"],
                 "missing_bidder_id": row["missing_bidder_id"],
+                "missing_import_batch_id": row["missing_import_batch_id"],
                 "coverage_pct": round(
                     100 * (1 - row["missing_bidder_id"] / row["total_rows"])
+                    if row["total_rows"] > 0 else 0,
+                    2,
+                ),
+                "import_batch_coverage_pct": round(
+                    100 * (1 - row["missing_import_batch_id"] / row["total_rows"])
                     if row["total_rows"] > 0 else 0,
                     2,
                 ),
@@ -175,6 +182,8 @@ async def main() -> None:
             print(f"    total_rows: {data['total_rows']:,}")
             print(f"    missing_bidder_id: {data['missing_bidder_id']:,}")
             print(f"    coverage: {data['coverage_pct']}%")
+            print(f"    missing_import_batch_id: {data['missing_import_batch_id']:,}")
+            print(f"    import_batch_coverage: {data['import_batch_coverage_pct']}%")
             print(f"    date_range: {data['min_date']} → {data['max_date']}")
 
     print("\n## Part B: Precompute table population (last 90 days)\n")
