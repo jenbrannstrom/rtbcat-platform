@@ -107,10 +107,9 @@ async def import_traffic_data(
         for r in records:
             await db_execute(
                 """INSERT INTO rtb_traffic
-                (canonical_size, raw_size, request_count, traffic_date, buyer_id)
+                (canonical_size, raw_size, request_count, date, buyer_id)
                 VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT (canonical_size, traffic_date, buyer_id) DO UPDATE SET
-                    raw_size = EXCLUDED.raw_size,
+                ON CONFLICT (buyer_id, canonical_size, raw_size, date) DO UPDATE SET
                     request_count = EXCLUDED.request_count""",
                 (r["canonical_size"], r["raw_size"], r["request_count"], r["date"], r["buyer_id"])
             )
@@ -169,10 +168,9 @@ async def generate_mock_traffic_endpoint(
         for r in traffic_records:
             await db_execute(
                 """INSERT INTO rtb_traffic
-                (canonical_size, raw_size, request_count, traffic_date, buyer_id)
+                (canonical_size, raw_size, request_count, date, buyer_id)
                 VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT (canonical_size, traffic_date, buyer_id) DO UPDATE SET
-                    raw_size = EXCLUDED.raw_size,
+                ON CONFLICT (buyer_id, canonical_size, raw_size, date) DO UPDATE SET
                     request_count = EXCLUDED.request_count""",
                 (r.canonical_size, r.raw_size, r.request_count, r.date, r.buyer_id)
             )
