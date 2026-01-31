@@ -4,44 +4,27 @@ This module provides administrative endpoints for managing users,
 permissions, and viewing audit logs. All endpoints require admin role.
 """
 
-import json
-import uuid
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from api.dependencies import require_admin, get_current_user
-from services.auth_service import AuthService, User
+from services.auth_service import User
+from services.admin_service import AdminService
+
+# Singleton AdminService instance
+_admin_service: Optional[AdminService] = None
 
 
-# Singleton AuthService instance
-_auth_service: Optional[AuthService] = None
-
-
-def get_auth_service() -> AuthService:
-    """Get or create the AuthService instance."""
-    global _auth_service
-    if _auth_service is None:
-        _auth_service = AuthService()
-    return _auth_service
+def get_admin_service() -> AdminService:
+    """Get or create the AdminService instance."""
+    global _admin_service
+    if _admin_service is None:
+        _admin_service = AdminService()
+    return _admin_service
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
-
-ALLOWED_DEFAULT_LANGUAGES = {
-    "en",
-    "pl",
-    "zh",
-    "ru",
-    "uk",
-    "es",
-    "da",
-    "fr",
-    "nl",
-    "he",
-    "ar",
-}
-
 
 # ==================== Request/Response Models ====================
 
@@ -133,22 +116,6 @@ def _get_client_ip(request: Request) -> Optional[str]:
     return None
 
 
-def _validate_default_language(value: Optional[str]) -> Optional[str]:
-    """Validate and normalize a default language code."""
-    if value is None:
-        return None
-
-    normalized = value.strip().lower()
-    if not normalized:
-        raise HTTPException(status_code=400, detail="Default language cannot be empty")
-    if normalized not in ALLOWED_DEFAULT_LANGUAGES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported default language: {normalized}",
-        )
-    return normalized
-
-
 # ==================== User Management Endpoints ====================
 
 @router.get("/users", response_model=List[UserResponse])
@@ -161,8 +128,8 @@ async def list_users(
 
     Requires admin role.
     """
-    auth_svc = get_auth_service()
-    users = await auth_svc.get_users(active_only=active_only, role=role)
+    admin_svc = get_admin_service()
+    users = await admin_svc.list_users(active_only=active_only, role=role)
 
     return [
         UserResponse(
@@ -191,50 +158,16 @@ async def create_user(
     so no password is needed. This pre-creates the user record
     with assigned role before they first log in.
     """
-    auth_svc = get_auth_service()
-
-    # Check if email already exists
-    existing = await auth_svc.get_user_by_email(user_request.email.lower().strip())
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already in use")
-
-    # Validate role
-    if user_request.role not in ("admin", "user"):
-        raise HTTPException(status_code=400, detail="Role must be 'admin' or 'user'")
-
-    default_language = _validate_default_language(user_request.default_language or "en")
-
-    # Create user (no password - OAuth2 only)
-    user_id = str(uuid.uuid4())
-    user = await auth_svc.create_user(
-        user_id=user_id,
-        email=user_request.email.lower().strip(),
+    admin_svc = get_admin_service()
+    result = await admin_svc.create_user(
+        admin=admin,
+        email=user_request.email,
         display_name=user_request.display_name,
         role=user_request.role,
-        default_language=default_language or "en",
+        default_language=user_request.default_language,
+        client_ip=_get_client_ip(request),
     )
-
-    # Log the action
-    await auth_svc.log_audit(
-        audit_id=str(uuid.uuid4()),
-        action="create_user",
-        user_id=admin.id,
-        resource_type="user",
-        resource_id=user_id,
-        details=json.dumps({
-            "email": user.email,
-            "role": user.role,
-            "created_by": admin.email,
-        }),
-        ip_address=_get_client_ip(request),
-    )
-
-    return CreateUserResponse(
-        status="success",
-        user_id=user_id,
-        email=user.email,
-        message="User created. They can now log in via Google OAuth2.",
-    )
+    return CreateUserResponse(**result)
 
 
 @router.get("/users/{user_id}", response_model=UserResponse)
@@ -246,8 +179,8 @@ async def get_user(
 
     Requires admin role.
     """
-    auth_svc = get_auth_service()
-    user = await auth_svc.get_user_by_id(user_id)
+    admin_svc = get_admin_service()
+    user = await admin_svc.get_user(user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -275,53 +208,16 @@ async def update_user(
 
     Requires admin role. Can update display_name, role, and is_active.
     """
-    auth_svc = get_auth_service()
-    user = await auth_svc.get_user_by_id(user_id)
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Don't allow deactivating self
-    if user_update.is_active is False and user_id == admin.id:
-        raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
-
-    # Don't allow removing own admin role
-    if user_update.role == "user" and user_id == admin.id:
-        raise HTTPException(status_code=400, detail="Cannot remove your own admin role")
-
-    # Update user
-    default_language = _validate_default_language(user_update.default_language)
-    await auth_svc.update_user(
+    admin_svc = get_admin_service()
+    updated_user = await admin_svc.update_user(
+        admin=admin,
         user_id=user_id,
         display_name=user_update.display_name,
         role=user_update.role,
         is_active=user_update.is_active,
-        default_language=default_language,
+        default_language=user_update.default_language,
+        client_ip=_get_client_ip(request),
     )
-
-    # Log the action
-    changes = {}
-    if user_update.display_name is not None:
-        changes["display_name"] = user_update.display_name
-    if user_update.role is not None:
-        changes["role"] = user_update.role
-    if user_update.is_active is not None:
-        changes["is_active"] = user_update.is_active
-    if user_update.default_language is not None:
-        changes["default_language"] = default_language
-
-    await auth_svc.log_audit(
-        audit_id=str(uuid.uuid4()),
-        action="update_user",
-        user_id=admin.id,
-        resource_type="user",
-        resource_id=user_id,
-        details=json.dumps(changes),
-        ip_address=_get_client_ip(request),
-    )
-
-    # Get updated user
-    updated_user = await auth_svc.get_user_by_id(user_id)
 
     return UserResponse(
         id=updated_user.id,
@@ -346,40 +242,12 @@ async def deactivate_user(
     Requires admin role. The user account is deactivated, not deleted.
     This also invalidates all their sessions.
     """
-    auth_svc = get_auth_service()
-    user = await auth_svc.get_user_by_id(user_id)
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if user_id == admin.id:
-        raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
-
-    # Deactivate user
-    await auth_svc.update_user(user_id=user_id, is_active=False)
-
-    # Delete all their sessions
-    sessions_deleted = await auth_svc.delete_user_sessions(user_id)
-
-    # Log the action
-    await auth_svc.log_audit(
-        audit_id=str(uuid.uuid4()),
-        action="deactivate_user",
-        user_id=admin.id,
-        resource_type="user",
-        resource_id=user_id,
-        details=json.dumps({
-            "email": user.email,
-            "sessions_deleted": sessions_deleted,
-        }),
-        ip_address=_get_client_ip(request),
+    admin_svc = get_admin_service()
+    return await admin_svc.deactivate_user(
+        admin=admin,
+        user_id=user_id,
+        client_ip=_get_client_ip(request),
     )
-
-    return {
-        "status": "success",
-        "message": "User deactivated",
-        "sessions_deleted": sessions_deleted,
-    }
 
 
 # ==================== Permission Management Endpoints ====================
@@ -393,13 +261,13 @@ async def get_user_permissions(
 
     Requires admin role.
     """
-    auth_svc = get_auth_service()
-    user = await auth_svc.get_user_by_id(user_id)
+    admin_svc = get_admin_service()
+    user = await admin_svc.get_user(user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    permissions = await auth_svc.get_user_permissions(user_id)
+    permissions = await admin_svc.get_user_permissions(user_id)
 
     return [
         PermissionResponse(
@@ -425,42 +293,18 @@ async def grant_permission(
 
     Requires admin role. If permission already exists, it will be updated.
     """
-    auth_svc = get_auth_service()
-    user = await auth_svc.get_user_by_id(user_id)
+    admin_svc = get_admin_service()
+    user = await admin_svc.get_user(user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Validate permission level
-    if perm_request.permission_level not in ("read", "write", "admin"):
-        raise HTTPException(
-            status_code=400,
-            detail="Permission level must be 'read', 'write', or 'admin'",
-        )
-
-    # Grant permission
-    permission_id = str(uuid.uuid4())
-    permission = await auth_svc.grant_permission(
-        permission_id=permission_id,
+    permission = await admin_svc.grant_permission(
+        admin=admin,
         user_id=user_id,
         service_account_id=perm_request.service_account_id,
         permission_level=perm_request.permission_level,
-        granted_by=admin.id,
-    )
-
-    # Log the action
-    await auth_svc.log_audit(
-        audit_id=str(uuid.uuid4()),
-        action="grant_permission",
-        user_id=admin.id,
-        resource_type="permission",
-        resource_id=permission_id,
-        details=json.dumps({
-            "target_user": user_id,
-            "service_account_id": perm_request.service_account_id,
-            "permission_level": perm_request.permission_level,
-        }),
-        ip_address=_get_client_ip(request),
+        client_ip=_get_client_ip(request),
     )
 
     return PermissionResponse(
@@ -484,31 +328,18 @@ async def revoke_permission(
 
     Requires admin role.
     """
-    auth_svc = get_auth_service()
-    user = await auth_svc.get_user_by_id(user_id)
+    admin_svc = get_admin_service()
+    user = await admin_svc.get_user(user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Revoke permission
-    revoked = await auth_svc.revoke_permission(user_id, service_account_id)
-
-    if not revoked:
-        raise HTTPException(status_code=404, detail="Permission not found")
-
-    # Log the action
-    await auth_svc.log_audit(
-        audit_id=str(uuid.uuid4()),
-        action="revoke_permission",
-        user_id=admin.id,
-        resource_type="permission",
-        details=json.dumps({
-            "target_user": user_id,
-            "service_account_id": service_account_id,
-        }),
-        ip_address=_get_client_ip(request),
+    await admin_svc.revoke_permission(
+        admin=admin,
+        user_id=user_id,
+        service_account_id=service_account_id,
+        client_ip=_get_client_ip(request),
     )
-
     return {"status": "success", "message": "Permission revoked"}
 
 
@@ -529,8 +360,8 @@ async def get_audit_logs(
     Requires admin role. Supports filtering by user, action, resource type,
     and time range.
     """
-    auth_svc = get_auth_service()
-    logs = await auth_svc.get_audit_logs(
+    admin_svc = get_admin_service()
+    logs = await admin_svc.get_audit_logs(
         user_id=user_id,
         action=action,
         resource_type=resource_type,
@@ -564,9 +395,8 @@ async def get_settings(
 
     Requires admin role.
     """
-    auth_svc = get_auth_service()
-    settings = await auth_svc.get_all_settings()
-    return settings
+    admin_svc = get_admin_service()
+    return await admin_svc.get_settings()
 
 
 @router.put("/settings/{key}")
@@ -580,42 +410,13 @@ async def update_setting(
 
     Requires admin role.
     """
-    auth_svc = get_auth_service()
-
-    # Validate certain settings
-    if key == "audit_retention_days":
-        try:
-            days = int(setting_update.value)
-            if days not in (0, 30, 60, 90, 120):
-                raise ValueError("Invalid retention period")
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail="Audit retention must be 0 (unlimited), 30, 60, 90, or 120 days",
-            )
-
-    if key == "multi_user_enabled":
-        if setting_update.value not in ("0", "1"):
-            raise HTTPException(
-                status_code=400,
-                detail="multi_user_enabled must be '0' or '1'",
-            )
-
-    # Update setting
-    await auth_svc.set_setting(key, setting_update.value, updated_by=admin.id)
-
-    # Log the action
-    await auth_svc.log_audit(
-        audit_id=str(uuid.uuid4()),
-        action="update_setting",
-        user_id=admin.id,
-        resource_type="setting",
-        resource_id=key,
-        details=json.dumps({"value": setting_update.value}),
-        ip_address=_get_client_ip(request),
+    admin_svc = get_admin_service()
+    return await admin_svc.update_setting(
+        admin=admin,
+        key=key,
+        value=setting_update.value,
+        client_ip=_get_client_ip(request),
     )
-
-    return {"status": "success", "key": key, "value": setting_update.value}
 
 
 # ==================== User Stats Endpoint ====================
@@ -628,76 +429,8 @@ async def get_admin_stats(
 
     Requires admin role. Returns counts of users, sessions, etc.
     """
-    auth_svc = get_auth_service()
-
-    users = await auth_svc.get_users()
-    active_users = [u for u in users if u.is_active]
-    admin_users = [u for u in users if u.role == "admin"]
-
-    from storage.serving_database import db_query
-
-    expected_report_kinds = [
-        "catscan-quality",
-        "catscan-bidsinauction",
-        "catscan-pipeline-geo",
-        "catscan-pipeline",
-        "catscan-bid-filtering",
-    ]
-
-    report_health = {
-        "expected_per_seat": len(expected_report_kinds),
-        "seats": [],
-    }
-
-    seats_rows = await db_query(
-        "SELECT DISTINCT buyer_id FROM buyer_seats WHERE active = 1 ORDER BY buyer_id"
-    )
-    seats = [row["buyer_id"] for row in seats_rows]
-
-    for seat_id in seats:
-        latest_rows = await db_query(
-            "SELECT MAX(report_date) as latest FROM gmail_import_runs WHERE buyer_account_id = ?",
-            (seat_id,),
-        )
-        latest_date = latest_rows[0]["latest"] if latest_rows else None
-        if not latest_date:
-            report_health["seats"].append({
-                "buyer_id": seat_id,
-                "latest_date": None,
-                "received": 0,
-                "missing": expected_report_kinds,
-                "failed": [],
-            })
-            continue
-
-        report_rows = await db_query(
-            "SELECT report_kind, success FROM gmail_import_runs WHERE buyer_account_id = ? AND report_date = ?",
-            (seat_id, latest_date),
-        )
-        received_kinds = set()
-        failed_kinds = set()
-        for row in report_rows:
-            if row["success"]:
-                received_kinds.add(row["report_kind"])
-            else:
-                failed_kinds.add(row["report_kind"])
-
-        missing_kinds = [kind for kind in expected_report_kinds if kind not in received_kinds]
-        report_health["seats"].append({
-            "buyer_id": seat_id,
-            "latest_date": latest_date,
-            "received": len(received_kinds),
-            "missing": missing_kinds,
-            "failed": sorted(failed_kinds),
-        })
-
-    return {
-        "total_users": len(users),
-        "active_users": len(active_users),
-        "admin_users": len(admin_users),
-        "multi_user_enabled": await auth_svc.is_multi_user_enabled(),
-        "report_health": report_health,
-    }
+    admin_svc = get_admin_service()
+    return await admin_svc.get_admin_stats()
 
 
 # ==================== Diagnostic Endpoint ====================
@@ -720,102 +453,8 @@ async def get_diagnostics(
     - Issue 3: Thumbnail placeholders
     - Issue 5: CSV import account mismatch
     """
-    from storage.serving_database import db_query
-
-    diagnostics = {}
-
-    # 1. All buyer seats (including inactive)
-    seats_rows = await db_query("""
-        SELECT bs.buyer_id, bs.bidder_id, bs.display_name, bs.active,
-               COALESCE(c.cnt, 0) as creative_count,
-               bs.last_synced, bs.service_account_id
-        FROM buyer_seats bs
-        LEFT JOIN (
-            SELECT account_id, COUNT(*) as cnt FROM creatives GROUP BY account_id
-        ) c ON c.account_id = bs.buyer_id
-        ORDER BY bs.display_name, bs.buyer_id
-    """)
-    diagnostics["buyer_seats"] = [
-        {
-            "buyer_id": row["buyer_id"],
-            "bidder_id": row["bidder_id"],
-            "display_name": row["display_name"],
-            "active": bool(row["active"]),
-            "creative_count": row["creative_count"],
-            "last_synced": row["last_synced"],
-            "service_account_id": row["service_account_id"],
-        }
-        for row in seats_rows
-    ]
-
-    # 2. Campaigns with creative_id counts
-    campaigns_rows = await db_query("SELECT id, name, creative_ids FROM campaigns LIMIT 20")
-    campaigns_data = []
-    for row in campaigns_rows:
-        creative_ids_raw = row["creative_ids"] or "[]"
-        try:
-            creative_ids = json.loads(creative_ids_raw) if isinstance(creative_ids_raw, str) else creative_ids_raw
-        except Exception:
-            creative_ids = []
-        campaigns_data.append({
-            "id": row["id"],
-            "name": row["name"],
-            "creative_ids_count": len(creative_ids) if creative_ids else 0,
-            "sample_ids": creative_ids[:5] if creative_ids else [],
-        })
-    diagnostics["campaigns_status"] = {
-        "campaigns": campaigns_data,
-        "total_campaigns": len(campaigns_data),
-    }
-
-    # 3. Thumbnail status summary
-    thumbnail_rows = await db_query("""
-        SELECT
-            format,
-            COUNT(*) as total,
-            SUM(CASE WHEN thumbnail_url IS NOT NULL AND thumbnail_url != '' THEN 1 ELSE 0 END) as with_thumbnail
-        FROM creatives
-        GROUP BY format
-    """)
-    thumbnail_data = {}
-    for row in thumbnail_rows:
-        fmt = row["format"] or "UNKNOWN"
-        thumbnail_data[fmt] = {
-            "total": row["total"],
-            "with_thumbnail": row["with_thumbnail"],
-            "missing_thumbnail": row["total"] - row["with_thumbnail"],
-        }
-    diagnostics["thumbnail_status"] = thumbnail_data
-
-    # 4. Import history by account
-    import_rows = await db_query("""
-        SELECT
-            buyer_id,
-            COUNT(*) as import_count,
-            MAX(imported_at) as last_import,
-            SUM(rows_imported) as total_records
-        FROM import_history
-        GROUP BY buyer_id
-        ORDER BY last_import DESC
-    """)
-    diagnostics["import_history"] = [
-        {
-            "buyer_id": row["buyer_id"],
-            "import_count": row["import_count"],
-            "last_import": str(row["last_import"]) if row["last_import"] else None,
-            "total_records": row["total_records"],
-        }
-        for row in import_rows
-    ]
-
-    # 5. Creative ID type check
-    id_rows = await db_query("SELECT id, pg_typeof(id)::text as type, account_id FROM creatives LIMIT 5")
-    diagnostics["creative_id_samples"] = [
-        {"id": row["id"], "type": row["type"], "account_id": row["account_id"]}
-        for row in id_rows
-    ]
-
-    return diagnostics
+    admin_svc = get_admin_service()
+    return await admin_svc.get_diagnostics()
 
 
 @router.post("/diagnostics/fix-inactive-seats")
@@ -827,17 +466,5 @@ async def fix_inactive_seats(
     Use this to fix Issue 2: Missing third account showing only 2 of 3 accounts.
     Sets active=1 for all buyer_seats entries.
     """
-    from storage.serving_database import db_query, db_execute
-
-    # Count inactive before
-    count_rows = await db_query("SELECT COUNT(*) as cnt FROM buyer_seats WHERE active = 0")
-    inactive_count = count_rows[0]["cnt"] if count_rows else 0
-
-    # Activate all
-    await db_execute("UPDATE buyer_seats SET active = 1 WHERE active = 0")
-
-    return {
-        "status": "success",
-        "message": f"Activated {inactive_count} buyer seat(s)",
-        "seats_activated": inactive_count,
-    }
+    admin_svc = get_admin_service()
+    return await admin_svc.activate_inactive_seats()
