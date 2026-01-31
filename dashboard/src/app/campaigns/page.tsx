@@ -299,7 +299,8 @@ export default function CampaignsPage() {
       idsToMove.forEach(id => {
         let srcCluster = 'unassigned';
         for (const campaign of campaigns) {
-          if (campaign.creative_ids.includes(id)) {
+          // Normalize to string comparison to handle API type variations
+          if (campaign.creative_ids.map(String).includes(String(id))) {
             srcCluster = campaign.id;
             break;
           }
@@ -344,7 +345,8 @@ export default function CampaignsPage() {
       // Find which cluster this ID belongs to
       let srcCluster = 'unassigned';
       for (const campaign of campaigns) {
-        if (campaign.creative_ids.includes(id)) {
+        // Normalize to string comparison to handle API type variations
+        if (campaign.creative_ids.map(String).includes(String(id))) {
           srcCluster = campaign.id;
           break;
         }
