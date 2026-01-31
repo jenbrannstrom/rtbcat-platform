@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -107,14 +106,14 @@ class EvaluationService:
             quality["missing"].append("rtb_daily (table missing)")
 
         try:
-            ts_count = await self.repo.get_troubleshooting_count(days)
-            if ts_count > 0:
-                quality["available"].append(f"troubleshooting_data ({ts_count:,} rows)")
+            bf_count = await self.repo.get_bid_filtering_count(days)
+            if bf_count > 0:
+                quality["available"].append(f"rtb_bid_filtering ({bf_count:,} rows)")
                 quality["score"] += 0.3
             else:
-                quality["missing"].append("troubleshooting_data (run: catscan troubleshoot collect)")
+                quality["missing"].append("rtb_bid_filtering (import CSV)")
         except Exception:
-            quality["missing"].append("troubleshooting_data (run: catscan troubleshoot collect)")
+            quality["missing"].append("rtb_bid_filtering (table missing)")
 
         try:
             creative_count = await self.repo.get_creatives_count()
@@ -138,39 +137,53 @@ class EvaluationService:
             return recommendations
 
         for row in filtered:
-            status = row.get("status_name", "UNKNOWN")
+            reason = row.get("filtering_reason", "UNKNOWN")
             pct = row.get("pct_of_filtered", 0) or 0
             bids = row.get("total_bids", 0) or 0
 
-            if status == "CREATIVE_NOT_APPROVED" and pct > 10:
+            # Analyze different filtering reasons
+            reason_lower = reason.lower() if reason else ""
+
+            if "manually" in reason_lower and pct > 10:
                 recommendations.append(Recommendation(
-                    type=RecommendationType.ADOPS_ADVICE,
-                    priority=1,
-                    title=f"Creative Approval Issue ({pct}% of filtered)",
-                    description=f"{bids:,} bids filtered because creatives not approved. "
-                               "Review pending creative approvals in Authorized Buyers UI.",
-                    impact_estimate=f"~{pct}% QPS could be recovered",
-                    evidence={"status": status, "bids": bids, "pct": pct}
+                    type=RecommendationType.PRETARGETING,
+                    priority=2,
+                    title=f"Publisher Manual Filter ({pct:.1f}%)",
+                    description=f"{bids:,} bids filtered manually by publishers. "
+                               "Review which publishers are filtering and consider exclusions.",
+                    impact_estimate=f"~{pct:.1f}% QPS affected",
+                    evidence={"reason": reason, "bids": bids, "pct": pct}
                 ))
-            elif status == "CREATIVE_DISAPPROVED" and pct > 5:
+            elif "disapproved" in reason_lower or "not approved" in reason_lower:
+                if pct > 5:
+                    recommendations.append(Recommendation(
+                        type=RecommendationType.CREATIVE_TEAM,
+                        priority=2,
+                        title=f"Creative Approval Issue ({pct:.1f}%)",
+                        description=f"{bids:,} bids filtered due to creative approval status. "
+                                   "Review pending/disapproved creatives.",
+                        impact_estimate=f"~{pct:.1f}% QPS could be recovered",
+                        evidence={"reason": reason, "bids": bids, "pct": pct}
+                    ))
+            elif "vendor" in reason_lower and pct > 5:
                 recommendations.append(Recommendation(
                     type=RecommendationType.CREATIVE_TEAM,
                     priority=2,
-                    title=f"Disapproved Creatives ({pct}% of filtered)",
-                    description=f"{bids:,} bids filtered due to disapproved creatives. "
-                               "Review disapproval reasons and update creative content.",
-                    impact_estimate=f"~{pct}% QPS could be recovered with fixes",
-                    evidence={"status": status, "bids": bids, "pct": pct}
+                    title=f"Unidentifiable Vendor ({pct:.1f}%)",
+                    description=f"{bids:,} bids filtered due to unidentifiable vendor. "
+                               "Ensure all ad tech vendors are properly declared.",
+                    impact_estimate=f"~{pct:.1f}% QPS affected",
+                    evidence={"reason": reason, "bids": bids, "pct": pct}
                 ))
-            elif "FLOOR" in status.upper() and pct > 15:
+            elif "category" in reason_lower and pct > 5:
                 recommendations.append(Recommendation(
                     type=RecommendationType.ADOPS_ADVICE,
-                    priority=2,
-                    title=f"Bids Below Floor Price ({pct}% of filtered)",
-                    description=f"{bids:,} bids rejected for being below floor. "
-                               "Consider increasing bid prices or excluding high-floor inventory.",
-                    impact_estimate=f"Bidder adjustment could win {pct}% more",
-                    evidence={"status": status, "bids": bids, "pct": pct}
+                    priority=3,
+                    title=f"Category Exclusion ({pct:.1f}%)",
+                    description=f"{bids:,} bids filtered due to product category. "
+                               "Review advertiser categories and publisher restrictions.",
+                    impact_estimate=f"~{pct:.1f}% QPS affected by category rules",
+                    evidence={"reason": reason, "bids": bids, "pct": pct}
                 ))
 
         return recommendations
@@ -337,33 +350,39 @@ class EvaluationService:
             return []
 
     async def get_bid_funnel(self, days: int = 7) -> Dict:
-        """Get bid funnel by parsing raw_data from bid_metrics rows."""
-        totals = {
-            "bids_submitted": 0,
-            "bids_in_auction": 0,
-            "impressions_won": 0,
-            "billed_impressions": 0,
-            "viewable_impressions": 0
-        }
-
+        """Get bid funnel from rtb_funnel_daily aggregates."""
         try:
-            rows = await self.repo.get_bid_metrics_raw(days)
-            for row in rows:
-                try:
-                    data = json.loads(row["raw_data"])
-                    totals["bids_submitted"] += int(data.get("bids", {}).get("value", 0))
-                    totals["bids_in_auction"] += int(data.get("bidsInAuction", {}).get("value", 0))
-                    totals["impressions_won"] += int(data.get("impressionsWon", {}).get("value", 0))
-                    totals["billed_impressions"] += int(data.get("billedImpressions", {}).get("value", 0))
-                    totals["viewable_impressions"] += int(data.get("viewableImpressions", {}).get("value", 0))
-                except Exception:
-                    pass
+            data = await self.repo.get_bid_funnel_metrics(days)
+            totals = {
+                "bid_requests": data.get("bid_requests", 0),
+                "successful_responses": data.get("successful_responses", 0),
+                "bids": data.get("bids", 0),
+                "reached_queries": data.get("reached_queries", 0),
+                "auctions_won": data.get("auctions_won", 0),
+                "impressions": data.get("impressions", 0),
+            }
+
+            # Calculate rates
+            if totals["bid_requests"] > 0:
+                totals["response_rate"] = round(
+                    100 * totals["successful_responses"] / totals["bid_requests"], 2
+                )
+            if totals["bids"] > 0:
+                totals["win_rate"] = round(
+                    100 * totals["auctions_won"] / totals["bids"], 2
+                )
+            if totals["reached_queries"] > 0:
+                totals["impression_rate"] = round(
+                    100 * totals["impressions"] / totals["reached_queries"], 2
+                )
+
+            return totals
         except Exception:
-            pass
-
-        if totals["bids_submitted"]:
-            totals["to_auction_rate"] = round(100 * totals["bids_in_auction"] / totals["bids_submitted"], 2)
-        if totals["bids_in_auction"]:
-            totals["win_rate"] = round(100 * totals["impressions_won"] / totals["bids_in_auction"], 2)
-
-        return totals
+            return {
+                "bid_requests": 0,
+                "successful_responses": 0,
+                "bids": 0,
+                "reached_queries": 0,
+                "auctions_won": 0,
+                "impressions": 0,
+            }
