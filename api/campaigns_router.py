@@ -12,10 +12,8 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 
-from storage.postgres_database import db_query, db_transaction_async
-from storage.repositories.campaign_repository import CampaignRepository, AICampaign
-from api.clustering.rule_based import pre_cluster_creatives, merge_small_clusters
-from api.clustering.ai_clusterer import AICampaignClusterer, apply_ai_suggestions
+from storage.postgres_database import pg_query
+from services.campaigns_service import CampaignsService, AICampaign
 from utils.app_parser import format_package_id_as_name, parse_app_store_url
 from api.dependencies import get_store, get_current_user, resolve_buyer_id
 from storage.postgres_store import PostgresStore
@@ -24,6 +22,18 @@ from services.auth_service import User
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
+
+
+# Singleton CampaignsService instance
+_campaigns_service: Optional[CampaignsService] = None
+
+
+def get_campaigns_service() -> CampaignsService:
+    """Get or create the CampaignsService instance."""
+    global _campaigns_service
+    if _campaigns_service is None:
+        _campaigns_service = CampaignsService()
+    return _campaigns_service
 
 
 # ============================================
@@ -123,8 +133,7 @@ class CampaignPerformanceResponse(BaseModel):
 # Helper Functions
 # ============================================
 
-# Note: get_db_connection() and get_campaign_repo() removed
-# All endpoints now use db_transaction_async() for thread-safe database access
+# All endpoints now use CampaignsService for database access
 
 
 # ============================================
@@ -136,8 +145,8 @@ async def _get_creative_countries(creative_ids: list[str], days: int = 30) -> di
     if not creative_ids:
         return {}
 
-    placeholders = ",".join("%s" * len(creative_ids))
-    rows = await db_query(f"""
+    rows = await pg_query(
+        """
         WITH ranked AS (
             SELECT creative_id, geography,
                    SUM(spend_micros) as total_spend,
@@ -146,15 +155,17 @@ async def _get_creative_countries(creative_ids: list[str], days: int = 30) -> di
                        ORDER BY SUM(spend_micros) DESC
                    ) as rn
             FROM performance_metrics
-            WHERE creative_id IN ({placeholders})
+            WHERE creative_id = ANY(%s)
               AND geography IS NOT NULL
-              AND metric_date::date >= (CURRENT_DATE - INTERVAL '{days} days')
+              AND metric_date >= CURRENT_DATE - make_interval(days => %s)
             GROUP BY creative_id, geography
         )
         SELECT creative_id, geography
         FROM ranked
         WHERE rn = 1
-    """, tuple(creative_ids))
+        """,
+        (creative_ids, days),
+    )
 
     return {row['creative_id']: row['geography'] for row in rows}
 
@@ -200,7 +211,8 @@ async def auto_cluster_creatives(
         # Build query for unclustered creatives, optionally filtered by buyer_id
         # Phase 29: Include app info fields for better clustering
         if buyer_id:
-            rows = await db_query("""
+            rows = await pg_query(
+                """
                 SELECT c.id as creative_id, c.final_url, c.buyer_id,
                        c.app_id, c.app_name, c.app_store, c.advertiser_name
                 FROM creatives c
@@ -208,16 +220,20 @@ async def auto_cluster_creatives(
                 WHERE cc.creative_id IS NULL
                   AND c.buyer_id = %s
                 ORDER BY c.id
-            """, (buyer_id,))
+                """,
+                (buyer_id,),
+            )
         else:
-            rows = await db_query("""
+            rows = await pg_query(
+                """
                 SELECT c.id as creative_id, c.final_url, c.buyer_id,
                        c.app_id, c.app_name, c.app_store, c.advertiser_name
                 FROM creatives c
                 LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
                 WHERE cc.creative_id IS NULL
                 ORDER BY c.id
-            """)
+                """
+            )
 
         unclustered_count = len(rows)
 
@@ -317,22 +333,27 @@ async def get_unclustered_creatives(
     try:
         buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         if buyer_id:
-            rows = await db_query("""
+            rows = await pg_query(
+                """
                 SELECT c.id as creative_id
                 FROM creatives c
                 LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
                 WHERE cc.creative_id IS NULL
                   AND c.buyer_id = %s
                 ORDER BY c.id
-            """, (buyer_id,))
+                """,
+                (buyer_id,),
+            )
         else:
-            rows = await db_query("""
+            rows = await pg_query(
+                """
                 SELECT c.id as creative_id
                 FROM creatives c
                 LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
                 WHERE cc.creative_id IS NULL
                 ORDER BY c.id
-            """)
+                """
+            )
 
         creative_ids = [str(row['creative_id']) for row in rows]
 
@@ -516,71 +537,54 @@ async def list_campaigns(
     """
     try:
         days = {"1d": 1, "7d": 7, "30d": 30, "all": 365}.get(period, 7)
+        svc = get_campaigns_service()
 
-        def _list_campaigns(conn):
-            repo = CampaignRepository(conn)
-            campaigns = repo.list_campaigns(seat_id=seat_id, status=status)
+        campaigns = await svc.list_campaigns(seat_id=seat_id, status=status)
 
-            result = []
-            for campaign in campaigns:
-                # Get creative IDs for this campaign
-                creative_ids = repo.get_campaign_creatives(campaign.id)
+        result = []
+        for campaign in campaigns:
+            # Get creative IDs for this campaign
+            creative_ids = await svc.get_campaign_creatives(campaign.id)
 
-                # Phase 29: Count disapproved creatives in this campaign
-                disapproved_count = 0
-                if creative_ids:
-                    placeholders = ",".join("%s" * len(creative_ids))
-                    cursor = conn.cursor()
-                    cursor.execute(f"""
-                        SELECT COUNT(*) as count
-                        FROM creatives
-                        WHERE id IN ({placeholders})
-                          AND (approval_status = 'DISAPPROVED'
-                               OR disapproval_reasons IS NOT NULL
-                               OR serving_restrictions IS NOT NULL)
-                    """, creative_ids)
-                    row = cursor.fetchone()
-                    disapproved_count = row['count'] if row else 0
+            # Phase 29: Count disapproved creatives in this campaign
+            disapproved_count = await svc.count_disapproved_creatives(creative_ids)
 
-                campaign_data = {
-                    "id": campaign.id,
-                    "seat_id": campaign.seat_id,
-                    "name": campaign.name,
-                    "description": campaign.description,
-                    "ai_generated": campaign.ai_generated,
-                    "ai_confidence": campaign.ai_confidence,
-                    "clustering_method": campaign.clustering_method,
-                    "status": campaign.status,
-                    "creative_count": campaign.creative_count,
-                    "creative_ids": creative_ids,
-                    "performance": None,
-                    "country_breakdown": None,
-                    # Phase 29: Disapproval tracking
-                    "disapproved_count": disapproved_count,
-                    "has_disapproved": disapproved_count > 0,
+            campaign_data = {
+                "id": campaign.id,
+                "seat_id": campaign.seat_id,
+                "name": campaign.name,
+                "description": campaign.description,
+                "ai_generated": campaign.ai_generated,
+                "ai_confidence": campaign.ai_confidence,
+                "clustering_method": campaign.clustering_method,
+                "status": campaign.status,
+                "creative_count": campaign.creative_count,
+                "creative_ids": creative_ids,
+                "performance": None,
+                "country_breakdown": None,
+                # Phase 29: Disapproval tracking
+                "disapproved_count": disapproved_count,
+                "has_disapproved": disapproved_count > 0,
+            }
+
+            if include_performance:
+                perf = await svc.get_campaign_performance(campaign.id, days=days)
+                campaign_data["performance"] = perf
+
+            if include_country_breakdown:
+                breakdown_raw = await svc.get_campaign_country_breakdown(campaign.id, days=days)
+                campaign_data["country_breakdown"] = {
+                    country: {
+                        "creative_ids": data['creative_ids'],
+                        "spend_micros": data['spend_micros'],
+                        "impressions": data['impressions'],
+                    }
+                    for country, data in breakdown_raw.items()
                 }
 
-                if include_performance:
-                    perf = repo.get_campaign_performance(campaign.id, days=days)
-                    campaign_data["performance"] = perf
+            result.append(campaign_data)
 
-                if include_country_breakdown:
-                    breakdown_raw = repo.get_campaign_country_breakdown(campaign.id, days=days)
-                    campaign_data["country_breakdown"] = {
-                        country: {
-                            "creative_ids": data['creative_ids'],
-                            "spend_micros": data['spend_micros'],
-                            "impressions": data['impressions'],
-                        }
-                        for country, data in breakdown_raw.items()
-                    }
-
-                result.append(campaign_data)
-
-            return result
-
-        campaigns_data = await db_transaction_async(_list_campaigns)
-        return [AICampaignResponse(**c) for c in campaigns_data]
+        return [AICampaignResponse(**c) for c in result]
 
     except Exception as e:
         logger.error(f"Failed to list campaigns: {e}")
@@ -593,46 +597,44 @@ async def create_campaign(request: CampaignCreateRequest):
     Create a new campaign and optionally assign creatives to it.
     """
     try:
-        def _create_campaign(conn):
-            repo = CampaignRepository(conn)
+        svc = get_campaigns_service()
 
-            # Create the campaign
-            campaign_id = repo.create_campaign(
-                name=request.name,
-                seat_id=None,  # Could be added to request if needed
-                description=request.description,
-                ai_generated=False,
-                ai_confidence=None,
-                clustering_method="manual",
+        # Create the campaign
+        campaign_id = await svc.create_campaign(
+            name=request.name,
+            seat_id=None,  # Could be added to request if needed
+            description=request.description,
+            ai_generated=False,
+            ai_confidence=None,
+            clustering_method="manual",
+        )
+
+        # Assign creatives if provided
+        if request.creative_ids:
+            await svc.assign_creatives_batch(
+                creative_ids=request.creative_ids,
+                campaign_id=campaign_id,
+                assigned_by="user",
+                manually_assigned=True,
             )
 
-            # Assign creatives if provided
-            if request.creative_ids:
-                repo.assign_creatives_batch(
-                    creative_ids=request.creative_ids,
-                    campaign_id=campaign_id,
-                    assigned_by="user",
-                    manually_assigned=True,
-                )
+        # Fetch the created campaign
+        campaign = await svc.get_campaign(campaign_id)
+        creative_ids = await svc.get_campaign_creatives(campaign_id)
 
-            # Fetch the created campaign
-            campaign = repo.get_campaign(campaign_id)
-            creative_ids = repo.get_campaign_creatives(campaign_id)
+        campaign_data = {
+            "id": campaign.id,
+            "seat_id": campaign.seat_id,
+            "name": campaign.name,
+            "description": campaign.description,
+            "ai_generated": campaign.ai_generated,
+            "ai_confidence": campaign.ai_confidence,
+            "clustering_method": campaign.clustering_method,
+            "status": campaign.status,
+            "creative_count": len(creative_ids),
+            "creative_ids": creative_ids,
+        }
 
-            return {
-                "id": campaign.id,
-                "seat_id": campaign.seat_id,
-                "name": campaign.name,
-                "description": campaign.description,
-                "ai_generated": campaign.ai_generated,
-                "ai_confidence": campaign.ai_confidence,
-                "clustering_method": campaign.clustering_method,
-                "status": campaign.status,
-                "creative_count": len(creative_ids),
-                "creative_ids": creative_ids,
-            }
-
-        campaign_data = await db_transaction_async(_create_campaign)
         return AICampaignResponse(**campaign_data)
 
     except Exception as e:
@@ -649,52 +651,33 @@ async def get_campaign(
     Get campaign details.
     """
     try:
-        def _get_campaign(conn):
-            repo = CampaignRepository(conn)
-            campaign = repo.get_campaign(campaign_id)
+        svc = get_campaigns_service()
+        campaign = await svc.get_campaign(campaign_id)
 
-            if not campaign:
-                return None
-
-            # Get creative IDs for this campaign
-            creative_ids = repo.get_campaign_creatives(campaign_id)
-
-            # Phase 29: Count disapproved creatives
-            disapproved_count = 0
-            if creative_ids:
-                placeholders = ",".join("%s" * len(creative_ids))
-                cursor = conn.cursor()
-                cursor.execute(f"""
-                    SELECT COUNT(*) as count
-                    FROM creatives
-                    WHERE id IN ({placeholders})
-                      AND (approval_status = 'DISAPPROVED'
-                           OR disapproval_reasons IS NOT NULL
-                           OR serving_restrictions IS NOT NULL)
-                """, creative_ids)
-                row = cursor.fetchone()
-                disapproved_count = row['count'] if row else 0
-
-            return {
-                "id": campaign.id,
-                "seat_id": campaign.seat_id,
-                "name": campaign.name,
-                "description": campaign.description,
-                "ai_generated": campaign.ai_generated,
-                "ai_confidence": campaign.ai_confidence,
-                "clustering_method": campaign.clustering_method,
-                "status": campaign.status,
-                "creative_count": campaign.creative_count,
-                "creative_ids": creative_ids,
-                # Phase 29: Disapproval tracking
-                "disapproved_count": disapproved_count,
-                "has_disapproved": disapproved_count > 0,
-            }
-
-        campaign_data = await db_transaction_async(_get_campaign)
-
-        if not campaign_data:
+        if not campaign:
             raise HTTPException(status_code=404, detail="Campaign not found")
+
+        # Get creative IDs for this campaign
+        creative_ids = await svc.get_campaign_creatives(campaign_id)
+
+        # Phase 29: Count disapproved creatives
+        disapproved_count = await svc.count_disapproved_creatives(creative_ids)
+
+        campaign_data = {
+            "id": campaign.id,
+            "seat_id": campaign.seat_id,
+            "name": campaign.name,
+            "description": campaign.description,
+            "ai_generated": campaign.ai_generated,
+            "ai_confidence": campaign.ai_confidence,
+            "clustering_method": campaign.clustering_method,
+            "status": campaign.status,
+            "creative_count": campaign.creative_count,
+            "creative_ids": creative_ids,
+            # Phase 29: Disapproval tracking
+            "disapproved_count": disapproved_count,
+            "has_disapproved": disapproved_count > 0,
+        }
 
         return AICampaignResponse(**campaign_data)
 
@@ -711,16 +694,13 @@ async def update_campaign(campaign_id: str, request: CampaignUpdateRequest):
     Update campaign name or description.
     """
     try:
-        def _update_campaign(conn):
-            repo = CampaignRepository(conn)
-            return repo.update_campaign(
-                campaign_id=campaign_id,
-                name=request.name,
-                description=request.description,
-                status=request.status,
-            )
-
-        success = await db_transaction_async(_update_campaign)
+        svc = get_campaigns_service()
+        success = await svc.update_campaign(
+            campaign_id=campaign_id,
+            name=request.name,
+            description=request.description,
+            status=request.status,
+        )
 
         if not success:
             raise HTTPException(status_code=404, detail="Campaign not found")
@@ -742,53 +722,47 @@ async def patch_campaign(campaign_id: str, request: CampaignPatchRequest):
     This is the main endpoint used by the drag-and-drop UI for moving creatives.
     """
     try:
-        def _patch_campaign(conn):
-            repo = CampaignRepository(conn)
+        svc = get_campaigns_service()
 
-            # Check campaign exists
-            campaign = repo.get_campaign(campaign_id)
-            if not campaign:
-                return None
-
-            # Update name if provided
-            if request.name is not None:
-                repo.update_campaign(campaign_id=campaign_id, name=request.name)
-
-            # Remove creatives if provided
-            if request.remove_creative_ids:
-                for creative_id in request.remove_creative_ids:
-                    repo.remove_creative_from_campaign(creative_id)
-
-            # Add creatives if provided
-            if request.add_creative_ids:
-                repo.assign_creatives_batch(
-                    creative_ids=request.add_creative_ids,
-                    campaign_id=campaign_id,
-                    assigned_by="user",
-                    manually_assigned=True,
-                )
-
-            # Fetch updated campaign
-            campaign = repo.get_campaign(campaign_id)
-            creative_ids = repo.get_campaign_creatives(campaign_id)
-
-            return {
-                "id": campaign.id,
-                "seat_id": campaign.seat_id,
-                "name": campaign.name,
-                "description": campaign.description,
-                "ai_generated": campaign.ai_generated,
-                "ai_confidence": campaign.ai_confidence,
-                "clustering_method": campaign.clustering_method,
-                "status": campaign.status,
-                "creative_count": len(creative_ids),
-                "creative_ids": creative_ids,
-            }
-
-        campaign_data = await db_transaction_async(_patch_campaign)
-
-        if not campaign_data:
+        # Check campaign exists
+        campaign = await svc.get_campaign(campaign_id)
+        if not campaign:
             raise HTTPException(status_code=404, detail="Campaign not found")
+
+        # Update name if provided
+        if request.name is not None:
+            await svc.update_campaign(campaign_id=campaign_id, name=request.name)
+
+        # Remove creatives if provided
+        if request.remove_creative_ids:
+            for creative_id in request.remove_creative_ids:
+                await svc.remove_creative(creative_id)
+
+        # Add creatives if provided
+        if request.add_creative_ids:
+            await svc.assign_creatives_batch(
+                creative_ids=request.add_creative_ids,
+                campaign_id=campaign_id,
+                assigned_by="user",
+                manually_assigned=True,
+            )
+
+        # Fetch updated campaign
+        campaign = await svc.get_campaign(campaign_id)
+        creative_ids = await svc.get_campaign_creatives(campaign_id)
+
+        campaign_data = {
+            "id": campaign.id,
+            "seat_id": campaign.seat_id,
+            "name": campaign.name,
+            "description": campaign.description,
+            "ai_generated": campaign.ai_generated,
+            "ai_confidence": campaign.ai_confidence,
+            "clustering_method": campaign.clustering_method,
+            "status": campaign.status,
+            "creative_count": len(creative_ids),
+            "creative_ids": creative_ids,
+        }
 
         return AICampaignResponse(**campaign_data)
 
@@ -805,11 +779,8 @@ async def delete_campaign(campaign_id: str):
     Delete a campaign and unassign all its creatives.
     """
     try:
-        def _delete_campaign(conn):
-            repo = CampaignRepository(conn)
-            return repo.delete_campaign(campaign_id)
-
-        success = await db_transaction_async(_delete_campaign)
+        svc = get_campaigns_service()
+        success = await svc.delete_campaign(campaign_id)
 
         if not success:
             raise HTTPException(status_code=404, detail="Campaign not found")
@@ -833,11 +804,8 @@ async def get_campaign_creatives(campaign_id: str):
     Get all creative IDs in a campaign.
     """
     try:
-        def _get_creatives(conn):
-            repo = CampaignRepository(conn)
-            return repo.get_campaign_creatives(campaign_id)
-
-        creative_ids = await db_transaction_async(_get_creatives)
+        svc = get_campaigns_service()
+        creative_ids = await svc.get_campaign_creatives(campaign_id)
         return {"creative_ids": creative_ids, "count": len(creative_ids)}
 
     except Exception as e:
@@ -851,16 +819,13 @@ async def add_creatives_to_campaign(campaign_id: str, request: AssignCreativesRe
     Manually assign creatives to a campaign.
     """
     try:
-        def _assign_creatives(conn):
-            repo = CampaignRepository(conn)
-            return repo.assign_creatives_batch(
-                creative_ids=request.creative_ids,
-                campaign_id=campaign_id,
-                assigned_by="user",
-                manually_assigned=True,
-            )
-
-        count = await db_transaction_async(_assign_creatives)
+        svc = get_campaigns_service()
+        count = await svc.assign_creatives_batch(
+            creative_ids=request.creative_ids,
+            campaign_id=campaign_id,
+            assigned_by="user",
+            manually_assigned=True,
+        )
         return {"status": "assigned", "count": count}
 
     except Exception as e:
@@ -874,11 +839,8 @@ async def remove_creative_from_campaign(campaign_id: str, creative_id: str):
     Remove a creative from a campaign.
     """
     try:
-        def _remove_creative(conn):
-            repo = CampaignRepository(conn)
-            return repo.remove_creative_from_campaign(creative_id)
-
-        success = await db_transaction_async(_remove_creative)
+        svc = get_campaigns_service()
+        success = await svc.remove_creative(creative_id)
 
         if not success:
             raise HTTPException(status_code=404, detail="Creative not in campaign")
@@ -898,16 +860,13 @@ async def move_creative(creative_id: str, request: MoveCreativeRequest):
     Move a creative from one campaign to another.
     """
     try:
-        def _move_creative(conn):
-            repo = CampaignRepository(conn)
-            return repo.assign_creative_to_campaign(
-                creative_id=creative_id,
-                campaign_id=request.to_campaign_id,
-                assigned_by="user",
-                manually_assigned=True,
-            )
-
-        await db_transaction_async(_move_creative)
+        svc = get_campaigns_service()
+        await svc.assign_creative(
+            creative_id=creative_id,
+            campaign_id=request.to_campaign_id,
+            assigned_by="user",
+            manually_assigned=True,
+        )
         return {"status": "moved"}
 
     except Exception as e:
@@ -929,12 +888,8 @@ async def get_campaign_performance(
     """
     try:
         days = {"1d": 1, "7d": 7, "30d": 30, "all": 365}.get(period, 7)
-
-        def _get_perf(conn):
-            repo = CampaignRepository(conn)
-            return repo.get_campaign_performance(campaign_id, days=days)
-
-        perf = await db_transaction_async(_get_perf)
+        svc = get_campaigns_service()
+        perf = await svc.get_campaign_performance(campaign_id, days=days)
         return CampaignPerformanceResponse(**perf)
 
     except Exception as e:
@@ -951,11 +906,8 @@ async def get_campaign_daily_trend(
     Get daily performance trend for a campaign.
     """
     try:
-        def _get_trend(conn):
-            repo = CampaignRepository(conn)
-            return repo.get_campaign_daily_trend(campaign_id, days=days)
-
-        trend = await db_transaction_async(_get_trend)
+        svc = get_campaigns_service()
+        trend = await svc.get_campaign_daily_trend(campaign_id, days=days)
         return {"trend": trend}
 
     except Exception as e:
@@ -970,27 +922,8 @@ async def refresh_campaign_summaries(seat_id: Optional[int] = None):
     Run this after importing new data.
     """
     try:
-        def _refresh_summaries(conn):
-            repo = CampaignRepository(conn)
-            campaigns = repo.list_campaigns(seat_id=seat_id)
-
-            # Get date range from performance data
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT DISTINCT metric_date FROM performance_metrics
-                ORDER BY metric_date DESC LIMIT 30
-            """)
-            dates = [row['metric_date'] for row in cursor.fetchall()]
-
-            updated = 0
-            for campaign in campaigns:
-                for date in dates:
-                    repo.update_campaign_summary(campaign.id, date)
-                    updated += 1
-
-            return {"campaigns": len(campaigns), "dates": len(dates)}
-
-        result = await db_transaction_async(_refresh_summaries)
+        svc = get_campaigns_service()
+        result = await svc.refresh_all_summaries(seat_id=seat_id)
         return {"status": "refreshed", "campaigns_updated": result["campaigns"], "dates_processed": result["dates"]}
 
     except Exception as e:
