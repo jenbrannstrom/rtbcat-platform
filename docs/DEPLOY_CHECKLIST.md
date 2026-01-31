@@ -86,3 +86,8 @@ SELECT 'config_creative_daily' AS table, COUNT(*) AS rows,
 FROM config_creative_daily
 WHERE metric_date >= CURRENT_DATE - INTERVAL '90 days';
 ```
+
+Expected thresholds (sanity):
+- **rows > 0** for all listed tables
+- **max_date within last 1–2 days** after refresh
+- **min_date within last 90 days** (for the refresh range)
