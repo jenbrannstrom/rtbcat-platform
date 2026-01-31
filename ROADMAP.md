@@ -15,7 +15,7 @@
 - [x] **Import Now button fails** - /import does not process queued Gmail reports
 - [x] **Campaigns create action no-op** - Clicking "Create" on auto cluster does nothing
 - [ ] **Creative modal missing publisher data** - "No publisher data for this config" despite migrated tables
-- [ ] **Duplicate migration numbers (SQLite runner)** - 018/019/021 duplicates cause skipped migrations; remove/archive as SQLite is deprecated
+- [x] **Duplicate migration numbers (SQLite runner)** - archived with SQLite legacy code
 - [ ] ~~**CI/CD pipeline** - Build images in GitHub Actions and deploy via docker pull (Artifact Registry)~~ **(Done)**
 - [ ] **BigQuery raw_facts coverage** - Data only through Jan 25; Jan 26–28 pending reprocess after pipeline fix
 
@@ -33,8 +33,8 @@ Goal: unmix business logic from data access. Routers call services; services cal
 | Pretargeting | ☐ | ☑ | ☐ | Codex | Service exists | PretargetingService in services/ |
 | Actions | ☐ | ☑ | ☑ | Claude | Done | ActionsService uses SeatsService |
 | Seats Sync | ☑ | ☑ | ☑ | Claude | Done | seats_repo.py + SeatsService |
-| Uploads | ☐ | ☐ | ☐ | Claude | Pending | Read-only queries |
-| Retention | ☐ | ☐ | ☐ | Claude | Pending | Uses RetentionManager |
+| Uploads | ☑ | ☑ | ☑ | Claude | Done | uploads_repo.py + UploadsService |
+| Retention | ☑ | ☑ | ☑ | Claude | Done | retention_repo.py + RetentionService |
 | System/Thumbnails | ☑ | ☑ | ☑ | Claude | Done | thumbnails_repo.py + ThumbnailsService |
 | Analytics/Performance | ☐ | ☐ | ☑ | Claude | Router done | Uses db_query() directly |
 | Creatives | ☐ | ☐ | ☑ | Claude | Router done | Uses db_query() directly |
@@ -42,7 +42,7 @@ Goal: unmix business logic from data access. Routers call services; services cal
 
 Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 
-**Runtime Postgres migration complete** (2026-01-31). No `store._connection()` patterns remain in API code.
+**Runtime Postgres migration complete** (2026-01-31). SQLite legacy archived under `docs/archive/sqlite_legacy/`.
 
 ---
 
