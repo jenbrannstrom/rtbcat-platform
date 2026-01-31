@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 from analytics.recommendation_engine import (
     Action,
@@ -24,9 +24,7 @@ from analytics.recommendation_engine import (
     RecommendationType,
     Severity,
 )
-
-if TYPE_CHECKING:
-    from storage.sqlite_store import SQLiteStore
+from storage.serving_database import db_query, db_query_one
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +46,8 @@ class CreativeAnalyzer:
     - Fixing low win rate issues
     """
 
-    def __init__(self, db_store: "SQLiteStore"):
-        self.store = db_store
+    def __init__(self, db_store: object | None = None):
+        self._store = db_store
 
     async def analyze(self, days: int = 7) -> list[Recommendation]:
         """
@@ -88,45 +86,32 @@ class CreativeAnalyzer:
 
     async def _check_low_ctr_creatives(self, days: int) -> list[Recommendation]:
         """Check for creatives with CTR significantly below average."""
-        import asyncio
-
         recommendations: list[Recommendation] = []
 
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
+        totals = await db_query_one("""
+            SELECT
+                COALESCE(SUM(impressions), 0) as total_impressions,
+                COALESCE(SUM(clicks), 0) as total_clicks
+            FROM performance_metrics
+            WHERE metric_date >= date('now', ?)
+        """, (f"-{days} days",)) or {}
+        total_imps = totals.get("total_impressions", 0) or 1
+        total_clicks = totals.get("total_clicks", 0) or 0
+        avg_ctr = total_clicks / total_imps if total_imps > 0 else 0
 
-            def _query():
-                # Get average CTR first
-                cursor = conn.execute("""
-                    SELECT
-                        COALESCE(SUM(impressions), 0) as total_impressions,
-                        COALESCE(SUM(clicks), 0) as total_clicks
-                    FROM performance_metrics
-                    WHERE metric_date >= date('now', ?)
-                """, (f"-{days} days",))
-                totals = dict(cursor.fetchone())
-                total_imps = totals.get("total_impressions", 0) or 1
-                total_clicks = totals.get("total_clicks", 0) or 0
-                avg_ctr = total_clicks / total_imps if total_imps > 0 else 0
-
-                # Find underperforming creatives
-                cursor = conn.execute("""
-                    SELECT
-                        c.id,
-                        c.format,
-                        COALESCE(SUM(pm.impressions), 0) as impressions,
-                        COALESCE(SUM(pm.clicks), 0) as clicks,
-                        COALESCE(SUM(pm.spend_micros), 0) as spend_micros
-                    FROM creatives c
-                    JOIN performance_metrics pm ON c.id = pm.creative_id
-                    WHERE pm.metric_date >= date('now', ?)
-                    GROUP BY c.id
-                    HAVING SUM(pm.impressions) > ? AND SUM(pm.spend_micros) > ?
-                """, (f"-{days} days", MIN_IMPRESSIONS_FOR_ANALYSIS, MIN_SPEND_FOR_REVIEW * 1_000_000))
-
-                return [dict(row) for row in cursor.fetchall()], avg_ctr
-
-            results, avg_ctr = await loop.run_in_executor(None, _query)
+        results = await db_query("""
+            SELECT
+                c.id,
+                COALESCE(SUM(pm.impressions), 0) as impressions,
+                COALESCE(SUM(pm.clicks), 0) as clicks,
+                COALESCE(SUM(pm.spend_micros), 0) as spend_micros
+            FROM creatives c
+            JOIN performance_metrics pm ON c.id = pm.creative_id
+            WHERE pm.metric_date >= date('now', ?)
+            GROUP BY c.id
+            HAVING COALESCE(SUM(pm.impressions), 0) > ?
+               AND COALESCE(SUM(pm.spend_micros), 0) > ?
+        """, (f"-{days} days", MIN_IMPRESSIONS_FOR_ANALYSIS, MIN_SPEND_FOR_REVIEW * 1_000_000))
 
         for row in results:
             creative_id = row["id"]
@@ -201,34 +186,22 @@ class CreativeAnalyzer:
 
     async def _check_broken_videos(self, days: int) -> list[Recommendation]:
         """Check for video creatives that may be broken."""
-        import asyncio
-
         recommendations: list[Recommendation] = []
 
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _query():
-                # Find video creatives with high queries but zero impressions
-                cursor = conn.execute("""
-                    SELECT
-                        c.id,
-                        c.format,
-                        c.video_url,
-                        COALESCE(SUM(pm.reached_queries), 0) as queries,
-                        COALESCE(SUM(pm.impressions), 0) as impressions,
-                        COALESCE(SUM(pm.spend_micros), 0) as spend_micros
-                    FROM creatives c
-                    LEFT JOIN performance_metrics pm ON c.id = pm.creative_id
-                        AND pm.metric_date >= date('now', ?)
-                    WHERE c.format = 'VIDEO'
-                    GROUP BY c.id
-                    HAVING queries > 10000 AND impressions = 0
-                """, (f"-{days} days",))
-
-                return [dict(row) for row in cursor.fetchall()]
-
-            results = await loop.run_in_executor(None, _query)
+        results = await db_query("""
+            SELECT
+                c.id,
+                COALESCE(SUM(pm.reached_queries), 0) as queries,
+                COALESCE(SUM(pm.impressions), 0) as impressions,
+                COALESCE(SUM(pm.spend_micros), 0) as spend_micros
+            FROM creatives c
+            LEFT JOIN performance_metrics pm ON c.id = pm.creative_id
+                AND pm.metric_date >= date('now', ?)
+            WHERE c.format = 'VIDEO'
+            GROUP BY c.id
+            HAVING COALESCE(SUM(pm.reached_queries), 0) > 10000
+               AND COALESCE(SUM(pm.impressions), 0) = 0
+        """, (f"-{days} days",))
 
         for row in results:
             creative_id = row["id"]
@@ -296,31 +269,21 @@ class CreativeAnalyzer:
 
     async def _check_zero_engagement(self, days: int) -> list[Recommendation]:
         """Check for creatives with impressions but zero clicks."""
-        import asyncio
-
         recommendations: list[Recommendation] = []
 
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _query():
-                cursor = conn.execute("""
-                    SELECT
-                        c.id,
-                        c.format,
-                        COALESCE(SUM(pm.impressions), 0) as impressions,
-                        COALESCE(SUM(pm.clicks), 0) as clicks,
-                        COALESCE(SUM(pm.spend_micros), 0) as spend_micros
-                    FROM creatives c
-                    LEFT JOIN performance_metrics pm ON c.id = pm.creative_id
-                        AND pm.metric_date >= date('now', ?)
-                    GROUP BY c.id
-                    HAVING impressions > ? AND clicks = 0
-                """, (f"-{days} days", MIN_IMPRESSIONS_FOR_ANALYSIS))
-
-                return [dict(row) for row in cursor.fetchall()]
-
-            results = await loop.run_in_executor(None, _query)
+        results = await db_query("""
+            SELECT
+                c.id,
+                COALESCE(SUM(pm.impressions), 0) as impressions,
+                COALESCE(SUM(pm.clicks), 0) as clicks,
+                COALESCE(SUM(pm.spend_micros), 0) as spend_micros
+            FROM creatives c
+            LEFT JOIN performance_metrics pm ON c.id = pm.creative_id
+                AND pm.metric_date >= date('now', ?)
+            GROUP BY c.id
+            HAVING COALESCE(SUM(pm.impressions), 0) > ?
+               AND COALESCE(SUM(pm.clicks), 0) = 0
+        """, (f"-{days} days", MIN_IMPRESSIONS_FOR_ANALYSIS))
 
         for row in results:
             creative_id = row["id"]
@@ -398,34 +361,22 @@ class CreativeAnalyzer:
 
     async def _check_low_win_rate(self, days: int) -> list[Recommendation]:
         """Check for creatives with very low win rates."""
-        import asyncio
-
         recommendations: list[Recommendation] = []
 
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _query():
-                cursor = conn.execute("""
-                    SELECT
-                        c.id,
-                        c.format,
-                        c.canonical_size,
-                        COALESCE(SUM(pm.reached_queries), 0) as queries,
-                        COALESCE(SUM(pm.impressions), 0) as impressions,
-                        COALESCE(SUM(pm.spend_micros), 0) as spend_micros
-                    FROM creatives c
-                    LEFT JOIN performance_metrics pm ON c.id = pm.creative_id
-                        AND pm.metric_date >= date('now', ?)
-                    GROUP BY c.id
-                    HAVING queries > 50000
-                        AND impressions > 0
-                        AND CAST(impressions AS FLOAT) / queries < ?
-                """, (f"-{days} days", LOW_WIN_RATE_THRESHOLD))
-
-                return [dict(row) for row in cursor.fetchall()]
-
-            results = await loop.run_in_executor(None, _query)
+        results = await db_query("""
+            SELECT
+                c.id,
+                COALESCE(SUM(pm.reached_queries), 0) as queries,
+                COALESCE(SUM(pm.impressions), 0) as impressions,
+                COALESCE(SUM(pm.spend_micros), 0) as spend_micros
+            FROM creatives c
+            LEFT JOIN performance_metrics pm ON c.id = pm.creative_id
+                AND pm.metric_date >= date('now', ?)
+            GROUP BY c.id
+            HAVING COALESCE(SUM(pm.reached_queries), 0) > 50000
+               AND COALESCE(SUM(pm.impressions), 0) > 0
+               AND CAST(COALESCE(SUM(pm.impressions), 0) AS FLOAT) / COALESCE(SUM(pm.reached_queries), 0) < ?
+        """, (f"-{days} days", LOW_WIN_RATE_THRESHOLD))
 
         for row in results:
             creative_id = row["id"]
@@ -480,32 +431,21 @@ class CreativeAnalyzer:
 
     async def _check_disapproved(self, days: int) -> list[Recommendation]:
         """Check for disapproved creatives still receiving traffic."""
-        import asyncio
-
         recommendations: list[Recommendation] = []
 
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _query():
-                cursor = conn.execute("""
-                    SELECT
-                        c.id,
-                        c.format,
-                        c.approval_status,
-                        COALESCE(SUM(pm.reached_queries), 0) as queries
-                    FROM creatives c
-                    LEFT JOIN performance_metrics pm ON c.id = pm.creative_id
-                        AND pm.metric_date >= date('now', ?)
-                    WHERE c.approval_status IS NOT NULL
-                        AND c.approval_status != 'APPROVED'
-                    GROUP BY c.id
-                    HAVING queries > 0
-                """, (f"-{days} days",))
-
-                return [dict(row) for row in cursor.fetchall()]
-
-            results = await loop.run_in_executor(None, _query)
+        results = await db_query("""
+            SELECT
+                c.id,
+                c.approval_status,
+                COALESCE(SUM(pm.reached_queries), 0) as queries
+            FROM creatives c
+            LEFT JOIN performance_metrics pm ON c.id = pm.creative_id
+                AND pm.metric_date >= date('now', ?)
+            WHERE c.approval_status IS NOT NULL
+                AND c.approval_status != 'APPROVED'
+            GROUP BY c.id, c.approval_status
+            HAVING COALESCE(SUM(pm.reached_queries), 0) > 0
+        """, (f"-{days} days",))
 
         for row in results:
             creative_id = row["id"]

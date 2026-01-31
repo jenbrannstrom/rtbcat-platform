@@ -28,13 +28,9 @@ This module provides analysis capabilities for RTB traffic, creative performance
 
 ```python
 from analytics import TrafficWasteAnalyzer
-from storage import SQLiteStore
-
-store = SQLiteStore()
-await store.initialize()
 
 # Traffic waste analysis
-analyzer = TrafficWasteAnalyzer(store)
+analyzer = TrafficWasteAnalyzer()
 report = await analyzer.analyze_waste(buyer_id="456", days=7)
 print(f"Waste: {report.waste_percentage}%")
 ```

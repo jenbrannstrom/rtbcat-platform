@@ -15,7 +15,6 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
 
 from analytics.recommendation_engine import (
     Action,
@@ -26,9 +25,7 @@ from analytics.recommendation_engine import (
     RecommendationType,
     Severity,
 )
-
-if TYPE_CHECKING:
-    from storage.sqlite_store import SQLiteStore
+from storage.serving_database import db_query, db_query_one
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +45,8 @@ class ConfigAnalyzer:
     - Fixing format/size mismatches
     """
 
-    def __init__(self, db_store: "SQLiteStore"):
-        self.store = db_store
+    def __init__(self, db_store: object | None = None):
+        self._store = db_store
 
     async def analyze(self, days: int = 7) -> list[Recommendation]:
         """
@@ -85,26 +82,16 @@ class ConfigAnalyzer:
 
     async def _check_overall_waste_rate(self, days: int) -> list[Recommendation]:
         """Check if overall query-to-impression rate is too low."""
-        import asyncio
-
         recommendations: list[Recommendation] = []
 
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _query():
-                cursor = conn.execute("""
-                    SELECT
-                        COALESCE(SUM(reached_queries), 0) as total_queries,
-                        COALESCE(SUM(impressions), 0) as total_impressions,
-                        COALESCE(SUM(spend_micros), 0) as total_spend_micros
-                    FROM performance_metrics
-                    WHERE metric_date >= date('now', ?)
-                """, (f"-{days} days",))
-
-                return dict(cursor.fetchone())
-
-            result = await loop.run_in_executor(None, _query)
+        result = await db_query_one("""
+            SELECT
+                COALESCE(SUM(reached_queries), 0) as total_queries,
+                COALESCE(SUM(impressions), 0) as total_impressions,
+                COALESCE(SUM(spend_micros), 0) as total_spend_micros
+            FROM performance_metrics
+            WHERE metric_date >= date('now', ?)
+        """, (f"-{days} days",)) or {}
 
         total_queries = result.get("total_queries", 0) or 0
         total_impressions = result.get("total_impressions", 0) or 0
@@ -175,49 +162,37 @@ class ConfigAnalyzer:
 
     async def _check_format_coverage(self, days: int) -> list[Recommendation]:
         """Check for format mismatches between traffic and inventory."""
-        import asyncio
-
         recommendations: list[Recommendation] = []
 
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
+        available_rows = await db_query("""
+            SELECT DISTINCT format
+            FROM creatives
+            WHERE format IS NOT NULL
+        """)
+        available_formats = {row["format"] for row in available_rows if row.get("format")}
 
-            def _query():
-                # Get formats we have creatives for
-                cursor = conn.execute("""
-                    SELECT DISTINCT format
-                    FROM creatives
-                    WHERE format IS NOT NULL
-                """)
-                available_formats = {row["format"] for row in cursor.fetchall()}
+        results = await db_query("""
+            SELECT
+                c.format,
+                COALESCE(SUM(pm.reached_queries), 0) as queries,
+                COALESCE(SUM(pm.impressions), 0) as impressions,
+                COUNT(DISTINCT c.id) as creative_count
+            FROM creatives c
+            LEFT JOIN performance_metrics pm ON c.id = pm.creative_id
+                AND pm.metric_date >= date('now', ?)
+            WHERE c.format IS NOT NULL
+            GROUP BY c.format
+        """, (f"-{days} days",))
 
-                # Get traffic by format from performance data
-                # Note: This assumes format data is available
-                cursor = conn.execute("""
-                    SELECT
-                        c.format,
-                        COALESCE(SUM(pm.reached_queries), 0) as queries,
-                        COALESCE(SUM(pm.impressions), 0) as impressions,
-                        COUNT(DISTINCT c.id) as creative_count
-                    FROM creatives c
-                    LEFT JOIN performance_metrics pm ON c.id = pm.creative_id
-                        AND pm.metric_date >= date('now', ?)
-                    WHERE c.format IS NOT NULL
-                    GROUP BY c.format
-                """, (f"-{days} days",))
-
-                results = []
-                for row in cursor.fetchall():
-                    results.append({
-                        "format": row["format"],
-                        "queries": row["queries"] or 0,
-                        "impressions": row["impressions"] or 0,
-                        "creative_count": row["creative_count"] or 0,
-                    })
-
-                return results, available_formats
-
-            results, available_formats = await loop.run_in_executor(None, _query)
+        results = [
+            {
+                "format": row["format"],
+                "queries": row["queries"] or 0,
+                "impressions": row["impressions"] or 0,
+                "creative_count": row["creative_count"] or 0,
+            }
+            for row in results
+        ]
 
         for row in results:
             fmt = row["format"]
@@ -296,32 +271,22 @@ class ConfigAnalyzer:
 
     async def _check_device_efficiency(self, days: int) -> list[Recommendation]:
         """Check for device types with poor performance."""
-        import asyncio
-
         recommendations: list[Recommendation] = []
 
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _query():
-                cursor = conn.execute("""
-                    SELECT
-                        pm.device_type,
-                        COALESCE(SUM(pm.reached_queries), 0) as queries,
-                        COALESCE(SUM(pm.impressions), 0) as impressions,
-                        COALESCE(SUM(pm.clicks), 0) as clicks,
-                        COALESCE(SUM(pm.spend_micros), 0) as spend_micros
-                    FROM performance_metrics pm
-                    WHERE pm.metric_date >= date('now', ?)
-                      AND pm.device_type IS NOT NULL
-                      AND pm.device_type != ''
-                    GROUP BY pm.device_type
-                    HAVING queries > ?
-                """, (f"-{days} days", MIN_QUERIES_FOR_ANALYSIS))
-
-                return [dict(row) for row in cursor.fetchall()]
-
-            results = await loop.run_in_executor(None, _query)
+        results = await db_query("""
+            SELECT
+                pm.device_type,
+                COALESCE(SUM(pm.reached_queries), 0) as queries,
+                COALESCE(SUM(pm.impressions), 0) as impressions,
+                COALESCE(SUM(pm.clicks), 0) as clicks,
+                COALESCE(SUM(pm.spend_micros), 0) as spend_micros
+            FROM performance_metrics pm
+            WHERE pm.metric_date >= date('now', ?)
+              AND pm.device_type IS NOT NULL
+              AND pm.device_type != ''
+            GROUP BY pm.device_type
+            HAVING COALESCE(SUM(pm.reached_queries), 0) > ?
+        """, (f"-{days} days", MIN_QUERIES_FOR_ANALYSIS))
 
         for row in results:
             device = row["device_type"]
