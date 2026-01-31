@@ -10,21 +10,21 @@ from pathlib import Path
 from typing import Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from api.dependencies import get_store, get_current_user, resolve_buyer_id, require_buyer_access
 from services.auth_service import User
 from services.creative_performance_service import CreativePerformanceService
 from services.creative_preview_service import CreativePreviewService
-from services.creative_language_service import CreativeLanguageService
 from services.creative_countries_service import CreativeCountriesService
+from services.creatives_service import CreativesService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Creatives"])
 preview_service = CreativePreviewService()
-language_service = CreativeLanguageService()
 countries_service = CreativeCountriesService()
+creatives_service = CreativesService()
 
 
 # =============================================================================
@@ -124,42 +124,6 @@ class CreativeResponse(BaseModel):
     language_analysis_error: Optional[str] = None
 
 
-class LanguageDetectionResponse(BaseModel):
-    """Response model for language detection."""
-    creative_id: str
-    detected_language: Optional[str] = None
-    detected_language_code: Optional[str] = None
-    language_confidence: Optional[float] = None
-    language_source: Optional[str] = None
-    language_analyzed_at: Optional[str] = None
-    language_analysis_error: Optional[str] = None
-    success: bool = False
-
-
-class GeoMismatchAlert(BaseModel):
-    """Response model for geo-language mismatch alert."""
-    severity: str  # "warning"
-    language: str
-    language_code: str
-    mismatched_countries: list[str]
-    expected_countries: list[str]
-    message: str
-
-
-class GeoMismatchResponse(BaseModel):
-    """Response for geo-mismatch check."""
-    creative_id: str
-    has_mismatch: bool
-    alert: Optional[GeoMismatchAlert] = None
-    serving_countries: list[str] = []
-
-
-class ManualLanguageUpdate(BaseModel):
-    """Request model for manual language update."""
-    detected_language: str = Field(..., min_length=1, description="Language name (e.g., 'German')")
-    detected_language_code: str = Field(..., min_length=2, max_length=3, description="ISO 639-1 code (e.g., 'de')")
-
-
 class ClusterAssignment(BaseModel):
     """Request model for cluster assignment."""
     creative_id: str
@@ -209,69 +173,22 @@ class CreativeCountryBreakdownResponse(BaseModel):
     period_days: int
 
 
-async def _get_thumbnail_status_for_creatives(
-    store: Any, creative_ids: list[str]
-) -> dict[str, ThumbnailStatusResponse]:
-    """Get thumbnail status for multiple creatives.
-
-    Returns a dict mapping creative_id to ThumbnailStatusResponse.
-    """
-    if not creative_ids:
-        return {}
-
-    statuses = await store.get_thumbnail_statuses(creative_ids)
-    thumbnails_dir = Path.home() / ".catscan" / "thumbnails"
-
-    result = {}
-    for cid in creative_ids:
-        status_data = statuses.get(cid)
-        has_thumbnail = (thumbnails_dir / f"{cid}.jpg").exists()
-
-        if status_data:
-            result[cid] = ThumbnailStatusResponse(
-                status=status_data["status"],
-                error_reason=status_data["error_reason"],
-                has_thumbnail=has_thumbnail,
-                thumbnail_url=status_data.get("thumbnail_url"),  # Phase 22: HTML thumbnails
-            )
-        else:
-            result[cid] = ThumbnailStatusResponse(
-                status=None,
-                error_reason=None,
-                has_thumbnail=has_thumbnail,
-                thumbnail_url=None,
-            )
-
-    return result
+def _convert_thumbnail_status(ts) -> ThumbnailStatusResponse:
+    """Convert service ThumbnailStatus to response model."""
+    return ThumbnailStatusResponse(
+        status=ts.status,
+        error_reason=ts.error_reason,
+        has_thumbnail=ts.has_thumbnail,
+        thumbnail_url=ts.thumbnail_url,
+    )
 
 
-async def _get_waste_flags_for_creatives(
-    creative_ids: list[str],
-    thumbnail_statuses: dict[str, ThumbnailStatusResponse],
-    days: int = 7,
-) -> dict[str, WasteFlagsResponse]:
-    """Compute waste flags for multiple creatives."""
-    service = CreativePerformanceService()
-    status_map = {
-        cid: {"status": ts.status} for cid, ts in thumbnail_statuses.items()
-    }
-    flags = await service.get_waste_flags(creative_ids, status_map, days)
-    return {
-        cid: WasteFlagsResponse(
-            broken_video=data["broken_video"],
-            zero_engagement=data["zero_engagement"],
-        )
-        for cid, data in flags.items()
-    }
-
-
-async def _get_primary_countries_for_creatives(
-    creative_ids: list[str],
-    days: int = 7,
-) -> dict[str, str]:
-    """Get the primary country (by spend) for each creative."""
-    service = CreativePerformanceService()
-    return await service.get_primary_countries(creative_ids, days)
+def _convert_waste_flags(wf) -> WasteFlagsResponse:
+    """Convert service WasteFlags to response model."""
+    return WasteFlagsResponse(
+        broken_video=wf.broken_video,
+        zero_engagement=wf.zero_engagement,
+    )
 
 
 # =============================================================================
@@ -311,17 +228,11 @@ async def list_creatives(
 
     # If active_only, filter to creatives with activity in timeframe
     if active_only and creatives:
-        creative_ids = [c.id for c in creatives]
-        perf_service = CreativePerformanceService()
-        active_ids = await perf_service.get_active_creative_ids(creative_ids, days)
-        if active_ids:
-            creatives = [c for c in creatives if c.id in active_ids][:limit]
+        creatives = await creatives_service.filter_active_creatives(creatives, days, limit)
 
-    # Get thumbnail status, waste flags, and country data for all creatives
+    # Get thumbnail status, waste flags, and country data via service
     creative_ids = [c.id for c in creatives]
-    thumbnail_statuses = await _get_thumbnail_status_for_creatives(store, creative_ids)
-    waste_flags = await _get_waste_flags_for_creatives(creative_ids, thumbnail_statuses, days)
-    country_data = await _get_primary_countries_for_creatives(creative_ids, days)
+    ctx = await creatives_service.get_list_context(store, creative_ids, days)
 
     return [
         CreativeResponse(
@@ -344,9 +255,9 @@ async def list_creatives(
             campaign_id=c.campaign_id,
             cluster_id=c.cluster_id,
             seat_name=c.seat_name,
-            country=country_data.get(c.id),
-            thumbnail_status=thumbnail_statuses.get(c.id),
-            waste_flags=waste_flags.get(c.id),
+            country=ctx.country_data.get(c.id),
+            thumbnail_status=_convert_thumbnail_status(ctx.thumbnail_statuses[c.id]) if c.id in ctx.thumbnail_statuses else None,
+            waste_flags=_convert_waste_flags(ctx.waste_flags[c.id]) if c.id in ctx.waste_flags else None,
             # Phase 29: App info and disapproval
             app_id=c.app_id,
             app_name=c.app_name,
@@ -361,10 +272,10 @@ async def list_creatives(
             language_source=c.language_source,
             language_analyzed_at=c.language_analyzed_at.isoformat() if c.language_analyzed_at else None,
             language_analysis_error=c.language_analysis_error,
-            **preview_service.build_preview(
+            **creatives_service.build_preview(
                 c,
                 slim=slim,
-                html_thumbnail_url=thumbnail_statuses.get(c.id).thumbnail_url if thumbnail_statuses.get(c.id) else None
+                html_thumbnail_url=ctx.thumbnail_statuses[c.id].thumbnail_url if c.id in ctx.thumbnail_statuses else None
             ),
         )
         for c in creatives
@@ -392,14 +303,13 @@ async def list_creatives_paginated(
     """
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
 
-    # Get total count for pagination (use same backend as list_creatives)
+    # Get total count for pagination
     total = await store.get_creative_count(
         buyer_id=buyer_id,
         format=format,
     )
 
     # Fetch creatives
-    from storage.serving_database import db_query
     creatives = await store.list_creatives(
         campaign_id=campaign_id,
         cluster_id=cluster_id,
@@ -411,17 +321,11 @@ async def list_creatives_paginated(
 
     # Filter by activity if requested
     if active_only and creatives:
-        creative_ids = [c.id for c in creatives]
-        perf_service = CreativePerformanceService()
-        active_ids = await perf_service.get_active_creative_ids(creative_ids, days)
-        if active_ids:
-            creatives = [c for c in creatives if c.id in active_ids][:limit]
+        creatives = await creatives_service.filter_active_creatives(creatives, days, limit)
 
-    # Get thumbnail status, waste flags, and country data
+    # Get thumbnail status, waste flags, and country data via service
     creative_ids = [c.id for c in creatives]
-    thumbnail_statuses = await _get_thumbnail_status_for_creatives(store, creative_ids)
-    waste_flags = await _get_waste_flags_for_creatives(creative_ids, thumbnail_statuses, days)
-    country_data = await _get_primary_countries_for_creatives(creative_ids, days)
+    ctx = await creatives_service.get_list_context(store, creative_ids, days)
 
     data = [
         CreativeResponse(
@@ -444,9 +348,9 @@ async def list_creatives_paginated(
             campaign_id=c.campaign_id,
             cluster_id=c.cluster_id,
             seat_name=c.seat_name,
-            country=country_data.get(c.id),
-            thumbnail_status=thumbnail_statuses.get(c.id),
-            waste_flags=waste_flags.get(c.id),
+            country=ctx.country_data.get(c.id),
+            thumbnail_status=_convert_thumbnail_status(ctx.thumbnail_statuses[c.id]) if c.id in ctx.thumbnail_statuses else None,
+            waste_flags=_convert_waste_flags(ctx.waste_flags[c.id]) if c.id in ctx.waste_flags else None,
             # Phase 29: App info and disapproval
             app_id=c.app_id,
             app_name=c.app_name,
@@ -461,10 +365,10 @@ async def list_creatives_paginated(
             language_source=c.language_source,
             language_analyzed_at=c.language_analyzed_at.isoformat() if c.language_analyzed_at else None,
             language_analysis_error=c.language_analysis_error,
-            **preview_service.build_preview(
+            **creatives_service.build_preview(
                 c,
                 slim=slim,
-                html_thumbnail_url=thumbnail_statuses.get(c.id).thumbnail_url if thumbnail_statuses.get(c.id) else None
+                html_thumbnail_url=ctx.thumbnail_statuses[c.id].thumbnail_url if c.id in ctx.thumbnail_statuses else None
             ),
         )
         for c in creatives
@@ -591,9 +495,8 @@ async def get_creative(
     if creative.buyer_id:
         await require_buyer_access(creative.buyer_id, store=store, user=user)
 
-    # Get thumbnail status and waste flags
-    thumbnail_statuses = await _get_thumbnail_status_for_creatives(store, [creative_id])
-    waste_flags = await _get_waste_flags_for_creatives([creative_id], thumbnail_statuses, days)
+    # Get thumbnail status and waste flags via service
+    ctx = await creatives_service.get_list_context(store, [creative_id], days)
 
     return CreativeResponse(
         id=creative.id,
@@ -615,8 +518,8 @@ async def get_creative(
         campaign_id=creative.campaign_id,
         cluster_id=creative.cluster_id,
         seat_name=creative.seat_name,
-        thumbnail_status=thumbnail_statuses.get(creative_id),
-        waste_flags=waste_flags.get(creative_id),
+        thumbnail_status=_convert_thumbnail_status(ctx.thumbnail_statuses[creative_id]) if creative_id in ctx.thumbnail_statuses else None,
+        waste_flags=_convert_waste_flags(ctx.waste_flags[creative_id]) if creative_id in ctx.waste_flags else None,
         # Phase 29: App info and disapproval
         app_id=creative.app_id,
         app_name=creative.app_name,
@@ -631,9 +534,9 @@ async def get_creative(
         language_source=creative.language_source,
         language_analyzed_at=creative.language_analyzed_at.isoformat() if creative.language_analyzed_at else None,
         language_analysis_error=creative.language_analysis_error,
-        **preview_service.build_preview(
+        **creatives_service.build_preview(
             creative,
-            html_thumbnail_url=thumbnail_statuses.get(creative_id).thumbnail_url if thumbnail_statuses.get(creative_id) else None
+            html_thumbnail_url=ctx.thumbnail_statuses[creative_id].thumbnail_url if creative_id in ctx.thumbnail_statuses else None
         ),
     )
 
@@ -712,102 +615,3 @@ async def get_creative_countries(
 
     payload = await countries_service.build_country_metrics(creative_id, days)
     return CreativeCountryBreakdownResponse(**payload)
-
-
-# =============================================================================
-# Language Detection Endpoints
-# =============================================================================
-
-@router.post("/creatives/{creative_id}/analyze-language", response_model=LanguageDetectionResponse)
-async def analyze_creative_language(
-    creative_id: str,
-    force: bool = Query(False, description="Force re-analysis even if already analyzed"),
-    store=Depends(get_store),
-    user: User = Depends(get_current_user),
-):
-    """Analyze a creative's content to detect its language.
-
-    Uses Gemini API to detect language from HTML, VAST, or Native content.
-    Set force=true to re-analyze even if previously analyzed.
-
-    Requires GEMINI_API_KEY environment variable to be set.
-    """
-    creative = await store.get_creative(creative_id)
-    if not creative:
-        raise HTTPException(status_code=404, detail="Creative not found")
-    if creative.buyer_id:
-        await require_buyer_access(creative.buyer_id, store=store, user=user)
-
-    response = await language_service.analyze_language(
-        creative=creative,
-        store=store,
-        force=force,
-    )
-
-    return LanguageDetectionResponse(**response)
-
-
-@router.put("/creatives/{creative_id}/language", response_model=LanguageDetectionResponse)
-async def update_creative_language(
-    creative_id: str,
-    update: ManualLanguageUpdate,
-    store=Depends(get_store),
-    user: User = Depends(get_current_user),
-):
-    """Manually update a creative's detected language.
-
-    Use this endpoint when automated detection was incorrect
-    and you want to manually specify the correct language.
-    """
-    creative = await store.get_creative(creative_id)
-    if not creative:
-        raise HTTPException(status_code=404, detail="Creative not found")
-    if creative.buyer_id:
-        await require_buyer_access(creative.buyer_id, store=store, user=user)
-
-    response = await language_service.update_manual_language(
-        creative=creative,
-        update=update,
-        store=store,
-    )
-
-    return LanguageDetectionResponse(**response)
-
-
-@router.get("/creatives/{creative_id}/geo-mismatch", response_model=GeoMismatchResponse)
-async def get_creative_geo_mismatch(
-    creative_id: str,
-    days: int = Query(7, ge=1, le=90, description="Days to look back for serving data"),
-    store=Depends(get_store),
-    user: User = Depends(get_current_user),
-):
-    """Check if a creative's language matches its serving countries.
-
-    Returns an alert if the detected language doesn't match the countries
-    where the creative is being served, indicating a potential localization issue.
-    """
-    creative = await store.get_creative(creative_id)
-    if not creative:
-        raise HTTPException(status_code=404, detail="Creative not found")
-    if creative.buyer_id:
-        await require_buyer_access(creative.buyer_id, store=store, user=user)
-
-    mismatch = await language_service.get_geo_mismatch(
-        creative=creative,
-        days=days,
-    )
-
-    if mismatch["alert"]:
-        return GeoMismatchResponse(
-            creative_id=creative_id,
-            has_mismatch=mismatch["has_mismatch"],
-            alert=GeoMismatchAlert(**mismatch["alert"]),
-            serving_countries=mismatch["serving_countries"],
-        )
-
-    return GeoMismatchResponse(
-        creative_id=creative_id,
-        has_mismatch=mismatch["has_mismatch"],
-        alert=None,
-        serving_countries=mismatch["serving_countries"],
-    )
