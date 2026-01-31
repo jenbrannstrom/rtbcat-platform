@@ -8,7 +8,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 from fastapi import FastAPI
 
@@ -53,10 +53,8 @@ from api.auth import APIKeyAuthMiddleware
 from api.session_middleware import SessionAuthMiddleware
 from api.auth_oauth_proxy import router as auth_router, cleanup_sessions
 from config import ConfigManager
-from storage import SQLiteStore
 from storage.postgres_store import PostgresStore
 from storage.serving_database import configure_serving_database
-from api.dependencies import use_postgres
 from api.campaigns_router import router as campaigns_router
 from api.routers import (
     system_router,
@@ -85,8 +83,8 @@ from api.dependencies import set_store, set_config_manager, startup_event
 
 logger = logging.getLogger(__name__)
 
-# Global instances - can be SQLiteStore or PostgresStore
-_store: Optional[Union[SQLiteStore, PostgresStore]] = None
+# Global instances - Postgres only
+_store: Optional[PostgresStore] = None
 _config_manager: Optional[ConfigManager] = None
 
 
@@ -111,13 +109,8 @@ async def lifespan(app: FastAPI):
         )
     configure_serving_database(serving_dsn)
 
-    # Use PostgresStore when Postgres backend is configured
-    if use_postgres():
-        logger.info("Using PostgresStore for state storage")
-        _store = PostgresStore()
-    else:
-        logger.info("Using SQLiteStore for state storage (legacy)")
-        _store = SQLiteStore()
+    logger.info("Using PostgresStore for state storage")
+    _store = PostgresStore()
     await _store.initialize()
 
     # Set dependencies for routers
