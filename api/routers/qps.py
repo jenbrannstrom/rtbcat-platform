@@ -9,19 +9,10 @@ This module provides endpoints for QPS (Queries Per Second) optimization analysi
 """
 
 import logging
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, HTTPException, Query
 
 from api.schemas.qps import QPSSummaryResponse, QPSReportResponse
-from importers import (
-    get_import_summary,
-    QpsSizeCoverageAnalyzer,
-    ConfigPerformanceTracker,
-    FraudSignalDetector,
-    ACCOUNT_ID,
-    ACCOUNT_NAME,
-)
+from services.qps_service import QpsService
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +27,7 @@ async def get_qps_summary():
     Returns counts of rows, dates, sizes, and totals from size_metrics_daily.
     """
     try:
-        summary = get_import_summary()
+        summary = QpsService().get_summary()
         return QPSSummaryResponse(
             total_rows=summary["total_rows"],
             unique_dates=summary["unique_dates"],
@@ -66,14 +57,8 @@ async def get_size_coverage_report(days: int = Query(7, ge=1, le=90)):
         days: Number of days to analyze (default: 7)
     """
     try:
-        analyzer = QpsSizeCoverageAnalyzer()
-        report_text = analyzer.generate_report(days)
-
-        return QPSReportResponse(
-            report=report_text,
-            generated_at=datetime.now(timezone.utc).isoformat(),
-            analysis_days=days,
-        )
+        report = QpsService().size_coverage_report(days)
+        return QPSReportResponse(**report)
     except Exception as e:
         logger.error(f"Failed to generate size coverage: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -91,14 +76,8 @@ async def get_config_performance_report(days: int = Query(7, ge=1, le=90)):
         days: Number of days to analyze (default: 7)
     """
     try:
-        tracker = ConfigPerformanceTracker()
-        report_text = tracker.generate_report(days)
-
-        return QPSReportResponse(
-            report=report_text,
-            generated_at=datetime.now(timezone.utc).isoformat(),
-            analysis_days=days,
-        )
+        report = QpsService().config_performance_report(days)
+        return QPSReportResponse(**report)
     except Exception as e:
         logger.error(f"Failed to generate config performance: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -119,14 +98,8 @@ async def get_fraud_signals_report(days: int = Query(14, ge=1, le=90)):
         days: Number of days to analyze (default: 14)
     """
     try:
-        detector = FraudSignalDetector()
-        report_text = detector.generate_report(days)
-
-        return QPSReportResponse(
-            report=report_text,
-            generated_at=datetime.now(timezone.utc).isoformat(),
-            analysis_days=days,
-        )
+        report = QpsService().fraud_signals_report(days)
+        return QPSReportResponse(**report)
     except Exception as e:
         logger.error(f"Failed to generate fraud signals: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -146,55 +119,8 @@ async def get_full_qps_report(days: int = Query(7, ge=1, le=90)):
         days: Number of days to analyze (default: 7)
     """
     try:
-        lines = []
-        lines.append("")
-        lines.append("=" * 80)
-        lines.append("Cat-Scan QPS OPTIMIZATION FULL REPORT")
-        lines.append("=" * 80)
-        lines.append("")
-        lines.append(f"Account: {ACCOUNT_NAME} (ID: {ACCOUNT_ID})")
-        lines.append(f"Generated: {datetime.now(timezone.utc).isoformat()}")
-        lines.append(f"Analysis Period: {days} days")
-        lines.append("")
-
-        # Size Coverage
-        try:
-            analyzer = QpsSizeCoverageAnalyzer()
-            lines.append(analyzer.generate_report(days))
-            lines.append("")
-        except Exception as e:
-            lines.append(f"Size Coverage: Error - {e}")
-            lines.append("")
-
-        # Config Performance
-        try:
-            tracker = ConfigPerformanceTracker()
-            lines.append(tracker.generate_report(days))
-            lines.append("")
-        except Exception as e:
-            lines.append(f"Config Performance: Error - {e}")
-            lines.append("")
-
-        # Fraud Signals
-        try:
-            detector = FraudSignalDetector()
-            lines.append(detector.generate_report(days * 2))
-            lines.append("")
-        except Exception as e:
-            lines.append(f"Fraud Signals: Error - {e}")
-            lines.append("")
-
-        lines.append("=" * 80)
-        lines.append("END OF FULL REPORT")
-        lines.append("=" * 80)
-
-        report_text = "\n".join(lines)
-
-        return QPSReportResponse(
-            report=report_text,
-            generated_at=datetime.now(timezone.utc).isoformat(),
-            analysis_days=days,
-        )
+        report = QpsService().full_report(days)
+        return QPSReportResponse(**report)
     except Exception as e:
         logger.error(f"Failed to generate full report: {e}")
         raise HTTPException(status_code=500, detail=str(e))
