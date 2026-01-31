@@ -5,10 +5,6 @@ This module provides system status and thumbnail management endpoints.
 
 import logging
 import os
-import shutil
-import subprocess
-import sys
-import json
 from pathlib import Path
 from typing import Optional
 
@@ -130,101 +126,6 @@ class HTMLThumbnailResponse(BaseModel):
     failed: int
     no_image_found: int
     message: Optional[str] = None
-
-
-# =============================================================================
-# Helper Functions
-# =============================================================================
-
-
-def _get_thumbnails_dir() -> Path:
-    """Get the thumbnails directory, creating if needed."""
-    thumb_dir = Path.home() / ".catscan" / "thumbnails"
-    thumb_dir.mkdir(parents=True, exist_ok=True)
-    return thumb_dir
-
-
-def _check_ffmpeg() -> bool:
-    """Check if ffmpeg is available."""
-    if shutil.which("ffmpeg") is not None:
-        return True
-    for path in ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/opt/homebrew/bin/ffmpeg"]:
-        if os.path.isfile(path) and os.access(path, os.X_OK):
-            return True
-    return False
-
-
-def _get_ffmpeg_path() -> str:
-    """Get the ffmpeg executable path."""
-    path = shutil.which("ffmpeg")
-    if path:
-        return path
-    for path in ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/opt/homebrew/bin/ffmpeg"]:
-        if os.path.isfile(path) and os.access(path, os.X_OK):
-            return path
-    return "ffmpeg"
-
-
-def _classify_ffmpeg_error(returncode: int, stderr: str, url: str) -> str:
-    """Classify ffmpeg error into categories."""
-    stderr_lower = stderr.lower() if stderr else ""
-
-    if "403" in stderr or "forbidden" in stderr_lower:
-        return "url_expired"
-    if "404" in stderr or "not found" in stderr_lower:
-        return "url_not_found"
-    if "timed out" in stderr_lower or "timeout" in stderr_lower:
-        return "timeout"
-    if "protocol" in stderr_lower or "invalid" in stderr_lower:
-        return "invalid_url"
-    if "network" in stderr_lower or "connection" in stderr_lower:
-        return "network_error"
-
-    return "unknown"
-
-
-def _generate_thumbnail_ffmpeg(video_url: str, output_path: Path, timeout: int = 15) -> dict:
-    """Generate thumbnail from video URL using ffmpeg."""
-    try:
-        cmd = [
-            _get_ffmpeg_path(),
-            "-y",
-            "-ss", "1",
-            "-t", "2",
-            "-rw_timeout", "5000000",
-            "-i", video_url,
-            "-vframes", "1",
-            "-vf", "scale='min(480,iw)':'-1'",
-            "-q:v", "2",
-            str(output_path)
-        ]
-
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            timeout=timeout,
-            text=True
-        )
-
-        if result.returncode == 0 and output_path.exists():
-            return {'success': True, 'error_reason': None}
-        else:
-            error_reason = _classify_ffmpeg_error(result.returncode, result.stderr, video_url)
-            return {'success': False, 'error_reason': error_reason}
-
-    except subprocess.TimeoutExpired:
-        return {'success': False, 'error_reason': 'timeout'}
-    except Exception:
-        return {'success': False, 'error_reason': 'unknown'}
-
-
-def _extract_video_url_from_vast(vast_xml: str) -> str | None:
-    """Extract video URL from VAST XML."""
-    if not vast_xml:
-        return None
-    import re
-    match = re.search(r'<MediaFile[^>]*>(?:<!\[CDATA\[)?(https?://[^\]<]+)', vast_xml)
-    return match.group(1).strip() if match else None
 
 
 # =============================================================================
