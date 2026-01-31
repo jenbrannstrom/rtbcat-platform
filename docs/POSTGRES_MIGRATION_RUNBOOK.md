@@ -300,6 +300,18 @@ The precompute refresh covers:
 
 **Note:** If `bq_aggregate_to_pg.py` does not include an `rtb_publisher_daily` aggregation, that table will remain empty. Add or update the aggregation query to populate it.
 
+### Production refresh cadence (recommended)
+
+- **On each import:** refresh the last **7 days** for the affected `buyer_id`.
+  ```bash
+  python scripts/refresh_precompute.py --days 7 --buyer-id BUYER_ACCOUNT_ID --validate
+  ```
+- **Nightly:** full refresh for the last **90 days** (all seats).
+  ```bash
+  python scripts/refresh_precompute.py --days 90 --validate
+  ```
+- **Weekly validation:** log row counts and min/max dates for `home_*_daily`, `rtb_*_daily`, and `config_*_daily`, and confirm `precompute_refresh_log` has recent entries.
+
 ## 4) Switch the UI to Postgres once validated
 
 1. Validate the precompute outputs (use the `--validate` flag above and spot-check in BigQuery/Postgres).
