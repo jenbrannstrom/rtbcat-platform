@@ -6,12 +6,7 @@ actionable recommendations.
 
 Example:
     >>> from analytics import TrafficWasteAnalyzer
-    >>> from storage import SQLiteStore
-    >>>
-    >>> store = SQLiteStore()
-    >>> await store.initialize()
-    >>>
-    >>> analyzer = TrafficWasteAnalyzer(store)
+    >>> analyzer = TrafficWasteAnalyzer()
     >>> report = await analyzer.analyze_waste(buyer_id="456", days=7)
     >>>
     >>> print(f"Waste: {report.waste_percentage}%")
@@ -22,7 +17,7 @@ Example:
 import logging
 import re
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from analytics.waste_models import SizeCoverage, SizeGap, TrafficRecord, WasteReport, ProblemFormat
 from storage.serving_database import db_query
@@ -32,9 +27,6 @@ from utils.size_normalization import (
     canonical_size_with_tolerance,
     get_size_category,
 )
-
-if TYPE_CHECKING:
-    from storage.sqlite_store import SQLiteStore
 
 logger = logging.getLogger(__name__)
 
@@ -56,15 +48,15 @@ class TrafficWasteAnalyzer:
     you're receiving traffic but cannot bid.
 
     Attributes:
-        store: SQLiteStore instance for database access.
+        store: Optional data store for creative inventory lookups.
     """
 
-    def __init__(self, db_store):
+    def __init__(self, db_store: object | None = None):
         """Initialize the waste analyzer.
 
         Args:
-            db_store: SQLiteStore instance for accessing creative inventory
-                and traffic data.
+            db_store: Optional store for accessing creative inventory
+                and traffic data (PostgresStore supported).
         """
         self.store = db_store
 
@@ -252,27 +244,27 @@ class TrafficWasteAnalyzer:
         Returns:
             Dictionary mapping canonical_size to count and format breakdown.
         """
-        # Get all creatives
-        creatives = await self.store.list_creatives(
-            buyer_id=buyer_id,
-            limit=10000,
-        )
+        query = """
+            SELECT canonical_size, format, COUNT(*) as count
+            FROM creatives
+            WHERE canonical_size IS NOT NULL
+        """
+        params: list = []
+        if buyer_id:
+            query += " AND buyer_id = ?"
+            params.append(buyer_id)
+        query += " GROUP BY canonical_size, format"
+
+        rows = await db_query(query, tuple(params))
 
         inventory: Dict[str, dict] = {}
-
-        for creative in creatives:
-            size = creative.canonical_size
-            if not size:
-                continue
-
+        for row in rows:
+            size = row["canonical_size"]
             if size not in inventory:
                 inventory[size] = {"count": 0, "formats": {}}
-
-            inventory[size]["count"] += 1
-
-            # Track format breakdown
-            fmt = creative.format or "UNKNOWN"
-            inventory[size]["formats"][fmt] = inventory[size]["formats"].get(fmt, 0) + 1
+            inventory[size]["count"] += row["count"]
+            fmt = row["format"] or "UNKNOWN"
+            inventory[size]["formats"][fmt] = row["count"]
 
         return inventory
 
@@ -290,25 +282,21 @@ class TrafficWasteAnalyzer:
         Returns:
             Dictionary mapping canonical_size to request count and raw sizes.
         """
-        # Get traffic data from database
-        if hasattr(self.store, "get_traffic_data"):
-            traffic_data = await self.store.get_traffic_data(buyer_id=buyer_id, days=days)
-        else:
-            query = """
-                SELECT
-                    canonical_size,
-                    raw_size,
-                    SUM(request_count) as request_count,
-                    buyer_id
-                FROM rtb_traffic
-                WHERE date >= date('now', ?)
-            """
-            params: list = [f"-{days} days"]
-            if buyer_id:
-                query += " AND buyer_id = ?"
-                params.append(buyer_id)
-            query += " GROUP BY canonical_size, raw_size, buyer_id"
-            traffic_data = await db_query(query, tuple(params))
+        query = """
+            SELECT
+                canonical_size,
+                raw_size,
+                SUM(request_count) as request_count,
+                buyer_id
+            FROM rtb_traffic
+            WHERE date >= date('now', ?)
+        """
+        params: list = [f"-{days} days"]
+        if buyer_id:
+            query += " AND buyer_id = ?"
+            params.append(buyer_id)
+        query += " GROUP BY canonical_size, raw_size, buyer_id"
+        traffic_data = await db_query(query, tuple(params))
 
         traffic: Dict[str, dict] = {}
 
@@ -557,118 +545,111 @@ class TrafficWasteAnalyzer:
         problems: List[ProblemFormat] = []
 
         try:
-            async with self.store._connection() as conn:
-                import asyncio
-                loop = asyncio.get_event_loop()
+            buyer_filter = ""
+            buyer_params: list = []
+            if buyer_id:
+                buyer_filter = "AND c.buyer_id = ?"
+                buyer_params.append(buyer_id)
 
-                def _detect():
-                    result = []
+            disapproved_rows = await db_query(f"""
+                SELECT c.id, c.approval_status, c.format
+                FROM creatives c
+                WHERE c.approval_status != 'APPROVED'
+                  AND c.approval_status IS NOT NULL
+                  {buyer_filter}
+            """, tuple(buyer_params))
 
-                    # Build buyer filter
-                    buyer_filter = ""
-                    buyer_param = ()
-                    if buyer_id:
-                        buyer_filter = "AND c.buyer_id = ?"
-                        buyer_param = (buyer_id,)
+            for row in disapproved_rows:
+                problems.append(ProblemFormat(
+                    creative_id=row["id"],
+                    problem_type="disapproved",
+                    evidence={
+                        "approval_status": row["approval_status"],
+                        "format": row["format"],
+                    },
+                    severity="high",
+                    recommendation="Review disapproval reason and fix or remove creative",
+                ))
 
-                    # 1. Disapproved creatives
-                    cursor = conn.execute(f"""
-                        SELECT c.id, c.approval_status, c.format, c.width, c.height
-                        FROM creatives c
-                        WHERE c.approval_status != 'APPROVED'
-                          AND c.approval_status IS NOT NULL
-                          {buyer_filter}
-                    """, buyer_param)
+            size_rows = await db_query(f"""
+                SELECT c.id, c.width, c.height, c.format
+                FROM creatives c
+                WHERE c.width > 0 AND c.height > 0
+                  {buyer_filter}
+            """, tuple(buyer_params))
 
-                    for row in cursor.fetchall():
-                        result.append(ProblemFormat(
-                            creative_id=row['id'],
-                            problem_type='disapproved',
-                            evidence={
-                                'approval_status': row['approval_status'],
-                                'format': row['format'],
-                            },
-                            severity='high',
-                            recommendation='Review disapproval reason and fix or remove creative',
-                        ))
+            for row in size_rows:
+                width = row["width"]
+                height = row["height"]
+                canonical = canonical_size_with_tolerance(width, height, size_tolerance)
+                if canonical.startswith("Non-Standard"):
+                    problems.append(ProblemFormat(
+                        creative_id=row["id"],
+                        problem_type="non_standard",
+                        evidence={
+                            "width": width,
+                            "height": height,
+                            "canonical_size": canonical,
+                            "format": row["format"],
+                        },
+                        severity="medium",
+                        recommendation=(
+                            f"Size {width}x{height} is non-standard. "
+                            "Consider resizing to nearest IAB standard."
+                        ),
+                    ))
 
-                    # 2. Non-standard sizes (using tolerance)
-                    cursor = conn.execute(f"""
-                        SELECT c.id, c.width, c.height, c.format
-                        FROM creatives c
-                        WHERE c.width > 0 AND c.height > 0
-                          {buyer_filter}
-                    """, buyer_param)
+            perf_params: list = [f"-{days} days"]
+            perf_params.extend(buyer_params)
+            perf_rows = await db_query(f"""
+                SELECT c.id, c.format,
+                       COALESCE(SUM(pm.reached_queries), 0) as queries,
+                       COALESCE(SUM(pm.impressions), 0) as impressions,
+                       COALESCE(SUM(pm.spend_micros), 0) as spend
+                FROM creatives c
+                LEFT JOIN performance_metrics pm ON c.id = pm.creative_id
+                  AND pm.metric_date >= date('now', ?)
+                WHERE 1=1 {buyer_filter}
+                GROUP BY c.id, c.format
+                HAVING COALESCE(SUM(pm.reached_queries), 0) > 1000
+            """, tuple(perf_params))
 
-                    for row in cursor.fetchall():
-                        width = row['width']
-                        height = row['height']
-                        # Use tolerance-based check
-                        canonical = canonical_size_with_tolerance(width, height, size_tolerance)
-                        if canonical.startswith('Non-Standard'):
-                            result.append(ProblemFormat(
-                                creative_id=row['id'],
-                                problem_type='non_standard',
-                                evidence={
-                                    'width': width,
-                                    'height': height,
-                                    'canonical_size': canonical,
-                                    'format': row['format'],
-                                },
-                                severity='medium',
-                                recommendation=f'Size {width}x{height} is non-standard. Consider resizing to nearest IAB standard.',
-                            ))
+            for row in perf_rows:
+                queries = row["queries"]
+                impressions = row["impressions"]
 
-                    # 3. Zero bids and low bid rate (from performance_metrics)
-                    cursor = conn.execute(f"""
-                        SELECT c.id, c.format,
-                               COALESCE(SUM(pm.reached_queries), 0) as queries,
-                               COALESCE(SUM(pm.impressions), 0) as impressions,
-                               COALESCE(SUM(pm.spend_micros), 0) as spend
-                        FROM creatives c
-                        LEFT JOIN performance_metrics pm ON c.id = pm.creative_id
-                          AND pm.metric_date >= date('now', '-{days} days')
-                        WHERE 1=1 {buyer_filter}
-                        GROUP BY c.id
-                        HAVING queries > 1000  -- Only check creatives with significant traffic
-                    """, buyer_param)
-
-                    for row in cursor.fetchall():
-                        queries = row['queries']
-                        impressions = row['impressions']
-
-                        if queries > 0 and impressions == 0:
-                            # Zero bids
-                            result.append(ProblemFormat(
-                                creative_id=row['id'],
-                                problem_type='zero_bids',
-                                evidence={
-                                    'reached_queries': queries,
-                                    'impressions': impressions,
-                                    'format': row['format'],
-                                },
-                                severity='high',
-                                recommendation='Creative receives queries but never wins. Check bid strategy or creative quality.',
-                            ))
-                        elif queries > 0 and (impressions / queries) < 0.01:
-                            # Low bid rate (< 1%)
-                            bid_rate = (impressions / queries) * 100
-                            result.append(ProblemFormat(
-                                creative_id=row['id'],
-                                problem_type='low_bid_rate',
-                                evidence={
-                                    'reached_queries': queries,
-                                    'impressions': impressions,
-                                    'bid_rate_pct': round(bid_rate, 4),
-                                    'format': row['format'],
-                                },
-                                severity='medium',
-                                recommendation=f'Bid rate {bid_rate:.2f}% is very low. Review bid strategy or creative quality.',
-                            ))
-
-                    return result
-
-                problems = await loop.run_in_executor(None, _detect)
+                if queries > 0 and impressions == 0:
+                    problems.append(ProblemFormat(
+                        creative_id=row["id"],
+                        problem_type="zero_bids",
+                        evidence={
+                            "reached_queries": queries,
+                            "impressions": impressions,
+                            "format": row["format"],
+                        },
+                        severity="high",
+                        recommendation=(
+                            "Creative receives queries but never wins. "
+                            "Check bid strategy or creative quality."
+                        ),
+                    ))
+                elif queries > 0 and (impressions / queries) < 0.01:
+                    bid_rate = (impressions / queries) * 100
+                    problems.append(ProblemFormat(
+                        creative_id=row["id"],
+                        problem_type="low_bid_rate",
+                        evidence={
+                            "reached_queries": queries,
+                            "impressions": impressions,
+                            "bid_rate_pct": round(bid_rate, 4),
+                            "format": row["format"],
+                        },
+                        severity="medium",
+                        recommendation=(
+                            f"Bid rate {bid_rate:.2f}% is very low. "
+                            "Review bid strategy or creative quality."
+                        ),
+                    ))
 
         except Exception as e:
             logger.error(f"Problem format detection failed: {e}")

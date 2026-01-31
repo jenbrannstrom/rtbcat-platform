@@ -13,10 +13,10 @@ import logging
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
-if TYPE_CHECKING:
-    from storage.sqlite_store import SQLiteStore
+from storage.postgres_database import pg_execute
+from storage.serving_database import db_query_one
 
 logger = logging.getLogger(__name__)
 
@@ -205,8 +205,8 @@ class RecommendationEngine:
     Master orchestrator that runs all analyzers and aggregates recommendations.
     """
 
-    def __init__(self, db_store: "SQLiteStore"):
-        self.store = db_store
+    def __init__(self, db_store: object | None = None):
+        self._store = db_store
         self._analyzers = None  # Lazy loaded
 
     def _get_analyzers(self):
@@ -219,11 +219,11 @@ class RecommendationEngine:
             from analytics.config_analyzer import ConfigAnalyzer
 
             self._analyzers = [
-                SizeAnalyzer(self.store),
-                CreativeAnalyzer(self.store),
-                GeoAnalyzer(self.store),
-                FraudAnalyzer(self.store),
-                ConfigAnalyzer(self.store),
+                SizeAnalyzer(self._store),
+                CreativeAnalyzer(self._store),
+                GeoAnalyzer(self._store),
+                FraudAnalyzer(self._store),
+                ConfigAnalyzer(self._store),
             ]
         return self._analyzers
 
@@ -290,15 +290,7 @@ class RecommendationEngine:
             WHERE metric_date >= date('now', ?)
         """
 
-        import asyncio
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _query():
-                cursor = conn.execute(query, (f"-{days} days",))
-                return dict(cursor.fetchone())
-
-            totals = await loop.run_in_executor(None, _query)
+        totals = await db_query_one(query, (f"-{days} days",)) or {}
 
         total_queries = totals.get("total_queries", 0) or 0
         total_impressions = totals.get("total_impressions", 0) or 0
@@ -332,39 +324,46 @@ class RecommendationEngine:
         import json
 
         query = """
-            INSERT OR REPLACE INTO recommendations (
+            INSERT INTO recommendations (
                 id, type, severity, confidence, title, description,
                 evidence_json, impact_json, actions_json,
                 affected_creatives, affected_campaigns,
                 status, generated_at, resolved_at, resolution_notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                type = EXCLUDED.type,
+                severity = EXCLUDED.severity,
+                confidence = EXCLUDED.confidence,
+                title = EXCLUDED.title,
+                description = EXCLUDED.description,
+                evidence_json = EXCLUDED.evidence_json,
+                impact_json = EXCLUDED.impact_json,
+                actions_json = EXCLUDED.actions_json,
+                affected_creatives = EXCLUDED.affected_creatives,
+                affected_campaigns = EXCLUDED.affected_campaigns,
+                status = EXCLUDED.status,
+                generated_at = EXCLUDED.generated_at,
+                resolved_at = EXCLUDED.resolved_at,
+                resolution_notes = EXCLUDED.resolution_notes
         """
 
-        import asyncio
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _save():
-                conn.execute(query, (
-                    rec.id,
-                    rec.type.value,
-                    rec.severity.value,
-                    rec.confidence.value,
-                    rec.title,
-                    rec.description,
-                    json.dumps([e.to_dict() for e in rec.evidence]),
-                    json.dumps(rec.impact.to_dict()),
-                    json.dumps([a.to_dict() for a in rec.actions]),
-                    json.dumps(rec.affected_creatives),
-                    json.dumps(rec.affected_campaigns),
-                    rec.status,
-                    rec.generated_at,
-                    rec.resolved_at,
-                    rec.resolution_notes,
-                ))
-                conn.commit()
-
-            await loop.run_in_executor(None, _save)
+        await pg_execute(query, (
+            rec.id,
+            rec.type.value,
+            rec.severity.value,
+            rec.confidence.value,
+            rec.title,
+            rec.description,
+            json.dumps([e.to_dict() for e in rec.evidence]),
+            json.dumps(rec.impact.to_dict()),
+            json.dumps([a.to_dict() for a in rec.actions]),
+            json.dumps(rec.affected_creatives),
+            json.dumps(rec.affected_campaigns),
+            rec.status,
+            rec.generated_at,
+            rec.resolved_at,
+            rec.resolution_notes,
+        ))
 
     async def resolve_recommendation(
         self,
@@ -375,22 +374,14 @@ class RecommendationEngine:
         query = """
             UPDATE recommendations
             SET status = 'resolved',
-                resolved_at = ?,
-                resolution_notes = ?
-            WHERE id = ?
+                resolved_at = %s,
+                resolution_notes = %s
+            WHERE id = %s
         """
 
-        import asyncio
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _resolve():
-                cursor = conn.execute(query, (
-                    datetime.utcnow().isoformat(),
-                    notes,
-                    rec_id,
-                ))
-                conn.commit()
-                return cursor.rowcount > 0
-
-            return await loop.run_in_executor(None, _resolve)
+        rows = await pg_execute(query, (
+            datetime.utcnow().isoformat(),
+            notes,
+            rec_id,
+        ))
+        return rows > 0

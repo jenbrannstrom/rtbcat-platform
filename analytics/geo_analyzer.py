@@ -15,7 +15,6 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
 
 from analytics.recommendation_engine import (
     Action,
@@ -26,9 +25,7 @@ from analytics.recommendation_engine import (
     RecommendationType,
     Severity,
 )
-
-if TYPE_CHECKING:
-    from storage.sqlite_store import SQLiteStore
+from storage.serving_database import db_query, db_query_one
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +46,8 @@ class GeoAnalyzer:
     - Adding geo-specific creatives
     """
 
-    def __init__(self, db_store: "SQLiteStore"):
-        self.store = db_store
+    def __init__(self, db_store: object | None = None):
+        self._store = db_store
 
     async def analyze(self, days: int = 7) -> list[Recommendation]:
         """
@@ -82,46 +79,33 @@ class GeoAnalyzer:
 
     async def _check_low_performance_geos(self, days: int) -> list[Recommendation]:
         """Check for geos with CTR significantly below average."""
-        import asyncio
-
         recommendations: list[Recommendation] = []
 
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
+        totals = await db_query_one("""
+            SELECT
+                COALESCE(SUM(impressions), 0) as total_impressions,
+                COALESCE(SUM(clicks), 0) as total_clicks
+            FROM performance_metrics
+            WHERE metric_date >= date('now', ?)
+        """, (f"-{days} days",)) or {}
+        total_imps = totals.get("total_impressions", 0) or 1
+        total_clicks = totals.get("total_clicks", 0) or 0
+        avg_ctr = total_clicks / total_imps if total_imps > 0 else 0
 
-            def _query():
-                # First get overall average CTR
-                cursor = conn.execute("""
-                    SELECT
-                        COALESCE(SUM(impressions), 0) as total_impressions,
-                        COALESCE(SUM(clicks), 0) as total_clicks
-                    FROM performance_metrics
-                    WHERE metric_date >= date('now', ?)
-                """, (f"-{days} days",))
-                totals = dict(cursor.fetchone())
-                total_imps = totals.get("total_impressions", 0) or 1
-                total_clicks = totals.get("total_clicks", 0) or 0
-                avg_ctr = total_clicks / total_imps if total_imps > 0 else 0
-
-                # Get per-geo performance
-                cursor = conn.execute("""
-                    SELECT
-                        pm.geography as geo,
-                        COALESCE(SUM(pm.impressions), 0) as impressions,
-                        COALESCE(SUM(pm.clicks), 0) as clicks,
-                        COALESCE(SUM(pm.spend_micros), 0) as spend_micros,
-                        COUNT(DISTINCT pm.creative_id) as creative_count
-                    FROM performance_metrics pm
-                    WHERE pm.metric_date >= date('now', ?)
-                      AND pm.geography IS NOT NULL
-                      AND pm.geography != ''
-                    GROUP BY pm.geography
-                    HAVING SUM(pm.spend_micros) > ?
-                """, (f"-{days} days", MIN_GEO_SPEND_USD * 1_000_000))
-
-                return [dict(row) for row in cursor.fetchall()], avg_ctr
-
-            results, avg_ctr = await loop.run_in_executor(None, _query)
+        results = await db_query("""
+            SELECT
+                pm.geography as geo,
+                COALESCE(SUM(pm.impressions), 0) as impressions,
+                COALESCE(SUM(pm.clicks), 0) as clicks,
+                COALESCE(SUM(pm.spend_micros), 0) as spend_micros,
+                COUNT(DISTINCT pm.creative_id) as creative_count
+            FROM performance_metrics pm
+            WHERE pm.metric_date >= date('now', ?)
+              AND pm.geography IS NOT NULL
+              AND pm.geography != ''
+            GROUP BY pm.geography
+            HAVING COALESCE(SUM(pm.spend_micros), 0) > ?
+        """, (f"-{days} days", MIN_GEO_SPEND_USD * 1_000_000))
 
         for row in results:
             geo = row["geo"]
@@ -200,31 +184,21 @@ class GeoAnalyzer:
 
     async def _check_high_waste_geos(self, days: int) -> list[Recommendation]:
         """Check for geos with high query volume but low impression rate."""
-        import asyncio
-
         recommendations: list[Recommendation] = []
 
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _query():
-                cursor = conn.execute("""
-                    SELECT
-                        pm.geography as geo,
-                        COALESCE(SUM(pm.reached_queries), 0) as queries,
-                        COALESCE(SUM(pm.impressions), 0) as impressions,
-                        COALESCE(SUM(pm.spend_micros), 0) as spend_micros
-                    FROM performance_metrics pm
-                    WHERE pm.metric_date >= date('now', ?)
-                      AND pm.geography IS NOT NULL
-                      AND pm.geography != ''
-                    GROUP BY pm.geography
-                    HAVING queries > 100000
-                """, (f"-{days} days",))
-
-                return [dict(row) for row in cursor.fetchall()]
-
-            results = await loop.run_in_executor(None, _query)
+        results = await db_query("""
+            SELECT
+                pm.geography as geo,
+                COALESCE(SUM(pm.reached_queries), 0) as queries,
+                COALESCE(SUM(pm.impressions), 0) as impressions,
+                COALESCE(SUM(pm.spend_micros), 0) as spend_micros
+            FROM performance_metrics pm
+            WHERE pm.metric_date >= date('now', ?)
+              AND pm.geography IS NOT NULL
+              AND pm.geography != ''
+            GROUP BY pm.geography
+            HAVING COALESCE(SUM(pm.reached_queries), 0) > 100000
+        """, (f"-{days} days",))
 
         for row in results:
             geo = row["geo"]
@@ -282,32 +256,22 @@ class GeoAnalyzer:
 
     async def _check_geo_coverage_gaps(self, days: int) -> list[Recommendation]:
         """Check for geos with traffic but limited creative coverage."""
-        import asyncio
-
         recommendations: list[Recommendation] = []
 
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _query():
-                # Find geos with queries from creatives that don't target them
-                cursor = conn.execute("""
-                    SELECT
-                        pm.geography as geo,
-                        COUNT(DISTINCT pm.creative_id) as active_creatives,
-                        COALESCE(SUM(pm.reached_queries), 0) as queries,
-                        COALESCE(SUM(pm.impressions), 0) as impressions
-                    FROM performance_metrics pm
-                    WHERE pm.metric_date >= date('now', ?)
-                      AND pm.geography IS NOT NULL
-                      AND pm.geography != ''
-                    GROUP BY pm.geography
-                    HAVING queries > 50000 AND active_creatives < 3
-                """, (f"-{days} days",))
-
-                return [dict(row) for row in cursor.fetchall()]
-
-            results = await loop.run_in_executor(None, _query)
+        results = await db_query("""
+            SELECT
+                pm.geography as geo,
+                COUNT(DISTINCT pm.creative_id) as active_creatives,
+                COALESCE(SUM(pm.reached_queries), 0) as queries,
+                COALESCE(SUM(pm.impressions), 0) as impressions
+            FROM performance_metrics pm
+            WHERE pm.metric_date >= date('now', ?)
+              AND pm.geography IS NOT NULL
+              AND pm.geography != ''
+            GROUP BY pm.geography
+            HAVING COALESCE(SUM(pm.reached_queries), 0) > 50000
+               AND COUNT(DISTINCT pm.creative_id) < 3
+        """, (f"-{days} days",))
 
         for row in results:
             geo = row["geo"]

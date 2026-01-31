@@ -17,9 +17,7 @@ Related modules:
 
 Usage:
     >>> from analytics.fraud_analyzer import FraudAnalyzer
-    >>> from storage.sqlite_store import SQLiteStore
-    >>> store = SQLiteStore()
-    >>> analyzer = FraudAnalyzer(store)
+    >>> analyzer = FraudAnalyzer()
     >>> recommendations = await analyzer.analyze(days=14)
 """
 
@@ -28,7 +26,6 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
 
 from analytics.recommendation_engine import (
     Action,
@@ -39,9 +36,7 @@ from analytics.recommendation_engine import (
     RecommendationType,
     Severity,
 )
-
-if TYPE_CHECKING:
-    from storage.sqlite_store import SQLiteStore
+from storage.serving_database import db_query
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +58,8 @@ class FraudAnalyzer:
     - Human review for edge cases
     """
 
-    def __init__(self, db_store: "SQLiteStore"):
-        self.store = db_store
+    def __init__(self, db_store: object | None = None):
+        self._store = db_store
 
     async def analyze(self, days: int = 7) -> list[Recommendation]:
         """
@@ -100,33 +95,22 @@ class FraudAnalyzer:
 
     async def _check_click_fraud(self, days: int) -> list[Recommendation]:
         """Check for suspiciously high CTR indicating click fraud."""
-        import asyncio
-
         recommendations: list[Recommendation] = []
 
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _query():
-                # Look for placements with abnormally high CTR
-                cursor = conn.execute("""
-                    SELECT
-                        pm.placement as source,
-                        COALESCE(SUM(pm.impressions), 0) as impressions,
-                        COALESCE(SUM(pm.clicks), 0) as clicks,
-                        COALESCE(SUM(pm.spend_micros), 0) as spend_micros,
-                        COUNT(DISTINCT pm.creative_id) as creative_count
-                    FROM performance_metrics pm
-                    WHERE pm.metric_date >= date('now', ?)
-                      AND pm.placement IS NOT NULL
-                      AND pm.placement != ''
-                    GROUP BY pm.placement
-                    HAVING impressions > ?
-                """, (f"-{days} days", MIN_IMPRESSIONS_FOR_ANALYSIS))
-
-                return [dict(row) for row in cursor.fetchall()]
-
-            results = await loop.run_in_executor(None, _query)
+        results = await db_query("""
+            SELECT
+                pm.placement as source,
+                COALESCE(SUM(pm.impressions), 0) as impressions,
+                COALESCE(SUM(pm.clicks), 0) as clicks,
+                COALESCE(SUM(pm.spend_micros), 0) as spend_micros,
+                COUNT(DISTINCT pm.creative_id) as creative_count
+            FROM performance_metrics pm
+            WHERE pm.metric_date >= date('now', ?)
+              AND pm.placement IS NOT NULL
+              AND pm.placement != ''
+            GROUP BY pm.placement
+            HAVING COALESCE(SUM(pm.impressions), 0) > ?
+        """, (f"-{days} days", MIN_IMPRESSIONS_FOR_ANALYSIS))
 
         for row in results:
             source = row["source"]
@@ -194,31 +178,22 @@ class FraudAnalyzer:
 
     async def _check_high_spend_no_conversions(self, days: int) -> list[Recommendation]:
         """Check for placements with high spend but zero meaningful engagement."""
-        import asyncio
-
         recommendations: list[Recommendation] = []
 
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _query():
-                cursor = conn.execute("""
-                    SELECT
-                        pm.placement as source,
-                        COALESCE(SUM(pm.impressions), 0) as impressions,
-                        COALESCE(SUM(pm.clicks), 0) as clicks,
-                        COALESCE(SUM(pm.spend_micros), 0) as spend_micros
-                    FROM performance_metrics pm
-                    WHERE pm.metric_date >= date('now', ?)
-                      AND pm.placement IS NOT NULL
-                      AND pm.placement != ''
-                    GROUP BY pm.placement
-                    HAVING spend_micros > ? AND clicks = 0
-                """, (f"-{days} days", HIGH_SPEND_ZERO_CONVERSIONS * 1_000_000))
-
-                return [dict(row) for row in cursor.fetchall()]
-
-            results = await loop.run_in_executor(None, _query)
+        results = await db_query("""
+            SELECT
+                pm.placement as source,
+                COALESCE(SUM(pm.impressions), 0) as impressions,
+                COALESCE(SUM(pm.clicks), 0) as clicks,
+                COALESCE(SUM(pm.spend_micros), 0) as spend_micros
+            FROM performance_metrics pm
+            WHERE pm.metric_date >= date('now', ?)
+              AND pm.placement IS NOT NULL
+              AND pm.placement != ''
+            GROUP BY pm.placement
+            HAVING COALESCE(SUM(pm.spend_micros), 0) > ?
+               AND COALESCE(SUM(pm.clicks), 0) = 0
+        """, (f"-{days} days", HIGH_SPEND_ZERO_CONVERSIONS * 1_000_000))
 
         for row in results:
             source = row["source"]
@@ -282,32 +257,22 @@ class FraudAnalyzer:
 
     async def _check_suspicious_patterns(self, days: int) -> list[Recommendation]:
         """Check for other suspicious traffic patterns."""
-        import asyncio
-
         recommendations: list[Recommendation] = []
 
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
-
-            def _query():
-                # Look for placements with extremely low CTR (could be bots viewing)
-                cursor = conn.execute("""
-                    SELECT
-                        pm.placement as source,
-                        COALESCE(SUM(pm.impressions), 0) as impressions,
-                        COALESCE(SUM(pm.clicks), 0) as clicks,
-                        COALESCE(SUM(pm.spend_micros), 0) as spend_micros
-                    FROM performance_metrics pm
-                    WHERE pm.metric_date >= date('now', ?)
-                      AND pm.placement IS NOT NULL
-                      AND pm.placement != ''
-                    GROUP BY pm.placement
-                    HAVING impressions > 50000 AND spend_micros > ?
-                """, (f"-{days} days", 20 * 1_000_000))  # $20+ spend
-
-                return [dict(row) for row in cursor.fetchall()]
-
-            results = await loop.run_in_executor(None, _query)
+        results = await db_query("""
+            SELECT
+                pm.placement as source,
+                COALESCE(SUM(pm.impressions), 0) as impressions,
+                COALESCE(SUM(pm.clicks), 0) as clicks,
+                COALESCE(SUM(pm.spend_micros), 0) as spend_micros
+            FROM performance_metrics pm
+            WHERE pm.metric_date >= date('now', ?)
+              AND pm.placement IS NOT NULL
+              AND pm.placement != ''
+            GROUP BY pm.placement
+            HAVING COALESCE(SUM(pm.impressions), 0) > 50000
+               AND COALESCE(SUM(pm.spend_micros), 0) > ?
+        """, (f"-{days} days", 20 * 1_000_000))
 
         for row in results:
             source = row["source"]
