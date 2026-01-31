@@ -39,6 +39,7 @@ SQLite legacy code is archived under `docs/archive/sqlite_legacy/`.
 - Routers convert service output into response models; no SQL.
 - Avoid cross-domain calls inside repos. Services can coordinate multiple repos.
 - No circular dependencies: routers → services → repos (one direction).
+- Schema of record is `storage/postgres_migrations/*.sql`. Do not add columns in SQL without a migration.
 
 ## Example Extraction (from a large router)
 
@@ -115,3 +116,7 @@ Router:
 - Repo tests: SQL shape, edge cases, empty input.
 - Service tests: validation and workflow behavior.
 - Router tests: response contract.
+
+## Refactor Checklist (Required)
+
+1) Verify every column used exists in `storage/postgres_migrations/*.sql`.\n2) Ensure `ON CONFLICT` targets a real unique index (no COALESCE unless an index exists).\n3) If schema mismatch: add migration **or** remove column usage.\n4) No behavior changes in refactor-only commits.

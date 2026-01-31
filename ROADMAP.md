@@ -291,6 +291,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [ ] Missing type annotations in several Python files
 - [ ] Code duplication in frontend API response handling
 - [ ] Inconsistent patterns (mix of sync/async, different logging approaches)
+- [ ] **Schema gate for refactors** - Verify migrations before adding columns or ON CONFLICT targets
 
 ### Architecture
 - [ ] Business logic mixed into route handlers - Extract to service layer
