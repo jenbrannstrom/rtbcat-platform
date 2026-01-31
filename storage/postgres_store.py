@@ -1,7 +1,7 @@
 """PostgreSQL storage backend for Cat-Scan.
 
-This module provides the PostgresStore class which mirrors the SQLiteStore API.
-Currently contains stubs - full implementation will be done incrementally.
+This module provides the PostgresStore class as the primary storage API.
+Full implementation is being completed incrementally.
 
 Usage:
     >>> from storage.postgres_store import PostgresStore
@@ -9,7 +9,7 @@ Usage:
     >>> store = PostgresStore()
     >>> await store.initialize()
     >>>
-    >>> # API matches SQLiteStore
+    >>> # API matches prior SQLiteStore surface
     >>> await store.save_creatives(creatives)
     >>> html_creatives = await store.list_creatives(format="HTML")
 
@@ -79,7 +79,7 @@ class PostgresStore:
     Provides CRUD operations for creatives, campaigns, and clusters
     with support for search and filtering.
 
-    This class mirrors the SQLiteStore API for drop-in replacement.
+    This class preserves the prior storage surface for compatibility.
     Many methods are currently stubs marked with TODO.
     """
 
