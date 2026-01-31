@@ -7,29 +7,16 @@ In GCP mode (OAuth2 Proxy enabled), supports Application Default Credentials (AD
 which uses the VM's attached service account automatically.
 """
 
-import json
 import logging
-import os
-import uuid
-from pathlib import Path
 from typing import List, Optional
 
-import google.auth
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from config import ConfigManager
-from config.config_manager import AuthorizedBuyersConfig, AppConfig
-from api.dependencies import get_config, get_store
-from storage.models import ServiceAccount
-from collectors import BuyerSeatsClient
+from api.dependencies import get_store
+from services.config_service import ConfigService
 
 logger = logging.getLogger(__name__)
-
-
-def is_gcp_mode() -> bool:
-    """Check if running in GCP mode with ADC (OAuth2 Proxy enabled)."""
-    return os.environ.get("OAUTH2_PROXY_ENABLED", "").lower() in ("1", "true", "yes")
 
 router = APIRouter(tags=["Configuration"])
 
@@ -68,36 +55,9 @@ async def get_gcp_status():
     with Application Default Credentials (ADC) from the VM's attached
     service account.
     """
-    if not is_gcp_mode():
-        return GCPStatusResponse(
-            gcp_mode=False,
-            adc_available=False,
-            message="Not running in GCP mode. Upload service account credentials manually.",
-        )
-
-    # Try to get ADC credentials
-    try:
-        credentials, project = google.auth.default()
-
-        # Get service account email if available
-        service_account_email = None
-        if hasattr(credentials, 'service_account_email'):
-            service_account_email = credentials.service_account_email
-
-        return GCPStatusResponse(
-            gcp_mode=True,
-            adc_available=True,
-            service_account_email=service_account_email,
-            project_id=project,
-            message="GCP mode active. Using VM's attached service account via ADC.",
-        )
-    except Exception as e:
-        logger.warning(f"ADC not available: {e}")
-        return GCPStatusResponse(
-            gcp_mode=True,
-            adc_available=False,
-            message=f"GCP mode active but ADC not available: {str(e)}",
-        )
+    service = ConfigService()
+    status = service.get_gcp_status()
+    return GCPStatusResponse(**status)
 
 
 @router.post("/config/gcp-discover", response_model=DiscoveryResponse)
@@ -113,51 +73,9 @@ async def discover_via_adc(
     The service account must have been added to the Authorized Buyers
     account in the RTB API Console.
     """
-    if not is_gcp_mode():
-        raise HTTPException(
-            status_code=400,
-            detail="Not running in GCP mode. Use /config/service-accounts to upload credentials.",
-        )
-
-    try:
-        # Use ADC (credentials_path=None triggers ADC in the client)
-        client = BuyerSeatsClient(
-            credentials_path=None,  # ADC mode
-            account_id=request.bidder_id,
-        )
-        seats = await client.discover_buyer_seats()
-
-        if not seats:
-            return DiscoveryResponse(
-                success=True,
-                bidder_ids=[],
-                buyer_seats_count=0,
-                message=(
-                    "No buyer seats found. Ensure the VM's service account "
-                    f"has been added to bidder {request.bidder_id} in the RTB API Console."
-                ),
-            )
-
-        bidder_ids = set()
-        for seat in seats:
-            # Mark as using ADC (no service_account_id)
-            seat.service_account_id = None
-            await store.save_buyer_seat(seat)
-            bidder_ids.add(seat.bidder_id)
-
-        return DiscoveryResponse(
-            success=True,
-            bidder_ids=list(bidder_ids),
-            buyer_seats_count=len(seats),
-            message=f"Discovered {len(seats)} buyer seat(s) under {len(bidder_ids)} bidder account(s) using ADC",
-        )
-
-    except Exception as e:
-        logger.error(f"GCP ADC discovery failed: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Discovery failed: {str(e)}. Ensure the VM's service account has RTB API access.",
-        )
+    service = ConfigService()
+    result = await service.discover_via_adc(request.bidder_id, store)
+    return DiscoveryResponse(**result)
 
 
 # =============================================================================
@@ -212,7 +130,8 @@ async def list_service_accounts(
     store=Depends(get_store),
 ):
     """List all configured service accounts."""
-    accounts = await store.get_service_accounts(active_only=active_only)
+    service = ConfigService()
+    accounts = await service.list_service_accounts(store, active_only)
     return ServiceAccountListResponse(
         accounts=[
             ServiceAccountResponse(
@@ -240,115 +159,13 @@ async def add_service_account(
     Accepts the JSON contents of a Google Cloud service account key file,
     validates it, saves it securely, and stores metadata in the database.
     """
-    # Parse and validate JSON
-    try:
-        creds_data = json.loads(request.service_account_json)
-    except json.JSONDecodeError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid JSON: {str(e)}",
-        )
-
-    # Validate required fields
-    required_fields = ["type", "client_email", "private_key", "project_id"]
-    missing = [f for f in required_fields if f not in creds_data]
-    if missing:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Missing required fields: {', '.join(missing)}. This doesn't appear to be a valid service account key.",
-        )
-
-    if creds_data.get("type") != "service_account":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid credential type: '{creds_data.get('type')}'. Expected 'service_account'.",
-        )
-
-    client_email = creds_data.get("client_email")
-    project_id = creds_data.get("project_id")
-
-    # Check if this account already exists
-    existing = await store.get_service_account_by_email(client_email)
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Service account {client_email} is already configured.",
-        )
-
-    # Generate UUID for this account
-    account_id = str(uuid.uuid4())
-
-    # Create credentials directory
-    creds_dir = Path.home() / ".catscan" / "credentials"
-    creds_dir.mkdir(parents=True, exist_ok=True)
-    os.chmod(creds_dir, 0o700)
-
-    # Save credentials file with UUID filename
-    creds_path = creds_dir / f"{account_id}.json"
-    with open(creds_path, "w") as f:
-        json.dump(creds_data, f, indent=2)
-    os.chmod(creds_path, 0o600)
-
-    # Save to database
-    try:
-        service_account = ServiceAccount(
-            id=account_id,
-            client_email=client_email,
-            project_id=project_id,
-            display_name=request.display_name or project_id or client_email.split("@")[0],
-            credentials_path=str(creds_path),
-            is_active=True,
-        )
-        await store.save_service_account(service_account)
-
-        logger.info(f"Service account added: {client_email} (id={account_id})")
-
-        # Automatically discover buyer seats to get the correct bidder ID
-        discovered_bidder_ids = []
-        try:
-            # BuyerSeatsClient.discover_buyer_seats() calls buyers.list() which
-            # doesn't need a specific account_id - it returns all accessible buyers
-            client = BuyerSeatsClient(
-                credentials_path=str(creds_path),
-                account_id="discovery",  # Placeholder - not used by buyers.list()
-            )
-            seats = await client.discover_buyer_seats()
-
-            if seats:
-                for seat in seats:
-                    # Link the discovered seat to this service account
-                    seat.service_account_id = account_id
-                    await store.save_buyer_seat(seat)
-                    discovered_bidder_ids.append(seat.bidder_id)
-                logger.info(f"Discovered {len(seats)} buyer seats for {client_email}: bidders={set(discovered_bidder_ids)}")
-            else:
-                logger.warning(f"No buyer seats discovered for {client_email}")
-        except Exception as e:
-            logger.warning(f"Failed to auto-discover buyer seats for {client_email}: {e}")
-            # Continue without failing - user can manually discover later
-
-        message = "Service account added successfully"
-        if discovered_bidder_ids:
-            unique_bidders = set(discovered_bidder_ids)
-            message += f". Discovered {len(unique_bidders)} bidder account(s): {', '.join(unique_bidders)}"
-
-        return CredentialsUploadResponse(
-            success=True,
-            id=account_id,
-            client_email=client_email,
-            project_id=project_id,
-            message=message,
-        )
-
-    except Exception as e:
-        # Clean up credentials file on failure
-        if creds_path.exists():
-            creds_path.unlink()
-        logger.error(f"Failed to save service account: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to save service account: {str(e)}",
-        )
+    service = ConfigService()
+    result = await service.add_service_account(
+        store=store,
+        service_account_json=request.service_account_json,
+        display_name=request.display_name,
+    )
+    return CredentialsUploadResponse(**result)
 
 
 @router.get("/config/service-accounts/{account_id}", response_model=ServiceAccountResponse)
@@ -357,7 +174,8 @@ async def get_service_account(
     store=Depends(get_store),
 ):
     """Get a specific service account by ID."""
-    account = await store.get_service_account(account_id)
+    service = ConfigService()
+    account = await service.get_service_account(store, account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Service account not found")
 
@@ -383,44 +201,12 @@ async def discover_bidders_for_account(
     accounts that this service account has access to. Discovered accounts
     are saved to the buyer_seats table and linked to this service account.
     """
-    account = await store.get_service_account(account_id)
+    service = ConfigService()
+    account = await service.get_service_account(store, account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Service account not found")
-
-    try:
-        client = BuyerSeatsClient(
-            credentials_path=account.credentials_path,
-            account_id="discovery",  # Placeholder - not used by buyers.list()
-        )
-        seats = await client.discover_buyer_seats()
-
-        if not seats:
-            return DiscoveryResponse(
-                success=True,
-                bidder_ids=[],
-                buyer_seats_count=0,
-                message="No bidder accounts found. Verify the service account has RTB API permissions.",
-            )
-
-        bidder_ids = set()
-        for seat in seats:
-            seat.service_account_id = account_id
-            await store.save_buyer_seat(seat)
-            bidder_ids.add(seat.bidder_id)
-
-        return DiscoveryResponse(
-            success=True,
-            bidder_ids=list(bidder_ids),
-            buyer_seats_count=len(seats),
-            message=f"Discovered {len(seats)} buyer seat(s) under {len(bidder_ids)} bidder account(s)",
-        )
-
-    except Exception as e:
-        logger.error(f"Bidder discovery failed for {account.client_email}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Discovery failed: {str(e)}",
-        )
+    result = await service.discover_bidders_for_account(store, account_id, account)
+    return DiscoveryResponse(**result)
 
 
 @router.delete("/config/service-accounts/{account_id}", response_model=DeleteResponse)
@@ -430,33 +216,12 @@ async def delete_service_account(
 ):
     """Delete a service account and its credentials file."""
     # Get the account first to find credentials path
-    account = await store.get_service_account(account_id)
+    service = ConfigService()
+    account = await service.get_service_account(store, account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Service account not found")
-
-    try:
-        # Delete credentials file
-        creds_path = Path(account.credentials_path)
-        if creds_path.exists():
-            creds_path.unlink()
-
-        # Delete from database (will set buyer_seats.service_account_id to NULL)
-        deleted = await store.delete_service_account(account_id)
-
-        if deleted:
-            logger.info(f"Service account deleted: {account.client_email} (id={account_id})")
-            return DeleteResponse(success=True, message="Service account deleted")
-        else:
-            raise HTTPException(status_code=500, detail="Failed to delete service account from database")
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to delete service account: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete service account: {str(e)}",
-        )
+    result = await service.delete_service_account(store, account)
+    return DeleteResponse(**result)
 
 
 # =============================================================================
@@ -481,13 +246,6 @@ class GeminiKeyUpdateResponse(BaseModel):
     message: str
 
 
-def _mask_api_key(key: str) -> str:
-    """Mask API key for display, showing first 4 and last 4 chars."""
-    if len(key) <= 10:
-        return "*" * len(key)
-    return f"{key[:4]}...{key[-4:]}"
-
-
 @router.get("/config/gemini-key", response_model=GeminiKeyStatusResponse)
 async def get_gemini_key_status(
     store=Depends(get_store),
@@ -497,28 +255,9 @@ async def get_gemini_key_status(
     The key is used for AI-powered language detection in creatives.
     Returns masked key for security.
     """
-    stored_key = await store.get_setting("gemini_api_key")
-
-    if stored_key:
-        return GeminiKeyStatusResponse(
-            configured=True,
-            masked_key=_mask_api_key(stored_key),
-            message="Gemini API key configured from database",
-        )
-
-    # Fall back to environment variable
-    env_key = os.environ.get("GEMINI_API_KEY")
-    if env_key:
-        return GeminiKeyStatusResponse(
-            configured=True,
-            masked_key=_mask_api_key(env_key),
-            message="Gemini API key configured from environment variable",
-        )
-
-    return GeminiKeyStatusResponse(
-        configured=False,
-        message="Gemini API key not configured. Language detection is disabled.",
-    )
+    service = ConfigService()
+    status = await service.get_gemini_key_status(store)
+    return GeminiKeyStatusResponse(**status)
 
 
 @router.put("/config/gemini-key", response_model=GeminiKeyUpdateResponse)
@@ -531,31 +270,9 @@ async def update_gemini_key(
     The key is stored securely in the database and used for AI-powered
     language detection in creatives.
     """
-    try:
-        # Validate key format (basic check)
-        api_key = request.api_key.strip()
-        if len(api_key) < 10:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid API key format. Key is too short.",
-            )
-
-        # Store in database
-        await store.set_setting("gemini_api_key", api_key, updated_by="api")
-
-        logger.info("Gemini API key updated")
-        return GeminiKeyUpdateResponse(
-            success=True,
-            message="Gemini API key saved successfully",
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to save Gemini API key: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to save API key: {str(e)}",
-        )
+    service = ConfigService()
+    result = await service.update_gemini_key(store, request.api_key)
+    return GeminiKeyUpdateResponse(**result)
 
 
 @router.delete("/config/gemini-key", response_model=GeminiKeyUpdateResponse)
@@ -566,17 +283,6 @@ async def delete_gemini_key(
 
     Note: If GEMINI_API_KEY environment variable is set, it will be used as fallback.
     """
-    try:
-        await store.set_setting("gemini_api_key", "", updated_by="api")
-
-        logger.info("Gemini API key removed")
-        return GeminiKeyUpdateResponse(
-            success=True,
-            message="Gemini API key removed",
-        )
-    except Exception as e:
-        logger.error(f"Failed to delete Gemini API key: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete API key: {str(e)}",
-        )
+    service = ConfigService()
+    result = await service.delete_gemini_key(store)
+    return GeminiKeyUpdateResponse(**result)
