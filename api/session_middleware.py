@@ -10,24 +10,19 @@ When deployed behind OAuth2 Proxy (e.g., on GCP), the X-Email header from
 OAuth2 Proxy is trusted for authentication. Users are auto-created on first access.
 """
 
-import asyncio
 import logging
 import os
 import uuid
-from typing import Optional, Union
+from typing import Optional
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from storage.database import DB_PATH
-from storage.repositories.user_repository import UserRepository, User
-from api.dependencies import use_postgres
+from storage.repositories.user_repository import User
+from api.dependencies import _store
 
 logger = logging.getLogger(__name__)
-
-# Type for user repository (SQLite or Postgres)
-UserRepoType = Union[UserRepository, "PostgresStore"]
 
 # Session cookie name (must match auth_oauth_proxy.py)
 SESSION_COOKIE_NAME = "rtbcat_session"
@@ -68,18 +63,11 @@ def is_public_path(path: str) -> bool:
     return False
 
 
-def _get_user_repo() -> UserRepoType:
-    """Get the appropriate user repository based on backend.
-
-    Returns PostgresStore when using Postgres backend.
-    Returns UserRepository for SQLite backend.
-    """
-    if use_postgres():
-        # Import here to avoid circular imports
-        from api.dependencies import _store
-        if _store is not None:
-            return _store
-    return UserRepository(DB_PATH)
+def _get_user_repo() -> "PostgresStore":
+    """Get the Postgres store for user operations."""
+    if _store is None:
+        raise RuntimeError("Store not initialized")
+    return _store
 
 
 def is_oauth2_proxy_enabled() -> bool:
