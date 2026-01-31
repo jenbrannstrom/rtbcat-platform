@@ -147,12 +147,14 @@ async def health_check(
     has_credentials = False
     configured = False
 
-    # Check new multi-account system - this is the primary credential source
+    # Check multi-account system - configured if any accounts exist
     try:
-        service_accounts = await store.get_service_accounts(active_only=True)
+        service_accounts = await store.get_service_accounts(active_only=False)
         if service_accounts:
             configured = True
-            has_credentials = True
+            has_credentials = any(
+                acc.credentials_path for acc in service_accounts
+            )
     except Exception:
         pass
 
