@@ -1,7 +1,7 @@
 """Serving database access module for UI queries.
 
 Serving is Postgres-only. SQLite fallback is deprecated and unsupported.
-Writes should continue to use storage.database.
+Writes should use storage.postgres_database.
 """
 
 from __future__ import annotations
