@@ -467,10 +467,8 @@ async def extract_html_thumbnails(
 class StatsResponse(BaseModel):
     """Response model for database statistics."""
     creative_count: int
-    campaign_count: int
-    cluster_count: int
+    buyer_seat_count: int
     formats: dict[str, int]
-    db_path: str
 
 
 class SizesResponse(BaseModel):
@@ -578,7 +576,11 @@ async def lookup_geo_names(
 async def get_stats(store=Depends(get_store)):
     """Get database statistics."""
     stats = await store.get_stats()
-    return StatsResponse(**stats)
+    return StatsResponse(
+        creative_count=stats.get("total_creatives", 0),
+        buyer_seat_count=stats.get("total_buyer_seats", 0),
+        formats=stats.get("by_format", {}),
+    )
 
 
 @router.get("/sizes", response_model=SizesResponse)
