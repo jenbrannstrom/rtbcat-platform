@@ -83,6 +83,15 @@ async def backfill_rtb_bidstream(dry_run: bool) -> None:
         count = await count_rows(count_sql)
         print(f"rtb_bidstream: would backfill bidder_id for {count:,} rows")
     else:
+        # Skip if import_batch_id coverage is poor
+        missing_batch = await count_rows(
+            """
+            SELECT 1 FROM rtb_bidstream
+            WHERE bidder_id IS NULL AND import_batch_id IS NULL
+            """
+        )
+        if missing_batch > 0:
+            print(f"rtb_bidstream: WARNING {missing_batch:,} rows missing import_batch_id; will not be backfilled via import_history")
         updated = await pg_execute(
             """
             UPDATE rtb_bidstream rb
@@ -121,6 +130,14 @@ async def backfill_rtb_bid_filtering(dry_run: bool) -> None:
         count = await count_rows(count_sql)
         print(f"rtb_bid_filtering: would backfill bidder_id for {count:,} rows")
     else:
+        missing_batch = await count_rows(
+            """
+            SELECT 1 FROM rtb_bid_filtering
+            WHERE bidder_id IS NULL AND import_batch_id IS NULL
+            """
+        )
+        if missing_batch > 0:
+            print(f"rtb_bid_filtering: WARNING {missing_batch:,} rows missing import_batch_id; will not be backfilled via import_history")
         updated = await pg_execute(
             """
             UPDATE rtb_bid_filtering rbf
@@ -159,6 +176,14 @@ async def backfill_rtb_quality(dry_run: bool) -> None:
         count = await count_rows(count_sql)
         print(f"rtb_quality: would backfill bidder_id for {count:,} rows")
     else:
+        missing_batch = await count_rows(
+            """
+            SELECT 1 FROM rtb_quality
+            WHERE bidder_id IS NULL AND import_batch_id IS NULL
+            """
+        )
+        if missing_batch > 0:
+            print(f"rtb_quality: WARNING {missing_batch:,} rows missing import_batch_id; will not be backfilled via import_history")
         updated = await pg_execute(
             """
             UPDATE rtb_quality rq
@@ -224,6 +249,14 @@ async def backfill_rtb_daily(dry_run: bool) -> None:
         print(f"rtb_daily: would backfill bidder_id via import_history for {count_history:,} rows")
         print(f"rtb_daily: would backfill bidder_id via billing_id mapping for {count_billing:,} rows")
     else:
+        missing_batch = await count_rows(
+            """
+            SELECT 1 FROM rtb_daily
+            WHERE bidder_id IS NULL AND import_batch_id IS NULL
+            """
+        )
+        if missing_batch > 0:
+            print(f"rtb_daily: WARNING {missing_batch:,} rows missing import_batch_id; billing_id mapping may be required")
         # First, via import_history
         updated_history = await pg_execute(
             """
