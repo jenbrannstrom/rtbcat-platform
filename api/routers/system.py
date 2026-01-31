@@ -18,9 +18,9 @@ from pydantic import BaseModel, Field
 
 from api.dependencies import get_store, get_config, get_current_user, resolve_buyer_id
 from services.auth_service import User
-from storage.serving_database import db_query, db_execute, table_exists
 from config import ConfigManager
 from services.thumbnails_service import ThumbnailsService
+from services.system_service import SystemService
 
 logger = logging.getLogger(__name__)
 
@@ -309,58 +309,20 @@ async def get_thumbnail_status(
 @router.get("/system/status", response_model=SystemStatusResponse)
 async def get_system_status():
     """Get system status including installed tools and resource usage."""
-    python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-
-    node_available = shutil.which("node") is not None
-    node_version = None
-    if node_available:
-        try:
-            result = subprocess.run(['node', '--version'], capture_output=True, text=True, timeout=5)
-            node_version = result.stdout.strip()
-        except Exception:
-            pass
-
-    ffmpeg_available = _check_ffmpeg()
-    ffmpeg_version = None
-    if ffmpeg_available:
-        try:
-            result = subprocess.run([_get_ffmpeg_path(), '-version'], capture_output=True, text=True, timeout=5)
-            first_line = result.stdout.split('\n')[0]
-            parts = first_line.split(' ')
-            ffmpeg_version = parts[2] if len(parts) > 2 else 'Unknown'
-        except Exception:
-            pass
-
-    # Database size not available for Postgres via file stat
-    database_size_mb = 0.0
-
-    thumbnails_dir = Path.home() / ".catscan" / "thumbnails"
-    thumbnails_count = len(list(thumbnails_dir.glob("*.jpg"))) if thumbnails_dir.exists() else 0
-
-    total, used, free = shutil.disk_usage(Path.home())
-    disk_space_gb = free / (1024 ** 3)
-
-    creatives_count = 0
-    videos_count = 0
-    try:
-        rows = await db_query("SELECT COUNT(*) as cnt FROM creatives")
-        creatives_count = rows[0]["cnt"] if rows else 0
-        video_rows = await db_query("SELECT COUNT(*) as cnt FROM creatives WHERE format = 'VIDEO'")
-        videos_count = video_rows[0]["cnt"] if video_rows else 0
-    except Exception:
-        pass
+    service = SystemService()
+    status = await service.get_system_status()
 
     return SystemStatusResponse(
-        python_version=python_version,
-        node_available=node_available,
-        node_version=node_version,
-        ffmpeg_available=ffmpeg_available,
-        ffmpeg_version=ffmpeg_version,
-        database_size_mb=round(database_size_mb, 2),
-        thumbnails_count=thumbnails_count,
-        disk_space_gb=round(disk_space_gb, 1),
-        creatives_count=creatives_count,
-        videos_count=videos_count,
+        python_version=status.python_version,
+        node_available=status.node_available,
+        node_version=status.node_version,
+        ffmpeg_available=status.ffmpeg_available,
+        ffmpeg_version=status.ffmpeg_version,
+        database_size_mb=status.database_size_mb,
+        thumbnails_count=status.thumbnails_count,
+        disk_space_gb=status.disk_space_gb,
+        creatives_count=status.creatives_count,
+        videos_count=status.videos_count,
     )
 
 
@@ -481,33 +443,6 @@ class GeoLookupResponse(BaseModel):
     geos: dict[str, str]  # geo_id -> display name
 
 
-# Fallback geo ID mappings for common Google Ads criterion IDs
-# Used when migration 010 hasn't been run or geographies table is empty
-FALLBACK_GEO_NAMES = {
-    # US Metro/DMA regions (21xxx series) - most common
-    '21155': 'Los Angeles, CA', '21164': 'New York, NY', '21174': 'Chicago, IL',
-    '21145': 'Atlanta, GA', '21147': 'Austin, TX', '21149': 'Baltimore, MD',
-    '21159': 'Boston, MA', '21170': 'Charlotte, NC', '21176': 'Cincinnati, OH',
-    '21178': 'Cleveland-Akron, OH', '21183': 'Columbus, OH', '21186': 'Dallas-Fort Worth, TX',
-    '21189': 'Denver, CO', '21191': 'Detroit, MI', '21225': 'Houston, TX',
-    '21228': 'Indianapolis, IN', '21231': 'Jacksonville, FL', '21236': 'Kansas City, MO',
-    '21244': 'Las Vegas, NV', '21258': 'Miami-Fort Lauderdale, FL', '21260': 'Minneapolis-St. Paul, MN',
-    '21267': 'Nashville, TN', '21268': 'New Orleans, LA', '21272': 'Oklahoma City, OK',
-    '21274': 'Orlando-Daytona Beach, FL', '21281': 'Philadelphia, PA', '21282': 'Phoenix, AZ',
-    '21283': 'Pittsburgh, PA', '21284': 'Portland, OR', '21289': 'Raleigh-Durham, NC',
-    '21297': 'Sacramento-Stockton, CA', '21299': 'Saint Louis, MO', '21301': 'Salt Lake City, UT',
-    '21303': 'San Antonio, TX', '21304': 'San Diego, CA', '21305': 'San Francisco-Oakland, CA',
-    '21308': 'Seattle-Tacoma, WA', '21319': 'Tampa-St. Petersburg, FL', '21332': 'Washington, DC',
-    '21152': 'Beaumont-Port Arthur, TX', '21171': 'Charlottesville, VA',
-    # Country-level IDs
-    '2840': 'United States', '2826': 'United Kingdom', '2124': 'Canada', '2036': 'Australia',
-    '2276': 'Germany', '2250': 'France', '2392': 'Japan', '2076': 'Brazil', '2356': 'India',
-    '2484': 'Mexico', '2724': 'Spain', '2380': 'Italy', '2528': 'Netherlands', '2586': 'Pakistan',
-    '2360': 'Indonesia', '2608': 'Philippines', '2704': 'Vietnam', '2764': 'Thailand',
-    '2458': 'Malaysia', '2702': 'Singapore', '2784': 'UAE', '2682': 'Saudi Arabia',
-}
-
-
 @router.get("/geos/lookup", response_model=GeoLookupResponse)
 async def lookup_geo_names(
     ids: str = Query(..., description="Comma-separated list of Google geo criterion IDs"),
@@ -524,52 +459,10 @@ async def lookup_geo_names(
     if not geo_ids:
         return GeoLookupResponse(geos={})
 
-    # Build query with placeholders
-    placeholders = ",".join(["?" for _ in geo_ids])
+    service = SystemService()
+    geos = await service.lookup_geo_names(geo_ids)
 
-    # Try database lookup first
-    rows = []
-    try:
-        rows = await db_query(f"""
-            SELECT google_geo_id, country_code, country_name, city_name
-            FROM geographies
-            WHERE google_geo_id IN ({placeholders})
-        """, tuple(geo_ids))
-    except Exception:
-        # Table may not exist if migration not run
-        pass
-
-    # Build result mapping from database
-    result = {}
-    found_ids = set()
-
-    for row in rows:
-        geo_id = str(row['google_geo_id'])
-        found_ids.add(geo_id)
-
-        if row['city_name']:
-            # City-level: show "City, ST" or just city name
-            result[geo_id] = row['city_name']
-        elif row['country_name']:
-            # Country-level: show ISO-3 code when available
-            from utils.country_codes import get_country_alpha3
-            result[geo_id] = get_country_alpha3(row['country_code']) if row['country_code'] else row['country_name']
-        elif row['country_code']:
-            # Fallback to ISO-3 code from country code
-            from utils.country_codes import get_country_alpha3
-            result[geo_id] = get_country_alpha3(row['country_code'])
-
-    # For any not found in DB, try fallback mapping
-    for geo_id in geo_ids:
-        if geo_id not in found_ids:
-            if geo_id in FALLBACK_GEO_NAMES:
-                from utils.country_codes import get_country_alpha3_from_name
-                result[geo_id] = get_country_alpha3_from_name(FALLBACK_GEO_NAMES[geo_id])
-            else:
-                # Return original ID as last resort
-                result[geo_id] = geo_id
-
-    return GeoLookupResponse(geos=result)
+    return GeoLookupResponse(geos=geos)
 
 
 @router.get("/stats", response_model=StatsResponse)
