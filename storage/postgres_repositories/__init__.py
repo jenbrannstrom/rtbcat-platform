@@ -13,6 +13,7 @@ from .thumbnails_repo import ThumbnailsRepository
 from .seats_repo import SeatsRepository
 from .uploads_repo import UploadsRepository
 from .creative_performance_repo import CreativePerformanceRepository
+from .rtb_bidstream_repo import RtbBidstreamRepository
 
 __all__ = [
     "EndpointsRepository",
@@ -28,4 +29,5 @@ __all__ = [
     "SeatsRepository",
     "UploadsRepository",
     "CreativePerformanceRepository",
+    "RtbBidstreamRepository",
 ]
