@@ -7,13 +7,19 @@ SQL operations delegated to SeatsRepository.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Optional, Any
 
 from storage.postgres_repositories.seats_repo import SeatsRepository
 
 logger = logging.getLogger(__name__)
+
+
+def is_gcp_mode() -> bool:
+    """Check if running in GCP mode with ADC (OAuth2 Proxy enabled)."""
+    return os.environ.get("OAUTH2_PROXY_ENABLED", "").lower() in ("1", "true", "yes")
 
 
 @dataclass
@@ -41,6 +47,27 @@ class BuyerSeat:
             created_at=row.get("created_at"),
             service_account_id=row.get("service_account_id"),
         )
+
+    def to_response_dict(self) -> dict[str, Any]:
+        """Convert to response-ready dict with formatted datetime fields."""
+        return {
+            "buyer_id": self.buyer_id,
+            "bidder_id": self.bidder_id,
+            "display_name": self.display_name,
+            "active": self.active,
+            "creative_count": self.creative_count,
+            "last_synced": _format_datetime(self.last_synced),
+            "created_at": _format_datetime(self.created_at),
+        }
+
+
+def _format_datetime(dt: Optional[datetime | str]) -> Optional[str]:
+    """Format datetime to ISO string for response."""
+    if dt is None:
+        return None
+    if isinstance(dt, str):
+        return dt
+    return dt.isoformat()
 
 
 @dataclass
@@ -207,3 +234,47 @@ class SeatsService:
             return account.credentials_path
 
         return None
+
+    async def get_credentials_with_fallback(
+        self,
+        seat: BuyerSeat,
+        config: Any,
+    ) -> Optional[str]:
+        """Get credentials path with full fallback chain.
+
+        Tries credentials in order:
+        1. Multi-account credentials (via service_account_id)
+        2. First available service account
+        3. Legacy ConfigManager credentials
+        4. ADC (GCP mode) - returns None to trigger Application Default Credentials
+
+        Args:
+            seat: The buyer seat to get credentials for.
+            config: ConfigManager instance for legacy fallback.
+
+        Returns:
+            Path to service account JSON file, or None for ADC mode.
+
+        Raises:
+            ValueError: If no valid credentials found and not in GCP mode.
+        """
+        # Try multi-account via SeatsService
+        creds_path = await self.get_credentials_for_seat(seat)
+        if creds_path:
+            return creds_path
+
+        # Fall back to legacy ConfigManager
+        if config.is_configured():
+            try:
+                return str(config.get_service_account_path())
+            except Exception:
+                pass
+
+        # GCP mode: use Application Default Credentials
+        if is_gcp_mode():
+            logger.info("Using ADC (Application Default Credentials) for GCP mode")
+            return None
+
+        raise ValueError(
+            "No service account credentials configured. Add a service account in Setup."
+        )
