@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from services.creative_performance_service import CreativePerformanceService
+from services.creative_countries_service import CreativeCountriesService
 
 
 class CreativeLanguageService:
@@ -121,8 +121,8 @@ class CreativeLanguageService:
                 "serving_countries": [],
             }
 
-        service = CreativePerformanceService()
-        country_breakdown = await service.get_country_breakdown(creative.id, days)
+        countries_service = CreativeCountriesService()
+        country_breakdown = await countries_service.get_country_breakdown(creative.id, days)
         if not country_breakdown:
             return {
                 "has_mismatch": False,
