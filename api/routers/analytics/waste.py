@@ -104,7 +104,7 @@ async def get_waste_report(
 async def get_waste_signals(
     creative_id: str,
     include_resolved: bool = Query(False, description="Include resolved signals"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Get evidence-based waste signals for a creative.
@@ -128,7 +128,7 @@ async def detect_problem_formats(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     days: int = Query(7, ge=1, le=90, description="Timeframe for analysis"),
     size_tolerance: int = Query(5, ge=0, le=20, description="Pixel tolerance for size matching"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Detect creatives with problems that hurt QPS efficiency.
@@ -205,7 +205,7 @@ async def get_viewability_waste(
     days: int = Query(7, ge=1, le=30),
     threshold_pct: float = Query(50.0, ge=0, le=100, description="Viewability threshold"),
     bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """
@@ -234,7 +234,7 @@ async def get_fraud_risk_publishers(
     days: int = Query(7, ge=1, le=30),
     threshold_pct: float = Query(5.0, ge=0, le=100, description="IVT rate threshold"),
     bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
-    store: StoreType = Depends(get_store),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """

@@ -21,12 +21,12 @@ class EvaluationRepository:
         )
         return row["cnt"] if row else 0
 
-    async def get_troubleshooting_count(self, days: int) -> int:
-        """Count troubleshooting_data rows in timeframe."""
+    async def get_bid_filtering_count(self, days: int) -> int:
+        """Count rtb_bid_filtering rows in timeframe."""
         row = await pg_query_one(
             """
-            SELECT COUNT(*) as cnt FROM troubleshooting_data
-            WHERE collection_date >= CURRENT_DATE - make_interval(days => %s)
+            SELECT COUNT(*) as cnt FROM rtb_bid_filtering
+            WHERE metric_date >= CURRENT_DATE - make_interval(days => %s)
             """,
             (days,),
         )
@@ -38,21 +38,20 @@ class EvaluationRepository:
         return row["cnt"] if row else 0
 
     async def get_filtered_bids_summary(self, days: int) -> list[dict[str, Any]]:
-        """Get filtered bids grouped by status."""
+        """Get filtered bids grouped by filtering reason."""
         return await pg_query(
             """
             SELECT
-                status_name,
-                SUM(bid_count) as total_bids,
-                SUM(impression_count) as total_impressions,
-                ROUND(100.0 * SUM(bid_count) /
-                    NULLIF((SELECT SUM(bid_count) FROM troubleshooting_data
-                     WHERE metric_type = 'filtered_bids'
-                     AND collection_date >= CURRENT_DATE - make_interval(days => %s)), 0), 2) as pct_of_filtered
-            FROM troubleshooting_data
-            WHERE metric_type = 'filtered_bids'
-              AND collection_date >= CURRENT_DATE - make_interval(days => %s)
-            GROUP BY status_name
+                filtering_reason,
+                SUM(bids) as total_bids,
+                SUM(bids_in_auction) as bids_in_auction,
+                SUM(opportunity_cost_micros) as opportunity_cost_micros,
+                ROUND(100.0 * SUM(bids) /
+                    NULLIF((SELECT SUM(bids) FROM rtb_bid_filtering
+                     WHERE metric_date >= CURRENT_DATE - make_interval(days => %s)), 0), 2) as pct_of_filtered
+            FROM rtb_bid_filtering
+            WHERE metric_date >= CURRENT_DATE - make_interval(days => %s)
+            GROUP BY filtering_reason
             ORDER BY total_bids DESC
             """,
             (days, days),
@@ -140,14 +139,27 @@ class EvaluationRepository:
             (days, limit),
         )
 
-    async def get_bid_metrics_raw(self, days: int) -> list[dict[str, Any]]:
-        """Get raw bid metrics data for funnel calculation."""
-        return await pg_query(
+    async def get_bid_funnel_metrics(self, days: int) -> dict[str, Any]:
+        """Get aggregated bid funnel metrics."""
+        row = await pg_query_one(
             """
-            SELECT raw_data
-            FROM troubleshooting_data
-            WHERE metric_type = 'bid_metrics'
-              AND collection_date >= CURRENT_DATE - make_interval(days => %s)
+            SELECT
+                COALESCE(SUM(bid_requests), 0) as bid_requests,
+                COALESCE(SUM(successful_responses), 0) as successful_responses,
+                COALESCE(SUM(bids), 0) as bids,
+                COALESCE(SUM(reached_queries), 0) as reached_queries,
+                COALESCE(SUM(auctions_won), 0) as auctions_won,
+                COALESCE(SUM(impressions), 0) as impressions
+            FROM rtb_funnel_daily
+            WHERE metric_date >= CURRENT_DATE - make_interval(days => %s)
             """,
             (days,),
         )
+        return row or {
+            "bid_requests": 0,
+            "successful_responses": 0,
+            "bids": 0,
+            "reached_queries": 0,
+            "auctions_won": 0,
+            "impressions": 0,
+        }
