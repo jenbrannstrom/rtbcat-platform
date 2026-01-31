@@ -8,7 +8,20 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from storage.serving_database import db_query, db_query_one, table_exists
+from services.analytics_service import AnalyticsService
+
+logger = logging.getLogger(__name__)
+
+# Singleton service instance for helper functions
+_analytics_service: Optional[AnalyticsService] = None
+
+
+def _get_analytics_service() -> AnalyticsService:
+    """Get or create the analytics service singleton."""
+    global _analytics_service
+    if _analytics_service is None:
+        _analytics_service = AnalyticsService()
+    return _analytics_service
 
 
 async def get_precompute_status(
@@ -18,38 +31,14 @@ async def get_precompute_status(
     params: Optional[list] = None,
 ) -> dict:
     """Check if a precompute table exists and has rows for the requested range."""
-    if not await table_exists(table_name):
-        return {
-            "table": table_name,
-            "exists": False,
-            "has_rows": False,
-            "row_count": 0,
-        }
-
-    where_clauses = ["metric_date::date >= (CURRENT_DATE + ?::interval)"]
-    query_params: list = [f"-{days} days"]
-    if filters:
-        where_clauses.extend(filters)
-        if params:
-            query_params.extend(params)
-
-    row = await db_query_one(
-        f"""
-        SELECT COUNT(*) as cnt
-        FROM {table_name}
-        WHERE {" AND ".join(where_clauses)}
-        """,
-        tuple(query_params),
-    )
-    row_count = row["cnt"] or 0 if row else 0
+    service = _get_analytics_service()
+    status = await service.get_precompute_status(table_name, days, filters, params)
     return {
-        "table": table_name,
-        "exists": True,
-        "has_rows": row_count > 0,
-        "row_count": row_count,
+        "table": status.table,
+        "exists": status.exists,
+        "has_rows": status.has_rows,
+        "row_count": status.row_count,
     }
-
-logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -62,16 +51,8 @@ async def get_current_bidder_id() -> Optional[str]:
     Returns the bidder_id that was most recently synced, which represents
     the currently active account.
     """
-    try:
-        row = await db_query_one("""
-            SELECT bidder_id FROM pretargeting_configs
-            WHERE bidder_id IS NOT NULL
-            ORDER BY synced_at DESC
-            LIMIT 1
-        """)
-        return row["bidder_id"] if row else None
-    except Exception:
-        return None
+    service = _get_analytics_service()
+    return await service.get_current_bidder_id()
 
 
 async def get_valid_billing_ids() -> list[str]:
@@ -85,25 +66,8 @@ async def get_valid_billing_ids() -> list[str]:
 
     Billing IDs are normalized (trimmed) to match CSV import format.
     """
-    try:
-        # Get the current bidder_id (most recently synced account)
-        current_bidder = await get_current_bidder_id()
-
-        if current_bidder:
-            # Filter by the current account's bidder_id
-            rows = await db_query(
-                "SELECT DISTINCT TRIM(billing_id) as billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL AND bidder_id = ?",
-                (current_bidder,)
-            )
-        else:
-            # Fallback: return all billing_ids if no bidder_id found
-            rows = await db_query(
-                "SELECT DISTINCT TRIM(billing_id) as billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL"
-            )
-
-        return [row["billing_id"] for row in rows]
-    except Exception:
-        return []
+    service = _get_analytics_service()
+    return await service.get_valid_billing_ids()
 
 
 async def get_valid_billing_ids_for_buyer(buyer_id: Optional[str] = None) -> list[str]:
@@ -119,28 +83,8 @@ async def get_valid_billing_ids_for_buyer(buyer_id: Optional[str] = None) -> lis
         List of billing_id strings for the specified buyer (or all if not specified).
         Billing IDs are normalized (trimmed) to match CSV import format.
     """
-    try:
-        if buyer_id:
-            # Get bidder_id for this buyer seat
-            seat = await db_query_one(
-                "SELECT bidder_id FROM buyer_seats WHERE buyer_id = ?",
-                (buyer_id,)
-            )
-            if seat and seat["bidder_id"]:
-                rows = await db_query(
-                    "SELECT DISTINCT TRIM(billing_id) as billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL AND bidder_id = ?",
-                    (seat["bidder_id"],)
-                )
-                return [row["billing_id"] for row in rows]
-
-        # Fallback: return all billing_ids
-        rows = await db_query(
-            "SELECT DISTINCT TRIM(billing_id) as billing_id FROM pretargeting_configs WHERE billing_id IS NOT NULL"
-        )
-        return [row["billing_id"] for row in rows]
-    except Exception as e:
-        logger.error(f"Failed to get billing IDs for buyer {buyer_id}: {e}")
-        return []
+    service = _get_analytics_service()
+    return await service.get_valid_billing_ids_for_buyer(buyer_id)
 
 
 def _group_signals_by_type(signals) -> dict[str, int]:
