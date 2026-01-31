@@ -624,18 +624,14 @@ async def list_creatives_paginated(
     """
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
 
-    # Get total count for pagination
-    from storage.serving_database import db_query_one, db_query
-    if buyer_id:
-        count_row = await db_query_one(
-            "SELECT COUNT(*) as cnt FROM creatives WHERE buyer_id = %s",
-            (buyer_id,),
-        )
-    else:
-        count_row = await db_query_one("SELECT COUNT(*) as cnt FROM creatives")
-    total = count_row["cnt"] if count_row else 0
+    # Get total count for pagination (use same backend as list_creatives)
+    total = await store.get_creative_count(
+        buyer_id=buyer_id,
+        format=format,
+    )
 
     # Fetch creatives
+    from storage.serving_database import db_query
     creatives = await store.list_creatives(
         campaign_id=campaign_id,
         cluster_id=cluster_id,
@@ -648,18 +644,22 @@ async def list_creatives_paginated(
     # Filter by activity if requested
     if active_only and creatives:
         creative_ids = [c.id for c in creatives]
-        rows = await db_query(
-            """
-            SELECT DISTINCT creative_id
-            FROM rtb_daily
-            WHERE creative_id = ANY(%s)
-              AND metric_date >= CURRENT_DATE - make_interval(days => %s)
-              AND (impressions > 0 OR clicks > 0 OR spend_micros > 0)
-            """,
-            (creative_ids, days),
-        )
-        active_ids = set(row["creative_id"] for row in rows)
-        creatives = [c for c in creatives if c.id in active_ids][:limit]
+        try:
+            rows = await db_query(
+                """
+                SELECT DISTINCT creative_id
+                FROM rtb_daily
+                WHERE creative_id = ANY(%s)
+                  AND metric_date >= CURRENT_DATE - make_interval(days => %s)
+                  AND (impressions > 0 OR clicks > 0 OR spend_micros > 0)
+                """,
+                (creative_ids, days),
+            )
+            active_ids = set(row["creative_id"] for row in rows)
+            creatives = [c for c in creatives if c.id in active_ids][:limit]
+        except Exception as e:
+            # rtb_daily table may not exist - return all creatives
+            logger.debug(f"Could not filter active creatives: {e}")
 
     # Get thumbnail status, waste flags, and country data
     creative_ids = [c.id for c in creatives]
