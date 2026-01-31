@@ -17,12 +17,14 @@ from services.auth_service import User
 from services.creative_performance_service import CreativePerformanceService
 from services.creative_preview_service import CreativePreviewService
 from services.creative_language_service import CreativeLanguageService
+from services.creative_countries_service import CreativeCountriesService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Creatives"])
 preview_service = CreativePreviewService()
 language_service = CreativeLanguageService()
+countries_service = CreativeCountriesService()
 
 
 # =============================================================================
@@ -270,15 +272,6 @@ async def _get_primary_countries_for_creatives(
     """Get the primary country (by spend) for each creative."""
     service = CreativePerformanceService()
     return await service.get_primary_countries(creative_ids, days)
-
-
-async def _get_country_breakdown_for_creative(
-    creative_id: str,
-    days: int = 7,
-) -> list[dict]:
-    """Get country breakdown with spend/impressions for a single creative."""
-    service = CreativePerformanceService()
-    return await service.get_country_breakdown(creative_id, days)
 
 
 # =============================================================================
@@ -717,33 +710,8 @@ async def get_creative_countries(
     if creative.buyer_id:
         await require_buyer_access(creative.buyer_id, store=store, user=user)
 
-    breakdown = await _get_country_breakdown_for_creative(creative_id, days)
-
-    # Calculate total spend for percentage calculation
-    total_spend = sum(c.get("spend_micros", 0) or 0 for c in breakdown)
-
-    # Map country codes to names
-    from utils.country_codes import get_country_name, get_country_alpha3
-
-    countries = [
-        CreativeCountryMetrics(
-            country_code=c["country_code"],
-            country_name=get_country_name(c["country_code"]),
-            country_iso3=get_country_alpha3(c["country_code"]),
-            spend_micros=c.get("spend_micros", 0) or 0,
-            impressions=c.get("impressions", 0) or 0,
-            clicks=c.get("clicks", 0) or 0,
-            spend_percent=round((c.get("spend_micros", 0) or 0) / total_spend * 100, 1) if total_spend > 0 else 0,
-        )
-        for c in breakdown
-    ]
-
-    return CreativeCountryBreakdownResponse(
-        creative_id=creative_id,
-        countries=countries,
-        total_countries=len(countries),
-        period_days=days,
-    )
+    payload = await countries_service.build_country_metrics(creative_id, days)
+    return CreativeCountryBreakdownResponse(**payload)
 
 
 # =============================================================================
