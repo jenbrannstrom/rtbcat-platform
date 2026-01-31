@@ -343,7 +343,7 @@ The precompute refresh covers:
 
 **Endpoint:** `POST /precompute/refresh/scheduled`
 
-**Recommended schedule:** Every 6 hours (4x daily)
+**Recommended schedule:** Every 6 hours (4x daily). This is an **incremental** refresh (e.g., last 2 days) and should be complemented by the nightly full refresh (last 90 days).
 
 ```bash
 # Create Cloud Scheduler job

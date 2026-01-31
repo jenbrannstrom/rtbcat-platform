@@ -27,18 +27,18 @@ Goal: unmix business logic from data access. Routers call services; services cal
 
 | Domain | Repo | Service | Router | Owner | Status | Notes |
 |--------|------|---------|--------|-------|--------|-------|
-| Endpoints | ☐ | ☐ | ☑ | Codex | Router done | Uses SeatsService for SA lookups |
-| Snapshots | ☐ | ☑ | ☐ | Codex | Service exists | SnapshotsService in services/ |
-| Changes | ☐ | ☑ | ☐ | Codex | Service exists | ChangesService in services/ |
-| Pretargeting | ☐ | ☑ | ☐ | Codex | Service exists | PretargetingService in services/ |
-| Actions | ☐ | ☑ | ☑ | Claude | Done | ActionsService uses SeatsService |
+| Endpoints | ☑ | ☑ | ☑ | Codex | Done | endpoints_repo.py + EndpointsService |
+| Snapshots | ☑ | ☑ | ☑ | Codex | Done | snapshots_repo.py + SnapshotsService |
+| Changes | ☑ | ☑ | ☑ | Codex | Done | changes_repo.py + ChangesService |
+| Pretargeting | ☑ | ☑ | ☑ | Codex | Done | pretargeting_repo.py + PretargetingService |
+| Actions | — | ☑ | ☑ | Claude | Done | Orchestrates services; no repo needed |
 | Seats Sync | ☑ | ☑ | ☑ | Claude | Done | seats_repo.py + SeatsService |
 | Uploads | ☑ | ☑ | ☑ | Claude | Done | uploads_repo.py + UploadsService |
 | Retention | ☑ | ☑ | ☑ | Claude | Done | retention_repo.py + RetentionService |
 | System/Thumbnails | ☑ | ☑ | ☑ | Claude | Done | thumbnails_repo.py + ThumbnailsService |
-| Analytics/Performance | ☐ | ☐ | ☑ | Claude | Router done | Uses db_query() directly |
-| Creatives | ☐ | ☐ | ☑ | Claude | Router done | Uses db_query() directly |
-| Campaigns | ☐ | ☑ | ☑ | Codex | Done | campaign_repository.py migrated |
+| Analytics/Performance | ☑ | ☑ | ☑ | Claude | Done | analytics_repo.py + AnalyticsService |
+| Creatives | ☑ | ☑ | ☑ | Claude | Done | creatives_repo.py + CreativesService |
+| Campaigns | ☑ | ☑ | ☑ | Codex | Done | campaign_repo.py + CampaignsService |
 
 Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 
