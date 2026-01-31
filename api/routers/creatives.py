@@ -16,11 +16,13 @@ from api.dependencies import get_store, get_current_user, resolve_buyer_id, requ
 from services.auth_service import User
 from services.creative_performance_service import CreativePerformanceService
 from services.creative_preview_service import CreativePreviewService
+from services.creative_language_service import CreativeLanguageService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Creatives"])
 preview_service = CreativePreviewService()
+language_service = CreativeLanguageService()
 
 
 # =============================================================================
@@ -768,72 +770,13 @@ async def analyze_creative_language(
     if creative.buyer_id:
         await require_buyer_access(creative.buyer_id, store=store, user=user)
 
-    # Check if already analyzed (unless force=True)
-    if not force and creative.language_analyzed_at:
-        return LanguageDetectionResponse(
-            creative_id=creative_id,
-            detected_language=creative.detected_language,
-            detected_language_code=creative.detected_language_code,
-            language_confidence=creative.language_confidence,
-            language_source=creative.language_source,
-            language_analyzed_at=creative.language_analyzed_at.isoformat() if creative.language_analyzed_at else None,
-            language_analysis_error=creative.language_analysis_error,
-            success=creative.detected_language is not None,
-        )
-
-    # Import analyzer
-    try:
-        from api.analysis.language_analyzer import GeminiLanguageAnalyzer
-    except ImportError as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Language analyzer not available: {e}"
-        )
-
-    analyzer = GeminiLanguageAnalyzer(db_path=store.db_path)
-
-    if not analyzer.is_configured:
-        # Save error to database
-        await store.creative_repository.update_language_detection(
-            creative_id=creative_id,
-            detected_language=None,
-            detected_language_code=None,
-            language_confidence=None,
-            language_source="gemini",
-            language_analysis_error="Gemini API key not configured",
-        )
-        raise HTTPException(
-            status_code=503,
-            detail="Gemini API key not configured. Set it in Settings > Connected Accounts."
-        )
-
-    # Run language detection
-    result = await analyzer.analyze_creative(
-        creative_id=creative_id,
-        raw_data=creative.raw_data,
-        creative_format=creative.format,
+    response = await language_service.analyze_language(
+        creative=creative,
+        store=store,
+        force=force,
     )
 
-    # Save results to database
-    await store.creative_repository.update_language_detection(
-        creative_id=creative_id,
-        detected_language=result.language,
-        detected_language_code=result.language_code,
-        language_confidence=result.confidence,
-        language_source=result.source,
-        language_analysis_error=result.error,
-    )
-
-    return LanguageDetectionResponse(
-        creative_id=creative_id,
-        detected_language=result.language,
-        detected_language_code=result.language_code,
-        language_confidence=result.confidence,
-        language_source=result.source,
-        language_analyzed_at=datetime.now().isoformat(),
-        language_analysis_error=result.error,
-        success=result.success,
-    )
+    return LanguageDetectionResponse(**response)
 
 
 @router.put("/creatives/{creative_id}/language", response_model=LanguageDetectionResponse)
@@ -854,26 +797,13 @@ async def update_creative_language(
     if creative.buyer_id:
         await require_buyer_access(creative.buyer_id, store=store, user=user)
 
-    # Save manual update
-    await store.creative_repository.update_language_detection(
-        creative_id=creative_id,
-        detected_language=update.detected_language,
-        detected_language_code=update.detected_language_code.lower(),
-        language_confidence=1.0,  # Manual updates have full confidence
-        language_source="manual",
-        language_analysis_error=None,
+    response = await language_service.update_manual_language(
+        creative=creative,
+        update=update,
+        store=store,
     )
 
-    return LanguageDetectionResponse(
-        creative_id=creative_id,
-        detected_language=update.detected_language,
-        detected_language_code=update.detected_language_code.lower(),
-        language_confidence=1.0,
-        language_source="manual",
-        language_analyzed_at=datetime.now().isoformat(),
-        language_analysis_error=None,
-        success=True,
-    )
+    return LanguageDetectionResponse(**response)
 
 
 @router.get("/creatives/{creative_id}/geo-mismatch", response_model=GeoMismatchResponse)
@@ -894,48 +824,22 @@ async def get_creative_geo_mismatch(
     if creative.buyer_id:
         await require_buyer_access(creative.buyer_id, store=store, user=user)
 
-    # If no language detected, no mismatch check possible
-    if not creative.detected_language_code:
-        return GeoMismatchResponse(
-            creative_id=creative_id,
-            has_mismatch=False,
-            alert=None,
-            serving_countries=[],
-        )
-
-    # Get serving countries for this creative
-    country_breakdown = await _get_country_breakdown_for_creative(creative_id, days)
-
-    if not country_breakdown:
-        return GeoMismatchResponse(
-            creative_id=creative_id,
-            has_mismatch=False,
-            alert=None,
-            serving_countries=[],
-        )
-
-    serving_countries = [c["country_code"] for c in country_breakdown if c.get("country_code")]
-
-    # Check for mismatch
-    from utils.language_country_map import get_mismatch_alert
-
-    alert_data = get_mismatch_alert(
-        language_code=creative.detected_language_code,
-        language_name=creative.detected_language or creative.detected_language_code,
-        serving_countries=serving_countries,
+    mismatch = await language_service.get_geo_mismatch(
+        creative=creative,
+        days=days,
     )
 
-    if alert_data:
+    if mismatch["alert"]:
         return GeoMismatchResponse(
             creative_id=creative_id,
-            has_mismatch=True,
-            alert=GeoMismatchAlert(**alert_data),
-            serving_countries=serving_countries,
+            has_mismatch=mismatch["has_mismatch"],
+            alert=GeoMismatchAlert(**mismatch["alert"]),
+            serving_countries=mismatch["serving_countries"],
         )
 
     return GeoMismatchResponse(
         creative_id=creative_id,
-        has_mismatch=False,
+        has_mismatch=mismatch["has_mismatch"],
         alert=None,
-        serving_countries=serving_countries,
+        serving_countries=mismatch["serving_countries"],
     )
