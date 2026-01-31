@@ -1,9 +1,10 @@
 name: Build and Push Images
 
 on:
-  push:
-    branches:
-      - unified-platform
+  # TEMPORARILY DISABLED - rapid pushing, will re-enable when ready
+  # push:
+  #   branches:
+  #     - unified-platform
   workflow_dispatch:
 
 permissions:
