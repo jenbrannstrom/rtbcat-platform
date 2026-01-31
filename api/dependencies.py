@@ -4,7 +4,7 @@ from typing import Optional, List
 from fastapi import HTTPException, Request, Depends
 from storage.postgres_store import PostgresStore
 from storage.postgres_database import init_postgres_database
-from storage.repositories.user_repository import User
+from services.auth_service import AuthService, User
 from config import ConfigManager
 
 StoreType = PostgresStore
@@ -52,11 +52,16 @@ async def startup_event():
 
 # ==================== User Authentication Dependencies ====================
 
-def _get_user_repo() -> PostgresStore:
-    """Get the Postgres user repository instance."""
-    if _store is None:
-        raise HTTPException(status_code=503, detail="Store not initialized")
-    return _store
+# Singleton AuthService instance
+_auth_service: Optional[AuthService] = None
+
+
+def get_auth_service() -> AuthService:
+    """Get or create the AuthService instance."""
+    global _auth_service
+    if _auth_service is None:
+        _auth_service = AuthService()
+    return _auth_service
 
 
 # ==================== OAuth2 Proxy Authentication ====================
@@ -164,8 +169,8 @@ async def get_user_service_accounts(
         # Admins can access all service accounts
         return []  # Empty list means "all accounts"
 
-    repo = _get_user_repo()
-    return await repo.get_user_service_account_ids(user.id)
+    auth_svc = get_auth_service()
+    return await auth_svc.get_user_service_account_ids(user.id)
 
 
 async def get_allowed_service_account_ids(
@@ -177,8 +182,8 @@ async def get_allowed_service_account_ids(
     """
     if user.role == "admin":
         return []
-    repo = _get_user_repo()
-    return await repo.get_user_service_account_ids(user.id)
+    auth_svc = get_auth_service()
+    return await auth_svc.get_user_service_account_ids(user.id)
 
 
 async def get_allowed_buyer_ids(
@@ -192,8 +197,8 @@ async def get_allowed_buyer_ids(
     if user.role == "admin":
         return None
 
-    repo = _get_user_repo()
-    service_account_ids = await repo.get_user_service_account_ids(user.id)
+    auth_svc = get_auth_service()
+    service_account_ids = await auth_svc.get_user_service_account_ids(user.id)
     if not service_account_ids:
         return []
     return await store.get_buyer_ids_for_service_accounts(service_account_ids)
@@ -308,8 +313,8 @@ async def check_service_account_access(
     if user.role == "admin":
         return True
 
-    repo = _get_user_repo()
-    has_access = await repo.check_user_permission(
+    auth_svc = get_auth_service()
+    has_access = await auth_svc.check_user_permission(
         user.id,
         service_account_id,
         required_level,

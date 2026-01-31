@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from api.dependencies import get_store, get_config, get_current_user, resolve_buyer_id
-from storage.repositories.user_repository import User
+from services.auth_service import User
 from storage.serving_database import db_query, db_execute, table_exists
 from config import ConfigManager
 from services.thumbnails_service import ThumbnailsService

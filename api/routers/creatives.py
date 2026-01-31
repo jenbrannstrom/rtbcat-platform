@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from api.dependencies import get_store, get_current_user, resolve_buyer_id, require_buyer_access
-from storage.repositories.user_repository import User
+from services.auth_service import User
 from services.creative_performance_service import CreativePerformanceService
 from services.creative_preview_service import CreativePreviewService
 

@@ -14,7 +14,7 @@ from analytics.geo_waste_analyzer import GeoWasteAnalyzer
 from analytics.pretargeting_recommender import PretargetingRecommender
 from analytics.qps_optimizer import QPSOptimizer
 from api.dependencies import get_store, get_current_user, resolve_buyer_id, get_allowed_buyer_ids
-from storage.repositories.user_repository import User
+from services.auth_service import User
 
 from .common import get_valid_billing_ids_for_buyer
 

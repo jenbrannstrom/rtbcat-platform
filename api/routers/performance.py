@@ -21,7 +21,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from pydantic import BaseModel
 
 from api.dependencies import get_store, get_current_user, get_allowed_buyer_ids
-from storage.repositories.user_repository import User
+from services.auth_service import User
 from api.schemas.performance import (
     PerformanceMetricInput,
     PerformanceMetricResponse,

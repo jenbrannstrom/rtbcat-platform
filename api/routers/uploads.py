@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from api.dependencies import get_current_user, get_allowed_bidder_ids
 from services.uploads_service import UploadsService
-from storage.repositories.user_repository import User
+from services.auth_service import User
 
 logger = logging.getLogger(__name__)
 
