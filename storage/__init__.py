@@ -1,17 +1,17 @@
 """RTBcat Creative Intelligence - Storage Module.
 
 This module provides storage backends for creative data,
-supporting both local SQLite and cloud S3 storage.
+supporting PostgreSQL and cloud S3 storage.
 
 The storage layer is organized as follows:
 - models.py: All dataclass definitions
 - schema.py: Database schema and migrations
 - repositories/: Specialized repository classes for each entity type
-- sqlite_store.py: Main facade class (delegates to repositories)
+- postgres_store.py: Main facade class (delegates to repositories)
 
 Example:
     >>> from collectors import CreativesClient
-    >>> from storage import SQLiteStore, creative_dict_to_storage
+    >>> from storage import PostgresStore, creative_dict_to_storage
     >>>
     >>> # Fetch from API
     >>> client = CreativesClient(credentials_path="...", account_id="123")
@@ -19,14 +19,14 @@ Example:
     >>>
     >>> # Convert and store
     >>> storage_creatives = [creative_dict_to_storage(c) for c in api_creatives]
-    >>> store = SQLiteStore()
+    >>> store = PostgresStore()
     >>> await store.initialize()
     >>> await store.save_creatives(storage_creatives)
 """
 
 from .adapters import creative_dict_to_storage, creative_dicts_to_storage
 from .s3_writer import S3Writer
-from .sqlite_store import BuyerSeat, Campaign, Creative, PerformanceMetric, SQLiteStore
+from .postgres_store import BuyerSeat, Campaign, Creative, PerformanceMetric, PostgresStore
 from .repositories.performance_repository import PerformanceRepository
 from .repositories.seat_repository import Seat, SeatRepository
 from .retention_manager import RetentionManager
@@ -55,7 +55,7 @@ from .repositories import (
 
 __all__ = [
     # Storage backends
-    "SQLiteStore",
+    "PostgresStore",
     "S3Writer",
     "PerformanceRepository",
     "SeatRepository",

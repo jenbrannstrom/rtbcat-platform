@@ -6,7 +6,7 @@ returned by API collectors and the dataclass models used for storage.
 
 from typing import TYPE_CHECKING, Optional, Tuple
 
-from storage.sqlite_store import Creative
+from storage.models import Creative
 from utils.size_normalization import canonical_size as compute_canonical_size
 from utils.size_normalization import get_size_category
 
