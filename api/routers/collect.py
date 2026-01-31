@@ -13,9 +13,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from api.dependencies import get_store, get_config
 from api.schemas.system import CollectRequest, CollectResponse
-from collectors import CreativesClient
 from config import ConfigManager
-from storage import creative_dicts_to_storage
+from services.collect_service import CollectService
 
 logger = logging.getLogger(__name__)
 
@@ -30,20 +29,15 @@ async def collect_creatives_task(
 ) -> None:
     """Background task to collect creatives from API."""
     try:
-        client = CreativesClient(
+        service = CollectService()
+        fetched_count, saved_count = await service.collect_and_save(
             credentials_path=credentials_path,
             account_id=account_id,
+            filter_query=filter_query,
+            store=store,
         )
-
-        # Fetch all creatives from API
-        api_creatives = await client.fetch_all_creatives(filter_query=filter_query)
-        logger.info(f"Fetched {len(api_creatives)} creatives from API")
-
-        # Convert to storage format and save
-        storage_creatives = creative_dicts_to_storage(api_creatives)
-        count = await store.save_creatives(storage_creatives)
-
-        logger.info(f"Saved {count} creatives to database")
+        logger.info(f"Fetched {fetched_count} creatives from API")
+        logger.info(f"Saved {saved_count} creatives to database")
 
     except Exception as e:
         logger.error(f"Collection failed for account {account_id}: {e}")
@@ -121,17 +115,13 @@ async def collect_sync(
         )
 
     try:
-        client = CreativesClient(
+        service = CollectService()
+        _, count = await service.collect_and_save(
             credentials_path=credentials_path,
             account_id=request.account_id,
+            filter_query=request.filter_query,
+            store=store,
         )
-
-        # Fetch all creatives from API
-        api_creatives = await client.fetch_all_creatives(filter_query=request.filter_query)
-
-        # Convert to storage format and save
-        storage_creatives = creative_dicts_to_storage(api_creatives)
-        count = await store.save_creatives(storage_creatives)
 
         return CollectResponse(
             status="completed",
