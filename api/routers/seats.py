@@ -28,7 +28,7 @@ from api.dependencies import (
     get_allowed_service_account_ids,
     require_buyer_access,
 )
-from storage.repositories.user_repository import User
+from services.auth_service import User
 from collectors import BuyerSeatsClient, CreativesClient, EndpointsClient, PretargetingClient
 from services.seats_service import SeatsService, BuyerSeat
 

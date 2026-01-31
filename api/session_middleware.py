@@ -19,8 +19,7 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from storage.repositories.user_repository import User
-from api.dependencies import _store
+from services.auth_service import AuthService, User
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +62,16 @@ def is_public_path(path: str) -> bool:
     return False
 
 
-def _get_user_repo() -> "PostgresStore":
-    """Get the Postgres store for user operations."""
-    if _store is None:
-        raise RuntimeError("Store not initialized")
-    return _store
+# Singleton AuthService instance
+_auth_service: Optional[AuthService] = None
+
+
+def get_auth_service() -> AuthService:
+    """Get or create the AuthService instance."""
+    global _auth_service
+    if _auth_service is None:
+        _auth_service = AuthService()
+    return _auth_service
 
 
 def is_oauth2_proxy_enabled() -> bool:
@@ -113,8 +117,8 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             return self._multi_user_enabled
 
         try:
-            repo = _get_user_repo()
-            self._multi_user_enabled = await repo.is_multi_user_enabled()
+            auth_svc = get_auth_service()
+            self._multi_user_enabled = await auth_svc.is_multi_user_enabled()
             self._multi_user_checked = True
         except Exception as e:
             logger.warning(f"Failed to check multi-user mode: {e}")
@@ -125,8 +129,8 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
     async def _validate_session(self, session_id: str) -> Optional[User]:
         """Validate session and return user if valid."""
         try:
-            repo = _get_user_repo()
-            return await repo.validate_session(session_id)
+            auth_svc = get_auth_service()
+            return await auth_svc.validate_session(session_id)
         except Exception as e:
             logger.warning(f"Session validation failed: {e}")
             return None
@@ -138,11 +142,11 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
         Users are auto-created on first access with admin role.
         """
         try:
-            repo = _get_user_repo()
+            auth_svc = get_auth_service()
             email = email.lower().strip()
 
             # Try to find existing user
-            user = await repo.get_user_by_email(email)
+            user = await auth_svc.get_user_by_email(email)
             if user:
                 return user
 
@@ -151,10 +155,10 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             display_name = email.split("@")[0].replace(".", " ").title()
 
             # First user gets admin role, others get user role
-            user_count = await repo.count_users()
+            user_count = await auth_svc.count_users()
             role = "admin" if user_count == 0 else "user"
 
-            user = await repo.create_user(
+            user = await auth_svc.create_user(
                 user_id=user_id,
                 email=email,
                 display_name=display_name,

@@ -12,7 +12,7 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile, Depends
 
 from .common import ImportTrafficResponse
 from api.dependencies import get_store, get_current_user, resolve_buyer_id, get_allowed_buyer_ids
-from storage.repositories.user_repository import User
+from services.auth_service import User
 
 logger = logging.getLogger(__name__)
 

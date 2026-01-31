@@ -19,7 +19,7 @@ from api.clustering.ai_clusterer import AICampaignClusterer, apply_ai_suggestion
 from utils.app_parser import format_package_id_as_name, parse_app_store_url
 from api.dependencies import get_store, get_current_user, resolve_buyer_id
 from storage.postgres_store import PostgresStore
-from storage.repositories.user_repository import User
+from services.auth_service import User
 
 logger = logging.getLogger(__name__)
 

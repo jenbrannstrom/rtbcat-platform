@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from api.dependencies import get_store, get_current_user, resolve_buyer_id
 from storage.serving_database import db_query, db_query_one
 from .common import get_precompute_status
-from storage.repositories.user_repository import User
+from services.auth_service import User
 from services.home_precompute import refresh_home_summaries
 
 logger = logging.getLogger(__name__)

@@ -19,7 +19,7 @@ from api.dependencies import (
     require_buyer_access,
     resolve_bidder_id,
 )
-from storage.repositories.user_repository import User
+from services.auth_service import User
 from .common import (
     SizeGapResponse,
     SizeCoverageResponse,
