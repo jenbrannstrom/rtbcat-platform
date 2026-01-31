@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from storage.postgres_database import pg_query_one, pg_execute
+from storage.postgres_database import pg_query, pg_query_one, pg_execute
 
 
 class PerformanceRepository:
@@ -74,3 +74,14 @@ class PerformanceRepository:
             "total_clicks": perf["total_clicks"] if perf else 0,
             "total_spend_usd": perf["total_spend_usd"] if perf else 0,
         }
+
+    async def get_creative_buyer_ids(
+        self, creative_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        """Get creative IDs and their buyer_ids for access validation."""
+        if not creative_ids:
+            return []
+        return await pg_query(
+            "SELECT id, buyer_id FROM creatives WHERE id = ANY(%s)",
+            (creative_ids,),
+        )
