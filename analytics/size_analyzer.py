@@ -13,9 +13,7 @@ Related modules:
 
 Usage:
     >>> from analytics.size_analyzer import SizeAnalyzer
-    >>> from storage.sqlite_store import SQLiteStore
-    >>> store = SQLiteStore()
-    >>> analyzer = SizeAnalyzer(store)
+    >>> analyzer = SizeAnalyzer()
     >>> recommendations = await analyzer.analyze(days=7)
 """
 
@@ -25,7 +23,7 @@ import logging
 import re
 import uuid
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 from analytics.recommendation_engine import (
     Action,
@@ -37,14 +35,12 @@ from analytics.recommendation_engine import (
     Severity,
     severity_from_waste_rate,
 )
+from storage.serving_database import db_query
 from utils.size_normalization import (
     IAB_STANDARD_SIZES,
     canonical_size_with_tolerance,
     get_size_category,
 )
-
-if TYPE_CHECKING:
-    from storage.sqlite_store import SQLiteStore
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +61,8 @@ class SizeAnalyzer:
     - Using flexible HTML5 for near-IAB sizes
     """
 
-    def __init__(self, db_store: "SQLiteStore"):
-        self.store = db_store
+    def __init__(self, db_store: object | None = None):
+        self._store = db_store
 
     async def analyze(self, days: int = 7) -> list[Recommendation]:
         """
@@ -126,31 +122,23 @@ class SizeAnalyzer:
 
     async def _get_inventory_by_size(self) -> dict[str, dict]:
         """Get creative inventory grouped by canonical size."""
-        import asyncio
+        rows = await db_query("""
+            SELECT canonical_size, COUNT(*) as count, format
+            FROM creatives
+            WHERE canonical_size IS NOT NULL
+            GROUP BY canonical_size, format
+        """)
 
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
+        inventory: dict[str, dict] = {}
+        for row in rows:
+            size = row["canonical_size"]
+            if size not in inventory:
+                inventory[size] = {"count": 0, "formats": {}}
+            inventory[size]["count"] += row["count"]
+            fmt = row["format"] or "UNKNOWN"
+            inventory[size]["formats"][fmt] = row["count"]
 
-            def _query():
-                cursor = conn.execute("""
-                    SELECT canonical_size, COUNT(*) as count, format
-                    FROM creatives
-                    WHERE canonical_size IS NOT NULL
-                    GROUP BY canonical_size, format
-                """)
-
-                inventory: dict[str, dict] = {}
-                for row in cursor.fetchall():
-                    size = row["canonical_size"]
-                    if size not in inventory:
-                        inventory[size] = {"count": 0, "formats": {}}
-                    inventory[size]["count"] += row["count"]
-                    fmt = row["format"] or "UNKNOWN"
-                    inventory[size]["formats"][fmt] = row["count"]
-
-                return inventory
-
-            return await loop.run_in_executor(None, _query)
+        return inventory
 
     async def _get_traffic_by_size(self, days: int) -> dict[str, dict]:
         """
@@ -158,36 +146,25 @@ class SizeAnalyzer:
 
         Uses performance_metrics table to aggregate queries by size.
         """
-        import asyncio
+        rows = await db_query("""
+            SELECT
+                c.canonical_size,
+                COALESCE(SUM(pm.reached_queries), 0) as request_count
+            FROM performance_metrics pm
+            JOIN creatives c ON pm.creative_id = c.id
+            WHERE pm.metric_date >= date('now', ?)
+              AND c.canonical_size IS NOT NULL
+            GROUP BY c.canonical_size
+        """, (f"-{days} days",))
 
-        async with self.store._connection() as conn:
-            loop = asyncio.get_event_loop()
+        traffic: dict[str, dict] = {}
+        for row in rows:
+            size = row["canonical_size"]
+            count = row["request_count"] or 0
+            if size and count > 0:
+                traffic[size] = {"count": count}
 
-            def _query():
-                # Try to get size data from traffic
-                # Note: We need to join with creatives to get sizes
-                # If no direct size in traffic, aggregate from creatives performance
-                cursor = conn.execute("""
-                    SELECT
-                        c.canonical_size,
-                        COALESCE(SUM(pm.reached_queries), 0) as request_count
-                    FROM performance_metrics pm
-                    JOIN creatives c ON pm.creative_id = c.id
-                    WHERE pm.metric_date >= date('now', ?)
-                      AND c.canonical_size IS NOT NULL
-                    GROUP BY c.canonical_size
-                """, (f"-{days} days",))
-
-                traffic: dict[str, dict] = {}
-                for row in cursor.fetchall():
-                    size = row["canonical_size"]
-                    count = row["request_count"] or 0
-                    if size and count > 0:
-                        traffic[size] = {"count": count}
-
-                return traffic
-
-            return await loop.run_in_executor(None, _query)
+        return traffic
 
     def _create_size_recommendation(
         self,

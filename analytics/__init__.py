@@ -8,17 +8,13 @@ This module provides analysis capabilities for RTB optimization:
 
 Example:
     >>> from analytics import TrafficWasteAnalyzer, SizeAnalyzer
-    >>> from storage import SQLiteStore
-    >>>
-    >>> store = SQLiteStore()
-    >>> await store.initialize()
     >>>
     >>> # Traffic waste analysis
-    >>> analyzer = TrafficWasteAnalyzer(store)
+    >>> analyzer = TrafficWasteAnalyzer()
     >>> report = await analyzer.analyze_waste(buyer_id="456")
     >>>
     >>> # Size mismatch analysis
-    >>> size_analyzer = SizeAnalyzer(store)
+    >>> size_analyzer = SizeAnalyzer()
     >>> recommendations = await size_analyzer.analyze(days=7)
 """
 
