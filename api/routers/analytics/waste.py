@@ -56,7 +56,7 @@ async def get_waste_report(
     try:
         # TrafficWasteAnalyzer uses its own db connection internally
         buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
-        analyzer = TrafficWasteAnalyzer()
+        analyzer = TrafficWasteAnalyzer(store)
         report = await analyzer.analyze_waste(buyer_id=buyer_id, days=days)
 
         return WasteReportResponse(
@@ -143,7 +143,7 @@ async def detect_problem_formats(
     - disapproved: approval_status != 'APPROVED'
     """
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
-    analyzer = TrafficWasteAnalyzer()
+    analyzer = TrafficWasteAnalyzer(store)
     problems = await analyzer.detect_problem_formats(
         buyer_id=buyer_id,
         days=days,

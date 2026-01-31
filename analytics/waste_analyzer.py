@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from analytics.waste_models import SizeCoverage, SizeGap, TrafficRecord, WasteReport, ProblemFormat
+from storage.serving_database import db_query
 from utils.size_normalization import (
     IAB_STANDARD_SIZES,
     canonical_size,
@@ -58,7 +59,7 @@ class TrafficWasteAnalyzer:
         store: SQLiteStore instance for database access.
     """
 
-    def __init__(self, db_store: "SQLiteStore"):
+    def __init__(self, db_store):
         """Initialize the waste analyzer.
 
         Args:
@@ -290,7 +291,24 @@ class TrafficWasteAnalyzer:
             Dictionary mapping canonical_size to request count and raw sizes.
         """
         # Get traffic data from database
-        traffic_data = await self.store.get_traffic_data(buyer_id=buyer_id, days=days)
+        if hasattr(self.store, "get_traffic_data"):
+            traffic_data = await self.store.get_traffic_data(buyer_id=buyer_id, days=days)
+        else:
+            query = """
+                SELECT
+                    canonical_size,
+                    raw_size,
+                    SUM(request_count) as request_count,
+                    buyer_id
+                FROM rtb_traffic
+                WHERE date >= date('now', ?)
+            """
+            params: list = [f"-{days} days"]
+            if buyer_id:
+                query += " AND buyer_id = ?"
+                params.append(buyer_id)
+            query += " GROUP BY canonical_size, raw_size, buyer_id"
+            traffic_data = await db_query(query, tuple(params))
 
         traffic: Dict[str, dict] = {}
 
