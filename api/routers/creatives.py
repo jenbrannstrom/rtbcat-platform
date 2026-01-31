@@ -14,14 +14,12 @@ from pydantic import BaseModel
 
 from api.dependencies import get_store, get_current_user, resolve_buyer_id, require_buyer_access
 from services.auth_service import User
-from services.creative_preview_service import CreativePreviewService
 from services.creative_countries_service import CreativeCountriesService
 from services.creatives_service import CreativesService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Creatives"])
-preview_service = CreativePreviewService()
 countries_service = CreativeCountriesService()
 creatives_service = CreativesService()
 
