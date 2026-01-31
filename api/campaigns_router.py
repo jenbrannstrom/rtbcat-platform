@@ -199,7 +199,6 @@ async def auto_cluster_creatives(
         cluster_data: dict[str, dict] = defaultdict(lambda: {'name': '', 'domain': '', 'creative_ids': []})
 
         for row in rows:
-            # Convert sqlite3.Row to dict for .get() access
             row_dict = dict(row)
             creative_id = str(row_dict['creative_id'])
             final_url = row_dict.get('final_url') or ''

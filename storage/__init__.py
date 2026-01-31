@@ -5,9 +5,9 @@ supporting PostgreSQL and cloud S3 storage.
 
 The storage layer is organized as follows:
 - models.py: All dataclass definitions
-- schema.py: Database schema and migrations
-- repositories/: Specialized repository classes for each entity type
-- postgres_store.py: Main facade class (delegates to repositories)
+- postgres_store.py: Main facade class (delegates to postgres_repositories)
+- postgres_repositories/: Postgres-only repository classes
+- postgres_database.py: Postgres connection and query utilities
 
 Example:
     >>> from collectors import CreativesClient
@@ -27,12 +27,8 @@ Example:
 from .adapters import creative_dict_to_storage, creative_dicts_to_storage
 from .s3_writer import S3Writer
 from .postgres_store import BuyerSeat, Campaign, Creative, PerformanceMetric, PostgresStore
-from .repositories.performance_repository import PerformanceRepository
-from .repositories.seat_repository import Seat, SeatRepository
-from .retention_manager import RetentionManager
-from .repositories.campaign_repository import AICampaign, CampaignRepository
 
-# New modular imports
+# Models
 from .models import (
     Creative as CreativeModel,
     Campaign as CampaignModel,
@@ -44,45 +40,26 @@ from .models import (
     ImportHistory,
     DailyUploadSummary,
 )
-from .schema import SCHEMA, MIGRATIONS
-from .repositories import (
-    BaseRepository,
-    CreativeRepository,
-    AccountRepository,
-    TrafficRepository,
-    ThumbnailRepository,
-)
 
 __all__ = [
     # Storage backends
     "PostgresStore",
     "S3Writer",
-    "PerformanceRepository",
-    "SeatRepository",
-    "RetentionManager",
-    "CampaignRepository",
     # Models (backward compatible)
     "Creative",
     "Campaign",
-    "AICampaign",
     "BuyerSeat",
     "PerformanceMetric",
-    "Seat",
     # New models
+    "CreativeModel",
+    "CampaignModel",
     "Cluster",
     "ServiceAccount",
+    "BuyerSeatModel",
+    "PerformanceMetricModel",
     "ThumbnailStatus",
     "ImportHistory",
     "DailyUploadSummary",
-    # Schema
-    "SCHEMA",
-    "MIGRATIONS",
-    # New repositories
-    "BaseRepository",
-    "CreativeRepository",
-    "AccountRepository",
-    "TrafficRepository",
-    "ThumbnailRepository",
     # Adapters
     "creative_dict_to_storage",
     "creative_dicts_to_storage",
