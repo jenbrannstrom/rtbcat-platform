@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 
 from storage.serving_database import db_query, db_query_one, table_exists
 from api.dependencies import get_store, get_current_user, resolve_buyer_id
-from storage.repositories.user_repository import User
+from services.auth_service import User
 from analytics.rtb_bidstream_analyzer import RTBFunnelAnalyzer
 from .common import get_precompute_status, get_valid_billing_ids_for_buyer
 

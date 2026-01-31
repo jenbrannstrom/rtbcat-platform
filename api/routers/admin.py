@@ -11,8 +11,20 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from api.dependencies import require_admin, get_current_user, _get_user_repo
-from storage.repositories.user_repository import User
+from api.dependencies import require_admin, get_current_user
+from services.auth_service import AuthService, User
+
+
+# Singleton AuthService instance
+_auth_service: Optional[AuthService] = None
+
+
+def get_auth_service() -> AuthService:
+    """Get or create the AuthService instance."""
+    global _auth_service
+    if _auth_service is None:
+        _auth_service = AuthService()
+    return _auth_service
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -149,8 +161,8 @@ async def list_users(
 
     Requires admin role.
     """
-    repo = _get_user_repo()
-    users = await repo.get_users(active_only=active_only, role=role)
+    auth_svc = get_auth_service()
+    users = await auth_svc.get_users(active_only=active_only, role=role)
 
     return [
         UserResponse(
@@ -179,10 +191,10 @@ async def create_user(
     so no password is needed. This pre-creates the user record
     with assigned role before they first log in.
     """
-    repo = _get_user_repo()
+    auth_svc = get_auth_service()
 
     # Check if email already exists
-    existing = await repo.get_user_by_email(user_request.email.lower().strip())
+    existing = await auth_svc.get_user_by_email(user_request.email.lower().strip())
     if existing:
         raise HTTPException(status_code=400, detail="Email already in use")
 
@@ -194,7 +206,7 @@ async def create_user(
 
     # Create user (no password - OAuth2 only)
     user_id = str(uuid.uuid4())
-    user = await repo.create_user(
+    user = await auth_svc.create_user(
         user_id=user_id,
         email=user_request.email.lower().strip(),
         display_name=user_request.display_name,
@@ -203,7 +215,7 @@ async def create_user(
     )
 
     # Log the action
-    await repo.log_audit(
+    await auth_svc.log_audit(
         audit_id=str(uuid.uuid4()),
         action="create_user",
         user_id=admin.id,
@@ -234,8 +246,8 @@ async def get_user(
 
     Requires admin role.
     """
-    repo = _get_user_repo()
-    user = await repo.get_user_by_id(user_id)
+    auth_svc = get_auth_service()
+    user = await auth_svc.get_user_by_id(user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -263,8 +275,8 @@ async def update_user(
 
     Requires admin role. Can update display_name, role, and is_active.
     """
-    repo = _get_user_repo()
-    user = await repo.get_user_by_id(user_id)
+    auth_svc = get_auth_service()
+    user = await auth_svc.get_user_by_id(user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -279,7 +291,7 @@ async def update_user(
 
     # Update user
     default_language = _validate_default_language(user_update.default_language)
-    await repo.update_user(
+    await auth_svc.update_user(
         user_id=user_id,
         display_name=user_update.display_name,
         role=user_update.role,
@@ -298,7 +310,7 @@ async def update_user(
     if user_update.default_language is not None:
         changes["default_language"] = default_language
 
-    await repo.log_audit(
+    await auth_svc.log_audit(
         audit_id=str(uuid.uuid4()),
         action="update_user",
         user_id=admin.id,
@@ -309,7 +321,7 @@ async def update_user(
     )
 
     # Get updated user
-    updated_user = await repo.get_user_by_id(user_id)
+    updated_user = await auth_svc.get_user_by_id(user_id)
 
     return UserResponse(
         id=updated_user.id,
@@ -334,8 +346,8 @@ async def deactivate_user(
     Requires admin role. The user account is deactivated, not deleted.
     This also invalidates all their sessions.
     """
-    repo = _get_user_repo()
-    user = await repo.get_user_by_id(user_id)
+    auth_svc = get_auth_service()
+    user = await auth_svc.get_user_by_id(user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -344,13 +356,13 @@ async def deactivate_user(
         raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
 
     # Deactivate user
-    await repo.update_user(user_id=user_id, is_active=False)
+    await auth_svc.update_user(user_id=user_id, is_active=False)
 
     # Delete all their sessions
-    sessions_deleted = await repo.delete_user_sessions(user_id)
+    sessions_deleted = await auth_svc.delete_user_sessions(user_id)
 
     # Log the action
-    await repo.log_audit(
+    await auth_svc.log_audit(
         audit_id=str(uuid.uuid4()),
         action="deactivate_user",
         user_id=admin.id,
@@ -381,13 +393,13 @@ async def get_user_permissions(
 
     Requires admin role.
     """
-    repo = _get_user_repo()
-    user = await repo.get_user_by_id(user_id)
+    auth_svc = get_auth_service()
+    user = await auth_svc.get_user_by_id(user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    permissions = await repo.get_user_permissions(user_id)
+    permissions = await auth_svc.get_user_permissions(user_id)
 
     return [
         PermissionResponse(
@@ -413,8 +425,8 @@ async def grant_permission(
 
     Requires admin role. If permission already exists, it will be updated.
     """
-    repo = _get_user_repo()
-    user = await repo.get_user_by_id(user_id)
+    auth_svc = get_auth_service()
+    user = await auth_svc.get_user_by_id(user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -428,7 +440,7 @@ async def grant_permission(
 
     # Grant permission
     permission_id = str(uuid.uuid4())
-    permission = await repo.grant_permission(
+    permission = await auth_svc.grant_permission(
         permission_id=permission_id,
         user_id=user_id,
         service_account_id=perm_request.service_account_id,
@@ -437,7 +449,7 @@ async def grant_permission(
     )
 
     # Log the action
-    await repo.log_audit(
+    await auth_svc.log_audit(
         audit_id=str(uuid.uuid4()),
         action="grant_permission",
         user_id=admin.id,
@@ -472,20 +484,20 @@ async def revoke_permission(
 
     Requires admin role.
     """
-    repo = _get_user_repo()
-    user = await repo.get_user_by_id(user_id)
+    auth_svc = get_auth_service()
+    user = await auth_svc.get_user_by_id(user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     # Revoke permission
-    revoked = await repo.revoke_permission(user_id, service_account_id)
+    revoked = await auth_svc.revoke_permission(user_id, service_account_id)
 
     if not revoked:
         raise HTTPException(status_code=404, detail="Permission not found")
 
     # Log the action
-    await repo.log_audit(
+    await auth_svc.log_audit(
         audit_id=str(uuid.uuid4()),
         action="revoke_permission",
         user_id=admin.id,
@@ -517,8 +529,8 @@ async def get_audit_logs(
     Requires admin role. Supports filtering by user, action, resource type,
     and time range.
     """
-    repo = _get_user_repo()
-    logs = await repo.get_audit_logs(
+    auth_svc = get_auth_service()
+    logs = await auth_svc.get_audit_logs(
         user_id=user_id,
         action=action,
         resource_type=resource_type,
@@ -552,8 +564,8 @@ async def get_settings(
 
     Requires admin role.
     """
-    repo = _get_user_repo()
-    settings = await repo.get_all_settings()
+    auth_svc = get_auth_service()
+    settings = await auth_svc.get_all_settings()
     return settings
 
 
@@ -568,7 +580,7 @@ async def update_setting(
 
     Requires admin role.
     """
-    repo = _get_user_repo()
+    auth_svc = get_auth_service()
 
     # Validate certain settings
     if key == "audit_retention_days":
@@ -590,10 +602,10 @@ async def update_setting(
             )
 
     # Update setting
-    await repo.set_setting(key, setting_update.value, updated_by=admin.id)
+    await auth_svc.set_setting(key, setting_update.value, updated_by=admin.id)
 
     # Log the action
-    await repo.log_audit(
+    await auth_svc.log_audit(
         audit_id=str(uuid.uuid4()),
         action="update_setting",
         user_id=admin.id,
@@ -616,9 +628,9 @@ async def get_admin_stats(
 
     Requires admin role. Returns counts of users, sessions, etc.
     """
-    repo = _get_user_repo()
+    auth_svc = get_auth_service()
 
-    users = await repo.get_users()
+    users = await auth_svc.get_users()
     active_users = [u for u in users if u.is_active]
     admin_users = [u for u in users if u.role == "admin"]
 
@@ -683,7 +695,7 @@ async def get_admin_stats(
         "total_users": len(users),
         "active_users": len(active_users),
         "admin_users": len(admin_users),
-        "multi_user_enabled": await repo.is_multi_user_enabled(),
+        "multi_user_enabled": await auth_svc.is_multi_user_enabled(),
         "report_health": report_health,
     }
 

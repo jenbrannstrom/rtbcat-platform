@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from api.dependencies import require_admin
 from services.config_precompute import refresh_config_breakdowns
 from services.home_precompute import refresh_home_summaries
-from storage.repositories.user_repository import User
+from services.auth_service import User
 
 logger = logging.getLogger(__name__)
 

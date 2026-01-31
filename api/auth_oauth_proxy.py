@@ -9,14 +9,13 @@ This module provides user authentication via OAuth2 Proxy (Google Auth):
 Password-based login has been removed - Google Auth only.
 """
 
-import json
 import uuid
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
-from api.dependencies import _store
+from services.auth_service import AuthService
 
 # Session cookie name (used by OAuth2 Proxy flow)
 SESSION_COOKIE_NAME = "rtbcat_session"
@@ -39,11 +38,16 @@ class UserInfo(BaseModel):
 
 # ==================== Helper Functions ====================
 
-def _get_user_repo() -> "PostgresStore":
-    """Get the Postgres store instance."""
-    if _store is None:
-        raise HTTPException(status_code=503, detail="Store not initialized")
-    return _store
+# Singleton AuthService instance
+_auth_service: Optional[AuthService] = None
+
+
+def get_auth_service() -> AuthService:
+    """Get or create the AuthService instance."""
+    global _auth_service
+    if _auth_service is None:
+        _auth_service = AuthService()
+    return _auth_service
 
 
 def _get_client_ip(request: Request) -> Optional[str]:
@@ -68,12 +72,12 @@ async def logout(request: Request, response: Response):
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
 
     if session_id:
-        repo = _get_user_repo()
-        user = await repo.validate_session(session_id)
-        await repo.delete_session(session_id)
+        auth_svc = get_auth_service()
+        user = await auth_svc.validate_session(session_id)
+        await auth_svc.delete_session(session_id)
 
         if user:
-            await repo.log_audit(
+            await auth_svc.log_audit(
                 audit_id=str(uuid.uuid4()),
                 action="logout",
                 user_id=user.id,
@@ -100,8 +104,8 @@ async def get_current_user_info(request: Request):
     # User should be set by session middleware from OAuth2 Proxy headers
     if hasattr(request.state, "user") and request.state.user:
         user = request.state.user
-        repo = _get_user_repo()
-        permissions = await repo.get_user_service_account_ids(user.id)
+        auth_svc = get_auth_service()
+        permissions = await auth_svc.get_user_service_account_ids(user.id)
         return UserInfo(
             id=user.id,
             email=user.email,
@@ -154,8 +158,8 @@ async def cleanup_sessions():
 
     Should be called periodically (e.g., daily cron).
     """
-    repo = _get_user_repo()
-    sessions_deleted = await repo.cleanup_expired_sessions()
+    auth_svc = get_auth_service()
+    sessions_deleted = await auth_svc.cleanup_expired_sessions()
     return {
         "sessions_deleted": sessions_deleted,
     }
@@ -166,13 +170,13 @@ async def cleanup_audit_logs():
 
     Should be called periodically (e.g., daily cron).
     """
-    repo = _get_user_repo()
+    auth_svc = get_auth_service()
 
-    retention_str = await repo.get_setting("audit_retention_days")
+    retention_str = await auth_svc.get_setting("audit_retention_days")
     retention_days = int(retention_str) if retention_str else 60
 
     if retention_days <= 0:
         return {"deleted": 0, "message": "Retention set to unlimited"}
 
-    deleted = await repo.cleanup_old_audit_logs(retention_days)
+    deleted = await auth_svc.cleanup_old_audit_logs(retention_days)
     return {"deleted": deleted, "retention_days": retention_days}
