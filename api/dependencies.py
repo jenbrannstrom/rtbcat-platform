@@ -1,32 +1,17 @@
 """Shared dependencies for API routers."""
 
-import os
-from typing import Optional, List, Union
+from typing import Optional, List
 from fastapi import HTTPException, Request, Depends
-from storage import SQLiteStore
 from storage.postgres_store import PostgresStore
-from storage.database import init_database, DB_PATH
-from storage.repositories.user_repository import UserRepository, User
+from storage.postgres_database import init_postgres_database
+from storage.repositories.user_repository import User
 from config import ConfigManager
 
-# Type alias for store (SQLite or Postgres)
-StoreType = Union[SQLiteStore, PostgresStore]
+StoreType = PostgresStore
 
 # Global instances - set by main.py lifespan
 _store: Optional[StoreType] = None
 _config_manager: Optional[ConfigManager] = None
-
-
-def use_postgres() -> bool:
-    """Check if PostgreSQL backend should be used.
-
-    Set CATSCAN_DB_BACKEND=postgres or POSTGRES_SERVING_DSN to enable PostgreSQL.
-    Default is sqlite for backward compatibility.
-    """
-    backend = os.getenv("CATSCAN_DB_BACKEND", "").lower()
-    has_postgres_dsn = bool(os.getenv("POSTGRES_SERVING_DSN") or os.getenv("POSTGRES_DSN"))
-    return backend == "postgres" or has_postgres_dsn
-
 
 def set_store(store: StoreType) -> None:
     """Set the global store instance (called from main.py lifespan)."""
@@ -43,10 +28,7 @@ def set_config_manager(config_manager: ConfigManager) -> None:
 def get_store() -> StoreType:
     """Dependency for getting the data store.
 
-    Returns SQLiteStore or PostgresStore depending on CATSCAN_DB_BACKEND.
-
-    DEPRECATED: Use storage.database functions directly instead.
-    Kept for backward compatibility during migration.
+    Returns PostgresStore for all backends.
     """
     if _store is None:
         raise HTTPException(status_code=503, detail="Store not initialized")
@@ -65,20 +47,16 @@ async def startup_event():
 
     Initializes the v40 database schema if needed.
     """
-    await init_database()
+    await init_postgres_database()
 
 
 # ==================== User Authentication Dependencies ====================
 
-def _get_user_repo() -> Union[UserRepository, PostgresStore]:
-    """Get the user repository instance.
-
-    Returns PostgresStore when using Postgres backend (has user methods built-in).
-    Returns UserRepository for SQLite backend.
-    """
-    if use_postgres() and _store is not None and isinstance(_store, PostgresStore):
-        return _store
-    return UserRepository(DB_PATH)
+def _get_user_repo() -> PostgresStore:
+    """Get the Postgres user repository instance."""
+    if _store is None:
+        raise HTTPException(status_code=503, detail="Store not initialized")
+    return _store
 
 
 # ==================== OAuth2 Proxy Authentication ====================
@@ -204,7 +182,7 @@ async def get_allowed_service_account_ids(
 
 
 async def get_allowed_buyer_ids(
-    store: SQLiteStore = Depends(get_store),
+    store: PostgresStore = Depends(get_store),
     user: User = Depends(get_current_user),
 ) -> Optional[list[str]]:
     """Get buyer IDs allowed for the current user.
@@ -222,7 +200,7 @@ async def get_allowed_buyer_ids(
 
 
 async def get_allowed_bidder_ids(
-    store: SQLiteStore = Depends(get_store),
+    store: PostgresStore = Depends(get_store),
     user: User = Depends(get_current_user),
 ) -> Optional[list[str]]:
     """Get bidder IDs allowed for the current user."""
@@ -236,7 +214,7 @@ async def get_allowed_bidder_ids(
 
 async def resolve_buyer_id(
     buyer_id: Optional[str],
-    store: SQLiteStore = Depends(get_store),
+    store: PostgresStore = Depends(get_store),
     user: User = Depends(get_current_user),
 ) -> Optional[str]:
     """Resolve buyer_id for a request based on user access.
@@ -268,7 +246,7 @@ async def resolve_buyer_id(
 
 async def require_buyer_access(
     buyer_id: str,
-    store: SQLiteStore = Depends(get_store),
+    store: PostgresStore = Depends(get_store),
     user: User = Depends(get_current_user),
 ) -> None:
     """Require access to a specific buyer_id."""
@@ -284,7 +262,7 @@ async def require_buyer_access(
 
 async def resolve_bidder_id(
     bidder_id: Optional[str],
-    store: SQLiteStore = Depends(get_store),
+    store: PostgresStore = Depends(get_store),
     user: User = Depends(get_current_user),
 ) -> Optional[str]:
     """Resolve bidder_id for a request based on user access."""
