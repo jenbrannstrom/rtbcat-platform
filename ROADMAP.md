@@ -277,7 +277,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 
 ### Large File Refactoring
 - [ ] `dashboard/src/lib/api.ts` - Still has ~30 legacy functions to extract
-- [ ] **Postgres-only migration** - Replace SQLiteStore with PostgresStore + repositories; remove SQLite dependencies
+- [x] **Postgres-only migration** - Replace SQLiteStore with PostgresStore + repositories; SQLite legacy archived
 - [ ] `storage/repositories/user_repository.py` (1,188 lines) - Split into auth, permissions, audit repos
 - [ ] `api/routers/creatives.py` (1,181 lines) - Extract language detection, preview generation
 - [ ] `cli/qps_analyzer.py` (1,053 lines) - Split into separate command modules under `cli/commands/`

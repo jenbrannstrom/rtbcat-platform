@@ -10,14 +10,10 @@ Goal: unmix business logic from data access so routers are thin, services are te
 - PostgresStore: temporary shim only; no new logic.
 - File size cap: ~300-500 LOC; split by domain.
 
-## Open Decision
+## Repository Location
 
-Pick a home for Postgres repositories:
-
-1) `storage/repositories/postgres/*_repo.py`
-2) `storage/postgres_repositories/*_repo.py`
-
-Either is fine; choose one and keep SQLite repositories marked as legacy.
+Use `storage/postgres_repositories/*_repo.py` for all new data access modules.
+SQLite legacy code is archived under `docs/archive/sqlite_legacy/`.
 
 ## Phased Execution
 

@@ -20,10 +20,19 @@ python3 -m venv venv
 echo "Setting up Node.js dependencies..."
 cd dashboard && npm install && cd ..
 
-# Database init
+# Database init (Postgres)
 echo "Initializing database..."
-./venv/bin/python -c "from storage.sqlite_store import SQLiteStore; SQLiteStore()"
-sqlite3 ~/.catscan/catscan.db "PRAGMA journal_mode=WAL;" >/dev/null 2>&1 || true
+if [[ -z "${POSTGRES_DSN}" && -z "${DATABASE_URL}" ]]; then
+  echo "POSTGRES_DSN or DATABASE_URL must be set for Postgres."
+  echo "Example: export POSTGRES_DSN=postgresql://user:pass@localhost:5432/rtbcat"
+  exit 1
+fi
+if [[ -z "${POSTGRES_SERVING_DSN}" ]]; then
+  echo "POSTGRES_SERVING_DSN must be set for serving queries."
+  echo "Example: export POSTGRES_SERVING_DSN=postgresql://user:pass@localhost:5432/rtbcat"
+  exit 1
+fi
+./venv/bin/python scripts/postgres_migrate.py
 
 echo ""
 echo "=== Setup Complete ==="
