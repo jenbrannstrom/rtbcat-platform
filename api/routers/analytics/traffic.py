@@ -13,6 +13,7 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile, Depends
 from .common import ImportTrafficResponse
 from api.dependencies import get_store, get_current_user, resolve_buyer_id, get_allowed_buyer_ids
 from services.auth_service import User
+from services.traffic_service import TrafficService
 
 logger = logging.getLogger(__name__)
 
@@ -101,19 +102,8 @@ async def import_traffic_data(
         if not records:
             raise HTTPException(status_code=400, detail="No valid records found in CSV")
 
-        # Store traffic data
-        from storage.serving_database import db_execute
-        count = 0
-        for r in records:
-            await db_execute(
-                """INSERT INTO rtb_traffic
-                (canonical_size, raw_size, request_count, date, buyer_id)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT (buyer_id, canonical_size, raw_size, date) DO UPDATE SET
-                    request_count = EXCLUDED.request_count""",
-                (r["canonical_size"], r["raw_size"], r["request_count"], r["date"], r["buyer_id"])
-            )
-            count += 1
+        service = TrafficService()
+        count = await service.insert_rows(records)
 
         return ImportTrafficResponse(
             status="completed",
