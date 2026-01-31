@@ -27,18 +27,22 @@ Goal: unmix business logic from data access. Routers call services; services cal
 
 | Domain | Repo | Service | Router | Owner | Status | Notes |
 |--------|------|---------|--------|-------|--------|-------|
-| Endpoints | ☐ | ☐ | ☐ | Codex | Pending | Low-conflict first slice |
-| Snapshots | ☐ | ☐ | ☐ | Codex | Pending | Small surface area |
-| Changes | ☐ | ☐ | ☐ | Codex | Pending | Depends on snapshots |
-| Pretargeting | ☐ | ☐ | ☐ | Codex | Pending | Larger, do after small slices |
-| Actions | ☐ | ☐ | ☐ | Codex | Pending | Tied to pretargeting workflows |
-| Seats Sync | ☐ | ☐ | ☐ | Claude | Pending | Avoid overlap until his router work lands |
+| Endpoints | ☐ | ☐ | ☑ | Codex | Router done | Uses SeatsService for SA lookups |
+| Snapshots | ☐ | ☑ | ☐ | Codex | Service exists | SnapshotsService in services/ |
+| Changes | ☐ | ☑ | ☐ | Codex | Service exists | ChangesService in services/ |
+| Pretargeting | ☐ | ☑ | ☐ | Codex | Service exists | PretargetingService in services/ |
+| Actions | ☐ | ☑ | ☑ | Claude | Done | ActionsService uses SeatsService |
+| Seats Sync | ☑ | ☑ | ☑ | Claude | Done | seats_repo.py + SeatsService |
 | Uploads | ☐ | ☐ | ☐ | Claude | Pending | Read-only queries |
 | Retention | ☐ | ☐ | ☐ | Claude | Pending | Uses RetentionManager |
-| System/Thumbnails | ☐ | ☐ | ☐ | Claude | Pending | Local file + db ops |
-| Analytics/Performance | ☐ | ☐ | ☐ | Claude | Pending | Complex queries/transactions |
+| System/Thumbnails | ☑ | ☑ | ☑ | Claude | Done | thumbnails_repo.py + ThumbnailsService |
+| Analytics/Performance | ☐ | ☐ | ☑ | Claude | Router done | Uses db_query() directly |
+| Creatives | ☐ | ☐ | ☑ | Claude | Router done | Uses db_query() directly |
+| Campaigns | ☐ | ☑ | ☑ | Codex | Done | campaign_repository.py migrated |
 
-Legend: ☐ = not started, ☑ = done, ◐ = in progress. Start after Claude completes current router migrations.
+Legend: ☐ = not started, ☑ = done, ◐ = in progress.
+
+**Runtime Postgres migration complete** (2026-01-31). No `store._connection()` patterns remain in API code.
 
 ---
 
