@@ -2,11 +2,55 @@
 
 from __future__ import annotations
 
-from storage.postgres_database import pg_query_one
+from typing import Any, Optional
+
+from storage.postgres_database import pg_query_one, pg_execute
 
 
 class PerformanceRepository:
     """SQL-only repository for performance aggregates."""
+
+    async def upsert_performance_metric(
+        self,
+        creative_id: str,
+        metric_date: str,
+        impressions: int,
+        clicks: int,
+        spend_micros: int,
+        reached_queries: int = 0,
+        campaign_id: Optional[str] = None,
+        geography: Optional[str] = None,
+        device_type: Optional[str] = None,
+        placement: Optional[str] = None,
+        billing_id: Optional[str] = None,
+    ) -> None:
+        """Upsert a single performance metric row."""
+        await pg_execute("""
+            INSERT INTO performance_metrics (
+                creative_id, campaign_id, metric_date,
+                impressions, clicks, spend_micros,
+                geography, device_type, placement, reached_queries,
+                billing_id
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (creative_id, metric_date, COALESCE(geography, ''), COALESCE(device_type, ''), COALESCE(placement, ''))
+            DO UPDATE SET
+                impressions = performance_metrics.impressions + EXCLUDED.impressions,
+                clicks = performance_metrics.clicks + EXCLUDED.clicks,
+                spend_micros = performance_metrics.spend_micros + EXCLUDED.spend_micros,
+                reached_queries = performance_metrics.reached_queries + EXCLUDED.reached_queries
+        """, (
+            creative_id,
+            campaign_id,
+            metric_date,
+            impressions,
+            clicks,
+            spend_micros,
+            geography,
+            device_type,
+            placement,
+            reached_queries,
+            billing_id,
+        ))
 
     async def get_performance_aggregates(self, billing_id: str) -> dict:
         perf = await pg_query_one(
