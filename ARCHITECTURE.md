@@ -54,8 +54,8 @@ This document describes the technical architecture of Cat-Scan, a QPS optimizati
 │  │  Postgres (serving)  │  Repositories            │  Archive writer   │   │
 │  │  - precompute tables │  - repositories/         │  - GCS (current)  │   │
 │  │  - raw facts         │    - campaign_repository │  - S3 (legacy)    │   │
-│  │  SQLite (legacy)     │    - seat_repository     │                   │   │
-│  │  - staging only      │    - performance_repository                 │   │
+│  │  Postgres (state)    │    - seat_repository     │                   │   │
+│  │  - auth/config       │    - performance_repository                 │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -120,10 +120,11 @@ rtbcat-platform/
 │       └── collect.py     # Google API sync
 │
 ├── storage/               # Data persistence layer
-│   ├── sqlite_store.py    # Main database interface
+│   ├── postgres_store.py  # Main database interface
+│   ├── postgres_database.py # Postgres connection management
+│   ├── serving_database.py  # Read-only serving queries
 │   ├── schema.py          # Table definitions (41 tables)
 │   ├── models.py          # Pydantic models
-│   ├── database.py        # Connection management
 │   ├── repositories/
 │   │   ├── campaign_repository.py
 │   │   ├── seat_repository.py
@@ -183,7 +184,8 @@ rtbcat-platform/
 │   ├── gmail_import.py    # Gmail CSV import
 │   └── cleanup_old_data.py
 │
-├── migrations/            # Database migrations (20+ migrations)
+├── storage/postgres_migrations/ # Postgres migrations
+├── docs/archive/sqlite_legacy/  # Archived SQLite-only code
 ├── docs/                  # Documentation
 ├── terraform/             # Infrastructure as code
 │
@@ -434,9 +436,9 @@ dashboard/src/lib/i18n/
 
 ## Key Design Decisions
 
-### 1. Postgres-Only Serving (SQLite Deprecated)
+### 1. Postgres-Only Serving (SQLite Archived)
 
-**Why:** Production serving uses Postgres (Cloud SQL) for raw facts, precompute tables, and UI queries. SQLite is deprecated and should not be used for analytics or serving. This provides:
+**Why:** Production serving uses Postgres (Cloud SQL) for raw facts, precompute tables, and UI queries. SQLite is archived under `docs/archive/sqlite_legacy/` and should not be used for analytics or serving. This provides:
 - Single source of truth for analytics and UI
 - Scalable serving for large daily volumes
 - Stable joins for QPS optimization across raw facts
@@ -483,9 +485,9 @@ dashboard/src/lib/i18n/
 ## Performance Optimizations
 
 1. **Database:**
-   - WAL mode for concurrent access
    - Indexes on frequently queried columns
    - 90-day data retention with S3 archival
+   - Read/write split via serving vs state connections
 
 2. **API:**
    - Slim mode for creative listings (excludes VAST XML, HTML snippets)
