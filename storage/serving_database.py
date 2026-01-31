@@ -1,6 +1,6 @@
 """Serving database access module for UI queries.
 
-Serving is Postgres-only. SQLite fallback is deprecated and unsupported.
+Postgres-only serving database. All queries go to Postgres.
 Writes should use storage.postgres_database.
 """
 
@@ -38,7 +38,8 @@ def configure_serving_database(dsn: Optional[str] = None) -> None:
         logger.error("Serving queries require Postgres; POSTGRES_SERVING_DSN is not set")
 
 
-def _convert_sqlite_sql(sql: str) -> str:
+def _normalize_sql_placeholders(sql: str) -> str:
+    """Convert legacy ? placeholders to Postgres %s format."""
     sql = _DATE_NOW_REGEX.sub("CURRENT_DATE + %s::interval", sql)
     return sql.replace("?", "%s")
 
@@ -49,12 +50,14 @@ def _ensure_postgres_available() -> None:
             "Postgres serving is configured but psycopg is not installed. "
             "Install psycopg to enable Postgres read routing."
         )
+    if not _serving_postgres_dsn:
+        raise RuntimeError("POSTGRES_SERVING_DSN must be set for serving queries.")
 
 
 async def _postgres_query(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
     _ensure_postgres_available()
     loop = asyncio.get_event_loop()
-    converted_sql = _convert_sqlite_sql(sql)
+    converted_sql = _normalize_sql_placeholders(sql)
 
     def _execute() -> list[dict[str, Any]]:
         with psycopg.connect(_serving_postgres_dsn, row_factory=dict_row) as conn:
@@ -68,7 +71,7 @@ async def _postgres_query(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
 async def _postgres_query_one(sql: str, params: tuple = ()) -> Optional[dict[str, Any]]:
     _ensure_postgres_available()
     loop = asyncio.get_event_loop()
-    converted_sql = _convert_sqlite_sql(sql)
+    converted_sql = _normalize_sql_placeholders(sql)
 
     def _execute() -> Optional[dict[str, Any]]:
         with psycopg.connect(_serving_postgres_dsn, row_factory=dict_row) as conn:
@@ -80,7 +83,7 @@ async def _postgres_query_one(sql: str, params: tuple = ()) -> Optional[dict[str
 
 
 async def db_query(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
-    """Execute a SELECT query against the serving database when available."""
+    """Execute a SELECT query against the serving database."""
     return await _postgres_query(sql, params)
 
 
@@ -93,7 +96,7 @@ async def db_execute(sql: str, params: tuple = ()) -> int:
     """Execute an INSERT/UPDATE/DELETE statement. Returns rowcount."""
     _ensure_postgres_available()
     loop = asyncio.get_event_loop()
-    converted_sql = _convert_sqlite_sql(sql)
+    converted_sql = _normalize_sql_placeholders(sql)
 
     def _execute() -> int:
         with psycopg.connect(_serving_postgres_dsn) as conn:
@@ -112,5 +115,3 @@ async def table_exists(table_name: str) -> bool:
         (table_name,),
     )
     return bool(row and row.get("exists"))
-    if not _serving_postgres_dsn:
-        raise RuntimeError("POSTGRES_SERVING_DSN must be set for serving queries.")

@@ -79,6 +79,6 @@ Even with that limit, it’s still a better control surface than what most SSPs 
 
 ## Deployment notes
 
-- Production serving is Postgres‑only; SQLite is deprecated.
+- Production serving is Postgres‑only; SQLite is not used for serving.
 - CI builds images; VMs pull and restart.
 - Daily refresh is expected for correct dashboards.

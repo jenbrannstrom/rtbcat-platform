@@ -11,11 +11,11 @@
 - [ ] **FFmpeg missing on install** - Creatives tab fails to render video thumbnails until ffmpeg installed
 - [ ] **CSV import account mismatch** - Imports not linking to correct accounts
 - [ ] **Login loop / empty analytics** - Missing `POSTGRES_SERVING_DSN` breaks analytics; enforce Postgres-only and set DSN
-- [ ] **Size drill-down shows no creatives** - fix is in config_precompute (creative_size) but needs deploy + config precompute refresh; no SQLite migration required
+- [ ] **Size drill-down shows no creatives** - fix is in config_precompute (creative_size) but needs deploy + config precompute refresh
 - [x] **Import Now button fails** - /import does not process queued Gmail reports
 - [x] **Campaigns create action no-op** - Clicking "Create" on auto cluster does nothing
 - [ ] **Creative modal missing publisher data** - "No publisher data for this config" despite migrated tables
-- [x] **Duplicate migration numbers (SQLite runner)** - archived with SQLite legacy code
+- [x] **Duplicate migration numbers** - resolved
 - [ ] ~~**CI/CD pipeline** - Build images in GitHub Actions and deploy via docker pull (Artifact Registry)~~ **(Done)**
 - [ ] **BigQuery raw_facts coverage** - Data only through Jan 25; Jan 26–28 pending reprocess after pipeline fix
 
@@ -42,7 +42,7 @@ Goal: unmix business logic from data access. Routers call services; services cal
 
 Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 
-**Runtime Postgres migration complete** (2026-01-31). SQLite legacy archived under `docs/archive/sqlite_legacy/`.
+**Runtime Postgres migration complete** (2026-01-31). SQLite legacy has been removed from runtime paths.
 
 ---
 
@@ -277,7 +277,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 
 ### Large File Refactoring
 - [ ] `dashboard/src/lib/api.ts` - Still has ~30 legacy functions to extract
-- [x] **Postgres-only migration** - Replace SQLiteStore with PostgresStore + repositories; SQLite legacy archived
+- [x] **Postgres-only migration** - Replace SQLiteStore with PostgresStore + repositories; SQLite legacy removed
 - [ ] `storage/repositories/user_repository.py` (1,188 lines) - Split into auth, permissions, audit repos
 - [ ] `api/routers/creatives.py` (1,181 lines) - Extract language detection, preview generation
 - [ ] `cli/qps_analyzer.py` (1,053 lines) - Split into separate command modules under `cli/commands/`

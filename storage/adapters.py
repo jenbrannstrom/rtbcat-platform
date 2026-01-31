@@ -24,7 +24,7 @@ def creative_dict_to_storage(data: "CreativeDict") -> Creative:
         data: CreativeDict from CreativesClient.fetch_all_creatives()
 
     Returns:
-        Creative dataclass ready for SQLite storage.
+        Creative dataclass ready for Postgres storage.
 
     Example:
         >>> from collectors import CreativesClient

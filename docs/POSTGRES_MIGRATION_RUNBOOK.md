@@ -1,17 +1,17 @@
-# SQLite → GCS/BigQuery → Postgres migration runbook
+# Legacy SQLite → GCS/BigQuery → Postgres migration runbook
 
-**Decision (Jan 30, 2026):** Analytics and serving are Postgres-only. SQLite is deprecated and must not be used for serving or analytics. Any fallback to SQLite should be treated as a misconfiguration.
+**Decision (Jan 30, 2026):** Analytics and serving are Postgres-only. SQLite must not be used for serving or analytics. Any fallback to SQLite should be treated as a misconfiguration.
 
 This runbook tracks the four migration tasks:
 
-1. Export legacy SQLite raw tables to CSV/Parquet (if a legacy DB still exists).
+1. Export legacy SQLite raw tables to CSV/Parquet (only if an old SQLite DB still exists).
 2. Load into GCS and BigQuery partitions.
 3. Run precompute jobs for the last 90 days to fill Postgres summary tables.
 4. Switch the UI to Postgres once validated.
 
 ## Prerequisites
 
-- Access to a legacy SQLite database file (if it exists).
+- Access to a legacy SQLite database file (only if it still exists).
 - A GCS bucket for raw exports.
 - A BigQuery dataset for staging/partitioned tables.
 - A Postgres instance with the target schema and summary tables.
@@ -21,7 +21,7 @@ This runbook tracks the four migration tasks:
 ## 0) Ensure API uses Postgres (no SQLite fallback)
 
 On SG VM, the API container must receive `POSTGRES_DSN` and `POSTGRES_SERVING_DSN`.
-If `DATABASE_PATH` is set, the API will keep using SQLite and analytics will fail.
+If `DATABASE_PATH` is set, the API will attempt legacy SQLite and analytics will fail.
 
 **Compose patch (SG VM):**
 - Add `env_file: .env` to load `/opt/catscan/.env`

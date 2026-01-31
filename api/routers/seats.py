@@ -67,7 +67,7 @@ async def _trigger_background_language_analysis(
     It's designed to be non-blocking and fail gracefully.
 
     Args:
-        store: SQLite store instance.
+        store: PostgresStore instance.
         limit: Maximum number of creatives to analyze per batch.
 
     Returns:
