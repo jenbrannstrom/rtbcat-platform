@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
 from services.creative_performance_service import CreativePerformanceService
 from services.creative_preview_service import CreativePreviewService
+from storage.postgres_repositories.creatives_repo import CreativesRepository
 
 
 @dataclass
@@ -37,6 +39,16 @@ class CreativeListContext:
     country_data: dict[str, str]
 
 
+@dataclass
+class NewlyUploadedCreativesResult:
+    """Result for newly uploaded creatives query."""
+
+    creatives: list[dict[str, Any]]
+    total_count: int
+    period_start: datetime
+    period_end: datetime
+
+
 class CreativesService:
     """Service layer for creative list orchestration."""
 
@@ -44,9 +56,11 @@ class CreativesService:
         self,
         performance_service: CreativePerformanceService | None = None,
         preview_service: CreativePreviewService | None = None,
+        creatives_repo: CreativesRepository | None = None,
     ) -> None:
         self._perf = performance_service or CreativePerformanceService()
         self._preview = preview_service or CreativePreviewService()
+        self._repo = creatives_repo or CreativesRepository()
         self._thumbnails_dir = Path.home() / ".catscan" / "thumbnails"
 
     async def filter_active_creatives(
@@ -157,4 +171,55 @@ class CreativesService:
             creative,
             slim=slim,
             html_thumbnail_url=html_thumbnail_url,
+        )
+
+    async def get_newly_uploaded_creatives(
+        self,
+        days: int,
+        limit: int,
+        creative_format: Optional[str] = None,
+        buyer_id: Optional[str] = None,
+    ) -> NewlyUploadedCreativesResult:
+        """Get creatives first seen within the specified time period."""
+        period_end = datetime.now()
+        period_start = period_end - timedelta(days=days)
+
+        rows = await self._repo.get_newly_uploaded_creatives(
+            period_start=period_start,
+            period_end=period_end,
+            limit=limit,
+            creative_format=creative_format,
+            buyer_id=buyer_id,
+        )
+        total_count = await self._repo.get_newly_uploaded_creatives_count(
+            period_start=period_start,
+            period_end=period_end,
+            creative_format=creative_format,
+            buyer_id=buyer_id,
+        )
+
+        creatives: list[dict[str, Any]] = []
+        for row in rows:
+            creatives.append(
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "format": row["format"],
+                    "approval_status": row["approval_status"],
+                    "width": row["width"],
+                    "height": row["height"],
+                    "canonical_size": row["canonical_size"],
+                    "final_url": row["final_url"],
+                    "first_seen_at": row["first_seen_at"],
+                    "first_import_batch_id": row["first_import_batch_id"],
+                    "total_spend_usd": (row["total_spend_micros"] or 0) / 1_000_000,
+                    "total_impressions": row["total_impressions"] or 0,
+                }
+            )
+
+        return NewlyUploadedCreativesResult(
+            creatives=creatives,
+            total_count=total_count,
+            period_start=period_start,
+            period_end=period_end,
         )
