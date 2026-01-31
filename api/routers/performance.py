@@ -581,19 +581,11 @@ async def get_batch_performance(
             if not allowed:
                 raise HTTPException(status_code=403, detail="No buyer accounts assigned.")
             # Validate all creatives belong to allowed buyers
-            async with store._connection() as conn:
-                import asyncio
-                loop = asyncio.get_event_loop()
-
-                def _fetch_creatives():
-                    placeholders = ",".join("?" * len(request.creative_ids))
-                    cursor = conn.execute(
-                        f"SELECT id, buyer_id FROM creatives WHERE id IN ({placeholders})",
-                        request.creative_ids,
-                    )
-                    return cursor.fetchall()
-
-                rows = await loop.run_in_executor(None, _fetch_creatives)
+            from storage.serving_database import db_query
+            rows = await db_query(
+                "SELECT id, buyer_id FROM creatives WHERE id = ANY(%s)",
+                (request.creative_ids,)
+            )
             for row in rows:
                 buyer_id = row["buyer_id"]
                 if buyer_id and buyer_id not in allowed:
