@@ -22,17 +22,15 @@ class PerformanceRepository:
         geography: Optional[str] = None,
         device_type: Optional[str] = None,
         placement: Optional[str] = None,
-        billing_id: Optional[str] = None,
     ) -> None:
         """Upsert a single performance metric row."""
         await pg_execute("""
             INSERT INTO performance_metrics (
                 creative_id, campaign_id, metric_date,
                 impressions, clicks, spend_micros,
-                geography, device_type, placement, reached_queries,
-                billing_id
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (creative_id, metric_date, COALESCE(geography, ''), COALESCE(device_type, ''), COALESCE(placement, ''))
+                geography, device_type, placement, reached_queries
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (creative_id, metric_date, geography, device_type, placement)
             DO UPDATE SET
                 impressions = performance_metrics.impressions + EXCLUDED.impressions,
                 clicks = performance_metrics.clicks + EXCLUDED.clicks,
@@ -49,7 +47,6 @@ class PerformanceRepository:
             device_type,
             placement,
             reached_queries,
-            billing_id,
         ))
 
     async def get_performance_aggregates(self, billing_id: str) -> dict:

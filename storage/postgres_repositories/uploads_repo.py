@@ -160,8 +160,6 @@ class UploadsRepository:
         status: str,
         error_message: Optional[str],
         file_size_bytes: int,
-        bidder_id: Optional[str] = None,
-        billing_ids_found: Optional[str] = None,
     ) -> None:
         """Record an import in import_history table."""
         await pg_execute(
@@ -170,8 +168,8 @@ class UploadsRepository:
                 batch_id, filename, rows_read, rows_imported, rows_skipped, rows_duplicate,
                 date_range_start, date_range_end, columns_found, columns_missing,
                 total_reached, total_impressions, total_spend_usd, status, error_message,
-                file_size_bytes, bidder_id, billing_ids_found
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                file_size_bytes
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 batch_id,
@@ -190,8 +188,6 @@ class UploadsRepository:
                 status,
                 error_message,
                 file_size_bytes,
-                bidder_id,
-                billing_ids_found,
             ),
         )
 

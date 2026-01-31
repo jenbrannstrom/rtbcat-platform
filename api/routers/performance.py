@@ -669,7 +669,6 @@ async def import_performance_stream(
                 device_type = row.get("device_type") or row.get("platform") or None
                 placement = row.get("placement") or None
                 campaign_id = row.get("campaign_id") or None
-                billing_id = row.get("billing_id") or None
 
                 await perf_service.upsert_metric(
                     creative_id=row.get("creative_id"),
@@ -682,7 +681,6 @@ async def import_performance_stream(
                     geography=geography,
                     device_type=device_type,
                     placement=placement,
-                    billing_id=billing_id,
                 )
 
                 total_imported += 1
@@ -759,7 +757,6 @@ async def import_performance_batch(
                 device_type = row.get("device_type") or row.get("platform") or None
                 placement = row.get("placement") or None
                 campaign_id = row.get("campaign_id") or None
-                billing_id = row.get("billing_id") or None
 
                 await perf_service.upsert_metric(
                     creative_id=row.get("creative_id"),
@@ -772,7 +769,6 @@ async def import_performance_batch(
                     geography=geography,
                     device_type=device_type,
                     placement=placement,
-                    billing_id=billing_id,
                 )
 
                 imported += 1
