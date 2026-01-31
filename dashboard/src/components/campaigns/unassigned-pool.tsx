@@ -41,7 +41,7 @@ export function UnassignedPool({
   };
 
   const unassignedCreatives = creativeIds
-    .map(id => creatives.get(id))
+    .map(id => creatives.get(String(id)))
     .filter(Boolean) as Creative[];
 
   return (
