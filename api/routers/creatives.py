@@ -364,28 +364,21 @@ async def _get_waste_flags_for_creatives(
     # We need to query the rtb_daily table for impressions/clicks
     perf_data = {}
     try:
-        async with store._connection() as conn:
-            import asyncio
-            loop = asyncio.get_event_loop()
-
-            def _get_perf():
-                placeholders = ",".join("?" * len(creative_ids))
-                cursor = conn.execute(
-                    f"""
-                    SELECT creative_id,
-                           SUM(impressions) as total_impressions,
-                           SUM(clicks) as total_clicks
-                    FROM rtb_daily
-                    WHERE creative_id IN ({placeholders})
-                      AND metric_date::date >= (CURRENT_DATE - INTERVAL '{days} days')
-                    GROUP BY creative_id
-                    """,
-                    creative_ids,
-                )
-                return {row["creative_id"]: {"impressions": row["total_impressions"], "clicks": row["total_clicks"]}
-                        for row in cursor.fetchall()}
-
-            perf_data = await loop.run_in_executor(None, _get_perf)
+        from storage.serving_database import db_query
+        rows = await db_query(
+            """
+            SELECT creative_id,
+                   SUM(impressions) as total_impressions,
+                   SUM(clicks) as total_clicks
+            FROM rtb_daily
+            WHERE creative_id = ANY(%s)
+              AND metric_date >= CURRENT_DATE - make_interval(days => %s)
+            GROUP BY creative_id
+            """,
+            (creative_ids, days),
+        )
+        perf_data = {row["creative_id"]: {"impressions": row["total_impressions"], "clicks": row["total_clicks"]}
+                     for row in rows}
     except Exception as e:
         # rtb_daily table may not exist yet (no performance data imported)
         logger.debug(f"Could not fetch performance data: {e}")
@@ -435,37 +428,29 @@ async def _get_primary_countries_for_creatives(
 
     result = {}
     try:
-        async with store._connection() as conn:
-            import asyncio
-            loop = asyncio.get_event_loop()
-
-            def _get_countries():
-                placeholders = ",".join("?" * len(creative_ids))
-                # Get the country with highest spend for each creative
-                cursor = conn.execute(
-                    f"""
-                    WITH ranked AS (
-                        SELECT creative_id, geography,
-                               SUM(spend_micros) as total_spend,
-                               ROW_NUMBER() OVER (
-                                   PARTITION BY creative_id
-                                   ORDER BY SUM(spend_micros) DESC
-                               ) as rn
-                        FROM performance_metrics
-                        WHERE creative_id IN ({placeholders})
-                          AND geography IS NOT NULL
-                          AND metric_date::date >= (CURRENT_DATE - INTERVAL '{days} days')
-                        GROUP BY creative_id, geography
-                    )
-                    SELECT creative_id, geography
-                    FROM ranked
-                    WHERE rn = 1
-                    """,
-                    creative_ids,
-                )
-                return {row["creative_id"]: row["geography"] for row in cursor.fetchall()}
-
-            result = await loop.run_in_executor(None, _get_countries)
+        from storage.serving_database import db_query
+        rows = await db_query(
+            """
+            WITH ranked AS (
+                SELECT creative_id, geography,
+                       SUM(spend_micros) as total_spend,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY creative_id
+                           ORDER BY SUM(spend_micros) DESC
+                       ) as rn
+                FROM performance_metrics
+                WHERE creative_id = ANY(%s)
+                  AND geography IS NOT NULL
+                  AND metric_date >= CURRENT_DATE - make_interval(days => %s)
+                GROUP BY creative_id, geography
+            )
+            SELECT creative_id, geography
+            FROM ranked
+            WHERE rn = 1
+            """,
+            (creative_ids, days),
+        )
+        result = {row["creative_id"]: row["geography"] for row in rows}
     except Exception as e:
         # performance_metrics table may not exist or have geography data
         logger.debug(f"Could not fetch country data: {e}")
@@ -474,7 +459,6 @@ async def _get_primary_countries_for_creatives(
 
 
 async def _get_country_breakdown_for_creative(
-    store: Any,
     creative_id: str,
     days: int = 7,
 ) -> list[dict]:
@@ -485,31 +469,24 @@ async def _get_country_breakdown_for_creative(
     """
     result = []
     try:
-        async with store._connection() as conn:
-            import asyncio
-            loop = asyncio.get_event_loop()
-
-            def _query():
-                cursor = conn.execute(
-                    """
-                    SELECT
-                        country as country_code,
-                        SUM(spend_micros) as spend_micros,
-                        SUM(impressions) as impressions,
-                        SUM(clicks) as clicks
-                    FROM rtb_daily
-                    WHERE creative_id = ?
-                      AND country IS NOT NULL
-                      AND country != ''
-                      AND metric_date::date >= (CURRENT_DATE + (? || ' days')::interval)
-                    GROUP BY country
-                    ORDER BY spend_micros DESC
-                    """,
-                    (creative_id, f"-{days}"),
-                )
-                return [dict(row) for row in cursor.fetchall()]
-
-            result = await loop.run_in_executor(None, _query)
+        from storage.serving_database import db_query
+        result = await db_query(
+            """
+            SELECT
+                country as country_code,
+                SUM(spend_micros) as spend_micros,
+                SUM(impressions) as impressions,
+                SUM(clicks) as clicks
+            FROM rtb_daily
+            WHERE creative_id = %s
+              AND country IS NOT NULL
+              AND country != ''
+              AND metric_date >= CURRENT_DATE - make_interval(days => %s)
+            GROUP BY country
+            ORDER BY spend_micros DESC
+            """,
+            (creative_id, days),
+        )
     except Exception as e:
         logger.debug(f"Could not fetch country breakdown: {e}")
 
@@ -555,26 +532,19 @@ async def list_creatives(
     if active_only and creatives:
         creative_ids = [c.id for c in creatives]
         try:
-            async with store._connection() as conn:
-                import asyncio
-                loop = asyncio.get_event_loop()
-
-                def _get_active_ids():
-                    placeholders = ",".join("?" * len(creative_ids))
-                    cursor = conn.execute(
-                        f"""
-                        SELECT DISTINCT creative_id
-                        FROM rtb_daily
-                        WHERE creative_id IN ({placeholders})
-                          AND metric_date::date >= (CURRENT_DATE - INTERVAL '{days} days')
-                          AND (impressions > 0 OR clicks > 0 OR spend_micros > 0)
-                        """,
-                        creative_ids,
-                    )
-                    return set(row["creative_id"] for row in cursor.fetchall())
-
-                active_ids = await loop.run_in_executor(None, _get_active_ids)
-                creatives = [c for c in creatives if c.id in active_ids][:limit]
+            from storage.serving_database import db_query
+            rows = await db_query(
+                """
+                SELECT DISTINCT creative_id
+                FROM rtb_daily
+                WHERE creative_id = ANY(%s)
+                  AND metric_date >= CURRENT_DATE - make_interval(days => %s)
+                  AND (impressions > 0 OR clicks > 0 OR spend_micros > 0)
+                """,
+                (creative_ids, days),
+            )
+            active_ids = set(row["creative_id"] for row in rows)
+            creatives = [c for c in creatives if c.id in active_ids][:limit]
         except Exception as e:
             # rtb_daily table may not exist - return all creatives
             logger.debug(f"Could not filter active creatives: {e}")
@@ -655,21 +625,15 @@ async def list_creatives_paginated(
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
 
     # Get total count for pagination
-    async with store._connection() as conn:
-        import asyncio
-        loop = asyncio.get_event_loop()
-
-        def _count():
-            if buyer_id:
-                cursor = conn.execute(
-                    "SELECT COUNT(*) FROM creatives WHERE buyer_id = ?",
-                    (buyer_id,),
-                )
-            else:
-                cursor = conn.execute("SELECT COUNT(*) FROM creatives")
-            return cursor.fetchone()[0]
-
-        total = await loop.run_in_executor(None, _count)
+    from storage.serving_database import db_query_one, db_query
+    if buyer_id:
+        count_row = await db_query_one(
+            "SELECT COUNT(*) as cnt FROM creatives WHERE buyer_id = %s",
+            (buyer_id,),
+        )
+    else:
+        count_row = await db_query_one("SELECT COUNT(*) as cnt FROM creatives")
+    total = count_row["cnt"] if count_row else 0
 
     # Fetch creatives
     creatives = await store.list_creatives(
@@ -684,26 +648,18 @@ async def list_creatives_paginated(
     # Filter by activity if requested
     if active_only and creatives:
         creative_ids = [c.id for c in creatives]
-        async with store._connection() as conn:
-            import asyncio
-            loop = asyncio.get_event_loop()
-
-            def _get_active_ids():
-                placeholders = ",".join("?" * len(creative_ids))
-                cursor = conn.execute(
-                    f"""
-                    SELECT DISTINCT creative_id
-                    FROM rtb_daily
-                    WHERE creative_id IN ({placeholders})
-                      AND metric_date::date >= (CURRENT_DATE - INTERVAL '{days} days')
-                      AND (impressions > 0 OR clicks > 0 OR spend_micros > 0)
-                    """,
-                    creative_ids,
-                )
-                return set(row["creative_id"] for row in cursor.fetchall())
-
-            active_ids = await loop.run_in_executor(None, _get_active_ids)
-            creatives = [c for c in creatives if c.id in active_ids][:limit]
+        rows = await db_query(
+            """
+            SELECT DISTINCT creative_id
+            FROM rtb_daily
+            WHERE creative_id = ANY(%s)
+              AND metric_date >= CURRENT_DATE - make_interval(days => %s)
+              AND (impressions > 0 OR clicks > 0 OR spend_micros > 0)
+            """,
+            (creative_ids, days),
+        )
+        active_ids = set(row["creative_id"] for row in rows)
+        creatives = [c for c in creatives if c.id in active_ids][:limit]
 
     # Get thumbnail status, waste flags, and country data
     creative_ids = [c.id for c in creatives]
@@ -786,59 +742,51 @@ async def get_newly_uploaded_creatives(
     This is useful for identifying new creatives added to the account.
     """
     try:
+        from storage.serving_database import db_query, db_query_one
         period_end = datetime.now()
         period_start = period_end - timedelta(days=days)
         buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
 
-        async with store._connection() as conn:
-            import asyncio
-            loop = asyncio.get_event_loop()
+        # Build query with Postgres syntax
+        query = """
+            SELECT c.*,
+                (SELECT SUM(spend_micros) FROM rtb_daily WHERE creative_id = c.id) as total_spend_micros,
+                (SELECT SUM(impressions) FROM rtb_daily WHERE creative_id = c.id) as total_impressions
+            FROM creatives c
+            WHERE c.first_seen_at >= %s
+            AND c.first_seen_at <= %s
+        """
+        params: list = [period_start.isoformat(), period_end.isoformat()]
 
-            # Build query
-            query = """
-                SELECT c.*,
-                    (SELECT SUM(spend_micros) FROM rtb_daily WHERE creative_id = c.id) as total_spend_micros,
-                    (SELECT SUM(impressions) FROM rtb_daily WHERE creative_id = c.id) as total_impressions
-                FROM creatives c
-                WHERE c.first_seen_at >= ?
-                AND c.first_seen_at <= ?
-            """
-            params = [period_start.isoformat(), period_end.isoformat()]
+        if format:
+            query += " AND c.format = %s"
+            params.append(format.upper())
 
-            if format:
-                query += " AND c.format = ?"
-                params.append(format.upper())
+        if buyer_id:
+            query += " AND c.buyer_id = %s"
+            params.append(buyer_id)
 
-            if buyer_id:
-                query += " AND c.buyer_id = ?"
-                params.append(buyer_id)
+        query += " ORDER BY c.first_seen_at DESC LIMIT %s"
+        params.append(limit)
 
-            query += " ORDER BY c.first_seen_at DESC LIMIT ?"
-            params.append(limit)
+        rows = await db_query(query, tuple(params))
 
-            rows = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(query, params).fetchall(),
-            )
+        # Get total count
+        count_query = """
+            SELECT COUNT(*) as cnt FROM creatives c
+            WHERE c.first_seen_at >= %s
+            AND c.first_seen_at <= %s
+        """
+        count_params: list = [period_start.isoformat(), period_end.isoformat()]
+        if format:
+            count_query += " AND c.format = %s"
+            count_params.append(format.upper())
+        if buyer_id:
+            count_query += " AND c.buyer_id = %s"
+            count_params.append(buyer_id)
 
-            # Get total count
-            count_query = """
-                SELECT COUNT(*) FROM creatives c
-                WHERE c.first_seen_at >= ?
-                AND c.first_seen_at <= ?
-            """
-            count_params = [period_start.isoformat(), period_end.isoformat()]
-            if format:
-                count_query += " AND c.format = ?"
-                count_params.append(format.upper())
-            if buyer_id:
-                count_query += " AND c.buyer_id = ?"
-                count_params.append(buyer_id)
-
-            total_count = await loop.run_in_executor(
-                None,
-                lambda: conn.execute(count_query, count_params).fetchone()[0],
-            )
+        count_row = await db_query_one(count_query, tuple(count_params))
+        total_count = count_row["cnt"] if count_row else 0
 
         creatives = []
         for row in rows:
@@ -1006,7 +954,7 @@ async def get_creative_countries(
     if creative.buyer_id:
         await require_buyer_access(creative.buyer_id, store=store, user=user)
 
-    breakdown = await _get_country_breakdown_for_creative(store, creative_id, days)
+    breakdown = await _get_country_breakdown_for_creative(creative_id, days)
 
     # Calculate total spend for percentage calculation
     total_spend = sum(c.get("spend_micros", 0) or 0 for c in breakdown)
@@ -1195,7 +1143,7 @@ async def get_creative_geo_mismatch(
         )
 
     # Get serving countries for this creative
-    country_breakdown = await _get_country_breakdown_for_creative(store, creative_id, days)
+    country_breakdown = await _get_country_breakdown_for_creative(creative_id, days)
 
     if not country_breakdown:
         return GeoMismatchResponse(
