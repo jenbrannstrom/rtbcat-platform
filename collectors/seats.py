@@ -13,7 +13,7 @@ from typing import AsyncIterator, Optional
 from googleapiclient.errors import HttpError
 
 from collectors.base import BaseAuthorizedBuyersClient
-from storage.sqlite_store import BuyerSeat
+from storage.models import BuyerSeat
 
 logger = logging.getLogger(__name__)
 
