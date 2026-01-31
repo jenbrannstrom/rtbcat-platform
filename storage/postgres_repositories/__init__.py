@@ -10,6 +10,7 @@ from .retention_repo import RetentionRepository
 from .evaluation_repo import EvaluationRepository
 from .campaign_repo import CampaignRepository
 from .thumbnails_repo import ThumbnailsRepository
+from .seats_repo import SeatsRepository
 
 __all__ = [
     "EndpointsRepository",
@@ -22,4 +23,5 @@ __all__ = [
     "EvaluationRepository",
     "CampaignRepository",
     "ThumbnailsRepository",
+    "SeatsRepository",
 ]
