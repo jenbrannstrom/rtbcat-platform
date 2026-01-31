@@ -528,3 +528,92 @@ class CampaignRepository:
             (limit,),
         )
         return [str(row["metric_date"]) for row in rows]
+
+    # ==================== Unclustered Creatives ====================
+
+    async def get_unclustered_creatives(
+        self, buyer_id: Optional[str] = None
+    ) -> list[dict[str, Any]]:
+        """Get unclustered creatives with app/URL info for auto-clustering."""
+        if buyer_id:
+            return await pg_query(
+                """
+                SELECT c.id as creative_id, c.final_url, c.buyer_id,
+                       c.app_id, c.app_name, c.app_store, c.advertiser_name
+                FROM creatives c
+                LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
+                WHERE cc.creative_id IS NULL
+                  AND c.buyer_id = %s
+                ORDER BY c.id
+                """,
+                (buyer_id,),
+            )
+        return await pg_query(
+            """
+            SELECT c.id as creative_id, c.final_url, c.buyer_id,
+                   c.app_id, c.app_name, c.app_store, c.advertiser_name
+            FROM creatives c
+            LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
+            WHERE cc.creative_id IS NULL
+            ORDER BY c.id
+            """
+        )
+
+    async def get_unclustered_creative_ids(
+        self, buyer_id: Optional[str] = None
+    ) -> list[str]:
+        """Get IDs of unclustered creatives."""
+        if buyer_id:
+            rows = await pg_query(
+                """
+                SELECT c.id as creative_id
+                FROM creatives c
+                LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
+                WHERE cc.creative_id IS NULL
+                  AND c.buyer_id = %s
+                ORDER BY c.id
+                """,
+                (buyer_id,),
+            )
+        else:
+            rows = await pg_query(
+                """
+                SELECT c.id as creative_id
+                FROM creatives c
+                LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
+                WHERE cc.creative_id IS NULL
+                ORDER BY c.id
+                """
+            )
+        return [str(row["creative_id"]) for row in rows]
+
+    async def get_creative_countries(
+        self, creative_ids: list[str], days: int = 30
+    ) -> dict[str, str]:
+        """Get primary country (by spend) for each creative."""
+        if not creative_ids:
+            return {}
+
+        rows = await pg_query(
+            """
+            WITH ranked AS (
+                SELECT creative_id, geography,
+                       SUM(spend_micros) as total_spend,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY creative_id
+                           ORDER BY SUM(spend_micros) DESC
+                       ) as rn
+                FROM performance_metrics
+                WHERE creative_id = ANY(%s)
+                  AND geography IS NOT NULL
+                  AND metric_date >= CURRENT_DATE - make_interval(days => %s)
+                GROUP BY creative_id, geography
+            )
+            SELECT creative_id, geography
+            FROM ranked
+            WHERE rn = 1
+            """,
+            (creative_ids, days),
+        )
+
+        return {row["creative_id"]: row["geography"] for row in rows}
