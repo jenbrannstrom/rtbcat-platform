@@ -2,7 +2,6 @@
 PostgreSQL database access module for Cat-Scan.
 
 This module provides thread-safe PostgreSQL access for FastAPI's async environment.
-API signatures are consistent with storage/database.py for SQLite.
 
 Usage:
     from storage.postgres_database import pg_query, pg_execute, pg_transaction_async
@@ -295,7 +294,7 @@ async def init_postgres_database() -> None:
 # Compatibility layer
 # ============================================================================
 
-# Aliases for compatibility with SQLite database.py naming convention
+# Aliases for backward compatibility
 db_query = pg_query
 db_query_one = pg_query_one
 db_execute = pg_execute

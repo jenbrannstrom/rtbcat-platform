@@ -9,7 +9,6 @@ Usage:
     >>> store = PostgresStore()
     >>> await store.initialize()
     >>>
-    >>> # API matches prior SQLiteStore surface
     >>> await store.save_creatives(creatives)
     >>> html_creatives = await store.list_creatives(format="HTML")
 

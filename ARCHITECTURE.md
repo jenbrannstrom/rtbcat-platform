@@ -185,7 +185,6 @@ rtbcat-platform/
 │   └── cleanup_old_data.py
 │
 ├── storage/postgres_migrations/ # Postgres migrations
-├── docs/archive/sqlite_legacy/  # Archived SQLite-only code
 ├── docs/                  # Documentation
 ├── terraform/             # Infrastructure as code
 │
@@ -436,9 +435,9 @@ dashboard/src/lib/i18n/
 
 ## Key Design Decisions
 
-### 1. Postgres-Only Serving (SQLite Archived)
+### 1. Postgres-Only Serving
 
-**Why:** Production serving uses Postgres (Cloud SQL) for raw facts, precompute tables, and UI queries. SQLite is archived under `docs/archive/sqlite_legacy/` and should not be used for analytics or serving. This provides:
+**Why:** Production serving uses Postgres (Cloud SQL) for raw facts, precompute tables, and UI queries. SQLite is not used for analytics or serving. This provides:
 - Single source of truth for analytics and UI
 - Scalable serving for large daily volumes
 - Stable joins for QPS optimization across raw facts

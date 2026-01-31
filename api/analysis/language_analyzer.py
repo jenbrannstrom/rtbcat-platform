@@ -17,31 +17,15 @@ logger = logging.getLogger(__name__)
 
 
 def get_gemini_api_key_sync(db_path: Optional[str] = None) -> Optional[str]:
-    """Get Gemini API key from database or environment variable (sync version).
+    """Get Gemini API key from environment variable.
 
     Args:
-        db_path: Path to database file. If not provided, checks env var only.
+        db_path: Deprecated, not used. Kept for backward compatibility.
 
     Returns:
         API key if configured, None otherwise.
     """
-    # Try database first using direct SQLite access
-    if db_path:
-        try:
-            import sqlite3
-            conn = sqlite3.connect(db_path)
-            cursor = conn.execute(
-                "SELECT value FROM system_settings WHERE key = ?",
-                ("gemini_api_key",)
-            )
-            row = cursor.fetchone()
-            conn.close()
-            if row and row[0]:
-                return row[0]
-        except Exception as e:
-            logger.debug(f"Could not get Gemini API key from database: {e}")
-
-    # Fall back to environment variable
+    # Environment variable is the only supported source
     return os.environ.get("GEMINI_API_KEY")
 
 
