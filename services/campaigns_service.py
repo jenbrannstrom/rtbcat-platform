@@ -163,6 +163,26 @@ class CampaignsService:
         """Count disapproved creatives in a list."""
         return await self._repo.count_disapproved_in_list(creative_ids)
 
+    # ==================== Unclustered Creatives ====================
+
+    async def get_unclustered_creatives(
+        self, buyer_id: Optional[str] = None
+    ) -> list[dict[str, Any]]:
+        """Get unclustered creatives with app/URL info for clustering."""
+        return await self._repo.get_unclustered_creatives(buyer_id)
+
+    async def get_unclustered_creative_ids(
+        self, buyer_id: Optional[str] = None
+    ) -> list[str]:
+        """Get IDs of unclustered creatives."""
+        return await self._repo.get_unclustered_creative_ids(buyer_id)
+
+    async def get_creative_countries(
+        self, creative_ids: list[str], days: int = 30
+    ) -> dict[str, str]:
+        """Get primary country (by spend) for each creative."""
+        return await self._repo.get_creative_countries(creative_ids, days)
+
     # ==================== Helpers ====================
 
     @staticmethod

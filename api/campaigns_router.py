@@ -12,7 +12,6 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 
-from storage.postgres_database import pg_query
 from services.campaigns_service import CampaignsService, AICampaign
 from utils.app_parser import format_package_id_as_name, parse_app_store_url
 from api.dependencies import get_store, get_current_user, resolve_buyer_id
@@ -142,32 +141,8 @@ class CampaignPerformanceResponse(BaseModel):
 
 async def _get_creative_countries(creative_ids: list[str], days: int = 30) -> dict[str, str]:
     """Get the primary country (by spend) for each creative."""
-    if not creative_ids:
-        return {}
-
-    rows = await pg_query(
-        """
-        WITH ranked AS (
-            SELECT creative_id, geography,
-                   SUM(spend_micros) as total_spend,
-                   ROW_NUMBER() OVER (
-                       PARTITION BY creative_id
-                       ORDER BY SUM(spend_micros) DESC
-                   ) as rn
-            FROM performance_metrics
-            WHERE creative_id = ANY(%s)
-              AND geography IS NOT NULL
-              AND metric_date >= CURRENT_DATE - make_interval(days => %s)
-            GROUP BY creative_id, geography
-        )
-        SELECT creative_id, geography
-        FROM ranked
-        WHERE rn = 1
-        """,
-        (creative_ids, days),
-    )
-
-    return {row['creative_id']: row['geography'] for row in rows}
+    svc = get_campaigns_service()
+    return await svc.get_creative_countries(creative_ids, days)
 
 
 def _split_clusters_by_country(
@@ -208,33 +183,8 @@ async def auto_cluster_creatives(
     """
     try:
         buyer_id = await resolve_buyer_id(request.buyer_id, store=store, user=user)
-        # Build query for unclustered creatives, optionally filtered by buyer_id
-        # Phase 29: Include app info fields for better clustering
-        if buyer_id:
-            rows = await pg_query(
-                """
-                SELECT c.id as creative_id, c.final_url, c.buyer_id,
-                       c.app_id, c.app_name, c.app_store, c.advertiser_name
-                FROM creatives c
-                LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
-                WHERE cc.creative_id IS NULL
-                  AND c.buyer_id = %s
-                ORDER BY c.id
-                """,
-                (buyer_id,),
-            )
-        else:
-            rows = await pg_query(
-                """
-                SELECT c.id as creative_id, c.final_url, c.buyer_id,
-                       c.app_id, c.app_name, c.app_store, c.advertiser_name
-                FROM creatives c
-                LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
-                WHERE cc.creative_id IS NULL
-                ORDER BY c.id
-                """
-            )
-
+        svc = get_campaigns_service()
+        rows = await svc.get_unclustered_creatives(buyer_id)
         unclustered_count = len(rows)
 
         if not rows:
@@ -332,30 +282,8 @@ async def get_unclustered_creatives(
     """
     try:
         buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
-        if buyer_id:
-            rows = await pg_query(
-                """
-                SELECT c.id as creative_id
-                FROM creatives c
-                LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
-                WHERE cc.creative_id IS NULL
-                  AND c.buyer_id = %s
-                ORDER BY c.id
-                """,
-                (buyer_id,),
-            )
-        else:
-            rows = await pg_query(
-                """
-                SELECT c.id as creative_id
-                FROM creatives c
-                LEFT JOIN creative_campaigns cc ON c.id = cc.creative_id
-                WHERE cc.creative_id IS NULL
-                ORDER BY c.id
-                """
-            )
-
-        creative_ids = [str(row['creative_id']) for row in rows]
+        svc = get_campaigns_service()
+        creative_ids = await svc.get_unclustered_creative_ids(buyer_id)
 
         return {
             "creative_ids": creative_ids,
