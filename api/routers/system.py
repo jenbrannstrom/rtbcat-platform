@@ -20,6 +20,7 @@ from api.dependencies import get_store, get_config, get_current_user, resolve_bu
 from storage.repositories.user_repository import User
 from storage.serving_database import db_query, db_execute, table_exists
 from config import ConfigManager
+from services.thumbnails_service import ThumbnailsService
 
 logger = logging.getLogger(__name__)
 
@@ -290,48 +291,18 @@ async def get_thumbnail_status(
 
     Optionally filter by buyer_id to see status for a specific account.
     """
-    ffmpeg_available = _check_ffmpeg()
-
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
 
-    # Build WHERE clause with optional buyer_id filter
-    where_clause = "WHERE c.format = 'VIDEO'"
-    params = []
-    if buyer_id:
-        where_clause += " AND c.buyer_id = ?"
-        params.append(buyer_id)
-
-    count_rows = await db_query(
-        f"SELECT COUNT(*) as cnt FROM creatives c {where_clause}",
-        tuple(params)
-    )
-    total_videos = count_rows[0]["cnt"] if count_rows else 0
-
-    status_rows = await db_query(f"""
-        SELECT
-            COALESCE(ts.status, 'pending') as status,
-            COUNT(*) as count
-        FROM creatives c
-        LEFT JOIN thumbnail_status ts ON c.id = ts.creative_id
-        {where_clause}
-        GROUP BY COALESCE(ts.status, 'pending')
-    """, tuple(params))
-
-    status_counts = {row['status']: row['count'] for row in status_rows}
-
-    with_thumbnails = status_counts.get('success', 0)
-    failed = status_counts.get('failed', 0)
-    pending = total_videos - with_thumbnails - failed
-
-    coverage = (with_thumbnails / total_videos * 100) if total_videos > 0 else 0.0
+    service = ThumbnailsService()
+    summary = await service.get_status_summary(buyer_id)
 
     return ThumbnailStatusSummary(
-        total_videos=total_videos,
-        with_thumbnails=with_thumbnails,
-        pending=pending,
-        failed=failed,
-        coverage_percent=round(coverage, 1),
-        ffmpeg_available=ffmpeg_available,
+        total_videos=summary.total_videos,
+        with_thumbnails=summary.with_thumbnails,
+        pending=summary.pending,
+        failed=summary.failed,
+        coverage_percent=summary.coverage_percent,
+        ffmpeg_available=summary.ffmpeg_available,
     )
 
 
@@ -399,93 +370,22 @@ async def generate_single_thumbnail(
     store=Depends(get_store),
 ):
     """Generate thumbnail for a single video creative."""
-    if not _check_ffmpeg():
+    service = ThumbnailsService()
+
+    if not service.check_ffmpeg():
         raise HTTPException(status_code=503, detail="ffmpeg not installed on server")
 
-    thumb_dir = _get_thumbnails_dir()
+    result = await service.generate_thumbnail(request.creative_id)
 
-    rows = await db_query("""
-        SELECT id, format, raw_data
-        FROM creatives
-        WHERE id = ?
-    """, (request.creative_id,))
-
-    if not rows:
+    if result.status == "failed" and result.error_reason == "creative_not_found":
         raise HTTPException(status_code=404, detail="Creative not found")
 
-    row = rows[0]
-    if row['format'] != 'VIDEO':
-        return ThumbnailGenerateResponse(
-            creative_id=request.creative_id,
-            status='skipped',
-            error_reason='not_video',
-        )
-
-    raw_data = json.loads(row['raw_data']) if row['raw_data'] else {}
-    video_data = raw_data.get('video', {})
-    video_url = video_data.get('videoUrl')
-
-    if not video_url and video_data.get('vastXml'):
-        video_url = _extract_video_url_from_vast(video_data['vastXml'])
-
-    if not video_url:
-        await db_execute("""
-            INSERT INTO thumbnail_status (creative_id, status, error_reason, attempted_at)
-            VALUES (?, 'failed', 'no_url', CURRENT_TIMESTAMP)
-            ON CONFLICT(creative_id) DO UPDATE SET
-                status = 'failed',
-                error_reason = 'no_url',
-                attempted_at = CURRENT_TIMESTAMP
-        """, (request.creative_id,))
-
-        return ThumbnailGenerateResponse(
-            creative_id=request.creative_id,
-            status='failed',
-            error_reason='no_video_url',
-        )
-
-    thumb_path = thumb_dir / f"{request.creative_id}.jpg"
-    result = _generate_thumbnail_ffmpeg(video_url, thumb_path)
-
-    if result['success']:
-        video_data['localThumbnailPath'] = str(thumb_path)
-        raw_data['video'] = video_data
-        await db_execute(
-            "UPDATE creatives SET raw_data = ? WHERE id = ?",
-            (json.dumps(raw_data), request.creative_id)
-        )
-
-        await db_execute("""
-            INSERT INTO thumbnail_status (creative_id, status, video_url, attempted_at)
-            VALUES (?, 'success', ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(creative_id) DO UPDATE SET
-                status = 'success',
-                error_reason = NULL,
-                video_url = excluded.video_url,
-                attempted_at = CURRENT_TIMESTAMP
-        """, (request.creative_id, video_url))
-
-        return ThumbnailGenerateResponse(
-            creative_id=request.creative_id,
-            status='success',
-            thumbnail_url=f"/thumbnails/{request.creative_id}.jpg",
-        )
-    else:
-        await db_execute("""
-            INSERT INTO thumbnail_status (creative_id, status, error_reason, video_url, attempted_at)
-            VALUES (?, 'failed', ?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(creative_id) DO UPDATE SET
-                status = 'failed',
-                error_reason = excluded.error_reason,
-                video_url = excluded.video_url,
-                attempted_at = CURRENT_TIMESTAMP
-        """, (request.creative_id, result['error_reason'], video_url))
-
-        return ThumbnailGenerateResponse(
-            creative_id=request.creative_id,
-            status='failed',
-            error_reason=result['error_reason'],
-        )
+    return ThumbnailGenerateResponse(
+        creative_id=result.creative_id,
+        status=result.status,
+        error_reason=result.error_reason,
+        thumbnail_url=result.thumbnail_url,
+    )
 
 
 @router.post("/thumbnails/generate-batch", response_model=ThumbnailBatchResponse, tags=["Thumbnails"])
@@ -497,108 +397,35 @@ async def generate_batch_thumbnails(
 
     Processes videos that don't have thumbnails yet (or failed ones if force=True).
     """
-    if not _check_ffmpeg():
+    service = ThumbnailsService()
+
+    if not service.check_ffmpeg():
         raise HTTPException(status_code=503, detail="ffmpeg not installed on server")
 
-    thumb_dir = _get_thumbnails_dir()
-
-    if request.force:
-        query = """
-            SELECT c.id, c.raw_data
-            FROM creatives c
-            LEFT JOIN thumbnail_status ts ON c.id = ts.creative_id
-            WHERE c.format = 'VIDEO'
-            AND (ts.status IS NULL OR ts.status = 'failed')
-        """
-    else:
-        query = """
-            SELECT c.id, c.raw_data
-            FROM creatives c
-            LEFT JOIN thumbnail_status ts ON c.id = ts.creative_id
-            WHERE c.format = 'VIDEO'
-            AND ts.status IS NULL
-        """
-
-    if request.seat_id:
-        query += " AND c.buyer_id = ?"
-        rows = await db_query(query + f" LIMIT {request.limit}", (request.seat_id,))
-    else:
-        rows = await db_query(query + f" LIMIT {request.limit}")
+    batch_results = await service.generate_batch(limit=request.limit, force=request.force)
 
     results = []
     success_count = 0
     failed_count = 0
     skipped_count = 0
 
-    for row in rows:
-        creative_id = row['id']
-        raw_data = json.loads(row['raw_data']) if row['raw_data'] else {}
-        video_data = raw_data.get('video', {})
-        video_url = video_data.get('videoUrl')
-
-        if not video_url and video_data.get('vastXml'):
-            video_url = _extract_video_url_from_vast(video_data['vastXml'])
-
-        if not video_url:
-            await db_execute("""
-                INSERT INTO thumbnail_status (creative_id, status, error_reason, attempted_at)
-                VALUES (?, 'failed', 'no_url', CURRENT_TIMESTAMP)
-                ON CONFLICT(creative_id) DO UPDATE SET
-                    status = 'failed', error_reason = 'no_url', attempted_at = CURRENT_TIMESTAMP
-            """, (creative_id,))
-
-            results.append(ThumbnailGenerateResponse(
-                creative_id=creative_id,
-                status='failed',
-                error_reason='no_video_url',
-            ))
-            failed_count += 1
-            continue
-
-        thumb_path = thumb_dir / f"{creative_id}.jpg"
-        result = _generate_thumbnail_ffmpeg(video_url, thumb_path)
-
-        if result['success']:
-            video_data['localThumbnailPath'] = str(thumb_path)
-            raw_data['video'] = video_data
-            await db_execute(
-                "UPDATE creatives SET raw_data = ? WHERE id = ?",
-                (json.dumps(raw_data), creative_id)
-            )
-
-            await db_execute("""
-                INSERT INTO thumbnail_status (creative_id, status, video_url, attempted_at)
-                VALUES (?, 'success', ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(creative_id) DO UPDATE SET
-                    status = 'success', error_reason = NULL, video_url = excluded.video_url,
-                    attempted_at = CURRENT_TIMESTAMP
-            """, (creative_id, video_url))
-
-            results.append(ThumbnailGenerateResponse(
-                creative_id=creative_id,
-                status='success',
-                thumbnail_url=f"/thumbnails/{creative_id}.jpg",
-            ))
+    for r in batch_results:
+        results.append(ThumbnailGenerateResponse(
+            creative_id=r.creative_id,
+            status=r.status,
+            error_reason=r.error_reason,
+            thumbnail_url=r.thumbnail_url,
+        ))
+        if r.status == "success":
             success_count += 1
-        else:
-            await db_execute("""
-                INSERT INTO thumbnail_status (creative_id, status, error_reason, video_url, attempted_at)
-                VALUES (?, 'failed', ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(creative_id) DO UPDATE SET
-                    status = 'failed', error_reason = excluded.error_reason,
-                    video_url = excluded.video_url, attempted_at = CURRENT_TIMESTAMP
-            """, (creative_id, result['error_reason'], video_url))
-
-            results.append(ThumbnailGenerateResponse(
-                creative_id=creative_id,
-                status='failed',
-                error_reason=result['error_reason'],
-            ))
+        elif r.status == "failed":
             failed_count += 1
+        else:
+            skipped_count += 1
 
     return ThumbnailBatchResponse(
         status='completed',
-        total_processed=len(rows),
+        total_processed=len(batch_results),
         success_count=success_count,
         failed_count=failed_count,
         skipped_count=skipped_count,
