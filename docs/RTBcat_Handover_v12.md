@@ -37,8 +37,8 @@ Commits / actions:
    Root cause identified: `config_creative_daily` lacked `creative_size`. Fix in `services/config_precompute.py` (commit `72213ac`) — deploy + refresh needed.
 3) **Drill‑down “No precompute” for AdMob + AdSense.**  
    Likely precompute date coverage or app_name mismatch across report types; verify after Postgres-only fix.
-4) **Duplicate SQLite migration numbers (018/019/021)**  
-   Must renumber or delete to avoid skipped migrations during cleanup.
+4) ~~**Duplicate SQLite migration numbers (018/019/021)**~~
+   ✅ RESOLVED: SQLite migrations archived to `docs/archive/sqlite_legacy/migrations/`.
 
 **VM:** `catscan-production-sg` (asia-southeast1-b)
 - Dashboard: pending deploy of latest Publisher List UI commits
@@ -48,14 +48,13 @@ Commits / actions:
 
 ## ✅ Next Steps (Priority Order)
 
-1. **Enforce Postgres-only analytics**
-   - Ensure `POSTGRES_SERVING_DSN` is passed to API container.
-   - Remove SQLite fallback for analytics queries; fail fast if missing DSN.
-   - Update docs to state analytics requires Postgres.
+1. ~~**Enforce Postgres-only analytics**~~ ✅ DONE
+   - SQLite fallback removed from all analytics queries.
+   - All routers now use Router→Service→Repo pattern.
 
-2. **Finish Postgres-only migration**
-   - Migrate state/auth/config tables off SQLite (or remove SQLite entirely).
-   - Renumber/delete duplicate SQLite migrations (018/019/021).
+2. ~~**Finish Postgres-only migration**~~ ✅ DONE
+   - SQLite modules removed from runtime code.
+   - SQLite migrations archived to `docs/archive/sqlite_legacy/`.
 
 3. **Deploy UX + size drilldown fix**
    - Deploy Publisher List full-page UI: commits `1fea149`, `dffd69a`, `50db7d6`.
