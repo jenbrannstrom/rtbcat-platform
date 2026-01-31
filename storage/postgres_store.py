@@ -43,8 +43,8 @@ from .models import (
     RTBEndpoint,
 )
 
-# Import user models from user_repository for Tier 1 auth support
-from .repositories.user_repository import (
+# Import user models from auth_service (Postgres-only)
+from services.auth_service import (
     User,
     UserSession,
     UserPermission,
