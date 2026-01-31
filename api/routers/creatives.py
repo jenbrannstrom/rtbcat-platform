@@ -399,75 +399,20 @@ async def get_newly_uploaded_creatives(
     This is useful for identifying new creatives added to the account.
     """
     try:
-        from storage.serving_database import db_query, db_query_one
-        period_end = datetime.now()
-        period_start = period_end - timedelta(days=days)
         buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
 
-        # Build query with Postgres syntax
-        query = """
-            SELECT c.*,
-                (SELECT SUM(spend_micros) FROM rtb_daily WHERE creative_id = c.id) as total_spend_micros,
-                (SELECT SUM(impressions) FROM rtb_daily WHERE creative_id = c.id) as total_impressions
-            FROM creatives c
-            WHERE c.first_seen_at >= %s
-            AND c.first_seen_at <= %s
-        """
-        params: list = [period_start.isoformat(), period_end.isoformat()]
-
-        if format:
-            query += " AND c.format = %s"
-            params.append(format.upper())
-
-        if buyer_id:
-            query += " AND c.buyer_id = %s"
-            params.append(buyer_id)
-
-        query += " ORDER BY c.first_seen_at DESC LIMIT %s"
-        params.append(limit)
-
-        rows = await db_query(query, tuple(params))
-
-        # Get total count
-        count_query = """
-            SELECT COUNT(*) as cnt FROM creatives c
-            WHERE c.first_seen_at >= %s
-            AND c.first_seen_at <= %s
-        """
-        count_params: list = [period_start.isoformat(), period_end.isoformat()]
-        if format:
-            count_query += " AND c.format = %s"
-            count_params.append(format.upper())
-        if buyer_id:
-            count_query += " AND c.buyer_id = %s"
-            count_params.append(buyer_id)
-
-        count_row = await db_query_one(count_query, tuple(count_params))
-        total_count = count_row["cnt"] if count_row else 0
-
-        creatives = []
-        for row in rows:
-            creative = {
-                "id": row["id"],
-                "name": row["name"],
-                "format": row["format"],
-                "approval_status": row["approval_status"],
-                "width": row["width"],
-                "height": row["height"],
-                "canonical_size": row["canonical_size"],
-                "final_url": row["final_url"],
-                "first_seen_at": row["first_seen_at"],
-                "first_import_batch_id": row["first_import_batch_id"],
-                "total_spend_usd": (row["total_spend_micros"] or 0) / 1_000_000,
-                "total_impressions": row["total_impressions"] or 0,
-            }
-            creatives.append(creative)
+        result = await creatives_service.get_newly_uploaded_creatives(
+            days=days,
+            limit=limit,
+            creative_format=format,
+            buyer_id=buyer_id,
+        )
 
         return NewlyUploadedCreativesResponse(
-            creatives=creatives,
-            total_count=total_count or 0,
-            period_start=period_start.strftime("%Y-%m-%d"),
-            period_end=period_end.strftime("%Y-%m-%d"),
+            creatives=result.creatives,
+            total_count=result.total_count or 0,
+            period_start=result.period_start.strftime("%Y-%m-%d"),
+            period_end=result.period_end.strftime("%Y-%m-%d"),
         )
 
     except Exception as e:
