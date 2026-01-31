@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from api.dependencies import get_store
+from services.recommendations_service import RecommendationsService
 
 logger = logging.getLogger(__name__)
 
@@ -98,21 +99,9 @@ async def get_recommendations(
     Phase 25: Core Analytics Engine
     Returns recommendations sorted by impact (highest wasted QPS first).
     """
-    from analytics.recommendation_engine import RecommendationEngine, Severity
-
     try:
-        severity_map = {
-            "low": Severity.LOW,
-            "medium": Severity.MEDIUM,
-            "high": Severity.HIGH,
-            "critical": Severity.CRITICAL,
-        }
-        min_sev = severity_map.get(min_severity.lower(), Severity.LOW)
-
-        engine = RecommendationEngine(store)
-        recommendations = await engine.generate_recommendations(days=days, min_severity=min_sev)
-
-        return [rec.to_dict() for rec in recommendations]
+        service = RecommendationsService(store)
+        return await service.generate(days=days, min_severity=min_severity)
     except Exception as e:
         logger.error(f"Failed to generate recommendations: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -129,12 +118,9 @@ async def get_recommendations_summary(
     Phase 25: Core Analytics Engine
     Returns summary metrics including total waste and recommendation breakdown.
     """
-    from analytics.recommendation_engine import RecommendationEngine
-
     try:
-        engine = RecommendationEngine(store)
-        summary = await engine.get_summary(days=days)
-        return summary
+        service = RecommendationsService(store)
+        return await service.summary(days=days)
     except Exception as e:
         logger.error(f"Failed to get recommendations summary: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -152,11 +138,9 @@ async def resolve_recommendation(
     Phase 25: Core Analytics Engine
     Updates the recommendation status and records resolution notes.
     """
-    from analytics.recommendation_engine import RecommendationEngine
-
     try:
-        engine = RecommendationEngine(store)
-        success = await engine.resolve_recommendation(recommendation_id, notes)
+        service = RecommendationsService(store)
+        success = await service.resolve(recommendation_id, notes)
 
         if not success:
             raise HTTPException(status_code=404, detail="Recommendation not found")
@@ -182,14 +166,9 @@ async def get_recommendations_by_type(
     Types: size_mismatch, config_inefficiency, publisher_block, app_block,
            geo_exclusion, creative_pause, creative_review, fraud_alert
     """
-    from analytics.recommendation_engine import RecommendationEngine, Severity
-
     try:
-        engine = RecommendationEngine(store)
-        recommendations = await engine.generate_recommendations(days=days, min_severity=Severity.LOW)
-
-        filtered = [rec for rec in recommendations if rec.type.value == rec_type]
-        return [rec.to_dict() for rec in filtered]
+        service = RecommendationsService(store)
+        return await service.by_type(rec_type, days)
     except Exception as e:
         logger.error(f"Failed to get recommendations by type: {e}")
         raise HTTPException(status_code=500, detail=str(e))
