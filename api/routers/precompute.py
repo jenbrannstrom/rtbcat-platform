@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -12,10 +11,10 @@ from pydantic import BaseModel, Field
 
 from services.config_precompute import refresh_config_breakdowns
 from services.home_precompute import refresh_home_summaries
+from services.precompute_service import PrecomputeService
 from services.precompute_utils import normalize_refresh_dates, refresh_window
 from services.precompute_validation import run_precompute_validation
 from services.rtb_precompute import refresh_rtb_summaries
-from storage.serving_database import db_query
 
 logger = logging.getLogger(__name__)
 
@@ -90,59 +89,19 @@ async def precompute_health(request: Request):
     if max_age_hours < 1:
         raise HTTPException(status_code=400, detail="PRECOMPUTE_REFRESH_MAX_AGE_HOURS must be >= 1")
 
-    required_caches = ["home_summaries", "config_breakdowns", "rtb_summaries"]
-    cutoff = datetime.utcnow() - timedelta(hours=max_age_hours)
+    service = PrecomputeService()
+    status = await service.get_health_status(max_age_hours)
 
-    try:
-        rows = await db_query(
-            """
-            SELECT cache_name, MAX(refreshed_at) AS refreshed_at
-            FROM precompute_refresh_log
-            GROUP BY cache_name
-            """
-        )
-    except Exception:
-        rows = []
-    refresh_map = {
-        row["cache_name"]: row["refreshed_at"] for row in rows if row.get("refreshed_at")
-    }
-
-    stale_caches: list[str] = []
-    missing_caches: list[str] = []
-    cache_refresh_times: dict[str, str] = {}
-
-    for cache_name in required_caches:
-        refreshed_at = refresh_map.get(cache_name)
-        if not refreshed_at:
-            missing_caches.append(cache_name)
-            continue
-
-        try:
-            refreshed_dt = datetime.fromisoformat(refreshed_at)
-        except ValueError:
-            missing_caches.append(cache_name)
-            continue
-
-        cache_refresh_times[cache_name] = refreshed_at
-        if refreshed_dt < cutoff:
-            stale_caches.append(cache_name)
-
-    ok = not stale_caches and not missing_caches
     response = PrecomputeHealthResponse(
-        ok=ok,
-        max_age_hours=max_age_hours,
-        checked_at=datetime.utcnow().isoformat(),
-        stale_caches=stale_caches,
-        missing_caches=missing_caches,
-        cache_refresh_times=cache_refresh_times,
+        ok=status.ok,
+        max_age_hours=status.max_age_hours,
+        checked_at=status.checked_at,
+        stale_caches=status.stale_caches,
+        missing_caches=status.missing_caches,
+        cache_refresh_times=status.cache_refresh_times,
     )
 
-    if not ok:
-        logger.warning(
-            "Precompute health check failed: stale=%s missing=%s",
-            stale_caches,
-            missing_caches,
-        )
+    if not status.ok:
         return JSONResponse(status_code=503, content=response.model_dump())
 
     return response

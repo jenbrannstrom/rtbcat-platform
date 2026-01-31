@@ -140,31 +140,16 @@ async def generate_mock_traffic_endpoint(
     - 0.5 = balanced mix
     - 1.0 = heavy waste traffic
     """
-    from analytics import generate_mock_traffic
-    from storage.serving_database import db_execute
-
     try:
-        buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
-        # Generate mock traffic
-        traffic_records = generate_mock_traffic(
+        resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+
+        service = TrafficService()
+        count = await service.generate_and_insert_mock_traffic(
             days=days,
-            buyer_id=buyer_id,
+            buyer_id=resolved_buyer_id,
             base_daily_requests=base_daily_requests,
             waste_bias=waste_bias,
         )
-
-        # Store traffic data
-        count = 0
-        for r in traffic_records:
-            await db_execute(
-                """INSERT INTO rtb_traffic
-                (canonical_size, raw_size, request_count, date, buyer_id)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT (buyer_id, canonical_size, raw_size, date) DO UPDATE SET
-                    request_count = EXCLUDED.request_count""",
-                (r.canonical_size, r.raw_size, r.request_count, r.date, r.buyer_id)
-            )
-            count += 1
 
         return ImportTrafficResponse(
             status="completed",

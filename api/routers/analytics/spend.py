@@ -8,8 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
-from storage.serving_database import db_query_one
-from .common import get_precompute_status, get_valid_billing_ids
+from services.analytics_service import AnalyticsService
 
 logger = logging.getLogger(__name__)
 
@@ -29,75 +28,21 @@ async def get_spend_stats(
     Optionally filter by a specific billing_id.
     """
     try:
-        precompute_status = await get_precompute_status(
-            "rtb_app_daily",
-            days,
-            filters=["billing_id = ?"] if billing_id else None,
-            params=[billing_id] if billing_id else None,
-        )
-        if not precompute_status["has_rows"]:
-            return {
-                "period_days": days,
-                "total_impressions": 0,
-                "total_spend_usd": 0,
-                "avg_cpm_usd": None,
-                "has_spend_data": False,
-                "message": "No precompute available for requested date range.",
-                "precompute_status": {"rtb_app_daily": precompute_status},
-            }
+        service = AnalyticsService()
+        stats = await service.get_spend_stats(days, billing_id)
 
-        if billing_id:
-            # Filter by specific billing_id
-            row = await db_query_one("""
-                SELECT
-                    COALESCE(SUM(impressions), 0) as total_impressions,
-                    COALESCE(SUM(spend_micros), 0) as total_spend_micros
-                FROM rtb_app_daily
-                WHERE metric_date::date >= (CURRENT_DATE + ?::interval)
-                  AND billing_id = ?
-            """, (f'-{days} days', billing_id))
-        else:
-            # Get valid billing IDs for current account to prevent cross-account data mixing
-            valid_billing_ids = await get_valid_billing_ids()
-
-            if valid_billing_ids:
-                # Filter by valid billing IDs
-                placeholders = ",".join("?" * len(valid_billing_ids))
-                row = await db_query_one(f"""
-                    SELECT
-                        COALESCE(SUM(impressions), 0) as total_impressions,
-                        COALESCE(SUM(spend_micros), 0) as total_spend_micros
-                    FROM rtb_app_daily
-                    WHERE metric_date::date >= (CURRENT_DATE + ?::interval)
-                      AND billing_id IN ({placeholders})
-                """, (f'-{days} days', *valid_billing_ids))
-            else:
-                # No pretargeting configs synced yet - return no data
-                row = await db_query_one("""
-                    SELECT
-                        COALESCE(SUM(impressions), 0) as total_impressions,
-                        COALESCE(SUM(spend_micros), 0) as total_spend_micros
-                    FROM rtb_app_daily
-                    WHERE metric_date::date >= (CURRENT_DATE + ?::interval)
-                """, (f'-{days} days',))
-
-        total_impressions = row["total_impressions"] if row else 0
-        total_spend_micros = row["total_spend_micros"] if row else 0
-        total_spend_usd = total_spend_micros / 1_000_000
-
-        # Calculate CPM: (spend / impressions) * 1000
-        avg_cpm = None
-        if total_impressions > 0 and total_spend_micros > 0:
-            avg_cpm = (total_spend_usd / total_impressions) * 1000
-
-        return {
-            "period_days": days,
-            "total_impressions": total_impressions,
-            "total_spend_usd": round(total_spend_usd, 2),
-            "avg_cpm_usd": round(avg_cpm, 2) if avg_cpm else None,
-            "has_spend_data": total_spend_micros > 0,
-            "precompute_status": {"rtb_app_daily": precompute_status},
+        response = {
+            "period_days": stats.period_days,
+            "total_impressions": stats.total_impressions,
+            "total_spend_usd": stats.total_spend_usd,
+            "avg_cpm_usd": stats.avg_cpm_usd,
+            "has_spend_data": stats.has_spend_data,
+            "precompute_status": stats.precompute_status,
         }
+        if stats.message:
+            response["message"] = stats.message
+        return response
+
     except Exception as e:
         logger.error(f"Failed to get spend stats: {e}")
         return {

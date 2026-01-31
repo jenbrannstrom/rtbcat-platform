@@ -9,11 +9,14 @@ from .performance_repo import PerformanceRepository
 from .retention_repo import RetentionRepository
 from .evaluation_repo import EvaluationRepository
 from .campaign_repo import CampaignRepository
+from .creatives_repo import CreativesRepository
 from .thumbnails_repo import ThumbnailsRepository
 from .seats_repo import SeatsRepository
 from .uploads_repo import UploadsRepository
 from .creative_performance_repo import CreativePerformanceRepository
 from .rtb_bidstream_repo import RtbBidstreamRepository
+from .analytics_repo import AnalyticsRepository
+from .precompute_repo import PrecomputeRepository
 
 __all__ = [
     "EndpointsRepository",
@@ -25,9 +28,12 @@ __all__ = [
     "RetentionRepository",
     "EvaluationRepository",
     "CampaignRepository",
+    "CreativesRepository",
     "ThumbnailsRepository",
     "SeatsRepository",
     "UploadsRepository",
     "CreativePerformanceRepository",
     "RtbBidstreamRepository",
+    "AnalyticsRepository",
+    "PrecomputeRepository",
 ]
