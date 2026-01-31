@@ -3,16 +3,15 @@
 Handles upload tracking summary and detailed import history for CSV imports.
 """
 
-import json
 import logging
-from datetime import datetime, timedelta
+from dataclasses import asdict
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 
-from storage.serving_database import db_query, table_exists
 from api.dependencies import get_current_user, get_allowed_bidder_ids
+from services.uploads_service import UploadsService
 from storage.repositories.user_repository import User
 
 logger = logging.getLogger(__name__)
@@ -91,288 +90,6 @@ class DailyUploadsGridResponse(BaseModel):
     expected_uploads_per_day: int
 
 
-# =============================================================================
-# Endpoints
-# =============================================================================
-
-@router.get("/uploads/tracking", response_model=UploadTrackingResponse)
-async def get_upload_tracking(
-    days: int = Query(30, description="Number of days to retrieve", ge=1, le=365),
-    user: User = Depends(get_current_user),
-):
-    """Get daily upload tracking summary."""
-    if user.role != "admin":
-        return UploadTrackingResponse(
-            daily_summaries=[],
-            total_days=0,
-            total_uploads=0,
-            total_rows=0,
-            days_with_anomalies=0,
-        )
-    if not await table_exists("daily_upload_summary"):
-        return UploadTrackingResponse(
-            daily_summaries=[],
-            total_days=0,
-            total_uploads=0,
-            total_rows=0,
-            days_with_anomalies=0,
-        )
-
-    try:
-        rows = await db_query(
-            """SELECT * FROM daily_upload_summary
-            ORDER BY upload_date DESC
-            LIMIT ?""",
-            (days,),
-        )
-
-        daily_summaries = []
-        total_uploads = 0
-        total_rows = 0
-        days_with_anomalies = 0
-
-        for row in rows:
-            file_size_mb = (row["total_file_size_bytes"] or 0) / (1024 * 1024)
-            has_anomaly = bool(row["has_anomaly"]) if "has_anomaly" in row.keys() else False
-
-            daily_summaries.append(
-                DailyUploadSummaryResponse(
-                    upload_date=row["upload_date"],
-                    total_uploads=row["total_uploads"] or 0,
-                    successful_uploads=row["successful_uploads"] or 0,
-                    failed_uploads=row["failed_uploads"] or 0,
-                    total_rows_written=row["total_rows_written"] or 0,
-                    total_file_size_mb=round(file_size_mb, 2),
-                    avg_rows_per_upload=round(row["avg_rows_per_upload"] or 0, 1),
-                    min_rows=row["min_rows"] if "min_rows" in row.keys() else None,
-                    max_rows=row["max_rows"] if "max_rows" in row.keys() else None,
-                    has_anomaly=has_anomaly,
-                    anomaly_reason=row["anomaly_reason"] if "anomaly_reason" in row.keys() else None,
-                )
-            )
-
-            total_uploads += row["total_uploads"] or 0
-            total_rows += row["total_rows_written"] or 0
-            if has_anomaly:
-                days_with_anomalies += 1
-
-        return UploadTrackingResponse(
-            daily_summaries=daily_summaries,
-            total_days=len(daily_summaries),
-            total_uploads=total_uploads,
-            total_rows=total_rows,
-            days_with_anomalies=days_with_anomalies,
-        )
-
-    except Exception as e:
-        logger.error(f"Failed to get upload tracking: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get upload tracking: {str(e)}")
-
-
-@router.get("/uploads/history", response_model=list[ImportHistoryResponse])
-async def get_import_history(
-    limit: int = Query(50, description="Maximum number of records to return", ge=1, le=500),
-    offset: int = Query(0, description="Number of records to skip", ge=0),
-    bidder_id: Optional[str] = Query(None, description="Filter by account (bidder_id)"),
-    user: User = Depends(get_current_user),
-):
-    """Get import history records."""
-    if not await table_exists("import_history"):
-        return []
-
-    try:
-        allowed_bidder_ids = await get_allowed_bidder_ids(user=user)
-        if allowed_bidder_ids is not None:
-            if not allowed_bidder_ids:
-                return []
-            if bidder_id and bidder_id not in allowed_bidder_ids:
-                raise HTTPException(status_code=403, detail="You don't have access to this bidder account.")
-
-        if bidder_id:
-            rows = await db_query(
-                """SELECT * FROM import_history
-                WHERE bidder_id = ?
-                ORDER BY imported_at DESC
-                LIMIT ? OFFSET ?""",
-                (bidder_id, limit, offset),
-            )
-        else:
-            if allowed_bidder_ids is None:
-                rows = await db_query(
-                    """SELECT * FROM import_history
-                    ORDER BY imported_at DESC
-                    LIMIT ? OFFSET ?""",
-                    (limit, offset),
-                )
-            else:
-                placeholders = ",".join("?" * len(allowed_bidder_ids))
-                rows = await db_query(
-                    f"""SELECT * FROM import_history
-                    WHERE bidder_id IN ({placeholders})
-                    ORDER BY imported_at DESC
-                    LIMIT ? OFFSET ?""",
-                    (*allowed_bidder_ids, limit, offset),
-                )
-
-        def _split_columns(value: Optional[str]) -> Optional[list[str]]:
-            if not value:
-                return None
-            columns = [col.strip() for col in value.split(",") if col.strip()]
-            return columns or None
-
-        results = []
-        for row in rows:
-            file_size_bytes = row["file_size_bytes"] if "file_size_bytes" in row.keys() else 0
-            file_size_mb = (file_size_bytes or 0) / (1024 * 1024)
-
-            billing_ids = None
-            if "billing_ids_found" in row.keys() and row["billing_ids_found"]:
-                try:
-                    billing_ids = json.loads(row["billing_ids_found"])
-                except json.JSONDecodeError:
-                    billing_ids = None
-
-            results.append(
-                ImportHistoryResponse(
-                    batch_id=row["batch_id"],
-                    filename=row["filename"],
-                    imported_at=row["imported_at"] or "",
-                    rows_read=row["rows_read"] or 0,
-                    rows_imported=row["rows_imported"] or 0,
-                    rows_skipped=row["rows_skipped"] or 0,
-                    rows_duplicate=row["rows_duplicate"] or 0,
-                    date_range_start=row["date_range_start"],
-                    date_range_end=row["date_range_end"],
-                    total_spend_usd=row["total_spend_usd"] or 0,
-                    file_size_mb=round(file_size_mb, 2),
-                    status=row["status"] or "unknown",
-                    error_message=row["error_message"],
-                    bidder_id=row["bidder_id"] if "bidder_id" in row.keys() else None,
-                    billing_ids_found=billing_ids,
-                    columns_found=_split_columns(row["columns_found"]) if "columns_found" in row.keys() else None,
-                    columns_missing=_split_columns(row["columns_missing"]) if "columns_missing" in row.keys() else None,
-                )
-            )
-
-        return results
-
-    except Exception as e:
-        logger.error(f"Failed to get import history: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get import history: {str(e)}")
-
-
-@router.get("/uploads/daily-grid", response_model=DailyUploadsGridResponse)
-async def get_daily_uploads_grid(
-    days: int = Query(14, description="Number of days to show", ge=1, le=90),
-    expected_per_day: int = Query(3, description="Expected uploads per day", ge=1, le=10),
-    user: User = Depends(get_current_user),
-):
-    """Get daily uploads in a simple grid format."""
-    if not await table_exists("import_history"):
-        return DailyUploadsGridResponse(days=[], expected_uploads_per_day=expected_per_day)
-
-    try:
-        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-        allowed_bidder_ids = await get_allowed_bidder_ids(user=user)
-        if allowed_bidder_ids is not None and not allowed_bidder_ids:
-            return DailyUploadsGridResponse(days=[], expected_uploads_per_day=expected_per_day)
-
-        if allowed_bidder_ids is None:
-            imports = await db_query(
-                """
-                SELECT
-                    date(imported_at) as import_date,
-                    rows_imported,
-                    status,
-                    error_message,
-                    filename
-                FROM import_history
-                WHERE date(imported_at) >= ?
-                ORDER BY imported_at ASC
-                """,
-                (start_date,),
-            )
-        else:
-            placeholders = ",".join("?" * len(allowed_bidder_ids))
-            imports = await db_query(
-                f"""
-                SELECT
-                    date(imported_at) as import_date,
-                    rows_imported,
-                    status,
-                    error_message,
-                    filename
-                FROM import_history
-                WHERE date(imported_at) >= ?
-                  AND bidder_id IN ({placeholders})
-                ORDER BY imported_at ASC
-                """,
-                (start_date, *allowed_bidder_ids),
-            )
-
-        # Group imports by date
-        imports_by_date: dict[str, list] = {}
-        for row in imports:
-            date_str = row["import_date"]
-            if date_str not in imports_by_date:
-                imports_by_date[date_str] = []
-            imports_by_date[date_str].append({
-                "rows": row["rows_imported"] or 0,
-                "status": row["status"] or "unknown",
-                "error_message": row["error_message"],
-            })
-
-        # Build response for each day in range
-        result_days = []
-        current = datetime.now().date()
-
-        for i in range(days):
-            check_date = current - timedelta(days=i)
-            date_iso = check_date.strftime("%Y-%m-%d")
-            date_display = check_date.strftime("%a %d %b")
-
-            day_uploads = imports_by_date.get(date_iso, [])
-
-            uploads = []
-            total_rows = 0
-            has_error = False
-
-            for upload in day_uploads:
-                status = "success" if upload["status"] == "complete" else "error"
-                if status == "error":
-                    has_error = True
-                uploads.append(DailyFileUpload(
-                    rows=upload["rows"],
-                    status=status,
-                    error_message=upload["error_message"],
-                ))
-                total_rows += upload["rows"]
-
-            while len(uploads) < expected_per_day:
-                uploads.append(DailyFileUpload(rows=0, status="missing"))
-
-            result_days.append(DailyUploadRow(
-                date=date_display,
-                date_iso=date_iso,
-                uploads=uploads,
-                total_rows=total_rows,
-                has_error=has_error,
-            ))
-
-        return DailyUploadsGridResponse(
-            days=result_days,
-            expected_uploads_per_day=expected_per_day,
-        )
-
-    except Exception as e:
-        logger.error(f"Failed to get daily uploads grid: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get daily uploads grid: {str(e)}")
-
-
-# =============================================================================
-# Multi-Account Upload Tracking Endpoints
-# =============================================================================
-
 class AccountUploadStats(BaseModel):
     """Upload statistics for a single account."""
     bidder_id: str
@@ -390,89 +107,159 @@ class AccountsUploadSummaryResponse(BaseModel):
     unassigned_uploads: int
 
 
-@router.get("/uploads/accounts", response_model=AccountsUploadSummaryResponse)
-async def get_accounts_upload_summary(
+# =============================================================================
+# Dependencies
+# =============================================================================
+
+def get_uploads_service() -> UploadsService:
+    """Dependency to get UploadsService instance."""
+    return UploadsService()
+
+
+# =============================================================================
+# Endpoints
+# =============================================================================
+
+@router.get("/uploads/tracking", response_model=UploadTrackingResponse)
+async def get_upload_tracking(
+    days: int = Query(30, description="Number of days to retrieve", ge=1, le=365),
     user: User = Depends(get_current_user),
+    service: UploadsService = Depends(get_uploads_service),
 ):
-    """Get upload statistics grouped by account (bidder_id)."""
-    if not await table_exists("import_history"):
-        return AccountsUploadSummaryResponse(
-            accounts=[],
-            total_accounts=0,
-            unassigned_uploads=0,
+    """Get daily upload tracking summary."""
+    if user.role != "admin":
+        return UploadTrackingResponse(
+            daily_summaries=[],
+            total_days=0,
+            total_uploads=0,
+            total_rows=0,
+            days_with_anomalies=0,
         )
 
     try:
+        result = await service.get_tracking_summary(days)
+
+        # Convert dataclasses to response models
+        summaries = [
+            DailyUploadSummaryResponse(**asdict(s))
+            for s in result["daily_summaries"]
+        ]
+
+        return UploadTrackingResponse(
+            daily_summaries=summaries,
+            total_days=result["total_days"],
+            total_uploads=result["total_uploads"],
+            total_rows=result["total_rows"],
+            days_with_anomalies=result["days_with_anomalies"],
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get upload tracking: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get upload tracking: {str(e)}")
+
+
+@router.get("/uploads/history", response_model=list[ImportHistoryResponse])
+async def get_import_history(
+    limit: int = Query(50, description="Maximum number of records to return", ge=1, le=500),
+    offset: int = Query(0, description="Number of records to skip", ge=0),
+    bidder_id: Optional[str] = Query(None, description="Filter by account (bidder_id)"),
+    user: User = Depends(get_current_user),
+    service: UploadsService = Depends(get_uploads_service),
+):
+    """Get import history records."""
+    try:
         allowed_bidder_ids = await get_allowed_bidder_ids(user=user)
-        if allowed_bidder_ids is not None and not allowed_bidder_ids:
-            return AccountsUploadSummaryResponse(
-                accounts=[],
-                total_accounts=0,
-                unassigned_uploads=0,
-            )
+        if allowed_bidder_ids is not None:
+            if not allowed_bidder_ids:
+                return []
+            if bidder_id and bidder_id not in allowed_bidder_ids:
+                raise HTTPException(status_code=403, detail="You don't have access to this bidder account.")
 
-        if allowed_bidder_ids is None:
-            rows = await db_query("""
-                SELECT
-                    bidder_id,
-                    COUNT(*) as upload_count,
-                    SUM(rows_imported) as total_rows,
-                    MAX(imported_at) as latest_upload,
-                    STRING_AGG(DISTINCT billing_ids_found, ',') as all_billing_ids
-                FROM import_history
-                WHERE bidder_id IS NOT NULL
-                GROUP BY bidder_id
-                ORDER BY latest_upload DESC
-            """)
+        entries = await service.get_import_history(
+            limit=limit,
+            offset=offset,
+            bidder_id=bidder_id,
+            allowed_bidder_ids=allowed_bidder_ids,
+        )
 
-            unassigned_row = await db_query("""
-                SELECT COUNT(*) as cnt FROM import_history WHERE bidder_id IS NULL
-            """)
-            unassigned = unassigned_row[0]["cnt"] if unassigned_row else 0
-        else:
-            placeholders = ",".join("?" * len(allowed_bidder_ids))
-            rows = await db_query(
-                f"""
-                SELECT
-                    bidder_id,
-                    COUNT(*) as upload_count,
-                    SUM(rows_imported) as total_rows,
-                    MAX(imported_at) as latest_upload,
-                    STRING_AGG(DISTINCT billing_ids_found, ',') as all_billing_ids
-                FROM import_history
-                WHERE bidder_id IN ({placeholders})
-                GROUP BY bidder_id
-                ORDER BY latest_upload DESC
-                """,
-                tuple(allowed_bidder_ids),
-            )
-            unassigned = 0
+        return [ImportHistoryResponse(**asdict(e)) for e in entries]
 
-        accounts = []
-        for row in rows:
-            billing_ids = set()
-            if row["all_billing_ids"]:
-                for json_str in row["all_billing_ids"].split(","):
-                    if json_str:
-                        try:
-                            ids = json.loads(json_str)
-                            if isinstance(ids, list):
-                                billing_ids.update(ids)
-                        except json.JSONDecodeError:
-                            pass
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get import history: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get import history: {str(e)}")
 
-            accounts.append(AccountUploadStats(
-                bidder_id=row["bidder_id"],
-                total_uploads=row["upload_count"] or 0,
-                total_rows=row["total_rows"] or 0,
-                latest_upload=row["latest_upload"],
-                billing_ids=sorted(list(billing_ids)),
+
+@router.get("/uploads/daily-grid", response_model=DailyUploadsGridResponse)
+async def get_daily_uploads_grid(
+    days: int = Query(14, description="Number of days to show", ge=1, le=90),
+    expected_per_day: int = Query(3, description="Expected uploads per day", ge=1, le=10),
+    user: User = Depends(get_current_user),
+    service: UploadsService = Depends(get_uploads_service),
+):
+    """Get daily uploads in a simple grid format."""
+    try:
+        allowed_bidder_ids = await get_allowed_bidder_ids(user=user)
+
+        result = await service.get_daily_grid(
+            days=days,
+            expected_per_day=expected_per_day,
+            allowed_bidder_ids=allowed_bidder_ids,
+        )
+
+        # Convert dataclasses to response models
+        days_response = []
+        for day in result["days"]:
+            uploads = [
+                DailyFileUpload(**asdict(u))
+                for u in day.uploads
+            ]
+            days_response.append(DailyUploadRow(
+                date=day.date,
+                date_iso=day.date_iso,
+                uploads=uploads,
+                total_rows=day.total_rows,
+                has_error=day.has_error,
             ))
+
+        return DailyUploadsGridResponse(
+            days=days_response,
+            expected_uploads_per_day=result["expected_uploads_per_day"],
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get daily uploads grid: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get daily uploads grid: {str(e)}")
+
+
+@router.get("/uploads/accounts", response_model=AccountsUploadSummaryResponse)
+async def get_accounts_upload_summary(
+    user: User = Depends(get_current_user),
+    service: UploadsService = Depends(get_uploads_service),
+):
+    """Get upload statistics grouped by account (bidder_id)."""
+    try:
+        allowed_bidder_ids = await get_allowed_bidder_ids(user=user)
+
+        result = await service.get_accounts_summary(allowed_bidder_ids)
+
+        # Convert dataclasses to response models
+        accounts = [
+            AccountUploadStats(
+                bidder_id=a.bidder_id,
+                total_uploads=a.total_uploads,
+                total_rows=a.total_rows,
+                latest_upload=a.latest_upload,
+                billing_ids=a.billing_ids,
+            )
+            for a in result["accounts"]
+        ]
 
         return AccountsUploadSummaryResponse(
             accounts=accounts,
-            total_accounts=len(accounts),
-            unassigned_uploads=unassigned,
+            total_accounts=result["total_accounts"],
+            unassigned_uploads=result["unassigned_uploads"],
         )
 
     except Exception as e:
