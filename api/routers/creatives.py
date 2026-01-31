@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from api.dependencies import get_store, get_current_user, resolve_buyer_id, require_buyer_access
 from storage.repositories.user_repository import User
+from services.creative_performance_service import CreativePerformanceService
 
 logger = logging.getLogger(__name__)
 
@@ -341,156 +342,41 @@ async def _get_thumbnail_status_for_creatives(
 
 
 async def _get_waste_flags_for_creatives(
-    store: Any,
     creative_ids: list[str],
     thumbnail_statuses: dict[str, ThumbnailStatusResponse],
     days: int = 7,
 ) -> dict[str, WasteFlagsResponse]:
-    """Compute waste flags for multiple creatives.
-
-    Args:
-        store: Database store
-        creative_ids: List of creative IDs
-        thumbnail_statuses: Pre-fetched thumbnail status data
-        days: Timeframe for performance data (default 7 days)
-
-    Returns:
-        Dict mapping creative_id to WasteFlagsResponse
-    """
-    if not creative_ids:
-        return {}
-
-    # Get performance data for all creatives in timeframe
-    # We need to query the rtb_daily table for impressions/clicks
-    perf_data = {}
-    try:
-        from storage.serving_database import db_query
-        rows = await db_query(
-            """
-            SELECT creative_id,
-                   SUM(impressions) as total_impressions,
-                   SUM(clicks) as total_clicks
-            FROM rtb_daily
-            WHERE creative_id = ANY(%s)
-              AND metric_date >= CURRENT_DATE - make_interval(days => %s)
-            GROUP BY creative_id
-            """,
-            (creative_ids, days),
+    """Compute waste flags for multiple creatives."""
+    service = CreativePerformanceService()
+    status_map = {
+        cid: {"status": ts.status} for cid, ts in thumbnail_statuses.items()
+    }
+    flags = await service.get_waste_flags(creative_ids, status_map, days)
+    return {
+        cid: WasteFlagsResponse(
+            broken_video=data["broken_video"],
+            zero_engagement=data["zero_engagement"],
         )
-        perf_data = {row["creative_id"]: {"impressions": row["total_impressions"], "clicks": row["total_clicks"]}
-                     for row in rows}
-    except Exception as e:
-        # rtb_daily table may not exist yet (no performance data imported)
-        logger.debug(f"Could not fetch performance data: {e}")
-
-    result = {}
-    for cid in creative_ids:
-        ts = thumbnail_statuses.get(cid)
-        perf = perf_data.get(cid, {"impressions": 0, "clicks": 0})
-        impressions = perf["impressions"] or 0
-        clicks = perf["clicks"] or 0
-
-        # broken_video: thumbnail failed AND has impressions (wasting money on broken video)
-        broken_video = (
-            ts is not None
-            and ts.status == "failed"
-            and impressions > 0
-        )
-
-        # zero_engagement: high impressions but no clicks (poor creative performance)
-        zero_engagement = impressions > 1000 and clicks == 0
-
-        result[cid] = WasteFlagsResponse(
-            broken_video=broken_video,
-            zero_engagement=zero_engagement,
-        )
-
-    return result
+        for cid, data in flags.items()
+    }
 
 
 async def _get_primary_countries_for_creatives(
-    store: Any,
     creative_ids: list[str],
     days: int = 7,
 ) -> dict[str, str]:
-    """Get the primary country (by spend) for each creative.
-
-    Args:
-        store: Database store
-        creative_ids: List of creative IDs
-        days: Timeframe for performance data (default 7 days)
-
-    Returns:
-        Dict mapping creative_id to country code
-    """
-    if not creative_ids:
-        return {}
-
-    result = {}
-    try:
-        from storage.serving_database import db_query
-        rows = await db_query(
-            """
-            WITH ranked AS (
-                SELECT creative_id, geography,
-                       SUM(spend_micros) as total_spend,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY creative_id
-                           ORDER BY SUM(spend_micros) DESC
-                       ) as rn
-                FROM performance_metrics
-                WHERE creative_id = ANY(%s)
-                  AND geography IS NOT NULL
-                  AND metric_date >= CURRENT_DATE - make_interval(days => %s)
-                GROUP BY creative_id, geography
-            )
-            SELECT creative_id, geography
-            FROM ranked
-            WHERE rn = 1
-            """,
-            (creative_ids, days),
-        )
-        result = {row["creative_id"]: row["geography"] for row in rows}
-    except Exception as e:
-        # performance_metrics table may not exist or have geography data
-        logger.debug(f"Could not fetch country data: {e}")
-
-    return result
+    """Get the primary country (by spend) for each creative."""
+    service = CreativePerformanceService()
+    return await service.get_primary_countries(creative_ids, days)
 
 
 async def _get_country_breakdown_for_creative(
     creative_id: str,
     days: int = 7,
 ) -> list[dict]:
-    """Get country breakdown with spend/impressions for a single creative.
-
-    Returns list of {country_code, spend_micros, impressions, clicks}
-    sorted by spend descending.
-    """
-    result = []
-    try:
-        from storage.serving_database import db_query
-        result = await db_query(
-            """
-            SELECT
-                country as country_code,
-                SUM(spend_micros) as spend_micros,
-                SUM(impressions) as impressions,
-                SUM(clicks) as clicks
-            FROM rtb_daily
-            WHERE creative_id = %s
-              AND country IS NOT NULL
-              AND country != ''
-              AND metric_date >= CURRENT_DATE - make_interval(days => %s)
-            GROUP BY country
-            ORDER BY spend_micros DESC
-            """,
-            (creative_id, days),
-        )
-    except Exception as e:
-        logger.debug(f"Could not fetch country breakdown: {e}")
-
-    return result
+    """Get country breakdown with spend/impressions for a single creative."""
+    service = CreativePerformanceService()
+    return await service.get_country_breakdown(creative_id, days)
 
 
 # =============================================================================
@@ -531,29 +417,16 @@ async def list_creatives(
     # If active_only, filter to creatives with activity in timeframe
     if active_only and creatives:
         creative_ids = [c.id for c in creatives]
-        try:
-            from storage.serving_database import db_query
-            rows = await db_query(
-                """
-                SELECT DISTINCT creative_id
-                FROM rtb_daily
-                WHERE creative_id = ANY(%s)
-                  AND metric_date >= CURRENT_DATE - make_interval(days => %s)
-                  AND (impressions > 0 OR clicks > 0 OR spend_micros > 0)
-                """,
-                (creative_ids, days),
-            )
-            active_ids = set(row["creative_id"] for row in rows)
+        perf_service = CreativePerformanceService()
+        active_ids = await perf_service.get_active_creative_ids(creative_ids, days)
+        if active_ids:
             creatives = [c for c in creatives if c.id in active_ids][:limit]
-        except Exception as e:
-            # rtb_daily table may not exist - return all creatives
-            logger.debug(f"Could not filter active creatives: {e}")
 
     # Get thumbnail status, waste flags, and country data for all creatives
     creative_ids = [c.id for c in creatives]
     thumbnail_statuses = await _get_thumbnail_status_for_creatives(store, creative_ids)
-    waste_flags = await _get_waste_flags_for_creatives(store, creative_ids, thumbnail_statuses, days)
-    country_data = await _get_primary_countries_for_creatives(store, creative_ids, days)
+    waste_flags = await _get_waste_flags_for_creatives(creative_ids, thumbnail_statuses, days)
+    country_data = await _get_primary_countries_for_creatives(creative_ids, days)
 
     return [
         CreativeResponse(
@@ -644,28 +517,16 @@ async def list_creatives_paginated(
     # Filter by activity if requested
     if active_only and creatives:
         creative_ids = [c.id for c in creatives]
-        try:
-            rows = await db_query(
-                """
-                SELECT DISTINCT creative_id
-                FROM rtb_daily
-                WHERE creative_id = ANY(%s)
-                  AND metric_date >= CURRENT_DATE - make_interval(days => %s)
-                  AND (impressions > 0 OR clicks > 0 OR spend_micros > 0)
-                """,
-                (creative_ids, days),
-            )
-            active_ids = set(row["creative_id"] for row in rows)
+        perf_service = CreativePerformanceService()
+        active_ids = await perf_service.get_active_creative_ids(creative_ids, days)
+        if active_ids:
             creatives = [c for c in creatives if c.id in active_ids][:limit]
-        except Exception as e:
-            # rtb_daily table may not exist - return all creatives
-            logger.debug(f"Could not filter active creatives: {e}")
 
     # Get thumbnail status, waste flags, and country data
     creative_ids = [c.id for c in creatives]
     thumbnail_statuses = await _get_thumbnail_status_for_creatives(store, creative_ids)
-    waste_flags = await _get_waste_flags_for_creatives(store, creative_ids, thumbnail_statuses, days)
-    country_data = await _get_primary_countries_for_creatives(store, creative_ids, days)
+    waste_flags = await _get_waste_flags_for_creatives(creative_ids, thumbnail_statuses, days)
+    country_data = await _get_primary_countries_for_creatives(creative_ids, days)
 
     data = [
         CreativeResponse(
@@ -837,7 +698,7 @@ async def get_creative(
 
     # Get thumbnail status and waste flags
     thumbnail_statuses = await _get_thumbnail_status_for_creatives(store, [creative_id])
-    waste_flags = await _get_waste_flags_for_creatives(store, [creative_id], thumbnail_statuses, days)
+    waste_flags = await _get_waste_flags_for_creatives([creative_id], thumbnail_statuses, days)
 
     return CreativeResponse(
         id=creative.id,
