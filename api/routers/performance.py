@@ -36,7 +36,6 @@ from api.schemas.performance import (
 )
 from importers.unified_importer import unified_import
 from storage import PerformanceMetric
-from storage.serving_database import db_query
 from services.home_precompute import refresh_home_summaries
 from services.performance_service import PerformanceService
 from services.precompute_validation import run_precompute_validation
@@ -569,11 +568,8 @@ async def get_batch_performance(
             if not allowed:
                 raise HTTPException(status_code=403, detail="No buyer accounts assigned.")
             # Validate all creatives belong to allowed buyers
-            from storage.serving_database import db_query
-            rows = await db_query(
-                "SELECT id, buyer_id FROM creatives WHERE id = ANY(%s)",
-                (request.creative_ids,)
-            )
+            perf_service = PerformanceService()
+            rows = await perf_service.get_creative_buyer_ids(request.creative_ids)
             for row in rows:
                 buyer_id = row["buyer_id"]
                 if buyer_id and buyer_id not in allowed:

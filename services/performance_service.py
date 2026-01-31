@@ -132,6 +132,12 @@ class PerformanceService:
                 success=True,
             )
 
+    async def get_creative_buyer_ids(
+        self, creative_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        """Get creative IDs and their buyer_ids for access validation."""
+        return await self._perf.get_creative_buyer_ids(creative_ids)
+
     @staticmethod
     def parse_spend(spend_value: Any) -> tuple[int, float]:
         """Parse spend value into micros and USD. Returns (spend_micros, spend_usd)."""
