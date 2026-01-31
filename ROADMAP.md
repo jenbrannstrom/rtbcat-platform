@@ -228,6 +228,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 ### Phase 5 — Validation
 - [ ] **Data correctness checks** - Assert `bids <= reached` where applicable; warn on inconsistent source data
 - [ ] **Performance checks** - Home page loads in sections with independent loading states
+- [ ] **Deploy verification** - Follow `docs/DEPLOY_CHECKLIST.md` after UI + precompute deploys
 
 ---
 
