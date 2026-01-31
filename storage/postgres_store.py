@@ -109,7 +109,8 @@ class PostgresStore:
     async def save_creatives(self, creatives: list["CreativeDict"]) -> int:
         """Save or update multiple creatives using batch upsert."""
         import json
-        from .repositories.creative_repository import compute_canonical_size, get_size_category
+        from utils.size_normalization import canonical_size as compute_canonical_size
+        from utils.size_normalization import get_size_category
 
         if not creatives:
             return 0
@@ -1232,6 +1233,90 @@ class PostgresStore:
         """Get RTB traffic data. TODO: Implement."""
         logger.warning("PostgresStore.get_rtb_traffic() is a stub")
         return []
+
+    # =========================================================================
+    # RTB TRAFFIC - COMPAT HELPERS (used by analytics/tests)
+    # =========================================================================
+
+    async def store_traffic_data(self, records: list[dict]) -> int:
+        """Upsert RTB traffic records into rtb_traffic."""
+        if not records:
+            return 0
+
+        count = 0
+        for record in records:
+            await pg_execute(
+                """
+                INSERT INTO rtb_traffic
+                    (canonical_size, raw_size, request_count, date, buyer_id)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (buyer_id, canonical_size, raw_size, date)
+                DO UPDATE SET request_count = EXCLUDED.request_count
+                """,
+                (
+                    record.get("canonical_size"),
+                    record.get("raw_size"),
+                    record.get("request_count", 0),
+                    record.get("date"),
+                    record.get("buyer_id"),
+                ),
+            )
+            count += 1
+        return count
+
+    async def get_traffic_data(
+        self,
+        buyer_id: Optional[str] = None,
+        days: int = 7,
+    ) -> list[dict]:
+        """Fetch RTB traffic rows for the last N days."""
+        query = """
+            SELECT canonical_size, raw_size, request_count, date, buyer_id
+            FROM rtb_traffic
+            WHERE date >= CURRENT_DATE - %s::interval
+        """
+        params: list = [f"{days} days"]
+        if buyer_id:
+            query += " AND buyer_id = %s"
+            params.append(buyer_id)
+        query += " ORDER BY date DESC"
+        return await pg_query(query, tuple(params))
+
+    async def get_traffic_summary(
+        self,
+        buyer_id: Optional[str] = None,
+        days: int = 7,
+    ) -> dict:
+        """Return total requests and unique sizes for traffic data."""
+        query = """
+            SELECT
+                COALESCE(SUM(request_count), 0) AS total_requests,
+                COUNT(DISTINCT canonical_size) AS unique_sizes
+            FROM rtb_traffic
+            WHERE date >= CURRENT_DATE - %s::interval
+        """
+        params: list = [f"{days} days"]
+        if buyer_id:
+            query += " AND buyer_id = %s"
+            params.append(buyer_id)
+        row = await pg_query_one(query, tuple(params))
+        return {
+            "total_requests": row["total_requests"] if row else 0,
+            "unique_sizes": row["unique_sizes"] if row else 0,
+        }
+
+    async def clear_traffic_data(
+        self,
+        days: int = 30,
+        buyer_id: Optional[str] = None,
+    ) -> int:
+        """Delete traffic data older than N days (optionally for a buyer)."""
+        query = "DELETE FROM rtb_traffic WHERE date < CURRENT_DATE - %s::interval"
+        params: list[Any] = [f"{days} days"]
+        if buyer_id:
+            query += " AND buyer_id = %s"
+            params.append(buyer_id)
+        return await pg_execute(query, tuple(params))
 
     # =========================================================================
     # PRETARGETING CONFIGS (Tier 2)

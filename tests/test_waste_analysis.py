@@ -10,9 +10,9 @@ This module tests the waste analysis functionality including:
 Run with: pytest tests/test_waste_analysis.py -v
 """
 
-import tempfile
+import os
+import uuid
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -30,84 +30,102 @@ from analytics.mock_traffic import (
     TRAFFIC_DISTRIBUTIONS,
 )
 from analytics.waste_analyzer import TrafficWasteAnalyzer
-from storage.sqlite_store import Creative, SQLiteStore
+from storage import Creative, PostgresStore
 
 
 @pytest_asyncio.fixture
 async def temp_store():
-    """Create a temporary SQLite store for testing."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = Path(tmpdir) / "test.db"
-        store = SQLiteStore(db_path=str(db_path))
-        await store.initialize()
-        yield store
+    """Create a Postgres store for testing (skips if DSN not set)."""
+    dsn = os.getenv("POSTGRES_DSN") or os.getenv("DATABASE_URL")
+    if not dsn:
+        pytest.skip("POSTGRES_DSN or DATABASE_URL not set; skipping PostgresStore tests.")
+    store = PostgresStore()
+    await store.initialize()
+    yield store
 
 
 @pytest_asyncio.fixture
 async def store_with_creatives(temp_store):
     """Create a store with sample creatives for testing waste analysis."""
+    buyer_id = _buyer_id()
     # Add creatives for common IAB sizes
     # Need at least 3 creatives per size for "good" coverage status
     creatives = [
         Creative(
-            id="c1",
+            id=f"c1-{uuid.uuid4().hex}",
             name="bidders/123/creatives/c1",
             format="HTML",
             width=300,
             height=250,
             canonical_size="300x250 (Medium Rectangle)",
+            buyer_id=buyer_id,
         ),
         Creative(
-            id="c2",
+            id=f"c2-{uuid.uuid4().hex}",
             name="bidders/123/creatives/c2",
             format="HTML",
             width=300,
             height=250,
             canonical_size="300x250 (Medium Rectangle)",
+            buyer_id=buyer_id,
         ),
         Creative(
-            id="c2b",
+            id=f"c2b-{uuid.uuid4().hex}",
             name="bidders/123/creatives/c2b",
             format="NATIVE",
             width=300,
             height=250,
             canonical_size="300x250 (Medium Rectangle)",
+            buyer_id=buyer_id,
         ),
         Creative(
-            id="c3",
+            id=f"c3-{uuid.uuid4().hex}",
             name="bidders/123/creatives/c3",
             format="HTML",
             width=728,
             height=90,
             canonical_size="728x90 (Leaderboard)",
+            buyer_id=buyer_id,
         ),
         Creative(
-            id="c3b",
+            id=f"c3b-{uuid.uuid4().hex}",
             name="bidders/123/creatives/c3b",
             format="HTML",
             width=728,
             height=90,
             canonical_size="728x90 (Leaderboard)",
+            buyer_id=buyer_id,
         ),
         Creative(
-            id="c3c",
+            id=f"c3c-{uuid.uuid4().hex}",
             name="bidders/123/creatives/c3c",
             format="HTML",
             width=728,
             height=90,
             canonical_size="728x90 (Leaderboard)",
+            buyer_id=buyer_id,
         ),
         Creative(
-            id="c4",
+            id=f"c4-{uuid.uuid4().hex}",
             name="bidders/123/creatives/c4",
             format="VIDEO",
             width=1920,
             height=1080,
             canonical_size="Video 16:9 (Horizontal)",
+            buyer_id=buyer_id,
         ),
     ]
     await temp_store.save_creatives(creatives)
+    setattr(temp_store, "_test_buyer_id", buyer_id)
     return temp_store
+
+
+def _buyer_id() -> str:
+    return f"buyer-{uuid.uuid4().hex}"
+
+
+def _store_buyer_id(store) -> str:
+    return getattr(store, "_test_buyer_id", None) or _buyer_id()
 
 
 class TestTrafficRecord:
@@ -321,25 +339,26 @@ class TestMockTrafficGenerator:
 
 
 @pytest.mark.asyncio
-class TestSQLiteStoreTrafficData:
-    """Tests for SQLiteStore traffic data operations."""
+class TestPostgresStoreTrafficData:
+    """Tests for PostgresStore traffic data operations."""
 
     async def test_store_traffic_data(self, temp_store):
         """Test storing traffic data records."""
+        buyer_id = _buyer_id()
         records = [
             {
                 "canonical_size": "300x250 (Medium Rectangle)",
                 "raw_size": "300x250",
                 "request_count": 50000,
                 "date": "2024-01-15",
-                "buyer_id": "456",
+                "buyer_id": buyer_id,
             },
             {
                 "canonical_size": "Non-Standard (320x481)",
                 "raw_size": "320x481",
                 "request_count": 12000,
                 "date": "2024-01-15",
-                "buyer_id": "456",
+                "buyer_id": buyer_id,
             },
         ]
         count = await temp_store.store_traffic_data(records)
@@ -348,13 +367,14 @@ class TestSQLiteStoreTrafficData:
     async def test_store_traffic_data_upsert(self, temp_store):
         """Test that storing duplicate records updates counts."""
         today = datetime.now().date().isoformat()
+        buyer_id = _buyer_id()
         records = [
             {
                 "canonical_size": "300x250 (Medium Rectangle)",
                 "raw_size": "300x250",
                 "request_count": 50000,
                 "date": today,
-                "buyer_id": "456",
+                "buyer_id": buyer_id,
             }
         ]
         await temp_store.store_traffic_data(records)
@@ -364,73 +384,79 @@ class TestSQLiteStoreTrafficData:
         await temp_store.store_traffic_data(records)
 
         # Retrieve and verify updated
-        data = await temp_store.get_traffic_data(buyer_id="456", days=7)
+        data = await temp_store.get_traffic_data(buyer_id=buyer_id, days=7)
         assert len(data) == 1
         assert data[0]["request_count"] == 75000
 
     async def test_get_traffic_data(self, temp_store):
         """Test retrieving traffic data."""
         today = datetime.now().date().isoformat()
+        buyer_id = _buyer_id()
         records = [
             {
                 "canonical_size": "300x250 (Medium Rectangle)",
                 "raw_size": "300x250",
                 "request_count": 50000,
                 "date": today,
-                "buyer_id": "456",
+                "buyer_id": buyer_id,
             }
         ]
         await temp_store.store_traffic_data(records)
 
-        data = await temp_store.get_traffic_data(days=7)
+        data = await temp_store.get_traffic_data(buyer_id=buyer_id, days=7)
         assert len(data) == 1
         assert data[0]["canonical_size"] == "300x250 (Medium Rectangle)"
 
     async def test_get_traffic_data_by_buyer(self, temp_store):
         """Test filtering traffic data by buyer_id."""
         today = datetime.now().date().isoformat()
+        buyer_a = _buyer_id()
+        buyer_b = _buyer_id()
         records = [
             {
                 "canonical_size": "300x250 (Medium Rectangle)",
                 "raw_size": "300x250",
                 "request_count": 50000,
                 "date": today,
-                "buyer_id": "456",
+                "buyer_id": buyer_a,
             },
             {
                 "canonical_size": "728x90 (Leaderboard)",
                 "raw_size": "728x90",
                 "request_count": 30000,
                 "date": today,
-                "buyer_id": "789",
+                "buyer_id": buyer_b,
             },
         ]
         await temp_store.store_traffic_data(records)
 
-        buyer_data = await temp_store.get_traffic_data(buyer_id="456", days=7)
+        buyer_data = await temp_store.get_traffic_data(buyer_id=buyer_a, days=7)
         assert len(buyer_data) == 1
-        assert buyer_data[0]["buyer_id"] == "456"
+        assert buyer_data[0]["buyer_id"] == buyer_a
 
     async def test_get_traffic_summary(self, temp_store):
         """Test getting traffic summary statistics."""
         today = datetime.now().date().isoformat()
+        buyer_id = _buyer_id()
         records = [
             {
                 "canonical_size": "300x250 (Medium Rectangle)",
                 "raw_size": "300x250",
                 "request_count": 50000,
                 "date": today,
+                "buyer_id": buyer_id,
             },
             {
                 "canonical_size": "Non-Standard (320x481)",
                 "raw_size": "320x481",
                 "request_count": 12000,
                 "date": today,
+                "buyer_id": buyer_id,
             },
         ]
         await temp_store.store_traffic_data(records)
 
-        summary = await temp_store.get_traffic_summary(days=7)
+        summary = await temp_store.get_traffic_summary(buyer_id=buyer_id, days=7)
         assert summary["total_requests"] == 62000
         assert summary["unique_sizes"] == 2
 
@@ -438,22 +464,24 @@ class TestSQLiteStoreTrafficData:
         """Test clearing traffic data."""
         # Use a date from 60 days ago so it can be cleared with default retention
         old_date = (datetime.now() - timedelta(days=60)).date().isoformat()
+        buyer_id = _buyer_id()
         records = [
             {
                 "canonical_size": "300x250 (Medium Rectangle)",
                 "raw_size": "300x250",
                 "request_count": 50000,
                 "date": old_date,
+                "buyer_id": buyer_id,
             }
         ]
         await temp_store.store_traffic_data(records)
 
         # Clear data older than 30 days (default)
-        count = await temp_store.clear_traffic_data()
+        count = await temp_store.clear_traffic_data(buyer_id=buyer_id)
         assert count == 1
 
         # Verify empty (the data was older than 7 days anyway)
-        data = await temp_store.get_traffic_data(days=90)
+        data = await temp_store.get_traffic_data(buyer_id=buyer_id, days=90)
         assert len(data) == 0
 
 
@@ -464,7 +492,7 @@ class TestTrafficWasteAnalyzer:
     async def test_analyze_waste_no_data(self, temp_store):
         """Test waste analysis with no data."""
         analyzer = TrafficWasteAnalyzer(temp_store)
-        report = await analyzer.analyze_waste(days=7)
+        report = await analyzer.analyze_waste(buyer_id=_buyer_id(), days=7)
 
         assert report.total_requests == 0
         assert report.total_waste_requests == 0
@@ -475,24 +503,27 @@ class TestTrafficWasteAnalyzer:
         """Test waste analysis with creative coverage."""
         # Add traffic for sizes we have creatives for
         today = datetime.now().date().isoformat()
+        buyer_id = _store_buyer_id(store_with_creatives)
         records = [
             {
                 "canonical_size": "300x250 (Medium Rectangle)",
                 "raw_size": "300x250",
                 "request_count": 50000,
                 "date": today,
+                "buyer_id": buyer_id,
             },
             {
                 "canonical_size": "728x90 (Leaderboard)",
                 "raw_size": "728x90",
                 "request_count": 30000,
                 "date": today,
+                "buyer_id": buyer_id,
             },
         ]
         await store_with_creatives.store_traffic_data(records)
 
         analyzer = TrafficWasteAnalyzer(store_with_creatives)
-        report = await analyzer.analyze_waste(days=7)
+        report = await analyzer.analyze_waste(buyer_id=buyer_id, days=7)
 
         # Should have no waste since we have creatives for these sizes
         assert report.total_requests == 80000
@@ -503,6 +534,7 @@ class TestTrafficWasteAnalyzer:
     async def test_analyze_waste_with_gaps(self, store_with_creatives):
         """Test waste analysis identifying gaps."""
         today = datetime.now().date().isoformat()
+        buyer_id = _store_buyer_id(store_with_creatives)
         records = [
             # Has creative coverage
             {
@@ -510,6 +542,7 @@ class TestTrafficWasteAnalyzer:
                 "raw_size": "300x250",
                 "request_count": 50000,
                 "date": today,
+                "buyer_id": buyer_id,
             },
             # No creative coverage - should be identified as waste
             {
@@ -517,12 +550,13 @@ class TestTrafficWasteAnalyzer:
                 "raw_size": "320x481",
                 "request_count": 35000,
                 "date": today,
+                "buyer_id": buyer_id,
             },
         ]
         await store_with_creatives.store_traffic_data(records)
 
         analyzer = TrafficWasteAnalyzer(store_with_creatives)
-        report = await analyzer.analyze_waste(days=7)
+        report = await analyzer.analyze_waste(buyer_id=buyer_id, days=7)
 
         assert report.total_requests == 85000
         assert report.total_waste_requests == 35000
@@ -533,6 +567,7 @@ class TestTrafficWasteAnalyzer:
     async def test_analyze_waste_recommendations(self, store_with_creatives):
         """Test waste analysis generates appropriate recommendations."""
         today = datetime.now().date().isoformat()
+        buyer_id = _store_buyer_id(store_with_creatives)
         records = [
             # High volume non-standard - should recommend Block
             {
@@ -540,6 +575,7 @@ class TestTrafficWasteAnalyzer:
                 "raw_size": "320x481",
                 "request_count": 100000,  # High volume
                 "date": today,
+                "buyer_id": buyer_id,
             },
             # Medium volume - should recommend Add Creative
             {
@@ -547,6 +583,7 @@ class TestTrafficWasteAnalyzer:
                 "raw_size": "480x320",
                 "request_count": 5000,
                 "date": today,
+                "buyer_id": buyer_id,
             },
             # Low volume - should recommend Monitor
             {
@@ -554,12 +591,13 @@ class TestTrafficWasteAnalyzer:
                 "raw_size": "234x90",
                 "request_count": 500,
                 "date": today,
+                "buyer_id": buyer_id,
             },
         ]
         await store_with_creatives.store_traffic_data(records)
 
         analyzer = TrafficWasteAnalyzer(store_with_creatives)
-        report = await analyzer.analyze_waste(days=1)
+        report = await analyzer.analyze_waste(buyer_id=buyer_id, days=1)
 
         # Check recommendations match volume thresholds
         gaps_by_size = {g.canonical_size: g for g in report.size_gaps}
@@ -576,6 +614,7 @@ class TestTrafficWasteAnalyzer:
     async def test_analyze_waste_near_iab_flexible(self, store_with_creatives):
         """Test recommendation for sizes near IAB standard."""
         today = datetime.now().date().isoformat()
+        buyer_id = _store_buyer_id(store_with_creatives)
         records = [
             # Off-by-one from 300x250 - should recommend flexible
             {
@@ -583,12 +622,13 @@ class TestTrafficWasteAnalyzer:
                 "raw_size": "301x250",
                 "request_count": 15000,  # Medium-high volume
                 "date": today,
+                "buyer_id": buyer_id,
             },
         ]
         await store_with_creatives.store_traffic_data(records)
 
         analyzer = TrafficWasteAnalyzer(store_with_creatives)
-        report = await analyzer.analyze_waste(days=1)
+        report = await analyzer.analyze_waste(buyer_id=buyer_id, days=1)
 
         assert len(report.size_gaps) == 1
         gap = report.size_gaps[0]
@@ -598,18 +638,21 @@ class TestTrafficWasteAnalyzer:
     async def test_get_size_gaps(self, store_with_creatives):
         """Test getting size gaps with minimum request filter."""
         today = datetime.now().date().isoformat()
+        buyer_id = _store_buyer_id(store_with_creatives)
         records = [
             {
                 "canonical_size": "Non-Standard (320x481)",
                 "raw_size": "320x481",
                 "request_count": 5000,
                 "date": today,
+                "buyer_id": buyer_id,
             },
             {
                 "canonical_size": "Non-Standard (234x90)",
                 "raw_size": "234x90",
                 "request_count": 50,
                 "date": today,
+                "buyer_id": buyer_id,
             },
         ]
         await store_with_creatives.store_traffic_data(records)
@@ -617,25 +660,27 @@ class TestTrafficWasteAnalyzer:
         analyzer = TrafficWasteAnalyzer(store_with_creatives)
 
         # With high min_requests, only the larger gap should be returned
-        gaps = await analyzer.get_size_gaps(days=7, min_requests=1000)
+        gaps = await analyzer.get_size_gaps(buyer_id=buyer_id, days=7, min_requests=1000)
         assert len(gaps) == 1
         assert gaps[0].canonical_size == "Non-Standard (320x481)"
 
     async def test_get_size_coverage(self, store_with_creatives):
         """Test getting size coverage data."""
         today = datetime.now().date().isoformat()
+        buyer_id = _store_buyer_id(store_with_creatives)
         records = [
             {
                 "canonical_size": "300x250 (Medium Rectangle)",
                 "raw_size": "300x250",
                 "request_count": 50000,
                 "date": today,
+                "buyer_id": buyer_id,
             },
         ]
         await store_with_creatives.store_traffic_data(records)
 
         analyzer = TrafficWasteAnalyzer(store_with_creatives)
-        coverage = await analyzer.get_size_coverage()
+        coverage = await analyzer.get_size_coverage(buyer_id=buyer_id)
 
         assert "300x250 (Medium Rectangle)" in coverage
         cov = coverage["300x250 (Medium Rectangle)"]
@@ -646,20 +691,22 @@ class TestTrafficWasteAnalyzer:
     async def test_analyze_waste_by_buyer(self, store_with_creatives):
         """Test waste analysis filtered by buyer_id."""
         today = datetime.now().date().isoformat()
+        buyer_a = _store_buyer_id(store_with_creatives)
+        buyer_b = _buyer_id()
         records = [
             {
                 "canonical_size": "Non-Standard (320x481)",
                 "raw_size": "320x481",
                 "request_count": 10000,
                 "date": today,
-                "buyer_id": "456",
+                "buyer_id": buyer_a,
             },
             {
                 "canonical_size": "Non-Standard (320x481)",
                 "raw_size": "320x481",
                 "request_count": 5000,
                 "date": today,
-                "buyer_id": "789",
+                "buyer_id": buyer_b,
             },
         ]
         await store_with_creatives.store_traffic_data(records)
@@ -667,31 +714,34 @@ class TestTrafficWasteAnalyzer:
         analyzer = TrafficWasteAnalyzer(store_with_creatives)
 
         # Filter by buyer 456
-        report = await analyzer.analyze_waste(buyer_id="456", days=7)
-        assert report.buyer_id == "456"
+        report = await analyzer.analyze_waste(buyer_id=buyer_a, days=7)
+        assert report.buyer_id == buyer_a
         assert report.total_requests == 10000
 
     async def test_waste_report_recommendations_summary(self, store_with_creatives):
         """Test waste report generates recommendations summary."""
         today = datetime.now().date().isoformat()
+        buyer_id = _store_buyer_id(store_with_creatives)
         records = [
             {
                 "canonical_size": "Non-Standard (320x481)",
                 "raw_size": "320x481",
                 "request_count": 100000,
                 "date": today,
+                "buyer_id": buyer_id,
             },
             {
                 "canonical_size": "Non-Standard (480x320)",
                 "raw_size": "480x320",
                 "request_count": 5000,
                 "date": today,
+                "buyer_id": buyer_id,
             },
         ]
         await store_with_creatives.store_traffic_data(records)
 
         analyzer = TrafficWasteAnalyzer(store_with_creatives)
-        report = await analyzer.analyze_waste(days=1)
+        report = await analyzer.analyze_waste(buyer_id=buyer_id, days=1)
 
         assert "block" in report.recommendations_summary
         assert "add_creative" in report.recommendations_summary
@@ -705,7 +755,8 @@ class TestTrafficWasteAnalyzerEdgeCases:
     async def test_empty_traffic_data(self, store_with_creatives):
         """Test analysis with creatives but no traffic."""
         analyzer = TrafficWasteAnalyzer(store_with_creatives)
-        report = await analyzer.analyze_waste(days=7)
+        buyer_id = _store_buyer_id(store_with_creatives)
+        report = await analyzer.analyze_waste(buyer_id=buyer_id, days=7)
 
         # Should have coverage entries for sizes with creatives but no traffic
         excess_coverage = [
@@ -717,13 +768,14 @@ class TestTrafficWasteAnalyzerEdgeCases:
         """Test analysis with zero-day period."""
         analyzer = TrafficWasteAnalyzer(temp_store)
         # Should handle gracefully without division errors
-        report = await analyzer.analyze_waste(days=0)
+        report = await analyzer.analyze_waste(buyer_id=_buyer_id(), days=0)
         assert report.analysis_period_days == 0
 
     async def test_old_traffic_data_excluded(self, temp_store):
         """Test that old traffic data outside the period is excluded."""
         old_date = (datetime.now() - timedelta(days=30)).date().isoformat()
         recent_date = datetime.now().date().isoformat()
+        buyer_id = _buyer_id()
 
         records = [
             {
@@ -731,18 +783,20 @@ class TestTrafficWasteAnalyzerEdgeCases:
                 "raw_size": "320x481",
                 "request_count": 50000,
                 "date": old_date,
+                "buyer_id": buyer_id,
             },
             {
                 "canonical_size": "Non-Standard (480x320)",
                 "raw_size": "480x320",
                 "request_count": 10000,
                 "date": recent_date,
+                "buyer_id": buyer_id,
             },
         ]
         await temp_store.store_traffic_data(records)
 
         analyzer = TrafficWasteAnalyzer(temp_store)
-        report = await analyzer.analyze_waste(days=7)
+        report = await analyzer.analyze_waste(buyer_id=buyer_id, days=7)
 
         # Only recent traffic should be included
         assert report.total_requests == 10000

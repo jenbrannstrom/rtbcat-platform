@@ -3,32 +3,35 @@
 This module tests the buyer seats functionality including:
 - Database schema migrations
 - BuyerSeatsClient operations
-- SQLiteStore buyer seat methods
+- PostgresStore buyer seat methods
 - API endpoints for seat management
 
 Run with: pytest tests/test_multi_seat.py -v
 """
 
-import asyncio
-import tempfile
-from datetime import datetime
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+import os
+import uuid
+from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
 
-from storage.sqlite_store import BuyerSeat, Creative, SQLiteStore
+from storage import BuyerSeat, Creative, PostgresStore
 
 
 @pytest_asyncio.fixture
 async def temp_store():
-    """Create a temporary SQLite store for testing."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = Path(tmpdir) / "test.db"
-        store = SQLiteStore(db_path=str(db_path))
-        await store.initialize()
-        yield store
+    """Create a Postgres store for testing (skips if DSN not set)."""
+    dsn = os.getenv("POSTGRES_DSN") or os.getenv("DATABASE_URL")
+    if not dsn:
+        pytest.skip("POSTGRES_DSN or DATABASE_URL not set; skipping PostgresStore tests.")
+    store = PostgresStore()
+    await store.initialize()
+    yield store
+
+
+def _test_id(prefix: str) -> str:
+    return f"{prefix}-{uuid.uuid4().hex}"
 
 
 class TestBuyerSeatDataclass:
@@ -84,31 +87,31 @@ class TestCreativeWithBuyerId:
 
 
 @pytest.mark.asyncio
-class TestSQLiteStoreBuyerSeats:
-    """Tests for SQLiteStore buyer seat operations."""
+class TestPostgresStoreBuyerSeats:
+    """Tests for PostgresStore buyer seat operations."""
 
     async def test_save_buyer_seat(self, temp_store):
         """Test saving a buyer seat."""
         seat = BuyerSeat(
-            buyer_id="456",
-            bidder_id="123",
+            buyer_id=_test_id("buyer"),
+            bidder_id=_test_id("bidder"),
             display_name="Test Buyer",
             active=True,
         )
         await temp_store.save_buyer_seat(seat)
 
         # Retrieve and verify
-        retrieved = await temp_store.get_buyer_seat("456")
+        retrieved = await temp_store.get_buyer_seat(seat.buyer_id)
         assert retrieved is not None
-        assert retrieved.buyer_id == "456"
-        assert retrieved.bidder_id == "123"
+        assert retrieved.buyer_id == seat.buyer_id
+        assert retrieved.bidder_id == seat.bidder_id
         assert retrieved.display_name == "Test Buyer"
 
     async def test_save_buyer_seat_update(self, temp_store):
         """Test updating an existing buyer seat."""
         seat = BuyerSeat(
-            buyer_id="456",
-            bidder_id="123",
+            buyer_id=_test_id("buyer"),
+            bidder_id=_test_id("bidder"),
             display_name="Original Name",
         )
         await temp_store.save_buyer_seat(seat)
@@ -117,15 +120,16 @@ class TestSQLiteStoreBuyerSeats:
         seat.display_name = "Updated Name"
         await temp_store.save_buyer_seat(seat)
 
-        retrieved = await temp_store.get_buyer_seat("456")
+        retrieved = await temp_store.get_buyer_seat(seat.buyer_id)
         assert retrieved.display_name == "Updated Name"
 
     async def test_get_buyer_seats_all(self, temp_store):
         """Test getting all buyer seats."""
+        bidder_id = _test_id("bidder")
         seats = [
-            BuyerSeat(buyer_id="456", bidder_id="123", display_name="Buyer 1"),
-            BuyerSeat(buyer_id="789", bidder_id="123", display_name="Buyer 2"),
-            BuyerSeat(buyer_id="012", bidder_id="999", display_name="Buyer 3"),
+            BuyerSeat(buyer_id=_test_id("buyer"), bidder_id=bidder_id, display_name="Buyer 1"),
+            BuyerSeat(buyer_id=_test_id("buyer"), bidder_id=bidder_id, display_name="Buyer 2"),
+            BuyerSeat(buyer_id=_test_id("buyer"), bidder_id=_test_id("bidder"), display_name="Buyer 3"),
         ]
         for seat in seats:
             await temp_store.save_buyer_seat(seat)
@@ -135,29 +139,31 @@ class TestSQLiteStoreBuyerSeats:
 
     async def test_get_buyer_seats_by_bidder(self, temp_store):
         """Test filtering buyer seats by bidder_id."""
+        bidder_id = _test_id("bidder")
         seats = [
-            BuyerSeat(buyer_id="456", bidder_id="123", display_name="Buyer 1"),
-            BuyerSeat(buyer_id="789", bidder_id="123", display_name="Buyer 2"),
-            BuyerSeat(buyer_id="012", bidder_id="999", display_name="Buyer 3"),
+            BuyerSeat(buyer_id=_test_id("buyer"), bidder_id=bidder_id, display_name="Buyer 1"),
+            BuyerSeat(buyer_id=_test_id("buyer"), bidder_id=bidder_id, display_name="Buyer 2"),
+            BuyerSeat(buyer_id=_test_id("buyer"), bidder_id=_test_id("bidder"), display_name="Buyer 3"),
         ]
         for seat in seats:
             await temp_store.save_buyer_seat(seat)
 
-        bidder_seats = await temp_store.get_buyer_seats(bidder_id="123")
+        bidder_seats = await temp_store.get_buyer_seats(bidder_id=bidder_id)
         assert len(bidder_seats) == 2
 
     async def test_get_buyer_seats_active_only(self, temp_store):
         """Test filtering active buyer seats."""
+        bidder_id = _test_id("bidder")
         seats = [
-            BuyerSeat(buyer_id="456", bidder_id="123", active=True),
-            BuyerSeat(buyer_id="789", bidder_id="123", active=False),
+            BuyerSeat(buyer_id=_test_id("buyer"), bidder_id=bidder_id, active=True),
+            BuyerSeat(buyer_id=_test_id("buyer"), bidder_id=bidder_id, active=False),
         ]
         for seat in seats:
             await temp_store.save_buyer_seat(seat)
 
         active_seats = await temp_store.get_buyer_seats(active_only=True)
         assert len(active_seats) == 1
-        assert active_seats[0].buyer_id == "456"
+        assert active_seats[0].buyer_id == seats[0].buyer_id
 
     async def test_get_buyer_seat_not_found(self, temp_store):
         """Test getting a non-existent buyer seat."""
@@ -167,92 +173,95 @@ class TestSQLiteStoreBuyerSeats:
     async def test_update_seat_creative_count(self, temp_store):
         """Test updating creative count for a seat."""
         # Create seat
-        seat = BuyerSeat(buyer_id="456", bidder_id="123")
+        seat = BuyerSeat(buyer_id=_test_id("buyer"), bidder_id=_test_id("bidder"))
         await temp_store.save_buyer_seat(seat)
 
         # Add creatives with this buyer_id
         creatives = [
             Creative(
-                id=f"c{i}",
-                name=f"bidders/123/creatives/c{i}",
+                id=_test_id(f"c{i}"),
+                name=f"bidders/{seat.bidder_id}/creatives/{i}",
                 format="HTML",
-                buyer_id="456",
+                buyer_id=seat.buyer_id,
             )
             for i in range(5)
         ]
         await temp_store.save_creatives(creatives)
 
         # Update count
-        count = await temp_store.update_seat_creative_count("456")
+        count = await temp_store.update_seat_creative_count(seat.buyer_id)
         assert count == 5
 
         # Verify
-        updated_seat = await temp_store.get_buyer_seat("456")
+        updated_seat = await temp_store.get_buyer_seat(seat.buyer_id)
         assert updated_seat.creative_count == 5
 
     async def test_update_seat_sync_time(self, temp_store):
         """Test updating sync time for a seat."""
-        seat = BuyerSeat(buyer_id="456", bidder_id="123")
+        seat = BuyerSeat(buyer_id=_test_id("buyer"), bidder_id=_test_id("bidder"))
         await temp_store.save_buyer_seat(seat)
 
         # Initially no sync time
-        initial = await temp_store.get_buyer_seat("456")
+        initial = await temp_store.get_buyer_seat(seat.buyer_id)
         assert initial.last_synced is None
 
         # Update sync time
-        await temp_store.update_seat_sync_time("456")
+        await temp_store.update_seat_sync_time(seat.buyer_id)
 
         # Verify
-        updated = await temp_store.get_buyer_seat("456")
+        updated = await temp_store.get_buyer_seat(seat.buyer_id)
         assert updated.last_synced is not None
 
 
 @pytest.mark.asyncio
-class TestSQLiteStoreCreativesWithBuyerId:
+class TestPostgresStoreCreativesWithBuyerId:
     """Tests for creative operations with buyer_id support."""
 
     async def test_save_creative_with_buyer_id(self, temp_store):
         """Test saving a creative with buyer_id."""
+        buyer_id = _test_id("buyer")
         creative = Creative(
-            id="abc123",
-            name="bidders/123/creatives/abc123",
+            id=_test_id("creative"),
+            name=f"bidders/{_test_id('bidder')}/creatives/abc123",
             format="HTML",
             account_id="123",
-            buyer_id="456",
+            buyer_id=buyer_id,
         )
-        await temp_store.save_creative(creative)
+        await temp_store.save_creatives([creative])
 
-        retrieved = await temp_store.get_creative("abc123")
-        assert retrieved.buyer_id == "456"
+        retrieved = await temp_store.get_creative(creative.id)
+        assert retrieved.buyer_id == buyer_id
 
     async def test_list_creatives_by_buyer_id(self, temp_store):
         """Test filtering creatives by buyer_id."""
+        buyer_a = _test_id("buyer")
+        buyer_b = _test_id("buyer")
         creatives = [
             Creative(
-                id="c1",
-                name="bidders/123/creatives/c1",
+                id=_test_id("c1"),
+                name=f"bidders/{_test_id('bidder')}/creatives/c1",
                 format="HTML",
-                buyer_id="456",
+                buyer_id=buyer_a,
             ),
             Creative(
-                id="c2",
-                name="bidders/123/creatives/c2",
+                id=_test_id("c2"),
+                name=f"bidders/{_test_id('bidder')}/creatives/c2",
                 format="HTML",
-                buyer_id="456",
+                buyer_id=buyer_a,
             ),
             Creative(
-                id="c3",
-                name="bidders/123/creatives/c3",
+                id=_test_id("c3"),
+                name=f"bidders/{_test_id('bidder')}/creatives/c3",
                 format="HTML",
-                buyer_id="789",
+                buyer_id=buyer_b,
             ),
         ]
         await temp_store.save_creatives(creatives)
 
-        buyer_creatives = await temp_store.list_creatives(buyer_id="456")
+        buyer_creatives = await temp_store.list_creatives(buyer_id=buyer_a)
         assert len(buyer_creatives) == 2
 
-        other_creatives = await temp_store.list_creatives(buyer_id="789")
+        other_creatives = await temp_store.list_creatives(buyer_id=buyer_b)
         assert len(other_creatives) == 1
 
 
@@ -387,22 +396,22 @@ class TestDatabaseMigration:
         """Test that initialization creates buyer_seats table."""
         # The temp_store fixture already calls initialize()
         # Verify we can perform buyer seat operations
-        seat = BuyerSeat(buyer_id="456", bidder_id="123")
+        seat = BuyerSeat(buyer_id=_test_id("buyer"), bidder_id=_test_id("bidder"))
         await temp_store.save_buyer_seat(seat)
-        retrieved = await temp_store.get_buyer_seat("456")
+        retrieved = await temp_store.get_buyer_seat(seat.buyer_id)
         assert retrieved is not None
 
     async def test_migration_adds_buyer_id_column(self, temp_store):
         """Test that initialization adds buyer_id column to creatives."""
         creative = Creative(
-            id="test",
-            name="bidders/123/creatives/test",
+            id=_test_id("creative"),
+            name=f"bidders/{_test_id('bidder')}/creatives/test",
             format="HTML",
-            buyer_id="456",
+            buyer_id=_test_id("buyer"),
         )
-        await temp_store.save_creative(creative)
-        retrieved = await temp_store.get_creative("test")
-        assert retrieved.buyer_id == "456"
+        await temp_store.save_creatives([creative])
+        retrieved = await temp_store.get_creative(creative.id)
+        assert retrieved.buyer_id == creative.buyer_id
 
 
 if __name__ == "__main__":
