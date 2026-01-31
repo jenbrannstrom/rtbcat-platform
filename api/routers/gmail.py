@@ -5,17 +5,14 @@ Handles Gmail import status and triggering manual imports.
 
 import logging
 import os
-import uuid
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.dependencies import require_admin
-from services.config_precompute import refresh_config_breakdowns
-from services.home_precompute import refresh_home_summaries
 from services.auth_service import User
+from services.gmail_service import GmailService
 
 logger = logging.getLogger(__name__)
 
@@ -65,20 +62,9 @@ async def get_gmail_status():
     Returns whether Gmail is configured/authorized and the last import results.
     """
     try:
-        from scripts.gmail_import import get_status
-        status = get_status()
+        service = GmailService()
+        status = service.get_status()
         return GmailStatusResponse(**status)
-    except ImportError:
-        # Fallback if script not found
-        catscan_dir = Path.home() / '.catscan'
-        credentials_dir = catscan_dir / 'credentials'
-
-        return GmailStatusResponse(
-            configured=(credentials_dir / 'gmail-oauth-client.json').exists(),
-            authorized=(credentials_dir / 'gmail-token.json').exists(),
-            total_imports=0,
-            recent_history=[]
-        )
     except Exception as e:
         logger.error(f"Failed to get Gmail status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -96,7 +82,9 @@ async def trigger_gmail_import(
     This is the same operation that runs via cron.
     """
     try:
-        return await _queue_gmail_import(background_tasks)
+        service = GmailService()
+        result = await service.queue_import(background_tasks)
+        return GmailImportResponse(**result)
 
     except ImportError as e:
         logger.error(f"Gmail import script not found: {e}")
@@ -127,7 +115,9 @@ async def trigger_gmail_import_scheduled(
         raise HTTPException(status_code=403, detail="Invalid scheduler secret")
 
     try:
-        return await _queue_gmail_import(background_tasks)
+        service = GmailService()
+        result = await service.queue_import(background_tasks)
+        return GmailImportResponse(**result)
     except ImportError as e:
         logger.error(f"Gmail import script not found: {e}")
         raise HTTPException(
@@ -140,52 +130,3 @@ async def trigger_gmail_import_scheduled(
         logger.error(f"Gmail import failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
-async def _queue_gmail_import(background_tasks: BackgroundTasks) -> GmailImportResponse:
-    from scripts.gmail_import import run_import, get_status
-
-    # Check if configured first
-    status = get_status()
-    if not status.get("configured"):
-        raise HTTPException(
-            status_code=400,
-            detail="Gmail not configured. Upload gmail-oauth-client.json to ~/.catscan/credentials/"
-        )
-
-    if not status.get("authorized"):
-        raise HTTPException(
-            status_code=400,
-            detail="Gmail not authorized. Run the import script manually first to complete OAuth flow."
-        )
-
-    if status.get("running"):
-        raise HTTPException(status_code=409, detail="Gmail import already running")
-
-    job_id = str(uuid.uuid4())
-    background_tasks.add_task(_run_import_and_refresh, job_id)
-
-    return GmailImportResponse(
-        success=True,
-        queued=True,
-        job_id=job_id,
-        message="Gmail import queued",
-        emails_skipped=0,
-        skipped_seat_ids=[],
-        emails_processed=0,
-        files_imported=0,
-        files=[],
-        errors=[],
-    )
-
-
-def _run_import_and_refresh(job_id: str) -> None:
-    from scripts.gmail_import import run_import
-
-    result = run_import(False, job_id)
-    if not result.get("success") or result.get("files_imported", 0) == 0:
-        return
-
-    import asyncio
-
-    asyncio.run(refresh_home_summaries(days=30))
-    asyncio.run(refresh_config_breakdowns(days=30))
