@@ -216,3 +216,25 @@ class SeatsRepository:
             "UPDATE service_accounts SET last_used = CURRENT_TIMESTAMP WHERE id = %s",
             (account_id,),
         )
+
+    async def get_bidder_id_for_service_account(
+        self, service_account_id: str
+    ) -> Optional[str]:
+        """Get bidder_id for a service account from buyer_seats."""
+        row = await pg_query_one(
+            "SELECT bidder_id FROM buyer_seats WHERE service_account_id = %s LIMIT 1",
+            (service_account_id,)
+        )
+        return row["bidder_id"] if row else None
+
+    async def get_first_bidder_id(self) -> Optional[str]:
+        """Get the first available bidder_id (for single-account scenarios)."""
+        row = await pg_query_one("SELECT bidder_id FROM buyer_seats LIMIT 1")
+        return row["bidder_id"] if row else None
+
+    async def get_buyer_seat_with_bidder(self, buyer_id: str) -> Optional[dict[str, Any]]:
+        """Get buyer seat info including bidder_id and display_name."""
+        return await pg_query_one(
+            "SELECT bidder_id, display_name FROM buyer_seats WHERE buyer_id = %s",
+            (buyer_id,)
+        )

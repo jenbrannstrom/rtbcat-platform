@@ -1,11 +1,9 @@
 """Pretargeting apply/suspend/activate/rollback routes."""
 
 import logging
-from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 
-from api.dependencies import get_store
 from services.actions_service import ActionsService
 
 from .models import (
@@ -26,7 +24,6 @@ router = APIRouter(tags=["RTB Settings"])
 async def apply_pending_change(
     billing_id: str,
     request: ApplyChangeRequest,
-    store=Depends(get_store),
 ):
     """
     Apply a single pending change to Google Authorized Buyers.
@@ -47,7 +44,6 @@ async def apply_pending_change(
             billing_id=billing_id,
             change_id=request.change_id,
             dry_run=request.dry_run,
-            store=store,
         )
         return ApplyChangeResponse(**result)
     except ValueError as e:
@@ -61,7 +57,6 @@ async def apply_pending_change(
 async def apply_all_pending_changes(
     billing_id: str,
     dry_run: bool = Query(True, description="Preview changes without applying"),
-    store=Depends(get_store),
 ):
     """
     Apply all pending changes for a billing_id to Google.
@@ -74,7 +69,6 @@ async def apply_all_pending_changes(
         result = await service.apply_all_pending_changes(
             billing_id=billing_id,
             dry_run=dry_run,
-            store=store,
         )
         return ApplyAllResponse(**result)
 
@@ -88,7 +82,6 @@ async def apply_all_pending_changes(
 @router.post("/settings/pretargeting/{billing_id}/suspend", response_model=SuspendActivateResponse)
 async def suspend_pretargeting_config(
     billing_id: str,
-    store=Depends(get_store),
 ):
     """
     Suspend a pretargeting configuration.
@@ -100,7 +93,7 @@ async def suspend_pretargeting_config(
     """
     try:
         service = ActionsService()
-        result = await service.suspend_config(billing_id=billing_id, store=store)
+        result = await service.suspend_config(billing_id=billing_id)
         return SuspendActivateResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -112,7 +105,6 @@ async def suspend_pretargeting_config(
 @router.post("/settings/pretargeting/{billing_id}/activate", response_model=SuspendActivateResponse)
 async def activate_pretargeting_config(
     billing_id: str,
-    store=Depends(get_store),
 ):
     """
     Activate a suspended pretargeting configuration.
@@ -123,7 +115,7 @@ async def activate_pretargeting_config(
     """
     try:
         service = ActionsService()
-        result = await service.activate_config(billing_id=billing_id, store=store)
+        result = await service.activate_config(billing_id=billing_id)
         return SuspendActivateResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -136,7 +128,6 @@ async def activate_pretargeting_config(
 async def rollback_to_snapshot(
     billing_id: str,
     request: RollbackRequest,
-    store=Depends(get_store),
 ):
     """
     Rollback a pretargeting config to a previous snapshot state.
@@ -152,7 +143,6 @@ async def rollback_to_snapshot(
             billing_id=billing_id,
             snapshot_id=request.snapshot_id,
             dry_run=request.dry_run,
-            store=store,
         )
         return RollbackResponse(**result)
     except ValueError as e:
