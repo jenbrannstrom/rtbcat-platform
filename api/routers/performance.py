@@ -36,8 +36,9 @@ from api.schemas.performance import (
 )
 from importers.unified_importer import unified_import
 from storage import PerformanceMetric
-from storage.serving_database import db_execute, db_query_one
+from storage.serving_database import db_query
 from services.home_precompute import refresh_home_summaries
+from services.performance_service import PerformanceService
 from services.precompute_validation import run_precompute_validation
 from services.config_precompute import refresh_config_breakdowns
 from services.rtb_precompute import refresh_rtb_summaries
@@ -353,33 +354,20 @@ async def import_performance_csv(
                 columns_found.append(col)
                 seen_columns.add(col)
 
-        await db_execute(
-            """
-            INSERT INTO import_history (
-                batch_id, filename, rows_read, rows_imported, rows_skipped, rows_duplicate,
-                date_range_start, date_range_end, columns_found, columns_missing,
-                total_reached, total_impressions, total_spend_usd, status, error_message,
-                file_size_bytes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                result.batch_id,
-                file.filename,
-                result.rows_read,
-                result.rows_imported,
-                result.rows_skipped,
-                result.rows_duplicate,
-                result.date_range_start,
-                result.date_range_end,
-                ",".join(columns_found) if columns_found else None,
-                None,
-                0,
-                0,
-                0,
-                "complete" if result.success else "failed",
-                result.error_message or None,
-                file_size_bytes,
-            ),
+        perf_service = PerformanceService()
+        await perf_service.record_import(
+            batch_id=result.batch_id,
+            filename=file.filename,
+            rows_read=result.rows_read,
+            rows_imported=result.rows_imported,
+            rows_skipped=result.rows_skipped,
+            rows_duplicate=result.rows_duplicate,
+            date_range_start=result.date_range_start,
+            date_range_end=result.date_range_end,
+            columns_found=columns_found,
+            status="complete" if result.success else "failed",
+            error_message=result.error_message,
+            file_size_bytes=file_size_bytes,
         )
         if result.success and result.date_range_start and result.date_range_end:
             background_tasks.add_task(
@@ -645,6 +633,7 @@ async def import_performance_stream(
     min_date: Optional[str] = None
     max_date: Optional[str] = None
     total_spend = 0.0
+    perf_service = PerformanceService()
 
     try:
         body = b""
@@ -670,11 +659,8 @@ async def import_performance_stream(
                 if max_date is None or date > max_date:
                     max_date = date
 
-                spend = row.get("spend", 0)
-                if isinstance(spend, str):
-                    spend = float(spend.replace("$", "").replace(",", ""))
-                spend_micros = int(float(spend) * 1_000_000)
-                total_spend += float(spend)
+                spend_micros, spend_usd = perf_service.parse_spend(row.get("spend", 0))
+                total_spend += spend_usd
 
                 impressions = int(row.get("impressions", 0) or 0)
                 clicks = int(row.get("clicks", 0) or 0)
@@ -685,32 +671,19 @@ async def import_performance_stream(
                 campaign_id = row.get("campaign_id") or None
                 billing_id = row.get("billing_id") or None
 
-                await db_execute("""
-                    INSERT INTO performance_metrics (
-                        creative_id, campaign_id, metric_date,
-                        impressions, clicks, spend_micros,
-                        geography, device_type, placement, reached_queries,
-                        billing_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT (creative_id, metric_date, COALESCE(geography, ''), COALESCE(device_type, ''), COALESCE(placement, ''))
-                    DO UPDATE SET
-                        impressions = performance_metrics.impressions + EXCLUDED.impressions,
-                        clicks = performance_metrics.clicks + EXCLUDED.clicks,
-                        spend_micros = performance_metrics.spend_micros + EXCLUDED.spend_micros,
-                        reached_queries = performance_metrics.reached_queries + EXCLUDED.reached_queries
-                """, (
-                    row.get("creative_id"),
-                    campaign_id,
-                    date,
-                    impressions,
-                    clicks,
-                    spend_micros,
-                    geography,
-                    device_type,
-                    placement,
-                    reached,
-                    billing_id,
-                ))
+                await perf_service.upsert_metric(
+                    creative_id=row.get("creative_id"),
+                    metric_date=date,
+                    impressions=impressions,
+                    clicks=clicks,
+                    spend_micros=spend_micros,
+                    reached_queries=reached,
+                    campaign_id=campaign_id,
+                    geography=geography,
+                    device_type=device_type,
+                    placement=placement,
+                    billing_id=billing_id,
+                )
 
                 total_imported += 1
                 total_processed += 1
@@ -755,6 +728,7 @@ async def import_performance_batch(
 
     Writes directly to the unified performance_metrics table.
     """
+    perf_service = PerformanceService()
     try:
         min_date: Optional[str] = None
         max_date: Optional[str] = None
@@ -774,11 +748,8 @@ async def import_performance_batch(
                 if max_date is None or date > max_date:
                     max_date = date
 
-                spend = row.get("spend", 0)
-                if isinstance(spend, str):
-                    spend = float(spend.replace("$", "").replace(",", ""))
-                spend_micros = int(float(spend) * 1_000_000)
-                total_spend += float(spend)
+                spend_micros, spend_usd = perf_service.parse_spend(row.get("spend", 0))
+                total_spend += spend_usd
 
                 impressions = int(row.get("impressions", 0) or 0)
                 clicks = int(row.get("clicks", 0) or 0)
@@ -790,32 +761,19 @@ async def import_performance_batch(
                 campaign_id = row.get("campaign_id") or None
                 billing_id = row.get("billing_id") or None
 
-                await db_execute("""
-                    INSERT INTO performance_metrics (
-                        creative_id, campaign_id, metric_date,
-                        impressions, clicks, spend_micros,
-                        geography, device_type, placement, reached_queries,
-                        billing_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT (creative_id, metric_date, COALESCE(geography, ''), COALESCE(device_type, ''), COALESCE(placement, ''))
-                    DO UPDATE SET
-                        impressions = performance_metrics.impressions + EXCLUDED.impressions,
-                        clicks = performance_metrics.clicks + EXCLUDED.clicks,
-                        spend_micros = performance_metrics.spend_micros + EXCLUDED.spend_micros,
-                        reached_queries = performance_metrics.reached_queries + EXCLUDED.reached_queries
-                """, (
-                    row.get("creative_id"),
-                    campaign_id,
-                    date,
-                    impressions,
-                    clicks,
-                    spend_micros,
-                    geography,
-                    device_type,
-                    placement,
-                    reached,
-                    billing_id,
-                ))
+                await perf_service.upsert_metric(
+                    creative_id=row.get("creative_id"),
+                    metric_date=date,
+                    impressions=impressions,
+                    clicks=clicks,
+                    spend_micros=spend_micros,
+                    reached_queries=reached,
+                    campaign_id=campaign_id,
+                    geography=geography,
+                    device_type=device_type,
+                    placement=placement,
+                    billing_id=billing_id,
+                )
 
                 imported += 1
 
@@ -844,54 +802,21 @@ async def import_performance_batch(
 async def finalize_import(request: FinalizeImportRequest):
     """Finalize a chunked import session and record in import_history."""
     try:
-        # Record in import_history
-        await db_execute("""
-            INSERT INTO import_history (
-                batch_id, filename, rows_read, rows_imported, rows_skipped, rows_duplicate,
-                date_range_start, date_range_end, total_reached, total_impressions,
-                total_spend_usd, status, file_size_bytes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            request.batch_id,
-            request.filename,
-            request.rows_read,
-            request.rows_imported,
-            request.rows_skipped,
-            request.rows_duplicate,
-            request.date_range_start,
-            request.date_range_end,
-            request.total_reached,
-            request.total_impressions,
-            request.total_spend_usd,
-            "complete",
-            request.file_size_bytes,
-        ))
-
-        # Update daily upload summary
-        import_date_row = await db_query_one("SELECT CURRENT_DATE as dt")
-        import_date = import_date_row["dt"] if import_date_row else None
-
-        await db_execute("""
-            INSERT INTO daily_upload_summary (
-                upload_date, total_uploads, successful_uploads, failed_uploads,
-                total_rows_written, total_file_size_bytes, min_rows, max_rows, avg_rows_per_upload
-            ) VALUES (?, 1, 1, 0, ?, ?, ?, ?, ?)
-            ON CONFLICT(upload_date) DO UPDATE SET
-                total_uploads = daily_upload_summary.total_uploads + 1,
-                successful_uploads = daily_upload_summary.successful_uploads + 1,
-                total_rows_written = daily_upload_summary.total_rows_written + EXCLUDED.total_rows_written,
-                total_file_size_bytes = daily_upload_summary.total_file_size_bytes + EXCLUDED.total_file_size_bytes,
-                min_rows = LEAST(daily_upload_summary.min_rows, EXCLUDED.min_rows),
-                max_rows = GREATEST(daily_upload_summary.max_rows, EXCLUDED.max_rows),
-                avg_rows_per_upload = (daily_upload_summary.total_rows_written + EXCLUDED.total_rows_written) / (daily_upload_summary.total_uploads + 1)
-        """, (
-            import_date,
-            request.rows_imported,
-            request.file_size_bytes,
-            request.rows_imported,
-            request.rows_imported,
-            request.rows_imported,
-        ))
+        perf_service = PerformanceService()
+        await perf_service.finalize_import(
+            batch_id=request.batch_id,
+            filename=request.filename,
+            rows_read=request.rows_read,
+            rows_imported=request.rows_imported,
+            rows_skipped=request.rows_skipped,
+            rows_duplicate=request.rows_duplicate,
+            date_range_start=request.date_range_start,
+            date_range_end=request.date_range_end,
+            total_reached=request.total_reached,
+            total_impressions=request.total_impressions,
+            total_spend_usd=request.total_spend_usd,
+            file_size_bytes=request.file_size_bytes,
+        )
 
         logger.info(f"Import finalized: batch_id={request.batch_id}, rows={request.rows_imported}")
 
