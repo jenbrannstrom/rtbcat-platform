@@ -5,7 +5,6 @@ Handles CRUD operations for campaigns, creative_campaigns,
 and campaign_daily_summary tables.
 """
 
-import sqlite3
 import uuid
 from typing import Optional, Union
 from dataclasses import dataclass, field
@@ -67,15 +66,14 @@ class CampaignRepository:
     Handles campaign CRUD, creative assignments, and performance aggregation.
     """
 
-    def __init__(self, db_connection: sqlite3.Connection):
+    def __init__(self, db_connection):
         """
         Initialize repository with database connection.
 
         Args:
-            db_connection: SQLite database connection
+            db_connection: Postgres database connection
         """
         self.db = db_connection
-        self.db.row_factory = sqlite3.Row
 
     # ==================== Campaign CRUD ====================
 
@@ -110,10 +108,8 @@ class CampaignRepository:
             INSERT INTO ai_campaigns
             (id, seat_id, name, description, ai_generated, ai_confidence,
              clustering_method, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """, (campaign_id, seat_id, name, description, ai_generated, ai_confidence, clustering_method))
-
-        self.db.commit()
         return campaign_id
 
     def get_campaign(self, campaign_id: Union[str, int]) -> Optional[AICampaign]:
@@ -131,7 +127,7 @@ class CampaignRepository:
             SELECT c.*,
                    (SELECT COUNT(*) FROM creative_campaigns WHERE campaign_id = c.id) as computed_count
             FROM ai_campaigns c
-            WHERE c.id = ?
+            WHERE c.id = %s
         """, (str(campaign_id),))
         row = cursor.fetchone()
 
@@ -162,11 +158,11 @@ class CampaignRepository:
         params = []
 
         if seat_id is not None:
-            conditions.append("c.seat_id = ?")
+            conditions.append("c.seat_id = %s")
             params.append(seat_id)
 
         if status:
-            conditions.append("c.status = ?")
+            conditions.append("c.status = %s")
             params.append(status)
 
         where_clause = " AND ".join(conditions) if conditions else "1=1"
@@ -179,7 +175,7 @@ class CampaignRepository:
             FROM ai_campaigns c
             WHERE {where_clause}
             ORDER BY c.updated_at DESC
-            LIMIT ? OFFSET ?
+            LIMIT %s OFFSET %s
         """, params)
 
         return [self._row_to_campaign(row) for row in cursor.fetchall()]
@@ -207,25 +203,24 @@ class CampaignRepository:
         params = []
 
         if name is not None:
-            updates.append("name = ?")
+            updates.append("name = %s")
             params.append(name)
 
         if description is not None:
-            updates.append("description = ?")
+            updates.append("description = %s")
             params.append(description)
 
         if status is not None:
-            updates.append("status = ?")
+            updates.append("status = %s")
             params.append(status)
 
         params.append(campaign_id)
 
         cursor = self.db.cursor()
         cursor.execute(
-            f"UPDATE ai_campaigns SET {', '.join(updates)} WHERE id = ?",
+            f"UPDATE ai_campaigns SET {', '.join(updates)} WHERE id = %s",
             params
         )
-        self.db.commit()
 
         return cursor.rowcount > 0
 
@@ -243,17 +238,15 @@ class CampaignRepository:
 
         # Delete mappings first
         cursor.execute(
-            "DELETE FROM creative_campaigns WHERE campaign_id = ?",
+            "DELETE FROM creative_campaigns WHERE campaign_id = %s",
             (campaign_id,)
         )
 
         # Delete campaign
         cursor.execute(
-            "DELETE FROM ai_campaigns WHERE id = ?",
+            "DELETE FROM ai_campaigns WHERE id = %s",
             (campaign_id,)
         )
-
-        self.db.commit()
         return cursor.rowcount > 0
 
     # ==================== Creative Assignment ====================
@@ -281,12 +274,15 @@ class CampaignRepository:
         """
         cursor = self.db.cursor()
         cursor.execute("""
-            INSERT OR REPLACE INTO creative_campaigns
+            INSERT INTO creative_campaigns
             (creative_id, campaign_id, manually_assigned, assigned_at, assigned_by)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)
+            VALUES (%s, %s, %s, CURRENT_TIMESTAMP, %s)
+            ON CONFLICT (creative_id) DO UPDATE SET
+                campaign_id = EXCLUDED.campaign_id,
+                manually_assigned = EXCLUDED.manually_assigned,
+                assigned_at = EXCLUDED.assigned_at,
+                assigned_by = EXCLUDED.assigned_by
         """, (creative_id, campaign_id, manually_assigned, assigned_by))
-
-        self.db.commit()
         return cursor.rowcount > 0
 
     def assign_creatives_batch(
@@ -313,13 +309,17 @@ class CampaignRepository:
 
         for creative_id in creative_ids:
             cursor.execute("""
-                INSERT OR REPLACE INTO creative_campaigns
+                INSERT INTO creative_campaigns
                 (creative_id, campaign_id, manually_assigned, assigned_at, assigned_by)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)
+                VALUES (%s, %s, %s, CURRENT_TIMESTAMP, %s)
+                ON CONFLICT (creative_id) DO UPDATE SET
+                    campaign_id = EXCLUDED.campaign_id,
+                    manually_assigned = EXCLUDED.manually_assigned,
+                    assigned_at = EXCLUDED.assigned_at,
+                    assigned_by = EXCLUDED.assigned_by
             """, (creative_id, campaign_id, manually_assigned, assigned_by))
             count += 1
 
-        self.db.commit()
         return count
 
     def remove_creative_from_campaign(self, creative_id: str) -> bool:
@@ -334,10 +334,9 @@ class CampaignRepository:
         """
         cursor = self.db.cursor()
         cursor.execute(
-            "DELETE FROM creative_campaigns WHERE creative_id = ?",
+            "DELETE FROM creative_campaigns WHERE creative_id = %s",
             (creative_id,)
         )
-        self.db.commit()
         return cursor.rowcount > 0
 
     def get_campaign_creatives(self, campaign_id: int) -> list[str]:
@@ -352,10 +351,10 @@ class CampaignRepository:
         """
         cursor = self.db.cursor()
         cursor.execute(
-            "SELECT creative_id FROM creative_campaigns WHERE campaign_id = ?",
+            "SELECT creative_id FROM creative_campaigns WHERE campaign_id = %s",
             (campaign_id,)
         )
-        return [row['creative_id'] for row in cursor.fetchall()]
+        return [row["creative_id"] for row in cursor.fetchall()]
 
     def get_campaign_country_breakdown(
         self, campaign_id: Union[str, int], days: int = 7
@@ -379,25 +378,25 @@ class CampaignRepository:
                    SUM(pm.impressions) as impressions
             FROM creative_campaigns cc
             JOIN performance_metrics pm ON cc.creative_id = pm.creative_id
-            WHERE cc.campaign_id = ?
+            WHERE cc.campaign_id = %s
               AND pm.geography IS NOT NULL
-              AND pm.metric_date >= date('now', ? || ' days')
+              AND pm.metric_date >= CURRENT_DATE - make_interval(days => %s)
             GROUP BY pm.creative_id, pm.geography
-        """, (campaign_id, f"-{days}"))
+        """, (campaign_id, days))
 
         # Build breakdown
         breakdown: dict[str, dict] = {}
         for row in cursor.fetchall():
-            country = row['geography']
+            country = row["geography"]
             if country not in breakdown:
                 breakdown[country] = {
                     'creative_ids': [],
                     'spend_micros': 0,
                     'impressions': 0
                 }
-            breakdown[country]['creative_ids'].append(row['creative_id'])
-            breakdown[country]['spend_micros'] += row['spend_micros'] or 0
-            breakdown[country]['impressions'] += row['impressions'] or 0
+            breakdown[country]['creative_ids'].append(row["creative_id"])
+            breakdown[country]['spend_micros'] += row["spend_micros"] or 0
+            breakdown[country]['impressions'] += row["impressions"] or 0
 
         # De-duplicate creative_ids (a creative may appear multiple times)
         for country in breakdown:
@@ -417,11 +416,11 @@ class CampaignRepository:
         """
         cursor = self.db.cursor()
         cursor.execute(
-            "SELECT campaign_id FROM creative_campaigns WHERE creative_id = ?",
+            "SELECT campaign_id FROM creative_campaigns WHERE creative_id = %s",
             (creative_id,)
         )
         row = cursor.fetchone()
-        return row['campaign_id'] if row else None
+        return row["campaign_id"] if row else None
 
     def get_uncategorized_creatives(self, seat_id: Optional[int] = None) -> list[dict]:
         """
@@ -487,7 +486,7 @@ class CampaignRepository:
                 COUNT(DISTINCT pm.geography) as unique_geos
             FROM performance_metrics pm
             JOIN creative_campaigns cc ON pm.creative_id = cc.creative_id
-            WHERE cc.campaign_id = ? AND pm.metric_date = ?
+            WHERE cc.campaign_id = %s AND pm.metric_date = %s
         """, (campaign_id, date))
 
         row = cursor.fetchone()
@@ -504,11 +503,22 @@ class CampaignRepository:
 
             # Upsert summary
             cursor.execute("""
-                INSERT OR REPLACE INTO campaign_daily_summary
+                INSERT INTO campaign_daily_summary
                 (campaign_id, date, total_creatives, active_creatives,
                  total_queries, total_impressions, total_clicks, total_spend,
                  avg_win_rate, avg_ctr, avg_cpm, unique_geos)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (campaign_id, date) DO UPDATE SET
+                    total_creatives = EXCLUDED.total_creatives,
+                    active_creatives = EXCLUDED.active_creatives,
+                    total_queries = EXCLUDED.total_queries,
+                    total_impressions = EXCLUDED.total_impressions,
+                    total_clicks = EXCLUDED.total_clicks,
+                    total_spend = EXCLUDED.total_spend,
+                    avg_win_rate = EXCLUDED.avg_win_rate,
+                    avg_ctr = EXCLUDED.avg_ctr,
+                    avg_cpm = EXCLUDED.avg_cpm,
+                    unique_geos = EXCLUDED.unique_geos
             """, (
                 campaign_id, date,
                 row['total_creatives'] or 0,
@@ -522,8 +532,6 @@ class CampaignRepository:
                 avg_cpm,
                 row['unique_geos'] or 0,
             ))
-
-            self.db.commit()
 
     def get_campaign_performance(
         self,
@@ -551,8 +559,9 @@ class CampaignRepository:
                 AVG(avg_ctr) as ctr,
                 AVG(avg_cpm) as cpm
             FROM campaign_daily_summary
-            WHERE campaign_id = ? AND date >= date('now', ?)
-        """, (campaign_id, f"-{days} days"))
+            WHERE campaign_id = %s
+              AND date >= CURRENT_DATE - make_interval(days => %s)
+        """, (campaign_id, days))
 
         row = cursor.fetchone()
 
@@ -597,28 +606,29 @@ class CampaignRepository:
             SELECT date, total_impressions, total_clicks, total_spend,
                    avg_win_rate, avg_ctr, avg_cpm, unique_geos
             FROM campaign_daily_summary
-            WHERE campaign_id = ? AND date >= date('now', ?)
+            WHERE campaign_id = %s
+              AND date >= CURRENT_DATE - make_interval(days => %s)
             ORDER BY date DESC
-        """, (campaign_id, f"-{days} days"))
+        """, (campaign_id, days))
 
         return [dict(row) for row in cursor.fetchall()]
 
     # ==================== Helper Methods ====================
 
-    def _row_to_campaign(self, row: sqlite3.Row) -> AICampaign:
+    def _row_to_campaign(self, row: dict) -> AICampaign:
         """Convert database row to AICampaign object."""
         # Use computed_count to avoid collision with creative_count table column
-        count = row['computed_count'] if 'computed_count' in row.keys() else 0
+        count = row.get("computed_count", 0)
         return AICampaign(
-            id=row['id'],
-            seat_id=row['seat_id'],
-            name=row['name'],
-            description=row['description'],
-            ai_generated=bool(row['ai_generated']),
-            ai_confidence=row['ai_confidence'],
-            clustering_method=row['clustering_method'],
-            status=row['status'],
-            created_at=row['created_at'],
-            updated_at=row['updated_at'],
+            id=row["id"],
+            seat_id=row["seat_id"],
+            name=row["name"],
+            description=row.get("description"),
+            ai_generated=bool(row.get("ai_generated")),
+            ai_confidence=row.get("ai_confidence"),
+            clustering_method=row.get("clustering_method"),
+            status=row.get("status") or "active",
+            created_at=row.get("created_at"),
+            updated_at=row.get("updated_at"),
             creative_count=count,
         )
