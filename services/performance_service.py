@@ -31,7 +31,6 @@ class PerformanceService:
         geography: Optional[str] = None,
         device_type: Optional[str] = None,
         placement: Optional[str] = None,
-        billing_id: Optional[str] = None,
     ) -> None:
         """Upsert a single performance metric."""
         await self._perf.upsert_performance_metric(
@@ -45,7 +44,6 @@ class PerformanceService:
             geography=geography,
             device_type=device_type,
             placement=placement,
-            billing_id=billing_id,
         )
 
     async def get_aggregates_for_billing_id(self, billing_id: str) -> dict[str, Any]:
@@ -66,14 +64,9 @@ class PerformanceService:
         status: str,
         error_message: Optional[str],
         file_size_bytes: int,
-        bidder_id: Optional[str] = None,
-        billing_ids_found: Optional[list[str]] = None,
     ) -> None:
         """Record an import in history and update daily summary."""
-        import json
-
         columns_str = ",".join(columns_found) if columns_found else None
-        billing_ids_str = json.dumps(billing_ids_found) if billing_ids_found else None
 
         await self._uploads.record_import_history(
             batch_id=batch_id,
@@ -92,8 +85,6 @@ class PerformanceService:
             status=status,
             error_message=error_message,
             file_size_bytes=file_size_bytes,
-            bidder_id=bidder_id,
-            billing_ids_found=billing_ids_str,
         )
 
     async def finalize_import(
