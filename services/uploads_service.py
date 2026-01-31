@@ -159,12 +159,7 @@ class UploadsService:
             file_size_bytes = row.get("file_size_bytes") or 0
             file_size_mb = file_size_bytes / (1024 * 1024)
 
-            billing_ids = None
-            if row.get("billing_ids_found"):
-                try:
-                    billing_ids = json.loads(row["billing_ids_found"])
-                except json.JSONDecodeError:
-                    billing_ids = None
+            billing_ids = self._parse_single_billing_ids(row.get("billing_ids_found"))
 
             columns_found = self._split_columns(row.get("columns_found"))
             columns_missing = self._split_columns(row.get("columns_missing"))
@@ -307,17 +302,45 @@ class UploadsService:
         return columns or None
 
     @staticmethod
-    def _parse_billing_ids(value: Optional[str]) -> list[str]:
-        """Parse aggregated billing IDs from comma-separated JSON strings."""
+    def _parse_single_billing_ids(value: Any) -> Optional[list[str]]:
+        """Parse billing_ids_found field - handles both JSON string and JSONB list."""
+        if not value:
+            return None
+        # If already a list (JSONB), return directly
+        if isinstance(value, list):
+            return value
+        # If dict (shouldn't happen, but handle gracefully)
+        if isinstance(value, dict):
+            return list(value.keys()) if value else None
+        # If string, try to parse as JSON
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list):
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+        return None
+
+    @staticmethod
+    def _parse_billing_ids(value: Any) -> list[str]:
+        """Parse aggregated billing IDs from comma-separated JSON strings or JSONB."""
         if not value:
             return []
+        # If already a list (JSONB), return directly
+        if isinstance(value, list):
+            return [str(v) for v in value]
+        # If not a string, can't parse
+        if not isinstance(value, str):
+            return []
+        # Parse comma-separated JSON strings (from STRING_AGG)
         billing_ids: set[str] = set()
         for json_str in value.split(","):
             if json_str:
                 try:
                     ids = json.loads(json_str)
                     if isinstance(ids, list):
-                        billing_ids.update(ids)
+                        billing_ids.update(str(v) for v in ids)
                 except json.JSONDecodeError:
                     pass
         return list(billing_ids)
