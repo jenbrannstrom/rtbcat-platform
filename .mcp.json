@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "chromium": {
-      "type": "http",
-      "url": "http://localhost:8765/mcp"
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["chrome-devtools-mcp@latest"]
     }
   }
 }

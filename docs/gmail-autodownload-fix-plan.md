@@ -102,6 +102,49 @@ Add `catscan-gmail-import.timer` alongside existing `catscan-home-refresh.timer`
 
 ## Recommended Implementation: Option A (Cloud Scheduler)
 
+## Plan
+
+### Goals
+- Restore automatic Gmail imports without manual "Import Now".
+- Keep the schedule visible and auditable in GCP.
+- Ensure secrets are generated and injected securely.
+
+### Scope (MVP)
+- Terraform-only changes to add a Cloud Scheduler job.
+- Generate and pass `GMAIL_IMPORT_SECRET` into the VM/container.
+- Verify scheduled import endpoint works end-to-end.
+
+### Out of Scope (for now)
+- Multi-schedule support (per seat or per account).
+- UI controls for schedule time.
+- Alerting/monitoring dashboards.
+
+### Steps
+1. **Terraform: secret generation**
+   - Add `random_password.gmail_import_secret`.
+   - Wire to startup template vars.
+2. **Terraform: scheduler job**
+   - Add `google_cloud_scheduler_job.gmail_import`.
+   - Use the generated secret in `X-Gmail-Import-Secret`.
+3. **Terraform: URL local**
+   - Add `local.gmail_import_url` alongside other service URLs.
+4. **Startup script**
+   - Export `GMAIL_IMPORT_SECRET`.
+   - Ensure docker-compose passes it to the API container.
+5. **Apply + verify**
+   - `terraform plan` → `terraform apply`.
+   - Trigger job manually in GCP Console.
+   - Validate in API logs and dashboard.
+
+### Rollback
+- Disable or delete the scheduler job in GCP.
+- Remove secret from startup script/template variables.
+
+### Definition of Done
+- Cloud Scheduler job exists and runs daily.
+- `/api/gmail/import/scheduled` succeeds with 200.
+- New Gmail reports appear without manual import.
+
 ### Step 1: Add Secret Generation to Terraform
 
 In `terraform/gcp/main.tf`, add after line 44:

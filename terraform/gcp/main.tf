@@ -43,10 +43,17 @@ resource "random_password" "precompute_monitor_secret" {
   special = false
 }
 
+resource "random_password" "gmail_import_secret" {
+  length  = 32
+  special = false
+}
+
 locals {
   precompute_refresh_url = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/precompute/refresh/scheduled" : "http://${google_compute_address.catscan.address}/api/precompute/refresh/scheduled"
 
   precompute_health_url = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/precompute/health" : "http://${google_compute_address.catscan.address}/api/precompute/health"
+
+  gmail_import_url = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/gmail/import/scheduled" : "http://${google_compute_address.catscan.address}/api/gmail/import/scheduled"
 
   precompute_health_host = var.domain_name != "" ? var.domain_name : google_compute_address.catscan.address
   precompute_health_port = (var.enable_https && var.domain_name != "") ? 443 : 80
@@ -434,6 +441,7 @@ resource "google_compute_instance" "catscan" {
     allowed_email_domains      = var.allowed_email_domains
     precompute_refresh_secret  = random_password.precompute_refresh_secret.result
     precompute_monitor_secret  = random_password.precompute_monitor_secret.result
+    gmail_import_secret        = random_password.gmail_import_secret.result
     precompute_refresh_days    = var.precompute_refresh_days
     precompute_refresh_max_age = var.precompute_refresh_max_age_hours
   })
@@ -515,6 +523,7 @@ resource "google_compute_instance" "catscan_sg" {
     allowed_email_domains      = var.allowed_email_domains
     precompute_refresh_secret  = random_password.precompute_refresh_secret.result
     precompute_monitor_secret  = random_password.precompute_monitor_secret.result
+    gmail_import_secret        = random_password.gmail_import_secret.result
     precompute_refresh_days    = var.precompute_refresh_days
     precompute_refresh_max_age = var.precompute_refresh_max_age_hours
   })
@@ -683,6 +692,34 @@ resource "google_cloud_scheduler_job" "precompute_refresh" {
     headers = {
       X-Precompute-Refresh-Secret = random_password.precompute_refresh_secret.result
     }
+  }
+
+  depends_on = [google_project_service.cloudscheduler]
+}
+
+# =============================================================================
+# CLOUD SCHEDULER - Gmail Import
+# =============================================================================
+
+resource "google_cloud_scheduler_job" "gmail_import" {
+  name        = "${var.app_name}-gmail-import"
+  description = "Daily Gmail report import"
+  schedule    = "0 8 * * *"
+  time_zone   = "Etc/UTC"
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = local.gmail_import_url
+    headers = {
+      X-Gmail-Import-Secret = random_password.gmail_import_secret.result
+    }
+  }
+
+  retry_config {
+    retry_count         = 3
+    min_backoff_duration = "60s"
+    max_backoff_duration = "600s"
   }
 
   depends_on = [google_project_service.cloudscheduler]

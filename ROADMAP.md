@@ -218,6 +218,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 
 ### Phase 4 — UI Refactor & Features
 - [ ] **Pretargeting configs** - “No data” state when performance missing; seat-only list (10 active)
+- [ ] **Pretargeting configs empty bug** - UI shows “No Pretargeting Configs” even after Sync All; verify sync-all writes `pretargeting_configs`, fix query key invalidation (`pretargeting-configs` vs `pretargetingConfigs`), and add banner when bidder_id lookup fails
 - [ ] **By Size** - Billing ID scoped; add size drill-down to list creatives + modal icon per creative (backend fix staged; deploy + refresh pending)
 - [ ] **By Geo / By Publisher** - Re-enable once join-safe keys are available; seat-only
 - [ ] **By Creative** - Confirm billing_id scoping; add creative modal icon; move country targeting near top
