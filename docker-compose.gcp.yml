@@ -1,4 +1,4 @@
-# GCP/Cloud deployment: API + Dashboard only
+# GCP/Cloud deployment: API + Dashboard + Cloud SQL Proxy
 # Nginx + OAuth2 Proxy handle SSL and authentication externally
 #
 # Usage: docker compose -f docker-compose.gcp.yml up -d
@@ -8,8 +8,29 @@
 #   IMAGE_TAG       - Image version tag (default: latest)
 #   DATA_DIR        - Host path for persistent data (default: ~/.catscan)
 #   GMAIL_IMPORT_SECRET - Secret for Gmail webhook (optional)
+#   CLOUDSQL_INSTANCE - Cloud SQL instance connection name (project:region:instance)
 
 services:
+  cloudsql-proxy:
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.3
+    container_name: catscan-cloudsql-proxy
+    command:
+      - "--address"
+      - "0.0.0.0"
+      - "--port"
+      - "5432"
+      - "${CLOUDSQL_INSTANCE:-catscan-prod-202601:asia-southeast1:catscan-production-serving}"
+    volumes:
+      - "${DATA_DIR:-~/.catscan}/credentials:/credentials:ro"
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/credentials/google-credentials.json
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   api:
     build:
       context: .
@@ -24,8 +45,8 @@ services:
       - "${DATA_DIR:-~/.catscan}:/home/rtbcat/.catscan"
     env_file:
       - .env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    depends_on:
+      - cloudsql-proxy
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/home/rtbcat/.catscan/credentials/google-credentials.json
       # DATABASE_PATH removed - using Postgres via POSTGRES_DSN from .env
