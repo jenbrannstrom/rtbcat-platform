@@ -248,7 +248,7 @@ async def get_pretargeting_configs(
                     included_geos=_parse_json_field(row["included_geos"]),
                     excluded_geos=_parse_json_field(row["excluded_geos"]),
                     included_operating_systems=os_names,
-                    synced_at=row["synced_at"],
+                    synced_at=str(row["synced_at"]) if row["synced_at"] else None,
                 )
             )
 
