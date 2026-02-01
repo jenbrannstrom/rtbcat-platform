@@ -1,5 +1,6 @@
 """Pretargeting pending changes routes (local-only)."""
 
+import json
 import logging
 from typing import Optional
 
@@ -13,6 +14,15 @@ from .models import ConfigDetailResponse, PendingChangeCreate, PendingChangeResp
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["RTB Settings"])
+
+
+def _parse_json_field(value):
+    """Parse JSON field - handles both JSONB (already parsed) and TEXT (needs parsing)."""
+    if value is None:
+        return None
+    if isinstance(value, (list, dict)):
+        return value  # Already parsed by psycopg (JSONB column)
+    return json.loads(value)  # TEXT column, needs parsing
 
 
 @router.post("/settings/pretargeting/pending-change", response_model=PendingChangeResponse)
@@ -243,13 +253,13 @@ async def get_pretargeting_config_detail(
         # Reverse to get ASC order (service returns DESC)
         pending_rows = list(reversed(pending_rows))
 
-        # Parse current values
-        included_sizes = json.loads(config["included_sizes"]) if config.get("included_sizes") else []
-        included_geos = json.loads(config["included_geos"]) if config.get("included_geos") else []
-        excluded_geos = json.loads(config["excluded_geos"]) if config.get("excluded_geos") else []
-        included_formats = json.loads(config["included_formats"]) if config.get("included_formats") else []
-        included_platforms = json.loads(config["included_platforms"]) if config.get("included_platforms") else []
-        raw_config = json.loads(config["raw_config"]) if config.get("raw_config") else {}
+        # Parse current values (handles both JSONB and TEXT columns)
+        included_sizes = _parse_json_field(config.get("included_sizes")) or []
+        included_geos = _parse_json_field(config.get("included_geos")) or []
+        excluded_geos = _parse_json_field(config.get("excluded_geos")) or []
+        included_formats = _parse_json_field(config.get("included_formats")) or []
+        included_platforms = _parse_json_field(config.get("included_platforms")) or []
+        raw_config = _parse_json_field(config.get("raw_config")) or {}
         publisher_targeting = raw_config.get("publisherTargeting") or {}
         publisher_mode = publisher_targeting.get("targetingMode")
         publisher_values = publisher_targeting.get("values") or []
