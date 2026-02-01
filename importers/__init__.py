@@ -45,10 +45,23 @@ from importers.constants import (
     ACCOUNT_NAME,
 )
 
-# Re-export analyzers from analytics/ for backwards compatibility
-from analytics.cli_size_analyzer import QpsSizeCoverageAnalyzer, CoverageReport
-from analytics.cli_config_tracker import ConfigPerformanceTracker, ConfigReport
-from analytics.cli_fraud_detector import FraudSignalDetector, FraudReport
+_ANALYZER_EXPORTS = {
+    "QpsSizeCoverageAnalyzer": ("analytics.cli_size_analyzer", "QpsSizeCoverageAnalyzer"),
+    "CoverageReport": ("analytics.cli_size_analyzer", "CoverageReport"),
+    "ConfigPerformanceTracker": ("analytics.cli_config_tracker", "ConfigPerformanceTracker"),
+    "ConfigReport": ("analytics.cli_config_tracker", "ConfigReport"),
+    "FraudSignalDetector": ("analytics.cli_fraud_detector", "FraudSignalDetector"),
+    "FraudReport": ("analytics.cli_fraud_detector", "FraudReport"),
+}
+
+
+def __getattr__(name: str):
+    """Lazy re-exports for analytics analyzers to avoid circular imports."""
+    if name in _ANALYZER_EXPORTS:
+        module_name, attr_name = _ANALYZER_EXPORTS[name]
+        module = __import__(module_name, fromlist=[attr_name])
+        return getattr(module, attr_name)
+    raise AttributeError(f"module 'importers' has no attribute {name!r}")
 
 __all__ = [
     # Importer
