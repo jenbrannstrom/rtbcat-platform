@@ -11,9 +11,9 @@ permissions:
 
 env:
   PROJECT_ID: catscan-prod-202601
-  REGION: europe-west1
+  REGION: asia-southeast1
   REPOSITORY: catscan
-  REGISTRY_HOST: europe-west1-docker.pkg.dev
+  REGISTRY_HOST: asia-southeast1-docker.pkg.dev
 
 jobs:
   build-and-push:
