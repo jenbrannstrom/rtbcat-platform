@@ -127,14 +127,52 @@ gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-throu
 
 ### VM Details
 
-**Production runs on TWO instances** (EU legacy + SG primary):
+**Production runs on THREE instances** (EU legacy + SG primary + SG VM2):
 
-| Property | EU (Legacy) | SG (Primary) |
-|----------|-------------|--------------|
-| VM Name | `catscan-production` | `catscan-production-sg` |
-| Zone | `europe-west1-b` | `asia-southeast1-b` |
-| External IP | `35.205.211.184` | `34.143.222.60` |
-| Domain | `scan.rtb.cat` | (same, via DNS) |
+| Property | EU (Legacy) | SG (Primary) | SG VM2 (Staging) |
+|----------|-------------|--------------|------------------|
+| VM Name | `catscan-production` | `catscan-production-sg` | `catscan-production-sg2` |
+| Zone | `europe-west1-b` | `asia-southeast1-b` | `asia-southeast1-b` |
+| External IP | `35.205.211.184` | `34.143.222.60` | `34.143.231.235` |
+| Domain | `scan.rtb.cat` | (same, via DNS) | `vm2.scan.rtb.cat` (pending) |
+| Status | TERMINATED | RUNNING | RUNNING |
+| Terraform | `terraform/gcp` | `terraform/gcp` | `terraform/gcp_sg_vm2` |
+
+### Parallel VM (SG VM2) - Safe Terraform Apply
+
+To avoid touching production resources, use the minimal Terraform config:
+
+```
+terraform/gcp_sg_vm2
+```
+
+This creates a new VM + IP only, and reuses the existing Cloud SQL + Secret Manager data.
+No PostgreSQL re-upload is required.
+
+### VM2 Environment Setup (DO NOT COPY .env FROM PRIMARY)
+
+Use a VM2-specific `.env` so OAuth and domain testing are isolated.
+
+Create `/opt/catscan/.env` on VM2 with these required fields:
+
+```bash
+# Minimal required env for VM2
+DATA_DIR=/home/catscan/.catscan
+POSTGRES_DSN=postgresql://<user>:<pass>@host.docker.internal:5432/rtbcat_serving
+POSTGRES_SERVING_DSN=postgresql://<user>:<pass>@host.docker.internal:5432/rtbcat_serving
+
+# OAuth2 proxy must be enabled for API trust
+OAUTH2_PROXY_ENABLED=true
+
+# Optional (if pulling from registry)
+# IMAGE_REGISTRY=asia-southeast1-docker.pkg.dev/<project>/<repo>
+# IMAGE_TAG=sha-<commit>
+
+# Optional (if enabling Gmail scheduler)
+# GMAIL_IMPORT_SECRET=<random-32-chars>
+```
+
+> **Important:** Do not copy `.env` from the primary VM. VM2 should use a separate OAuth client (for `vm2.scan.rtb.cat`).
 
 | Property | Value |
 |----------|-------|
@@ -146,11 +184,14 @@ gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-throu
 # SG instance (primary)
 gcloud compute ssh catscan-production-sg --zone=asia-southeast1-b --tunnel-through-iap
 
-# EU instance (legacy)
+# SG VM2 (staging/testing)
+gcloud compute ssh catscan-production-sg2 --zone=asia-southeast1-b --tunnel-through-iap
+
+# EU instance (legacy - TERMINATED)
 gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap
 ```
 
-**Important:** Use **SG (primary)** for all current work. The EU VM is legacy and does not have Postgres configured.
+**Important:** Use **SG (primary)** for production. Use **SG VM2** for testing changes before production. The EU VM is legacy and TERMINATED.
 
 ### Firewall Rules (What's Open)
 
