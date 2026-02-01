@@ -20,10 +20,8 @@ services:
       - "--port"
       - "5432"
       - "${CLOUDSQL_INSTANCE:-catscan-prod-202601:asia-southeast1:catscan-production-serving}"
-    volumes:
-      - "${DATA_DIR:-~/.catscan}/credentials:/credentials:ro"
-    environment:
-      - GOOGLE_APPLICATION_CREDENTIALS=/credentials/google-credentials.json
+    # On GCE VMs, uses Application Default Credentials from metadata server
+    # For local dev with credentials file, set GOOGLE_APPLICATION_CREDENTIALS
     restart: always
     logging:
       driver: "json-file"
