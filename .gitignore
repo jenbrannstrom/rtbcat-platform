@@ -26,13 +26,12 @@ data/
 # Sensitive deployment info should use environment variables, not hardcoded in docs
 
 # Terraform state and user-specific config
-terraform/*.tfstate
-terraform/*.tfstate.backup
-terraform/tfplan
-terraform/.terraform/
+**/.terraform/
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/tfplan
+**/terraform.tfvars
 terraform/.terraform.lock.hcl
-terraform/terraform.tfvars
-terraform/gcp/terraform.tfvars
 
 # Deployment prompts with real infrastructure details (use .example as template)
 prompts/deploy-catscan.md
