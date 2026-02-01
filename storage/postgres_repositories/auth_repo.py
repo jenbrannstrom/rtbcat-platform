@@ -26,7 +26,7 @@ class AuthRepository:
         await pg_execute(
             """
             INSERT INTO users (id, email, display_name, role, is_active, created_at, default_language)
-            VALUES (%s, %s, %s, %s, TRUE, %s, %s)
+            VALUES (%s, %s, %s, %s, 1, %s, %s)
             """,
             (user_id, email, display_name, role, now, default_language),
         )
@@ -74,7 +74,7 @@ class AuthRepository:
         params: list[Any] = []
 
         if active_only:
-            conditions.append("is_active = TRUE")
+            conditions.append("is_active = 1")
         if role:
             conditions.append("role = %s")
             params.append(role)
@@ -205,7 +205,7 @@ class AuthRepository:
                    u.created_at, u.updated_at, u.last_login_at, u.default_language
             FROM user_sessions s
             JOIN users u ON s.user_id = u.id
-            WHERE s.id = %s AND s.expires_at > %s AND u.is_active = TRUE
+            WHERE s.id = %s AND s.expires_at > %s AND u.is_active = 1
             """,
             (session_id, now),
         )
