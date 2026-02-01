@@ -228,6 +228,7 @@ class PostgresStore:
         offset: int = 0,
         format: Optional[str] = None,
         campaign_id: Optional[str] = None,
+        cluster_id: Optional[str] = None,
         buyer_id: Optional[str] = None,
         approval_status: Optional[str] = None,
         search: Optional[str] = None,
@@ -244,6 +245,12 @@ class PostgresStore:
         if format:
             conditions.append("format = %s")
             params.append(format)
+        if campaign_id:
+            conditions.append("campaign_id = %s")
+            params.append(campaign_id)
+        if cluster_id:
+            conditions.append("cluster_id = %s")
+            params.append(cluster_id)
         if buyer_id:
             conditions.append("buyer_id = %s")
             params.append(buyer_id)

@@ -23,19 +23,19 @@ class HomeAnalyticsService:
         seat_status = await get_precompute_status(
             "home_seat_daily",
             days,
-            filters=["buyer_account_id = ?"] if buyer_id else None,
+            filters=["buyer_account_id = %s"] if buyer_id else None,
             params=[buyer_id] if buyer_id else None,
         )
         publisher_status = await get_precompute_status(
             "home_publisher_daily",
             days,
-            filters=["buyer_account_id = ?"] if buyer_id else None,
+            filters=["buyer_account_id = %s"] if buyer_id else None,
             params=[buyer_id] if buyer_id else None,
         )
         geo_status = await get_precompute_status(
             "home_geo_daily",
             days,
-            filters=["buyer_account_id = ?"] if buyer_id else None,
+            filters=["buyer_account_id = %s"] if buyer_id else None,
             params=[buyer_id] if buyer_id else None,
         )
 
@@ -174,7 +174,7 @@ class HomeAnalyticsService:
         config_status = await get_precompute_status(
             "home_config_daily",
             days,
-            filters=["buyer_account_id = ?"] if buyer_id else None,
+            filters=["buyer_account_id = %s"] if buyer_id else None,
             params=[buyer_id] if buyer_id else None,
         )
         if not config_status["has_rows"]:
