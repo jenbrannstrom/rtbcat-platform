@@ -23,6 +23,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["RTB Settings"])
 
 
+def _parse_json_field(value):
+    """Parse JSON field - handles both JSONB (already parsed) and TEXT (needs parsing)."""
+    if value is None:
+        return None
+    if isinstance(value, (list, dict)):
+        return value  # Already parsed by psycopg (JSONB column)
+    return json.loads(value)  # TEXT column, needs parsing
+
+
 def get_seats_service() -> SeatsService:
     """Dependency to get SeatsService instance."""
     return SeatsService()
@@ -218,7 +227,7 @@ async def get_pretargeting_configs(
         results = []
         for row in rows:
             # Parse OS targeting and convert IDs to names if possible
-            os_ids = json.loads(row["included_operating_systems"]) if row["included_operating_systems"] else None
+            os_ids = _parse_json_field(row["included_operating_systems"])
             os_names = None
             if os_ids:
                 # Map known OS IDs to human-readable names
@@ -233,11 +242,11 @@ async def get_pretargeting_configs(
                     display_name=row["display_name"],
                     user_name=row["user_name"],
                     state=row["state"] or "ACTIVE",
-                    included_formats=json.loads(row["included_formats"]) if row["included_formats"] else None,
-                    included_platforms=json.loads(row["included_platforms"]) if row["included_platforms"] else None,
-                    included_sizes=json.loads(row["included_sizes"]) if row["included_sizes"] else None,
-                    included_geos=json.loads(row["included_geos"]) if row["included_geos"] else None,
-                    excluded_geos=json.loads(row["excluded_geos"]) if row["excluded_geos"] else None,
+                    included_formats=_parse_json_field(row["included_formats"]),
+                    included_platforms=_parse_json_field(row["included_platforms"]),
+                    included_sizes=_parse_json_field(row["included_sizes"]),
+                    included_geos=_parse_json_field(row["included_geos"]),
+                    excluded_geos=_parse_json_field(row["excluded_geos"]),
                     included_operating_systems=os_names,
                     synced_at=row["synced_at"],
                 )
