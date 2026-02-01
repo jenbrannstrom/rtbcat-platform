@@ -179,8 +179,8 @@ export function Sidebar() {
       queryClient.invalidateQueries({ queryKey: ["creatives"] });
       queryClient.invalidateQueries({ queryKey: ["seats"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
-      queryClient.invalidateQueries({ queryKey: ["rtbEndpoints"] });
-      queryClient.invalidateQueries({ queryKey: ["pretargetingConfigs"] });
+      queryClient.invalidateQueries({ queryKey: ["rtb-endpoints"] });
+      queryClient.invalidateQueries({ queryKey: ["pretargeting-configs"] });
       setTimeout(() => setSyncMessage(null), 5000);
     },
     onError: (error) => {
