@@ -324,7 +324,7 @@ async def get_pretargeting_config_detail(
             excluded_geos=excluded_geos,
             publisher_targeting_mode=publisher_mode,
             publisher_targeting_values=publisher_values,
-            synced_at=config["synced_at"],
+            synced_at=str(config["synced_at"]) if config["synced_at"] else None,
             pending_changes=pending_changes,
             pending_changes_count=len(pending_changes),
             effective_sizes=sorted(list(effective_sizes)),
