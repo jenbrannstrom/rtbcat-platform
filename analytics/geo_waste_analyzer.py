@@ -102,12 +102,12 @@ class GeoWasteAnalyzer:
         """
         conn = psycopg.connect(self.dsn, row_factory=dict_row)
 
-        # Get geo performance
+        # Get geo performance (join seats to filter by billing_id)
         billing_filter = ""
         billing_params = []
         if billing_ids:
             placeholders = ",".join("%s" for _ in billing_ids)
-            billing_filter = f" AND pm.billing_id IN ({placeholders})"
+            billing_filter = f" AND s.billing_id IN ({placeholders})"
             billing_params.extend(billing_ids)
 
         cursor = conn.execute(f"""
@@ -118,6 +118,7 @@ class GeoWasteAnalyzer:
                 SUM(pm.spend_micros) / 1000000.0 as spend_usd,
                 COUNT(DISTINCT pm.creative_id) as creative_count
             FROM performance_metrics pm
+            LEFT JOIN seats s ON pm.seat_id = s.id
             WHERE pm.metric_date >= CURRENT_DATE - INTERVAL '{days} days'
               AND pm.geography IS NOT NULL
               AND pm.geography != ''
