@@ -53,15 +53,18 @@ class EndpointsRepository:
         )
 
     async def get_current_qps(self, bidder_id: str | None = None) -> float:
-        if bidder_id:
-            rows = await pg_query(
-                "SELECT SUM(current_qps) AS current_qps FROM rtb_endpoints_current WHERE bidder_id = %s",
-                (bidder_id,),
-            )
-        else:
-            rows = await pg_query(
-                "SELECT SUM(current_qps) AS current_qps FROM rtb_endpoints_current"
-            )
+        try:
+            if bidder_id:
+                rows = await pg_query(
+                    "SELECT SUM(current_qps) AS current_qps FROM rtb_endpoints_current WHERE bidder_id = %s",
+                    (bidder_id,),
+                )
+            else:
+                rows = await pg_query(
+                    "SELECT SUM(current_qps) AS current_qps FROM rtb_endpoints_current"
+                )
+        except Exception:
+            return 0.0
         if not rows:
             return 0.0
         value = rows[0].get("current_qps")
