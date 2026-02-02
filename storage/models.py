@@ -81,6 +81,8 @@ class Creative:
     language_source: Optional[str] = None  # "gemini" or "manual"
     language_analyzed_at: Optional[datetime] = None
     language_analysis_error: Optional[str] = None
+    # Tracking timestamps
+    first_seen_at: Optional[datetime] = None  # When first imported
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
