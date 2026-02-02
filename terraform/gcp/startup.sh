@@ -304,6 +304,27 @@ PY
 fi
 
 # -----------------------------------------------------------------------------
+# 3d. Write /opt/catscan/.env for docker-compose (hands-off provisioning)
+# -----------------------------------------------------------------------------
+echo ">>> Writing /opt/catscan/.env from /etc/catscan.env..."
+
+APP_ENV_FILE="$APP_DIR/.env"
+ENV_SOURCE="/etc/catscan.env"
+
+{
+    echo "DATA_DIR=$DATA_DIR"
+    echo "OAUTH2_PROXY_ENABLED=true"
+    grep '^POSTGRES_DSN=' "$ENV_SOURCE" 2>/dev/null || true
+    grep '^POSTGRES_SERVING_DSN=' "$ENV_SOURCE" 2>/dev/null || true
+    grep '^PRECOMPUTE_REFRESH_SECRET=' "$ENV_SOURCE" 2>/dev/null || true
+    grep '^PRECOMPUTE_MONITOR_SECRET=' "$ENV_SOURCE" 2>/dev/null || true
+    grep '^GMAIL_IMPORT_SECRET=' "$ENV_SOURCE" 2>/dev/null || true
+} > "$APP_ENV_FILE"
+
+chmod 600 "$APP_ENV_FILE"
+chown catscan:catscan "$APP_ENV_FILE"
+
+# -----------------------------------------------------------------------------
 # 4. Configure Services to Bind to 127.0.0.1 ONLY
 # -----------------------------------------------------------------------------
 echo ">>> Configuring secure service binding..."
