@@ -6,6 +6,9 @@ This module provides system status and thumbnail management endpoints.
 import logging
 import os
 from pathlib import Path
+import os
+
+from storage.postgres_database import pg_query_one
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -164,6 +167,17 @@ async def health_check(
     # "Connected Accounts" in the Setup page.
 
     db_path = Path.home() / ".catscan" / "catscan.db"
+    postgres_dsn = os.getenv("POSTGRES_DSN") or os.getenv("DATABASE_URL")
+    database_exists = False
+
+    if postgres_dsn:
+        try:
+            row = await pg_query_one("SELECT 1 AS ok")
+            database_exists = bool(row and row.get("ok") == 1)
+        except Exception:
+            database_exists = False
+    else:
+        database_exists = db_path.exists()
 
     return HealthResponse(
         status="healthy",
@@ -171,7 +185,7 @@ async def health_check(
         git_sha=get_git_sha(),
         configured=configured,
         has_credentials=has_credentials,
-        database_exists=db_path.exists(),
+        database_exists=database_exists,
     )
 
 
