@@ -1,17 +1,21 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getConfigBreakdown,
   getConfigCreatives,
   getCreative,
+  getPretargetingPublishers,
+  addPretargetingPublisher,
+  removePretargetingPublisher,
   type ConfigBreakdownType,
   type ConfigBreakdownItem,
   type ConfigCreativesItem,
+  type PretargetingPublisher,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Loader2, AlertCircle, AlertTriangle, ArrowUpDown, ChevronRight, Info, Image } from 'lucide-react';
+import { Loader2, AlertCircle, AlertTriangle, ArrowUpDown, ChevronRight, Info, Image, Square, CheckSquare, Ban, Shield, Search, Plus, X, Upload, Download } from 'lucide-react';
 import { AppDrilldownModal } from './app-drilldown-modal';
 import { useAccount } from '@/contexts/account-context';
 import { PreviewModal } from '@/components/preview-modal';
@@ -43,6 +47,25 @@ function formatMoney(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
+// Publisher helper functions
+function normalizePublisherId(value: string): string {
+  return value.trim();
+}
+
+function isValidPublisherId(value: string): boolean {
+  if (!value.includes('.')) return false;
+  return /^[a-zA-Z0-9][a-zA-Z0-9._-]*\.[a-zA-Z0-9._-]+$/.test(value);
+}
+
+function detectPublisherType(value: string): 'App' | 'Web' {
+  const parts = value.toLowerCase().split('.');
+  const appPrefixes = new Set(['com', 'net', 'org', 'io', 'co', 'app']);
+  if (parts.length >= 3 && appPrefixes.has(parts[0])) {
+    return 'App';
+  }
+  return 'Web';
+}
+
 export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdownPanelProps) {
   const [activeTab, setActiveTab] = useState<ConfigBreakdownType>('creative');
   const [sortKey, setSortKey] = useState<'name' | 'spend' | 'reached' | 'impressions' | 'win_rate'>('reached');
@@ -58,6 +81,14 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
   const [isLoadingCreative, setIsLoadingCreative] = useState(false);
   const [fullCreative, setFullCreative] = useState<any | null>(null);
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
+  const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set());
+  const [sizeActionPending, setSizeActionPending] = useState(false);
+
+  // Publisher tab state
+  const [publisherFilter, setPublisherFilter] = useState('');
+  const [newPublisher, setNewPublisher] = useState('');
+  const [publisherInputError, setPublisherInputError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const isDimensionSize = (value: string | null) => {
     if (!value) return false;
@@ -79,17 +110,50 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
     staleTime: 30000,
   });
 
+  // Query for publishers (when publisher tab is active)
+  const { data: publishersData, isLoading: publishersLoading, refetch: refetchPublishers } = useQuery({
+    queryKey: ['pretargeting-publishers', billing_id],
+    queryFn: () => getPretargetingPublishers(billing_id),
+    enabled: isExpanded && activeTab === 'publisher',
+    staleTime: 30000,
+  });
+
+  // Publisher mutations
+  const addPublisherMutation = useMutation({
+    mutationFn: ({ publisherId, mode }: { publisherId: string; mode: string }) =>
+      addPretargetingPublisher(billing_id, publisherId, mode),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', billing_id] });
+      setNewPublisher('');
+      setPublisherInputError(null);
+    },
+    onError: (error: any) => {
+      setPublisherInputError(error?.message || 'Failed to add publisher');
+    },
+  });
+
+  const removePublisherMutation = useMutation({
+    mutationFn: (publisherId: string) => removePretargetingPublisher(billing_id, publisherId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', billing_id] });
+    },
+  });
+
   // Animate height changes
   useEffect(() => {
     if (contentRef.current) {
       setHeight(isExpanded ? contentRef.current.scrollHeight : 0);
     }
-  }, [isExpanded, data, activeTab, selectedSize, sizeCreatives, sizeCreativesLoading, sizeCreativesMessage]);
+  }, [isExpanded, data, activeTab, selectedSize, sizeCreatives, sizeCreativesLoading, sizeCreativesMessage, publishersData, publishersLoading]);
 
   useEffect(() => {
     setSelectedSize(null);
     setSizeCreatives([]);
     setExpandedCountries(new Set());
+    setSelectedSizes(new Set());
+    setPublisherFilter('');
+    setNewPublisher('');
+    setPublisherInputError(null);
     setSortKey('reached');
     setSortDir('desc');
   }, [activeTab, billing_id]);
@@ -105,6 +169,102 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
       return next;
     });
   };
+
+  // Size selection handlers
+  const toggleSizeSelection = (sizeName: string) => {
+    setSelectedSizes((prev) => {
+      const next = new Set(prev);
+      if (next.has(sizeName)) {
+        next.delete(sizeName);
+      } else {
+        next.add(sizeName);
+      }
+      return next;
+    });
+  };
+
+  const selectAllSizes = () => {
+    const allSizeNames = sortedBreakdown.map((item) => item.name);
+    setSelectedSizes(new Set(allSizeNames));
+  };
+
+  const clearSizeSelection = () => {
+    setSelectedSizes(new Set());
+  };
+
+  const invertSizeSelection = () => {
+    const allSizeNames = new Set(sortedBreakdown.map((item) => item.name));
+    const inverted = new Set<string>();
+    allSizeNames.forEach((name) => {
+      if (!selectedSizes.has(name)) {
+        inverted.add(name);
+      }
+    });
+    setSelectedSizes(inverted);
+  };
+
+  const handleBulkBlock = async () => {
+    if (selectedSizes.size === 0) return;
+    setSizeActionPending(true);
+    // TODO: Wire to backend API when available
+    console.log('Block sizes:', Array.from(selectedSizes));
+    // Placeholder: simulate action
+    setTimeout(() => {
+      setSizeActionPending(false);
+      setSelectedSizes(new Set());
+    }, 500);
+  };
+
+  const handleBulkUnblock = async () => {
+    if (selectedSizes.size === 0) return;
+    setSizeActionPending(true);
+    // TODO: Wire to backend API when available
+    console.log('Unblock sizes:', Array.from(selectedSizes));
+    // Placeholder: simulate action
+    setTimeout(() => {
+      setSizeActionPending(false);
+      setSelectedSizes(new Set());
+    }, 500);
+  };
+
+  // Publisher handlers
+  const handleAddPublisher = () => {
+    const normalized = normalizePublisherId(newPublisher);
+    if (!normalized) return;
+    if (!isValidPublisherId(normalized)) {
+      setPublisherInputError('Invalid publisher ID format. Use bundle ID (com.example.app) or domain (example.com).');
+      return;
+    }
+    // Check if already exists
+    const existingPublisher = publishersData?.publishers?.find(
+      (p: PretargetingPublisher) => p.publisher_id === normalized && p.status !== 'pending_remove'
+    );
+    if (existingPublisher) {
+      setPublisherInputError('Publisher already in list.');
+      return;
+    }
+    setPublisherInputError(null);
+    addPublisherMutation.mutate({ publisherId: normalized, mode: 'BLACKLIST' });
+  };
+
+  const handleRemovePublisher = (publisherId: string) => {
+    removePublisherMutation.mutate(publisherId);
+  };
+
+  // Filter publishers
+  const filteredPublishers = publishersData?.publishers?.filter((p: PretargetingPublisher) =>
+    p.publisher_id.toLowerCase().includes(publisherFilter.trim().toLowerCase())
+  ) || [];
+
+  const activePublisherCount = publishersData?.publishers?.filter(
+    (p: PretargetingPublisher) => p.status === 'active'
+  ).length || 0;
+  const pendingAddCount = publishersData?.publishers?.filter(
+    (p: PretargetingPublisher) => p.status === 'pending_add'
+  ).length || 0;
+  const pendingRemoveCount = publishersData?.publishers?.filter(
+    (p: PretargetingPublisher) => p.status === 'pending_remove'
+  ).length || 0;
 
   useEffect(() => {
     if (sizeCreativeData?.creatives) {
@@ -187,20 +347,151 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
         </div>
 
         {/* Content */}
-        {isLoading && (
+        {isLoading && activeTab !== 'publisher' && (
           <div className="flex items-center justify-center py-8 text-gray-400">
             <Loader2 className="h-5 w-5 animate-spin mr-2" />
             <span className="text-sm">Loading breakdown...</span>
           </div>
         )}
 
-        {error && (
+        {error && activeTab !== 'publisher' && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-600 text-sm">
             Failed to load breakdown data
           </div>
         )}
 
-        {!isLoading && !error && sortedBreakdown.length === 0 && (
+        {/* Publisher tab - embedded list */}
+        {activeTab === 'publisher' && (
+          <div className="space-y-3">
+            {publishersLoading && (
+              <div className="flex items-center justify-center py-8 text-gray-400">
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                <span className="text-sm">Loading publishers...</span>
+              </div>
+            )}
+
+            {!publishersLoading && (
+              <>
+                {/* Publisher header with mode and counts */}
+                <div className="flex items-center justify-between p-2 bg-gray-50 border border-gray-200 rounded">
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-gray-500" />
+                    <span className="text-sm font-medium text-gray-700">
+                      Blacklist: {activePublisherCount} blocked
+                    </span>
+                    {pendingAddCount > 0 && (
+                      <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">
+                        +{pendingAddCount} pending
+                      </span>
+                    )}
+                    {pendingRemoveCount > 0 && (
+                      <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">
+                        -{pendingRemoveCount} pending
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Search filter */}
+                <div className="flex items-center gap-2">
+                  <Search className="h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={publisherFilter}
+                    onChange={(e) => setPublisherFilter(e.target.value)}
+                    placeholder="Filter publishers..."
+                    className="flex-1 px-3 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Publisher list */}
+                <div className="bg-white rounded-lg border overflow-hidden">
+                  <div className="grid grid-cols-[1fr_80px_100px_80px] gap-2 px-3 py-2 bg-gray-50 text-xs font-medium text-gray-500 border-b">
+                    <span>Publisher ID</span>
+                    <span>Type</span>
+                    <span>Status</span>
+                    <span className="text-right">Action</span>
+                  </div>
+                  {filteredPublishers.length === 0 ? (
+                    <div className="px-3 py-6 text-sm text-gray-500 text-center">
+                      {(publishersData?.publishers?.length || 0) === 0
+                        ? 'No publishers blocked yet.'
+                        : 'No publishers match the current filter.'}
+                    </div>
+                  ) : (
+                    <div className="divide-y max-h-60 overflow-y-auto">
+                      {filteredPublishers.map((pub: PretargetingPublisher) => {
+                        const isPendingAdd = pub.status === 'pending_add';
+                        const isPendingRemove = pub.status === 'pending_remove';
+                        return (
+                          <div
+                            key={pub.publisher_id}
+                            className={cn(
+                              'grid grid-cols-[1fr_80px_100px_80px] gap-2 px-3 py-2 text-sm items-center',
+                              isPendingRemove && 'bg-red-50 text-gray-400 line-through'
+                            )}
+                          >
+                            <div className="min-w-0">
+                              <div className="truncate text-xs text-gray-700" title={pub.publisher_id}>
+                                {pub.publisher_id}
+                              </div>
+                            </div>
+                            <span className="text-xs text-gray-500">{detectPublisherType(pub.publisher_id)}</span>
+                            <span className={cn(
+                              "text-xs",
+                              isPendingAdd || isPendingRemove ? "text-yellow-600" : "text-gray-600"
+                            )}>
+                              {isPendingAdd || isPendingRemove ? '⏳ Pending' : 'Blocked'}
+                            </span>
+                            <div className="text-right">
+                              <button
+                                onClick={() => handleRemovePublisher(pub.publisher_id)}
+                                disabled={removePublisherMutation.isPending}
+                                className="px-2 py-1 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50"
+                              >
+                                {isPendingRemove ? 'Undo' : 'Remove'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Add publisher input */}
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-500">Add publisher to block:</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newPublisher}
+                      onChange={(e) => {
+                        setNewPublisher(e.target.value);
+                        setPublisherInputError(null);
+                      }}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddPublisher()}
+                      placeholder="com.example.app or publisher.com"
+                      className="flex-1 px-3 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      onClick={handleAddPublisher}
+                      disabled={!newPublisher.trim() || addPublisherMutation.isPending}
+                      className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                  {publisherInputError && (
+                    <p className="text-xs text-red-600">{publisherInputError}</p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {!isLoading && !error && sortedBreakdown.length === 0 && activeTab !== 'publisher' && (
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm">
             <div className="flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
@@ -209,15 +500,22 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                   No {activeTab} data for this config
                 </p>
                 <p className="text-gray-500 text-xs">
-                  {data?.no_data_reason ||
-                    `To see ${activeTab} breakdown, import both catscan-quality (has billing_id) and catscan-bidsinauction (has ${activeTab === 'geo' ? 'country' : activeTab}) CSV reports.`}
+                  {data?.no_data_reason || (
+                    activeTab === 'geo'
+                      ? 'Geographic breakdown is not available. This config may not have geographic targeting data, or the precompute job has not yet processed this config.'
+                      : activeTab === 'size'
+                      ? 'Size breakdown is not available. This config may not have had bid activity in the selected period, or the precompute job has not yet processed this config.'
+                      : activeTab === 'creative'
+                      ? 'Creative breakdown is not available. This config may not have active creatives with bid activity, or the precompute job has not yet processed this config.'
+                      : `To see ${activeTab} breakdown, import both catscan-quality (has billing_id) and catscan-bidsinauction CSV reports.`
+                  )}
                 </p>
               </div>
             </div>
           </div>
         )}
 
-        {!isLoading && !error && sortedBreakdown.length > 0 && (
+        {!isLoading && !error && sortedBreakdown.length > 0 && activeTab !== 'publisher' && (
           <>
             {/* Creative tab info note explaining the metric */}
             {activeTab === 'creative' && (
@@ -229,17 +527,86 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                 </span>
               </div>
             )}
+            {/* Size tab bulk toolbar */}
+            {activeTab === 'size' && (
+              <div className="mb-3 flex items-center justify-between p-2 bg-gray-50 border border-gray-200 rounded">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">
+                    {selectedSizes.size > 0 ? `${selectedSizes.size} selected` : 'Select sizes to block/unblock'}
+                  </span>
+                  <button
+                    onClick={selectAllSizes}
+                    className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 rounded transition-colors"
+                  >
+                    Select all
+                  </button>
+                  <button
+                    onClick={invertSizeSelection}
+                    className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 rounded transition-colors"
+                  >
+                    Invert
+                  </button>
+                  {selectedSizes.size > 0 && (
+                    <button
+                      onClick={clearSizeSelection}
+                      className="px-2 py-1 text-xs text-gray-400 hover:text-gray-600 rounded transition-colors"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleBulkBlock}
+                    disabled={selectedSizes.size === 0 || sizeActionPending}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-red-50 text-red-600 hover:bg-red-100 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Ban className="h-3 w-3" />
+                    Block
+                  </button>
+                  <button
+                    onClick={handleBulkUnblock}
+                    disabled={selectedSizes.size === 0 || sizeActionPending}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-green-50 text-green-600 hover:bg-green-100 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Shield className="h-3 w-3" />
+                    Unblock
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="bg-white rounded-lg border overflow-hidden">
             {/* Table header */}
             <div className={cn(
               "grid gap-2 px-3 py-2 border-b bg-gray-50 text-xs font-medium text-gray-500",
-              activeTab === "creative" ? "grid-cols-14" : "grid-cols-12"
+              activeTab === "creative" ? "grid-cols-14" : activeTab === "size" ? "grid-cols-13" : "grid-cols-12"
             )}>
+              {activeTab === 'size' && (
+                <div className="col-span-1 flex items-center">
+                  <button
+                    onClick={() => {
+                      if (selectedSizes.size === sortedBreakdown.length) {
+                        clearSizeSelection();
+                      } else {
+                        selectAllSizes();
+                      }
+                    }}
+                    className="p-0.5 text-gray-400 hover:text-gray-600"
+                    title={selectedSizes.size === sortedBreakdown.length ? "Deselect all" : "Select all"}
+                  >
+                    {selectedSizes.size === sortedBreakdown.length && sortedBreakdown.length > 0 ? (
+                      <CheckSquare className="h-4 w-4" />
+                    ) : (
+                      <Square className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => handleSort("name")}
                 className={cn(
-                  activeTab === "creative" ? "col-span-4" : "col-span-4",
+                  activeTab === "creative" ? "col-span-4" : activeTab === "size" ? "col-span-3" : "col-span-4",
                   "flex items-center gap-1 text-left",
                   sortKey === "name" && "text-gray-700"
                 )}
@@ -306,18 +673,37 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                 const winRate = item.win_rate ?? 0;
                 const winRateClass =
                   winRate < 51 ? 'text-red-600' : winRate < 75 ? 'text-orange-600' : 'text-green-600';
-                const nameColSpan = activeTab === 'creative' ? 'col-span-4' : 'col-span-4';
+                const nameColSpan = activeTab === 'creative' ? 'col-span-4' : activeTab === 'size' ? 'col-span-3' : 'col-span-4';
+                const isSelected = activeTab === 'size' && selectedSizes.has(item.name);
                 return (
                   <div key={`${item.name}-${index}`}>
                     <div
                       onClick={() => isClickable && setSelectedApp(item.name)}
                       className={cn(
                         'grid gap-2 px-3 py-2 text-sm items-center',
-                        activeTab === 'creative' ? 'grid-cols-14' : 'grid-cols-12',
+                        activeTab === 'creative' ? 'grid-cols-14' : activeTab === 'size' ? 'grid-cols-13' : 'grid-cols-12',
                         'hover:bg-gray-50 transition-colors',
-                        isClickable && 'cursor-pointer hover:bg-blue-50'
+                        isClickable && 'cursor-pointer hover:bg-blue-50',
+                        isSelected && 'bg-blue-50'
                       )}
                     >
+                      {activeTab === 'size' && (
+                        <div className="col-span-1 flex items-center">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleSizeSelection(item.name);
+                            }}
+                            className="p-0.5 text-gray-400 hover:text-gray-600"
+                          >
+                            {isSelected ? (
+                              <CheckSquare className="h-4 w-4 text-blue-600" />
+                            ) : (
+                              <Square className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                      )}
                       <div className={cn(nameColSpan, "font-medium text-gray-900 flex items-center gap-1")} title={item.name}>
                         <span className="truncate">{item.name}</span>
                         {activeTab === 'size' && (
