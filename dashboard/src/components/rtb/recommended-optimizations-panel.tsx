@@ -279,6 +279,10 @@ export function RecommendedOptimizationsPanel({
   days = 7,
   onConfigSelect,
 }: RecommendedOptimizationsPanelProps) {
+  const enabled = process.env.NEXT_PUBLIC_ENABLE_RECOMMENDED_OPTIMIZATIONS === 'true';
+  if (!enabled) {
+    return null;
+  }
   const aiMode = useAIControlMode();
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const queryClient = useQueryClient();

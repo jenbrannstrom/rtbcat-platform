@@ -321,23 +321,6 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (config.billing_id) {
-                    router.push(`/pretargeting/${encodeURIComponent(config.billing_id)}/publishers`);
-                  }
-                }}
-                disabled={!config.billing_id}
-                className={cn(
-                  "flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors",
-                  config.billing_id
-                    ? "bg-blue-600 text-white hover:bg-blue-700"
-                    : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                )}
-              >
-                Publisher List
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
                   setEditorTab('settings');
                   setShowSettingsEditor(!showSettingsEditor);
                 }}
