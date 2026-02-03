@@ -86,7 +86,7 @@ class HomeAnalyticsService:
         )
         total_bid_requests = (funnel_row["total_bid_requests"] or 0) if funnel_row else 0
 
-        effective_reached = total_reached or total_successful or total_bid_requests
+        effective_reached = total_reached
         win_rate = (total_impressions / effective_reached * 100) if effective_reached > 0 else 0
         waste_rate = 100 - win_rate
 
@@ -94,8 +94,6 @@ class HomeAnalyticsService:
         publishers = []
         for row in publisher_rows:
             reached = row["reached"] or 0
-            if reached == 0:
-                reached = (row["successful_responses"] or 0) or (row["bid_requests"] or 0)
             imps = row["impressions"] or 0
             bids = row["total_bids"] or 0
             wins = row["auctions_won"] or 0
@@ -118,8 +116,6 @@ class HomeAnalyticsService:
         geos = []
         for row in geo_rows:
             reached = row["reached"] or 0
-            if reached == 0:
-                reached = (row["successful_responses"] or 0) or (row["bid_requests"] or 0)
             imps = row["impressions"] or 0
             bids = row["total_bids"] or 0
             wins = row["auctions_won"] or 0
