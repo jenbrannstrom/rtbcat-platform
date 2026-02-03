@@ -453,7 +453,7 @@ async def add_pretargeting_publisher(
 async def remove_pretargeting_publisher(
     billing_id: str,
     publisher_id: str,
-    mode: str = Query(..., description="WHITELIST or BLACKLIST"),
+    mode: Optional[str] = Query(None, description="WHITELIST or BLACKLIST"),
 ):
     """Mark a publisher for removal with pending_remove status.
 
@@ -461,10 +461,11 @@ async def remove_pretargeting_publisher(
     are applied via the pretargeting API.
     """
     try:
-        # Validate mode
-        mode = mode.strip().upper()
-        if mode not in ("WHITELIST", "BLACKLIST"):
-            raise HTTPException(status_code=400, detail="Mode must be WHITELIST or BLACKLIST")
+        resolved_mode = None
+        if mode:
+            resolved_mode = mode.strip().upper()
+            if resolved_mode not in ("WHITELIST", "BLACKLIST"):
+                raise HTTPException(status_code=400, detail="Mode must be WHITELIST or BLACKLIST")
 
         # Validate billing_id exists
         pretargeting_service = PretargetingService()
@@ -472,10 +473,23 @@ async def remove_pretargeting_publisher(
         if not config:
             raise HTTPException(status_code=404, detail=f"Pretargeting config {billing_id} not found")
 
+        if not resolved_mode:
+            rows = await pretargeting_service.get_publisher_rows(billing_id, publisher_id)
+            if not rows:
+                raise HTTPException(status_code=404, detail=f"Publisher {publisher_id} not found in config")
+            modes = {row["mode"] for row in rows if row.get("mode")}
+            if len(modes) == 1:
+                resolved_mode = next(iter(modes))
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Publisher exists in multiple modes. Specify mode=WHITELIST or mode=BLACKLIST.",
+                )
+
         await pretargeting_service.update_publisher_status(
             billing_id=billing_id,
             publisher_id=publisher_id,
-            mode=mode,
+            mode=resolved_mode,
             status="pending_remove",
         )
 
