@@ -248,3 +248,16 @@ class PretargetingRepository:
             (billing_id,),
         )
         return [dict(row) for row in rows]
+
+    async def get_publisher_rows(
+        self, billing_id: str, publisher_id: str
+    ) -> list[dict[str, Any]]:
+        rows = await pg_query(
+            """
+            SELECT * FROM pretargeting_publishers
+            WHERE billing_id = %s AND publisher_id = %s
+            ORDER BY mode
+            """,
+            (billing_id, publisher_id),
+        )
+        return [dict(row) for row in rows]
