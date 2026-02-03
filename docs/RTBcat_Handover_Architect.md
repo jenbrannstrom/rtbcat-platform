@@ -91,6 +91,9 @@ You are **senior to Claude** and responsible for **delegation, sequencing, and a
 1) **Fix Win Rate > 100%** (metric correctness / join grain)
 2) **Resolve UI inconsistencies** (size shows impressions but no creatives; drill‑down says no precompute)
 3) **Publisher list UX deploy** (commits `b8112a6`, `fa7295b`)
+4) **Fix /creatives page on VM2** (missing `creative_thumbnails` table → apply migration `033_creative_thumbnails.sql`)
+5) **Fix Home By Size layout** (Tailwind grid columns >12 not rendered; update grid class strategy)
+6) **Disable Recommended Optimizations panel** (per ROADMAP; ensure feature flag or removal in build)
 
 ---
 

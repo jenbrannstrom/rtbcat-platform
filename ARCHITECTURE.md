@@ -276,7 +276,7 @@ Incremental refactors should move the highest-churn/longest methods first and le
 
 | Category | Tables | Purpose |
 |----------|--------|---------|
-| **Creative Management** | creatives, clusters, thumbnail_status | Store creative metadata and thumbnails |
+| **Creative Management** | creatives, clusters, thumbnail_status, creative_thumbnails | Store creative metadata and thumbnails |
 | **Campaign Management** | campaigns, ai_campaigns, creative_campaigns, campaign_creatives, campaign_daily_summary | Organize creatives into campaigns |
 | **Service Accounts & Seats** | service_accounts, buyer_seats, seats | Multi-account/multi-seat support (4 seats across 2 accounts) |
 | **RTB Performance** | rtb_daily, rtb_bidstream, rtb_bid_filtering, rtb_quality | CSV import data |

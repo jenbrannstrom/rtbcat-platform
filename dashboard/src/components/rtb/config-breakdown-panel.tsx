@@ -580,10 +580,16 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
             )}
             <div className="bg-white rounded-lg border overflow-hidden">
             {/* Table header */}
-            <div className={cn(
-              "grid gap-2 px-3 py-2 border-b bg-gray-50 text-xs font-medium text-gray-500",
-              activeTab === "creative" ? "grid-cols-14" : activeTab === "size" ? "grid-cols-13" : "grid-cols-12"
-            )}>
+            <div
+              className={cn(
+                "grid gap-2 px-3 py-2 border-b bg-gray-50 text-xs font-medium text-gray-500",
+                activeTab === "creative"
+                  ? "grid-cols-[repeat(14,minmax(0,1fr))]"
+                  : activeTab === "size"
+                  ? "grid-cols-[repeat(13,minmax(0,1fr))]"
+                  : "grid-cols-12"
+              )}
+            >
               {activeTab === 'size' && (
                 <div className="col-span-1 flex items-center">
                   <button
@@ -684,7 +690,11 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                       onClick={() => isClickable && setSelectedApp(item.name)}
                       className={cn(
                         'grid gap-2 px-3 py-2 text-sm items-center',
-                        activeTab === 'creative' ? 'grid-cols-14' : activeTab === 'size' ? 'grid-cols-13' : 'grid-cols-12',
+                        activeTab === 'creative'
+                          ? 'grid-cols-[repeat(14,minmax(0,1fr))]'
+                          : activeTab === 'size'
+                          ? 'grid-cols-[repeat(13,minmax(0,1fr))]'
+                          : 'grid-cols-12',
                         'hover:bg-gray-50 transition-colors',
                         isClickable && 'cursor-pointer hover:bg-blue-50',
                         isSelected && 'bg-blue-50'
@@ -707,7 +717,19 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                           </button>
                         </div>
                       )}
-                      <div className={cn(nameColSpan, "font-medium text-gray-900 flex items-center gap-1")} title={item.name}>
+                      <div
+                        className={cn(
+                          nameColSpan,
+                          "font-medium text-gray-900 flex items-center gap-1",
+                          activeTab === "creative" && "cursor-pointer"
+                        )}
+                        title={item.name}
+                        onClick={(event) => {
+                          if (activeTab !== "creative") return;
+                          event.stopPropagation();
+                          setSelectedCreative({ id: item.name });
+                        }}
+                      >
                         <span className="truncate">{item.name}</span>
                         {activeTab === 'size' && (
                           <button

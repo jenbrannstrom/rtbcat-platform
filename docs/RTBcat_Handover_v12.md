@@ -35,7 +35,10 @@ Commits / actions:
    Fix: pass `POSTGRES_SERVING_DSN` into API container; enforce Postgres-only for analytics.
 2) **Sizes show impressions but “No creatives found for this size.”**  
    Root cause identified: `config_creative_daily` lacked `creative_size`. Fix in `services/config_precompute.py` (commit `72213ac`) — deploy + refresh needed.
-3) **Drill‑down “No precompute” for AdMob + AdSense.**  
+3) **/creatives page fails ("Cannot connect to API server")**  
+   Root cause: API 500 due to missing `creative_thumbnails` table on VM2.  
+   Fix: apply Postgres migration to add `creative_thumbnails` (new migration `033_creative_thumbnails.sql`) and redeploy.
+4) **Drill‑down “No precompute” for AdMob + AdSense.**  
    Likely precompute date coverage or app_name mismatch across report types; verify after Postgres-only fix.
 4) ~~**Duplicate SQLite migration numbers (018/019/021)**~~
    ✅ RESOLVED: SQLite migrations archived to `docs/archive/sqlite_legacy/migrations/`.
