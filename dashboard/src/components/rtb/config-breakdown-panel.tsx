@@ -120,7 +120,7 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
 
   // Publisher mutations
   const addPublisherMutation = useMutation({
-    mutationFn: ({ publisherId, mode }: { publisherId: string; mode: string }) =>
+    mutationFn: ({ publisherId, mode }: { publisherId: string; mode: 'BLACKLIST' | 'WHITELIST' }) =>
       addPretargetingPublisher(billing_id, publisherId, mode),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', billing_id] });
