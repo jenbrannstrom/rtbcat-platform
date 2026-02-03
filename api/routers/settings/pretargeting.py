@@ -492,8 +492,10 @@ async def remove_pretargeting_publisher(
             mode=resolved_mode,
             status="pending_remove",
         )
-
-        return {"status": "success", "message": f"Publisher {publisher_id} queued for removal from {mode}"}
+        return {
+            "status": "success",
+            "message": f"Publisher {publisher_id} queued for removal from {resolved_mode}",
+        }
 
     except Exception as e:
         logger.error(f"Failed to remove publisher: {e}")
