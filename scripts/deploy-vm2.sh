@@ -37,7 +37,7 @@ else
 fi
 
 # Show deployed version
-curl -s http://127.0.0.1:8000/health | python - <<'PY'
+curl -s http://127.0.0.1:8000/health | python3 - <<'PY'
 import json,sys
 print(json.dumps(json.load(sys.stdin), indent=2))
 PY

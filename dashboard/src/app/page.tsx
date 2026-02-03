@@ -7,7 +7,6 @@ import { RefreshCw, AlertTriangle, ArrowUp, ArrowDown, ChevronsUpDown } from "lu
 import { AccountEndpointsHeader } from "@/components/rtb/account-endpoints-header";
 import { PretargetingConfigCard, type PretargetingConfig } from "@/components/rtb/pretargeting-config-card";
 import { ConfigBreakdownPanel } from "@/components/rtb/config-breakdown-panel";
-import { RecommendedOptimizationsPanel } from "@/components/rtb/recommended-optimizations-panel";
 import {
   getQPSSummary, getRTBFunnel, getSpendStats,
   getPretargetingConfigs, getRTBFunnelConfigs, getSeats,
@@ -313,13 +312,7 @@ function WasteAnalysisContent() {
         </div>
       )}
 
-      {/* Recommended Optimizations Panel */}
-      <section>
-        <RecommendedOptimizationsPanel
-          days={days}
-          onConfigSelect={(billingId) => setExpandedConfigId(billingId)}
-        />
-      </section>
+      {/* Recommended Optimizations Panel (disabled; see ROADMAP) */}
 
       {/* Pretargeting Configs Section */}
       <section>
