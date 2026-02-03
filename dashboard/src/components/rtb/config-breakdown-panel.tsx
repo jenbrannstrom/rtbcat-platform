@@ -609,7 +609,7 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                 type="button"
                 onClick={() => handleSort("name")}
                 className={cn(
-                  activeTab === "creative" ? "col-span-4" : activeTab === "size" ? "col-span-3" : "col-span-4",
+                  activeTab === "creative" ? "col-span-4" : activeTab === "size" ? "col-span-4" : "col-span-4",
                   "flex items-center gap-1 text-left",
                   sortKey === "name" && "text-gray-700"
                 )}
