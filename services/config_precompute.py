@@ -271,7 +271,7 @@ async def refresh_config_breakdowns(
                 buyer_account_id,
                 billing_id,
                 creative_id,
-                creative_size,
+                ANY_VALUE(creative_size) AS creative_size,
                 SUM(reached_queries) AS reached_queries,
                 SUM(impressions) AS impressions,
                 SUM(spend_micros) AS spend_micros
@@ -283,7 +283,7 @@ async def refresh_config_breakdowns(
               AND buyer_account_id != ''
               AND creative_id IS NOT NULL
               AND creative_id != ''{buyer_clause}
-            GROUP BY metric_date, buyer_account_id, billing_id, creative_id, creative_size
+            GROUP BY metric_date, buyer_account_id, billing_id, creative_id
         """,
         params=[
             bigquery.ArrayQueryParameter("dates", "DATE", dates_param),
