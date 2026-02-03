@@ -672,7 +672,7 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
             {/* Table body */}
             <div className="divide-y divide-gray-100">
               {sortedBreakdown.map((item, index) => {
-                const isClickable = activeTab === 'publisher';
+                const isClickable = false;
                 const winRate = item.win_rate ?? 0;
                 const winRateClass =
                   winRate < 51 ? 'text-red-600' : winRate < 75 ? 'text-orange-600' : 'text-green-600';
