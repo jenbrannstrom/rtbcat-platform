@@ -233,13 +233,13 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
             {/* Table header */}
             <div className={cn(
               "grid gap-2 px-3 py-2 border-b bg-gray-50 text-xs font-medium text-gray-500",
-                activeTab === "creative" ? "grid-cols-16" : "grid-cols-12"
+              activeTab === "creative" ? "grid-cols-14" : "grid-cols-12"
             )}>
               <button
                 type="button"
                 onClick={() => handleSort("name")}
                 className={cn(
-                  activeTab === "creative" ? "col-span-5" : "col-span-4",
+                  activeTab === "creative" ? "col-span-4" : "col-span-4",
                   "flex items-center gap-1 text-left",
                   sortKey === "name" && "text-gray-700"
                 )}
@@ -293,7 +293,7 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
               </button>
               {activeTab === "creative" && (
                 <>
-                  <div className="col-span-2">Country Targeted</div>
+                  <div className="col-span-1">Country Targeted</div>
                   <div className="col-span-1">Creative Lang</div>
                 </>
               )}
@@ -306,14 +306,14 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                 const winRate = item.win_rate ?? 0;
                 const winRateClass =
                   winRate < 51 ? 'text-red-600' : winRate < 75 ? 'text-orange-600' : 'text-green-600';
-                const nameColSpan = activeTab === 'creative' ? 'col-span-5' : 'col-span-4';
+                const nameColSpan = activeTab === 'creative' ? 'col-span-4' : 'col-span-4';
                 return (
                   <div key={`${item.name}-${index}`}>
                     <div
                       onClick={() => isClickable && setSelectedApp(item.name)}
                       className={cn(
                         'grid gap-2 px-3 py-2 text-sm items-center',
-                        activeTab === 'creative' ? 'grid-cols-16' : 'grid-cols-12',
+                        activeTab === 'creative' ? 'grid-cols-14' : 'grid-cols-12',
                         'hover:bg-gray-50 transition-colors',
                         isClickable && 'cursor-pointer hover:bg-blue-50'
                       )}
@@ -370,7 +370,7 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                       </div>
                       {activeTab === 'creative' && (
                         <>
-                          <div className="col-span-2 text-xs text-gray-600 truncate">
+                          <div className="col-span-1 text-xs text-gray-600 truncate">
                             {(item.target_countries || []).join(", ") || "—"}
                           </div>
                           <div className="col-span-1 text-xs text-gray-600 flex items-center gap-1">
