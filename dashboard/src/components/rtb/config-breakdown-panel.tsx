@@ -59,6 +59,11 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
   const [fullCreative, setFullCreative] = useState<any | null>(null);
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
 
+  const isDimensionSize = (value: string | null) => {
+    if (!value) return false;
+    return /^\d+\s*x\s*\d+$/i.test(value.trim());
+  };
+
   // Query for breakdown data
   const { data, isLoading, error } = useQuery({
     queryKey: ['config-breakdown', billing_id, activeTab, selectedBuyerId],
@@ -70,7 +75,7 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
   const { data: sizeCreativeData, isLoading: sizeCreativesLoading } = useQuery({
     queryKey: ['config-creatives', billing_id, selectedSize, selectedBuyerId],
     queryFn: () => getConfigCreatives(billing_id, selectedSize || undefined, selectedBuyerId || undefined),
-    enabled: isExpanded && activeTab === 'size' && !!selectedSize,
+    enabled: isExpanded && activeTab === 'size' && !!selectedSize && isDimensionSize(selectedSize),
     staleTime: 30000,
   });
 
@@ -228,13 +233,13 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
             {/* Table header */}
             <div className={cn(
               "grid gap-2 px-3 py-2 border-b bg-gray-50 text-xs font-medium text-gray-500",
-              activeTab === "creative" ? "grid-cols-14" : "grid-cols-12"
+                activeTab === "creative" ? "grid-cols-16" : "grid-cols-12"
             )}>
               <button
                 type="button"
                 onClick={() => handleSort("name")}
                 className={cn(
-                  activeTab === "creative" ? "col-span-3" : "col-span-4",
+                  activeTab === "creative" ? "col-span-5" : "col-span-4",
                   "flex items-center gap-1 text-left",
                   sortKey === "name" && "text-gray-700"
                 )}
@@ -301,25 +306,33 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                 const winRate = item.win_rate ?? 0;
                 const winRateClass =
                   winRate < 51 ? 'text-red-600' : winRate < 75 ? 'text-orange-600' : 'text-green-600';
-                const nameColSpan = activeTab === 'creative' ? 'col-span-3' : 'col-span-4';
+                const nameColSpan = activeTab === 'creative' ? 'col-span-5' : 'col-span-4';
                 return (
                   <div key={`${item.name}-${index}`}>
                     <div
                       onClick={() => isClickable && setSelectedApp(item.name)}
                       className={cn(
                         'grid gap-2 px-3 py-2 text-sm items-center',
-                        activeTab === 'creative' ? 'grid-cols-14' : 'grid-cols-12',
+                        activeTab === 'creative' ? 'grid-cols-16' : 'grid-cols-12',
                         'hover:bg-gray-50 transition-colors',
                         isClickable && 'cursor-pointer hover:bg-blue-50'
                       )}
                     >
-                      <div className={cn(nameColSpan, "font-medium text-gray-900 truncate flex items-center gap-1")} title={item.name}>
-                        {item.name}
+                      <div className={cn(nameColSpan, "font-medium text-gray-900 flex items-center gap-1")} title={item.name}>
+                        <span className="truncate">{item.name}</span>
                         {activeTab === 'size' && (
                           <button
                             onClick={(event) => {
                               event.stopPropagation();
-                              setSelectedSize((prev) => (prev === item.name ? null : item.name));
+                              const next = item.name;
+                              const isDimension = isDimensionSize(next);
+                              setSelectedSize((prev) => (prev === next ? null : next));
+                              if (!isDimension) {
+                                setSizeCreatives([]);
+                                setSizeCreativesMessage("Drill-down is only available for dimension sizes (e.g. 300x250).");
+                              } else {
+                                setSizeCreativesMessage(null);
+                              }
                             }}
                             className="p-1 text-gray-400 hover:text-gray-600"
                             title="View creatives for this size"
