@@ -197,6 +197,11 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 
 **Goal:** Home page shows only data for the selected seat (buyer_id). Admins can switch seats; users only see assigned seats.
 
+### Feature #001 — Size block/unblock controls (Home breakdown)
+- [ ] Implement backend endpoints to block/unblock selected sizes from the Home > By Size table
+- [ ] Wire bulk actions to pretargeting updates (and persist pending changes)
+- [ ] Ensure audit logging + rollback support
+
 ### Phase 0 — Audit & Baseline
 - [ ] **Data source audit** - For each Home section, list data tables used and % of rows missing `bidder_id`/`billing_id`
 - [ ] **Seat scope verification** - Confirm all Home endpoints enforce `buyer_id` and user permissions

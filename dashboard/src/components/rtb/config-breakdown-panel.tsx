@@ -572,6 +572,9 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                     <Shield className="h-3 w-3" />
                     Unblock
                   </button>
+                  <span className="text-[10px] uppercase tracking-wide text-gray-400">
+                    Feature #001 ROADMAP.md
+                  </span>
                 </div>
               </div>
             )}
