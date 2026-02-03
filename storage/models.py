@@ -83,6 +83,7 @@ class Creative:
     language_analysis_error: Optional[str] = None
     # Tracking timestamps
     first_seen_at: Optional[datetime] = None  # When first imported
+    first_import_batch_id: Optional[str] = None  # Import batch ID when first seen
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
