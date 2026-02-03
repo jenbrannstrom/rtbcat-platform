@@ -163,13 +163,14 @@ async def get_rtb_endpoints(
         # Get current QPS usage from rtb_endpoints_current table
         qps_current = await endpoint_service.get_current_qps(bidder_id if bidder_id else None)
 
+        synced_at_value = str(latest_sync) if latest_sync else None
         return RTBEndpointsResponse(
             bidder_id=bidder_id or "unknown",
             account_name=account_name,
             endpoints=endpoints,
             total_qps_allocated=total_qps,
             qps_current=qps_current,
-            synced_at=latest_sync,
+            synced_at=synced_at_value,
         )
 
     except Exception as e:
