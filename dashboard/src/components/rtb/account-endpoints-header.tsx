@@ -264,7 +264,7 @@ export function AccountEndpointsHeader({ funnelData }: AccountEndpointsHeaderPro
             <div className="space-y-2">
               {/* Reached */}
               <div className="flex items-center justify-between px-3 py-1.5 bg-blue-50 rounded border border-blue-100">
-                <span className="text-xs text-blue-600 uppercase tracking-wide">Reached</span>
+                <span className="text-xs text-blue-600 uppercase tracking-wide">Reached Queries</span>
                 <span className="text-sm font-bold text-blue-700">{formatNumber(funnelData!.reached!)}</span>
               </div>
               {/* Impressions */}
