@@ -12,7 +12,24 @@ class EndpointsRepository:
 
     async def upsert_endpoints(self, bidder_id: str, endpoints: list[dict[str, Any]]) -> int:
         if not endpoints:
+            # No endpoints from API - delete all for this bidder
+            await pg_execute(
+                "DELETE FROM rtb_endpoints WHERE bidder_id = %s",
+                (bidder_id,),
+            )
             return 0
+
+        # Get endpoint IDs from API response
+        api_endpoint_ids = [str(ep["endpointId"]) for ep in endpoints]
+
+        # Delete endpoints that no longer exist in API
+        await pg_execute(
+            """
+            DELETE FROM rtb_endpoints
+            WHERE bidder_id = %s AND endpoint_id != ALL(%s)
+            """,
+            (bidder_id, api_endpoint_ids),
+        )
 
         data = [
             (
