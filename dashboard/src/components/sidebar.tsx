@@ -97,6 +97,7 @@ export function Sidebar() {
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [adminExpanded, setAdminExpanded] = useState(false);
   const [qpsExpanded, setQpsExpanded] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Use context for buyer_id (persistent across pages)
   const currentBuyerId = selectedBuyerId;
@@ -172,7 +173,17 @@ export function Sidebar() {
   });
 
   const syncMutation = useMutation({
-    mutationFn: () => syncAllData(),
+    mutationFn: async () => {
+      // Run sync and minimum 1 second delay in parallel for visual feedback
+      const [result] = await Promise.all([
+        syncAllData(),
+        new Promise(resolve => setTimeout(resolve, 1000)),
+      ]);
+      return result;
+    },
+    onMutate: () => {
+      setIsSyncing(true);
+    },
     onSuccess: (data) => {
       const msg = `${data.creatives_synced} creatives, ${data.endpoints_synced} endpoints, ${data.pretargeting_synced} configs`;
       setSyncMessage({ type: "success", text: msg });
@@ -186,6 +197,9 @@ export function Sidebar() {
     onError: (error) => {
       setSyncMessage({ type: "error", text: t.common.failed });
       setTimeout(() => setSyncMessage(null), 3000);
+    },
+    onSettled: () => {
+      setIsSyncing(false);
     },
   });
 
@@ -257,14 +271,14 @@ export function Sidebar() {
               </div>
               <button
                 onClick={() => syncMutation.mutate()}
-                disabled={syncMutation.isPending}
+                disabled={isSyncing}
                 className={cn(
                   "p-1.5 rounded-md text-gray-500 hover:text-primary-600 hover:bg-primary-50",
                   "disabled:opacity-50 flex-shrink-0"
                 )}
                 title={t.common.syncAll || "Sync All Data"}
               >
-                <RefreshCw className={cn("h-4 w-4", syncMutation.isPending && "animate-spin")} />
+                <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
               </button>
             </div>
 
@@ -334,15 +348,15 @@ export function Sidebar() {
             {/* Sync All button - always visible when seats exist */}
             <button
               onClick={() => syncMutation.mutate()}
-              disabled={syncMutation.isPending}
+              disabled={isSyncing}
               className={cn(
                 "mt-2 w-full flex items-center justify-center gap-2 px-3 py-1.5",
                 "bg-primary-600 text-white rounded-md text-sm font-medium",
                 "hover:bg-primary-700 disabled:opacity-50"
               )}
             >
-              <RefreshCw className={cn("h-3.5 w-3.5", syncMutation.isPending && "animate-spin")} />
-              {syncMutation.isPending ? t.common.syncing : (t.common.syncAll || "Sync All")}
+              <RefreshCw className={cn("h-3.5 w-3.5", isSyncing && "animate-spin")} />
+              {isSyncing ? t.common.syncing : (t.common.syncAll || "Sync All")}
             </button>
 
             {syncMessage && (
