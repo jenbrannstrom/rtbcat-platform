@@ -214,6 +214,13 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [ ] **Join-safe keys** - Geo/publisher joins must include seat identity (`bidder_id` or `buyer_account_id`)
 - [ ] **Identifier integrity** - Never substitute `seat_id/buyer_id` for `billing_id`. Billing IDs scope pretargeting configs; seat IDs scope buyer seats. Keep them distinct in queries and APIs.
 
+### Gmail Import & Pipeline (Operational)
+- [ ] **Backlog ingestion** - Run `scripts/gmail_import_batch.py` with checkpointing; track progress in `~/.catscan/gmail_batch_checkpoint.json`.
+- [ ] **Cloud Scheduler** - Configure `/api/gmail/import/scheduled` with `GMAIL_IMPORT_SECRET`. See `docs/gmail-autodownload-fix-plan.md`.
+- [ ] **Token health monitoring** - Alert on `invalid_grant` in logs and on `/gmail/status` when `authorized=false` or `last_error` contains `invalid_grant`. See `docs/gmail-autodownload-fix-plan.md`.
+- [ ] **Pipeline env parity** - Ensure `CATSCAN_PIPELINE_ENABLED`, `BIGQUERY_PROJECT_ID`, `BIGQUERY_DATASET`, `RAW_PARQUET_BUCKET`, `CATSCAN_GCS_BUCKET`, and `GOOGLE_APPLICATION_CREDENTIALS` are set on VM2.
+- [ ] **Ops runbook** - Link: `docs/POSTGRES_MIGRATION_RUNBOOK.md` §2b and `docs/GCP_CREDENTIALS_SETUP.md` (Gmail OAuth + Scheduler).
+
 ### Phase 2 — Precompute & Caching
 - [ ] **Materialized aggregates** - Precompute seat-wide and billing_id-level metrics (size/geo/publisher/config)
 - [x] **Refresh strategy** - Documented in runbook: 6h scheduled (2 days), per-import (7 days), nightly (90 days), weekly validation. See `docs/POSTGRES_MIGRATION_RUNBOOK.md` § 5.
