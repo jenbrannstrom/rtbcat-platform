@@ -86,16 +86,29 @@ export const detectReportType = (
   return "unknown";
 };
 
+const hasSeatIdInFilename = (filename?: string | null): boolean => {
+  if (!filename) return false;
+  const lower = filename.toLowerCase();
+  if (!lower.includes("catscan-")) return false;
+  return /-\d{6,}-/.test(lower);
+};
+
 export const getRequiredColumns = (reportType: ReportType): string[] =>
   REQUIRED_COLUMNS[reportType] || [];
 
 export const getMissingRequiredColumns = (
   headers: string[],
-  reportType: ReportType
+  reportType: ReportType,
+  filename?: string | null
 ): string[] => {
   const required = getRequiredColumns(reportType);
   if (required.length === 0) return [];
 
   const normalized = new Set(headers.map(normalizeColumnName));
-  return required.filter((column) => !normalized.has(normalizeColumnName(column)));
+  return required.filter((column) => {
+    if (normalizeColumnName(column) === "buyer account id" && hasSeatIdInFilename(filename)) {
+      return false;
+    }
+    return !normalized.has(normalizeColumnName(column));
+  });
 };
