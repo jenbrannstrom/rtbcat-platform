@@ -344,7 +344,7 @@ async def import_performance_csv(
             tmp_path = tmp.name
 
         # Try flexible unified importer first - it auto-maps columns
-        result = unified_import(tmp_path)
+        result = unified_import(tmp_path, source_filename=file.filename)
         file_size_bytes = os.path.getsize(tmp_path) if tmp_path and os.path.exists(tmp_path) else 0
         columns_found = []
         seen_columns = set()
@@ -516,7 +516,7 @@ async def complete_stream_import(
     shutil.move(str(data_path), str(final_path))
 
     try:
-        result = unified_import(str(final_path))
+        result = unified_import(str(final_path), source_filename=meta.get("filename"))
         if result.success and result.date_range_start and result.date_range_end:
             background_tasks.add_task(
                 refresh_home_summaries,

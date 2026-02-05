@@ -91,10 +91,10 @@ def get_value(row: Dict, mapping: MappingResult, db_field: str, default: str = "
     return default
 
 
-def parse_bidder_id_from_filename(csv_path: str) -> Optional[str]:
+def parse_bidder_id_from_filename(filename: str) -> Optional[str]:
     """Try to extract a bidder/account ID from a Cat-Scan filename."""
-    filename = os.path.basename(csv_path)
-    for token in filename.split("-"):
+    base = os.path.basename(filename)
+    for token in base.split("-"):
         if token.isdigit() and len(token) >= 6:
             return token
     return None
@@ -679,6 +679,7 @@ def import_to_rtb_bid_filtering(
 def unified_import(
     csv_path: str,
     bidder_id: Optional[str] = None,
+    source_filename: Optional[str] = None,
 ) -> UnifiedImportResult:
     """
     Import any CSV using flexible column mapping (Postgres).
@@ -736,7 +737,7 @@ def unified_import(
         return result
 
     if not bidder_id:
-        bidder_id = parse_bidder_id_from_filename(csv_path)
+        bidder_id = parse_bidder_id_from_filename(source_filename or csv_path)
     if target_table == "rtb_bidstream" and not bidder_id and not mapping.has_field("buyer_account_id"):
         result.error_message = (
             "Missing Buyer account ID. Include the column in the report or ensure the filename "
