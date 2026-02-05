@@ -96,7 +96,11 @@ export default function ImportPage() {
       setSeatInfo(seat);
 
       const reportType = detectReportType(preview.headers, selectedFile.name);
-      const missingRequired = getMissingRequiredColumns(preview.headers, reportType);
+      const missingRequired = getMissingRequiredColumns(
+        preview.headers,
+        reportType,
+        selectedFile.name
+      );
 
       const errors =
         reportType === "unknown"

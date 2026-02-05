@@ -15,7 +15,7 @@ import Papa from "papaparse";
 import type { ImportResponse } from "@/lib/types/import";
 
 // Constants
-const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB chunks
+const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB chunks (safer for proxy limits)
 const API_BASE = "/api";
 
 // Types
