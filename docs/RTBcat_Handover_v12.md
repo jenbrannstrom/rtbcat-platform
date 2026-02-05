@@ -113,3 +113,67 @@ All summary tables populated through Jan 28:
 - `1fea149` — Full-page Publisher List route + button wiring
 - `dffd69a` — Publisher List layout polish (mode toggle dot, sticky pending)
 - `50db7d6` — Final spec polish (Pending label, ID-only rows, header cleanup)
+
+---
+
+## 📖 Domain Terms Glossary
+
+| Term | Meaning |
+|------|---------|
+| RTB | Real-Time Bidding - auction for ad impressions |
+| QPS | Queries Per Second - bid requests received |
+| Pretargeting | Filters that determine which bid requests you receive |
+| Billing ID | Identifier for a pretargeting config |
+| Creative | An ad (image, video, native) |
+| Seat | A bidding entity within a buyer account |
+| VAST | Video Ad Serving Template - video ad standard |
+| CPM | Cost Per Mille (per 1000 impressions) |
+| CTR | Click-Through Rate |
+| Reached Queries | QPS that matched pretargeting filters |
+| Win Rate | Impressions / Reached Queries (successful auction wins) |
+
+---
+
+## 📥 GMail Ingest
+
+See **[docs/gmail-autodownload-fix-plan.md](gmail-autodownload-fix-plan.md)** for:
+- Entry points and scripts
+- Auth/token file paths
+- GCS download behavior
+- Manual batch run commands
+- Auto-download scheduler setup (Cloud Scheduler)
+
+---
+
+## 🧪 MCP Chrome Bring-up Sequence
+
+**Scripts:** `scripts/chrome-cdp.sh`, `scripts/mcp-chromium-cdp.sh`
+
+**Important:** Playwright browser automation is blocked by Google OAuth. We must attach to a real Chrome profile; do NOT use Playwright to launch/login.
+
+**Deterministic bring-up sequence:**
+
+1. Verify CDP responds:
+   ```bash
+   curl -s http://127.0.0.1:9222/json/version
+   ```
+
+2. Kill stale MCP servers:
+   ```bash
+   pkill -f "@playwright/mcp" || true
+   pkill -f "playwright-mcp" || true
+   pkill -f "mcp --cdp-endpoint" || true
+   ```
+
+3. Start MCP:
+   ```bash
+   ./scripts/mcp-chromium-cdp.sh
+   ```
+
+4. Restart Codex CLI after MCP is running.
+
+5. Validate via **tool usage** (e.g., screenshot), not resource listing.
+
+**If Codex still cannot see MCP tools:**
+- Use Claude CLI for browser tasks (proven working via CDP).
+- Confirm Codex config uses `localhost`, not `127.0.0.1`.
