@@ -30,6 +30,14 @@ GOOGLE_OAUTH_CLIENT_ID="${google_oauth_client_id}"
 GOOGLE_OAUTH_CLIENT_SECRET="${google_oauth_client_secret}"
 ALLOWED_EMAIL_DOMAINS='${jsonencode(allowed_email_domains)}'
 
+# Recover domain/HTTPS from existing nginx/cert if metadata left blank (e.g., reboots)
+if [ -z "$DOMAIN_NAME" ] && [ -f /etc/nginx/sites-enabled/catscan ]; then
+    DOMAIN_NAME=$(awk '/server_name/ {print $2; exit}' /etc/nginx/sites-enabled/catscan | tr -d ';')
+fi
+if [ -z "${ENABLE_HTTPS:-}" ] && [ -n "$DOMAIN_NAME" ] && [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
+    ENABLE_HTTPS="true"
+fi
+
 # Paths
 APP_DIR="/opt/catscan"
 DATA_DIR="/home/catscan/.catscan"
