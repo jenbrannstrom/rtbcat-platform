@@ -1,4 +1,49 @@
-# Gmail Auto-Download Fix Plan
+# Gmail Import Operations & Auto-Download Fix Plan
+
+---
+
+## Operational Reference
+
+### Entry Points
+
+| Method | Location | Notes |
+|--------|----------|-------|
+| Primary script | `scripts/gmail_import.py` (`run_import()`) | Manual or scheduled |
+| Batch wrapper | `scripts/gmail_import_batch.py` | For processing many emails |
+| API endpoint | `api/routers/gmail.py` (`POST /gmail/import`) | Dashboard "Import Now" |
+| Scheduled endpoint | `POST /api/gmail/import/scheduled` | Cloud Scheduler target |
+
+### Auth & Token Handling
+
+| File | Purpose |
+|------|---------|
+| `~/.catscan/credentials/gmail-token.json` | OAuth token (auto-refreshes) |
+| `~/.catscan/credentials/gmail-oauth-client.json` | Client secret |
+
+- **Scope:** `gmail.modify` (read + mark as read)
+- Tokens auto-refresh and are saved back to disk during long runs.
+
+### GCS Download Behavior
+
+- Extracts GCS URL from email body
+- Converts `storage.cloud.google.com` → `storage.googleapis.com`
+- Signed URLs download directly; unsigned use OAuth Bearer token
+- Streams in 1MB chunks; validates first line is not HTML/binary
+- Timeout 60s, no retries (single attempt)
+
+### Manual Batch Run Commands (SG VM)
+
+```bash
+cd /opt/catscan && git pull
+nohup python3 scripts/gmail_import_batch.py --batch-size 10 >> ~/.catscan/logs/gmail_batch.log 2>&1 &
+tail -f ~/.catscan/logs/gmail_batch.log
+python3 scripts/gmail_import_batch.py --status
+cat ~/.catscan/gmail_batch_checkpoint.json
+```
+
+**Checkpoint file:** `~/.catscan/gmail_batch_checkpoint.json` (tracks processed/failed message IDs)
+
+---
 
 ## Problem Statement
 Gmail reports are not being automatically downloaded and parsed. Users must manually click "Import Now" in the dashboard.
