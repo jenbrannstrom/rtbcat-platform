@@ -128,7 +128,9 @@ async def check_auth_status(request: Request):
     """Check if user is authenticated.
 
     Returns authentication status and user info if authenticated.
-    User is authenticated via OAuth2 Proxy.
+    Returns 503 with error details if the auth system is degraded
+    (e.g. database unreachable), so the frontend can show a retry
+    screen instead of triggering an infinite OAuth redirect loop.
     """
     if hasattr(request.state, "user") and request.state.user:
         user = request.state.user
@@ -144,6 +146,20 @@ async def check_auth_status(request: Request):
                 "default_language": getattr(user, "default_language", None),
             },
         }
+
+    # Distinguish "not authenticated" from "auth system broken"
+    auth_error = getattr(request.state, "auth_error", None)
+    if auth_error:
+        from starlette.responses import JSONResponse
+        return JSONResponse(
+            status_code=503,
+            content={
+                "authenticated": False,
+                "user": None,
+                "error": auth_error,
+                "detail": getattr(request.state, "auth_error_detail", "Service temporarily unavailable"),
+            },
+        )
 
     return {
         "authenticated": False,
