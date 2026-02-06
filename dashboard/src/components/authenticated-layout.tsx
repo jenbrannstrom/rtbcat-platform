@@ -3,13 +3,17 @@
 /**
  * Authenticated layout wrapper.
  *
- * With OAuth2 Proxy (Google Auth):
- * - Users are authenticated at the edge before reaching the app
- * - No public paths needed - everything requires auth
- * - If not authenticated, AuthContext redirects to OAuth2 sign-in
+ * Supports multiple auth methods:
+ * - Authing (OIDC)
+ * - Google (via OAuth2 Proxy)
+ * - Email/Password
+ *
+ * Public pages (like /login) are rendered without the sidebar.
+ * Protected pages require authentication.
  */
 
 import { Suspense, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useTranslation } from "@/contexts/i18n-context";
 import { Sidebar } from "@/components/sidebar";
@@ -20,12 +24,24 @@ interface AuthenticatedLayoutProps {
   sidebarFallback: ReactNode;
 }
 
+// Pages that should be rendered without the authenticated layout
+const PUBLIC_PAGES = ["/login"];
+
 export function AuthenticatedLayout({
   children,
   sidebarFallback,
 }: AuthenticatedLayoutProps) {
+  const pathname = usePathname();
   const { isAuthenticated, isLoading } = useAuth();
   const { t } = useTranslation();
+
+  // Check if this is a public page
+  const isPublicPage = PUBLIC_PAGES.includes(pathname);
+
+  // For public pages, render children directly without layout
+  if (isPublicPage) {
+    return <>{children}</>;
+  }
 
   // Show loading spinner while checking auth
   if (isLoading) {
@@ -39,7 +55,7 @@ export function AuthenticatedLayout({
     );
   }
 
-  // If not authenticated, the AuthProvider will redirect to OAuth2 sign-in
+  // If not authenticated, the AuthProvider will redirect to login
   // Show a minimal loading state while redirect happens
   if (!isAuthenticated) {
     return (

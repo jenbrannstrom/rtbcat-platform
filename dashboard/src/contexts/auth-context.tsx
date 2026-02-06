@@ -1,13 +1,12 @@
 "use client";
 
 /**
- * Authentication context for OAuth2 Proxy (Google Auth).
+ * Authentication context supporting multiple auth methods:
+ * - Authing (OIDC)
+ * - Google (via OAuth2 Proxy)
+ * - Email/Password
  *
- * With OAuth2 Proxy:
- * - Users authenticate via Google before reaching the app
- * - X-Email header from OAuth2 Proxy identifies the user
- * - Users are auto-created on first login (first user gets admin role)
- * - No password-based login - Google Auth only
+ * Users are auto-created on first login (first user gets admin role).
  */
 
 import {
@@ -18,7 +17,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 // ==================== Types ====================
 
@@ -47,12 +46,19 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 // ==================== Provider ====================
 
+// Pages that don't require authentication
+const PUBLIC_PAGES = ["/login"];
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
+
+  // Check if current page is public
+  const isPublicPage = PUBLIC_PAGES.includes(pathname);
 
   // Check authentication status
   const checkAuth = useCallback(async () => {
@@ -90,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Logout function - clears session and redirects to OAuth2 sign-out
+  // Logout function - clears session and redirects to login
   const logout = useCallback(async () => {
     try {
       await fetch("/api/auth/logout", {
@@ -103,8 +109,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setUser(null);
     setPermissions([]);
-    // Redirect to OAuth2 Proxy sign-out which will redirect to Google sign-out
-    window.location.href = "/oauth2/sign_out";
+    // Redirect to login page
+    window.location.href = "/login";
   }, []);
 
   // Initialize auth state on mount
@@ -119,16 +125,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     init();
   }, [checkAuth]);
 
-  // If not authenticated after OAuth2 Proxy, redirect to sign-in
-  // This shouldn't normally happen since OAuth2 Proxy handles auth at the edge
+  // Redirect to login if not authenticated (except on public pages)
   useEffect(() => {
     if (!initialized || isLoading) return;
 
-    if (!user) {
-      // Redirect to OAuth2 Proxy sign-in (which redirects to Google)
-      window.location.href = "/oauth2/sign_in";
+    if (!user && !isPublicPage) {
+      // Redirect to login page with callback URL
+      const callbackUrl = encodeURIComponent(pathname);
+      window.location.href = `/login?callbackUrl=${callbackUrl}`;
     }
-  }, [initialized, isLoading, user]);
+  }, [initialized, isLoading, user, isPublicPage, pathname]);
+
+  // If authenticated and on login page, redirect to home
+  useEffect(() => {
+    if (!initialized || isLoading) return;
+
+    if (user && isPublicPage) {
+      router.push("/");
+    }
+  }, [initialized, isLoading, user, isPublicPage, router]);
 
   const value: AuthContextValue = {
     user,
@@ -140,8 +155,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkAuth,
   };
 
-  // Show loading state on initial load
-  if (!initialized) {
+  // Show loading state on initial load (except on public pages)
+  if (!initialized && !isPublicPage) {
     return (
       <AuthContext.Provider value={value}>
         <div className="flex items-center justify-center h-screen bg-gray-50">

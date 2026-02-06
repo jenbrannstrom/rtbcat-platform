@@ -52,6 +52,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.auth import APIKeyAuthMiddleware
 from api.session_middleware import SessionAuthMiddleware
 from api.auth_oauth_proxy import router as auth_router, cleanup_sessions
+from api.auth_authing import router as authing_router
+from api.auth_password import router as password_router
 from config import ConfigManager
 from storage.postgres_store import PostgresStore
 from storage.serving_database import configure_serving_database
@@ -182,6 +184,8 @@ app = create_app()
 
 # Authentication routes (must be first for login/logout)
 app.include_router(auth_router)
+app.include_router(authing_router)
+app.include_router(password_router)
 
 # System routes (health, thumbnails, stats, sizes)
 app.include_router(system_router)

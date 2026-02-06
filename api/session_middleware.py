@@ -38,6 +38,10 @@ PUBLIC_PATHS = {
     "/redoc",
     "/auth/check",
     "/auth/me",
+    "/auth/login",  # Password login
+    "/auth/register",  # First user registration
+    "/auth/authing/login",  # Authing OIDC login redirect
+    "/auth/authing/callback",  # Authing OIDC callback
     "/gmail/import/scheduled",  # Cloud Scheduler (uses secret header)
     "/precompute/refresh/scheduled",  # Cloud Scheduler (uses secret header)
     "/precompute/health",  # Monitoring (uses secret header)
