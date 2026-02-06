@@ -10,6 +10,38 @@
 
 ---
 
+## Claude Code Access (Jen's Laptop)
+
+**Claude Code on Jen's laptop has full access to:**
+
+| Tool | Path | Notes |
+|------|------|-------|
+| Terraform | `/home/jen/bin/terraform` | Can run `terraform plan/apply` |
+| gcloud CLI | system PATH | Authenticated as `billing@amazingdo.com` |
+| Terraform state | `terraform/gcp/terraform.tfstate` | Existing infrastructure state |
+| Terraform vars | `terraform/gcp/terraform.tfvars` | Production configuration |
+
+**Claude can:**
+- SSH to VMs via `gcloud compute ssh ... --tunnel-through-iap`
+- Run `terraform plan` to preview infrastructure changes
+- Run `terraform apply` to apply changes (WITH USER APPROVAL)
+- Deploy new Docker images to production
+- Read/update `.env` files on VMs
+
+**IMPORTANT WARNINGS:**
+- Always run `terraform plan` first and review output before apply
+- Some changes force VM replacement (destroys running production!)
+- Watch for `# forces replacement` in plan output - these are destructive
+- The startup script changing will force VM recreation
+- Never apply without explicit user approval
+
+**Current Terraform State (as of 2026-02):**
+- EU VM (`catscan-production`) - TERMINATED (legacy)
+- SG VM (`catscan-production-sg`) - RUNNING (production)
+- Image registry moved to `asia-southeast1-docker.pkg.dev`
+
+---
+
 ## How to Access the Production VM (READ THIS FIRST)
 
 ### What You Need to Access the VM
