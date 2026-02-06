@@ -334,32 +334,36 @@ async def set_password(request: Request, password_data: dict):
 # These functions interact with the database to store/retrieve password hashes.
 # Password hashes are stored in a separate table for security.
 
-from storage.postgres import get_pool
+from storage.postgres import pg_transaction_async
 
 
 async def _get_user_password_hash(user_id: str) -> Optional[str]:
     """Get password hash for a user."""
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT password_hash FROM user_passwords WHERE user_id = $1",
-            user_id,
-        )
-        return row["password_hash"] if row else None
+    def _query(conn):
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT password_hash FROM user_passwords WHERE user_id = %s",
+                (user_id,),
+            )
+            row = cur.fetchone()
+            return row[0] if row else None
+
+    return await pg_transaction_async(_query)
 
 
 async def _set_user_password_hash(user_id: str, password_hash: str) -> None:
     """Set or update password hash for a user."""
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        await conn.execute(
-            """
-            INSERT INTO user_passwords (user_id, password_hash, updated_at)
-            VALUES ($1, $2, NOW())
-            ON CONFLICT (user_id) DO UPDATE SET
-                password_hash = EXCLUDED.password_hash,
-                updated_at = NOW()
-            """,
-            user_id,
-            password_hash,
-        )
+    def _query(conn):
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO user_passwords (user_id, password_hash, updated_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (user_id) DO UPDATE SET
+                    password_hash = EXCLUDED.password_hash,
+                    updated_at = NOW()
+                """,
+                (user_id, password_hash),
+            )
+
+    await pg_transaction_async(_query)
