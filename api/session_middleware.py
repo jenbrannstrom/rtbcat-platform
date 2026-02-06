@@ -139,11 +139,14 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             logger.warning(f"Session validation failed: {e}")
             return None
 
-    async def _get_or_create_oauth2_user(self, email: str) -> Optional[User]:
+    async def _get_or_create_oauth2_user(self, email: str, request: Request) -> Optional[User]:
         """Get or create a user from OAuth2 Proxy authentication.
 
         When behind OAuth2 Proxy, we trust the X-Email header.
         Users are auto-created on first access with admin role.
+
+        On DB failure, sets request.state.auth_error so /auth/check can
+        return 503 instead of silently claiming "not authenticated".
         """
         try:
             auth_svc = get_auth_service()
@@ -174,6 +177,9 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
 
         except Exception as e:
             logger.error(f"Failed to get/create OAuth2 user: {e}")
+            # Propagate DB error so /auth/check returns 503, not "unauthenticated"
+            request.state.auth_error = "database_unavailable"
+            request.state.auth_error_detail = str(e)
             return None
 
     async def dispatch(self, request: Request, call_next):
@@ -182,7 +188,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             # Still attach OAuth2 user if header present (for /auth/check etc.)
             oauth2_email = request.headers.get(OAUTH2_PROXY_EMAIL_HEADER)
             if oauth2_email and is_oauth2_proxy_enabled():
-                user = await self._get_or_create_oauth2_user(oauth2_email)
+                user = await self._get_or_create_oauth2_user(oauth2_email, request)
                 if user:
                     request.state.user = user
                     request.state.oauth2_authenticated = True
@@ -191,7 +197,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
         # Check for OAuth2 Proxy authentication first (GCP deployment)
         oauth2_email = request.headers.get(OAUTH2_PROXY_EMAIL_HEADER)
         if oauth2_email and is_oauth2_proxy_enabled():
-            user = await self._get_or_create_oauth2_user(oauth2_email)
+            user = await self._get_or_create_oauth2_user(oauth2_email, request)
             if user:
                 request.state.user = user
                 request.state.oauth2_authenticated = True
