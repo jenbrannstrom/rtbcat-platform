@@ -129,6 +129,10 @@ def _safe_filename(filename: str) -> str:
 
 
 def _build_import_response(result) -> CSVImportResult:
+    fallback_error = result.error_message
+    if not fallback_error and getattr(result, "errors", None):
+        fallback_error = result.errors[0]
+
     if result.success:
         return CSVImportResult(
             success=True,
@@ -150,7 +154,7 @@ def _build_import_response(result) -> CSVImportResult:
 
     return CSVImportResult(
         success=False,
-        error=result.error_message,
+        error=fallback_error,
         errors=result.errors,
         columns_mapped=result.columns_mapped,
         columns_found=list(result.columns_mapped.values()) + result.columns_unmapped,

@@ -89,6 +89,9 @@ export function ImportResultCard({
           {result.error && (
             <p className="text-red-700 mb-4">{result.error}</p>
           )}
+          {!result.error && Array.isArray(result.errors) && result.errors.length > 0 && (
+            <p className="text-red-700 mb-4">{String(result.errors[0])}</p>
+          )}
 
           {/* Missing required columns */}
           {result.required_missing && result.required_missing.length > 0 && (

@@ -137,7 +137,7 @@ cookie_expire = "168h"  # 7 days
 cookie_refresh = "1h"
 
 # Skip authentication for health check
-skip_auth_routes = ["/health"]
+skip_auth_routes = ["/health", "/api/gmail/import/scheduled", "/api/precompute/refresh/scheduled", "/api/precompute/health"]
 
 # Pass user info to upstream
 set_xauthrequest = true
@@ -409,6 +409,9 @@ server {
     listen 80;
     server_name DOMAIN_PLACEHOLDER;
 
+    # Allow large CSV uploads for imports (avoid 413)
+    client_max_body_size 200m;
+
     # OAuth2 Proxy endpoints (handles Google login flow)
     location /oauth2/ {
         proxy_pass http://127.0.0.1:4180;
@@ -444,6 +447,12 @@ server {
 
     location = /api/precompute/health {
         proxy_pass http://127.0.0.1:8000/precompute/health;
+        proxy_set_header Host $host;
+    }
+
+    # Gmail import scheduler endpoint - allow scheduler with secret header
+    location = /api/gmail/import/scheduled {
+        proxy_pass http://127.0.0.1:8000/gmail/import/scheduled;
         proxy_set_header Host $host;
     }
 
