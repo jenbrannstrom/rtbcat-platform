@@ -44,6 +44,7 @@ interface AccountEndpointsHeaderProps {
 export function AccountEndpointsHeader({ funnelData }: AccountEndpointsHeaderProps) {
   const { selectedBuyerId, selectedServiceAccountId } = useAccount();
   const [showQpsInfo, setShowQpsInfo] = useState(false);
+  const [showDataQualityInfo, setShowDataQualityInfo] = useState(false);
   const queryClient = useQueryClient();
 
   // Use buyer_id for filtering - RTB endpoints are looked up via buyer -> bidder mapping
@@ -223,7 +224,7 @@ export function AccountEndpointsHeader({ funnelData }: AccountEndpointsHeaderPro
             {/* Total QPS Row - styled as a sum */}
             <div className="flex items-center justify-between px-3 py-2 mt-2 bg-blue-50 border-2 border-blue-200 rounded-lg">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-blue-800">Total QPS Allocated</span>
+                <span className="text-sm font-medium text-blue-800">Allocated QPS Cap</span>
                 <div className="relative">
                   <button
                     onClick={() => setShowQpsInfo(!showQpsInfo)}
@@ -238,9 +239,9 @@ export function AccountEndpointsHeader({ funnelData }: AccountEndpointsHeaderPro
                     <div className="absolute left-0 top-6 w-72 p-3 bg-white border border-gray-200 rounded-lg shadow-lg z-10 text-xs text-gray-600">
                       <p className="font-medium text-gray-900 mb-1">QPS Allocation</p>
                       <p>
-                        This is the QPS you have requested from Google to be sent to your endpoints. You can edit this amount.
-                        Once that allocated QPS reaches your endpoint you can then filter and adjust using the pretargeting settings
-                        (billing IDs). Google only assigns 10 pretargetings per seat.
+                        This is your configured QPS cap (invited capacity), not guaranteed incoming traffic.
+                        Actual delivery is spend-constrained and controlled by Google throttling. Use observed delivery
+                        metrics as directional, especially when CSV imports are missing on some dates.
                       </p>
                     </div>
                   )}
@@ -262,6 +263,31 @@ export function AccountEndpointsHeader({ funnelData }: AccountEndpointsHeaderPro
         <div className="w-56 flex flex-col justify-center">
           {hasFunnelData ? (
             <div className="space-y-2">
+              <div className="flex items-center justify-between px-2">
+                <span className="text-[10px] uppercase tracking-wide text-gray-500">Observed Delivery</span>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowDataQualityInfo(!showDataQualityInfo)}
+                    onMouseEnter={() => setShowDataQualityInfo(true)}
+                    onMouseLeave={() => setShowDataQualityInfo(false)}
+                    className="p-0.5 hover:bg-gray-100 rounded-full transition-colors"
+                    aria-label="Observed delivery data quality"
+                  >
+                    <Info className="h-3.5 w-3.5 text-gray-400" />
+                  </button>
+                  {showDataQualityInfo && (
+                    <div className="absolute right-0 top-6 w-80 p-3 bg-white border border-gray-200 rounded-lg shadow-lg z-10 text-xs text-gray-600">
+                      <p className="font-medium text-gray-900 mb-1">Configured vs Observed</p>
+                      <p>
+                        Endpoint rows above come from Google endpoint configuration (`/settings/endpoints`).
+                        Delivery metrics here come from imported CSV/precompute data. Missing or delayed CSV days can
+                        skew observed region comparisons, so treat these comparisons as directional and verify over
+                        longer windows before making hard decisions.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
               {/* Reached */}
               <div className="flex items-center justify-between px-3 py-1.5 bg-blue-50 rounded border border-blue-100">
                 <span className="text-xs text-blue-600 uppercase tracking-wide">Reached Queries</span>
