@@ -185,13 +185,17 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Allow public paths without authentication
         if is_public_path(request.url.path):
-            # Still attach OAuth2 user if header present (for /auth/check etc.)
+            # Still attach user if available (for /auth/check, /auth/me etc.)
             oauth2_email = request.headers.get(OAUTH2_PROXY_EMAIL_HEADER)
             if oauth2_email and is_oauth2_proxy_enabled():
                 user = await self._get_or_create_oauth2_user(oauth2_email, request)
                 if user:
                     request.state.user = user
                     request.state.oauth2_authenticated = True
+            elif request.cookies.get(SESSION_COOKIE_NAME):
+                user = await self._validate_session(request.cookies[SESSION_COOKIE_NAME])
+                if user:
+                    request.state.user = user
             return await call_next(request)
 
         # Check for OAuth2 Proxy authentication first (GCP deployment)
