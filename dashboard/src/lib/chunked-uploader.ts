@@ -15,7 +15,8 @@ import Papa from "papaparse";
 import type { ImportResponse } from "@/lib/types/import";
 
 // Constants
-const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB chunks (safer for proxy limits)
+// Keep chunks below common default reverse-proxy body limits after multipart overhead.
+const CHUNK_SIZE = 512 * 1024; // 512KB chunks
 const API_BASE = "/api";
 
 // Types

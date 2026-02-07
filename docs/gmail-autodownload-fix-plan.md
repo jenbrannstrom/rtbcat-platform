@@ -48,22 +48,16 @@ cat ~/.catscan/gmail_batch_checkpoint.json
 ## Problem Statement
 Gmail reports are not being automatically downloaded and parsed. Users must manually click "Import Now" in the dashboard.
 
+## Update (2026-02)
+- Terraform now includes a Cloud Scheduler job for Gmail import in `terraform/gcp/main.tf`.
+- The remaining blocker is nginx auth routing in startup templates: `/api/gmail/import/scheduled` was falling into authenticated `/api/` routing.
+- Fix applied in code: startup templates now include a dedicated public nginx location for `/api/gmail/import/scheduled` (secret-header protected by API).
+
 ## Root Cause Analysis
 
-### Finding 1: No Scheduler Configured in Production Infrastructure
+### Finding 1: Scheduler traffic blocked by auth routing
 
-The current GCP terraform (`terraform/gcp/main.tf`) does NOT include a Cloud Scheduler job for Gmail imports:
-
-```hcl
-# Line 673-689 - ONLY precompute refresh is scheduled
-resource "google_cloud_scheduler_job" "precompute_refresh" {
-  name     = "${var.app_name}-precompute-refresh"
-  schedule = var.precompute_refresh_schedule
-  # Posts to /api/precompute/refresh/scheduled
-}
-
-# NO gmail scheduler job exists!
-```
+`/api/gmail/import/scheduled` was being handled by nginx `location /api/` (OAuth-protected) rather than a scheduler-safe public route. This prevents Cloud Scheduler from reaching the API even when the `X-Gmail-Import-Secret` is correct.
 
 ### Finding 2: Startup Script Migration Lost Gmail Cron
 
@@ -232,6 +226,8 @@ resource "google_cloud_scheduler_job" "gmail_import" {
 }
 ```
 
+> Status: already present in current repo. Keep this section for reference in older branches only.
+
 ### Step 3: Add Local for URL
 
 In `terraform/gcp/main.tf`, add to locals block (around line 46):
@@ -257,6 +253,14 @@ export GMAIL_IMPORT_SECRET="${gmail_import_secret}"
 ```
 
 And ensure it's in the docker-compose environment or `.env` file.
+
+Also add a dedicated nginx route (before `location /api/`):
+```nginx
+location = /api/gmail/import/scheduled {
+    proxy_pass http://127.0.0.1:8000/gmail/import/scheduled;
+    proxy_set_header Host $host;
+}
+```
 
 ### Step 6: Add Monitoring (Optional)
 
@@ -321,3 +325,5 @@ gcloud scheduler jobs create http catscan-gmail-import \
   --headers="X-Gmail-Import-Secret=YOUR_SECRET" \
   --attempt-deadline=600s
 ```
+
+If job exists but still fails, verify nginx has the dedicated scheduler route and that `/api/gmail/import/scheduled` does not require OAuth login.
