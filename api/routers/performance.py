@@ -511,13 +511,37 @@ async def complete_stream_import(
         raise HTTPException(status_code=404, detail="Upload data missing")
 
     safe_name = _safe_filename(meta.get("filename", "upload.csv"))
-    imports_dir = Path.home() / ".catscan" / "imports"
-    imports_dir.mkdir(parents=True, exist_ok=True)
     timestamp = int(time.time())
-    final_path = imports_dir / f"{timestamp}_{safe_name}"
-    # Use shutil.move instead of rename to handle cross-filesystem moves
-    # (e.g., /tmp -> mounted volume in Docker)
-    shutil.move(str(data_path), str(final_path))
+
+    # Prefer persistent imports dir, but fall back to upload temp dir if mount permissions
+    # on ~/.catscan/imports are too restrictive in the current runtime.
+    final_path: Path
+    imports_dir = Path.home() / ".catscan" / "imports"
+    preferred_path = imports_dir / f"{timestamp}_{safe_name}"
+    fallback_path = UPLOAD_DIR / f"{timestamp}_{safe_name}"
+    try:
+        imports_dir.mkdir(parents=True, exist_ok=True)
+        # Use shutil.move instead of rename to handle cross-filesystem moves
+        # (e.g., /tmp -> mounted volume in Docker).
+        shutil.move(str(data_path), str(preferred_path))
+        final_path = preferred_path
+    except (OSError, PermissionError) as move_error:
+        logger.warning(
+            f"Failed to move upload {request.upload_id} to {preferred_path}: {move_error}. "
+            f"Falling back to {fallback_path}"
+        )
+        try:
+            shutil.move(str(data_path), str(fallback_path))
+            final_path = fallback_path
+        except Exception as fallback_error:
+            logger.error(
+                f"Failed to place completed upload {request.upload_id} in both destinations: "
+                f"primary_error={move_error}; fallback_error={fallback_error}"
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Import processing failed: unable to place uploaded file on server storage",
+            )
 
     try:
         result = unified_import(str(final_path), source_filename=meta.get("filename"))
