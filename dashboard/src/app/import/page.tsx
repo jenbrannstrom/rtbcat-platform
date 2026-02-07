@@ -81,6 +81,23 @@ export default function ImportPage() {
     loadHistory();
   }, [loadHistory]);
 
+  useEffect(() => {
+    const isImportInFlight =
+      step === "importing" &&
+      (chunkedProgress?.status === "uploading" || chunkedProgress?.status === "processing");
+    if (!isImportInFlight) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [step, chunkedProgress?.status]);
+
   // Handle file selection
   const handleFileSelect = async (selectedFile: File) => {
     setFile(selectedFile);

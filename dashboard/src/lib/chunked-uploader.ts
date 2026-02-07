@@ -224,7 +224,7 @@ export async function uploadChunkedCSV(
       chunksSent,
       totalChunks,
       progress: 99,
-      currentPhase: "Processing on server",
+      currentPhase: "Finalizing import on server (can take a few minutes)",
       errors: [],
     });
   }
