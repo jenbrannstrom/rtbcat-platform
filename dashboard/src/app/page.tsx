@@ -389,6 +389,7 @@ function WasteAnalysisContent() {
                 />
                 <ConfigBreakdownPanel
                   billing_id={config.billing_id}
+                  days={days}
                   isExpanded={expandedConfigId === config.billing_id}
                 />
               </div>

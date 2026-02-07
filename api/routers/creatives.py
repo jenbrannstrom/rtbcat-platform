@@ -478,6 +478,7 @@ async def get_creative(
         language_analysis_error=creative.language_analysis_error,
         **creatives_service.build_preview(
             creative,
+            slim=False,
             html_thumbnail_url=ctx.thumbnail_statuses[creative_id].thumbnail_url if creative_id in ctx.thumbnail_statuses else None
         ),
     )
