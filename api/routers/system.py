@@ -6,7 +6,6 @@ This module provides system status and thumbnail management endpoints.
 import logging
 import os
 from pathlib import Path
-import os
 
 from storage.postgres_database import pg_query_one
 from typing import Optional
@@ -42,8 +41,22 @@ def get_version() -> str:
 
 
 def get_git_sha() -> str:
-    """Get git SHA from environment variable (set during Docker build)."""
-    return os.environ.get("GIT_SHA", "unknown")
+    """Get git SHA from env or from .git metadata baked into image."""
+    try:
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        git_dir = repo_root / ".git"
+        head = (git_dir / "HEAD").read_text().strip()
+        if head.startswith("ref: "):
+            ref_path = git_dir / head.replace("ref: ", "", 1)
+            if ref_path.exists():
+                return ref_path.read_text().strip()[:8]
+        return head[:8]
+    except Exception:
+        pass
+
+    if git_sha := os.environ.get("GIT_SHA"):
+        return git_sha
+    return "unknown"
 
 
 # =============================================================================
