@@ -1,0 +1,35 @@
+# Cat-Scan systemd service for VM2
+# Starts Docker Compose containers on boot and stops them on shutdown.
+#
+# Install:
+#   sudo cp catscan.service /etc/systemd/system/catscan.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable catscan.service
+#
+# Usage:
+#   sudo systemctl start catscan    # start containers
+#   sudo systemctl stop catscan     # stop containers
+#   sudo systemctl status catscan   # check status
+#
+# NOTE: Type=oneshot + RemainAfterExit=yes is required because
+# "docker compose up -d" exits immediately after starting containers.
+# The old Type=simple + Restart=always caused a restart loop that
+# re-ran "up -d" every 10 seconds, breaking container name resolution.
+
+[Unit]
+Description=Cat-Scan Application
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/catscan
+EnvironmentFile=-/etc/catscan.env
+ExecStart=/usr/bin/docker compose -f docker-compose.gcp.yml up -d
+ExecStop=/usr/bin/docker compose -f docker-compose.gcp.yml down
+ExecReload=/usr/bin/docker compose -f docker-compose.gcp.yml up -d --build
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
