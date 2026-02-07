@@ -1,27 +1,24 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   getConfigBreakdown,
   getConfigCreatives,
   getCreative,
-  getPretargetingPublishers,
-  addPretargetingPublisher,
-  removePretargetingPublisher,
   type ConfigBreakdownType,
   type ConfigBreakdownItem,
   type ConfigCreativesItem,
-  type PretargetingPublisher,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Loader2, AlertCircle, AlertTriangle, ArrowUpDown, ChevronRight, Info, Image, Square, CheckSquare, Ban, Shield, Search, Plus, X, Upload, Download } from 'lucide-react';
+import { Loader2, AlertCircle, AlertTriangle, ArrowUpDown, ChevronRight, Info, Image, Square, CheckSquare, Ban, Shield } from 'lucide-react';
 import { AppDrilldownModal } from './app-drilldown-modal';
 import { useAccount } from '@/contexts/account-context';
 import { PreviewModal } from '@/components/preview-modal';
 
 interface ConfigBreakdownPanelProps {
   billing_id: string;
+  days: number;
   isExpanded: boolean;
 }
 
@@ -47,26 +44,7 @@ function formatMoney(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
-// Publisher helper functions
-function normalizePublisherId(value: string): string {
-  return value.trim();
-}
-
-function isValidPublisherId(value: string): boolean {
-  if (!value.includes('.')) return false;
-  return /^[a-zA-Z0-9][a-zA-Z0-9._-]*\.[a-zA-Z0-9._-]+$/.test(value);
-}
-
-function detectPublisherType(value: string): 'App' | 'Web' {
-  const parts = value.toLowerCase().split('.');
-  const appPrefixes = new Set(['com', 'net', 'org', 'io', 'co', 'app']);
-  if (parts.length >= 3 && appPrefixes.has(parts[0])) {
-    return 'App';
-  }
-  return 'Web';
-}
-
-export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdownPanelProps) {
+export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBreakdownPanelProps) {
   const [activeTab, setActiveTab] = useState<ConfigBreakdownType>('creative');
   const [sortKey, setSortKey] = useState<'name' | 'spend' | 'reached' | 'impressions' | 'win_rate'>('reached');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -79,64 +57,25 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
   const [sizeCreativesMessage, setSizeCreativesMessage] = useState<string | null>(null);
   const [selectedCreative, setSelectedCreative] = useState<null | { id: string }>(null);
   const [isLoadingCreative, setIsLoadingCreative] = useState(false);
+  const [creativeLoadError, setCreativeLoadError] = useState<string | null>(null);
   const [fullCreative, setFullCreative] = useState<any | null>(null);
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
   const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set());
   const [sizeActionPending, setSizeActionPending] = useState(false);
 
-  // Publisher tab state
-  const [publisherFilter, setPublisherFilter] = useState('');
-  const [newPublisher, setNewPublisher] = useState('');
-  const [publisherInputError, setPublisherInputError] = useState<string | null>(null);
-  const queryClient = useQueryClient();
-
-  const isDimensionSize = (value: string | null) => {
-    if (!value) return false;
-    return /^\d+\s*x\s*\d+$/i.test(value.trim());
-  };
-
   // Query for breakdown data
   const { data, isLoading, error } = useQuery({
-    queryKey: ['config-breakdown', billing_id, activeTab, selectedBuyerId],
-    queryFn: () => getConfigBreakdown(billing_id, activeTab, selectedBuyerId || undefined),
+    queryKey: ['config-breakdown', billing_id, activeTab, selectedBuyerId, days],
+    queryFn: () => getConfigBreakdown(billing_id, activeTab, selectedBuyerId || undefined, days),
     enabled: isExpanded,
     staleTime: 30000, // Cache for 30 seconds
   });
 
   const { data: sizeCreativeData, isLoading: sizeCreativesLoading } = useQuery({
-    queryKey: ['config-creatives', billing_id, selectedSize, selectedBuyerId],
-    queryFn: () => getConfigCreatives(billing_id, selectedSize || undefined, selectedBuyerId || undefined),
-    enabled: isExpanded && activeTab === 'size' && !!selectedSize && isDimensionSize(selectedSize),
+    queryKey: ['config-creatives', billing_id, selectedSize, selectedBuyerId, days],
+    queryFn: () => getConfigCreatives(billing_id, selectedSize || undefined, selectedBuyerId || undefined, days),
+    enabled: isExpanded && activeTab === 'size' && !!selectedSize,
     staleTime: 30000,
-  });
-
-  // Query for publishers (when publisher tab is active)
-  const { data: publishersData, isLoading: publishersLoading, refetch: refetchPublishers } = useQuery({
-    queryKey: ['pretargeting-publishers', billing_id],
-    queryFn: () => getPretargetingPublishers(billing_id),
-    enabled: isExpanded && activeTab === 'publisher',
-    staleTime: 30000,
-  });
-
-  // Publisher mutations
-  const addPublisherMutation = useMutation({
-    mutationFn: ({ publisherId, mode }: { publisherId: string; mode: 'BLACKLIST' | 'WHITELIST' }) =>
-      addPretargetingPublisher(billing_id, publisherId, mode),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', billing_id] });
-      setNewPublisher('');
-      setPublisherInputError(null);
-    },
-    onError: (error: any) => {
-      setPublisherInputError(error?.message || 'Failed to add publisher');
-    },
-  });
-
-  const removePublisherMutation = useMutation({
-    mutationFn: (publisherId: string) => removePretargetingPublisher(billing_id, publisherId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', billing_id] });
-    },
   });
 
   // Animate height changes
@@ -144,16 +83,16 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
     if (contentRef.current) {
       setHeight(isExpanded ? contentRef.current.scrollHeight : 0);
     }
-  }, [isExpanded, data, activeTab, selectedSize, sizeCreatives, sizeCreativesLoading, sizeCreativesMessage, publishersData, publishersLoading]);
+  }, [isExpanded, data, activeTab, selectedSize, sizeCreatives, sizeCreativesLoading, sizeCreativesMessage, isLoadingCreative, creativeLoadError]);
 
   useEffect(() => {
     setSelectedSize(null);
     setSizeCreatives([]);
+    setSelectedCreative(null);
+    setFullCreative(null);
+    setCreativeLoadError(null);
     setExpandedCountries(new Set());
     setSelectedSizes(new Set());
-    setPublisherFilter('');
-    setNewPublisher('');
-    setPublisherInputError(null);
     setSortKey('reached');
     setSortDir('desc');
   }, [activeTab, billing_id]);
@@ -227,45 +166,6 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
     }, 500);
   };
 
-  // Publisher handlers
-  const handleAddPublisher = () => {
-    const normalized = normalizePublisherId(newPublisher);
-    if (!normalized) return;
-    if (!isValidPublisherId(normalized)) {
-      setPublisherInputError('Invalid publisher ID format. Use bundle ID (com.example.app) or domain (example.com).');
-      return;
-    }
-    // Check if already exists
-    const existingPublisher = publishersData?.publishers?.find(
-      (p: PretargetingPublisher) => p.publisher_id === normalized && p.status !== 'pending_remove'
-    );
-    if (existingPublisher) {
-      setPublisherInputError('Publisher already in list.');
-      return;
-    }
-    setPublisherInputError(null);
-    addPublisherMutation.mutate({ publisherId: normalized, mode: 'BLACKLIST' });
-  };
-
-  const handleRemovePublisher = (publisherId: string) => {
-    removePublisherMutation.mutate(publisherId);
-  };
-
-  // Filter publishers
-  const filteredPublishers = publishersData?.publishers?.filter((p: PretargetingPublisher) =>
-    p.publisher_id.toLowerCase().includes(publisherFilter.trim().toLowerCase())
-  ) || [];
-
-  const activePublisherCount = publishersData?.publishers?.filter(
-    (p: PretargetingPublisher) => p.status === 'active'
-  ).length || 0;
-  const pendingAddCount = publishersData?.publishers?.filter(
-    (p: PretargetingPublisher) => p.status === 'pending_add'
-  ).length || 0;
-  const pendingRemoveCount = publishersData?.publishers?.filter(
-    (p: PretargetingPublisher) => p.status === 'pending_remove'
-  ).length || 0;
-
   useEffect(() => {
     if (sizeCreativeData?.creatives) {
       setSizeCreatives(sizeCreativeData.creatives);
@@ -276,12 +176,17 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
   useEffect(() => {
     if (!selectedCreative) {
       setFullCreative(null);
+      setCreativeLoadError(null);
       return;
     }
     setIsLoadingCreative(true);
+    setCreativeLoadError(null);
     getCreative(selectedCreative.id)
       .then((creative) => setFullCreative(creative))
-      .catch(() => setFullCreative(null))
+      .catch((error: Error) => {
+        setFullCreative(null);
+        setCreativeLoadError(error?.message || 'Failed to load creative preview.');
+      })
       .finally(() => setIsLoadingCreative(false));
   }, [selectedCreative]);
 
@@ -347,151 +252,20 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
         </div>
 
         {/* Content */}
-        {isLoading && activeTab !== 'publisher' && (
+        {isLoading && (
           <div className="flex items-center justify-center py-8 text-gray-400">
             <Loader2 className="h-5 w-5 animate-spin mr-2" />
             <span className="text-sm">Loading breakdown...</span>
           </div>
         )}
 
-        {error && activeTab !== 'publisher' && (
+        {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-600 text-sm">
             Failed to load breakdown data
           </div>
         )}
 
-        {/* Publisher tab - embedded list */}
-        {activeTab === 'publisher' && (
-          <div className="space-y-3">
-            {publishersLoading && (
-              <div className="flex items-center justify-center py-8 text-gray-400">
-                <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                <span className="text-sm">Loading publishers...</span>
-              </div>
-            )}
-
-            {!publishersLoading && (
-              <>
-                {/* Publisher header with mode and counts */}
-                <div className="flex items-center justify-between p-2 bg-gray-50 border border-gray-200 rounded">
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-4 w-4 text-gray-500" />
-                    <span className="text-sm font-medium text-gray-700">
-                      Blacklist: {activePublisherCount} blocked
-                    </span>
-                    {pendingAddCount > 0 && (
-                      <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">
-                        +{pendingAddCount} pending
-                      </span>
-                    )}
-                    {pendingRemoveCount > 0 && (
-                      <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">
-                        -{pendingRemoveCount} pending
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Search filter */}
-                <div className="flex items-center gap-2">
-                  <Search className="h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    value={publisherFilter}
-                    onChange={(e) => setPublisherFilter(e.target.value)}
-                    placeholder="Filter publishers..."
-                    className="flex-1 px-3 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                {/* Publisher list */}
-                <div className="bg-white rounded-lg border overflow-hidden">
-                  <div className="grid grid-cols-[1fr_80px_100px_80px] gap-2 px-3 py-2 bg-gray-50 text-xs font-medium text-gray-500 border-b">
-                    <span>Publisher ID</span>
-                    <span>Type</span>
-                    <span>Status</span>
-                    <span className="text-right">Action</span>
-                  </div>
-                  {filteredPublishers.length === 0 ? (
-                    <div className="px-3 py-6 text-sm text-gray-500 text-center">
-                      {(publishersData?.publishers?.length || 0) === 0
-                        ? 'No publishers blocked yet.'
-                        : 'No publishers match the current filter.'}
-                    </div>
-                  ) : (
-                    <div className="divide-y max-h-60 overflow-y-auto">
-                      {filteredPublishers.map((pub: PretargetingPublisher) => {
-                        const isPendingAdd = pub.status === 'pending_add';
-                        const isPendingRemove = pub.status === 'pending_remove';
-                        return (
-                          <div
-                            key={pub.publisher_id}
-                            className={cn(
-                              'grid grid-cols-[1fr_80px_100px_80px] gap-2 px-3 py-2 text-sm items-center',
-                              isPendingRemove && 'bg-red-50 text-gray-400 line-through'
-                            )}
-                          >
-                            <div className="min-w-0">
-                              <div className="truncate text-xs text-gray-700" title={pub.publisher_id}>
-                                {pub.publisher_id}
-                              </div>
-                            </div>
-                            <span className="text-xs text-gray-500">{detectPublisherType(pub.publisher_id)}</span>
-                            <span className={cn(
-                              "text-xs",
-                              isPendingAdd || isPendingRemove ? "text-yellow-600" : "text-gray-600"
-                            )}>
-                              {isPendingAdd || isPendingRemove ? '⏳ Pending' : 'Blocked'}
-                            </span>
-                            <div className="text-right">
-                              <button
-                                onClick={() => handleRemovePublisher(pub.publisher_id)}
-                                disabled={removePublisherMutation.isPending}
-                                className="px-2 py-1 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50"
-                              >
-                                {isPendingRemove ? 'Undo' : 'Remove'}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Add publisher input */}
-                <div className="space-y-1">
-                  <label className="text-xs text-gray-500">Add publisher to block:</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newPublisher}
-                      onChange={(e) => {
-                        setNewPublisher(e.target.value);
-                        setPublisherInputError(null);
-                      }}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddPublisher()}
-                      placeholder="com.example.app or publisher.com"
-                      className="flex-1 px-3 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <button
-                      onClick={handleAddPublisher}
-                      disabled={!newPublisher.trim() || addPublisherMutation.isPending}
-                      className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </div>
-                  {publisherInputError && (
-                    <p className="text-xs text-red-600">{publisherInputError}</p>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {!isLoading && !error && sortedBreakdown.length === 0 && activeTab !== 'publisher' && (
+        {!isLoading && !error && sortedBreakdown.length === 0 && (
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm">
             <div className="flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
@@ -515,7 +289,7 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
           </div>
         )}
 
-        {!isLoading && !error && sortedBreakdown.length > 0 && activeTab !== 'publisher' && (
+        {!isLoading && !error && sortedBreakdown.length > 0 && (
           <>
             {/* Creative tab info note explaining the metric */}
             {activeTab === 'creative' && (
@@ -524,6 +298,15 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                 <span>
                   Win rate shows reached-to-impression conversion for this config.
                   This measures how efficiently bid requests convert to impressions.
+                </span>
+              </div>
+            )}
+            {activeTab === 'publisher' && (
+              <div className="mb-3 flex items-center gap-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+                <Info className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                <span>
+                  This table shows observed publisher performance from imported analytics data. Your editable
+                  publisher blocklist is available in the pretargeting settings editor.
                 </span>
               </div>
             )}
@@ -736,14 +519,8 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                             onClick={(event) => {
                               event.stopPropagation();
                               const next = item.name;
-                              const isDimension = isDimensionSize(next);
                               setSelectedSize((prev) => (prev === next ? null : next));
-                              if (!isDimension) {
-                                setSizeCreatives([]);
-                                setSizeCreativesMessage("Drill-down is only available for dimension sizes (e.g. 300x250).");
-                              } else {
-                                setSizeCreativesMessage(null);
-                              }
+                              setSizeCreativesMessage(null);
                             }}
                             className="p-1 text-gray-400 hover:text-gray-600"
                             title="View creatives for this size"
@@ -802,15 +579,18 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
                       <div className="border-t bg-gray-50 px-3 py-2">
                         <div className="grid grid-cols-6 gap-2 text-xs font-medium text-gray-500 border-b pb-1">
                           <div className="col-span-3">Creative</div>
-                          <div className="col-span-2">Country targeted</div>
+                          <div className="col-span-2">Country (if available)</div>
                           <div className="col-span-1 text-right">Preview</div>
+                        </div>
+                        <div className="py-1 text-[11px] text-gray-500">
+                          Country is optional and may be unavailable in some imported CSV slices.
                         </div>
                         {sizeCreativesLoading && (
                           <div className="py-2 text-sm text-gray-500">Loading creatives...</div>
                         )}
                         {!sizeCreativesLoading && sizeCreatives.length === 0 && (
                           <div className="py-2 text-sm text-gray-400">
-                            {sizeCreativesMessage || "No creatives found for this size."}
+                            {sizeCreativesMessage || `No creatives found for "${selectedSize}".`}
                           </div>
                         )}
                         {!sizeCreativesLoading && sizeCreatives.length > 0 && (
@@ -871,10 +651,46 @@ export function ConfigBreakdownPanel({ billing_id, isExpanded }: ConfigBreakdown
             onClose={() => setSelectedApp(null)}
           />
         )}
+        {selectedCreative && isLoadingCreative && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setSelectedCreative(null)} />
+            <div className="relative bg-white rounded-lg shadow-xl p-6 flex items-center gap-3 text-gray-600">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span>Loading creative preview...</span>
+            </div>
+          </div>
+        )}
+        {selectedCreative && !isLoadingCreative && !fullCreative && creativeLoadError && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setSelectedCreative(null)} />
+            <div className="relative bg-white rounded-lg shadow-xl p-5 max-w-md w-full mx-4">
+              <h3 className="text-sm font-semibold text-gray-900 mb-2">Creative preview unavailable</h3>
+              <p className="text-sm text-gray-600 mb-4">{creativeLoadError}</p>
+              <div className="flex justify-end gap-2">
+                <button
+                  className="px-3 py-1.5 text-sm rounded border border-gray-300 hover:bg-gray-50"
+                  onClick={() => setSelectedCreative(null)}
+                >
+                  Close
+                </button>
+                <button
+                  className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
+                  onClick={() => setSelectedCreative({ id: selectedCreative.id })}
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {fullCreative && selectedCreative && (
           <PreviewModal
             creative={fullCreative}
-            onClose={() => setSelectedCreative(null)}
+            onClose={() => {
+              setSelectedCreative(null);
+              setFullCreative(null);
+              setCreativeLoadError(null);
+            }}
           />
         )}
       </div>

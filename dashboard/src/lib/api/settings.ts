@@ -262,9 +262,10 @@ export interface ConfigCreativesResponse {
 export async function getConfigBreakdown(
   billingId: string,
   by: ConfigBreakdownType = 'size',
-  buyerId?: string
+  buyerId?: string,
+  days: number = 7
 ): Promise<ConfigBreakdownResponse> {
-  const params = new URLSearchParams({ by });
+  const params = new URLSearchParams({ by, days: String(days) });
   if (buyerId) params.set("buyer_id", buyerId);
   return fetchApi<ConfigBreakdownResponse>(
     `/analytics/rtb-funnel/configs/${encodeURIComponent(billingId)}/breakdown?${params.toString()}`
@@ -274,11 +275,13 @@ export async function getConfigBreakdown(
 export async function getConfigCreatives(
   billingId: string,
   size?: string,
-  buyerId?: string
+  buyerId?: string,
+  days: number = 30
 ): Promise<ConfigCreativesResponse> {
   const params = new URLSearchParams();
   if (size) params.set("size", size);
   if (buyerId) params.set("buyer_id", buyerId);
+  params.set("days", String(days));
   return fetchApi<ConfigCreativesResponse>(
     `/analytics/rtb-funnel/configs/${encodeURIComponent(billingId)}/creatives?${params.toString()}`
   );
