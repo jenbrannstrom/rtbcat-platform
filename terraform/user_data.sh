@@ -90,9 +90,6 @@ DOMAIN=$DOMAIN_NAME
 # Data directory
 DATA_DIR=/home/catscan/.catscan
 
-# API Configuration
-DATABASE_PATH=/home/catscan/.catscan/catscan.db
-
 # Authentication cookie for Caddy (required)
 CATSCAN_AUTH_COOKIE=${catscan_auth_cookie}
 
@@ -132,7 +129,6 @@ services:
       - /home/catscan/.catscan/credentials:/credentials:ro
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/credentials/google-credentials.json
-      - DATABASE_PATH=/home/rtbcat/.catscan/catscan.db
     logging:
       driver: "json-file"
       options:

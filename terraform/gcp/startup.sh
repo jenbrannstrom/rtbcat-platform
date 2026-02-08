@@ -68,7 +68,6 @@ apt-get install -y \
     nginx \
     certbot \
     python3-certbot-nginx \
-    sqlite3 \
     curl \
     git \
     jq \
@@ -577,31 +576,8 @@ systemctl restart fail2ban
 # -----------------------------------------------------------------------------
 # 8. Backup Script
 # -----------------------------------------------------------------------------
-echo ">>> Setting up backup script..."
-
-cat > /usr/local/bin/catscan-backup << 'BACKUPEOF'
-#!/bin/bash
-# Daily backup of SQLite database to GCS
-# Uses streaming to avoid filling local disk (database can be >10GB)
-
-set -euo pipefail
-
-DATA_DIR="/home/catscan/.catscan"
-GCS_PATH="gs://${gcs_bucket}/backups/$(date +%Y/%m)/catscan-$(date +%Y%m%d).db.gz"
-
-echo "Starting streaming backup to $GCS_PATH"
-echo "This may take 15-30 minutes for large databases..."
-
-# Stream dump directly to GCS via gzip (no local temp file needed)
-sqlite3 "$DATA_DIR/catscan.db" ".dump" | gzip | gsutil cp - "$GCS_PATH"
-
-echo "Backup completed: $GCS_PATH"
-BACKUPEOF
-
-chmod +x /usr/local/bin/catscan-backup
-
-# Add daily cron job
-echo "0 3 * * * root /usr/local/bin/catscan-backup >> /var/log/catscan-backup.log 2>&1" > /etc/cron.d/catscan-backup
+# NOTE: SQLite backup removed — production uses Cloud SQL PostgreSQL
+# Cloud SQL handles its own automated backups via GCP
 
 # -----------------------------------------------------------------------------
 # 8b. Maintenance Cron Jobs (CRITICAL - prevents disk full)

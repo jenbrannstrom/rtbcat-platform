@@ -12,7 +12,7 @@ This project runs in a memory-limited environment. Follow these rules to prevent
 - Read in chunks using offset/limit parameters
 - Large files in this project:
   - `dashboard/src/lib/api.ts` (1500+ lines)
-  - `storage/sqlite_store.py` (1400+ lines)
+  - `storage/postgres_store.py` (1400+ lines)
 
 ### Pre-session setup:
 ```bash
