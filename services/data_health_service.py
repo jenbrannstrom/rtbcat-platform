@@ -48,17 +48,17 @@ class DataHealthService:
 
         row_daily = await pg_query_one(
             f"""
-            SELECT MAX(metric_date) AS max_metric_date, COUNT(*) AS rows
+            SELECT MAX(metric_date::date) AS max_metric_date, COUNT(*) AS rows
             FROM rtb_daily
-            WHERE metric_date >= CURRENT_DATE - %s::int{buyer_filter}
+            WHERE metric_date::date >= CURRENT_DATE - %s::int{buyer_filter}
             """,
             tuple([days, *params]),
         )
         row_geo = await pg_query_one(
             f"""
-            SELECT MAX(metric_date) AS max_metric_date, COUNT(*) AS rows
+            SELECT MAX(metric_date::date) AS max_metric_date, COUNT(*) AS rows
             FROM rtb_geo_daily
-            WHERE metric_date >= CURRENT_DATE - %s::int{buyer_filter}
+            WHERE metric_date::date >= CURRENT_DATE - %s::int{buyer_filter}
             """,
             tuple([days, *params]),
         )
@@ -82,25 +82,25 @@ class DataHealthService:
 
         row_home_geo = await pg_query_one(
             f"""
-            SELECT MAX(metric_date) AS max_metric_date, COUNT(*) AS rows
+            SELECT MAX(metric_date::date) AS max_metric_date, COUNT(*) AS rows
             FROM home_geo_daily
-            WHERE metric_date >= CURRENT_DATE - %s::int{buyer_filter}
+            WHERE metric_date::date >= CURRENT_DATE - %s::int{buyer_filter}
             """,
             tuple([days, *params]),
         )
         row_cfg_geo = await pg_query_one(
             f"""
-            SELECT MAX(metric_date) AS max_metric_date, COUNT(*) AS rows
+            SELECT MAX(metric_date::date) AS max_metric_date, COUNT(*) AS rows
             FROM config_geo_daily
-            WHERE metric_date >= CURRENT_DATE - %s::int{buyer_filter}
+            WHERE metric_date::date >= CURRENT_DATE - %s::int{buyer_filter}
             """,
             tuple([days, *params]),
         )
         row_cfg_pub = await pg_query_one(
             f"""
-            SELECT MAX(metric_date) AS max_metric_date, COUNT(*) AS rows
+            SELECT MAX(metric_date::date) AS max_metric_date, COUNT(*) AS rows
             FROM config_publisher_daily
-            WHERE metric_date >= CURRENT_DATE - %s::int{buyer_filter}
+            WHERE metric_date::date >= CURRENT_DATE - %s::int{buyer_filter}
             """,
             tuple([days, *params]),
         )
@@ -134,7 +134,7 @@ class DataHealthService:
                 SUM(CASE WHEN publisher_id IS NULL OR publisher_id = '' THEN 1 ELSE 0 END) AS missing_publisher_rows,
                 SUM(CASE WHEN billing_id IS NULL OR billing_id = '' THEN 1 ELSE 0 END) AS missing_billing_rows
             FROM rtb_daily
-            WHERE metric_date >= CURRENT_DATE - %s::int{buyer_filter}
+            WHERE metric_date::date >= CURRENT_DATE - %s::int{buyer_filter}
             """,
             tuple([days, *params]),
         )
@@ -165,31 +165,40 @@ class DataHealthService:
         }
 
     async def _get_ingestion_summary(self, days: int, buyer_id: Optional[str]) -> dict[str, Any]:
-        buyer_filter = ""
-        params: list[Any] = []
-        if buyer_id:
-            buyer_filter = " AND buyer_id = %s"
-            params.append(buyer_id)
-        row = await pg_query_one(
-            f"""
-            SELECT
-                COUNT(*) AS total_runs,
-                SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successful_runs,
-                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_runs,
-                MAX(started_at) AS last_started_at,
-                MAX(finished_at) AS last_finished_at
-            FROM ingestion_runs
-            WHERE started_at >= CURRENT_TIMESTAMP - (%s::int * INTERVAL '1 day'){buyer_filter}
-            """,
-            tuple([days, *params]),
-        )
-        return {
-            "total_runs": int((row or {}).get("total_runs") or 0),
-            "successful_runs": int((row or {}).get("successful_runs") or 0),
-            "failed_runs": int((row or {}).get("failed_runs") or 0),
-            "last_started_at": _to_iso((row or {}).get("last_started_at")),
-            "last_finished_at": _to_iso((row or {}).get("last_finished_at")),
-        }
+        try:
+            buyer_filter = ""
+            params: list[Any] = []
+            if buyer_id:
+                buyer_filter = " AND buyer_id = %s"
+                params.append(buyer_id)
+            row = await pg_query_one(
+                f"""
+                SELECT
+                    COUNT(*) AS total_runs,
+                    SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successful_runs,
+                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_runs,
+                    MAX(started_at) AS last_started_at,
+                    MAX(finished_at) AS last_finished_at
+                FROM ingestion_runs
+                WHERE started_at >= CURRENT_TIMESTAMP - (%s::int * INTERVAL '1 day'){buyer_filter}
+                """,
+                tuple([days, *params]),
+            )
+            return {
+                "total_runs": int((row or {}).get("total_runs") or 0),
+                "successful_runs": int((row or {}).get("successful_runs") or 0),
+                "failed_runs": int((row or {}).get("failed_runs") or 0),
+                "last_started_at": _to_iso((row or {}).get("last_started_at")),
+                "last_finished_at": _to_iso((row or {}).get("last_finished_at")),
+            }
+        except Exception:
+            return {
+                "total_runs": 0,
+                "successful_runs": 0,
+                "failed_runs": 0,
+                "last_started_at": None,
+                "last_finished_at": None,
+            }
 
     def _compute_state(self, source: dict[str, Any], serving: dict[str, Any], coverage: dict[str, Any]) -> str:
         source_rows = source["rtb_daily"]["rows"] + source["rtb_geo_daily"]["rows"]
