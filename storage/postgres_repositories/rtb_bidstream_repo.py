@@ -273,7 +273,10 @@ class RtbBidstreamRepository:
         buyer_id: Optional[str] = None,
         valid_billing_ids: Optional[list[str]] = None,
     ) -> list[dict[str, Any]]:
-        """Get config geo data for country lists."""
+        """Get config geo data for country lists from canonical facts."""
+        if not await self.table_exists("fact_delivery_daily"):
+            return []
+
         where = ["metric_date::date >= (CURRENT_DATE - %s * INTERVAL '1 day')"]
         params: list = [days]
 
@@ -284,11 +287,13 @@ class RtbBidstreamRepository:
         if valid_billing_ids:
             where.append("billing_id = ANY(%s)")
             params.append(valid_billing_ids)
+        where.append("country != ''")
+        where.append("data_scope = 'billing'")
 
         return await pg_query(
             f"""
             SELECT billing_id, country
-            FROM config_geo_daily
+            FROM fact_delivery_daily
             WHERE {" AND ".join(where)}
             """,
             tuple(params),
@@ -305,33 +310,63 @@ class RtbBidstreamRepository:
         buyer_account_id: Optional[str] = None,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        """Get geo breakdown for a specific config."""
-        where = [
+        """Get geo breakdown for a config with canonical fallback."""
+        if not await self.table_exists("fact_delivery_daily"):
+            return []
+
+        primary_where = [
             "billing_id = %s",
             "metric_date::date >= (CURRENT_DATE - %s * INTERVAL '1 day')",
+            "country != ''",
+            "data_scope = 'billing'",
         ]
-        params: list = [billing_id, days]
-
+        primary_params: list = [billing_id, days]
         if buyer_account_id:
-            where.append("buyer_account_id = %s")
-            params.append(buyer_account_id)
+            primary_where.append("buyer_account_id = %s")
+            primary_params.append(buyer_account_id)
+        primary_params.append(limit)
 
-        params.append(limit)
-
-        return await pg_query(
+        rows = await pg_query(
             f"""
             SELECT
                 country as name,
                 COALESCE(SUM(reached_queries), 0) as total_reached,
                 COALESCE(SUM(impressions), 0) as total_impressions,
-                COALESCE(SUM(spend_micros), 0) as total_spend_micros
-            FROM config_geo_daily
-            WHERE {" AND ".join(where)}
-            GROUP BY country
+                COALESCE(SUM(spend_micros), 0) as total_spend_micros,
+                'billing' as data_scope,
+                source_used as data_source
+            FROM fact_delivery_daily
+            WHERE {" AND ".join(primary_where)}
+            GROUP BY country, source_used
             ORDER BY SUM(reached_queries) DESC
             LIMIT %s
             """,
-            tuple(params),
+            tuple(primary_params),
+        )
+        if rows or not buyer_account_id:
+            return rows
+
+        # Buyer-scope fallback when billing-scoped geo dimensions are unavailable.
+        return await pg_query(
+            """
+            SELECT
+                country as name,
+                COALESCE(SUM(reached_queries), 0) as total_reached,
+                COALESCE(SUM(impressions), 0) as total_impressions,
+                COALESCE(SUM(spend_micros), 0) as total_spend_micros,
+                'buyer_fallback' as data_scope,
+                source_used as data_source
+            FROM fact_delivery_daily
+            WHERE buyer_account_id = %s
+              AND metric_date::date >= (CURRENT_DATE - %s * INTERVAL '1 day')
+              AND data_scope = 'buyer_fallback'
+              AND billing_id = ''
+              AND country != ''
+            GROUP BY country, source_used
+            ORDER BY SUM(reached_queries) DESC
+            LIMIT %s
+            """,
+            (buyer_account_id, days, limit),
         )
 
     async def get_config_breakdown_publisher(
@@ -341,33 +376,62 @@ class RtbBidstreamRepository:
         buyer_account_id: Optional[str] = None,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        """Get publisher breakdown for a specific config."""
-        where = [
+        """Get publisher breakdown for a config with canonical fallback."""
+        if not await self.table_exists("fact_delivery_daily"):
+            return []
+
+        primary_where = [
             "billing_id = %s",
             "metric_date::date >= (CURRENT_DATE - %s * INTERVAL '1 day')",
+            "publisher_id != ''",
+            "data_scope = 'billing'",
         ]
-        params: list = [billing_id, days]
-
+        primary_params: list = [billing_id, days]
         if buyer_account_id:
-            where.append("buyer_account_id = %s")
-            params.append(buyer_account_id)
+            primary_where.append("buyer_account_id = %s")
+            primary_params.append(buyer_account_id)
+        primary_params.append(limit)
 
-        params.append(limit)
-
-        return await pg_query(
+        rows = await pg_query(
             f"""
             SELECT
-                COALESCE(publisher_name, publisher_id) as name,
+                COALESCE(NULLIF(publisher_name, ''), publisher_id) as name,
                 COALESCE(SUM(reached_queries), 0) as total_reached,
                 COALESCE(SUM(impressions), 0) as total_impressions,
-                COALESCE(SUM(spend_micros), 0) as total_spend_micros
-            FROM config_publisher_daily
-            WHERE {" AND ".join(where)}
-            GROUP BY COALESCE(publisher_name, publisher_id)
+                COALESCE(SUM(spend_micros), 0) as total_spend_micros,
+                'billing' as data_scope,
+                source_used as data_source
+            FROM fact_delivery_daily
+            WHERE {" AND ".join(primary_where)}
+            GROUP BY COALESCE(NULLIF(publisher_name, ''), publisher_id), source_used
             ORDER BY SUM(reached_queries) DESC
             LIMIT %s
             """,
-            tuple(params),
+            tuple(primary_params),
+        )
+        if rows or not buyer_account_id:
+            return rows
+
+        return await pg_query(
+            """
+            SELECT
+                COALESCE(NULLIF(publisher_name, ''), publisher_id) as name,
+                COALESCE(SUM(reached_queries), 0) as total_reached,
+                COALESCE(SUM(impressions), 0) as total_impressions,
+                COALESCE(SUM(spend_micros), 0) as total_spend_micros,
+                'buyer_fallback' as data_scope,
+                source_used as data_source
+            FROM fact_delivery_daily
+            WHERE buyer_account_id = %s
+              AND metric_date::date >= (CURRENT_DATE - %s * INTERVAL '1 day')
+              AND data_scope = 'buyer_fallback'
+              AND billing_id = ''
+              AND publisher_id != ''
+            GROUP BY COALESCE(NULLIF(publisher_name, ''), publisher_id), source_used
+            ORDER BY SUM(reached_queries) DESC
+            LIMIT %s
+            """,
+            (buyer_account_id, days, limit),
         )
 
     async def get_config_breakdown_creative(
