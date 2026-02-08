@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, ExternalLink, Loader2, FileCode } from "lucide-react";
+import { X, ExternalLink, Loader2, FileCode, RefreshCw, AlertTriangle } from "lucide-react";
 import type { Creative, CreativePerformanceSummary } from "@/types/api";
 import { cn, getStatusColor, getFormatLabel } from "@/lib/utils";
 import { getCreative, getCreativeLive } from "@/lib/api";
@@ -31,6 +31,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
   const [previewSource, setPreviewSource] = useState<"live" | "cache" | null>(null);
   const [previewMessage, setPreviewMessage] = useState<string | null>(null);
   const [showHtmlCode, setShowHtmlCode] = useState(false);
+  const [isRefetchingLive, setIsRefetchingLive] = useState(false);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -60,6 +61,26 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
       .finally(() => setIsLoadingFull(false));
   }, [initialCreative.id]);
 
+  const refetchLive = async () => {
+    setIsRefetchingLive(true);
+    try {
+      const resp = await getCreativeLive(initialCreative.id, {
+        allowCacheFallback: false,
+        refreshCache: true,
+        days: 7,
+      });
+      setCreative(resp.creative);
+      setPreviewSource(resp.source);
+      setPreviewMessage(resp.message);
+    } catch (err) {
+      console.error("Live refetch failed:", err);
+      setPreviewMessage("Live refetch failed. Still showing cached snapshot.");
+      setPreviewSource("cache");
+    } finally {
+      setIsRefetchingLive(false);
+    }
+  };
+
   // Extract data from raw_data
   const rawData = (creative as unknown as { raw_data?: Record<string, unknown> }).raw_data;
   const rejectionReason = rawData?.rejectionReason as string | undefined;
@@ -80,6 +101,10 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
   const parsedUrls = parseDestinationUrls(allRawUrls);
   const trackingParams = extractTrackingParams(creative.final_url);
   const hasTrackingParams = Object.keys(trackingParams).length > 0;
+  const effectiveSource = (creative.data_source?.source || previewSource || "cache") as "live" | "cache";
+  const isStaleCache = effectiveSource === "cache" && !!creative.data_source?.is_stale;
+  const staleHours = creative.data_source?.stale_age_hours;
+  const staleThreshold = creative.data_source?.stale_threshold_hours;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -94,6 +119,16 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold text-gray-900 font-mono truncate max-w-[400px]" title={creative.id}>#{creative.id}</h2>
               <CopyButton text={creative.id} className="flex-shrink-0" />
+              <span
+                className={cn(
+                  "text-[10px] px-1.5 py-0.5 rounded border",
+                  effectiveSource === "live"
+                    ? "bg-green-100 text-green-700 border-green-200"
+                    : "bg-amber-100 text-amber-700 border-amber-200"
+                )}
+              >
+                {effectiveSource === "live" ? "Live" : "Cached"}
+              </span>
             </div>
             {googleUrl && (
               <a
@@ -140,15 +175,43 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
               </div>
             )}
           </div>
-          {(previewSource || previewMessage) && (
+          {(previewSource || previewMessage || isStaleCache) && (
             <div className={cn(
               "px-4 py-2 text-xs border-b",
-              previewSource === "live"
+              effectiveSource === "live"
                 ? "bg-green-50 text-green-700 border-green-100"
                 : "bg-amber-50 text-amber-700 border-amber-100"
             )}>
-              {previewSource === "live" ? "Source: Live from Google API." : "Source: Cached snapshot."}
+              {effectiveSource === "live" ? "Source: Live from Google API." : "Source: Cached snapshot."}
+              {isStaleCache && (
+                <span className="ml-2 inline-flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  Cache is stale
+                  {staleHours ? ` (${Math.round(staleHours)}h old` : ""}
+                  {staleThreshold ? `, threshold ${staleThreshold}h)` : staleHours ? ")" : ""}
+                </span>
+              )}
               {previewMessage ? ` ${previewMessage}` : ""}
+              {effectiveSource === "cache" && (
+                <button
+                  type="button"
+                  onClick={refetchLive}
+                  disabled={isRefetchingLive}
+                  className="ml-3 inline-flex items-center gap-1 rounded border border-amber-300 bg-white px-2 py-0.5 text-amber-700 hover:bg-amber-50 disabled:opacity-60"
+                >
+                  {isRefetchingLive ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Refetching
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-3 w-3" />
+                      Refetch live
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           )}
 

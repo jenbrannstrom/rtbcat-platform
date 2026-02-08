@@ -289,6 +289,11 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 
 ## Technical Debt
 
+### Secrets Rollout Follow-up
+- [ ] Enable `SECRETS_HEALTH_STRICT=true` in production after all required feature secrets are present in the selected backend
+- [ ] Add deployment health probe for `GET /api/system/secrets-health` (status-only, non-sensitive)
+- [ ] Wire `CATSCAN_ENABLE_*` feature toggles explicitly in deploy templates so secret checks are deterministic
+
 ### Naming Standardization (Pre-OSS)
 - [ ] **Rename `rtbcat` → `catscan` in Docker** - Container user is `rtbcat`, VM user is `catscan`. Causes confusion when debugging paths (see `docs/GCP_CREDENTIALS_SETUP.md` for current paths).
 
@@ -296,7 +301,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [ ] `dashboard/src/lib/api.ts` - Still has ~30 legacy functions to extract
 - [x] **Postgres-only migration** - Replace SQLiteStore with PostgresStore + repositories; SQLite legacy removed
 - [ ] `storage/repositories/user_repository.py` (1,188 lines) - Split into auth, permissions, audit repos
-- [ ] `api/routers/creatives.py` (1,181 lines) - Extract language detection, preview generation
+- [ ] `api/routers/creatives.py` - Continue split after schema + response-builder extraction (keep route layer HTTP-only)
 - [ ] `cli/qps_analyzer.py` (1,053 lines) - Split into separate command modules under `cli/commands/`
 
 ### Security

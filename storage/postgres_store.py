@@ -369,7 +369,7 @@ class PostgresStore:
     ) -> dict[str, Any]:
         """Extract thumbnail URLs from HTML creative snippets and cache in creative_thumbnails."""
         import json
-        import re
+        from utils.html_thumbnail import extract_primary_image_url
 
         where_parts = ["c.format = 'HTML'"]
         params: list[Any] = []
@@ -404,13 +404,6 @@ class PostgresStore:
         failed = 0
         no_image_found = 0
 
-        patterns = [
-            r'<img[^>]+src=["\\\'](https?://[^"\\\']+)["\\\']',
-            r'background-image\\s*:\\s*url\\((["\\\']?)(https?://[^)"\\\']+)\\1\\)',
-            r'document\\.write\\(.*?(https?://[^"\\\']+\\.(?:png|jpg|jpeg|gif|webp))',
-            r'(https?://[^\\s"\\\']+\\.(?:png|jpg|jpeg|gif|webp))',
-        ]
-
         for row in rows:
             processed += 1
             creative_id = row["id"]
@@ -429,13 +422,7 @@ class PostgresStore:
             if isinstance(html_data, dict):
                 snippet = html_data.get("snippet") or ""
 
-            image_url = None
-            if snippet:
-                for pattern in patterns:
-                    match = re.search(pattern, snippet, re.IGNORECASE | re.DOTALL)
-                    if match:
-                        image_url = match.group(match.lastindex or 1)
-                        break
+            image_url = extract_primary_image_url(snippet) if snippet else None
 
             if image_url:
                 await pg_execute(

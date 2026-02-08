@@ -19,6 +19,7 @@ from services.auth_service import User
 from config import ConfigManager
 from services.thumbnails_service import ThumbnailsService
 from services.system_service import SystemService
+from services.secrets_health_service import get_secrets_health
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +126,14 @@ class ThumbnailStatusSummary(BaseModel):
     ffmpeg_available: bool
 
 
+class ThumbnailFailureMetricsResponse(BaseModel):
+    no_url: int
+    timeout: int
+    ffmpeg: int
+    parse: int
+    other: int
+
+
 class HTMLThumbnailRequest(BaseModel):
     """Request model for HTML thumbnail extraction."""
     limit: int = Field(100, ge=1, le=1000, description="Maximum creatives to process")
@@ -139,6 +148,39 @@ class HTMLThumbnailResponse(BaseModel):
     failed: int
     no_image_found: int
     message: Optional[str] = None
+
+
+class SecretKeyStatus(BaseModel):
+    key: str
+    configured: bool
+
+
+class SecretFeatureStatus(BaseModel):
+    name: str
+    description: str
+    enabled: bool
+    healthy: bool
+    required_keys: list[SecretKeyStatus]
+    missing_keys: list[str]
+
+
+class SecretsHealthSummary(BaseModel):
+    enabled_features: int
+    required_keys: int
+    configured_keys: int
+    missing_keys: int
+
+
+class SecretsHealthResponse(BaseModel):
+    checked_at: str
+    strict_mode: bool
+    healthy: bool
+    backend: str
+    prefer_env: bool
+    name_prefix: str
+    summary: SecretsHealthSummary
+    missing_required_keys: list[str]
+    features: list[SecretFeatureStatus]
 
 
 # =============================================================================
@@ -230,6 +272,14 @@ async def get_thumbnail_status(
     )
 
 
+@router.get("/thumbnails/failure-metrics", response_model=ThumbnailFailureMetricsResponse, tags=["Thumbnails"])
+async def get_thumbnail_failure_metrics():
+    """Get thumbnail failure counts by normalized error category."""
+    service = ThumbnailsService()
+    metrics = await service.get_failure_metrics()
+    return ThumbnailFailureMetricsResponse(**metrics)
+
+
 @router.get("/system/status", response_model=SystemStatusResponse)
 async def get_system_status():
     """Get system status including installed tools and resource usage."""
@@ -248,6 +298,12 @@ async def get_system_status():
         creatives_count=status.creatives_count,
         videos_count=status.videos_count,
     )
+
+
+@router.get("/system/secrets-health", response_model=SecretsHealthResponse)
+async def get_system_secrets_health():
+    """Get non-sensitive status of required secrets per enabled feature."""
+    return SecretsHealthResponse(**get_secrets_health())
 
 
 @router.post("/thumbnails/generate", response_model=ThumbnailGenerateResponse, tags=["Thumbnails"])

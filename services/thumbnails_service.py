@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import shutil
 import subprocess
@@ -47,6 +48,8 @@ class ThumbnailsService:
     def __init__(self, repo: Optional[ThumbnailsRepository] = None):
         self.repo = repo or ThumbnailsRepository()
         self._thumbnails_dir: Optional[Path] = None
+        self._base_retry_seconds = 60
+        self._max_retry_seconds = 6 * 3600
 
     @property
     def thumbnails_dir(self) -> Path:
@@ -94,6 +97,14 @@ class ThumbnailsService:
     async def generate_thumbnail(self, creative_id: str) -> ThumbnailResult:
         """Generate thumbnail for a single video creative."""
         if not self.check_ffmpeg():
+            category = "ffmpeg"
+            await self.repo.upsert_thumbnail_status(
+                creative_id=creative_id,
+                status="failed",
+                error_reason="ffmpeg_not_available",
+                error_category=category,
+                backoff_seconds=self._compute_backoff_seconds(1),
+            )
             return ThumbnailResult(
                 creative_id=creative_id,
                 status="failed",
@@ -143,18 +154,24 @@ class ThumbnailsService:
         )
 
         if not video_url and vast_xml:
-            video_url = self._extract_video_url_from_vast(vast_xml)
+            video_url, parse_failed = self._extract_video_url_from_vast(vast_xml)
+        else:
+            parse_failed = False
 
         if not video_url:
+            error_reason = "parse_vast_failed" if parse_failed else "no_url"
+            category = self._classify_error_category(error_reason)
             await self.repo.upsert_thumbnail_status(
                 creative_id=creative_id,
                 status="failed",
-                error_reason="no_url",
+                error_reason=error_reason,
+                error_category=category,
+                backoff_seconds=self._compute_backoff_seconds(1),
             )
             return ThumbnailResult(
                 creative_id=creative_id,
                 status="failed",
-                error_reason="no_video_url",
+                error_reason="no_url",
             )
 
         # Generate thumbnail
@@ -179,11 +196,16 @@ class ThumbnailsService:
                 thumbnail_url=f"/thumbnails/{creative_id}.jpg",
             )
         else:
+            error_reason = result["error_reason"]
+            category = self._classify_error_category(error_reason)
+            retries = await self._get_retry_count(creative_id)
             await self.repo.upsert_thumbnail_status(
                 creative_id=creative_id,
                 status="failed",
-                error_reason=result["error_reason"],
+                error_reason=error_reason,
                 video_url=video_url,
+                error_category=category,
+                backoff_seconds=self._compute_backoff_seconds(retries + 1),
             )
 
             return ThumbnailResult(
@@ -240,16 +262,17 @@ class ThumbnailsService:
             if result.returncode == 0 and output_path.exists():
                 return {"success": True}
             else:
-                error_msg = result.stderr[:200] if result.stderr else "unknown_error"
-                return {"success": False, "error_reason": error_msg}
+                stderr = result.stderr or ""
+                return {"success": False, "error_reason": self._classify_ffmpeg_error(stderr)}
 
         except subprocess.TimeoutExpired:
             return {"success": False, "error_reason": "timeout"}
         except Exception as e:
-            return {"success": False, "error_reason": str(e)[:100]}
+            return {"success": False, "error_reason": f"ffmpeg_exception:{str(e)[:80]}"}
 
-    def _extract_video_url_from_vast(self, vast_xml: str) -> Optional[str]:
+    def _extract_video_url_from_vast(self, vast_xml: str) -> tuple[Optional[str], bool]:
         """Extract video URL from VAST XML."""
+        parse_failed = False
         try:
             root = ElementTree.fromstring(vast_xml)
             # Try common VAST paths
@@ -262,15 +285,70 @@ class ThumbnailsService:
                 for mf in media_files:
                     url = mf.text.strip() if mf.text else None
                     if url and url.startswith("http"):
-                        return url
+                        return url, False
         except Exception:
-            pass
+            parse_failed = True
 
         # Fallback: regex for URL
         match = re.search(r'https?://[^\s<>"]+\.mp4', vast_xml)
-        return match.group(0) if match else None
+        return (match.group(0), parse_failed) if match else (None, parse_failed)
 
     def get_thumbnail_path(self, creative_id: str) -> Optional[Path]:
         """Get path to thumbnail file if it exists."""
         thumb_path = self.thumbnails_dir / f"{creative_id}.jpg"
         return thumb_path if thumb_path.exists() else None
+
+    async def get_failure_metrics(self) -> dict[str, int]:
+        """Get standardized failure category metrics."""
+        rows = await self.repo.get_thumbnail_failure_metrics()
+        metrics = {"no_url": 0, "timeout": 0, "ffmpeg": 0, "parse": 0, "other": 0}
+        for row in rows:
+            category = str(row.get("category") or "other")
+            count = int(row.get("count") or 0)
+            if category in metrics:
+                metrics[category] += count
+            else:
+                metrics["other"] += count
+        return metrics
+
+    async def _get_retry_count(self, creative_id: str) -> int:
+        current = await self.repo.get_thumbnail_status(creative_id)
+        if not current:
+            return 0
+        value = current.get("retry_count")
+        try:
+            return int(value or 0)
+        except Exception:
+            return 0
+
+    def _compute_backoff_seconds(self, retry_count: int) -> int:
+        # Exponential backoff with cap: 60s, 120s, 240s, ...
+        power = max(0, retry_count - 1)
+        seconds = int(self._base_retry_seconds * math.pow(2, power))
+        return min(seconds, self._max_retry_seconds)
+
+    @staticmethod
+    def _classify_ffmpeg_error(stderr: str) -> str:
+        message = (stderr or "").lower()
+        if "timed out" in message:
+            return "timeout"
+        if "invalid data found" in message or "could not find codec" in message:
+            return "parse_media_error"
+        if "connection" in message or "http error" in message:
+            return "network_error"
+        if "ffmpeg" in message and "not found" in message:
+            return "ffmpeg_not_found"
+        return "ffmpeg_failure"
+
+    @staticmethod
+    def _classify_error_category(error_reason: Optional[str]) -> str:
+        value = (error_reason or "").lower()
+        if "no_url" in value:
+            return "no_url"
+        if "timeout" in value:
+            return "timeout"
+        if "parse" in value or "xml" in value or "json" in value:
+            return "parse"
+        if "ffmpeg" in value:
+            return "ffmpeg"
+        return "other"

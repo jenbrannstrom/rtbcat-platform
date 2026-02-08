@@ -85,6 +85,7 @@ from api.routers import (
     spend_router,
 )
 from api.dependencies import set_store, set_config_manager, startup_event
+from services.secrets_health_service import get_secrets_health
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +122,26 @@ async def lifespan(app: FastAPI):
     # Set dependencies for routers
     set_store(_store)
     set_config_manager(_config_manager)
+
+    # Validate required secrets for enabled features at startup
+    secrets_health = get_secrets_health()
+    if secrets_health["healthy"]:
+        logger.info(
+            "Secrets health check passed (backend=%s, enabled_features=%s)",
+            secrets_health["backend"],
+            secrets_health["summary"]["enabled_features"],
+        )
+    else:
+        missing = ", ".join(secrets_health["missing_required_keys"])
+        if secrets_health["strict_mode"]:
+            raise RuntimeError(
+                "Missing required secrets for enabled features: "
+                f"{missing}. Set SECRETS_HEALTH_STRICT=false to downgrade to warning."
+            )
+        logger.warning(
+            "Secrets health check failed (strict=false). Missing required keys: %s",
+            missing,
+        )
 
     # Auto-populate buyer_seats from existing creatives if needed
     try:

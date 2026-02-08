@@ -13,6 +13,18 @@ from .common import (
 )
 
 
+class CreativeDataSource(BaseModel):
+    """Source metadata for preview payload quality."""
+
+    source: str = Field(..., description="live or cache")
+    cached_at: Optional[str] = None
+    fetched_at: Optional[str] = None
+    stale_threshold_hours: Optional[int] = None
+    stale_age_hours: Optional[float] = None
+    is_stale: bool = False
+    fallback_reason: Optional[str] = None
+
+
 class CreativeResponse(BaseModel):
     """Response model for creative data."""
     id: str
@@ -47,6 +59,15 @@ class CreativeResponse(BaseModel):
     is_disapproved: bool = False
     disapproval_reasons: Optional[list] = None
     serving_restrictions: Optional[list] = None
+    # Language detection (Creative geo display)
+    detected_language: Optional[str] = None
+    detected_language_code: Optional[str] = None
+    language_confidence: Optional[float] = None
+    language_source: Optional[str] = None
+    language_analyzed_at: Optional[str] = None
+    language_analysis_error: Optional[str] = None
+    # Live/cache preview source metadata
+    data_source: Optional[CreativeDataSource] = None
 
 
 class ClusterAssignment(BaseModel):
@@ -63,6 +84,37 @@ class PaginatedCreativesResponse(BaseModel):
 
 class NewlyUploadedCreativesResponse(BaseModel):
     """Response for newly uploaded creatives."""
-    creatives: list[CreativeResponse]
-    total: int
-    since_days: int
+    creatives: list[dict]
+    total_count: int
+    period_start: str
+    period_end: str
+
+
+class CreativeLiveResponse(BaseModel):
+    """Response model for live creative endpoint."""
+
+    creative: CreativeResponse
+    source: str
+    fetched_at: str
+    message: Optional[str] = None
+
+
+class CreativeCountryMetrics(BaseModel):
+    """Country-level metrics for a creative."""
+
+    country_code: str
+    country_name: str
+    country_iso3: Optional[str] = None
+    spend_micros: int
+    impressions: int
+    clicks: int
+    spend_percent: float
+
+
+class CreativeCountryBreakdownResponse(BaseModel):
+    """Response for creative country breakdown."""
+
+    creative_id: str
+    countries: list[CreativeCountryMetrics]
+    total_countries: int
+    period_days: int
