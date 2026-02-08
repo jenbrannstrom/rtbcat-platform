@@ -265,7 +265,7 @@ gcloud compute ssh catscan-production --zone=europe-west1-b -- \
 | Path | Purpose |
 |------|---------|
 | `/opt/catscan` | Application code |
-| `/home/catscan/.catscan/catscan.db` | SQLite database |
+| Cloud SQL PostgreSQL | Serving database (via `POSTGRES_SERVING_DSN`) |
 | `/home/catscan/.catscan/credentials/` | API credentials |
 | `/home/catscan/.catscan/imports/` | Downloaded CSV files |
 | `/var/log/catscan-setup.log` | Startup script log |

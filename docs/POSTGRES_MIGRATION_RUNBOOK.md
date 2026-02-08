@@ -1,396 +1,137 @@
-# Legacy SQLite → GCS/BigQuery → Postgres migration runbook
+# Postgres-Only Decommission Runbook (Remove SQLite Once and for All)
 
-**Decision (Jan 30, 2026):** Analytics and serving are Postgres-only. SQLite must not be used for serving or analytics. Any fallback to SQLite should be treated as a misconfiguration.
+**Status:** Active cleanup plan  
+**Date:** 2026-02-08  
+**Policy:** Runtime and analytics are Postgres-only. Any SQLite dependency outside `docs/archive/sqlite_legacy/` is technical debt to remove.
 
-This runbook tracks the four migration tasks:
+## Objective
 
-1. Export legacy SQLite raw tables to CSV/Parquet (only if an old SQLite DB still exists).
-2. Load into GCS and BigQuery partitions.
-3. Run precompute jobs for the last 90 days to fill Postgres summary tables.
-4. Switch the UI to Postgres once validated.
+Remove all remaining SQLite runtime/config/docs leftovers and enforce Postgres-only operation across:
+- API runtime
+- Dashboard/runtime env config
+- Import and ops scripts
+- Terraform/startup scripts
+- Documentation
 
-## Prerequisites
+Also remove non-actionable AI/assistant leftovers (for example, accidental "claude" notes) from operational docs.
 
-- Access to a legacy SQLite database file (only if it still exists).
-- A GCS bucket for raw exports.
-- A BigQuery dataset for staging/partitioned tables.
-- A Postgres instance with the target schema and summary tables.
-- API container must be configured to use Postgres DSNs (not SQLite).
-- Cloud SQL Auth Proxy (or equivalent) must be running on the VM.
+## Non-Goals
 
-## 0) Ensure API uses Postgres (no SQLite fallback)
+- We are not deleting historical archives under `docs/archive/sqlite_legacy/`.
+- We are not changing analytics logic in this runbook unless needed to remove SQLite coupling.
 
-On SG VM, the API container must receive `POSTGRES_DSN` and `POSTGRES_SERVING_DSN`.
-If `DATABASE_PATH` is set, the API will attempt legacy SQLite and analytics will fail.
+## Acceptance Criteria (Done Definition)
 
-**Compose patch (SG VM):**
-- Add `env_file: .env` to load `/opt/catscan/.env`
-- Remove `DATABASE_PATH`
-- Add `POSTGRES_DSN` and `POSTGRES_SERVING_DSN` in environment
+1. No runtime path can start with SQLite configuration.
+2. No production compose/terraform/startup file sets `DATABASE_PATH`.
+3. No active scripts used by ops/import path depend on `sqlite3`.
+4. Docs outside archive do not instruct SQLite usage.
+5. CI/verification guard fails if new SQLite runtime references are introduced.
 
-**Restart:**
-```bash
-cd /opt/catscan
-sudo docker compose -f docker-compose.gcp.yml down
-sudo docker compose -f docker-compose.gcp.yml up -d
-sudo docker exec catscan-api env | grep -i postgres
-```
+## Phase 0: Immediate Safety Gate (Block SQLite at Runtime)
 
-## 1) Export SQLite raw tables to CSV/Parquet
+1. Add fail-fast guard in API startup/config:
+- If `DATABASE_PATH` is set in production env, log error and refuse startup.
 
-### Identify raw tables
+2. Confirm runtime version source remains image tag (`sha-*`) and not file fallback confusion.
 
-The raw RTB tables that drive analytics include:
+3. Keep `docs/archive/sqlite_legacy/` as read-only historical reference.
 
-- `rtb_daily`
-- `rtb_bidstream`
-- `rtb_bid_filtering`
-- `rtb_quality`
-- `rtb_traffic`
+## Phase 1: Runtime and Infra Cleanup
 
-If you need additional raw tables (for example, `performance_metrics`), export those as well.
+Remove SQLite env usage from active deployment paths:
 
-### CSV export (recommended for large tables)
+- `docker-compose.production.yml`
+- `docker-compose.simple.yml`
+- `terraform/user_data.sh`
+- `terraform/gcp_sg_vm2/startup.sh`
 
-For full-table exports:
+Actions:
+- Remove `DATABASE_PATH` from container env.
+- Ensure only `POSTGRES_DSN` and `POSTGRES_SERVING_DSN` are used.
+- Remove cron tasks that assume local SQLite cleanup (`catscan-db-cleanup`) if they are SQLite-specific.
 
-```bash
-sqlite3 ~/.catscan/catscan.db \
-  -header -csv "SELECT * FROM rtb_bidstream;" \
-  > rtb_bidstream.csv
-```
+## Phase 2: Script and Import Path Cleanup
 
-For date-bounded exports (preferred for partitions and resumable loads):
+Migrate or retire active SQLite-based scripts used in normal operations:
 
-```bash
-sqlite3 ~/.catscan/catscan.db \
-  -header -csv "SELECT * FROM rtb_bidstream WHERE metric_date BETWEEN '2024-01-01' AND '2024-03-31';" \
-  > rtb_bidstream_2024Q1.csv
-```
+- `scripts/gmail_import.py` (remove `DATABASE_PATH`/SQLite code path)
+- `scripts/cleanup_old_data.py` (replace with Postgres cleanup or retire)
+- `importers/*.py` modules still opening `sqlite3.connect(...)`
+- `importers/utils.py` default db path usage
 
-Repeat per table and per partitionable date range.
+Actions:
+- Replace direct `sqlite3` writes with Postgres repository/store calls.
+- If a script is no longer needed, move to archive with explicit deprecation header.
+- Update scheduler/ops commands to only call Postgres-compatible scripts.
 
-### Parquet export (optional)
+## Phase 3: App and API Surface Cleanup
 
-If you need Parquet, convert the CSVs with a tool like DuckDB or pandas + pyarrow:
+Remove user-facing SQLite traces:
 
-```bash
-duckdb -c "COPY (SELECT * FROM read_csv_auto('rtb_bidstream.csv')) TO 'rtb_bidstream.parquet' (FORMAT PARQUET);"
-```
+- `api/routers/system.py` (remove `catscan.db` fallback/path exposure)
+- Any endpoint/status output that suggests SQLite runtime path
+- Any fallback behavior selecting SQLite when DSNs are missing
 
-## 2) Load exports into GCS and BigQuery partitions
+Actions:
+- Standardize system health/version responses around Postgres-only assumptions.
+- Return explicit misconfiguration errors when Postgres env is absent.
 
-### Upload to GCS
+## Phase 4: Documentation Cleanup
 
-```bash
-gsutil -m cp rtb_bidstream_*.csv gs://YOUR_BUCKET/rtb/raw/rtb_bidstream/
-```
+Update all active docs to be Postgres-only and remove conversational leftovers.
 
-### BigQuery load (CSV)
+Primary files:
+- `INSTALL.md`
+- `DATA_MODEL.md`
+- `prompts/deploy-catscan.example.md`
+- `CHANGELOG.md` (mark SQLite commands as historical, not active)
+- This file: `docs/POSTGRES_MIGRATION_RUNBOOK.md`
 
-If `metric_date` is a `DATE` column, load with ingestion-time partitioning:
+Rules:
+- No SQLite commands in active runbooks.
+- If historical context is required, link to `docs/archive/sqlite_legacy/`.
+- Remove accidental assistant artifacts (e.g., "claude:", pasted chat fragments).
 
-```bash
-bq load \
-  --source_format=CSV \
-  --skip_leading_rows=1 \
-  --autodetect \
-  --time_partitioning_field=metric_date \
-  YOUR_DATASET.rtb_bidstream \
-  gs://YOUR_BUCKET/rtb/raw/rtb_bidstream/rtb_bidstream_*.csv
-```
+## Phase 5: Verification and Regression Guard
 
-If `metric_date` arrives as text, load into a staging table and cast into a partitioned table:
-
-```sql
-CREATE OR REPLACE TABLE YOUR_DATASET.rtb_bidstream
-PARTITION BY metric_date AS
-SELECT
-  *,
-  DATE(metric_date) AS metric_date
-FROM YOUR_DATASET.rtb_bidstream_staging;
-```
-
-Repeat the same pattern for `rtb_daily`, `rtb_bid_filtering`, `rtb_quality`, and `rtb_traffic`.
-
-## 2b) Gmail ingest operational safety (large batches)
-
-For large Gmail batches (200+ emails), use a non-interactive batch runner with checkpointing.
-
-**Required environment variables for full pipeline:**
-```bash
-# In .env or docker-compose environment:
-CATSCAN_PIPELINE_ENABLED=true        # Enable CSV → Parquet → GCS → BigQuery pipeline
-CATSCAN_GCS_BUCKET=your-bucket-name  # GCS bucket for Parquet files
-RAW_PARQUET_BUCKET=your-bucket-name  # Same bucket (used by export_csv_to_parquet.py)
-CATSCAN_BQ_DATASET=rtbcat_analytics  # BigQuery dataset
-CATSCAN_BQ_PROJECT=your-project-id   # BigQuery project
-```
-
-**Docker networking for Postgres:**
-If using Cloud SQL Auth Proxy on the host, add to docker-compose.gcp.yml:
-```yaml
-extra_hosts:
-  - "host.docker.internal:host-gateway"
-```
-Then use `host.docker.internal` instead of `localhost` in POSTGRES_DSN.
-
-**Recommended commands (after code deploy):**
-```bash
-cd /opt/catscan && git pull
-nohup python3 scripts/gmail_import_batch.py --batch-size 10 >> ~/.catscan/logs/gmail_batch.log 2>&1 &
-tail -f ~/.catscan/logs/gmail_batch.log
-python3 scripts/gmail_import_batch.py --status
-```
-
-Checkpoint file: `~/.catscan/gmail_batch_checkpoint.json`
-
-**Scheduler routing requirement (critical):**
-- Nginx must have an explicit unauthenticated route for `POST /api/gmail/import/scheduled` (like precompute endpoints), otherwise OAuth2 auth gate blocks Cloud Scheduler.
-- Verify:
-```bash
-sudo nginx -T | grep -n "api/gmail/import/scheduled"
-```
-
-**Note on failed downloads (401 errors):**
-Emails with expired GCS signed URLs will fail with 401 Authentication errors. These cannot be fixed by marking emails as unread - the signed URLs must be regenerated by re-sending the report emails.
-
-**GCS Authentication (for link-only emails):**
-
-Large report emails (>=10MB) contain GCS download links instead of attachments. These links require authentication. The gmail_import.py script uses:
-
-1. **OAuth Token (primary and working):** Gmail OAuth token has `devstorage.read_only` scope and works for `storage.cloud.google.com` links.  
-2. **Service Account (not viable here):** The bucket `buyside-scheduled-report-export` is Google‑owned, so our service account cannot be granted access.
-
-## 2c) Known raw_facts schema gaps (current)
-
-**Status:** report_type, creative_size, billing_id are now present in raw_facts. Size/config aggregations are re-enabled with corrected join logic.
-
-## 2d) BIGINT requirement for aggregate columns
-
-Aggregate columns in Postgres summary tables must use BIGINT to avoid integer overflow.
-Columns that sum large values (reached_queries, impressions, bids, etc.) can exceed INT32 limits.
-
-**Migration for rtb_publisher_daily:**
-```sql
-ALTER TABLE rtb_publisher_daily ALTER COLUMN reached_queries TYPE BIGINT;
-ALTER TABLE rtb_publisher_daily ALTER COLUMN impressions TYPE BIGINT;
-ALTER TABLE rtb_publisher_daily ALTER COLUMN bids TYPE BIGINT;
-ALTER TABLE rtb_publisher_daily ALTER COLUMN successful_responses TYPE BIGINT;
-ALTER TABLE rtb_publisher_daily ALTER COLUMN bid_requests TYPE BIGINT;
-ALTER TABLE rtb_publisher_daily ALTER COLUMN auctions_won TYPE BIGINT;
-```
-
-**Apply similar migrations to other summary tables if needed:**
-- `home_publisher_daily`
-- `home_geo_daily`
-- `home_seat_daily`
-
-## 2e) Backfill Postgres raw fact tables (BQ → Postgres)
-
-Use `scripts/bq_backfill_raw_facts.py` to populate Postgres raw tables from BigQuery.
-
-Example:
-```bash
-python scripts/bq_backfill_raw_facts.py --table rtb_daily --date-range 2026-01-07 2026-01-25
-python scripts/bq_backfill_raw_facts.py --table rtb_bidstream --date-range 2026-01-07 2026-01-25
-python scripts/bq_backfill_raw_facts.py --table rtb_bid_filtering --date-range 2026-01-13 2026-01-25
-```
-
-## BigQuery table reference (rtb_daily, rtb_bidstream)
-
-Use native tables partitioned by `metric_date` for precompute jobs:
-
-### `rtb_daily`
-
-```sql
-CREATE TABLE `project_id.dataset_id.rtb_daily`
-(
-  id INT64,
-  metric_date DATE,
-  creative_id STRING,
-  billing_id STRING,
-  creative_size STRING,
-  creative_format STRING,
-  country STRING,
-  platform STRING,
-  environment STRING,
-  app_id STRING,
-  app_name STRING,
-  publisher_id STRING,
-  publisher_name STRING,
-  publisher_domain STRING,
-  deal_id STRING,
-  deal_name STRING,
-  transaction_type STRING,
-  advertiser STRING,
-  buyer_account_id STRING,
-  buyer_account_name STRING,
-  bidder_id STRING,
-  hour INT64,
-  reached_queries INT64,
-  impressions INT64,
-  clicks INT64,
-  spend_micros INT64,
-  video_starts INT64,
-  video_first_quartile INT64,
-  video_midpoint INT64,
-  video_third_quartile INT64,
-  video_completions INT64,
-  vast_errors INT64,
-  engaged_views INT64,
-  active_view_measurable INT64,
-  active_view_viewable INT64,
-  gma_sdk INT64,
-  buyer_sdk INT64,
-  row_hash STRING,
-  import_batch_id STRING,
-  created_at TIMESTAMP
-)
-PARTITION BY metric_date
-CLUSTER BY buyer_account_id, publisher_id, creative_id;
-```
-
-### `rtb_bidstream`
-
-```sql
-CREATE TABLE `project_id.dataset_id.rtb_bidstream`
-(
-  id INT64,
-  metric_date DATE,
-  hour INT64,
-  country STRING,
-  buyer_account_id STRING,
-  publisher_id STRING,
-  publisher_name STRING,
-  platform STRING,
-  environment STRING,
-  transaction_type STRING,
-  inventory_matches INT64,
-  bid_requests INT64,
-  successful_responses INT64,
-  reached_queries INT64,
-  bids INT64,
-  bids_in_auction INT64,
-  auctions_won INT64,
-  impressions INT64,
-  clicks INT64,
-  bidder_id STRING,
-  row_hash STRING,
-  import_batch_id STRING,
-  report_type STRING,
-  created_at TIMESTAMP
-)
-PARTITION BY metric_date
-CLUSTER BY buyer_account_id, publisher_id, bidder_id;
-```
-
-## 3) Run precompute jobs for the last 90 days
-
-Once the Postgres data is in place (and the API is configured to point at Postgres), refresh the precompute tables for the last 90 days:
+Run repo checks (excluding archive):
 
 ```bash
-python scripts/refresh_precompute.py --days 90 --validate
+rg -n "DATABASE_PATH|sqlite3|catscan\.db|sqlite_master|SQLite" \
+  --glob '!docs/archive/**' \
+  --glob '!docs/ai_logs/**' \
+  .
 ```
 
-Optional scope to a seat:
+Expected result after completion:
+- Zero hits in runtime/deploy/import paths.
+- Remaining hits allowed only in:
+  - `docs/archive/sqlite_legacy/**`
+  - historical AI logs (`docs/ai_logs/**`) if retained
 
-```bash
-python scripts/refresh_precompute.py --days 90 --buyer-id BUYER_ACCOUNT_ID --validate
-```
+Add CI guard:
+- Fail PR if forbidden SQLite patterns appear outside approved archive paths.
 
-The precompute refresh covers:
+## Work Plan Sequence
 
-- Home summaries (`home_*_daily`)
-- Config breakdowns (`config_*_daily`)
-- RTB summaries (`rtb_*_daily`)
+1. Runtime/infra env cleanup (Phase 1)
+2. Script/import migration (Phase 2)
+3. API/system surface hardening (Phase 3)
+4. Docs cleanup (Phase 4)
+5. Guardrails and CI enforcement (Phase 5)
 
-**Note:** If `bq_aggregate_to_pg.py` does not include an `rtb_publisher_daily` aggregation, that table will remain empty. Add or update the aggregation query to populate it.
+## Rollback Strategy
 
-### Production refresh cadence (recommended)
+- Keep changes per phase in separate commits.
+- If Phase 2 migration causes regressions, rollback only script path commit while keeping runtime SQLite block in place.
+- Do not reintroduce `DATABASE_PATH` in production compose.
 
-- **On each import:** refresh the last **7 days** for the affected `buyer_id`.
-  ```bash
-  python scripts/refresh_precompute.py --days 7 --buyer-id BUYER_ACCOUNT_ID --validate
-  ```
-- **Nightly:** full refresh for the last **90 days** (all seats).
-  ```bash
-  python scripts/refresh_precompute.py --days 90 --validate
-  ```
-- **Weekly validation:** log row counts and min/max dates for `home_*_daily`, `rtb_*_daily`, and `config_*_daily`, and confirm `precompute_refresh_log` has recent entries.
+## Owner Checklist
 
-## 4) Switch the UI to Postgres once validated
-
-1. Validate the precompute outputs (use the `--validate` flag above and spot-check in BigQuery/Postgres).
-2. Update API configuration to point to the Postgres-backed storage.
-3. Redeploy API + dashboard services.
-4. Confirm the UI reads from Postgres-backed endpoints.
-
-## Validation checklist
-
-- Row counts match between SQLite exports and BigQuery staging tables.
-- Partitioned tables in BigQuery include the expected date ranges.
-- Precompute validation passes for the last 90 days.
-- UI analytics pages render with data in the expected date ranges.
-- `precompute_refresh_log` shows recent successful runs covering the date range.
-- `home_publisher_daily` and `rtb_publisher_daily` both populated (row count > 0).
-
-## 5) Automated Precompute Refresh (Cloud Scheduler)
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PRECOMPUTE_REFRESH_SECRET` | (required) | Secret for scheduled refresh endpoint |
-| `PRECOMPUTE_MONITOR_SECRET` | (required) | Secret for health check endpoint |
-| `PRECOMPUTE_REFRESH_DAYS` | 2 | Days to refresh on each scheduled run |
-| `PRECOMPUTE_REFRESH_MAX_AGE_HOURS` | 36 | Staleness threshold for health check |
-
-### Cloud Scheduler Setup
-
-**Endpoint:** `POST /precompute/refresh/scheduled`
-
-**Recommended schedule:** Every 6 hours (4x daily). This is an **incremental** refresh (e.g., last 2 days) and should be complemented by the nightly full refresh (last 90 days).
-
-```bash
-# Create Cloud Scheduler job
-gcloud scheduler jobs create http precompute-refresh \
-  --location=asia-southeast1 \
-  --schedule="0 */6 * * *" \
-  --uri="https://api.rtb.cat/precompute/refresh/scheduled" \
-  --http-method=POST \
-  --headers="X-Precompute-Refresh-Secret=YOUR_SECRET" \
-  --time-zone="Asia/Singapore"
-```
-
-### Health Monitoring
-
-**Endpoint:** `GET /precompute/health`
-
-Returns 200 if all caches refreshed within `PRECOMPUTE_REFRESH_MAX_AGE_HOURS`, otherwise 503.
-
-```bash
-curl -H "X-Precompute-Monitor-Secret: $SECRET" https://api.rtb.cat/precompute/health
-```
-
-**Sample healthy response:**
-```json
-{
-  "ok": true,
-  "max_age_hours": 36,
-  "stale_caches": [],
-  "cache_refresh_times": {
-    "home_publisher_daily": "2026-02-01T06:00:00Z",
-    "rtb_publisher_daily": "2026-02-01T06:00:00Z"
-  }
-}
-```
-
-### Trigger Rules Summary
-
-| Trigger | Scope | Days | Notes |
-|---------|-------|------|-------|
-| Scheduled (6h) | All seats | 2 | Catches late-arriving data |
-| After import | Affected seat | 7 | Via import completion hook |
-| Nightly (03:00) | All seats | 90 | Full refresh, low traffic |
-| Weekly (Sun) | All seats | 90 | Validation run with `--validate` |
+- [ ] Remove `DATABASE_PATH` from active deploy files
+- [ ] Remove/replace SQLite ops scripts
+- [ ] Remove SQLite fallback from API/system endpoints
+- [ ] Clean active docs and remove assistant leftovers
+- [ ] Add CI grep guard and pass verification
+- [ ] Validate production containers start and serve using Postgres DSNs only
