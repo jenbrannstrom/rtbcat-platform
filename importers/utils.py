@@ -6,7 +6,7 @@ import os
 from datetime import datetime
 from typing import Optional
 
-DB_PATH = os.path.expanduser("~/.catscan/catscan.db")
+DB_PATH = None  # Legacy SQLite removed — Postgres is the only runtime database
 
 
 def parse_date(date_str: str) -> str:

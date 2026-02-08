@@ -42,7 +42,6 @@ services:
       - ${DATA_DIR:-/home/catscan/.catscan}:/home/rtbcat/.catscan
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/home/rtbcat/.catscan/credentials/google-credentials.json
-      - DATABASE_PATH=/home/rtbcat/.catscan/catscan.db
       - CATSCAN_API_KEY=${CATSCAN_API_KEY:-}
       - RTBCAT_ADMIN_EMAIL=${RTBCAT_ADMIN_EMAIL:-}
       - RTBCAT_ADMIN_PASSWORD=${RTBCAT_ADMIN_PASSWORD:-}

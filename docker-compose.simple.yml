@@ -25,7 +25,6 @@ services:
       - catscan-data:/home/rtbcat/.catscan
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/credentials/google-credentials.json
-      - DATABASE_PATH=/home/rtbcat/.catscan/catscan.db
     restart: always
     logging:
       driver: "json-file"

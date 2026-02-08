@@ -52,7 +52,7 @@ CATSCAN_DIR = Path.home() / '.catscan'
 CREDENTIALS_DIR = CATSCAN_DIR / 'credentials'
 IMPORTS_DIR = CATSCAN_DIR / 'imports'
 LOGS_DIR = CATSCAN_DIR / 'logs'
-DB_PATH = Path(os.environ.get('DATABASE_PATH', str(CATSCAN_DIR / 'catscan.db')))
+DB_PATH = None  # Legacy SQLite removed — import tracking is in Postgres import_history
 TOKEN_PATH = CREDENTIALS_DIR / 'gmail-token.json'
 CLIENT_SECRET_PATH = CREDENTIALS_DIR / 'gmail-oauth-client.json'
 STATUS_PATH = CATSCAN_DIR / 'gmail_import_status.json'
@@ -290,37 +290,6 @@ def extract_report_date(filename: str) -> Optional[str]:
     return f"{raw[:4]}-{raw[4:6]}-{raw[6:]}"
 
 
-def ensure_gmail_runs_table() -> None:
-    import sqlite3
-    conn = sqlite3.connect(DB_PATH)
-    try:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS gmail_import_runs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                imported_at TEXT NOT NULL,
-                report_date TEXT,
-                buyer_account_id TEXT,
-                report_kind TEXT NOT NULL,
-                filename TEXT NOT NULL,
-                success INTEGER NOT NULL DEFAULT 0,
-                rows_imported INTEGER DEFAULT 0,
-                rows_duplicate INTEGER DEFAULT 0,
-                error TEXT
-            )
-            """
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_gmail_import_runs_date ON gmail_import_runs(report_date)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_gmail_import_runs_seat_date ON gmail_import_runs(buyer_account_id, report_date)"
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-
 def record_import_run(
     *,
     seat_id: Optional[str],
@@ -331,33 +300,10 @@ def record_import_run(
     rows_duplicate: int = 0,
     error: Optional[str] = None,
 ) -> None:
-    import sqlite3
-    ensure_gmail_runs_table()
-    report_date = extract_report_date(filename)
-    conn = sqlite3.connect(DB_PATH)
-    try:
-        conn.execute(
-            """
-            INSERT INTO gmail_import_runs (
-                imported_at, report_date, buyer_account_id, report_kind, filename,
-                success, rows_imported, rows_duplicate, error
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                datetime.now().isoformat(),
-                report_date,
-                seat_id,
-                report_kind,
-                filename,
-                1 if success else 0,
-                rows_imported,
-                rows_duplicate,
-                error,
-            ),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    """Log import run. Tracking is now handled by Postgres import_history
+    via the unified importer. This function is kept as a no-op for
+    call-site compatibility."""
+    pass
 
 
 def archive_to_s3(filepath: Path, report_type: Optional[str] = None, verbose: bool = True) -> Optional[str]:

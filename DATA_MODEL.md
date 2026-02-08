@@ -1,6 +1,6 @@
 # RTBcat Platform - Data Model Documentation
 
-This document describes the database schema for the RTBcat platform, a real-time bidding (RTB) analytics and creative management system. Postgres is the serving database for analytics and precompute; SQLite is no longer used for serving or analytics.
+This document describes the database schema for the RTBcat platform, a real-time bidding (RTB) analytics and creative management system. Postgres (Cloud SQL) is the serving database for analytics and precompute.
 
 ## Table of Contents
 
@@ -532,8 +532,7 @@ RTB buyer seats/accounts.
 
 The platform supports multiple bidder accounts, each with their own RTB endpoints and pretargeting configurations.
 
-**Database Location (container):** `/home/rtbcat/.catscan/catscan.db`
-**Database Location (host):** `/home/catscan/.catscan/catscan.db`
+**Database:** Cloud SQL PostgreSQL (accessed via `POSTGRES_SERVING_DSN`)
 
 **Key Concepts:**
 

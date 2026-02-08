@@ -60,11 +60,11 @@ class RetentionConfig(BaseModel):
 class DatabaseConfig(BaseModel):
     """Database configuration."""
 
-    path: str = Field(default="~/.catscan/catscan.db")
+    path: str = Field(default="")  # Legacy — unused, Postgres is primary
     echo: bool = False
     serving_postgres_dsn: Optional[str] = Field(
         default=None,
-        description="Optional Postgres DSN for read-only serving queries",
+        description="Postgres DSN for read-only serving queries",
     )
 
 

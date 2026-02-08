@@ -179,7 +179,6 @@ async def health_check(
     # The legacy config.enc may exist but is not used for displaying
     # "Connected Accounts" in the Setup page.
 
-    db_path = Path.home() / ".catscan" / "catscan.db"
     postgres_dsn = os.getenv("POSTGRES_DSN") or os.getenv("DATABASE_URL")
     database_exists = False
 
@@ -189,8 +188,6 @@ async def health_check(
             database_exists = bool(row and row.get("ok") == 1)
         except Exception:
             database_exists = False
-    else:
-        database_exists = db_path.exists()
 
     return HealthResponse(
         status="healthy",
