@@ -654,11 +654,11 @@ export function Sidebar() {
                       : undefined
                   }
                 >
-                  {process.env.NEXT_PUBLIC_APP_VERSION && process.env.NEXT_PUBLIC_APP_VERSION !== "0.9.0"
-                    ? `v${process.env.NEXT_PUBLIC_APP_VERSION}`
+                  {process.env.NEXT_PUBLIC_APP_VERSION && process.env.NEXT_PUBLIC_APP_VERSION !== "unknown"
+                    ? process.env.NEXT_PUBLIC_APP_VERSION
                     : process.env.NEXT_PUBLIC_GIT_SHA && process.env.NEXT_PUBLIC_GIT_SHA !== "unknown"
                       ? `sha-${process.env.NEXT_PUBLIC_GIT_SHA}`
-                      : `v${process.env.NEXT_PUBLIC_APP_VERSION || "0.9.0"}`}
+                      : "dev"}
                 </span>
                 <span>·</span>
                 <a
