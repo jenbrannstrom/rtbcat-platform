@@ -26,18 +26,15 @@ router = APIRouter(tags=["System"])
 
 
 def get_version() -> str:
-    """Get app version from VERSION file or environment variable."""
-    # First check environment variable (set in Docker)
+    """Get app version from IMAGE_TAG / APP_VERSION env (sha-based).
+
+    The canonical version identifier is the git SHA set via IMAGE_TAG
+    in docker-compose.gcp.yml.  The legacy VERSION file is ignored.
+    """
     if version := os.environ.get("APP_VERSION"):
         return version
-
-    # Try to read from VERSION file (for local development)
-    version_file = Path(__file__).parent.parent.parent / "VERSION"
-    if version_file.exists():
-        return version_file.read_text().strip()
-
-    # Fallback
-    return "0.9.0"
+    # Fall back to git sha so local dev also shows a useful identifier
+    return get_git_sha()
 
 
 def get_git_sha() -> str:
