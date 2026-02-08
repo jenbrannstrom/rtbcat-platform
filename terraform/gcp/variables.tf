@@ -225,6 +225,12 @@ variable "precompute_refresh_schedule" {
   default     = "0 3 * * *"
 }
 
+variable "creative_cache_refresh_schedule" {
+  description = "Cron schedule for Cloud Scheduler creative cache refresh"
+  type        = string
+  default     = "10 3 * * *"
+}
+
 # =============================================================================
 # Data Retention (GCS Parquet + BigQuery partitions)
 # =============================================================================

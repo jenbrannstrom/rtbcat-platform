@@ -98,6 +98,9 @@ precompute_refresh_max_age_hours = 36
 # Daily schedule for precompute refresh (UTC)
 precompute_refresh_schedule = "0 3 * * *"
 
+# Daily schedule for creative cache refresh (UTC)
+creative_cache_refresh_schedule = "10 3 * * *"
+
 # =============================================================================
 # Data Retention (GCS Parquet + BigQuery partitions)
 # =============================================================================

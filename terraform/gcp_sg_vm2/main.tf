@@ -36,6 +36,11 @@ resource "random_password" "gmail_import_secret" {
   special = false
 }
 
+resource "random_password" "creative_cache_refresh_secret" {
+  length  = 32
+  special = false
+}
+
 data "google_compute_network" "default" {
   name = "default"
 }
@@ -84,23 +89,24 @@ resource "google_compute_instance" "catscan_sg_vm2" {
   }
 
   metadata_startup_script = templatefile("${path.module}/startup.sh", {
-    app_name                   = var.app_name
-    environment                = var.environment
-    domain_name                = var.domain_name
-    enable_https               = var.enable_https
-    github_repo                = var.github_repo
-    github_branch              = var.github_branch
-    gcp_region                 = var.gcp_region
-    gcs_bucket                 = var.gcs_bucket
-    google_oauth_client_id     = var.google_oauth_client_id
-    google_oauth_client_secret = var.google_oauth_client_secret
-    allowed_email_domains      = var.allowed_email_domains
-    precompute_refresh_secret  = random_password.precompute_refresh_secret.result
-    precompute_monitor_secret  = random_password.precompute_monitor_secret.result
-    gmail_import_secret        = random_password.gmail_import_secret.result
-    precompute_refresh_days    = var.precompute_refresh_days
-    precompute_refresh_max_age = var.precompute_refresh_max_age_hours
-    artifact_registry_domain   = var.artifact_registry_domain
+    app_name                      = var.app_name
+    environment                   = var.environment
+    domain_name                   = var.domain_name
+    enable_https                  = var.enable_https
+    github_repo                   = var.github_repo
+    github_branch                 = var.github_branch
+    gcp_region                    = var.gcp_region
+    gcs_bucket                    = var.gcs_bucket
+    google_oauth_client_id        = var.google_oauth_client_id
+    google_oauth_client_secret    = var.google_oauth_client_secret
+    allowed_email_domains         = var.allowed_email_domains
+    precompute_refresh_secret     = random_password.precompute_refresh_secret.result
+    precompute_monitor_secret     = random_password.precompute_monitor_secret.result
+    gmail_import_secret           = random_password.gmail_import_secret.result
+    creative_cache_refresh_secret = random_password.creative_cache_refresh_secret.result
+    precompute_refresh_days       = var.precompute_refresh_days
+    precompute_refresh_max_age    = var.precompute_refresh_max_age_hours
+    artifact_registry_domain      = var.artifact_registry_domain
   })
 
   deletion_protection = var.environment == "production"
