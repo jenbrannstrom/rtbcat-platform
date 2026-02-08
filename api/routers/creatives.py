@@ -1,18 +1,29 @@
-"""Creatives Router - Creative management endpoints.
+"""Creatives Router - Creative management endpoints."""
 
-Phase 11.1: Decision Context Foundation
-Includes thumbnail status, waste flags, and country data for each creative.
-"""
+from __future__ import annotations
 
 import logging
-from typing import Optional, Any
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
 
-from api.dependencies import get_store, get_current_user, resolve_buyer_id, require_buyer_access
+from api.dependencies import (
+    get_current_user,
+    get_store,
+    require_buyer_access,
+    resolve_buyer_id,
+)
+from api.schemas.common import PaginationMeta
+from api.schemas.creatives import (
+    ClusterAssignment,
+    CreativeCountryBreakdownResponse,
+    CreativeResponse,
+    NewlyUploadedCreativesResponse,
+    PaginatedCreativesResponse,
+)
 from services.auth_service import User
 from services.creative_countries_service import CreativeCountriesService
+from services.creative_response_builder import build_creative_response
 from services.creatives_service import CreativesService
 
 logger = logging.getLogger(__name__)
@@ -21,174 +32,6 @@ router = APIRouter(tags=["Creatives"])
 countries_service = CreativeCountriesService()
 creatives_service = CreativesService()
 
-
-# =============================================================================
-# Pydantic Models
-# =============================================================================
-
-class VideoPreview(BaseModel):
-    """Video creative preview data."""
-    video_url: Optional[str] = None
-    thumbnail_url: Optional[str] = None
-    vast_xml: Optional[str] = None
-    duration: Optional[str] = None
-
-
-class HtmlPreview(BaseModel):
-    """HTML creative preview data."""
-    snippet: Optional[str] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
-    thumbnail_url: Optional[str] = None  # Phase 22: Extracted from HTML snippet
-
-
-class ImagePreview(BaseModel):
-    """Image data for native creatives."""
-    url: Optional[str] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
-
-
-class NativePreview(BaseModel):
-    """Native creative preview data."""
-    headline: Optional[str] = None
-    body: Optional[str] = None
-    call_to_action: Optional[str] = None
-    click_link_url: Optional[str] = None
-    image: Optional[ImagePreview] = None
-    logo: Optional[ImagePreview] = None
-
-
-class ThumbnailStatusResponse(BaseModel):
-    """Response model for thumbnail generation status."""
-    status: Optional[str] = None  # 'success', 'failed', or None if not processed
-    error_reason: Optional[str] = None  # 'url_expired', 'no_url', 'timeout', 'network_error', 'invalid_format'
-    has_thumbnail: bool = False  # True if thumbnail file exists
-    thumbnail_url: Optional[str] = None  # Phase 22: URL for HTML-extracted thumbnails
-
-
-class WasteFlagsResponse(BaseModel):
-    """Response model for waste detection flags."""
-    broken_video: bool = False  # thumbnail_status='failed' AND impressions > 0
-    zero_engagement: bool = False  # impressions > 1000 AND clicks = 0
-
-
-class CreativeResponse(BaseModel):
-    """Response model for creative data."""
-    id: str
-    name: str
-    format: str
-    account_id: Optional[str] = None
-    buyer_id: Optional[str] = None
-    approval_status: Optional[str] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
-    final_url: Optional[str] = None
-    display_url: Optional[str] = None
-    utm_source: Optional[str] = None
-    utm_medium: Optional[str] = None
-    utm_campaign: Optional[str] = None
-    utm_content: Optional[str] = None
-    utm_term: Optional[str] = None
-    advertiser_name: Optional[str] = None
-    campaign_id: Optional[str] = None
-    cluster_id: Optional[str] = None
-    seat_name: Optional[str] = None
-    # Phase 22: Country data for clustering
-    country: Optional[str] = None  # Primary country by spend
-    # Preview data based on format
-    video: Optional[VideoPreview] = None
-    html: Optional[HtmlPreview] = None
-    native: Optional[NativePreview] = None
-    # Phase 10.4: Thumbnail status and waste detection
-    thumbnail_status: Optional[ThumbnailStatusResponse] = None
-    waste_flags: Optional[WasteFlagsResponse] = None
-    # Phase 29: App info and disapproval tracking
-    app_id: Optional[str] = None
-    app_name: Optional[str] = None
-    app_store: Optional[str] = None
-    is_disapproved: bool = False
-    disapproval_reasons: Optional[list] = None
-    serving_restrictions: Optional[list] = None
-    # Language detection (Creative geo display)
-    detected_language: Optional[str] = None
-    detected_language_code: Optional[str] = None
-    language_confidence: Optional[float] = None
-    language_source: Optional[str] = None
-    language_analyzed_at: Optional[str] = None
-    language_analysis_error: Optional[str] = None
-
-
-class ClusterAssignment(BaseModel):
-    """Request model for cluster assignment."""
-    creative_id: str
-    cluster_id: str
-
-
-class PaginationMeta(BaseModel):
-    """Pagination metadata for list responses."""
-    timeframe_days: Optional[int] = None
-    total: int
-    returned: int
-    limit: int
-    offset: int
-    has_more: bool
-
-
-class PaginatedCreativesResponse(BaseModel):
-    """Paginated response for creatives list."""
-    data: list[CreativeResponse]
-    meta: PaginationMeta
-
-
-class NewlyUploadedCreativesResponse(BaseModel):
-    """Response model for newly uploaded creatives."""
-    creatives: list[dict]
-    total_count: int
-    period_start: str
-    period_end: str
-
-
-class CreativeCountryMetrics(BaseModel):
-    """Country-level metrics for a creative."""
-    country_code: str
-    country_name: str  # Human-readable name
-    country_iso3: Optional[str] = None
-    spend_micros: int
-    impressions: int
-    clicks: int
-    spend_percent: float  # % of total spend for this creative
-
-
-class CreativeCountryBreakdownResponse(BaseModel):
-    """Response for creative country breakdown."""
-    creative_id: str
-    countries: list[CreativeCountryMetrics]
-    total_countries: int
-    period_days: int
-
-
-def _convert_thumbnail_status(ts) -> ThumbnailStatusResponse:
-    """Convert service ThumbnailStatus to response model."""
-    return ThumbnailStatusResponse(
-        status=ts.status,
-        error_reason=ts.error_reason,
-        has_thumbnail=ts.has_thumbnail,
-        thumbnail_url=ts.thumbnail_url,
-    )
-
-
-def _convert_waste_flags(wf) -> WasteFlagsResponse:
-    """Convert service WasteFlags to response model."""
-    return WasteFlagsResponse(
-        broken_video=wf.broken_video,
-        zero_engagement=wf.zero_engagement,
-    )
-
-
-# =============================================================================
-# Endpoints
-# =============================================================================
 
 @router.get("/creatives", response_model=list[CreativeResponse])
 async def list_creatives(
@@ -204,74 +47,31 @@ async def list_creatives(
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
-    """List creatives with optional filtering.
-
-    Phase 11.1: Decision Context Foundation
-    - By default, slim=True excludes large fields like vast_xml and html snippets
-    - Set active_only=True to hide creatives with zero activity in the timeframe
-    - Includes thumbnail_status and waste_flags for each creative
-    """
+    """List creatives with optional filtering."""
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     creatives = await store.list_creatives(
         campaign_id=campaign_id,
         cluster_id=cluster_id,
         buyer_id=buyer_id,
         format=format,
-        limit=limit if not active_only else limit * 3,  # Fetch more if filtering
+        limit=limit if not active_only else limit * 3,
         offset=offset,
     )
 
-    # If active_only, filter to creatives with activity in timeframe
     if active_only and creatives:
         creatives = await creatives_service.filter_active_creatives(creatives, days, limit)
 
-    # Get thumbnail status, waste flags, and country data via service
     creative_ids = [c.id for c in creatives]
     ctx = await creatives_service.get_list_context(store, creative_ids, days)
 
     return [
-        CreativeResponse(
-            id=c.id,
-            name=c.name,
-            format=c.format,
-            account_id=c.account_id,
-            buyer_id=c.buyer_id,
-            approval_status=c.approval_status,
-            width=c.width,
-            height=c.height,
-            final_url=c.final_url,
-            display_url=c.display_url,
-            utm_source=c.utm_source,
-            utm_medium=c.utm_medium,
-            utm_campaign=c.utm_campaign,
-            utm_content=c.utm_content,
-            utm_term=c.utm_term,
-            advertiser_name=c.advertiser_name,
-            campaign_id=c.campaign_id,
-            cluster_id=c.cluster_id,
-            seat_name=c.seat_name,
-            country=ctx.country_data.get(c.id),
-            thumbnail_status=_convert_thumbnail_status(ctx.thumbnail_statuses[c.id]) if c.id in ctx.thumbnail_statuses else None,
-            waste_flags=_convert_waste_flags(ctx.waste_flags[c.id]) if c.id in ctx.waste_flags else None,
-            # Phase 29: App info and disapproval
-            app_id=c.app_id,
-            app_name=c.app_name,
-            app_store=c.app_store,
-            is_disapproved=c.approval_status == "DISAPPROVED",
-            disapproval_reasons=c.disapproval_reasons,
-            serving_restrictions=c.serving_restrictions,
-            # Language detection
-            detected_language=c.detected_language,
-            detected_language_code=c.detected_language_code,
-            language_confidence=c.language_confidence,
-            language_source=c.language_source,
-            language_analyzed_at=c.language_analyzed_at.isoformat() if c.language_analyzed_at else None,
-            language_analysis_error=c.language_analysis_error,
-            **creatives_service.build_preview(
-                c,
-                slim=slim,
-                html_thumbnail_url=ctx.thumbnail_statuses[c.id].thumbnail_url if c.id in ctx.thumbnail_statuses else None
-            ),
+        build_creative_response(
+            c,
+            ctx,
+            c.id,
+            creatives_service,
+            slim=slim,
+            source="cache",
         )
         for c in creatives
     ]
@@ -291,20 +91,14 @@ async def list_creatives_paginated(
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
-    """List creatives with pagination metadata.
-
-    Phase 11.4: Scale Readiness
-    Returns paginated results with metadata for large accounts.
-    """
+    """List creatives with pagination metadata."""
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
 
-    # Get total count for pagination
     total = await store.get_creative_count(
         buyer_id=buyer_id,
         format=format,
     )
 
-    # Fetch creatives
     creatives = await store.list_creatives(
         campaign_id=campaign_id,
         cluster_id=cluster_id,
@@ -314,57 +108,20 @@ async def list_creatives_paginated(
         offset=offset,
     )
 
-    # Filter by activity if requested
     if active_only and creatives:
         creatives = await creatives_service.filter_active_creatives(creatives, days, limit)
 
-    # Get thumbnail status, waste flags, and country data via service
     creative_ids = [c.id for c in creatives]
     ctx = await creatives_service.get_list_context(store, creative_ids, days)
 
     data = [
-        CreativeResponse(
-            id=c.id,
-            name=c.name,
-            format=c.format,
-            account_id=c.account_id,
-            buyer_id=c.buyer_id,
-            approval_status=c.approval_status,
-            width=c.width,
-            height=c.height,
-            final_url=c.final_url,
-            display_url=c.display_url,
-            utm_source=c.utm_source,
-            utm_medium=c.utm_medium,
-            utm_campaign=c.utm_campaign,
-            utm_content=c.utm_content,
-            utm_term=c.utm_term,
-            advertiser_name=c.advertiser_name,
-            campaign_id=c.campaign_id,
-            cluster_id=c.cluster_id,
-            seat_name=c.seat_name,
-            country=ctx.country_data.get(c.id),
-            thumbnail_status=_convert_thumbnail_status(ctx.thumbnail_statuses[c.id]) if c.id in ctx.thumbnail_statuses else None,
-            waste_flags=_convert_waste_flags(ctx.waste_flags[c.id]) if c.id in ctx.waste_flags else None,
-            # Phase 29: App info and disapproval
-            app_id=c.app_id,
-            app_name=c.app_name,
-            app_store=c.app_store,
-            is_disapproved=c.approval_status == "DISAPPROVED",
-            disapproval_reasons=c.disapproval_reasons,
-            serving_restrictions=c.serving_restrictions,
-            # Language detection
-            detected_language=c.detected_language,
-            detected_language_code=c.detected_language_code,
-            language_confidence=c.language_confidence,
-            language_source=c.language_source,
-            language_analyzed_at=c.language_analyzed_at.isoformat() if c.language_analyzed_at else None,
-            language_analysis_error=c.language_analysis_error,
-            **creatives_service.build_preview(
-                c,
-                slim=slim,
-                html_thumbnail_url=ctx.thumbnail_statuses[c.id].thumbnail_url if c.id in ctx.thumbnail_statuses else None
-            ),
+        build_creative_response(
+            c,
+            ctx,
+            c.id,
+            creatives_service,
+            slim=slim,
+            source="cache",
         )
         for c in creatives
     ]
@@ -391,28 +148,21 @@ async def get_newly_uploaded_creatives(
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
-    """Get creatives that were first seen within the specified time period.
-
-    Returns creatives that appeared for the first time in imports during the specified period.
-    This is useful for identifying new creatives added to the account.
-    """
+    """Get creatives first seen within the specified period."""
     try:
         buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
-
         result = await creatives_service.get_newly_uploaded_creatives(
             days=days,
             limit=limit,
             creative_format=format,
             buyer_id=buyer_id,
         )
-
         return NewlyUploadedCreativesResponse(
             creatives=result.creatives,
             total_count=result.total_count or 0,
             period_start=result.period_start.strftime("%Y-%m-%d"),
             period_end=result.period_end.strftime("%Y-%m-%d"),
         )
-
     except Exception as e:
         logger.error(f"Failed to get newly uploaded creatives: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get newly uploaded creatives: {str(e)}")
@@ -425,60 +175,21 @@ async def get_creative(
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
-    """Get a specific creative by ID.
-
-    Includes thumbnail_status and waste_flags.
-    """
+    """Get a specific creative by ID with preview context."""
     creative = await store.get_creative(creative_id)
     if not creative:
         raise HTTPException(status_code=404, detail="Creative not found")
     if creative.buyer_id:
         await require_buyer_access(creative.buyer_id, store=store, user=user)
 
-    # Get thumbnail status and waste flags via service
     ctx = await creatives_service.get_list_context(store, [creative_id], days)
-
-    return CreativeResponse(
-        id=creative.id,
-        name=creative.name,
-        format=creative.format,
-        account_id=creative.account_id,
-        buyer_id=creative.buyer_id,
-        approval_status=creative.approval_status,
-        width=creative.width,
-        height=creative.height,
-        final_url=creative.final_url,
-        display_url=creative.display_url,
-        utm_source=creative.utm_source,
-        utm_medium=creative.utm_medium,
-        utm_campaign=creative.utm_campaign,
-        utm_content=creative.utm_content,
-        utm_term=creative.utm_term,
-        advertiser_name=creative.advertiser_name,
-        campaign_id=creative.campaign_id,
-        cluster_id=creative.cluster_id,
-        seat_name=creative.seat_name,
-        thumbnail_status=_convert_thumbnail_status(ctx.thumbnail_statuses[creative_id]) if creative_id in ctx.thumbnail_statuses else None,
-        waste_flags=_convert_waste_flags(ctx.waste_flags[creative_id]) if creative_id in ctx.waste_flags else None,
-        # Phase 29: App info and disapproval
-        app_id=creative.app_id,
-        app_name=creative.app_name,
-        app_store=creative.app_store,
-        is_disapproved=creative.approval_status == "DISAPPROVED",
-        disapproval_reasons=creative.disapproval_reasons,
-        serving_restrictions=creative.serving_restrictions,
-        # Language detection
-        detected_language=creative.detected_language,
-        detected_language_code=creative.detected_language_code,
-        language_confidence=creative.language_confidence,
-        language_source=creative.language_source,
-        language_analyzed_at=creative.language_analyzed_at.isoformat() if creative.language_analyzed_at else None,
-        language_analysis_error=creative.language_analysis_error,
-        **creatives_service.build_preview(
-            creative,
-            slim=False,
-            html_thumbnail_url=ctx.thumbnail_statuses[creative_id].thumbnail_url if creative_id in ctx.thumbnail_statuses else None
-        ),
+    return build_creative_response(
+        creative,
+        ctx,
+        creative_id,
+        creatives_service,
+        slim=False,
+        source="cache",
     )
 
 
@@ -510,10 +221,7 @@ async def assign_cluster(
         raise HTTPException(status_code=404, detail="Creative not found")
     if creative.buyer_id:
         await require_buyer_access(creative.buyer_id, store=store, user=user)
-    await store.update_creative_cluster(
-        assignment.creative_id,
-        assignment.cluster_id,
-    )
+    await store.update_creative_cluster(assignment.creative_id, assignment.cluster_id)
     return {"status": "updated", "creative_id": assignment.creative_id}
 
 
@@ -541,13 +249,7 @@ async def get_creative_countries(
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
-    """Get country breakdown for a specific creative.
-
-    Returns all countries where this creative has served,
-    with spend, impressions, and clicks per country.
-    Useful for verifying localization configuration.
-    """
-    # Verify creative exists
+    """Get country breakdown for a specific creative."""
     creative = await store.get_creative(creative_id)
     if not creative:
         raise HTTPException(status_code=404, detail="Creative not found")
@@ -556,3 +258,4 @@ async def get_creative_countries(
 
     payload = await countries_service.build_country_metrics(creative_id, days)
     return CreativeCountryBreakdownResponse(**payload)
+
