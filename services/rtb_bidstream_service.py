@@ -510,7 +510,7 @@ class RtbBidstreamService:
 
             status = await self.get_precompute_status(table_name, days, filters, params)
 
-            if not status.exists:
+            if not status.exists and breakdown_type not in ("geo", "publisher"):
                 return {
                     "billing_id": billing_id,
                     "breakdown_by": breakdown_type,
@@ -523,7 +523,7 @@ class RtbBidstreamService:
                     ),
                 }
 
-            if not status.has_rows:
+            if not status.has_rows and breakdown_type not in ("geo", "publisher"):
                 return {
                     "billing_id": billing_id,
                     "breakdown_by": breakdown_type,
@@ -552,8 +552,8 @@ class RtbBidstreamService:
 
         if not rows:
             reason_map = {
-                "geo": "No geo breakdown data. The catscan-quality report may be missing Country fields.",
-                "publisher": "No publisher breakdown data. The catscan-quality report may be missing Publisher fields.",
+                "geo": "No geo breakdown data. Neither billing-level CSV data nor buyer-level fallback data is available.",
+                "publisher": "No publisher breakdown data. Neither billing-level CSV data nor buyer-level fallback data is available.",
                 "creative": "No creative breakdown data. Run a config precompute refresh after importing catscan-quality.",
                 "size": "No size breakdown data. Run a config precompute refresh after importing catscan-quality.",
             }
@@ -564,12 +564,16 @@ class RtbBidstreamService:
                 "is_aggregate": False,
                 "has_funnel_metrics": False,
                 "no_data_reason": reason_map.get(breakdown_type, "No data available."),
+                "data_state": "unavailable",
+                "fallback_applied": False,
+                "fallback_reason": "no_canonical_rows",
             }
 
         # Build breakdown items
         breakdown = self._build_breakdown_items(
             rows, breakdown_type, target_geo_ids, target_country_codes
         )
+        fallback_applied = any(item.get("data_scope") == "buyer_fallback" for item in breakdown)
 
         return {
             "billing_id": billing_id,
@@ -577,6 +581,11 @@ class RtbBidstreamService:
             "breakdown": breakdown,
             "is_aggregate": False,
             "has_funnel_metrics": any(item.get("bids_in_auction", 0) > 0 for item in breakdown),
+            "data_state": "degraded" if fallback_applied else "healthy",
+            "fallback_applied": fallback_applied,
+            "fallback_reason": (
+                "buyer_level_dimension_fallback" if fallback_applied else None
+            ),
         }
 
     async def _get_breakdown_rows(
@@ -657,6 +666,8 @@ class RtbBidstreamService:
                 "win_rate": round(win_rate, 1),
                 "waste_rate": round(100 - win_rate, 1),
                 "spend_usd": round(spend_micros / 1_000_000, 2),
+                "data_scope": row.get("data_scope", "billing"),
+                "data_source": row.get("data_source", "csv"),
             }
 
             if bids > 0 or bids_in_auction > 0:

@@ -127,6 +127,264 @@ def _ensure_tables(conn) -> None:
         "ON config_creative_daily(metric_date, buyer_account_id, billing_id, creative_size)"
     )
 
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS fact_delivery_daily (
+            metric_date DATE NOT NULL,
+            buyer_account_id TEXT NOT NULL,
+            billing_id TEXT NOT NULL DEFAULT '',
+            country TEXT NOT NULL DEFAULT '',
+            publisher_id TEXT NOT NULL DEFAULT '',
+            publisher_name TEXT NOT NULL DEFAULT '',
+            reached_queries BIGINT NOT NULL DEFAULT 0,
+            impressions BIGINT NOT NULL DEFAULT 0,
+            clicks BIGINT NOT NULL DEFAULT 0,
+            spend_micros BIGINT NOT NULL DEFAULT 0,
+            source_used TEXT NOT NULL,
+            source_priority INTEGER NOT NULL DEFAULT 1,
+            data_scope TEXT NOT NULL DEFAULT 'billing',
+            confidence NUMERIC(5,4) NOT NULL DEFAULT 1.0000,
+            PRIMARY KEY (
+                metric_date, buyer_account_id, billing_id, country, publisher_id, source_used, data_scope
+            )
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_fact_delivery_buyer_date ON fact_delivery_daily(buyer_account_id, metric_date)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_fact_delivery_billing_date ON fact_delivery_daily(billing_id, metric_date)"
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS fact_dimension_gaps_daily (
+            metric_date DATE NOT NULL,
+            buyer_account_id TEXT NOT NULL,
+            total_rows BIGINT NOT NULL DEFAULT 0,
+            missing_country_rows BIGINT NOT NULL DEFAULT 0,
+            missing_publisher_rows BIGINT NOT NULL DEFAULT 0,
+            missing_billing_rows BIGINT NOT NULL DEFAULT 0,
+            country_missing_pct NUMERIC(5,2) NOT NULL DEFAULT 100.00,
+            publisher_missing_pct NUMERIC(5,2) NOT NULL DEFAULT 100.00,
+            billing_missing_pct NUMERIC(5,2) NOT NULL DEFAULT 100.00,
+            availability_state TEXT NOT NULL DEFAULT 'unavailable',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (metric_date, buyer_account_id)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_fact_dimension_gaps_buyer_date ON fact_dimension_gaps_daily(buyer_account_id, metric_date)"
+    )
+
+
+def _refresh_canonical_reconciliation(
+    conn,
+    *,
+    date_list: list[str],
+    buyer_account_id: Optional[str],
+) -> None:
+    """Rebuild canonical delivery facts from raw + API precompute tables."""
+    delete_params = [date_list]
+    buyer_filter = ""
+    if buyer_account_id:
+        buyer_filter = " AND buyer_account_id = %s"
+        delete_params.append(buyer_account_id)
+
+    conn.execute(
+        f"DELETE FROM fact_delivery_daily WHERE metric_date::text = ANY(%s){buyer_filter}",
+        tuple(delete_params),
+    )
+    conn.execute(
+        f"DELETE FROM fact_dimension_gaps_daily WHERE metric_date::text = ANY(%s){buyer_filter}",
+        tuple(delete_params),
+    )
+
+    # Billing-scoped geo facts from CSV-quality data.
+    insert_params = [date_list]
+    if buyer_account_id:
+        insert_params.append(buyer_account_id)
+    conn.execute(
+        f"""
+        INSERT INTO fact_delivery_daily (
+            metric_date, buyer_account_id, billing_id, country, publisher_id, publisher_name,
+            reached_queries, impressions, clicks, spend_micros,
+            source_used, source_priority, data_scope, confidence
+        )
+        SELECT
+            metric_date,
+            buyer_account_id,
+            billing_id,
+            country,
+            '',
+            '',
+            SUM(reached_queries),
+            SUM(impressions),
+            SUM(clicks),
+            SUM(spend_micros),
+            'csv',
+            1,
+            'billing',
+            1.0000
+        FROM rtb_daily
+        WHERE metric_date::text = ANY(%s)
+          AND billing_id IS NOT NULL AND billing_id != ''
+          AND buyer_account_id IS NOT NULL AND buyer_account_id != ''
+          AND country IS NOT NULL AND country != ''{buyer_filter}
+        GROUP BY metric_date, buyer_account_id, billing_id, country
+        """,
+        tuple(insert_params),
+    )
+
+    # Billing-scoped publisher facts from CSV-quality data.
+    conn.execute(
+        f"""
+        INSERT INTO fact_delivery_daily (
+            metric_date, buyer_account_id, billing_id, country, publisher_id, publisher_name,
+            reached_queries, impressions, clicks, spend_micros,
+            source_used, source_priority, data_scope, confidence
+        )
+        SELECT
+            metric_date,
+            buyer_account_id,
+            billing_id,
+            '',
+            publisher_id,
+            COALESCE(MAX(publisher_name), ''),
+            SUM(reached_queries),
+            SUM(impressions),
+            SUM(clicks),
+            SUM(spend_micros),
+            'csv',
+            1,
+            'billing',
+            1.0000
+        FROM rtb_daily
+        WHERE metric_date::text = ANY(%s)
+          AND billing_id IS NOT NULL AND billing_id != ''
+          AND buyer_account_id IS NOT NULL AND buyer_account_id != ''
+          AND publisher_id IS NOT NULL AND publisher_id != ''{buyer_filter}
+        GROUP BY metric_date, buyer_account_id, billing_id, publisher_id
+        """,
+        tuple(insert_params),
+    )
+
+    # Buyer-level fallback geo facts from API pipeline (no fake billing joins).
+    conn.execute(
+        f"""
+        INSERT INTO fact_delivery_daily (
+            metric_date, buyer_account_id, billing_id, country, publisher_id, publisher_name,
+            reached_queries, impressions, clicks, spend_micros,
+            source_used, source_priority, data_scope, confidence
+        )
+        SELECT
+            g.metric_date,
+            g.buyer_account_id,
+            '',
+            g.country,
+            '',
+            '',
+            SUM(g.reached_queries),
+            SUM(g.impressions),
+            0,
+            0,
+            'api',
+            2,
+            'buyer_fallback',
+            0.6000
+        FROM rtb_geo_daily g
+        WHERE g.metric_date::text = ANY(%s)
+          AND g.country IS NOT NULL AND g.country != ''{buyer_filter}
+          AND NOT EXISTS (
+              SELECT 1
+              FROM fact_delivery_daily f
+              WHERE f.metric_date = g.metric_date
+                AND f.buyer_account_id = g.buyer_account_id
+                AND f.country != ''
+                AND f.data_scope = 'billing'
+          )
+        GROUP BY g.metric_date, g.buyer_account_id, g.country
+        """,
+        tuple(insert_params),
+    )
+
+    # Buyer-level fallback publisher facts from API pipeline.
+    conn.execute(
+        f"""
+        INSERT INTO fact_delivery_daily (
+            metric_date, buyer_account_id, billing_id, country, publisher_id, publisher_name,
+            reached_queries, impressions, clicks, spend_micros,
+            source_used, source_priority, data_scope, confidence
+        )
+        SELECT
+            p.metric_date,
+            p.buyer_account_id,
+            '',
+            '',
+            p.publisher_id,
+            COALESCE(MAX(p.publisher_name), ''),
+            SUM(p.reached_queries),
+            SUM(p.impressions),
+            0,
+            0,
+            'api',
+            2,
+            'buyer_fallback',
+            0.6000
+        FROM rtb_publisher_daily p
+        WHERE p.metric_date::text = ANY(%s)
+          AND p.publisher_id IS NOT NULL AND p.publisher_id != ''{buyer_filter}
+          AND NOT EXISTS (
+              SELECT 1
+              FROM fact_delivery_daily f
+              WHERE f.metric_date = p.metric_date
+                AND f.buyer_account_id = p.buyer_account_id
+                AND f.publisher_id != ''
+                AND f.data_scope = 'billing'
+          )
+        GROUP BY p.metric_date, p.buyer_account_id, p.publisher_id
+        """,
+        tuple(insert_params),
+    )
+
+    # Daily dimension gap summary from CSV stream.
+    conn.execute(
+        f"""
+        INSERT INTO fact_dimension_gaps_daily (
+            metric_date, buyer_account_id,
+            total_rows, missing_country_rows, missing_publisher_rows, missing_billing_rows,
+            country_missing_pct, publisher_missing_pct, billing_missing_pct,
+            availability_state, updated_at
+        )
+        SELECT
+            metric_date,
+            buyer_account_id,
+            COUNT(*) AS total_rows,
+            SUM(CASE WHEN country IS NULL OR country = '' THEN 1 ELSE 0 END) AS missing_country_rows,
+            SUM(CASE WHEN publisher_id IS NULL OR publisher_id = '' THEN 1 ELSE 0 END) AS missing_publisher_rows,
+            SUM(CASE WHEN billing_id IS NULL OR billing_id = '' THEN 1 ELSE 0 END) AS missing_billing_rows,
+            CASE WHEN COUNT(*) = 0 THEN 100.00 ELSE ROUND(SUM(CASE WHEN country IS NULL OR country = '' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) END AS country_missing_pct,
+            CASE WHEN COUNT(*) = 0 THEN 100.00 ELSE ROUND(SUM(CASE WHEN publisher_id IS NULL OR publisher_id = '' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) END AS publisher_missing_pct,
+            CASE WHEN COUNT(*) = 0 THEN 100.00 ELSE ROUND(SUM(CASE WHEN billing_id IS NULL OR billing_id = '' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) END AS billing_missing_pct,
+            CASE
+                WHEN COUNT(*) = 0 THEN 'unavailable'
+                WHEN ROUND(SUM(CASE WHEN country IS NULL OR country = '' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) > 50
+                  OR ROUND(SUM(CASE WHEN publisher_id IS NULL OR publisher_id = '' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) > 50
+                THEN 'degraded'
+                ELSE 'healthy'
+            END AS availability_state,
+            CURRENT_TIMESTAMP
+        FROM rtb_daily
+        WHERE metric_date::text = ANY(%s)
+          AND buyer_account_id IS NOT NULL AND buyer_account_id != ''{buyer_filter}
+        GROUP BY metric_date, buyer_account_id
+        """,
+        tuple(insert_params),
+    )
+
 
 async def refresh_config_breakdowns(
     start_date: Optional[str] = None,
@@ -400,6 +658,12 @@ async def refresh_config_breakdowns(
                 )
                 for row in creative_rows
             ],
+        )
+
+        _refresh_canonical_reconciliation(
+            conn,
+            date_list=date_list,
+            buyer_account_id=buyer_account_id,
         )
 
         record_refresh_log_postgres(

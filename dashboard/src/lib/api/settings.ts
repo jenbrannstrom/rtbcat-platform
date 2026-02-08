@@ -230,6 +230,8 @@ export interface ConfigBreakdownItem {
   impressions: number;
   win_rate: number;
   waste_rate: number;
+  data_scope?: "billing" | "buyer_fallback";
+  data_source?: string;
   creative_language?: string | null;
   creative_language_code?: string | null;
   target_countries?: string[];
@@ -243,6 +245,10 @@ export interface ConfigBreakdownResponse {
   breakdown: ConfigBreakdownItem[];
   is_aggregate?: boolean;
   no_data_reason?: string;  // Explains why breakdown data is missing
+  data_state?: "healthy" | "degraded" | "unavailable";
+  fallback_applied?: boolean;
+  fallback_reason?: string | null;
+  has_funnel_metrics?: boolean;
 }
 
 export interface ConfigCreativesItem {
