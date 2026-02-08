@@ -11,7 +11,6 @@ Environment variables:
 - AUTHING_ISSUER: Authing OIDC issuer URL (e.g., https://catscan.authing.cn/oidc)
 """
 
-import os
 import uuid
 import logging
 import secrets
@@ -23,6 +22,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
 from services.auth_service import AuthService
+from services.secrets_manager import get_secrets_manager
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +39,10 @@ router = APIRouter(prefix="/auth/authing", tags=["Authing Authentication"])
 
 def get_authing_config() -> dict:
     """Get Authing configuration from environment variables."""
-    app_id = os.environ.get("AUTHING_APP_ID")
-    app_secret = os.environ.get("AUTHING_APP_SECRET")
-    issuer = os.environ.get("AUTHING_ISSUER")
+    secrets_mgr = get_secrets_manager()
+    app_id = secrets_mgr.get("AUTHING_APP_ID")
+    app_secret = secrets_mgr.get("AUTHING_APP_SECRET")
+    issuer = secrets_mgr.get("AUTHING_ISSUER")
 
     if not all([app_id, app_secret, issuer]):
         raise HTTPException(

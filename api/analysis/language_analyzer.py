@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from dataclasses import dataclass
 from typing import Optional
+from services.secrets_manager import get_secrets_manager
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +25,7 @@ def get_gemini_api_key_sync(db_path: Optional[str] = None) -> Optional[str]:
     Returns:
         API key if configured, None otherwise.
     """
-    # Environment variable is the only supported source
-    return os.environ.get("GEMINI_API_KEY")
+    return get_secrets_manager().get("GEMINI_API_KEY")
 
 
 @dataclass

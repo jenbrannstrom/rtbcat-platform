@@ -13,6 +13,7 @@ import google.auth
 from fastapi import HTTPException
 
 from collectors import BuyerSeatsClient
+from services.secrets_manager import get_secrets_manager
 from storage.models import ServiceAccount
 
 logger = logging.getLogger(__name__)
@@ -295,7 +296,7 @@ class ConfigService:
                 "message": "Gemini API key configured from database",
             }
 
-        env_key = os.environ.get("GEMINI_API_KEY")
+        env_key = get_secrets_manager().get("GEMINI_API_KEY")
         if env_key:
             return {
                 "configured": True,
