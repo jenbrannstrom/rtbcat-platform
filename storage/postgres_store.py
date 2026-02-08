@@ -345,7 +345,7 @@ class PostgresStore:
         placeholders = ", ".join(["%s"] * len(creative_ids))
         rows = await pg_query(
             f"""
-            SELECT creative_id, status, error_reason, updated_at
+            SELECT creative_id, status, error_reason, gcs_path, updated_at
             FROM creative_thumbnails
             WHERE creative_id IN ({placeholders})
             """,
@@ -355,9 +355,123 @@ class PostgresStore:
             row["creative_id"]: {
                 "status": row["status"],
                 "error_reason": row["error_reason"],
+                "thumbnail_url": row.get("gcs_path"),
                 "updated_at": row["updated_at"],
             }
             for row in rows
+        }
+
+    async def process_html_thumbnails(
+        self,
+        limit: int = 100,
+        force_retry: bool = False,
+        creative_ids: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        """Extract thumbnail URLs from HTML creative snippets and cache in creative_thumbnails."""
+        import json
+        import re
+
+        where_parts = ["c.format = 'HTML'"]
+        params: list[Any] = []
+
+        if creative_ids:
+            placeholders = ", ".join(["%s"] * len(creative_ids))
+            where_parts.append(f"c.id IN ({placeholders})")
+            params.extend(creative_ids)
+
+        if not force_retry:
+            where_parts.append("""
+                c.id NOT IN (
+                    SELECT creative_id FROM creative_thumbnails WHERE status = 'success'
+                )
+            """)
+
+        where_clause = " AND ".join(where_parts)
+
+        rows = await pg_query(
+            f"""
+            SELECT c.id, c.raw_data
+            FROM creatives c
+            WHERE {where_clause}
+            ORDER BY c.updated_at DESC NULLS LAST
+            LIMIT %s
+            """,
+            tuple([*params, limit]),
+        )
+
+        processed = 0
+        success = 0
+        failed = 0
+        no_image_found = 0
+
+        patterns = [
+            r'<img[^>]+src=["\\\'](https?://[^"\\\']+)["\\\']',
+            r'background-image\\s*:\\s*url\\((["\\\']?)(https?://[^)"\\\']+)\\1\\)',
+            r'document\\.write\\(.*?(https?://[^"\\\']+\\.(?:png|jpg|jpeg|gif|webp))',
+            r'(https?://[^\\s"\\\']+\\.(?:png|jpg|jpeg|gif|webp))',
+        ]
+
+        for row in rows:
+            processed += 1
+            creative_id = row["id"]
+            raw_value = row.get("raw_data")
+            raw_data = {}
+            if isinstance(raw_value, dict):
+                raw_data = raw_value
+            elif isinstance(raw_value, str) and raw_value:
+                try:
+                    raw_data = json.loads(raw_value)
+                except Exception:
+                    raw_data = {}
+
+            html_data = raw_data.get("html") if isinstance(raw_data, dict) else None
+            snippet = ""
+            if isinstance(html_data, dict):
+                snippet = html_data.get("snippet") or ""
+
+            image_url = None
+            if snippet:
+                for pattern in patterns:
+                    match = re.search(pattern, snippet, re.IGNORECASE | re.DOTALL)
+                    if match:
+                        image_url = match.group(match.lastindex or 1)
+                        break
+
+            if image_url:
+                await pg_execute(
+                    """
+                    INSERT INTO creative_thumbnails (creative_id, status, error_reason, gcs_path, updated_at)
+                    VALUES (%s, 'success', NULL, %s, CURRENT_TIMESTAMP)
+                    ON CONFLICT (creative_id) DO UPDATE SET
+                        status = 'success',
+                        error_reason = NULL,
+                        gcs_path = EXCLUDED.gcs_path,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (creative_id, image_url),
+                )
+                success += 1
+            else:
+                await pg_execute(
+                    """
+                    INSERT INTO creative_thumbnails (creative_id, status, error_reason, updated_at)
+                    VALUES (%s, 'failed', 'no_image_found', CURRENT_TIMESTAMP)
+                    ON CONFLICT (creative_id) DO UPDATE SET
+                        status = 'failed',
+                        error_reason = 'no_image_found',
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (creative_id,),
+                )
+                failed += 1
+                no_image_found += 1
+
+        return {
+            "processed": processed,
+            "success": success,
+            "failed": failed,
+            "no_image_found": no_image_found,
+            "message": f"Processed {processed} HTML creatives",
         }
 
     # =========================================================================

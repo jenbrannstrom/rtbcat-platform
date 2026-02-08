@@ -117,12 +117,33 @@ class ThumbnailsService:
             )
 
         # Extract video URL
-        raw_data = json.loads(creative["raw_data"]) if creative["raw_data"] else {}
+        raw_value = creative.get("raw_data")
+        if isinstance(raw_value, dict):
+            raw_data = raw_value
+        elif isinstance(raw_value, str):
+            raw_data = json.loads(raw_value) if raw_value else {}
+        else:
+            raw_data = {}
         video_data = raw_data.get("video", {})
-        video_url = video_data.get("videoUrl")
+        video_url = (
+            video_data.get("videoUrl")
+            or video_data.get("video_url")
+            or raw_data.get("videoUrl")
+            or raw_data.get("video_url")
+        )
+        vast_xml = (
+            video_data.get("vastXml")
+            or video_data.get("videoVastXml")
+            or video_data.get("vast_xml")
+            or video_data.get("video_vast_xml")
+            or raw_data.get("vastXml")
+            or raw_data.get("videoVastXml")
+            or raw_data.get("vast_xml")
+            or raw_data.get("video_vast_xml")
+        )
 
-        if not video_url and video_data.get("vastXml"):
-            video_url = self._extract_video_url_from_vast(video_data["vastXml"])
+        if not video_url and vast_xml:
+            video_url = self._extract_video_url_from_vast(vast_xml)
 
         if not video_url:
             await self.repo.upsert_thumbnail_status(

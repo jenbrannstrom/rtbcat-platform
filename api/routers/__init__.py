@@ -2,6 +2,8 @@
 
 from .system import router as system_router
 from .creatives import router as creatives_router
+from .creatives_live import router as creatives_live_router
+from .creative_cache import router as creative_cache_router
 from .creative_language import router as creative_language_router
 from .seats import router as seats_router
 from .settings import router as settings_router
@@ -29,6 +31,8 @@ from .analytics import (
 __all__ = [
     "system_router",
     "creatives_router",
+    "creatives_live_router",
+    "creative_cache_router",
     "creative_language_router",
     "seats_router",
     "settings_router",

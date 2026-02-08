@@ -23,8 +23,22 @@ class CreativePreviewService:
         if creative.format == "VIDEO":
             video_data = raw_data.get("video")
             if video_data:
-                vast_xml = video_data.get("vastXml")
-                video_url = video_data.get("videoUrl")
+                vast_xml = (
+                    video_data.get("vastXml")
+                    or video_data.get("videoVastXml")
+                    or video_data.get("vast_xml")
+                    or video_data.get("video_vast_xml")
+                    or raw_data.get("vastXml")
+                    or raw_data.get("videoVastXml")
+                    or raw_data.get("vast_xml")
+                    or raw_data.get("video_vast_xml")
+                )
+                video_url = (
+                    video_data.get("videoUrl")
+                    or video_data.get("video_url")
+                    or raw_data.get("videoUrl")
+                    or raw_data.get("video_url")
+                )
                 if not video_url and vast_xml:
                     video_url = self._extract_video_url_from_vast(vast_xml)
                 local_thumb_path = video_data.get("localThumbnailPath")

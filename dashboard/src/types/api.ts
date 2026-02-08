@@ -61,6 +61,13 @@ export interface Creative {
   language_analysis_error: string | null;
 }
 
+export interface CreativeLiveResponse {
+  creative: Creative;
+  source: "live" | "cache";
+  fetched_at: string;
+  message: string | null;
+}
+
 export interface Campaign {
   id: string;
   name: string;

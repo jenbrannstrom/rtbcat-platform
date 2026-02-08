@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Globe, Loader2, RefreshCw, Edit2, AlertTriangle } from "lucide-react";
-import type { Creative, GeoMismatchResponse } from "@/types/api";
-import { analyzeCreativeLanguage, updateCreativeLanguage, getCreativeGeoMismatch } from "@/lib/api";
+import { Globe, Loader2, RefreshCw, Edit2, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import type { Creative, GeoMismatchResponse, CreativeCountryBreakdown } from "@/types/api";
+import { analyzeCreativeLanguage, updateCreativeLanguage, getCreativeGeoMismatch, getCreativeCountries } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface LanguageSectionProps {
@@ -11,19 +11,18 @@ interface LanguageSectionProps {
   onLanguageUpdate?: (language: string, languageCode: string) => void;
 }
 
-/**
- * Language detection and editing section.
- */
 export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [geoMismatch, setGeoMismatch] = useState<GeoMismatchResponse | null>(null);
   const [isLoadingMismatch, setIsLoadingMismatch] = useState(false);
+  const [countryData, setCountryData] = useState<CreativeCountryBreakdown | null>(null);
+  const [isLoadingCountries, setIsLoadingCountries] = useState(false);
+  const [showAllCountries, setShowAllCountries] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editLanguage, setEditLanguage] = useState("");
   const [editLanguageCode, setEditLanguageCode] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch geo-mismatch data when language is detected
   useEffect(() => {
     if (creative.detected_language_code) {
       setIsLoadingMismatch(true);
@@ -33,6 +32,14 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
         .finally(() => setIsLoadingMismatch(false));
     }
   }, [creative.id, creative.detected_language_code]);
+
+  useEffect(() => {
+    setIsLoadingCountries(true);
+    getCreativeCountries(creative.id, 7)
+      .then((data) => setCountryData(data))
+      .catch(() => setCountryData(null))
+      .finally(() => setIsLoadingCountries(false));
+  }, [creative.id]);
 
   const handleRescan = async () => {
     setIsAnalyzing(true);
@@ -78,7 +85,6 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
     setIsEditing(true);
   };
 
-  // Show edit form
   if (isEditing) {
     return (
       <div className="bg-gray-50 rounded-lg p-3">
@@ -128,11 +134,15 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
     );
   }
 
+  const countries = countryData?.countries || [];
+  const visibleCountries = showAllCountries ? countries : countries.slice(0, 4);
+  const hasMoreCountries = countries.length > 4;
+
   return (
     <div className="bg-gray-50 rounded-lg p-3">
       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
         <Globe className="h-3 w-3" />
-        Language Detection
+        Language + Country
       </h4>
 
       {error && (
@@ -141,7 +151,6 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
         </div>
       )}
 
-      {/* Geo Mismatch Alert */}
       {geoMismatch?.has_mismatch && geoMismatch.alert && (
         <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded">
           <div className="flex items-start gap-1.5">
@@ -154,98 +163,109 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
         </div>
       )}
 
-      {creative.detected_language ? (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-gray-900">
-                {creative.detected_language}
-              </span>
-              <span className="text-xs text-gray-400 font-mono">
-                ({creative.detected_language_code})
-              </span>
-            </div>
-            {creative.language_confidence !== null && (
-              <span className={cn(
-                "text-xs px-1.5 py-0.5 rounded",
-                creative.language_confidence >= 0.8
-                  ? "bg-green-100 text-green-700"
-                  : creative.language_confidence >= 0.5
-                  ? "bg-yellow-100 text-yellow-700"
-                  : "bg-gray-100 text-gray-600"
-              )}>
-                {Math.round(creative.language_confidence * 100)}% confidence
-              </span>
-            )}
-          </div>
+      <div className="text-sm text-gray-700 flex flex-wrap items-center gap-1.5">
+        <span className="text-gray-500">Language detected:</span>
+        {creative.detected_language ? (
+          <span className="font-medium">
+            {creative.detected_language}
+            {creative.detected_language_code ? (
+              <span className="text-gray-400 font-mono ml-1">({creative.detected_language_code})</span>
+            ) : null}
+          </span>
+        ) : (
+          <span className="text-gray-400 italic">Not analyzed</span>
+        )}
+        <span className="text-gray-300">|</span>
+        <span className="text-gray-500">Country targeted:</span>
+        {isLoadingCountries ? (
+          <span className="inline-flex items-center gap-1 text-gray-400">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Loading...
+          </span>
+        ) : countries.length > 0 ? (
+          <span className="font-medium">
+            {visibleCountries.map((c) => c.country_iso3 || c.country_code).join(", ")}
+            {!showAllCountries && hasMoreCountries ? ` +${countries.length - 4}` : ""}
+          </span>
+        ) : (
+          <span className="text-gray-400 italic">No country data</span>
+        )}
+      </div>
 
-          <div className="flex items-center gap-3 pt-1">
-            <button
-              onClick={handleRescan}
-              disabled={isAnalyzing}
-              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
-            >
-              {isAnalyzing ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <RefreshCw className="h-3 w-3" />
-              )}
-              Rescan
-            </button>
-            <button
-              onClick={startEditing}
-              className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
-            >
-              <Edit2 className="h-3 w-3" />
-              Edit
-            </button>
-          </div>
-
-          {creative.language_source && (
-            <div className="text-xs text-gray-400">
-              Source: {creative.language_source}
-              {creative.language_analyzed_at && (
-                <> · {new Date(creative.language_analyzed_at).toLocaleDateString()}</>
-              )}
-            </div>
+      {hasMoreCountries && (
+        <button
+          type="button"
+          onClick={() => setShowAllCountries((v) => !v)}
+          className="mt-1 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+        >
+          {showAllCountries ? (
+            <>
+              <ChevronUp className="h-3 w-3" />
+              See less
+            </>
+          ) : (
+            <>
+              <ChevronDown className="h-3 w-3" />
+              See more
+            </>
           )}
+        </button>
+      )}
+
+      {showAllCountries && countries.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {countries.map((country) => (
+            <span
+              key={country.country_code}
+              className="inline-flex items-center gap-1 rounded-full bg-white border border-gray-200 px-2 py-0.5 text-xs text-gray-700"
+            >
+              <span>{country.country_name}</span>
+              <span className="text-gray-400 font-mono">{country.country_iso3 || country.country_code}</span>
+            </span>
+          ))}
         </div>
-      ) : creative.language_analysis_error ? (
-        <div className="space-y-2">
-          <p className="text-xs text-red-600">{creative.language_analysis_error}</p>
-          <button
-            onClick={handleRescan}
-            disabled={isAnalyzing}
-            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
-          >
-            {isAnalyzing ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3 w-3" />
-            )}
-            Retry Analysis
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <p className="text-sm text-gray-400 italic">Not analyzed yet</p>
-          <button
-            onClick={handleRescan}
-            disabled={isAnalyzing}
-            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
-          >
-            {isAnalyzing ? (
-              <>
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Analyzing...
-              </>
-            ) : (
-              <>
-                <Globe className="h-3 w-3" />
-                Detect Language
-              </>
-            )}
-          </button>
+      )}
+
+      <div className="flex items-center gap-3 pt-2">
+        <button
+          onClick={handleRescan}
+          disabled={isAnalyzing}
+          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+        >
+          {isAnalyzing ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3 w-3" />
+          )}
+          Rescan
+        </button>
+        <button
+          onClick={startEditing}
+          className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
+        >
+          <Edit2 className="h-3 w-3" />
+          Edit
+        </button>
+        {creative.language_confidence !== null && (
+          <span className={cn(
+            "text-xs px-1.5 py-0.5 rounded",
+            creative.language_confidence >= 0.8
+              ? "bg-green-100 text-green-700"
+              : creative.language_confidence >= 0.5
+              ? "bg-yellow-100 text-yellow-700"
+              : "bg-gray-100 text-gray-600"
+          )}>
+            {Math.round(creative.language_confidence * 100)}% confidence
+          </span>
+        )}
+      </div>
+
+      {creative.language_source && (
+        <div className="text-xs text-gray-400 mt-1">
+          Source: {creative.language_source}
+          {creative.language_analyzed_at && (
+            <> · {new Date(creative.language_analyzed_at).toLocaleDateString()}</>
+          )}
         </div>
       )}
 
