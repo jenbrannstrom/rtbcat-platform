@@ -20,6 +20,7 @@ from config import ConfigManager
 from services.thumbnails_service import ThumbnailsService
 from services.system_service import SystemService
 from services.secrets_health_service import get_secrets_health
+from services.data_health_service import DataHealthService
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +184,49 @@ class SecretsHealthResponse(BaseModel):
     features: list[SecretFeatureStatus]
 
 
+class DataHealthTableState(BaseModel):
+    rows: int
+    max_metric_date: Optional[str] = None
+
+
+class DataHealthSourceFreshness(BaseModel):
+    rtb_daily: DataHealthTableState
+    rtb_geo_daily: DataHealthTableState
+
+
+class DataHealthServingFreshness(BaseModel):
+    home_geo_daily: DataHealthTableState
+    config_geo_daily: DataHealthTableState
+    config_publisher_daily: DataHealthTableState
+
+
+class DataCoverageSummary(BaseModel):
+    total_rows: int
+    country_missing_pct: float
+    publisher_missing_pct: float
+    billing_missing_pct: float
+    availability_state: str
+
+
+class IngestionRunsSummary(BaseModel):
+    total_runs: int
+    successful_runs: int
+    failed_runs: int
+    last_started_at: Optional[str] = None
+    last_finished_at: Optional[str] = None
+
+
+class DataHealthResponse(BaseModel):
+    checked_at: str
+    days: int
+    buyer_id: Optional[str] = None
+    state: str
+    source_freshness: DataHealthSourceFreshness
+    serving_freshness: DataHealthServingFreshness
+    coverage: DataCoverageSummary
+    ingestion_runs: IngestionRunsSummary
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -304,6 +348,19 @@ async def get_system_status():
 async def get_system_secrets_health():
     """Get non-sensitive status of required secrets per enabled feature."""
     return SecretsHealthResponse(**get_secrets_health())
+
+
+@router.get("/system/data-health", response_model=DataHealthResponse)
+async def get_system_data_health(
+    days: int = Query(7, ge=1, le=90),
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    """Get source/serving freshness and dimension coverage state."""
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    service = DataHealthService()
+    return DataHealthResponse(**await service.get_data_health(days=days, buyer_id=buyer_id))
 
 
 @router.post("/thumbnails/generate", response_model=ThumbnailGenerateResponse, tags=["Thumbnails"])
