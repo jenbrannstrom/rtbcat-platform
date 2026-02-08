@@ -1,0 +1,9 @@
+[Unit]
+Description=Cat-Scan creative cache refresh
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec catscan-api python /app/scripts/refresh_creative_cache.py --days 7 --limit 1000
+

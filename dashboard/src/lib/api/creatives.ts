@@ -6,6 +6,7 @@
 import { fetchApi } from "./core";
 import type {
   Creative,
+  CreativeLiveResponse,
   CreativeCountryBreakdown,
   LanguageDetectionResponse,
   GeoMismatchResponse,
@@ -38,6 +39,26 @@ export async function getCreatives(params?: {
 
 export async function getCreative(id: string): Promise<Creative> {
   return fetchApi<Creative>(`/creatives/${encodeURIComponent(id)}`);
+}
+
+export async function getCreativeLive(
+  id: string,
+  params?: { allowCacheFallback?: boolean; refreshCache?: boolean; days?: number }
+): Promise<CreativeLiveResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.allowCacheFallback !== undefined) {
+    searchParams.set("allow_cache_fallback", String(params.allowCacheFallback));
+  }
+  if (params?.refreshCache !== undefined) {
+    searchParams.set("refresh_cache", String(params.refreshCache));
+  }
+  if (params?.days !== undefined) {
+    searchParams.set("days", String(params.days));
+  }
+  const query = searchParams.toString();
+  return fetchApi<CreativeLiveResponse>(
+    `/creatives/${encodeURIComponent(id)}/live${query ? `?${query}` : ""}`
+  );
 }
 
 export async function getCreativeCountries(

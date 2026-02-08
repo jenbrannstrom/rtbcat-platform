@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, ExternalLink, Loader2 } from "lucide-react";
+import { X, ExternalLink, Loader2, FileCode } from "lucide-react";
 import type { Creative, CreativePerformanceSummary } from "@/types/api";
 import { cn, getStatusColor, getFormatLabel } from "@/lib/utils";
-import { getCreative } from "@/lib/api";
+import { getCreative, getCreativeLive } from "@/lib/api";
 import {
   parseDestinationUrls,
   getGoogleAuthBuyersUrl,
@@ -14,7 +14,6 @@ import {
 import { formatSpend, formatNumber, formatCTR, formatCostMetric, getDataNotes, extractTrackingParams } from "./utils";
 import { CopyButton, MetricCard, DataNotesSection } from "./SharedComponents";
 import { VideoPreviewPlayer, HtmlPreviewFrame, NativePreviewCard } from "./PreviewRenderers";
-import { CountrySection } from "./CountrySection";
 import { LanguageSection } from "./LanguageSection";
 
 interface PreviewModalProps {
@@ -29,6 +28,9 @@ interface PreviewModalProps {
 export function PreviewModal({ creative: initialCreative, performance, onClose }: PreviewModalProps) {
   const [creative, setCreative] = useState<Creative>(initialCreative);
   const [isLoadingFull, setIsLoadingFull] = useState(false);
+  const [previewSource, setPreviewSource] = useState<"live" | "cache" | null>(null);
+  const [previewMessage, setPreviewMessage] = useState<string | null>(null);
+  const [showHtmlCode, setShowHtmlCode] = useState(false);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -38,16 +40,25 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
     return () => window.removeEventListener("keydown", handleEsc);
   }, [onClose]);
 
-  // Fetch full creative data for HTML format
+  // Fetch live creative payload first; fallback behavior is handled server-side.
   useEffect(() => {
-    if (initialCreative.format === "HTML" && !initialCreative.html?.snippet) {
-      setIsLoadingFull(true);
-      getCreative(initialCreative.id)
-        .then((fullCreative) => setCreative(fullCreative))
-        .catch((err) => console.error("Failed to fetch full creative:", err))
-        .finally(() => setIsLoadingFull(false));
-    }
-  }, [initialCreative.id, initialCreative.format, initialCreative.html?.snippet]);
+    setIsLoadingFull(true);
+    getCreativeLive(initialCreative.id, { allowCacheFallback: true, refreshCache: true, days: 7 })
+      .then((resp) => {
+        setCreative(resp.creative);
+        setPreviewSource(resp.source);
+        setPreviewMessage(resp.message);
+      })
+      .catch(async (err) => {
+        console.error("Failed to fetch live creative:", err);
+        // Last-resort fallback keeps modal usable.
+        const fullCreative = await getCreative(initialCreative.id);
+        setCreative(fullCreative);
+        setPreviewSource("cache");
+        setPreviewMessage("Live fetch unavailable; showing cached snapshot.");
+      })
+      .finally(() => setIsLoadingFull(false));
+  }, [initialCreative.id]);
 
   // Extract data from raw_data
   const rawData = (creative as unknown as { raw_data?: Record<string, unknown> }).raw_data;
@@ -129,6 +140,49 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
               </div>
             )}
           </div>
+          {(previewSource || previewMessage) && (
+            <div className={cn(
+              "px-4 py-2 text-xs border-b",
+              previewSource === "live"
+                ? "bg-green-50 text-green-700 border-green-100"
+                : "bg-amber-50 text-amber-700 border-amber-100"
+            )}>
+              {previewSource === "live" ? "Source: Live from Google API." : "Source: Cached snapshot."}
+              {previewMessage ? ` ${previewMessage}` : ""}
+            </div>
+          )}
+
+          {creative.format === "HTML" && (
+            <div className="p-4 border-b">
+              <div className="bg-gray-50 rounded-lg p-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide inline-flex items-center gap-1.5">
+                    <FileCode className="h-3 w-3" />
+                    HTML Snippet
+                  </h4>
+                  {creative.html?.snippet && <CopyButton text={creative.html.snippet} />}
+                </div>
+                {creative.html?.snippet ? (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowHtmlCode((v) => !v)}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      {showHtmlCode ? "Hide HTML" : "Show HTML"}
+                    </button>
+                    {showHtmlCode && (
+                      <pre className="mt-2 max-h-40 overflow-auto rounded border bg-white p-2 text-[11px] text-gray-700">
+                        {creative.html.snippet}
+                      </pre>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs text-gray-400 italic">No HTML snippet available</p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Performance Section */}
           <div className="p-4 border-b">
@@ -152,16 +206,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
             )}
           </div>
 
-          {/* Country Targeting */}
-          <div className="p-4 border-b">
-            <CountrySection
-              creativeId={creative.id}
-              detectedLanguage={creative.detected_language}
-              detectedLanguageCode={creative.detected_language_code}
-            />
-          </div>
-
-          {/* Language Detection */}
+          {/* Language + Country */}
           <div className="p-4 border-b">
             <LanguageSection
               creative={creative}

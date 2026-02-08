@@ -61,6 +61,8 @@ from api.campaigns_router import router as campaigns_router
 from api.routers import (
     system_router,
     creatives_router,
+    creatives_live_router,
+    creative_cache_router,
     creative_language_router,
     seats_router,
     settings_router,
@@ -192,6 +194,8 @@ app.include_router(system_router)
 
 # Core data routes
 app.include_router(creatives_router)
+app.include_router(creatives_live_router)
+app.include_router(creative_cache_router)
 app.include_router(creative_language_router)
 app.include_router(seats_router)
 app.include_router(campaigns_router)
