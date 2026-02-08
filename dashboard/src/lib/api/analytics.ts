@@ -372,9 +372,16 @@ export interface GeoPerformance {
 
 export interface RTBFunnelResponse {
   has_data: boolean;
+  data_state?: "healthy" | "degraded" | "unavailable";
+  fallback_applied?: boolean;
+  fallback_reason?: string | null;
   funnel: RTBFunnelSummary;
   publishers: PublisherPerformance[];
   geos: GeoPerformance[];
+  coverage?: {
+    publisher_rows_available?: boolean;
+    geo_rows_available?: boolean;
+  };
   data_sources: {
     bids_per_pub_available?: boolean;
     adx_metrics_available?: boolean;
@@ -401,6 +408,9 @@ export interface ConfigPerformanceResponse {
   period_days: number;
   total_configs: number;
   configs: ConfigPerformanceItem[];
+  data_state?: "healthy" | "degraded" | "unavailable";
+  fallback_applied?: boolean;
+  fallback_reason?: string | null;
 }
 
 // =============================================================================

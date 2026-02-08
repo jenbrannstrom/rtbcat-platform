@@ -50,6 +50,9 @@ class HomeAnalyticsService:
                 )
             return {
                 "has_data": False,
+                "data_state": "unavailable",
+                "fallback_applied": False,
+                "fallback_reason": "no_precompute_rows",
                 "funnel": {
                     "total_reached_queries": 0,
                     "total_impressions": 0,
@@ -73,6 +76,10 @@ class HomeAnalyticsService:
                         "home_publisher_daily": publisher_status,
                         "home_geo_daily": geo_status,
                     },
+                },
+                "coverage": {
+                    "publisher_rows_available": publisher_status.get("has_rows", False),
+                    "geo_rows_available": geo_status.get("has_rows", False),
                 },
             }
 
@@ -140,8 +147,19 @@ class HomeAnalyticsService:
         publisher_count = await self._repo.get_publisher_count(days, buyer_id)
         country_count = await self._repo.get_country_count(days, buyer_id)
 
+        data_state = "healthy"
+        fallback_reason = None
+        if seat_status.get("has_rows") and (
+            not publisher_status.get("has_rows") or not geo_status.get("has_rows")
+        ):
+            data_state = "degraded"
+            fallback_reason = "missing_dimension_precompute"
+
         return {
             "has_data": effective_reached > 0,
+            "data_state": data_state,
+            "fallback_applied": data_state == "degraded",
+            "fallback_reason": fallback_reason,
             "funnel": {
                 "total_reached_queries": effective_reached,
                 "total_impressions": total_impressions,
@@ -164,6 +182,10 @@ class HomeAnalyticsService:
                     "home_geo_daily": geo_status,
                 },
             },
+            "coverage": {
+                "publisher_rows_available": publisher_status.get("has_rows", False),
+                "geo_rows_available": geo_status.get("has_rows", False),
+            },
         }
 
     async def get_config_payload(self, days: int, buyer_id: str | None) -> dict[str, Any]:
@@ -177,6 +199,9 @@ class HomeAnalyticsService:
             return {
                 "period_days": days,
                 "data_source": "home_precompute",
+                "data_state": "unavailable",
+                "fallback_applied": False,
+                "fallback_reason": "no_precompute_rows",
                 "message": "No precompute available for requested date range.",
                 "configs": [],
                 "total_reached": 0,
@@ -191,6 +216,9 @@ class HomeAnalyticsService:
             return {
                 "period_days": days,
                 "data_source": "home_precompute",
+                "data_state": "degraded",
+                "fallback_applied": True,
+                "fallback_reason": "empty_rows_after_precompute",
                 "configs": [],
                 "total_reached": 0,
                 "total_impressions": 0,
@@ -243,6 +271,9 @@ class HomeAnalyticsService:
         return {
             "period_days": days,
             "data_source": "home_precompute",
+            "data_state": "healthy",
+            "fallback_applied": False,
+            "fallback_reason": None,
             "configs": configs[:20],
             "total_reached": total_reached,
             "total_impressions": total_impressions,
