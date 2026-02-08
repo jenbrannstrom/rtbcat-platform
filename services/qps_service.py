@@ -1,16 +1,21 @@
-"""Service layer for QPS optimization reporting."""
+"""Service layer for QPS optimization reporting.
+
+NOTE: The legacy SQLite-based CLI analyzers (QpsSizeCoverageAnalyzer,
+ConfigPerformanceTracker, FraudSignalDetector) have been archived.
+This service now returns deprecation notices. QPS efficiency metrics
+are being rebuilt as part of the endpoint-efficiency API (see
+docs/efficiency-qps-reconciliation-plan-2026-02-07.md).
+"""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from importers import (
-    get_import_summary,
-    QpsSizeCoverageAnalyzer,
-    ConfigPerformanceTracker,
-    FraudSignalDetector,
-    ACCOUNT_ID,
-    ACCOUNT_NAME,
+from importers import ACCOUNT_ID, ACCOUNT_NAME
+
+_DEPRECATED_MSG = (
+    "This report relied on legacy SQLite analyzers which have been removed. "
+    "QPS efficiency metrics are being rebuilt via the endpoint-efficiency API."
 )
 
 
@@ -18,75 +23,34 @@ class QpsService:
     """Orchestrates QPS reporting and summaries."""
 
     def get_summary(self) -> dict:
-        """Return summary of imported QPS data."""
-        return get_import_summary()
+        return {"message": _DEPRECATED_MSG}
 
     def size_coverage_report(self, days: int) -> dict:
-        analyzer = QpsSizeCoverageAnalyzer()
         return {
-            "report": analyzer.generate_report(days),
+            "report": _DEPRECATED_MSG,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "analysis_days": days,
         }
 
     def config_performance_report(self, days: int) -> dict:
-        tracker = ConfigPerformanceTracker()
         return {
-            "report": tracker.generate_report(days),
+            "report": _DEPRECATED_MSG,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "analysis_days": days,
         }
 
     def fraud_signals_report(self, days: int) -> dict:
-        detector = FraudSignalDetector()
         return {
-            "report": detector.generate_report(days),
+            "report": _DEPRECATED_MSG,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "analysis_days": days,
         }
 
     def full_report(self, days: int) -> dict:
-        lines = []
-        lines.append("")
-        lines.append("=" * 80)
-        lines.append("Cat-Scan QPS OPTIMIZATION FULL REPORT")
-        lines.append("=" * 80)
-        lines.append("")
-        lines.append(f"Account: {ACCOUNT_NAME} (ID: {ACCOUNT_ID})")
-        lines.append(f"Generated: {datetime.now(timezone.utc).isoformat()}")
-        lines.append(f"Analysis Period: {days} days")
-        lines.append("")
-
-        try:
-            analyzer = QpsSizeCoverageAnalyzer()
-            lines.append(analyzer.generate_report(days))
-            lines.append("")
-        except Exception as exc:
-            lines.append(f"Size Coverage: Error - {exc}")
-            lines.append("")
-
-        try:
-            tracker = ConfigPerformanceTracker()
-            lines.append(tracker.generate_report(days))
-            lines.append("")
-        except Exception as exc:
-            lines.append(f"Config Performance: Error - {exc}")
-            lines.append("")
-
-        try:
-            detector = FraudSignalDetector()
-            lines.append(detector.generate_report(days * 2))
-            lines.append("")
-        except Exception as exc:
-            lines.append(f"Fraud Signals: Error - {exc}")
-            lines.append("")
-
-        lines.append("=" * 80)
-        lines.append("END OF FULL REPORT")
-        lines.append("=" * 80)
-
         return {
-            "report": "\n".join(lines),
+            "report": _DEPRECATED_MSG,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "analysis_days": days,
+            "account_name": ACCOUNT_NAME,
+            "account_id": ACCOUNT_ID,
         }
