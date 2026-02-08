@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from services.secrets_manager import get_secrets_manager
 from services.config_precompute import refresh_config_breakdowns
 from services.home_precompute import refresh_home_summaries
 from services.precompute_service import PrecomputeService
@@ -48,12 +48,13 @@ class PrecomputeHealthResponse(BaseModel):
 @router.post("/precompute/refresh/scheduled", response_model=PrecomputeRefreshResponse)
 async def refresh_precompute_scheduled(request: Request):
     """Trigger scheduled precompute refreshes for Cloud Scheduler or cron."""
-    secret = os.getenv("PRECOMPUTE_REFRESH_SECRET")
+    secrets_mgr = get_secrets_manager()
+    secret = secrets_mgr.get("PRECOMPUTE_REFRESH_SECRET")
     header_secret = request.headers.get("X-Precompute-Refresh-Secret")
     if not secret or not header_secret or header_secret != secret:
         raise HTTPException(status_code=403, detail="Invalid scheduler secret")
 
-    refresh_days = int(os.getenv("PRECOMPUTE_REFRESH_DAYS", "2"))
+    refresh_days = secrets_mgr.get_int("PRECOMPUTE_REFRESH_DAYS", 2)
     if refresh_days < 1:
         raise HTTPException(status_code=400, detail="PRECOMPUTE_REFRESH_DAYS must be >= 1")
 
@@ -80,12 +81,13 @@ async def refresh_precompute_scheduled(request: Request):
 @router.get("/precompute/health", response_model=PrecomputeHealthResponse)
 async def precompute_health(request: Request):
     """Health check for precompute freshness (for monitoring)."""
-    secret = os.getenv("PRECOMPUTE_MONITOR_SECRET")
+    secrets_mgr = get_secrets_manager()
+    secret = secrets_mgr.get("PRECOMPUTE_MONITOR_SECRET")
     header_secret = request.headers.get("X-Precompute-Monitor-Secret")
     if not secret or not header_secret or header_secret != secret:
         raise HTTPException(status_code=403, detail="Invalid monitor secret")
 
-    max_age_hours = int(os.getenv("PRECOMPUTE_REFRESH_MAX_AGE_HOURS", "36"))
+    max_age_hours = secrets_mgr.get_int("PRECOMPUTE_REFRESH_MAX_AGE_HOURS", 36)
     if max_age_hours < 1:
         raise HTTPException(status_code=400, detail="PRECOMPUTE_REFRESH_MAX_AGE_HOURS must be >= 1")
 

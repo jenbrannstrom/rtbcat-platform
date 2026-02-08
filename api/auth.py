@@ -11,13 +11,13 @@ Usage:
     Authorization: Bearer your-secret-key-here
 """
 
-import os
 import secrets
 from typing import Optional
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
+from services.secrets_manager import get_secrets_manager
 
 # Paths that don't require authentication
 PUBLIC_PATHS = {
@@ -30,7 +30,7 @@ PUBLIC_PATHS = {
 
 def get_api_key() -> Optional[str]:
     """Get the API key from environment variable."""
-    return os.environ.get("CATSCAN_API_KEY")
+    return get_secrets_manager().get("CATSCAN_API_KEY")
 
 
 def generate_api_key() -> str:

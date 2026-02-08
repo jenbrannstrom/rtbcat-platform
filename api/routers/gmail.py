@@ -4,7 +4,6 @@ Handles Gmail import status and triggering manual imports.
 """
 
 import logging
-import os
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
@@ -13,6 +12,7 @@ from pydantic import BaseModel, Field
 from api.dependencies import require_admin
 from services.auth_service import User
 from services.gmail_service import GmailService
+from services.secrets_manager import get_secrets_manager
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +109,7 @@ async def trigger_gmail_import_scheduled(
 
     Requires header: X-Gmail-Import-Secret matching GMAIL_IMPORT_SECRET.
     """
-    secret = os.getenv("GMAIL_IMPORT_SECRET")
+    secret = get_secrets_manager().get("GMAIL_IMPORT_SECRET")
     header_secret = request.headers.get("X-Gmail-Import-Secret")
     if not secret or not header_secret or header_secret != secret:
         raise HTTPException(status_code=403, detail="Invalid scheduler secret")
@@ -129,4 +129,3 @@ async def trigger_gmail_import_scheduled(
     except Exception as e:
         logger.error(f"Gmail import failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
