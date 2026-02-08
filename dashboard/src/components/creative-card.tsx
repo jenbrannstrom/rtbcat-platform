@@ -39,6 +39,12 @@ function formatCTR(ctr: number | null | undefined): string {
 }
 
 function PreviewThumbnail({ creative }: { creative: Creative }) {
+  const source = creative.data_source?.source || "cache";
+  const sourceLabel = source === "live" ? "Live" : "Cached";
+  const sourceClass = source === "live"
+    ? "bg-green-100 text-green-700 border-green-200"
+    : "bg-amber-100 text-amber-700 border-amber-200";
+
   // For VIDEO: show thumbnail if available, otherwise gradient placeholder
   if (creative.format === "VIDEO") {
     const thumbnailUrl = creative.video?.thumbnail_url;
@@ -86,6 +92,9 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
             {creative.video.duration}
           </span>
         )}
+        <span className={cn("absolute top-1 right-1 text-[10px] px-1.5 py-0.5 rounded border", sourceClass)}>
+          {sourceLabel}
+        </span>
       </div>
     );
   }
@@ -107,6 +116,9 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
         ) : (
           <Image className="h-8 w-8 text-green-400" />
         )}
+        <span className={cn("absolute top-1 right-1 text-[10px] px-1.5 py-0.5 rounded border", sourceClass)}>
+          {sourceLabel}
+        </span>
       </div>
     );
   }
@@ -128,6 +140,9 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
         ) : (
           <FileCode className="h-8 w-8 text-blue-400" />
         )}
+        <span className={cn("absolute top-1 right-1 text-[10px] px-1.5 py-0.5 rounded border", sourceClass)}>
+          {sourceLabel}
+        </span>
       </div>
     );
   }
@@ -150,14 +165,20 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
         ) : (
           <Image className="h-8 w-8 text-blue-400" />
         )}
+        <span className={cn("absolute top-1 right-1 text-[10px] px-1.5 py-0.5 rounded border", sourceClass)}>
+          {sourceLabel}
+        </span>
       </div>
     );
   }
 
   // Default placeholder for unknown formats
   return (
-    <div className="h-20 bg-gray-100 flex items-center justify-center text-gray-400">
+    <div className="relative h-20 bg-gray-100 flex items-center justify-center text-gray-400">
       <Image className="h-8 w-8" />
+      <span className={cn("absolute top-1 right-1 text-[10px] px-1.5 py-0.5 rounded border", sourceClass)}>
+        {sourceLabel}
+      </span>
     </div>
   );
 }
@@ -204,6 +225,8 @@ export function CreativeCard({ creative, onPreview, performance, sortField }: Cr
     creative.detected_language_code,
     creative.country
   );
+  const isStale = !!creative.data_source?.is_stale;
+  const staleHours = creative.data_source?.stale_age_hours;
 
   return (
     <div className="card overflow-hidden hover:shadow-md transition-shadow">
@@ -295,6 +318,11 @@ export function CreativeCard({ creative, onPreview, performance, sortField }: Cr
                 Mismatch
               </span>
             )}
+          </div>
+        )}
+        {isStale && (
+          <div className="mt-2 text-xs text-amber-700">
+            Stale cache {staleHours ? `(${Math.round(staleHours)}h old)` : ""}
           </div>
         )}
 

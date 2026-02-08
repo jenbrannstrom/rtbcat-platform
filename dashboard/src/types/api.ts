@@ -59,6 +59,15 @@ export interface Creative {
   language_source: string | null;
   language_analyzed_at: string | null;
   language_analysis_error: string | null;
+  data_source?: {
+    source: "live" | "cache" | string;
+    cached_at: string | null;
+    fetched_at: string | null;
+    stale_threshold_hours: number | null;
+    stale_age_hours: number | null;
+    is_stale: boolean;
+    fallback_reason: string | null;
+  } | null;
 }
 
 export interface CreativeLiveResponse {

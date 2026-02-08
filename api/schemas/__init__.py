@@ -11,10 +11,14 @@ from .common import (
 )
 
 from .creatives import (
+    CreativeDataSource,
     CreativeResponse,
     ClusterAssignment,
     PaginatedCreativesResponse,
     NewlyUploadedCreativesResponse,
+    CreativeLiveResponse,
+    CreativeCountryMetrics,
+    CreativeCountryBreakdownResponse,
 )
 
 from .campaigns import (
@@ -88,10 +92,14 @@ __all__ = [
     "ThumbnailStatusResponse",
     "WasteFlagsResponse",
     # Creatives
+    "CreativeDataSource",
     "CreativeResponse",
     "ClusterAssignment",
     "PaginatedCreativesResponse",
     "NewlyUploadedCreativesResponse",
+    "CreativeLiveResponse",
+    "CreativeCountryMetrics",
+    "CreativeCountryBreakdownResponse",
     # Campaigns
     "CampaignMetricsResponse",
     "CampaignWarningsResponse",
