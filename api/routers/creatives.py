@@ -5,8 +5,6 @@ Includes thumbnail status, waste flags, and country data for each creative.
 """
 
 import logging
-from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
