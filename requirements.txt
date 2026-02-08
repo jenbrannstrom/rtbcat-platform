@@ -18,10 +18,13 @@ aiohttp>=3.9.0  # Async HTTP client for app store fetching
 # Cloud Storage
 boto3>=1.29.0
 botocore>=1.32.0
+google-cloud-secret-manager>=2.20.0
 google-cloud-storage>=2.16.0
 google-cloud-bigquery>=3.25.0
 pyarrow>=15.0.0
 numpy>=1.26.0
+alibabacloud-kms20160120>=2.0.2
+alibabacloud-tea-openapi>=0.3.12
 
 # Security & Encryption
 cryptography>=41.0.0
