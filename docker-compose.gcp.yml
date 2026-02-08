@@ -8,6 +8,7 @@
 #   IMAGE_TAG       - Image version tag (default: latest)
 #   DATA_DIR        - Host path for persistent data (default: ~/.catscan)
 #   GMAIL_IMPORT_SECRET - Secret for Gmail webhook (optional)
+#   CREATIVE_CACHE_REFRESH_SECRET - Secret for creative cache refresh webhook (optional)
 #   CLOUDSQL_INSTANCE - Cloud SQL instance connection name (project:region:instance)
 
 services:
@@ -57,6 +58,7 @@ services:
       - APP_VERSION=${IMAGE_TAG:-unknown}
       - OAUTH2_PROXY_ENABLED=true
       - GMAIL_IMPORT_SECRET=${GMAIL_IMPORT_SECRET:-}
+      - CREATIVE_CACHE_REFRESH_SECRET=${CREATIVE_CACHE_REFRESH_SECRET:-}
       - PRECOMPUTE_REFRESH_SECRET=${PRECOMPUTE_REFRESH_SECRET:-}
       - PRECOMPUTE_MONITOR_SECRET=${PRECOMPUTE_MONITOR_SECRET:-}
       - PRECOMPUTE_REFRESH_DAYS=${PRECOMPUTE_REFRESH_DAYS:-2}

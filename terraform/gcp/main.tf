@@ -48,12 +48,18 @@ resource "random_password" "gmail_import_secret" {
   special = false
 }
 
+resource "random_password" "creative_cache_refresh_secret" {
+  length  = 32
+  special = false
+}
+
 locals {
   precompute_refresh_url = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/precompute/refresh/scheduled" : "http://${google_compute_address.catscan.address}/api/precompute/refresh/scheduled"
 
   precompute_health_url = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/precompute/health" : "http://${google_compute_address.catscan.address}/api/precompute/health"
 
-  gmail_import_url = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/gmail/import/scheduled" : "http://${google_compute_address.catscan.address}/api/gmail/import/scheduled"
+  gmail_import_url           = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/gmail/import/scheduled" : "http://${google_compute_address.catscan.address}/api/gmail/import/scheduled"
+  creative_cache_refresh_url = (var.enable_https && var.domain_name != "") ? "https://${var.domain_name}/api/creatives/cache/refresh/scheduled" : "http://${google_compute_address.catscan.address}/api/creatives/cache/refresh/scheduled"
 
   precompute_health_host = var.domain_name != "" ? var.domain_name : google_compute_address.catscan.address
   precompute_health_port = (var.enable_https && var.domain_name != "") ? 443 : 80
@@ -428,22 +434,23 @@ resource "google_compute_instance" "catscan" {
 
   # Startup script - hardened setup with OAuth2 Proxy
   metadata_startup_script = templatefile("${path.module}/startup.sh", {
-    app_name                   = var.app_name
-    environment                = var.environment
-    domain_name                = var.domain_name
-    enable_https               = var.enable_https
-    github_repo                = var.github_repo
-    github_branch              = var.github_branch
-    gcp_region                 = var.gcp_region
-    gcs_bucket                 = google_storage_bucket.catscan.name
-    google_oauth_client_id     = var.google_oauth_client_id
-    google_oauth_client_secret = var.google_oauth_client_secret
-    allowed_email_domains      = var.allowed_email_domains
-    precompute_refresh_secret  = random_password.precompute_refresh_secret.result
-    precompute_monitor_secret  = random_password.precompute_monitor_secret.result
-    gmail_import_secret        = random_password.gmail_import_secret.result
-    precompute_refresh_days    = var.precompute_refresh_days
-    precompute_refresh_max_age = var.precompute_refresh_max_age_hours
+    app_name                      = var.app_name
+    environment                   = var.environment
+    domain_name                   = var.domain_name
+    enable_https                  = var.enable_https
+    github_repo                   = var.github_repo
+    github_branch                 = var.github_branch
+    gcp_region                    = var.gcp_region
+    gcs_bucket                    = google_storage_bucket.catscan.name
+    google_oauth_client_id        = var.google_oauth_client_id
+    google_oauth_client_secret    = var.google_oauth_client_secret
+    allowed_email_domains         = var.allowed_email_domains
+    precompute_refresh_secret     = random_password.precompute_refresh_secret.result
+    precompute_monitor_secret     = random_password.precompute_monitor_secret.result
+    gmail_import_secret           = random_password.gmail_import_secret.result
+    creative_cache_refresh_secret = random_password.creative_cache_refresh_secret.result
+    precompute_refresh_days       = var.precompute_refresh_days
+    precompute_refresh_max_age    = var.precompute_refresh_max_age_hours
   })
 
   # Enable deletion protection in production
@@ -510,22 +517,23 @@ resource "google_compute_instance" "catscan_sg" {
   # Startup script - hardened setup with OAuth2 Proxy
   # Note: Uses existing EU bucket during migration to avoid recreating it
   metadata_startup_script = templatefile("${path.module}/startup.sh", {
-    app_name                   = var.app_name
-    environment                = var.environment
-    domain_name                = var.domain_name
-    enable_https               = var.enable_https
-    github_repo                = var.github_repo
-    github_branch              = var.github_branch
-    gcp_region                 = var.gcp_region
-    gcs_bucket                 = "catscan-production-data-99957252"
-    google_oauth_client_id     = var.google_oauth_client_id
-    google_oauth_client_secret = var.google_oauth_client_secret
-    allowed_email_domains      = var.allowed_email_domains
-    precompute_refresh_secret  = random_password.precompute_refresh_secret.result
-    precompute_monitor_secret  = random_password.precompute_monitor_secret.result
-    gmail_import_secret        = random_password.gmail_import_secret.result
-    precompute_refresh_days    = var.precompute_refresh_days
-    precompute_refresh_max_age = var.precompute_refresh_max_age_hours
+    app_name                      = var.app_name
+    environment                   = var.environment
+    domain_name                   = var.domain_name
+    enable_https                  = var.enable_https
+    github_repo                   = var.github_repo
+    github_branch                 = var.github_branch
+    gcp_region                    = var.gcp_region
+    gcs_bucket                    = "catscan-production-data-99957252"
+    google_oauth_client_id        = var.google_oauth_client_id
+    google_oauth_client_secret    = var.google_oauth_client_secret
+    allowed_email_domains         = var.allowed_email_domains
+    precompute_refresh_secret     = random_password.precompute_refresh_secret.result
+    precompute_monitor_secret     = random_password.precompute_monitor_secret.result
+    gmail_import_secret           = random_password.gmail_import_secret.result
+    creative_cache_refresh_secret = random_password.creative_cache_refresh_secret.result
+    precompute_refresh_days       = var.precompute_refresh_days
+    precompute_refresh_max_age    = var.precompute_refresh_max_age_hours
   })
 
   deletion_protection = var.environment == "production"
@@ -662,9 +670,9 @@ resource "google_secret_manager_secret_version" "serving_db_credentials" {
 # =============================================================================
 
 resource "google_bigquery_dataset" "catscan" {
-  count                     = var.bigquery_dataset_id != "" ? 1 : 0
-  dataset_id                = var.bigquery_dataset_id
-  location                  = var.gcp_region
+  count                           = var.bigquery_dataset_id != "" ? 1 : 0
+  dataset_id                      = var.bigquery_dataset_id
+  location                        = var.gcp_region
   default_partition_expiration_ms = var.bigquery_partition_retention_days * 86400000
 
   labels = {
@@ -717,9 +725,31 @@ resource "google_cloud_scheduler_job" "gmail_import" {
   }
 
   retry_config {
-    retry_count         = 3
+    retry_count          = 3
     min_backoff_duration = "60s"
     max_backoff_duration = "600s"
+  }
+
+  depends_on = [google_project_service.cloudscheduler]
+}
+
+# =============================================================================
+# CLOUD SCHEDULER - Creative Cache Refresh
+# =============================================================================
+
+resource "google_cloud_scheduler_job" "creative_cache_refresh" {
+  name        = "${var.app_name}-creative-cache-refresh"
+  description = "Off-hours live creative cache refresh + HTML thumbnail extraction"
+  schedule    = var.creative_cache_refresh_schedule
+  time_zone   = "Etc/UTC"
+  region      = var.gcp_region
+
+  http_target {
+    http_method = "POST"
+    uri         = local.creative_cache_refresh_url
+    headers = {
+      X-Creative-Cache-Refresh-Secret = random_password.creative_cache_refresh_secret.result
+    }
   }
 
   depends_on = [google_project_service.cloudscheduler]
