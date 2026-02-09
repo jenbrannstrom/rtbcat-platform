@@ -6,7 +6,7 @@ Handles Gmail import status and triggering manual imports.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.dependencies import require_admin
@@ -72,7 +72,6 @@ async def get_gmail_status():
 
 @router.post("/gmail/import", response_model=GmailImportResponse)
 async def trigger_gmail_import(
-    background_tasks: BackgroundTasks,
     admin: User = Depends(require_admin),
 ):
     """
@@ -83,7 +82,7 @@ async def trigger_gmail_import(
     """
     try:
         service = GmailService()
-        result = await service.queue_import(background_tasks)
+        result = await service.queue_import()
         return GmailImportResponse(**result)
 
     except ImportError as e:
@@ -102,7 +101,6 @@ async def trigger_gmail_import(
 @router.post("/gmail/import/scheduled", response_model=GmailImportResponse)
 async def trigger_gmail_import_scheduled(
     request: Request,
-    background_tasks: BackgroundTasks,
 ):
     """
     Trigger Gmail import for schedulers (Cloud Scheduler/systemd).
@@ -116,7 +114,7 @@ async def trigger_gmail_import_scheduled(
 
     try:
         service = GmailService()
-        result = await service.queue_import(background_tasks)
+        result = await service.queue_import()
         return GmailImportResponse(**result)
     except ImportError as e:
         logger.error(f"Gmail import script not found: {e}")
