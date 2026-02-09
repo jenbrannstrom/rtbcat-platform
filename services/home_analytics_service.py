@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any
 
 from storage.postgres_repositories.home_repo import HomeAnalyticsRepository
@@ -280,4 +281,165 @@ class HomeAnalyticsService:
             "overall_win_rate_pct": round(overall_win, 1),
             "overall_waste_pct": round(100 - overall_win, 1),
             "precompute_status": {"home_config_daily": config_status},
+        }
+
+    async def get_endpoint_efficiency_payload(
+        self,
+        days: int,
+        buyer_id: str | None,
+    ) -> dict[str, Any]:
+        funnel_row = await self._repo.get_funnel_row(days, buyer_id)
+        total_reached = int((funnel_row or {}).get("total_reached") or 0)
+        total_impressions = int((funnel_row or {}).get("total_impressions") or 0)
+        total_bid_requests = int((funnel_row or {}).get("total_bid_requests") or 0)
+
+        end_date = date.today()
+        start_date = end_date - timedelta(days=max(days - 1, 0))
+        window_seconds = days * 24 * 3600
+
+        observed_qps = (total_reached / window_seconds) if window_seconds > 0 else 0.0
+        win_rate_pct = (total_impressions / total_reached * 100) if total_reached > 0 else 0.0
+
+        bidder_id = None
+        if buyer_id:
+            bidder_id = await self._repo.get_bidder_id_for_buyer(buyer_id)
+
+        endpoints = await self._repo.get_endpoints_for_bidder(bidder_id)
+        observed_rows = await self._repo.get_observed_endpoint_rows(bidder_id)
+        observed_rows = [r for r in observed_rows if float(r.get("current_qps") or 0) > 0]
+
+        allocated_qps = int(sum(int(r.get("maximum_qps") or 0) for r in endpoints))
+        utilization_pct = (observed_qps / allocated_qps * 100) if allocated_qps > 0 else 0.0
+        overshoot_x = (allocated_qps / observed_qps) if observed_qps > 0 else None
+
+        endpoint_by_id = {str(r.get("endpoint_id")): r for r in endpoints}
+        observed_by_id = {str(r.get("endpoint_id")): r for r in observed_rows}
+
+        mapped = [eid for eid in endpoint_by_id.keys() if eid in observed_by_id]
+        missing = [eid for eid in endpoint_by_id.keys() if eid not in observed_by_id]
+        extra = [eid for eid in observed_by_id.keys() if eid not in endpoint_by_id]
+
+        rows: list[dict[str, Any]] = []
+        for eid, endpoint in endpoint_by_id.items():
+            obs = observed_by_id.get(eid)
+            rows.append(
+                {
+                    "catscan_endpoint_id": eid,
+                    "catscan_location": endpoint.get("trading_location"),
+                    "allocated_qps": int(endpoint.get("maximum_qps") or 0),
+                    "google_location": (
+                        endpoint.get("trading_location")
+                        or ((obs or {}).get("trading_location"))
+                    ),
+                    "google_current_qps": float(obs.get("current_qps")) if obs else None,
+                    "mapping_status": "mapped" if obs else "missing_in_google",
+                }
+            )
+
+        for eid in extra:
+            obs = observed_by_id[eid]
+            rows.append(
+                {
+                    "catscan_endpoint_id": None,
+                    "catscan_location": None,
+                    "allocated_qps": None,
+                    "google_location": obs.get("trading_location"),
+                    "google_current_qps": float(obs.get("current_qps") or 0),
+                    "mapping_status": "extra_in_google",
+                }
+            )
+
+        available_impressions = total_bid_requests
+        inventory_matches = total_reached
+        filtered_impressions = max(available_impressions - inventory_matches, 0)
+        pretargeting_loss_pct = (
+            (filtered_impressions / available_impressions * 100)
+            if available_impressions > 0
+            else None
+        )
+        supply_capture_pct = (
+            (inventory_matches / available_impressions * 100)
+            if available_impressions > 0
+            else None
+        )
+
+        alerts: list[dict[str, Any]] = []
+        if missing:
+            alerts.append(
+                {
+                    "code": "ENDPOINT_MAPPING_MISSING",
+                    "severity": "high",
+                    "message": (
+                        f"{len(missing)} endpoint(s) configured in CatScan have no matching "
+                        "observed delivery row in selected period."
+                    ),
+                }
+            )
+        if allocated_qps > 0 and utilization_pct < 0.2 and total_reached > 0:
+            alerts.append(
+                {
+                    "code": "ALLOCATED_VS_OBSERVED_GAP",
+                    "severity": "medium",
+                    "message": (
+                        "Observed query-rate utilization is below 0.2% of allocated cap "
+                        "for this period."
+                    ),
+                }
+            )
+        if pretargeting_loss_pct is not None and pretargeting_loss_pct > 70:
+            alerts.append(
+                {
+                    "code": "PRETARGETING_LOSS_HIGH",
+                    "severity": "medium",
+                    "message": (
+                        f"Pretargeting loss is high at {pretargeting_loss_pct:.1f}% "
+                        "for selected period."
+                    ),
+                }
+            )
+
+        status = "healthy"
+        if missing or extra:
+            status = "warning"
+
+        return {
+            "period_days": days,
+            "window": {
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "seconds": window_seconds,
+            },
+            "summary": {
+                "allocated_qps": allocated_qps,
+                "observed_query_rate_qps_avg": round(observed_qps, 2),
+                "qps_utilization_pct": round(utilization_pct, 2),
+                "allocation_overshoot_x": round(overshoot_x, 2) if overshoot_x else None,
+                "total_reached_queries": total_reached,
+                "total_impressions": total_impressions,
+                "win_rate_pct": round(win_rate_pct, 2),
+            },
+            "endpoint_reconciliation": {
+                "status": status,
+                "counts": {
+                    "catscan_endpoints": len(endpoint_by_id),
+                    "google_delivery_rows": len(observed_by_id),
+                    "mapped": len(mapped),
+                    "missing_in_google": len(missing),
+                    "extra_in_google": len(extra),
+                },
+                "rows": rows,
+            },
+            "funnel_breakout": {
+                "available_impressions": available_impressions,
+                "inventory_matches": inventory_matches,
+                "filtered_impressions": filtered_impressions,
+                "pretargeting_loss_pct": round(pretargeting_loss_pct, 2)
+                if pretargeting_loss_pct is not None
+                else None,
+                "supply_capture_pct": round(supply_capture_pct, 2)
+                if supply_capture_pct is not None
+                else None,
+                "available_impressions_proxy_source": "home_seat_daily.bid_requests",
+            },
+            "alerts": alerts,
         }

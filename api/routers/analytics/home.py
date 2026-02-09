@@ -54,6 +54,23 @@ async def get_home_config_performance(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/analytics/home/endpoint-efficiency", tags=["Home Analytics"])
+async def get_home_endpoint_efficiency(
+    days: int = Query(7, ge=1, le=90),
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    """Get allocated-vs-observed endpoint efficiency and reconciliation."""
+    try:
+        buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+        service = HomeAnalyticsService()
+        return await service.get_endpoint_efficiency_payload(days=days, buyer_id=buyer_id)
+    except Exception as e:
+        logger.error(f"Failed to get endpoint efficiency data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/analytics/home/refresh", tags=["Home Analytics"])
 async def refresh_home_cache(
     start_date: Optional[str] = None,
