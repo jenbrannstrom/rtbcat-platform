@@ -343,31 +343,7 @@ class RtbBidstreamRepository:
             """,
             tuple(primary_params),
         )
-        if rows or not buyer_account_id:
-            return rows
-
-        # Buyer-scope fallback when billing-scoped geo dimensions are unavailable.
-        return await pg_query(
-            """
-            SELECT
-                country as name,
-                COALESCE(SUM(reached_queries), 0) as total_reached,
-                COALESCE(SUM(impressions), 0) as total_impressions,
-                COALESCE(SUM(spend_micros), 0) as total_spend_micros,
-                'buyer_fallback' as data_scope,
-                source_used as data_source
-            FROM fact_delivery_daily
-            WHERE buyer_account_id = %s
-              AND metric_date::date >= (CURRENT_DATE - %s * INTERVAL '1 day')
-              AND data_scope = 'buyer_fallback'
-              AND billing_id = ''
-              AND country != ''
-            GROUP BY country, source_used
-            ORDER BY SUM(reached_queries) DESC
-            LIMIT %s
-            """,
-            (buyer_account_id, days, limit),
-        )
+        return rows
 
     async def get_config_breakdown_publisher(
         self,
@@ -409,30 +385,7 @@ class RtbBidstreamRepository:
             """,
             tuple(primary_params),
         )
-        if rows or not buyer_account_id:
-            return rows
-
-        return await pg_query(
-            """
-            SELECT
-                COALESCE(NULLIF(publisher_name, ''), publisher_id) as name,
-                COALESCE(SUM(reached_queries), 0) as total_reached,
-                COALESCE(SUM(impressions), 0) as total_impressions,
-                COALESCE(SUM(spend_micros), 0) as total_spend_micros,
-                'buyer_fallback' as data_scope,
-                source_used as data_source
-            FROM fact_delivery_daily
-            WHERE buyer_account_id = %s
-              AND metric_date::date >= (CURRENT_DATE - %s * INTERVAL '1 day')
-              AND data_scope = 'buyer_fallback'
-              AND billing_id = ''
-              AND publisher_id != ''
-            GROUP BY COALESCE(NULLIF(publisher_name, ''), publisher_id), source_used
-            ORDER BY SUM(reached_queries) DESC
-            LIMIT %s
-            """,
-            (buyer_account_id, days, limit),
-        )
+        return rows
 
     async def get_config_breakdown_creative(
         self,
