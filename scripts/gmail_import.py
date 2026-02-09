@@ -818,19 +818,23 @@ def process_message(
             return [], seat_id, subject, True
     downloaded_files = []
 
-    # First, try to extract CSV attachments (reports < 10MB)
-    downloaded_files = extract_attachments(service, message_id, payload)
-
-    # If no attachments, look for download URL (reports >= 10MB)
-    if not downloaded_files:
-        body = get_email_body(payload)
-        # Also check snippet as fallback
-        if not body:
-            body = message.get('snippet', '')
-
-        url = extract_download_url(body)
-        if url:
+    # First, try GCS URL download (always has latest report template).
+    # Google RTB emails may include an older cached attachment AND a GCS link
+    # pointing to the freshly-generated report.  The GCS version reflects
+    # template changes (e.g. added Country column) while the attachment may not.
+    body = get_email_body(payload)
+    if not body:
+        body = message.get('snippet', '')
+    url = extract_download_url(body)
+    if url:
+        try:
             downloaded_files = download_from_url(url, message_id, access_token, seat_id)
+        except Exception as e:
+            print(f"  GCS download failed ({e}), falling back to attachment", flush=True)
+
+    # Fall back to email attachment if GCS download unavailable or failed
+    if not downloaded_files:
+        downloaded_files = extract_attachments(service, message_id, payload)
 
     return downloaded_files, seat_id, subject, False
 
