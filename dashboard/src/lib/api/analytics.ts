@@ -413,6 +413,57 @@ export interface ConfigPerformanceResponse {
   fallback_reason?: string | null;
 }
 
+export interface EndpointReconciliationRow {
+  catscan_endpoint_id: string | null;
+  catscan_location: string | null;
+  allocated_qps: number | null;
+  google_location: string | null;
+  google_current_qps: number | null;
+  mapping_status: "mapped" | "missing_in_google" | "extra_in_google";
+}
+
+export interface EndpointEfficiencyResponse {
+  period_days: number;
+  window: {
+    start_date: string;
+    end_date: string;
+    seconds: number;
+  };
+  summary: {
+    allocated_qps: number;
+    observed_query_rate_qps_avg: number;
+    qps_utilization_pct: number;
+    allocation_overshoot_x: number | null;
+    total_reached_queries: number;
+    total_impressions: number;
+    win_rate_pct: number;
+  };
+  endpoint_reconciliation: {
+    status: "healthy" | "warning";
+    counts: {
+      catscan_endpoints: number;
+      google_delivery_rows: number;
+      mapped: number;
+      missing_in_google: number;
+      extra_in_google: number;
+    };
+    rows: EndpointReconciliationRow[];
+  };
+  funnel_breakout: {
+    available_impressions: number;
+    inventory_matches: number;
+    filtered_impressions: number;
+    pretargeting_loss_pct: number | null;
+    supply_capture_pct: number | null;
+    available_impressions_proxy_source: string;
+  };
+  alerts: Array<{
+    code: string;
+    severity: "high" | "medium" | "info";
+    message: string;
+  }>;
+}
+
 // =============================================================================
 // RTB Funnel API
 // =============================================================================
@@ -450,6 +501,17 @@ export async function getRTBFunnelConfigs(
   if (buyerId) params.set('buyer_id', buyerId);
   return fetchApi<ConfigPerformanceResponse>(
     `/analytics/home/configs?${params}`
+  );
+}
+
+export async function getEndpointEfficiency(
+  days: number = 7,
+  buyerId?: string
+): Promise<EndpointEfficiencyResponse> {
+  const params = new URLSearchParams({ days: String(days) });
+  if (buyerId) params.set("buyer_id", buyerId);
+  return fetchApi<EndpointEfficiencyResponse>(
+    `/analytics/home/endpoint-efficiency?${params.toString()}`
   );
 }
 
