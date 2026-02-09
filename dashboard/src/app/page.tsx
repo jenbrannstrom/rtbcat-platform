@@ -5,10 +5,11 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, AlertTriangle, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
 import { AccountEndpointsHeader } from "@/components/rtb/account-endpoints-header";
+import { EndpointEfficiencyPanel } from "@/components/rtb/endpoint-efficiency-panel";
 import { PretargetingConfigCard, type PretargetingConfig } from "@/components/rtb/pretargeting-config-card";
 import { ConfigBreakdownPanel } from "@/components/rtb/config-breakdown-panel";
 import {
-  getQPSSummary, getRTBFunnel, getSpendStats,
+  getQPSSummary, getRTBFunnel, getSpendStats, getEndpointEfficiency,
   getPretargetingConfigs, getRTBFunnelConfigs, getSeats,
   type PretargetingConfigResponse
 } from "@/lib/api";
@@ -163,6 +164,11 @@ function WasteAnalysisContent() {
     queryFn: () => getRTBFunnelConfigs(days, selectedBuyerId || undefined),
   });
 
+  const { data: endpointEfficiency, isLoading: endpointEfficiencyLoading } = useQuery({
+    queryKey: ["endpoint-efficiency", days, selectedBuyerId],
+    queryFn: () => getEndpointEfficiency(days, selectedBuyerId || undefined),
+  });
+
   const handleRefresh = () => {
     refetchSummary();
     refetchFunnel();
@@ -305,6 +311,10 @@ function WasteAnalysisContent() {
       <div className="p-6 space-y-4">
       {/* Account Endpoints Header with integrated funnel metrics */}
       <AccountEndpointsHeader funnelData={funnelDataForHeader} />
+
+      {endpointEfficiency && !endpointEfficiencyLoading && (
+        <EndpointEfficiencyPanel data={endpointEfficiency} />
+      )}
 
       {selectedBuyerId && rtbFunnel?.data_sources?.buyer_filter_message && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">

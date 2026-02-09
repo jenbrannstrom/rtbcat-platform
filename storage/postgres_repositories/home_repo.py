@@ -136,3 +136,60 @@ class HomeAnalyticsRepository:
             """,
             tuple(params),
         )
+
+    async def get_bidder_id_for_buyer(self, buyer_id: str) -> str | None:
+        row = await pg_query_one(
+            """
+            SELECT bidder_id
+            FROM buyer_seats
+            WHERE buyer_id = %s
+            LIMIT 1
+            """,
+            (buyer_id,),
+        )
+        return (row or {}).get("bidder_id")
+
+    async def get_endpoints_for_bidder(self, bidder_id: str | None) -> list[dict[str, Any]]:
+        params: list[Any] = []
+        where = ""
+        if bidder_id:
+            where = "WHERE bidder_id = %s"
+            params.append(bidder_id)
+        return await pg_query(
+            f"""
+            SELECT
+                bidder_id,
+                endpoint_id,
+                url,
+                trading_location,
+                COALESCE(maximum_qps, 0) AS maximum_qps
+            FROM rtb_endpoints
+            {where}
+            ORDER BY trading_location, endpoint_id
+            """,
+            tuple(params),
+        )
+
+    async def get_observed_endpoint_rows(self, bidder_id: str | None) -> list[dict[str, Any]]:
+        params: list[Any] = []
+        where = ""
+        if bidder_id:
+            where = "WHERE c.bidder_id = %s"
+            params.append(bidder_id)
+        return await pg_query(
+            f"""
+            SELECT
+                c.bidder_id,
+                c.endpoint_id,
+                COALESCE(c.current_qps, 0) AS current_qps,
+                c.observed_at,
+                e.trading_location,
+                e.url
+            FROM rtb_endpoints_current c
+            LEFT JOIN rtb_endpoints e
+              ON e.bidder_id = c.bidder_id AND e.endpoint_id = c.endpoint_id
+            {where}
+            ORDER BY c.current_qps DESC, c.endpoint_id
+            """,
+            tuple(params),
+        )
