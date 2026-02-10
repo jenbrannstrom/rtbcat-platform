@@ -65,7 +65,7 @@ function WasteAnalysisContent() {
   const [days, setDays] = useState<number>(initialDays);
 
   // Fetch seats to auto-select first one if none selected
-  const { data: seats } = useQuery({
+  const { data: seats, isLoading: seatsLoading } = useQuery({
     queryKey: ["seats"],
     queryFn: () => getSeats({ active_only: true }),
   });
@@ -115,6 +115,8 @@ function WasteAnalysisContent() {
     [updateUrl]
   );
 
+  const seatReady = !!selectedBuyerId;
+
   // Fetch QPS summary
   const {
     data: qpsSummary,
@@ -123,6 +125,7 @@ function WasteAnalysisContent() {
   } = useQuery({
     queryKey: ["qps-summary", days],
     queryFn: () => getQPSSummary(days, selectedBuyerId || undefined),
+    enabled: seatReady,
   });
 
   // Fetch RTB funnel data from CSV files
@@ -133,6 +136,7 @@ function WasteAnalysisContent() {
   } = useQuery({
     queryKey: ["rtb-funnel", days, selectedBuyerId],
     queryFn: () => getRTBFunnel(days, selectedBuyerId || undefined),
+    enabled: seatReady,
   });
 
   // Fetch spend stats for CPM display (filtered by expanded config if selected)
@@ -152,6 +156,8 @@ function WasteAnalysisContent() {
   } = useQuery({
     queryKey: ["pretargeting-configs", selectedBuyerId],
     queryFn: () => getPretargetingConfigs({ buyer_id: selectedBuyerId || undefined }),
+    enabled: seatReady,
+    retry: 0,
   });
 
   // Fetch config-level performance data (filtered by selected buyer)
@@ -163,12 +169,14 @@ function WasteAnalysisContent() {
   } = useQuery({
     queryKey: ["rtb-funnel-configs", days, selectedBuyerId],
     queryFn: () => getRTBFunnelConfigs(days, selectedBuyerId || undefined),
+    enabled: seatReady,
     retry: 0,
   });
 
   const { data: endpointEfficiency, isLoading: endpointEfficiencyLoading } = useQuery({
     queryKey: ["endpoint-efficiency", days, selectedBuyerId],
     queryFn: () => getEndpointEfficiency(days, selectedBuyerId || undefined),
+    enabled: seatReady,
   });
 
   const handleRefresh = () => {
@@ -311,6 +319,11 @@ function WasteAnalysisContent() {
 
       {/* Content area with padding */}
       <div className="p-6 space-y-4">
+      {!seatReady && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+          {seatsLoading ? "Loading seat..." : "Select a seat to load home analytics."}
+        </div>
+      )}
       {/* Account Endpoints Header with integrated funnel metrics */}
       <AccountEndpointsHeader funnelData={funnelDataForHeader} />
 

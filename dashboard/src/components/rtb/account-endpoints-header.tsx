@@ -51,12 +51,15 @@ export function AccountEndpointsHeader({ funnelData }: AccountEndpointsHeaderPro
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['rtb-endpoints', selectedBuyerId],
     queryFn: () => getRTBEndpoints({ buyer_id: selectedBuyerId || undefined }),
+    enabled: !!selectedBuyerId,
   });
 
   // Also fetch pretargeting configs to count active ones
   const { data: configsData } = useQuery({
     queryKey: ['pretargeting-configs', selectedBuyerId],
     queryFn: () => getPretargetingConfigs({ buyer_id: selectedBuyerId || undefined }),
+    enabled: !!selectedBuyerId,
+    retry: 0,
   });
 
   // Mutation to sync endpoints from Google API
@@ -76,6 +79,14 @@ export function AccountEndpointsHeader({ funnelData }: AccountEndpointsHeaderPro
       syncMutation.mutate();
     }
   }, [isLoading, data, selectedServiceAccountId]);
+
+  if (!selectedBuyerId) {
+    return (
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+        Select a seat to load RTB endpoints and pretargeting metrics.
+      </div>
+    );
+  }
 
   const activeConfigsCount = configsData?.filter(c => c.state === 'ACTIVE').length || 0;
 
