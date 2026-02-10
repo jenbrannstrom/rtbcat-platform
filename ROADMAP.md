@@ -222,17 +222,55 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [ ] **Pipeline env parity** - Ensure `CATSCAN_PIPELINE_ENABLED`, `BIGQUERY_PROJECT_ID`, `BIGQUERY_DATASET`, `RAW_PARQUET_BUCKET`, `CATSCAN_GCS_BUCKET`, and `GOOGLE_APPLICATION_CREDENTIALS` are set on VM2.
 - [ ] **Ops runbook** - Link: `docs/POSTGRES_MIGRATION_RUNBOOK.md` §2b and `docs/GCP_CREDENTIALS_SETUP.md` (Gmail OAuth + Scheduler).
 
-### Phase 2 — Precompute & Caching
-- [ ] **Materialized aggregates** - Precompute seat-wide and billing_id-level metrics (size/geo/publisher/config)
-- [x] **Refresh strategy** - Documented in runbook: 6h scheduled (2 days), per-import (7 days), nightly (90 days), weekly validation. See `docs/POSTGRES_MIGRATION_RUNBOOK.md` § 5.
+### Universal Precompute Program (Fresh-Only, Single-Seat Assumption)
 
-### Phase 3 — API Refactor
-- [ ] **Seat-scoped endpoints** - `/analytics/home/*` endpoints that return precomputed data for a buyer_id
-- [ ] **Correctness flags** - API returns data_source + missing-data warnings for UI banners
+**Principle:** user-facing analytics routes must read prepared data only.  
+**Accuracy rule:** do not serve stale snapshots as current. If refresh is pending, return `refreshing` state (not old data).  
+**Scope rule:** optimize for one buyer seat per user session; admin diagnostics may remain slower.
 
-### Phase 4 — UI Refactor & Features
+#### Phase U0 — Endpoint Inventory + Runtime Query Freeze
+- [ ] Inventory all analytics endpoints used by `/`, `/qps/*`, `/settings/*` and classify each as `precomputed_read` or `runtime_aggregate`.
+- [ ] Mark all non-admin `runtime_aggregate` routes as migration targets.
+- [ ] Add a CI/static guard to block new multi-day fact-table aggregations in non-admin routers.
+
+#### Phase U1 — Canonical Serving Tables
+- [ ] Add universal serving tables keyed by `(window_days, buyer_account_id, dimension_key)` for windows `7/14/30`.
+- [ ] Table families: `serve_home_*`, `serve_qps_*`, `serve_config_*` at seat/config/publisher/geo/size grains.
+- [ ] Include metadata fields in each table: `as_of_date`, `last_refreshed_at`, `refresh_run_id`, `data_state`.
+- [ ] Add indexes for read paths: `(window_days, buyer_account_id, <dimension>)`.
+
+#### Phase U2 — Universal Refresh Orchestrator
+- [ ] Build one orchestrator job that recomputes all serving tables for `7/14/30` windows.
+- [ ] Trigger refresh on: scheduled cadence + post-import completion + manual admin refresh.
+- [ ] Make refresh idempotent and atomic per table/window (upsert/swap pattern).
+- [ ] Persist run logs and durations per domain/table/window.
+
+#### Phase U3 — API Cutover (Read-Only Serving)
+- [ ] Migrate non-admin analytics endpoints to serving-table reads only.
+- [ ] Remove runtime `SUM/GROUP BY` over fact/precompute-daily tables from hot paths.
+- [ ] Standardize response metadata: `data_state`, `last_refreshed_at`, `window_days`.
+- [ ] Keep admin-only deep-check endpoints separate under admin/system routes.
+
+#### Phase U4 — UI Behavior for Fresh-Only Accuracy
+- [ ] Replace long loading waits with explicit status states: `refreshing`, `ready`, `unavailable`.
+- [ ] Show “calculating now” banners when current window refresh is in progress.
+- [ ] Avoid presenting previous-window or stale-window data as if it were current.
+- [ ] Ensure core page sections render independently so one slow section does not block all.
+
+#### Phase U5 — Performance/Correctness Gates
+- [ ] SLO: non-admin analytics endpoints P95 < 500ms after warmup.
+- [ ] Correctness test: serving-table values match truth-query samples within tolerance.
+- [ ] Freshness test: requested window must have successful current refresh before `ready` state.
+- [ ] Deployment gate: fail release if any non-admin route still uses runtime multi-day aggregation.
+
+#### Phase U6 — Rollout Plan
+- [ ] Wave 1: Home page (`/analytics/home/*`) + pretargeting/config performance feeds.
+- [ ] Wave 2: QPS pages (`/qps/publisher`, `/qps/geo`, `/qps/size`) and backing APIs.
+- [ ] Wave 3: Remaining user-facing analytics and recommendation inputs.
+- [ ] Wave 4: remove deprecated runtime paths; keep admin diagnostic endpoints only.
+
+### Home UI Refactor & Features
 - [ ] **Pretargeting configs** - “No data” state when performance missing; seat-only list (10 active)
-- [ ] **Pretargeting configs empty bug** - UI shows “No Pretargeting Configs” even after Sync All; verify sync-all writes `pretargeting_configs`, fix query key invalidation (`pretargeting-configs` vs `pretargetingConfigs`), and add banner when bidder_id lookup fails
 - [ ] **Recommended Optimizations panel (Home)** - Disabled until data correctness and optimization engine are ready
 - [ ] **By Size** - Billing ID scoped; add size drill-down to list creatives + modal icon per creative (backend fix staged; deploy + refresh pending)
 - [ ] **By Geo / By Publisher** - Re-enable once join-safe keys are available; seat-only
@@ -241,7 +279,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [ ] **Size Analysis** - Seat-wide only; two-column layout with “No Creatives” and wasted QPS
 - [ ] **Geographic Performance** - Title “overall for {seat}”; sortable columns; fix totals + bids/reached mismatch; replace blocks with table icons (trophy/!)
 
-### Phase 5 — Validation
+### Home Validation
 - [ ] **Data correctness checks** - Assert `bids <= reached` where applicable; warn on inconsistent source data
 - [ ] **Performance checks** - Home page loads in sections with independent loading states
 - [ ] **Deploy verification** - Follow `docs/DEPLOY_CHECKLIST.md` after UI + precompute deploys
