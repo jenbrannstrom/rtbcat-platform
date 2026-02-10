@@ -500,7 +500,8 @@ export async function getRTBFunnelConfigs(
   const params = new URLSearchParams({ days: String(days) });
   if (buyerId) params.set('buyer_id', buyerId);
   return fetchApi<ConfigPerformanceResponse>(
-    `/analytics/home/configs?${params}`
+    `/analytics/home/configs?${params}`,
+    { timeoutMs: 12000 }
   );
 }
 
@@ -511,7 +512,8 @@ export async function getEndpointEfficiency(
   const params = new URLSearchParams({ days: String(days) });
   if (buyerId) params.set("buyer_id", buyerId);
   return fetchApi<EndpointEfficiencyResponse>(
-    `/analytics/home/endpoint-efficiency?${params.toString()}`
+    `/analytics/home/endpoint-efficiency?${params.toString()}`,
+    { timeoutMs: 12000 }
   );
 }
 

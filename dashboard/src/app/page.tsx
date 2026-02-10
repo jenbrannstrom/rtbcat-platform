@@ -159,9 +159,11 @@ function WasteAnalysisContent() {
     data: configPerformance,
     isLoading: configPerformanceLoading,
     refetch: refetchConfigPerf,
+    isError: configPerformanceError,
   } = useQuery({
     queryKey: ["rtb-funnel-configs", days, selectedBuyerId],
     queryFn: () => getRTBFunnelConfigs(days, selectedBuyerId || undefined),
+    retry: 0,
   });
 
   const { data: endpointEfficiency, isLoading: endpointEfficiencyLoading } = useQuery({
@@ -332,7 +334,7 @@ function WasteAnalysisContent() {
           </h2>
         </div>
 
-        {(configsLoading || configPerformanceLoading) ? (
+        {configsLoading ? (
           <div className="space-y-2">
             {[1, 2, 3].map(i => (
               <div key={i} className="h-16 bg-gray-100 rounded-lg animate-pulse" />
@@ -348,6 +350,11 @@ function WasteAnalysisContent() {
           </div>
         ) : (
           <div className="space-y-2">
+            {(configPerformanceLoading || configPerformanceError) && (
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                Config performance metrics are delayed; showing base config list.
+              </div>
+            )}
             {/* Sortable Column Headers */}
             <div className="flex items-center px-4 py-2 bg-gray-100 rounded-t-lg text-xs font-medium text-gray-600 uppercase tracking-wider">
               <button

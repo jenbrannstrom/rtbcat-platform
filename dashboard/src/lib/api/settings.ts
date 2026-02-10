@@ -148,7 +148,10 @@ export async function getPretargetingConfigs(params?: {
     searchParams.set("service_account_id", params.service_account_id);
   }
   const query = searchParams.toString();
-  return fetchApi<PretargetingConfigResponse[]>(`/settings/pretargeting${query ? `?${query}` : ""}`);
+  return fetchApi<PretargetingConfigResponse[]>(
+    `/settings/pretargeting${query ? `?${query}` : ""}`,
+    { timeoutMs: 10000 }
+  );
 }
 
 export async function syncPretargetingConfigs(params?: {

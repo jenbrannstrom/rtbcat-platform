@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any, Optional
 
 from storage.postgres_database import pg_query, pg_query_one
@@ -9,6 +10,11 @@ from storage.postgres_database import pg_query, pg_query_one
 
 class AnalyticsRepository:
     """SQL-only repository for analytics queries."""
+
+    @staticmethod
+    def _cutoff_date(days: int) -> str:
+        """Return ISO date cutoff matching prior CURRENT_DATE + '-N days' behavior."""
+        return (date.today() - timedelta(days=days)).isoformat()
 
     # =========================================================================
     # Precompute Status
@@ -35,8 +41,8 @@ class AnalyticsRepository:
         params: Optional[list] = None,
     ) -> int:
         """Get row count from a precompute table for the requested date range."""
-        where_clauses = ["metric_date::date >= (CURRENT_DATE + %s::interval)"]
-        query_params: list = [f"-{days} days"]
+        where_clauses = ["metric_date >= %s"]
+        query_params: list = [self._cutoff_date(days)]
         if filters:
             where_clauses.extend(filters)
             if params:
@@ -113,10 +119,10 @@ class AnalyticsRepository:
                 COALESCE(SUM(impressions), 0) as total_impressions,
                 COALESCE(SUM(spend_micros), 0) as total_spend_micros
             FROM rtb_app_daily
-            WHERE metric_date::date >= (CURRENT_DATE + %s::interval)
+            WHERE metric_date >= %s
               AND billing_id = %s
             """,
-            (f"-{days} days", billing_id),
+            (self._cutoff_date(days), billing_id),
         )
         return dict(row) if row else {"total_impressions": 0, "total_spend_micros": 0}
 
@@ -130,10 +136,10 @@ class AnalyticsRepository:
                 COALESCE(SUM(impressions), 0) as total_impressions,
                 COALESCE(SUM(spend_micros), 0) as total_spend_micros
             FROM rtb_app_daily
-            WHERE metric_date::date >= (CURRENT_DATE + %s::interval)
+            WHERE metric_date >= %s
               AND billing_id = ANY(%s)
             """,
-            (f"-{days} days", billing_ids),
+            (self._cutoff_date(days), billing_ids),
         )
         return dict(row) if row else {"total_impressions": 0, "total_spend_micros": 0}
 
@@ -145,8 +151,8 @@ class AnalyticsRepository:
                 COALESCE(SUM(impressions), 0) as total_impressions,
                 COALESCE(SUM(spend_micros), 0) as total_spend_micros
             FROM rtb_app_daily
-            WHERE metric_date::date >= (CURRENT_DATE + %s::interval)
+            WHERE metric_date >= %s
             """,
-            (f"-{days} days",),
+            (self._cutoff_date(days),),
         )
         return dict(row) if row else {"total_impressions": 0, "total_spend_micros": 0}
