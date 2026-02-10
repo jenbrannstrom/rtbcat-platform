@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import json
 import logging
-from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Optional
 
 from storage.postgres_repositories.rtb_bidstream_repo import RtbBidstreamRepository
+from services.home_analytics_service import HomeAnalyticsService
 
 logger = logging.getLogger(__name__)
 
@@ -333,153 +333,17 @@ class RtbBidstreamService:
         days: int,
         buyer_id: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Get performance breakdown by pretargeting config (billing_id)."""
-        buyer_filters = ["buyer_account_id = %s"] if buyer_id else None
-        buyer_params = [buyer_id] if buyer_id else None
+        """Get performance breakdown by pretargeting config (billing_id).
 
-        status = await self.get_precompute_status(
-            "config_size_daily", days, buyer_filters, buyer_params
+        This endpoint now reads from home precompute tables to avoid costly
+        runtime scans/aggregations from config_size/fact tables on Home loads.
+        """
+        payload = await HomeAnalyticsService().get_config_payload(
+            days=days,
+            buyer_id=buyer_id,
         )
-
-        if not status.has_rows:
-            message = (
-                "No precompute available for this seat. Run a config refresh after imports."
-                if buyer_id
-                else "No precompute available for requested date range."
-            )
-            return {
-                "period_days": days,
-                "data_source": "config_precompute",
-                "message": message,
-                "configs": [],
-                "total_reached": 0,
-                "total_impressions": 0,
-                "overall_win_rate_pct": 0,
-                "overall_waste_pct": 100,
-                "precompute_status": {"config_size_daily": status.to_dict()},
-            }
-
-        valid_billing_ids = None
-        if not buyer_id:
-            valid_billing_ids = await self.get_valid_billing_ids_for_buyer(buyer_id)
-            if not valid_billing_ids:
-                return {
-                    "period_days": days,
-                    "data_source": "config_precompute",
-                    "message": "No precompute available for requested date range.",
-                    "configs": [],
-                    "total_reached": 0,
-                    "total_impressions": 0,
-                    "overall_win_rate_pct": 0,
-                    "overall_waste_pct": 100,
-                    "precompute_status": {"config_size_daily": status.to_dict()},
-                }
-
-        # Get size data
-        rows = await self._repo.get_config_size_data(days, buyer_id, valid_billing_ids)
-        if not rows:
-            return {
-                "period_days": days,
-                "data_source": "config_precompute",
-                "message": "No precompute available for requested date range.",
-                "configs": [],
-                "total_reached": 0,
-                "total_impressions": 0,
-                "overall_win_rate_pct": 0,
-                "overall_waste_pct": 100,
-                "precompute_status": {"config_size_daily": status.to_dict()},
-            }
-
-        # Get geo data for country lists
-        geo_rows = await self._repo.get_config_geo_data(days, buyer_id, valid_billing_ids)
-
-        # Aggregate by billing_id
-        configs_by_billing: dict = defaultdict(lambda: {
-            "reached": 0,
-            "impressions": 0,
-            "sizes": defaultdict(lambda: {"reached": 0, "impressions": 0}),
-            "countries": set(),
-        })
-
-        for row in rows:
-            billing_id = row["billing_id"]
-            config = configs_by_billing[billing_id]
-            config["reached"] += row["total_reached"] or 0
-            config["impressions"] += row["total_impressions"] or 0
-
-            size = row["creative_size"] or "unknown"
-            config["sizes"][size]["reached"] += row["total_reached"] or 0
-            config["sizes"][size]["impressions"] += row["total_impressions"] or 0
-
-        for row in geo_rows:
-            billing_id = row["billing_id"]
-            if billing_id in configs_by_billing and row["country"]:
-                configs_by_billing[billing_id]["countries"].add(row["country"])
-
-        # Build response
-        configs = []
-        total_reached = 0
-        total_impressions = 0
-
-        for billing_id, config in sorted(
-            configs_by_billing.items(),
-            key=lambda x: x[1]["reached"],
-            reverse=True
-        ):
-            reached = config["reached"]
-            impressions = config["impressions"]
-            win_rate = (impressions / reached * 100) if reached > 0 else 0
-
-            total_reached += reached
-            total_impressions += impressions
-
-            sizes_list = []
-            for size, size_data in sorted(
-                config["sizes"].items(),
-                key=lambda x: x[1]["reached"],
-                reverse=True
-            ):
-                size_reached = size_data["reached"]
-                size_impressions = size_data["impressions"]
-                size_win = (size_impressions / size_reached * 100) if size_reached > 0 else 0
-                sizes_list.append({
-                    "size": size,
-                    "reached": size_reached,
-                    "impressions": size_impressions,
-                    "win_rate_pct": round(size_win, 1),
-                    "waste_pct": round(100 - size_win, 1),
-                })
-
-            configs.append({
-                "billing_id": billing_id,
-                "name": f"Config {billing_id}",
-                "reached": reached,
-                "bids": 0,
-                "impressions": impressions,
-                "win_rate_pct": round(win_rate, 1),
-                "waste_pct": round(100 - win_rate, 1),
-                "settings": {
-                    "format": "BANNER",
-                    "geos": sorted(list(config["countries"]))[:10],
-                    "platforms": [],
-                    "qps_limit": None,
-                    "budget_usd": None,
-                },
-                "sizes": sizes_list[:5],
-            })
-
-        overall_win = (total_impressions / total_reached * 100) if total_reached > 0 else 0
-
-        return {
-            "period_days": days,
-            "data_source": "config_precompute",
-            "configs": configs[:20],
-            "total_reached": total_reached,
-            "total_impressions": total_impressions,
-            "overall_win_rate_pct": round(overall_win, 1),
-            "overall_waste_pct": round(100 - overall_win, 1),
-            "precompute_status": {"config_size_daily": status.to_dict()},
-        }
+        payload["total_configs"] = len(payload.get("configs", []))
+        return payload
 
     # =========================================================================
     # Config Breakdown
