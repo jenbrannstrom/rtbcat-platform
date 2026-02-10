@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import sys
 import uuid
@@ -84,10 +85,15 @@ class GmailService:
         logs_dir.mkdir(parents=True, exist_ok=True)
         log_file = logs_dir / "gmail_import_worker.log"
 
+        app_root = str(worker_path.parent.parent)
+        env = {**os.environ, "PYTHONPATH": app_root}
+
         with open(log_file, "a", encoding="utf-8") as fp:
             subprocess.Popen(
                 [sys.executable, str(worker_path), "--job-id", job_id, "--quiet"],
                 stdout=fp,
                 stderr=fp,
                 start_new_session=True,
+                cwd=app_root,
+                env=env,
             )
