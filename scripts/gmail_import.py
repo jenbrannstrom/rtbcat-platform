@@ -44,9 +44,11 @@ except ImportError:
     HAS_GCS_CLIENT = False
 
 # Configuration
-# Only gmail.modify is required - CSV reports come as email attachments
+# gmail.modify: read emails + mark as read after import
+# devstorage.read_only: download reports from GCS (buyside-scheduled-report-export bucket)
 SCOPES = [
     'https://www.googleapis.com/auth/gmail.modify',
+    'https://www.googleapis.com/auth/devstorage.read_only',
 ]
 CATSCAN_DIR = Path.home() / '.catscan'
 CREDENTIALS_DIR = CATSCAN_DIR / 'credentials'
