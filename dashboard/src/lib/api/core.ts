@@ -6,30 +6,47 @@
 import type { Stats, Health, SizesResponse } from "@/types/api";
 
 export const API_BASE = "/api";
+const DEFAULT_API_TIMEOUT_MS = 15000;
+
+export interface FetchApiOptions extends RequestInit {
+  timeoutMs?: number;
+}
 
 /**
  * Generic fetch wrapper with error handling and session auth.
  */
 export async function fetchApi<T>(
   endpoint: string,
-  options?: RequestInit
+  options?: FetchApiOptions
 ): Promise<T> {
   let response: Response;
+  const { timeoutMs = DEFAULT_API_TIMEOUT_MS, ...fetchOptions } = options || {};
+  const timeoutController = options?.signal ? null : new AbortController();
+  const signal = options?.signal || timeoutController?.signal;
+  const timeoutId = timeoutController
+    ? setTimeout(() => timeoutController.abort(), timeoutMs)
+    : null;
 
   try {
     response = await fetch(`${API_BASE}${endpoint}`, {
       credentials: "include", // Include cookies for session auth
       headers: {
         "Content-Type": "application/json",
-        ...options?.headers,
+        ...fetchOptions.headers,
       },
-      ...options,
+      ...fetchOptions,
+      signal,
     });
   } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`Request timed out after ${timeoutMs}ms`);
+    }
     // Network error - API server likely not running
     throw new Error(
       "Cannot connect to API server. Please ensure the backend is running on port 8000."
     );
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 
   if (!response.ok) {
