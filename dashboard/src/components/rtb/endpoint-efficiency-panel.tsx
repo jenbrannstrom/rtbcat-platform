@@ -56,13 +56,20 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
           <div className="text-[11px] uppercase text-blue-700">Allocated QPS Cap</div>
           <div className="text-xl font-bold text-blue-900">{summary.allocated_qps.toLocaleString()}</div>
         </div>
-        <div className="rounded border bg-slate-50 border-slate-200 p-3">
-          <div className="text-[11px] uppercase text-slate-600">Observed Query Rate</div>
-          <div className="text-xl font-bold text-slate-900">{summary.observed_query_rate_qps_avg.toLocaleString()} QPS</div>
+        <div className={`rounded border p-3 ${summary.endpoint_delivery_state === "missing" ? "bg-red-50 border-red-200" : "bg-slate-50 border-slate-200"}`}>
+          <div className="text-[11px] uppercase text-slate-600">Observed Endpoint QPS</div>
+          {summary.observed_query_rate_qps !== null ? (
+            <div className="text-xl font-bold text-slate-900">{summary.observed_query_rate_qps.toLocaleString()} QPS</div>
+          ) : (
+            <div className="text-sm font-medium text-red-700">Feed missing</div>
+          )}
+          <div className="text-[10px] text-gray-400 mt-1">Funnel proxy: {summary.funnel_proxy_qps_avg.toLocaleString()} QPS</div>
         </div>
         <div className="rounded border bg-amber-50 border-amber-200 p-3">
           <div className="text-[11px] uppercase text-amber-700">Utilization</div>
-          <div className="text-xl font-bold text-amber-900">{summary.qps_utilization_pct.toFixed(2)}%</div>
+          <div className="text-xl font-bold text-amber-900">
+            {summary.qps_utilization_pct !== null ? `${summary.qps_utilization_pct.toFixed(2)}%` : "N/A"}
+          </div>
         </div>
         <div className="rounded border bg-emerald-50 border-emerald-200 p-3">
           <div className="text-[11px] uppercase text-emerald-700">Overshoot</div>

@@ -297,7 +297,7 @@ class HomeAnalyticsService:
         start_date = end_date - timedelta(days=max(days - 1, 0))
         window_seconds = days * 24 * 3600
 
-        observed_qps = (total_reached / window_seconds) if window_seconds > 0 else 0.0
+        funnel_proxy_qps = (total_reached / window_seconds) if window_seconds > 0 else 0.0
         win_rate_pct = (total_impressions / total_reached * 100) if total_reached > 0 else 0.0
 
         bidder_id = None
@@ -308,9 +308,24 @@ class HomeAnalyticsService:
         observed_rows = await self._repo.get_observed_endpoint_rows(bidder_id)
         observed_rows = [r for r in observed_rows if float(r.get("current_qps") or 0) > 0]
 
+        # observed_query_rate_qps from actual endpoint delivery data only
+        observed_qps: float | None = None
+        endpoint_delivery_state = "missing"
+        if observed_rows:
+            observed_qps = sum(float(r.get("current_qps") or 0) for r in observed_rows)
+            endpoint_delivery_state = "available"
+
         allocated_qps = int(sum(int(r.get("maximum_qps") or 0) for r in endpoints))
-        utilization_pct = (observed_qps / allocated_qps * 100) if allocated_qps > 0 else 0.0
-        overshoot_x = (allocated_qps / observed_qps) if observed_qps > 0 else None
+        utilization_pct = (
+            (observed_qps / allocated_qps * 100)
+            if observed_qps is not None and allocated_qps > 0
+            else None
+        )
+        overshoot_x = (
+            (allocated_qps / observed_qps)
+            if observed_qps is not None and observed_qps > 0
+            else None
+        )
 
         endpoint_by_id = {str(r.get("endpoint_id")): r for r in endpoints}
         observed_by_id = {str(r.get("endpoint_id")): r for r in observed_rows}
@@ -375,7 +390,19 @@ class HomeAnalyticsService:
                     ),
                 }
             )
-        if allocated_qps > 0 and utilization_pct < 0.2 and total_reached > 0:
+        if endpoint_delivery_state == "missing":
+            alerts.append(
+                {
+                    "code": "ENDPOINT_DELIVERY_MISSING",
+                    "severity": "high",
+                    "message": (
+                        "No endpoint delivery feed data available. "
+                        "observed_query_rate_qps is unavailable until "
+                        "rtb_endpoints_current is populated."
+                    ),
+                }
+            )
+        if utilization_pct is not None and allocated_qps > 0 and utilization_pct < 0.2 and total_reached > 0:
             alerts.append(
                 {
                     "code": "ALLOCATED_VS_OBSERVED_GAP",
@@ -411,9 +438,11 @@ class HomeAnalyticsService:
             },
             "summary": {
                 "allocated_qps": allocated_qps,
-                "observed_query_rate_qps_avg": round(observed_qps, 2),
-                "qps_utilization_pct": round(utilization_pct, 2),
-                "allocation_overshoot_x": round(overshoot_x, 2) if overshoot_x else None,
+                "observed_query_rate_qps": round(observed_qps, 2) if observed_qps is not None else None,
+                "funnel_proxy_qps_avg": round(funnel_proxy_qps, 2),
+                "endpoint_delivery_state": endpoint_delivery_state,
+                "qps_utilization_pct": round(utilization_pct, 2) if utilization_pct is not None else None,
+                "allocation_overshoot_x": round(overshoot_x, 2) if overshoot_x is not None else None,
                 "total_reached_queries": total_reached,
                 "total_impressions": total_impressions,
                 "win_rate_pct": round(win_rate_pct, 2),
