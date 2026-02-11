@@ -3,7 +3,7 @@
 import { useState, useCallback, Suspense, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { RefreshCw, AlertTriangle, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
+import { RefreshCw, AlertTriangle, ArrowUp, ArrowDown, ChevronsUpDown, Loader2 } from "lucide-react";
 import { AccountEndpointsHeader } from "@/components/rtb/account-endpoints-header";
 import { EndpointEfficiencyPanel } from "@/components/rtb/endpoint-efficiency-panel";
 import { PretargetingConfigCard, type PretargetingConfig } from "@/components/rtb/pretargeting-config-card";
@@ -166,6 +166,7 @@ function WasteAnalysisContent() {
     isLoading: configPerformanceLoading,
     refetch: refetchConfigPerf,
     isError: configPerformanceError,
+    isFetching: configPerformanceFetching,
   } = useQuery({
     queryKey: ["rtb-funnel-configs", days, selectedBuyerId],
     queryFn: () => getRTBFunnelConfigs(days, selectedBuyerId || undefined),
@@ -364,8 +365,11 @@ function WasteAnalysisContent() {
         ) : (
           <div className="space-y-2">
             {(configPerformanceLoading || configPerformanceError) && (
-              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                Config performance metrics are delayed; showing base config list.
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 flex items-center gap-2">
+                {(configPerformanceLoading || configPerformanceFetching) && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin flex-shrink-0" />
+                )}
+                <span>Config performance metrics are delayed; showing base config list.</span>
               </div>
             )}
             {/* Sortable Column Headers */}
