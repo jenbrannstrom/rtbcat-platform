@@ -221,6 +221,7 @@ class UploadsRepository:
         status: str,
         row_count: int = 0,
         error_summary: Optional[str] = None,
+        report_type: Optional[str] = None,
     ) -> None:
         """Finalize an ingestion run. Only updates if finished_at IS NULL (no double-write)."""
         await pg_execute(
@@ -229,10 +230,11 @@ class UploadsRepository:
             SET status = %s,
                 row_count = %s,
                 error_summary = %s,
+                report_type = COALESCE(%s, report_type),
                 finished_at = CURRENT_TIMESTAMP
             WHERE run_id = %s AND finished_at IS NULL
             """,
-            (status, row_count, error_summary, run_id),
+            (status, row_count, error_summary, report_type, run_id),
         )
 
     async def get_current_date(self) -> Optional[str]:
