@@ -45,12 +45,15 @@ class StubUploadsRepo(UploadsRepository):
 
     async def finish_ingestion_run(
         self, run_id, status, row_count=0, error_summary=None,
+        report_type=None,
     ):
         run = self.ingestion_runs.get(run_id)
         if run and run["finished_at"] is None:
             run["status"] = status
             run["row_count"] = row_count
             run["error_summary"] = error_summary
+            if report_type is not None:
+                run["report_type"] = report_type
             run["finished_at"] = "2026-02-11T00:00:00+00:00"
 
     async def record_import_history(self, **kwargs):
@@ -273,3 +276,27 @@ def test_gmail_record_import_run_writes_both_tables():
     assert third_params[0] == "gmail-batch-001"  # batch_id
     # buyer_id and bidder_id at end of params
     assert "654321" in third_params  # buyer_id present
+
+
+# ---------------------------------------------------------------------------
+# Test 7: API-path ingestion run gets report_type on finalization
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_api_path_finish_sets_report_type():
+    """finish_ingestion_run with report_type persists it on the run."""
+    repo = StubUploadsRepo()
+    run_id = str(uuid.uuid4())
+
+    await repo.start_ingestion_run(run_id=run_id, source_type="csv", buyer_id="111111")
+    assert repo.ingestion_runs[run_id]["report_type"] is None
+
+    await repo.finish_ingestion_run(
+        run_id=run_id, status="success", row_count=42, report_type="bidsinauction",
+    )
+
+    run = repo.ingestion_runs[run_id]
+    assert run["report_type"] == "bidsinauction"
+    assert run["status"] == "success"
+    assert run["row_count"] == 42
+    assert run["finished_at"] is not None

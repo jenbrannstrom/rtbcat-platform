@@ -380,6 +380,7 @@ async def import_performance_csv(
             status="success" if result.success else "failed",
             row_count=result.rows_imported,
             error_summary=result.error_message if not result.success else error_summary,
+            report_type=result.report_type or None,
         )
 
         perf_service = PerformanceService()
