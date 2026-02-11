@@ -82,6 +82,9 @@ async def sync_rtb_endpoints(
         endpoint_service = EndpointsService()
         count = await endpoint_service.sync_endpoints(account_id, endpoints)
 
+        # Refresh observed QPS from bidstream data for this bidder
+        await endpoint_service.refresh_endpoints_current(bidder_id=account_id)
+
         return SyncEndpointsResponse(
             status="success",
             endpoints_synced=count,

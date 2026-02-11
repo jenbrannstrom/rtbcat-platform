@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from storage.postgres_repositories.endpoints_repo import EndpointsRepository
 
@@ -25,3 +25,14 @@ class EndpointsService:
 
     async def get_current_qps(self, bidder_id: str | None = None) -> float:
         return await self._repo.get_current_qps(bidder_id=bidder_id)
+
+    async def refresh_endpoints_current(
+        self,
+        lookback_days: int = 7,
+        bidder_id: Optional[str] = None,
+    ) -> int:
+        """Refresh rtb_endpoints_current from bidstream data."""
+        return await self._repo.refresh_endpoints_current(
+            lookback_days=lookback_days,
+            bidder_id=bidder_id,
+        )
