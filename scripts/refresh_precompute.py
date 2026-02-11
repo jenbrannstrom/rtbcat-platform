@@ -8,6 +8,7 @@ import asyncio
 from datetime import date, timedelta
 
 from services.config_precompute import refresh_config_breakdowns
+from services.endpoints_service import EndpointsService
 from services.home_precompute import refresh_home_summaries
 from services.precompute_validation import run_precompute_validation
 from services.rtb_precompute import refresh_rtb_summaries
@@ -63,6 +64,10 @@ async def main() -> None:
         **refresh_kwargs,
     )
 
+    # Refresh endpoint observed QPS from bidstream data
+    endpoint_svc = EndpointsService()
+    endpoints_refreshed = await endpoint_svc.refresh_endpoints_current()
+
     if args.validate:
         await run_precompute_validation(start_date, end_date)
 
@@ -70,6 +75,7 @@ async def main() -> None:
         "Precompute refresh complete",
         {
             "home": home_result,
+            "endpoints_current_rows": endpoints_refreshed,
             "start_date": start_date,
             "end_date": end_date,
             "buyer_account_id": args.buyer_id,
