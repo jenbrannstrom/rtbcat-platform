@@ -409,7 +409,7 @@ async def refresh_home_summaries(
             INSERT INTO home_config_daily
                 (metric_date, buyer_account_id, billing_id,
                  reached_queries, impressions, bids_in_auction, auctions_won)
-            SELECT d, pc.bidder_id, pc.billing_id, 0, 0, 0, 0
+            SELECT d::date, pc.bidder_id, pc.billing_id, 0, 0, 0, 0
             FROM pretargeting_configs pc
             JOIN buyer_seats bs ON bs.bidder_id = pc.bidder_id AND bs.active = true
             CROSS JOIN UNNEST(%s::text[]) AS d
