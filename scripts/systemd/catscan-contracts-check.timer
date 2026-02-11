@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily Cat-Scan contract validation
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

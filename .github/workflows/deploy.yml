@@ -79,7 +79,7 @@ jobs:
 
       - name: Verify deployment
         run: |
-          # Wait for services to start (build can take time on the VM)
+          # Wait for services to start
           sleep 60
 
           # Health check
@@ -89,6 +89,22 @@ jobs:
             --quiet \
             --ssh-flag="-o StrictHostKeyChecking=no" \
             --command="
-              curl -s http://localhost:8000/health || echo 'API not responding yet'
+              curl -sf http://localhost:8000/health || { echo 'FAIL: API not responding'; exit 1; }
               sudo docker ps
+            "
+
+      - name: Post-deploy contract check
+        run: |
+          gcloud compute ssh ${{ env.VM_NAME }} \
+            --zone=${{ env.GCP_ZONE }} \
+            --tunnel-through-iap \
+            --quiet \
+            --ssh-flag="-o StrictHostKeyChecking=no" \
+            --command="
+              sudo docker exec catscan-api python /app/scripts/contracts_check.py \
+                --days 7 \
+                --db-dsn-env POSTGRES_DSN \
+                --json-out /tmp/contracts_post_deploy.json \
+              || echo 'WARNING: Contract check found issues (non-blocking)'
+              sudo docker exec catscan-api cat /tmp/contracts_post_deploy.json 2>/dev/null || true
             "
