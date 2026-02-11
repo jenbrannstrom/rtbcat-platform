@@ -83,7 +83,7 @@ export default function LoginPage() {
             <img src="/favicon.svg" alt="Cat-Scan" className="w-16 h-16" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Cat-Scan</h1>
-          <p className="text-gray-600 mt-1">Creative Intelligence Platform</p>
+          <p className="text-gray-600 mt-1">QPS manager for Google Auth Buyers</p>
         </div>
 
         {/* Login Card */}
