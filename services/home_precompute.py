@@ -395,6 +395,32 @@ async def refresh_home_summaries(
                 for row in config_rows
             ],
         )
+
+        # Gap-fill: ensure every ACTIVE config from active buyers has at least
+        # a zero-row in home_config_daily for each date in the refresh window.
+        # ON CONFLICT DO NOTHING preserves real traffic data from BQ.
+        gap_fill_params: list = [date_list]
+        gap_fill_buyer = ""
+        if buyer_account_id:
+            gap_fill_buyer = " AND pc.bidder_id = %s"
+            gap_fill_params.append(buyer_account_id)
+        conn.execute(
+            f"""
+            INSERT INTO home_config_daily
+                (metric_date, buyer_account_id, billing_id,
+                 reached_queries, impressions, bids_in_auction, auctions_won)
+            SELECT d, pc.bidder_id, pc.billing_id, 0, 0, 0, 0
+            FROM pretargeting_configs pc
+            JOIN buyer_seats bs ON bs.bidder_id = pc.bidder_id AND bs.active = true
+            CROSS JOIN UNNEST(%s::text[]) AS d
+            WHERE pc.state = 'ACTIVE'
+              AND pc.billing_id IS NOT NULL
+              AND pc.billing_id != ''{gap_fill_buyer}
+            ON CONFLICT (metric_date, buyer_account_id, billing_id) DO NOTHING
+            """,
+            tuple(gap_fill_params),
+        )
+
         execute_many(
             conn,
             sql=(
