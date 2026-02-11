@@ -638,6 +638,41 @@ async def refresh_config_breakdowns(
                 for row in publisher_rows
             ],
         )
+
+        # Postgres fallback: fill config_publisher_daily from local rtb_daily
+        # rows where BOTH billing_id and publisher_id are present on the same
+        # row.  ON CONFLICT DO NOTHING ensures BQ-sourced data takes priority.
+        fallback_params: list = [date_list]
+        fallback_buyer = ""
+        if buyer_account_id:
+            fallback_buyer = " AND buyer_account_id = %s"
+            fallback_params.append(buyer_account_id)
+        conn.execute(
+            f"""
+            INSERT INTO config_publisher_daily
+                (metric_date, buyer_account_id, billing_id, publisher_id,
+                 publisher_name, reached_queries, impressions, spend_micros)
+            SELECT
+                metric_date::text,
+                buyer_account_id,
+                billing_id,
+                publisher_id,
+                MAX(publisher_name),
+                SUM(reached_queries),
+                SUM(impressions),
+                SUM(spend_micros)
+            FROM rtb_daily
+            WHERE metric_date::text = ANY(%s)
+              AND billing_id IS NOT NULL AND billing_id != ''
+              AND publisher_id IS NOT NULL AND publisher_id != ''
+              AND buyer_account_id IS NOT NULL AND buyer_account_id != ''{fallback_buyer}
+            GROUP BY metric_date, buyer_account_id, billing_id, publisher_id
+            ON CONFLICT (metric_date, buyer_account_id, billing_id, publisher_id)
+                DO NOTHING
+            """,
+            tuple(fallback_params),
+        )
+
         execute_many(
             conn,
             sql=(
