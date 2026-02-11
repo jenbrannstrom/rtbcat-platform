@@ -172,6 +172,90 @@ All within 24h SLA.
 | endpoint_delivery_state | "missing" | "available" |
 | ENDPOINT_DELIVERY_MISSING alert | fires | cleared |
 
+## SG2 Parity Evidence (2026-02-11)
+
+Verification queries run on `catscan-production-sg2` to confirm identical state
+to `catscan-production-sg` (SG). Both instances share the same Cloud SQL database,
+so data parity is expected and confirmed.
+
+### SG2 Q1: Active buyers/bidders
+
+| buyer_id | bidder_id | active |
+|----------|-----------|--------|
+| 1487810529 | 1487810529 | true |
+| 299038253 | 299038253 | true |
+| 6574658621 | 6574658621 | true |
+| 6634662463 | 6634662463 | true |
+
+### SG2 Q2: Configured endpoints
+
+| bidder_id | endpoints | total_allocated_qps |
+|-----------|-----------|---------------------|
+| 1487810529 | 2 | 46,000 |
+| 299038253 | 3 | 46,999 |
+| 6574658621 | 3 | 460,000 |
+| 6634662463 | 3 | 304,428 |
+
+### SG2 Q3: Observed endpoints current
+
+| bidder_id | endpoints | total_observed_qps |
+|-----------|-----------|-------------------|
+| 1487810529 | 2 | 44.6 |
+| 299038253 | 3 | 77.4 |
+| 6574658621 | 3 | 6,299.5 |
+| 6634662463 | 3 | 2,064.5 |
+
+### SG2 Q4: Freshness
+
+| bidder_id | last_observed |
+|-----------|---------------|
+| 1487810529 | 2026-02-11 16:19:26 |
+| 299038253 | 2026-02-11 16:19:26 |
+| 6574658621 | 2026-02-11 16:19:26 |
+| 6634662463 | 2026-02-11 16:19:26 |
+
+### SG2 Q5: Coverage gap
+
+| bidder_id | configured | observed | gap |
+|-----------|-----------|----------|-----|
+| 1487810529 | 2 | 2 | **0** |
+| 299038253 | 3 | 3 | **0** |
+| 6574658621 | 3 | 3 | **0** |
+| 6634662463 | 3 | 3 | **0** |
+
+### SG2 Q6: Per-endpoint detail
+
+| bidder_id | endpoint_id | current_qps | observed_at |
+|-----------|-------------|-------------|-------------|
+| 1487810529 | 16213 | 34.9 | 2026-02-11 16:19:26 |
+| 1487810529 | 19587 | 9.7 | 2026-02-11 16:19:26 |
+| 299038253 | 13761 | 8.6 | 2026-02-11 16:19:26 |
+| 299038253 | 14379 | 25.8 | 2026-02-11 16:19:26 |
+| 299038253 | 14478 | 43.0 | 2026-02-11 16:19:26 |
+| 6574658621 | 15386 | 136.9 | 2026-02-11 16:19:26 |
+| 6574658621 | 15784 | 2,054.2 | 2026-02-11 16:19:26 |
+| 6574658621 | 15831 | 4,108.4 | 2026-02-11 16:19:26 |
+| 6634662463 | 17620 | 678.2 | 2026-02-11 16:19:26 |
+| 6634662463 | 17656 | 1,356.3 | 2026-02-11 16:19:26 |
+| 6634662463 | 18435 | 30.0 | 2026-02-11 16:19:26 |
+
+### SG vs SG2 Parity Comparison
+
+| Metric | SG | SG2 | Match |
+|--------|-----|------|-------|
+| Active bidders | 4 | 4 | YES |
+| Configured endpoints | 11 | 11 | YES |
+| rtb_endpoints_current rows | 11 | 11 | YES |
+| Bidders with observed data | 4/4 | 4/4 | YES |
+| Coverage gap (any bidder) | 0 | 0 | YES |
+| Total observed QPS | 8,486.0 | 8,486.0 | YES |
+| Max staleness | 2026-02-11 16:19:26 | 2026-02-11 16:19:26 | YES |
+| Per-endpoint QPS values | (see Q6) | (see SG2 Q6) | YES (exact) |
+
+**Verdict: PARITY PASS** — All values are identical across SG and SG2. Both
+instances connect to the same Cloud SQL database, so row-level identity is expected.
+Confirmed: no instance-local caching or divergent state.
+
 ## SLA Definition
 
 **Freshness SLA:** `observed_at` must be within 24 hours. This is maintained by:
