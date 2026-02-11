@@ -9,7 +9,7 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Cat, Mail, Lock, AlertCircle, Loader2 } from "lucide-react";
+import { Mail, Lock, AlertCircle, Loader2 } from "lucide-react";
 
 type AuthMethod = "select" | "password" | "authing" | "google";
 
@@ -79,8 +79,8 @@ export default function LoginPage() {
       <div className="max-w-md w-full mx-4">
         {/* Logo and Title */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-600 rounded-2xl mb-4">
-            <Cat className="w-10 h-10 text-white" />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4">
+            <img src="/favicon.svg" alt="Cat-Scan" className="w-16 h-16" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Cat-Scan</h1>
           <p className="text-gray-600 mt-1">Creative Intelligence Platform</p>
