@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - unified-platform
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'ROADMAP.md'
+      - 'CLAUDE.md'
   workflow_dispatch:
 
 permissions:
