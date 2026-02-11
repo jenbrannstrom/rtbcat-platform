@@ -21,6 +21,7 @@ env:
   VM_NAME: ${{ vars.VM_NAME || 'catscan-production' }}
   APP_DIR: ${{ vars.APP_DIR || '/opt/catscan' }}
   GIT_BRANCH: ${{ vars.GIT_BRANCH || 'unified-platform' }}
+  ALLOW_CONTRACT_FAILURE: ${{ vars.ALLOW_CONTRACT_FAILURE || 'false' }}
 
 jobs:
   deploy:
@@ -94,7 +95,18 @@ jobs:
             "
 
       - name: Post-deploy contract check
+        id: contracts
         run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+          ARTIFACT_NAME="contracts_${SHORT_SHA}_${{ env.VM_NAME }}_${TIMESTAMP}.json"
+          ARTIFACT_PATH="/tmp/${ARTIFACT_NAME}"
+          echo "ARTIFACT_PATH=${ARTIFACT_PATH}" >> "$GITHUB_ENV"
+          echo "ARTIFACT_NAME=${ARTIFACT_NAME}" >> "$GITHUB_ENV"
+
+          echo "::group::Contract check (${ARTIFACT_NAME})"
+
+          set +e
           gcloud compute ssh ${{ env.VM_NAME }} \
             --zone=${{ env.GCP_ZONE }} \
             --tunnel-through-iap \
@@ -104,7 +116,38 @@ jobs:
               sudo docker exec catscan-api python /app/scripts/contracts_check.py \
                 --days 7 \
                 --db-dsn-env POSTGRES_DSN \
-                --json-out /tmp/contracts_post_deploy.json \
-              || echo 'WARNING: Contract check found issues (non-blocking)'
-              sudo docker exec catscan-api cat /tmp/contracts_post_deploy.json 2>/dev/null || true
+                --json-out /tmp/contracts_post_deploy.json
             "
+          CHECK_EXIT=$?
+          set -e
+
+          # Copy JSON artifact from VM
+          gcloud compute scp ${{ env.VM_NAME }}:/tmp/contracts_post_deploy.json \
+            "${ARTIFACT_PATH}" \
+            --zone=${{ env.GCP_ZONE }} \
+            --tunnel-through-iap \
+            --quiet \
+            --ssh-flag="-o StrictHostKeyChecking=no" 2>/dev/null || true
+
+          echo "::endgroup::"
+          echo "Contract JSON artifact: ${ARTIFACT_PATH}"
+
+          if [ "$CHECK_EXIT" -ne 0 ]; then
+            if [ "${{ env.ALLOW_CONTRACT_FAILURE }}" = "true" ]; then
+              echo "::warning::CONTRACT CHECK FAILED (exit ${CHECK_EXIT}) — BYPASSED via ALLOW_CONTRACT_FAILURE=true"
+              echo "::warning::This bypass must be temporary. Remove ALLOW_CONTRACT_FAILURE after investigation."
+            else
+              echo "::error::CONTRACT CHECK FAILED (exit ${CHECK_EXIT}). Deploy blocked."
+              echo "::error::Set repository variable ALLOW_CONTRACT_FAILURE=true to bypass (temporary only)."
+              exit 1
+            fi
+          fi
+
+      - name: Upload contract check artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contracts-${{ env.VM_NAME }}-${{ github.sha }}
+          path: ${{ env.ARTIFACT_PATH }}
+          retention-days: 90
+          if-no-files-found: warn
