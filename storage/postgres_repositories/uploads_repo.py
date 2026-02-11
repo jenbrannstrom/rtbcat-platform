@@ -160,6 +160,8 @@ class UploadsRepository:
         status: str,
         error_message: Optional[str],
         file_size_bytes: int,
+        buyer_id: Optional[str] = None,
+        bidder_id: Optional[str] = None,
     ) -> None:
         """Record an import in import_history table."""
         await pg_execute(
@@ -168,8 +170,8 @@ class UploadsRepository:
                 batch_id, filename, rows_read, rows_imported, rows_skipped, rows_duplicate,
                 date_range_start, date_range_end, columns_found, columns_missing,
                 total_reached, total_impressions, total_spend_usd, status, error_message,
-                file_size_bytes
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                file_size_bytes, buyer_id, bidder_id
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 batch_id,
@@ -188,7 +190,49 @@ class UploadsRepository:
                 status,
                 error_message,
                 file_size_bytes,
+                buyer_id,
+                bidder_id,
             ),
+        )
+
+    async def start_ingestion_run(
+        self,
+        run_id: str,
+        source_type: str,
+        buyer_id: Optional[str] = None,
+        bidder_id: Optional[str] = None,
+        report_type: Optional[str] = None,
+        filename: Optional[str] = None,
+    ) -> None:
+        """Insert a new ingestion_runs row with status='running'."""
+        await pg_execute(
+            """
+            INSERT INTO ingestion_runs (
+                run_id, source_type, buyer_id, bidder_id, status,
+                report_type, filename
+            ) VALUES (%s, %s, %s, %s, 'running', %s, %s)
+            """,
+            (run_id, source_type, buyer_id, bidder_id, report_type, filename),
+        )
+
+    async def finish_ingestion_run(
+        self,
+        run_id: str,
+        status: str,
+        row_count: int = 0,
+        error_summary: Optional[str] = None,
+    ) -> None:
+        """Finalize an ingestion run. Only updates if finished_at IS NULL (no double-write)."""
+        await pg_execute(
+            """
+            UPDATE ingestion_runs
+            SET status = %s,
+                row_count = %s,
+                error_summary = %s,
+                finished_at = CURRENT_TIMESTAMP
+            WHERE run_id = %s AND finished_at IS NULL
+            """,
+            (status, row_count, error_summary, run_id),
         )
 
     async def get_current_date(self) -> Optional[str]:
