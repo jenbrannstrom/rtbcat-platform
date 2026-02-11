@@ -20,9 +20,11 @@ import base64
 import html
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass, field
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any, List
+import uuid
 import time
 
 # Add parent directory for imports when running as script
@@ -292,6 +294,22 @@ def extract_report_date(filename: str) -> Optional[str]:
     return f"{raw[:4]}-{raw[4:6]}-{raw[6:]}"
 
 
+def _get_sync_connection():
+    """Get a sync psycopg connection for gmail import tracking."""
+    import psycopg
+    from psycopg.rows import dict_row
+
+    dsn = (
+        os.getenv("POSTGRES_SERVING_DSN")
+        or os.getenv("POSTGRES_DSN")
+        or os.getenv("DATABASE_URL")
+        or ""
+    )
+    if not dsn:
+        return None
+    return psycopg.connect(dsn, row_factory=dict_row)
+
+
 def record_import_run(
     *,
     seat_id: Optional[str],
@@ -300,12 +318,62 @@ def record_import_run(
     success: bool,
     rows_imported: int = 0,
     rows_duplicate: int = 0,
+    rows_read: int = 0,
+    file_size_bytes: int = 0,
+    batch_id: Optional[str] = None,
+    date_range_start: Optional[str] = None,
+    date_range_end: Optional[str] = None,
+    columns_found: Optional[str] = None,
     error: Optional[str] = None,
 ) -> None:
-    """Log import run. Tracking is now handled by Postgres import_history
-    via the unified importer. This function is kept as a no-op for
-    call-site compatibility."""
-    pass
+    """Record import run in ingestion_runs and import_history.
+
+    Uses sync psycopg in a single transaction. buyer_id is set from seat_id
+    (explicit, not filename-parsed). Inserts ingestion_runs as 'running'
+    then immediately updates to final status — import completes before
+    recording, so this is intentional.
+    """
+    conn = _get_sync_connection()
+    if conn is None:
+        return
+    try:
+        run_id = str(uuid.uuid4())
+        status = "success" if success else "failed"
+        with conn:
+            conn.execute(
+                """INSERT INTO ingestion_runs
+                   (run_id, source_type, buyer_id, bidder_id, status,
+                    report_type, filename, row_count, error_summary)
+                   VALUES (%s, 'csv', %s, %s, 'running', %s, %s, 0, NULL)""",
+                (run_id, seat_id, seat_id, report_kind, filename),
+            )
+            conn.execute(
+                """UPDATE ingestion_runs
+                   SET status = %s, row_count = %s, error_summary = %s,
+                       finished_at = CURRENT_TIMESTAMP
+                   WHERE run_id = %s AND finished_at IS NULL""",
+                (status, rows_imported, error, run_id),
+            )
+            if batch_id:
+                conn.execute(
+                    """INSERT INTO import_history
+                       (batch_id, filename, rows_read, rows_imported,
+                        rows_skipped, rows_duplicate, date_range_start,
+                        date_range_end, columns_found, status,
+                        error_message, file_size_bytes, buyer_id, bidder_id)
+                       VALUES (%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    (
+                        batch_id, filename, rows_read, rows_imported,
+                        rows_duplicate, date_range_start, date_range_end,
+                        columns_found,
+                        "complete" if success else "failed",
+                        error, file_size_bytes, seat_id, seat_id,
+                    ),
+                )
+    except Exception as exc:
+        print(f"  Warning: failed to record import run: {exc}")
+    finally:
+        conn.close()
 
 
 def archive_to_s3(filepath: Path, report_type: Optional[str] = None, verbose: bool = True) -> Optional[str]:
@@ -753,23 +821,53 @@ def mark_as_read(service, message_id: str):
     ).execute()
 
 
-def import_to_catscan(filepath: Path) -> tuple[bool, str, int, int, Optional[str]]:
+@dataclass
+class CatscanImportResult:
+    """Result from import_to_catscan with full metadata for observability."""
+    success: bool = False
+    report_type: str = ""
+    rows_imported: int = 0
+    rows_duplicate: int = 0
+    error: Optional[str] = None
+    rows_read: int = 0
+    batch_id: str = ""
+    date_range_start: Optional[str] = None
+    date_range_end: Optional[str] = None
+    columns_found: Optional[str] = None
+    file_size_bytes: int = 0
+
+
+def import_to_catscan(filepath: Path) -> CatscanImportResult:
     """
     Import the CSV into Cat-Scan database directly using the unified importer.
-    Returns True if successful.
+    Returns CatscanImportResult with full metadata for observability.
     """
+    file_size = filepath.stat().st_size if filepath.exists() else 0
     try:
         from importers.unified_importer import unified_import
 
         result = unified_import(str(filepath))
+        columns_str = ",".join(result.columns_mapped.values()) if result.columns_mapped else None
 
         if result.success:
             print(f"  Imported: {result.rows_imported} rows ({result.report_type})")
-            return True, result.report_type, result.rows_imported, result.rows_duplicate, None
         else:
             print(f"  Import failed: {result.error_message}")
-            return False, result.report_type, result.rows_imported, result.rows_duplicate, result.error_message
-    except ImportError as e:
+
+        return CatscanImportResult(
+            success=result.success,
+            report_type=result.report_type,
+            rows_imported=result.rows_imported,
+            rows_duplicate=result.rows_duplicate,
+            error=result.error_message or None,
+            rows_read=result.rows_read,
+            batch_id=result.batch_id,
+            date_range_start=result.date_range_start,
+            date_range_end=result.date_range_end,
+            columns_found=columns_str,
+            file_size_bytes=file_size,
+        )
+    except ImportError:
         # Fall back to HTTP API if running standalone
         import requests
         try:
@@ -779,18 +877,34 @@ def import_to_catscan(filepath: Path) -> tuple[bool, str, int, int, Optional[str
                     files={'file': (filepath.name, f, 'text/csv')}
                 )
             if response.status_code == 200:
-                result = response.json()
-                print(f"  Imported: {result.get('rows_imported', 0)} rows")
-                return True, "api_import", result.get("rows_imported", 0), result.get("rows_duplicate", 0), None
+                data = response.json()
+                print(f"  Imported: {data.get('rows_imported', 0)} rows")
+                return CatscanImportResult(
+                    success=True,
+                    report_type="api_import",
+                    rows_imported=data.get("rows_imported", 0),
+                    rows_duplicate=data.get("rows_duplicate", 0),
+                    batch_id=data.get("batch_id", ""),
+                    file_size_bytes=file_size,
+                )
             else:
                 print(f"  Import failed: {response.text}")
-                return False, "api_import", 0, 0, response.text
+                return CatscanImportResult(
+                    report_type="api_import", error=response.text,
+                    file_size_bytes=file_size,
+                )
         except requests.exceptions.ConnectionError:
             print(f"  Warning: Cat-Scan API not running. File saved to {filepath}")
-            return False, "api_import", 0, 0, "API not running"
+            return CatscanImportResult(
+                report_type="api_import", error="API not running",
+                file_size_bytes=file_size,
+            )
     except Exception as e:
         print(f"  Import error: {e}")
-        return False, "import_error", 0, 0, str(e)
+        return CatscanImportResult(
+            report_type="import_error", error=str(e),
+            file_size_bytes=file_size,
+        )
 
 
 def process_message(
@@ -987,18 +1101,24 @@ def run_import(verbose: bool = True, job_id: Optional[str] = None) -> Dict[str, 
                     # Archive to S3 before importing to database
                     archive_to_s3(filepath, verbose=verbose)
 
-                    success, report_type, rows_imported, rows_duplicate, error = import_to_catscan(filepath)
+                    imp = import_to_catscan(filepath)
                     report_kind = detect_report_kind(filepath.name)
                     record_import_run(
                         seat_id=seat_id,
                         report_kind=report_kind,
                         filename=filepath.name,
-                        success=success,
-                        rows_imported=rows_imported,
-                        rows_duplicate=rows_duplicate,
-                        error=error,
+                        success=imp.success,
+                        rows_imported=imp.rows_imported,
+                        rows_duplicate=imp.rows_duplicate,
+                        rows_read=imp.rows_read,
+                        file_size_bytes=imp.file_size_bytes,
+                        batch_id=imp.batch_id,
+                        date_range_start=imp.date_range_start,
+                        date_range_end=imp.date_range_end,
+                        columns_found=imp.columns_found,
+                        error=imp.error,
                     )
-                    if success:
+                    if imp.success:
                         total_imported += 1
                         # Run pipeline for BigQuery/Postgres
                         run_pipeline_for_file(filepath, seat_id, verbose=verbose)

@@ -34,10 +34,11 @@ from api.schemas.performance import (
     CSVImportResult,
     StreamingImportResult,
 )
-from importers.unified_importer import unified_import
+from importers.unified_importer import unified_import, parse_bidder_id_from_filename
 from storage import PerformanceMetric
 from services.home_precompute import refresh_home_summaries
 from services.performance_service import PerformanceService
+from storage.postgres_repositories.uploads_repo import UploadsRepository
 from services.precompute_validation import run_precompute_validation
 from services.config_precompute import refresh_config_breakdowns
 from services.rtb_precompute import refresh_rtb_summaries
@@ -341,11 +342,27 @@ async def import_performance_csv(
         raise HTTPException(status_code=400, detail="File must be a CSV")
 
     tmp_path = None
+    run_id = str(uuid.uuid4())
+    uploads_repo = UploadsRepository()
+
     try:
         with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp:
             content = await file.read()
             tmp.write(content)
             tmp_path = tmp.name
+
+        # Extract buyer_id from filename as fallback
+        buyer_id = parse_bidder_id_from_filename(file.filename or "")
+        error_summary = None if buyer_id else "buyer_id_unresolved_from_upload"
+
+        # Start ingestion run tracking
+        await uploads_repo.start_ingestion_run(
+            run_id=run_id,
+            source_type="csv",
+            buyer_id=buyer_id,
+            bidder_id=buyer_id,
+            filename=file.filename,
+        )
 
         # Try flexible unified importer first - it auto-maps columns
         result = unified_import(tmp_path, source_filename=file.filename)
@@ -356,6 +373,14 @@ async def import_performance_csv(
             if col not in seen_columns:
                 columns_found.append(col)
                 seen_columns.add(col)
+
+        # Finish ingestion run
+        await uploads_repo.finish_ingestion_run(
+            run_id=run_id,
+            status="success" if result.success else "failed",
+            row_count=result.rows_imported,
+            error_summary=result.error_message if not result.success else error_summary,
+        )
 
         perf_service = PerformanceService()
         await perf_service.record_import(
@@ -371,6 +396,8 @@ async def import_performance_csv(
             status="complete" if result.success else "failed",
             error_message=result.error_message,
             file_size_bytes=file_size_bytes,
+            buyer_id=buyer_id,
+            bidder_id=buyer_id,
         )
         if result.success and result.date_range_start and result.date_range_end:
             background_tasks.add_task(
@@ -397,6 +424,16 @@ async def import_performance_csv(
 
     except Exception as e:
         logger.error(f"Import failed: {e}")
+        # Mark ingestion run as failed
+        try:
+            await uploads_repo.finish_ingestion_run(
+                run_id=run_id,
+                status="failed",
+                row_count=0,
+                error_summary=str(e),
+            )
+        except Exception:
+            logger.warning("Failed to record ingestion_run failure", exc_info=True)
         return CSVImportResult(
             success=False,
             error=str(e),
