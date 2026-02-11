@@ -1,0 +1,10 @@
+[Unit]
+Description=Cat-Scan contract validation
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/catscan
+ExecStart=/usr/bin/docker exec catscan-api python /app/scripts/contracts_check.py --days 7 --db-dsn-env POSTGRES_DSN --json-out /tmp/contracts_daily.json
+User=root
