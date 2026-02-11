@@ -431,8 +431,10 @@ export interface EndpointEfficiencyResponse {
   };
   summary: {
     allocated_qps: number;
-    observed_query_rate_qps_avg: number;
-    qps_utilization_pct: number;
+    observed_query_rate_qps: number | null;
+    funnel_proxy_qps_avg: number;
+    endpoint_delivery_state: "available" | "missing";
+    qps_utilization_pct: number | null;
     allocation_overshoot_x: number | null;
     total_reached_queries: number;
     total_impressions: number;
