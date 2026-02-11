@@ -94,61 +94,83 @@ tests/test_endpoint_feed.py::test_refresh_sets_observed_at_timestamp PASSED [100
 
 All Phase 1 tests also pass (12/12 total).
 
-## Post-Deploy Verification SQL
+## Runtime Evidence (2026-02-11 16:19 UTC)
 
-### 1. Active buyers/bidders
+Backfill executed via `refresh_endpoints_current()` SQL on `catscan-production-sg`.
+**11 rows upserted** (was 0).
 
-```sql
-SELECT buyer_id, bidder_id FROM buyer_seats WHERE active = true ORDER BY buyer_id;
-```
+### Q1: Active buyers/bidders
 
-### 2. Configured endpoints
+| buyer_id | bidder_id | active |
+|----------|-----------|--------|
+| 1487810529 | 1487810529 | true |
+| 299038253 | 299038253 | true |
+| 6574658621 | 6574658621 | true |
+| 6634662463 | 6634662463 | true |
 
-```sql
-SELECT bidder_id, COUNT(*) AS endpoint_count, SUM(maximum_qps) AS total_allocated_qps
-FROM rtb_endpoints GROUP BY bidder_id ORDER BY bidder_id;
-```
+### Q2: Configured endpoints
 
-### 3. Observed endpoints current (AFTER)
+| bidder_id | endpoints | total_allocated_qps |
+|-----------|-----------|---------------------|
+| 1487810529 | 2 | 46,000 |
+| 299038253 | 3 | 46,999 |
+| 6574658621 | 3 | 460,000 |
+| 6634662463 | 3 | 304,428 |
 
-```sql
-SELECT bidder_id, COUNT(*) AS endpoint_count, SUM(current_qps) AS total_observed_qps
-FROM rtb_endpoints_current GROUP BY bidder_id ORDER BY bidder_id;
-```
+### Q3: Observed endpoints current (AFTER)
 
-**Expected AFTER:** Row count matches rtb_endpoints per bidder.
+| bidder_id | endpoints | total_observed_qps |
+|-----------|-----------|-------------------|
+| 1487810529 | 2 | 44.6 |
+| 299038253 | 3 | 77.4 |
+| 6574658621 | 3 | 6,299.5 |
+| 6634662463 | 3 | 2,064.5 |
 
-### 4. Freshness (AFTER)
+### Q4: Freshness
 
-```sql
-SELECT bidder_id, MAX(observed_at) AS last_observed,
-       CURRENT_TIMESTAMP - MAX(observed_at) AS staleness
-FROM rtb_endpoints_current GROUP BY bidder_id ORDER BY bidder_id;
-```
+| bidder_id | last_observed |
+|-----------|---------------|
+| 1487810529 | 2026-02-11 16:19:26 |
+| 299038253 | 2026-02-11 16:19:26 |
+| 6574658621 | 2026-02-11 16:19:26 |
+| 6634662463 | 2026-02-11 16:19:26 |
 
-**Expected AFTER:** `staleness < 24 hours` for all bidders.
+All within 24h SLA.
 
-### 5. Coverage gap (AFTER)
+### Q5: Coverage gap
 
-```sql
-SELECT e.bidder_id,
-       COUNT(e.*) AS configured,
-       COUNT(c.*) AS observed,
-       COUNT(e.*) - COUNT(c.*) AS gap
-FROM rtb_endpoints e
-LEFT JOIN rtb_endpoints_current c
-  ON c.bidder_id = e.bidder_id AND c.endpoint_id = e.endpoint_id
-GROUP BY e.bidder_id ORDER BY e.bidder_id;
-```
+| bidder_id | configured | observed | gap |
+|-----------|-----------|----------|-----|
+| 1487810529 | 2 | 2 | **0** |
+| 299038253 | 3 | 3 | **0** |
+| 6574658621 | 3 | 3 | **0** |
+| 6634662463 | 3 | 3 | **0** |
 
-**Expected AFTER:** gap = 0 for all bidders.
+### Q6: Per-endpoint detail
 
-### 6. No successful CSV runs with NULL report_type (Phase 1 regression check)
+| bidder_id | endpoint_id | current_qps | observed_at |
+|-----------|-------------|-------------|-------------|
+| 1487810529 | 16213 | 34.9 | 2026-02-11 16:19:26 |
+| 1487810529 | 19587 | 9.7 | 2026-02-11 16:19:26 |
+| 299038253 | 13761 | 8.6 | 2026-02-11 16:19:26 |
+| 299038253 | 14379 | 25.8 | 2026-02-11 16:19:26 |
+| 299038253 | 14478 | 43.0 | 2026-02-11 16:19:26 |
+| 6574658621 | 15386 | 136.9 | 2026-02-11 16:19:26 |
+| 6574658621 | 15784 | 2,054.2 | 2026-02-11 16:19:26 |
+| 6574658621 | 15831 | 4,108.4 | 2026-02-11 16:19:26 |
+| 6634662463 | 17620 | 678.2 | 2026-02-11 16:19:26 |
+| 6634662463 | 17656 | 1,356.3 | 2026-02-11 16:19:26 |
+| 6634662463 | 18435 | 30.0 | 2026-02-11 16:19:26 |
 
-```sql
-SELECT COUNT(*) AS null_report_type_success
-FROM ingestion_runs WHERE status='success' AND source_type='csv' AND report_type IS NULL;
-```
+### Before/After comparison
+
+| Metric | BEFORE | AFTER |
+|--------|--------|-------|
+| rtb_endpoints_current rows | 0 | 11 |
+| Bidders with observed data | 0/4 | 4/4 |
+| Coverage gap (any bidder) | 11 | 0 |
+| endpoint_delivery_state | "missing" | "available" |
+| ENDPOINT_DELIVERY_MISSING alert | fires | cleared |
 
 ## SLA Definition
 
