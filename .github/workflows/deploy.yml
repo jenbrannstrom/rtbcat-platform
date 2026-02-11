@@ -122,12 +122,29 @@ jobs:
           set -e
 
           # Copy JSON artifact from VM
+          set +e
           gcloud compute scp ${{ env.VM_NAME }}:/tmp/contracts_post_deploy.json \
             "${ARTIFACT_PATH}" \
             --zone=${{ env.GCP_ZONE }} \
             --tunnel-through-iap \
             --quiet \
-            --ssh-flag="-o StrictHostKeyChecking=no" 2>/dev/null || true
+            --ssh-flag="-o StrictHostKeyChecking=no" 2>/dev/null
+          SCP_EXIT=$?
+          set -e
+
+          if [ "$SCP_EXIT" -ne 0 ] || [ ! -f "${ARTIFACT_PATH}" ]; then
+            echo "::warning::SCP copy failed (exit ${SCP_EXIT}). Writing fallback artifact."
+            cat > "${ARTIFACT_PATH}" <<FALLBACK
+          {
+            "timestamp": "${TIMESTAMP}",
+            "vm": "${{ env.VM_NAME }}",
+            "sha": "${SHORT_SHA}",
+            "check_exit": ${CHECK_EXIT},
+            "error": "artifact_copy_failed",
+            "note": "Contract JSON could not be copied from VM. Gate status decided by check_exit and ALLOW_CONTRACT_FAILURE flag."
+          }
+          FALLBACK
+          fi
 
           echo "::endgroup::"
           echo "Contract JSON artifact: ${ARTIFACT_PATH}"

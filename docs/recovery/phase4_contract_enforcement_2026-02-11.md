@@ -90,7 +90,9 @@ workflow fails — preventing silent release of contract-violating deployments.
 **Behavior:**
 - Runs `contracts_check.py` inside the deployed container via SSH
 - Writes JSON to a dated path: `contracts_<sha>_<vm>_<timestamp>.json`
-- Copies JSON from VM and uploads as a GitHub Actions artifact (90-day retention)
+- Copies JSON from VM via `gcloud compute scp`. If the copy fails, a fallback
+  JSON is written locally (see "Deterministic artifact" below).
+- Artifact is uploaded as a GitHub Actions artifact (90-day retention).
 - On contract failure:
   - **Default (`ALLOW_CONTRACT_FAILURE=false`):** step emits `::error::` and exits 1,
     failing the workflow.
@@ -104,6 +106,28 @@ workflow fails — preventing silent release of contract-violating deployments.
 - Use only for emergency/known-gap deployments.
 - Remove the variable immediately after investigation.
 - The bypass is auditable: the workflow log shows the warning annotation.
+
+**Deterministic artifact upload:**
+
+The artifact file at `${ARTIFACT_PATH}` is guaranteed to exist before the upload
+step runs. Two paths:
+
+1. **SCP succeeds:** the real contract JSON from the VM is uploaded.
+2. **SCP fails:** a fallback JSON is written locally with schema:
+   ```json
+   {
+     "timestamp": "20260211T143022Z",
+     "vm": "catscan-production",
+     "sha": "d8f5547",
+     "check_exit": 1,
+     "error": "artifact_copy_failed",
+     "note": "Contract JSON could not be copied from VM. Gate status decided by check_exit and ALLOW_CONTRACT_FAILURE flag."
+   }
+   ```
+   A `::warning::` annotation is emitted when the fallback is used.
+
+The gate decision (block / bypass / pass) is always based on the contract check
+exit code, never on whether SCP succeeded.
 
 **Workflow snippet (post-deploy step):**
 ```yaml
