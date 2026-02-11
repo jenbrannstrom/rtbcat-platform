@@ -64,6 +64,8 @@ class PerformanceService:
         status: str,
         error_message: Optional[str],
         file_size_bytes: int,
+        buyer_id: Optional[str] = None,
+        bidder_id: Optional[str] = None,
     ) -> None:
         """Record an import in history and update daily summary."""
         columns_str = ",".join(columns_found) if columns_found else None
@@ -85,6 +87,8 @@ class PerformanceService:
             status=status,
             error_message=error_message,
             file_size_bytes=file_size_bytes,
+            buyer_id=buyer_id,
+            bidder_id=bidder_id,
         )
 
     async def finalize_import(
@@ -101,6 +105,8 @@ class PerformanceService:
         total_impressions: int,
         total_spend_usd: float,
         file_size_bytes: int,
+        buyer_id: Optional[str] = None,
+        bidder_id: Optional[str] = None,
     ) -> None:
         """Finalize a chunked import - record history and update daily summary."""
         await self._uploads.record_import_history(
@@ -120,6 +126,8 @@ class PerformanceService:
             status="complete",
             error_message=None,
             file_size_bytes=file_size_bytes,
+            buyer_id=buyer_id,
+            bidder_id=bidder_id,
         )
 
         # Update daily summary
