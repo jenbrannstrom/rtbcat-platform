@@ -82,12 +82,65 @@ Added `test` job that runs before `build-and-push`:
 
 ### 3. Post-deploy gate: `deploy.yml`
 
-Added `Post-deploy contract check` step after the existing health check:
+Added `Post-deploy contract check` step after the existing health check.
 
-- Runs `contracts_check.py` inside the deployed container
-- Produces JSON output at `/tmp/contracts_post_deploy.json`
-- Non-blocking (logs warnings but doesn't fail the deploy workflow)
-- Contract violations are visible in the deploy workflow log
+**Blocking by default.** If `contracts_check.py` exits non-zero, the deploy
+workflow fails — preventing silent release of contract-violating deployments.
+
+**Behavior:**
+- Runs `contracts_check.py` inside the deployed container via SSH
+- Writes JSON to a dated path: `contracts_<sha>_<vm>_<timestamp>.json`
+- Copies JSON from VM and uploads as a GitHub Actions artifact (90-day retention)
+- On contract failure:
+  - **Default (`ALLOW_CONTRACT_FAILURE=false`):** step emits `::error::` and exits 1,
+    failing the workflow.
+  - **Bypass (`ALLOW_CONTRACT_FAILURE=true`):** step emits `::warning::` with explicit
+    bypass notice but does NOT fail. The JSON artifact is still uploaded for audit.
+- Artifact is always uploaded (`if: always()`), even on failure or bypass.
+
+**Bypass mechanism:**
+- Set repository variable `ALLOW_CONTRACT_FAILURE=true` in GitHub Settings >
+  Secrets and variables > Actions > Variables.
+- Use only for emergency/known-gap deployments.
+- Remove the variable immediately after investigation.
+- The bypass is auditable: the workflow log shows the warning annotation.
+
+**Workflow snippet (post-deploy step):**
+```yaml
+- name: Post-deploy contract check
+  id: contracts
+  run: |
+    set +e
+    gcloud compute ssh $VM_NAME ... --command="
+      sudo docker exec catscan-api python /app/scripts/contracts_check.py \
+        --days 7 --db-dsn-env POSTGRES_DSN \
+        --json-out /tmp/contracts_post_deploy.json
+    "
+    CHECK_EXIT=$?
+    set -e
+    # ... copy artifact from VM ...
+    if [ "$CHECK_EXIT" -ne 0 ]; then
+      if [ "$ALLOW_CONTRACT_FAILURE" = "true" ]; then
+        echo "::warning::BYPASSED"
+      else
+        echo "::error::Deploy blocked."
+        exit 1
+      fi
+    fi
+
+- name: Upload contract check artifact
+  if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: contracts-${{ env.VM_NAME }}-${{ github.sha }}
+    path: ${{ env.ARTIFACT_PATH }}
+    retention-days: 90
+```
+
+**Artifact path format:**
+`contracts_<7-char-sha>_<vm-name>_<YYYYMMDDTHHMMSSZ>.json`
+
+Example: `contracts_d8f5547_catscan-production_20260211T143022Z.json`
 
 ### 4. Daily scheduled check: systemd timer
 
