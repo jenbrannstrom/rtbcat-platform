@@ -9,32 +9,20 @@ It’s not a perfect app: we still depend on CSV imports because there is no oth
 
 The practical goal is to reduce bidder bandwidth and improve efficiency.
 
+
 DIAGRAM:
 
 A common issue is ingesting ~50,000 QPS.
-(Think of it like rainfall.)
+(Think of it like waterfall.)
 About 30,000 of that QPS can be low‑value signal that your bidder ignores because the media buyer doesn’t want that inventory.
 
-```
-                 QPS "rainfall"
-                      ↓
-            ┌──────────────────────┐
-            │ 50,000 QPS incoming  │
-            └──────────────────────┘
-                      ↓
-               ┌──────────┐
-               │ FILTER   │
-               └──────────┘
-                 ↙      ↘
-┌──────────────────────────┐   ┌──────────────────────┐
-│ 30,000 QPS wasted signal │   │ 20,000 QPS usable    │
-└──────────────────────────┘   └──────────────────────┘
-```
+![QPS Funnel](../qps-funnel.svg)
 
-You only get 10 pretargeting settings per seat, plus a broad geo bucket (EUS, WUS, EU, Asia).
+
+In Google Authorized Buyers platform you only get 10 pretargeting settings per seat, plus a broad geo bucket (EUS, WUS, EU, Asia).
 This app is about using those 10 settings as effectively as possible.
 
-Even with that limit, it’s still a better control surface than what most SSPs provide.
+Even with that limit, it’s still a better control surface than what most other SSPs provide.
 
 ## Features and user benefits
 
@@ -54,7 +42,7 @@ Even with that limit, it’s still a better control surface than what most SSPs 
    - The app shows where bids drop off in the funnel so you can target the biggest waste first.
 
 6) **Creative size waste**
-   - Google sends ~400 different sizes to your bidder. This is fine for HTML creatives, but for fixed-size display ads this can be a huge drain on your effective QPS. You can see which sizes get traffic but have no matching creatives, and decide to add or block.
+   - Google sends ~400 different *ad-sizes* to your bidder. This is fine for HTML creatives, but for fixed-size display ads this can be a huge drain on your effective QPS. You can see which sizes get traffic but have no matching creatives, and decide to leave or stop Google from sending it in the first place!
 
 7) **Creative‑level diagnostics**
    - You can inspect individual creatives with targeting context to find assets that underperform or mismatch.
@@ -73,12 +61,17 @@ Even with that limit, it’s still a better control surface than what most SSPs 
 
 ## Intended users
 
-- Media buyers, Google campaign managers, RTB/AB engineers maintaining pipelines and metrics.
+- Media buyers, Google ADX campaign managers, RTB/AB engineers maintaining pipelines and metrics.
 - Optimization engineers reducing wasted QPS.
 - Teams managing pretargeting at scale who need safe rollbacks.
 
 ## Deployment notes
 
-- Production serving is Postgres‑only; SQLite is not used for serving.
+- Production serving is Postgres‑only
 - CI builds images; VMs pull and restart.
-- Daily refresh is expected for correct dashboards.
+- when installing only add the seat access JSON key ONLY AT THE END to prevent leaks or exposure
+
+## ARCHITECTURE
+
+This system exists to preserve truth from source to decision: each contract defines a non-negotiable rule that must hold at every stage from import to precompute to API output.  
+When a contract fails, we treat it as a broken measurement path (not a UI issue), block release if needed, and fix the pipeline before trusting optimization decisions.
