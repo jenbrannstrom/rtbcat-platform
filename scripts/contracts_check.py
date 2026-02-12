@@ -339,6 +339,99 @@ async def check_pre_003(
 
 
 # ---------------------------------------------------------------------------
+# Web lane feature flag
+# ---------------------------------------------------------------------------
+
+
+def is_web_lane_enabled(buyer_id: str = "") -> bool:
+    """Check if the web/domain lane is enabled globally and for a specific buyer."""
+    if os.getenv("CATSCAN_WEB_LANE_ENABLED", "").lower() not in ("1", "true", "yes"):
+        return False
+    allowlist = os.getenv("CATSCAN_WEB_LANE_BUYERS", "")
+    if not allowlist:
+        return True  # global enabled, no per-buyer restriction
+    return buyer_id in [b.strip() for b in allowlist.split(",")]
+
+
+def _web_lane_buyer_sql_filter() -> str:
+    """Return a SQL AND clause to scope to allowlisted buyers, or empty string."""
+    allowlist = os.getenv("CATSCAN_WEB_LANE_BUYERS", "")
+    if not allowlist:
+        return ""
+    buyers = [b.strip() for b in allowlist.split(",") if b.strip()]
+    if not buyers:
+        return ""
+    placeholders = ", ".join(f"'{b}'" for b in buyers)
+    return f" AND buyer_account_id IN ({placeholders})"
+
+
+# ---------------------------------------------------------------------------
+# Web lane contract checks
+# ---------------------------------------------------------------------------
+
+
+async def check_web_001(days: int) -> CheckResult:
+    """C-WEB-001: inventory_type valid on all web_domain_daily rows."""
+    if not is_web_lane_enabled():
+        return CheckResult(
+            "C-WEB-001", "inventory_type valid", "SKIP",
+            "Web lane disabled (CATSCAN_WEB_LANE_ENABLED unset)",
+        )
+
+    buyer_filter = _web_lane_buyer_sql_filter()
+    rows = await pg_query(
+        "SELECT COUNT(*) AS cnt FROM web_domain_daily "
+        "WHERE inventory_type NOT IN ('web', 'app', 'unknown') "
+        f"AND metric_date >= (CURRENT_DATE - {days}){buyer_filter}"
+    )
+    bad = rows[0]["cnt"] if rows else 0
+
+    if bad > 0:
+        return CheckResult(
+            "C-WEB-001", "inventory_type valid", "FAIL",
+            f"{bad} row(s) with invalid inventory_type in last {days}d",
+            {"invalid_rows": bad},
+        )
+    return CheckResult(
+        "C-WEB-001", "inventory_type valid", "PASS",
+        f"All web_domain_daily rows have valid inventory_type ({days}d)",
+    )
+
+
+async def check_web_002(days: int, buyers: list[dict]) -> CheckResult:
+    """C-WEB-002: top-N invariant — distinct domains per group <= N+1."""
+    if not is_web_lane_enabled():
+        return CheckResult(
+            "C-WEB-002", "domain cardinality", "SKIP",
+            "Web lane disabled (CATSCAN_WEB_LANE_ENABLED unset)",
+        )
+
+    top_n = int(os.getenv("CATSCAN_DOMAIN_TOP_N", "200"))
+    buyer_filter = _web_lane_buyer_sql_filter()
+
+    rows = await pg_query(
+        "SELECT metric_date, buyer_account_id, billing_id, "
+        "COUNT(DISTINCT publisher_domain) AS domain_count "
+        "FROM web_domain_daily "
+        f"WHERE metric_date >= (CURRENT_DATE - {days}){buyer_filter} "
+        "GROUP BY metric_date, buyer_account_id, billing_id "
+        f"HAVING COUNT(DISTINCT publisher_domain) > {top_n + 1}"
+    )
+
+    if rows:
+        return CheckResult(
+            "C-WEB-002", "domain cardinality", "FAIL",
+            f"{len(rows)} group(s) exceed top-N+1 ({top_n + 1}) domain limit",
+            {"violating_groups": len(rows), "top_n": top_n},
+        )
+    return CheckResult(
+        "C-WEB-002", "domain cardinality", "PASS",
+        f"All groups within top-{top_n}+1 domain limit ({days}d)",
+        {"top_n": top_n},
+    )
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -352,14 +445,15 @@ def print_summary(results: list[CheckResult]) -> tuple[int, int, int]:
     print("-" * 72)
 
     for r in results:
-        icon = {"PASS": "+", "FAIL": "X", "WARN": "!"}.get(r.status, "?")
+        icon = {"PASS": "+", "FAIL": "X", "WARN": "!", "SKIP": "-"}.get(r.status, "?")
         print(f"{r.contract_id:<12} [{icon}] {r.status:<4}  {r.message}")
 
     print("-" * 72)
     passes = sum(1 for r in results if r.status == "PASS")
     warns = sum(1 for r in results if r.status == "WARN")
     fails = sum(1 for r in results if r.status == "FAIL")
-    print(f"Total: {passes} PASS, {warns} WARN, {fails} FAIL")
+    skips = sum(1 for r in results if r.status == "SKIP")
+    print(f"Total: {passes} PASS, {warns} WARN, {fails} FAIL, {skips} SKIP")
     print("=" * 72)
     return passes, warns, fails
 
@@ -388,6 +482,8 @@ async def run_all_checks(
         await check_ept_001(),
         await check_pre_002(days, buyers),
         await check_pre_003(days, buyers, strict),
+        await check_web_001(days),
+        await check_web_002(days, buyers),
     ]
 
 
