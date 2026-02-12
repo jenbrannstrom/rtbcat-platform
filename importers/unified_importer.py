@@ -22,12 +22,23 @@ from psycopg.rows import dict_row
 from importers.flexible_mapper import (
     map_columns, detect_best_report_type, get_default_value, MappingResult
 )
+from importers.domain_rollup import rollup_domains
 from importers.parquet_pipeline import ParquetExportManager
 from importers.utils import parse_date, parse_float, parse_int
 
 logger = logging.getLogger(__name__)
 
 IMPORT_BATCH_SIZE = int(os.getenv("CATSCAN_IMPORT_BATCH_SIZE", "1000"))
+
+
+def is_web_lane_enabled(buyer_id: str = "") -> bool:
+    """Check if the web/domain lane is enabled globally and for a specific buyer."""
+    if os.getenv("CATSCAN_WEB_LANE_ENABLED", "").lower() not in ("1", "true", "yes"):
+        return False
+    allowlist = os.getenv("CATSCAN_WEB_LANE_BUYERS", "")
+    if not allowlist:
+        return True  # global enabled, no per-buyer restriction
+    return buyer_id in [b.strip() for b in allowlist.split(",")]
 
 
 def get_postgres_connection() -> Any:
@@ -247,7 +258,35 @@ def ensure_table_exists(cursor, table_name: str):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_bid_filtering_date ON rtb_bid_filtering(metric_date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_bid_filtering_reason ON rtb_bid_filtering(filtering_reason)")
 
-
+    elif table_name == "web_domain_daily":
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS web_domain_daily (
+                id              SERIAL PRIMARY KEY,
+                metric_date     DATE NOT NULL,
+                buyer_account_id TEXT NOT NULL,
+                billing_id      TEXT NOT NULL,
+                publisher_id    TEXT,
+                publisher_domain TEXT NOT NULL,
+                inventory_type  TEXT NOT NULL CHECK (inventory_type IN ('web', 'app', 'unknown')),
+                impressions     BIGINT DEFAULT 0,
+                reached_queries BIGINT DEFAULT 0,
+                spend_micros    BIGINT DEFAULT 0,
+                source_report   TEXT,
+                row_hash        TEXT,
+                import_batch_id TEXT,
+                ingested_at     TIMESTAMPTZ DEFAULT now(),
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (metric_date, buyer_account_id, billing_id, publisher_domain)
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_web_domain_daily_date "
+            "ON web_domain_daily(metric_date)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_web_domain_daily_buyer "
+            "ON web_domain_daily(metric_date, buyer_account_id)"
+        )
 
 
 def import_to_rtb_daily(
@@ -676,6 +715,185 @@ def import_to_rtb_bid_filtering(
         conn.close()
 
 
+def derive_inventory_type(row_data: dict) -> str:
+    """Derive inventory_type from row signals when not explicitly provided."""
+    app_id = row_data.get("app_id", "")
+    app_name = row_data.get("app_name", "")
+    domain = row_data.get("publisher_domain", "")
+
+    if app_id or app_name:
+        return "app"
+    if domain and domain != "__NO_DOMAIN__":
+        return "web"
+    return "unknown"
+
+
+def import_to_web_domain_daily(
+    csv_path: str,
+    mapping: MappingResult,
+    batch_id: str,
+    result: UnifiedImportResult,
+    bidder_id: Optional[str] = None,
+    parquet_exporter: Optional["ParquetExportManager"] = None,
+    report_type: Optional[str] = None,
+):
+    """Import data to web_domain_daily table (Postgres)."""
+    conn = get_postgres_connection()
+    cursor = conn.cursor()
+    ensure_table_exists(cursor, "web_domain_daily")
+    conn.commit()
+
+    has_domain_col = mapping.has_field("publisher_domain")
+    if not has_domain_col:
+        logger.warning(
+            "Domain CSV missing publisher_domain column — no domain insight possible"
+        )
+
+    min_date, max_date = None, None
+    all_rows: list[dict] = []
+
+    try:
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+
+            for row_num, row in enumerate(reader, start=2):
+                result.rows_read += 1
+
+                try:
+                    metric_date = parse_date(get_value(row, mapping, "day"))
+                    if not metric_date:
+                        result.rows_skipped += 1
+                        continue
+
+                    if min_date is None or metric_date < min_date:
+                        min_date = metric_date
+                    if max_date is None or metric_date > max_date:
+                        max_date = metric_date
+
+                    buyer_account_id = get_value(row, mapping, "buyer_account_id", "")
+                    if not buyer_account_id and bidder_id:
+                        buyer_account_id = bidder_id
+                    if not buyer_account_id:
+                        raise ValueError(
+                            "buyer_account_id missing and no seat ID detected in filename"
+                        )
+
+                    # Buyer allowlist check
+                    if not is_web_lane_enabled(buyer_account_id):
+                        result.error_message = (
+                            f"Buyer {buyer_account_id} not in domain lane allowlist"
+                        )
+                        return
+
+                    domain = get_value(row, mapping, "publisher_domain", "")
+                    if not domain:
+                        domain = "__NO_DOMAIN__"
+
+                    row_data = {
+                        "metric_date": metric_date,
+                        "buyer_account_id": buyer_account_id,
+                        "billing_id": get_value(row, mapping, "billing_id", "unknown"),
+                        "publisher_id": get_value(row, mapping, "publisher_id", ""),
+                        "publisher_domain": domain,
+                        "app_id": get_value(row, mapping, "app_id", ""),
+                        "app_name": get_value(row, mapping, "app_name", ""),
+                        "reached_queries": parse_int(
+                            get_value(row, mapping, "reached_queries", "0")
+                        ),
+                        "impressions": parse_int(
+                            get_value(row, mapping, "impressions", "0")
+                        ),
+                    }
+
+                    # Parse spend (convert to micros)
+                    spend = parse_float(get_value(row, mapping, "spend", "0"))
+                    row_data["spend_micros"] = (
+                        int(spend * 1_000_000) if spend < 1000 else int(spend)
+                    )
+
+                    # Inventory type: explicit or derived
+                    explicit_inv = get_value(row, mapping, "inventory_type", "")
+                    if explicit_inv and explicit_inv in ("web", "app", "unknown"):
+                        row_data["inventory_type"] = explicit_inv
+                    elif explicit_inv:
+                        # Explicit but invalid value — fall back to derivation
+                        row_data["inventory_type"] = derive_inventory_type(row_data)
+                    else:
+                        row_data["inventory_type"] = derive_inventory_type(row_data)
+
+                    # Fix #3: if no domain column, force unknown
+                    if not has_domain_col:
+                        row_data["inventory_type"] = "unknown"
+
+                    row_data["source_report"] = report_type or ""
+                    row_data["import_batch_id"] = batch_id
+
+                    # Compute hash
+                    hash_keys = [
+                        "metric_date", "buyer_account_id", "billing_id",
+                        "publisher_domain",
+                    ]
+                    row_data["row_hash"] = compute_row_hash(row_data, hash_keys)
+
+                    all_rows.append(row_data)
+
+                except Exception as e:
+                    result.rows_skipped += 1
+                    if len(result.errors) < 10:
+                        result.errors.append(f"Row {row_num}: {str(e)}")
+
+        # Apply top-N rollup before insert
+        rolled_up = rollup_domains(all_rows)
+
+        # Batch insert
+        insert_sql = """
+            INSERT INTO web_domain_daily (
+                metric_date, buyer_account_id, billing_id, publisher_id,
+                publisher_domain, inventory_type, impressions, reached_queries,
+                spend_micros, source_report, row_hash, import_batch_id
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (metric_date, buyer_account_id, billing_id, publisher_domain)
+            DO NOTHING
+        """
+        rows_to_insert: list[tuple] = []
+
+        def flush_rows():
+            nonlocal rows_to_insert
+            if not rows_to_insert:
+                return
+            batch_count = len(rows_to_insert)
+            cursor.executemany(insert_sql, rows_to_insert)
+            inserted = cursor.rowcount if cursor.rowcount >= 0 else batch_count
+            result.rows_imported += inserted
+            result.rows_duplicate += batch_count - inserted
+            rows_to_insert = []
+
+        for rd in rolled_up:
+            rows_to_insert.append((
+                rd["metric_date"], rd["buyer_account_id"], rd["billing_id"],
+                rd.get("publisher_id", ""), rd["publisher_domain"],
+                rd["inventory_type"], rd.get("impressions", 0),
+                rd.get("reached_queries", 0), rd.get("spend_micros", 0),
+                rd.get("source_report", ""), rd.get("row_hash", ""),
+                rd.get("import_batch_id", ""),
+            ))
+            if len(rows_to_insert) >= IMPORT_BATCH_SIZE:
+                flush_rows()
+
+        flush_rows()
+        conn.commit()
+        result.success = True
+        result.date_range_start = min_date
+        result.date_range_end = max_date
+
+    except Exception as e:
+        result.error_message = str(e)
+        result.errors.append(f"Fatal: {e}")
+
+    finally:
+        conn.close()
+
+
 def unified_import(
     csv_path: str,
     bidder_id: Optional[str] = None,
@@ -722,6 +940,13 @@ def unified_import(
 
     # Detect best report type
     report_type, target_table, missing_critical = detect_best_report_type(mapping)
+
+    # Filename-first routing for domain lane
+    if source_filename and "catscan-domains-" in os.path.basename(source_filename or "").lower():
+        report_type = "domains"
+        target_table = "web_domain_daily"
+        missing_critical = [] if mapping.has_field("day") else ["day"]
+
     result.report_type = report_type
     result.target_table = target_table
 
@@ -779,6 +1004,16 @@ def unified_import(
             )
         elif target_table == "rtb_bid_filtering":
             import_to_rtb_bid_filtering(
+                csv_path,
+                mapping,
+                result.batch_id,
+                result,
+                bidder_id=bidder_id,
+                parquet_exporter=parquet_exporter,
+                report_type=report_type,
+            )
+        elif target_table == "web_domain_daily":
+            import_to_web_domain_daily(
                 csv_path,
                 mapping,
                 result.batch_id,
