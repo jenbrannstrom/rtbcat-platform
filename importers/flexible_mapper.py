@@ -79,7 +79,10 @@ COLUMN_SYNONYMS: Dict[str, List[str]] = {
         "platform", "#platform", "device type", "device", "os"
     ],
     "environment": [
-        "environment", "#environment", "env", "inventory type"
+        "environment", "#environment", "env"
+    ],
+    "inventory_type": [
+        "inventory type", "inventory_type", "#inventory type", "inv type", "inv_type"
     ],
 
     # Bid funnel metrics
@@ -303,6 +306,7 @@ def detect_best_report_type(mapping: MappingResult) -> Tuple[str, str, List[str]
     has_ivt = mapping.has_field("ivt_credited_impressions") or mapping.has_field("pre_filtered_impressions")
     has_impressions = mapping.has_field("impressions")
     has_auctions_won = mapping.has_field("auctions_won")
+    has_publisher_domain = mapping.has_field("publisher_domain")
 
     # Check for Bid Filtering report
     if has_filtering_reason:
@@ -341,6 +345,13 @@ def detect_best_report_type(mapping: MappingResult) -> Tuple[str, str, List[str]
             return ("rtb_bidstream_publisher", "rtb_bidstream", missing)
         else:
             return ("rtb_bidstream_geo", "rtb_bidstream", missing)
+
+    # Check for Domain report (has publisher_domain, no core-table signals)
+    if has_publisher_domain and not has_creative_id and not has_bid_requests and not has_filtering_reason and not has_ivt:
+        missing = []
+        if not has_day:
+            missing.append("day")
+        return ("domains", "web_domain_daily", missing)
 
     # Check for Performance Detail without creative_id (has impressions)
     if has_impressions:
