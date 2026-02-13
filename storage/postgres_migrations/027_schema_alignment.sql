@@ -205,5 +205,5 @@ ALTER TABLE rtb_funnel_daily ALTER COLUMN auctions_won TYPE BIGINT;
 -- ============================================================
 
 INSERT INTO schema_migrations (version, applied_at, description)
-VALUES (27, CURRENT_TIMESTAMP, 'Schema alignment with DATA_MODEL.md - raw fact tables, pretargeting_publishers, BIGINT upgrades')
+VALUES ('027_schema_alignment', CURRENT_TIMESTAMP, 'Schema alignment with DATA_MODEL.md - raw fact tables, pretargeting_publishers, BIGINT upgrades')
 ON CONFLICT (version) DO NOTHING;
