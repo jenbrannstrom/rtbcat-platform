@@ -24,6 +24,18 @@ variable "app_name" {
   default     = "catscan"
 }
 
+variable "github_repo" {
+  description = "GitHub repository URL to deploy"
+  type        = string
+  default     = "https://github.com/jenbrannstrom/rtbcat-platform.git"
+}
+
+variable "github_branch" {
+  description = "Git branch to deploy"
+  type        = string
+  default     = "unified-platform"
+}
+
 variable "ssh_key_name" {
   description = "Name of existing EC2 key pair for SSH access"
   type        = string
@@ -33,7 +45,23 @@ variable "ssh_key_name" {
 variable "allowed_ssh_cidr" {
   description = "CIDR block allowed to SSH (your IP)"
   type        = string
-  default     = "0.0.0.0/0" # Restrict this in production!
+  default     = "127.0.0.1/32" # Secure default: disable remote SSH until explicitly configured
+
+  validation {
+    condition     = can(cidrnetmask(var.allowed_ssh_cidr))
+    error_message = "allowed_ssh_cidr must be a valid CIDR block (example: 203.0.113.4/32)."
+  }
+}
+
+variable "allowed_app_cidr" {
+  description = "CIDR block allowed to access app ports in non-HTTPS mode"
+  type        = string
+  default     = "127.0.0.1/32" # Secure default: no public direct API/UI access
+
+  validation {
+    condition     = can(cidrnetmask(var.allowed_app_cidr))
+    error_message = "allowed_app_cidr must be a valid CIDR block."
+  }
 }
 
 variable "domain_name" {

@@ -16,6 +16,8 @@ DOMAIN_NAME="${domain_name}"
 ENABLE_HTTPS="${enable_https}"
 BASIC_AUTH_USER="${basic_auth_user}"
 BASIC_AUTH_HASH="${basic_auth_hash}"
+GITHUB_REPO="${github_repo}"
+GITHUB_BRANCH="${github_branch}"
 
 echo "Environment: $ENVIRONMENT"
 echo "S3 Bucket: $S3_BUCKET"
@@ -26,17 +28,12 @@ echo "Basic Auth: $([ -n \"$BASIC_AUTH_USER\" ] && echo 'enabled' || echo 'disab
 # Update system
 dnf update -y
 
-# Install Docker
-dnf install -y docker git
+# Install Docker and compose plugin from signed distro repos
+dnf install -y docker git docker-compose-plugin
 
 # Start Docker
 systemctl start docker
 systemctl enable docker
-
-# Install Docker Compose v2
-mkdir -p /usr/local/lib/docker/cli-plugins
-curl -SL "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64" -o /usr/local/lib/docker/cli-plugins/docker-compose
-chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
 # Create app user
 useradd -m -s /bin/bash catscan || true
@@ -46,8 +43,9 @@ usermod -aG docker catscan
 mkdir -p /home/catscan/.catscan
 mkdir -p /home/catscan/.catscan/credentials
 mkdir -p /home/catscan/.catscan/imports
-chown -R catscan:catscan /home/catscan/.catscan
-chmod -R 777 /home/catscan/.catscan
+# Container runs as rtbcat (UID 999) in production image.
+chown -R 999:999 /home/catscan/.catscan
+chmod -R u+rwX,go-rwx /home/catscan/.catscan
 
 # Setup SSH for GitHub deploy key
 mkdir -p /home/catscan/.ssh
@@ -69,7 +67,12 @@ chown catscan:catscan /home/catscan/.ssh/known_hosts
 # Clone repository via SSH (using deploy key)
 cd /home/catscan
 if [ ! -d "rtbcat-platform" ]; then
-    sudo -u catscan git clone git@github.com:jenbrannstrom/rtbcat-platform.git rtbcat-platform
+    if [[ "$GITHUB_REPO" == https://github.com/* ]]; then
+        GITHUB_SSH_URL=$(echo "$GITHUB_REPO" | sed 's|https://github.com/|git@github.com:|')
+    else
+        GITHUB_SSH_URL="$GITHUB_REPO"
+    fi
+    sudo -u catscan git clone -b "$GITHUB_BRANCH" "$GITHUB_SSH_URL" rtbcat-platform
 fi
 
 cd rtbcat-platform
@@ -89,6 +92,9 @@ DOMAIN=$DOMAIN_NAME
 
 # Data directory
 DATA_DIR=/home/catscan/.catscan
+
+# API worker count
+UVICORN_WORKERS=2
 
 # Authentication cookie for Caddy (required)
 CATSCAN_AUTH_COOKIE=${catscan_auth_cookie}

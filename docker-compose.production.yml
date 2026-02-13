@@ -43,6 +43,7 @@ services:
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/home/rtbcat/.catscan/credentials/google-credentials.json
       - CATSCAN_API_KEY=${CATSCAN_API_KEY:-}
+      - UVICORN_WORKERS=${UVICORN_WORKERS:-2}
       - RTBCAT_ADMIN_EMAIL=${RTBCAT_ADMIN_EMAIL:-}
       - RTBCAT_ADMIN_PASSWORD=${RTBCAT_ADMIN_PASSWORD:-}
       - APP_VERSION=${IMAGE_TAG:-unknown}

@@ -100,6 +100,7 @@ resource "google_compute_instance" "catscan_sg_vm2" {
     google_oauth_client_id        = var.google_oauth_client_id
     google_oauth_client_secret    = var.google_oauth_client_secret
     allowed_email_domains         = var.allowed_email_domains
+    allow_any_google_accounts     = var.allow_any_google_accounts
     precompute_refresh_secret     = random_password.precompute_refresh_secret.result
     precompute_monitor_secret     = random_password.precompute_monitor_secret.result
     gmail_import_secret           = random_password.gmail_import_secret.result
