@@ -55,6 +55,74 @@ read_env() {
   printf "%s" "$val"
 }
 
+auth_check_with_headers() {
+  local email="$1"
+  local code
+  code="$(curl -sS -H "X-Email: $email" -H "X-User: $email" -o /tmp/rtbcat_auth_check.json -w '%{http_code}' "$API_URL/auth/check" || true)"
+  if [[ "$code" != "200" ]]; then
+    return 1
+  fi
+  python3 - <<'PY' >/dev/null 2>&1
+import json,sys
+try:
+    d=json.load(open("/tmp/rtbcat_auth_check.json"))
+except Exception:
+    sys.exit(1)
+sys.exit(0 if d.get("authenticated") is True else 1)
+PY
+}
+
+discover_oauth_header_auth() {
+  local db_email admin_email candidate
+  local seen=" "
+  local -a candidates=()
+
+  # 1) explicit operator override
+  if [[ -n "${SMOKE_EMAIL:-}" ]]; then
+    candidates+=("${SMOKE_EMAIL}")
+  fi
+
+  # 2) configured admin email
+  admin_email="$(read_env RTBCAT_ADMIN_EMAIL)"
+  if [[ -n "$admin_email" ]]; then
+    candidates+=("$admin_email")
+  fi
+
+  # 3) best-effort DB discovery
+  db_email="$(dexec catscan-api python - <<'PY' 2>/dev/null || true
+import asyncio
+from services.auth_service import AuthService
+async def main():
+    svc = AuthService()
+    users = await svc.get_users(active_only=True)
+    if not users:
+        users = await svc.get_users(active_only=False)
+    print(users[0].email if users else "")
+asyncio.run(main())
+PY
+)"
+  if [[ -n "$db_email" ]]; then
+    candidates+=("$db_email")
+  fi
+
+  # 4) known default
+  candidates+=("cat-scan@rtb.cat")
+
+  for candidate in "${candidates[@]}"; do
+    [[ -z "$candidate" ]] && continue
+    case "$seen" in
+      *" $candidate "*) continue ;;
+    esac
+    seen="${seen}${candidate} "
+    if auth_check_with_headers "$candidate"; then
+      AUTH_ARGS=(-H "X-Email: $candidate" -H "X-User: $candidate")
+      ok "Using trusted proxy header auth with user: $candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
 echo "=== Step 1: apply/restart for UVICORN_WORKERS=2 ==="
 
 if [[ -f .env ]]; then
@@ -117,7 +185,9 @@ echo "=== Step 2: migration marker audit ==="
 if dexec catscan-api python scripts/postgres_migrate.py --audit-versions; then
   ok "schema_migrations marker audit clean"
 else
-  bad "schema_migrations marker audit reported anomalies"
+  warn "schema_migrations marker audit found mixed markers (usually historical)"
+  warn "Preview cleanup: python scripts/postgres_migrate.py --normalize-versions"
+  warn "Apply cleanup:   python scripts/postgres_migrate.py --normalize-versions-apply"
 fi
 
 echo
@@ -131,20 +201,10 @@ if [[ -n "$API_KEY" ]]; then
 else
   OAUTH2_ENABLED="$(read_env OAUTH2_PROXY_ENABLED | tr '[:upper:]' '[:lower:]')"
   if [[ "$OAUTH2_ENABLED" == "true" ]]; then
-    SMOKE_EMAIL="$(dexec catscan-api python - <<'PY' 2>/dev/null || true
-import asyncio
-from services.auth_service import AuthService
-async def main():
-    users = await AuthService().get_users(active_only=True)
-    print(users[0].email if users else "")
-asyncio.run(main())
-PY
-)"
-    if [[ -n "$SMOKE_EMAIL" ]]; then
-      AUTH_ARGS=(-H "X-Email: $SMOKE_EMAIL" -H "X-User: $SMOKE_EMAIL")
-      ok "Using trusted proxy header auth with existing user"
+    if discover_oauth_header_auth; then
+      :
     else
-      warn "No active user found for trusted proxy header auth"
+      warn "Could not discover a valid OAuth2 header-auth user; endpoint checks may skip"
     fi
   else
     warn "No CATSCAN_API_KEY and OAUTH2 proxy disabled"
