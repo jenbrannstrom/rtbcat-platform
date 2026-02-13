@@ -44,18 +44,26 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await response.json();
+      const contentType = response.headers.get("content-type") || "";
+      const isJson = contentType.includes("application/json");
+      const data = isJson ? await response.json().catch(() => null) : null;
 
       if (!response.ok) {
-        setErrorMessage(data.detail || "Login failed");
-        setIsLoading(false);
+        if ([502, 503, 504].includes(response.status)) {
+          setErrorMessage("Server unavailable. Please try again in a moment.");
+        } else if (response.status >= 500) {
+          setErrorMessage("Login service is temporarily unavailable.");
+        } else {
+          setErrorMessage(data?.detail || "Login failed");
+        }
         return;
       }
 
       // Redirect to callback URL or home
       router.push(callbackUrl);
     } catch (err) {
-      setErrorMessage("Network error. Please try again.");
+      setErrorMessage("Cannot reach server. Please check your connection and try again.");
+    } finally {
       setIsLoading(false);
     }
   };

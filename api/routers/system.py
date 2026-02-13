@@ -517,4 +517,14 @@ async def get_stats(store=Depends(get_store)):
 async def get_sizes(store=Depends(get_store)):
     """Get available creative sizes from the database."""
     sizes = await store.get_available_sizes()
-    return SizesResponse(sizes=sizes)
+    # PostgresStore currently returns [{canonical_size, size_category, count}]
+    # but this endpoint contract is list[str].
+    if sizes and isinstance(sizes[0], dict):
+        size_values = [
+            str(row.get("canonical_size"))
+            for row in sizes
+            if row.get("canonical_size")
+        ]
+    else:
+        size_values = [str(size) for size in sizes]
+    return SizesResponse(sizes=size_values)

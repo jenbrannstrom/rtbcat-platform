@@ -68,9 +68,13 @@ def ensure_migrations_table(conn: psycopg.Connection) -> None:
     conn.execute("""
         CREATE TABLE IF NOT EXISTS schema_migrations (
             version TEXT PRIMARY KEY,
-            applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            description TEXT
         )
     """)
+    # Backward compatibility: older installs created this table without
+    # description, but newer SQL migrations insert into that column.
+    conn.execute("ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS description TEXT")
     conn.commit()
 
 
