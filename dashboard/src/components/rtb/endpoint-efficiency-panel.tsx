@@ -24,8 +24,8 @@ function formatLocation(location: string | null): string {
 function InfoTooltip({ text }: { text: string }) {
   return (
     <span className="relative inline-flex items-center ml-1 group">
-      <Info className="h-3.5 w-3.5 text-gray-400 hover:text-gray-600 cursor-help" />
-      <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-1 hidden w-72 -translate-x-1/2 rounded border bg-white p-2 text-[11px] font-normal normal-case text-gray-700 shadow-lg group-hover:block">
+      <Info className="h-4 w-4 text-gray-500 hover:text-gray-700 cursor-help" />
+      <span className="pointer-events-none absolute right-full top-1/2 z-[9999] mr-2 hidden w-80 -translate-y-1/2 rounded-md border border-gray-300 bg-white p-3 text-sm font-normal normal-case leading-snug text-gray-800 shadow-2xl group-hover:block">
         {text}
       </span>
     </span>
@@ -42,9 +42,12 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
   const summary = data.summary;
   const recon = data.endpoint_reconciliation;
   const bridge = data.funnel_breakout;
+  const usedPctFromOvershoot = summary.allocation_overshoot_x
+    ? (100 / summary.allocation_overshoot_x)
+    : null;
 
   return (
-    <section className="bg-white rounded-lg border p-4 space-y-4">
+    <section className="bg-white rounded-lg border p-4 space-y-4 overflow-visible">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-gray-900">Endpoint Efficiency</h3>
         <span className="text-xs text-gray-500">
@@ -103,12 +106,17 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
         </div>
         <div className="rounded border bg-emerald-50 border-emerald-200 p-3">
           <div className="text-[11px] uppercase text-emerald-700">
-            Overshoot (Allocation / Observed)
-            <InfoTooltip text="Ratio = Allocated QPS Cap ÷ Observed Endpoint QPS. Example: 147.5x means capacity is 147.5 times higher than observed delivery." />
+            Reserved vs Used
+            <InfoTooltip text="This shows how much capacity you reserved compared to what was actually used. Example: 607.5x means you reserved about 607.5 units for each 1 unit used." />
           </div>
           <div className="text-xl font-bold text-emerald-900">
             {summary.allocation_overshoot_x ? `${summary.allocation_overshoot_x.toFixed(1)}x` : "N/A"}
           </div>
+          {usedPctFromOvershoot !== null && (
+            <div className="text-[12px] text-emerald-800 mt-1">
+              Used: {usedPctFromOvershoot.toFixed(2)}%
+            </div>
+          )}
         </div>
       </div>
 
@@ -124,7 +132,6 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
             <thead>
               <tr className="text-left text-xs text-gray-500 border-b">
                 <th className="py-2 pr-3">Location</th>
-                <th className="py-2 pr-3">Endpoint URL</th>
                 <th className="py-2 pr-3">Allocated QPS</th>
                 <th className="py-2 pr-3">Observed QPS</th>
                 <th className="py-2">
@@ -138,9 +145,6 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
                 <tr key={`${row.catscan_endpoint_id || "extra"}-${idx}`} className="border-b last:border-0">
                   <td className="py-2 pr-3 text-gray-800">
                     {formatLocation(row.catscan_location || row.google_location)}
-                  </td>
-                  <td className="py-2 pr-3 text-gray-700 max-w-[280px] truncate" title={row.catscan_url || row.google_url || "—"}>
-                    {row.catscan_url || row.google_url || "—"}
                   </td>
                   <td className="py-2 pr-3 text-gray-700">
                     {row.allocated_qps !== null ? row.allocated_qps.toLocaleString() : "—"}
