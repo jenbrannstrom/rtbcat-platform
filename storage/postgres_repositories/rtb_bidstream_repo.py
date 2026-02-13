@@ -371,7 +371,8 @@ class RtbBidstreamRepository:
         rows = await pg_query(
             f"""
             SELECT
-                COALESCE(NULLIF(publisher_name, ''), publisher_id) as name,
+                publisher_id as target_value,
+                COALESCE(NULLIF(MAX(publisher_name), ''), publisher_id) as name,
                 COALESCE(SUM(reached_queries), 0) as total_reached,
                 COALESCE(SUM(impressions), 0) as total_impressions,
                 COALESCE(SUM(spend_micros), 0) as total_spend_micros,
@@ -379,7 +380,7 @@ class RtbBidstreamRepository:
                 source_used as data_source
             FROM fact_delivery_daily
             WHERE {" AND ".join(primary_where)}
-            GROUP BY COALESCE(NULLIF(publisher_name, ''), publisher_id), source_used
+            GROUP BY publisher_id, source_used
             ORDER BY SUM(reached_queries) DESC
             LIMIT %s
             """,

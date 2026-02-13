@@ -133,8 +133,10 @@ async def sync_pretargeting_configs(
                 continue
 
             publisher_targeting = cfg.get("publisherTargeting", {}) or {}
-            included_publishers = publisher_targeting.get("includedIds", [])
-            excluded_publishers = publisher_targeting.get("excludedIds", [])
+            publisher_mode = publisher_targeting.get("targetingMode") or "EXCLUSIVE"
+            publisher_values = publisher_targeting.get("values", [])
+            included_publishers = publisher_values if publisher_mode == "INCLUSIVE" else []
+            excluded_publishers = publisher_values if publisher_mode == "EXCLUSIVE" else []
 
             # Clear stale api_sync entries for this billing_id before inserting new ones
             await pretargeting_service.clear_sync_publishers(billing_id)

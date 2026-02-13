@@ -70,6 +70,7 @@ export interface ConfigDetail {
   included_sizes: string[];
   included_geos: string[];
   excluded_geos: string[];
+  maximum_qps?: number | null;
   publisher_targeting_mode?: string | null;
   publisher_targeting_values?: string[];
   synced_at: string | null;
@@ -77,6 +78,7 @@ export interface ConfigDetail {
   effective_sizes: string[];
   effective_geos: string[];
   effective_formats: string[];
+  effective_maximum_qps?: number | null;
   effective_publisher_targeting_mode?: string | null;
   effective_publisher_targeting_values?: string[];
 }
@@ -228,6 +230,7 @@ export type ConfigBreakdownType = 'size' | 'geo' | 'publisher' | 'creative';
 
 export interface ConfigBreakdownItem {
   name: string;
+  target_value?: string;
   spend_usd?: number;
   reached: number;
   impressions: number;

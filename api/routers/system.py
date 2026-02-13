@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 from storage.postgres_database import pg_query_one
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -478,6 +478,49 @@ class SizesResponse(BaseModel):
 class GeoLookupResponse(BaseModel):
     """Response model for geo ID to name mapping."""
     geos: dict[str, str]  # geo_id -> display name
+
+
+class GeoSearchItemResponse(BaseModel):
+    """Searchable geo target result."""
+
+    geo_id: str
+    label: str
+    country_code: Optional[str] = None
+    country_name: Optional[str] = None
+    city_name: Optional[str] = None
+    type: Literal["country", "city"]
+
+
+class GeoSearchResponse(BaseModel):
+    """Response model for geo target search."""
+
+    results: list[GeoSearchItemResponse]
+
+
+@router.get("/geos/search", response_model=GeoSearchResponse)
+async def search_geo_targets(
+    q: str = Query(..., description="Search string for country/city name or geo ID"),
+    limit: int = Query(20, ge=1, le=50, description="Max number of matches"),
+    type: Literal["all", "country", "city"] = Query(
+        "all", description="Filter to country-level, city-level, or both"
+    ),
+):
+    """Search geo criterion targets for adding to pretargeting configs."""
+    service = SystemService()
+    matches = await service.search_geo_targets(query=q, limit=limit, target_type=type)
+    return GeoSearchResponse(
+        results=[
+            GeoSearchItemResponse(
+                geo_id=item["geo_id"],
+                label=item["label"],
+                country_code=item.get("country_code") or None,
+                country_name=item.get("country_name") or None,
+                city_name=item.get("city_name") or None,
+                type=item["type"],  # type: ignore[arg-type]
+            )
+            for item in matches
+        ]
+    )
 
 
 @router.get("/geos/lookup", response_model=GeoLookupResponse)
