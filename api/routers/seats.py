@@ -30,6 +30,7 @@ from api.dependencies import (
 from services.auth_service import User
 from collectors import BuyerSeatsClient, CreativesClient, EndpointsClient, PretargetingClient
 from services.seats_service import SeatsService, BuyerSeat, is_gcp_mode
+from services.pretargeting_service import PretargetingService
 
 StoreType = Any
 
@@ -558,6 +559,7 @@ async def sync_all_data(
 
         # 3. Sync pretargeting configs for this bidder
         try:
+            pretargeting_service = PretargetingService()
             pretargeting_client = PretargetingClient(
                 credentials_path=creds_path,  # None for ADC mode
                 account_id=account_id,
@@ -573,11 +575,12 @@ async def sync_all_data(
                 geo_targeting = cfg.get("geoTargeting", {}) or {}
                 included_geos = geo_targeting.get("includedIds", [])
                 excluded_geos = geo_targeting.get("excludedIds", [])
+                included_os = cfg.get("includedMobileOperatingSystemIds", [])
 
-                await store.save_pretargeting_config({
+                await pretargeting_service.save_config({
                     "bidder_id": account_id,
                     "config_id": cfg["configId"],
-                    "billing_id": cfg.get("billingId"),
+                    "billing_id": str(cfg.get("billingId", "")).strip() or None,
                     "display_name": cfg.get("displayName"),
                     "state": cfg.get("state", "ACTIVE"),
                     "included_formats": json.dumps(cfg.get("includedFormats", [])),
@@ -585,8 +588,35 @@ async def sync_all_data(
                     "included_sizes": json.dumps(sizes),
                     "included_geos": json.dumps(included_geos),
                     "excluded_geos": json.dumps(excluded_geos),
+                    "included_operating_systems": json.dumps(included_os) if included_os else None,
                     "raw_config": json.dumps(cfg),
                 })
+
+                billing_id = str(cfg.get("billingId", "")).strip()
+                if billing_id:
+                    publisher_targeting = cfg.get("publisherTargeting", {}) or {}
+                    publisher_mode = publisher_targeting.get("targetingMode") or "EXCLUSIVE"
+                    publisher_values = publisher_targeting.get("values", [])
+                    included_publishers = publisher_values if publisher_mode == "INCLUSIVE" else []
+                    excluded_publishers = publisher_values if publisher_mode == "EXCLUSIVE" else []
+
+                    await pretargeting_service.clear_sync_publishers(billing_id)
+                    for pub_id in included_publishers:
+                        await pretargeting_service.add_publisher(
+                            billing_id=billing_id,
+                            publisher_id=str(pub_id),
+                            mode="WHITELIST",
+                            status="active",
+                            source="api_sync",
+                        )
+                    for pub_id in excluded_publishers:
+                        await pretargeting_service.add_publisher(
+                            billing_id=billing_id,
+                            publisher_id=str(pub_id),
+                            mode="BLACKLIST",
+                            status="active",
+                            source="api_sync",
+                        )
             pretargeting_synced += len(configs)
             logger.info(f"Synced {len(configs)} pretargeting configs for bidder {account_id}")
         except Exception as e:

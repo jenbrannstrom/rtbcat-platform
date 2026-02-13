@@ -42,7 +42,7 @@ const SIDEBAR_QPS_EXPANDED_KEY = "rtbcat-sidebar-qps-expanded";
 
 // Main navigation items
 const navigationItems = [
-  { key: "creatives" as const, href: "/creatives", icon: Image },
+  { key: "creatives" as const, href: "/clusters", icon: Image },
   { key: "campaigns" as const, href: "/campaigns", icon: FolderKanban },
   { key: "changeHistory" as const, href: "/history", icon: History },
   { key: "import" as const, href: "/import", icon: RefreshCw },
@@ -186,7 +186,7 @@ export function Sidebar() {
     },
     onSuccess: (data) => {
       const msg = `${data.creatives_synced} creatives, ${data.endpoints_synced} endpoints, ${data.pretargeting_synced} configs`;
-      setSyncMessage({ type: "success", text: msg });
+      setSyncMessage({ type: data.status === "partial" ? "error" : "success", text: data.status === "partial" ? data.message : msg });
       queryClient.invalidateQueries({ queryKey: ["creatives"] });
       queryClient.invalidateQueries({ queryKey: ["seats"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
@@ -194,8 +194,9 @@ export function Sidebar() {
       queryClient.invalidateQueries({ queryKey: ["pretargeting-configs"] });
       setTimeout(() => setSyncMessage(null), 5000);
     },
-    onError: (error) => {
-      setSyncMessage({ type: "error", text: t.common.failed });
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : t.common.failed;
+      setSyncMessage({ type: "error", text: message });
       setTimeout(() => setSyncMessage(null), 3000);
     },
     onSettled: () => {
