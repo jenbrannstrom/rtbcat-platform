@@ -80,6 +80,12 @@ variable "allowed_email_domains" {
   default     = []
 }
 
+variable "allow_any_google_accounts" {
+  description = "Allow any Google account when allowed_email_domains is empty (not recommended)."
+  type        = bool
+  default     = false
+}
+
 variable "service_account_email" {
   description = "Existing service account email for VM"
   type        = string

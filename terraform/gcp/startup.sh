@@ -29,6 +29,7 @@ PRECOMPUTE_REFRESH_MAX_AGE_HOURS="${precompute_refresh_max_age}"
 GOOGLE_OAUTH_CLIENT_ID="${google_oauth_client_id}"
 GOOGLE_OAUTH_CLIENT_SECRET="${google_oauth_client_secret}"
 ALLOWED_EMAIL_DOMAINS='${jsonencode(allowed_email_domains)}'
+ALLOW_ANY_GOOGLE_ACCOUNTS="${allow_any_google_accounts}"
 
 # Recover domain/HTTPS from existing nginx/cert if metadata left blank (e.g., reboots)
 if [ -z "$DOMAIN_NAME" ] && [ -f /etc/nginx/sites-enabled/catscan ]; then
@@ -84,8 +85,15 @@ gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
 echo ">>> Installing OAuth2 Proxy..."
 
 OAUTH2_PROXY_VERSION="7.6.0"
-wget -q "https://github.com/oauth2-proxy/oauth2-proxy/releases/download/v$${OAUTH2_PROXY_VERSION}/oauth2-proxy-v$${OAUTH2_PROXY_VERSION}.linux-amd64.tar.gz" -O /tmp/oauth2-proxy.tar.gz
-tar -xzf /tmp/oauth2-proxy.tar.gz -C /tmp
+OAUTH2_PROXY_ARCHIVE="oauth2-proxy-v$${OAUTH2_PROXY_VERSION}.linux-amd64.tar.gz"
+OAUTH2_PROXY_BASE_URL="https://github.com/oauth2-proxy/oauth2-proxy/releases/download/v$${OAUTH2_PROXY_VERSION}"
+wget -q "$${OAUTH2_PROXY_BASE_URL}/$${OAUTH2_PROXY_ARCHIVE}" -O "/tmp/$${OAUTH2_PROXY_ARCHIVE}"
+wget -q "$${OAUTH2_PROXY_BASE_URL}/oauth2-proxy-v$${OAUTH2_PROXY_VERSION}.checksums.txt" -O /tmp/oauth2-proxy.checksums.txt
+if ! (cd /tmp && grep " $${OAUTH2_PROXY_ARCHIVE}\$" oauth2-proxy.checksums.txt | sha256sum -c -); then
+    echo "ERROR: OAuth2 Proxy checksum verification failed"
+    exit 1
+fi
+tar -xzf "/tmp/$${OAUTH2_PROXY_ARCHIVE}" -C /tmp
 mv /tmp/oauth2-proxy-v$${OAUTH2_PROXY_VERSION}.linux-amd64/oauth2-proxy /usr/local/bin/
 chmod +x /usr/local/bin/oauth2-proxy
 rm -rf /tmp/oauth2-proxy*
@@ -96,7 +104,13 @@ COOKIE_SECRET=$(openssl rand -hex 16)
 
 # Determine email domains config
 if [ "$ALLOWED_EMAIL_DOMAINS" = "[]" ] || [ -z "$ALLOWED_EMAIL_DOMAINS" ]; then
-    EMAIL_DOMAINS_CONFIG='email_domains = ["*"]'
+    if [ "$ALLOW_ANY_GOOGLE_ACCOUNTS" = "true" ]; then
+        EMAIL_DOMAINS_CONFIG='email_domains = ["*"]'
+    else
+        echo "ERROR: allowed_email_domains is empty and allow_any_google_accounts=false."
+        echo "Set allowed_email_domains in Terraform for production-safe access control."
+        exit 1
+    fi
 else
     # Convert JSON array to oauth2-proxy format
     EMAIL_DOMAINS_CONFIG="email_domains = $ALLOWED_EMAIL_DOMAINS"
@@ -290,6 +304,7 @@ CREATIVE_CACHE_REFRESH_SECRET=$CREATIVE_CACHE_REFRESH_SECRET
 PRECOMPUTE_REFRESH_DAYS=$PRECOMPUTE_REFRESH_DAYS
 PRECOMPUTE_REFRESH_MAX_AGE_HOURS=$PRECOMPUTE_REFRESH_MAX_AGE_HOURS
 OAUTH2_PROXY_ENABLED=true
+UVICORN_WORKERS=2
 EOF
 
 chmod 600 /etc/catscan.env
@@ -323,6 +338,7 @@ ENV_SOURCE="/etc/catscan.env"
 {
     echo "DATA_DIR=$DATA_DIR"
     echo "OAUTH2_PROXY_ENABLED=true"
+    echo "UVICORN_WORKERS=2"
     grep '^POSTGRES_DSN=' "$ENV_SOURCE" 2>/dev/null || true
     grep '^POSTGRES_SERVING_DSN=' "$ENV_SOURCE" 2>/dev/null || true
     grep '^PRECOMPUTE_REFRESH_SECRET=' "$ENV_SOURCE" 2>/dev/null || true
@@ -373,8 +389,10 @@ CLOUDSQL_PROXY_VERSION="2.14.3"
 CLOUDSQL_INSTANCE_NAME="${app_name}-${environment}-serving"
 CLOUDSQL_CONNECTION_NAME="$${PROJECT_ID}:${gcp_region}:$${CLOUDSQL_INSTANCE_NAME}"
 
-curl -sSfL -o /usr/local/bin/cloud-sql-proxy \
-    "https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v$${CLOUDSQL_PROXY_VERSION}/cloud-sql-proxy.linux.amd64"
+CLOUDSQL_PROXY_URL="https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v$${CLOUDSQL_PROXY_VERSION}/cloud-sql-proxy.linux.amd64"
+curl -sSfL -o /usr/local/bin/cloud-sql-proxy "$${CLOUDSQL_PROXY_URL}"
+CLOUDSQL_PROXY_SHA256="$(curl -sSfL "$${CLOUDSQL_PROXY_URL}.sha256" | awk '{print $1}')"
+echo "$${CLOUDSQL_PROXY_SHA256}  /usr/local/bin/cloud-sql-proxy" | sha256sum -c -
 chmod +x /usr/local/bin/cloud-sql-proxy
 
 cat > /etc/systemd/system/cloud-sql-proxy.service << SERVICEEOF
@@ -596,13 +614,8 @@ cat > /etc/cron.d/docker-cleanup << 'EOF'
 EOF
 chmod 644 /etc/cron.d/docker-cleanup
 
-# Database cleanup - runs weekly on Sunday at 2am UTC
-# Deletes data older than 90 days (configurable via CATSCAN_RETENTION_DAYS)
-cat > /etc/cron.d/catscan-db-cleanup << 'EOF'
-# Database cleanup - runs weekly on Sunday at 2am UTC
-0 2 * * 0 root docker exec catscan-api python scripts/cleanup_old_data.py >> /var/log/catscan-db-cleanup.log 2>&1
-EOF
-chmod 644 /etc/cron.d/catscan-db-cleanup
+# Legacy database cleanup cron removed: scripts/cleanup_old_data.py no longer exists.
+# Use in-app retention settings and /retention/run endpoint for controlled cleanup.
 
 # Home page precompute - systemd timer runs daily at 3am UTC
 # Refreshes precomputed tables for fast dashboard loading
@@ -634,7 +647,7 @@ systemctl enable catscan-precompute-refresh.timer
 
 echo "Maintenance jobs configured:"
 echo "  - docker-cleanup: daily 4am UTC"
-echo "  - catscan-db-cleanup: weekly Sunday 2am UTC"
+echo "  - database retention: managed via app settings/retention endpoint"
 echo "  - catscan-precompute-refresh: daily 3am UTC"
 
 # -----------------------------------------------------------------------------

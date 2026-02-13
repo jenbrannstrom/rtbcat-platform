@@ -15,10 +15,10 @@ permissions:
   contents: read
 
 env:
-  PROJECT_ID: catscan-prod-202601
-  REGION: asia-southeast1
-  REPOSITORY: catscan
-  REGISTRY_HOST: asia-southeast1-docker.pkg.dev
+  PROJECT_ID: ${{ vars.GCP_PROJECT || 'catscan-prod-202601' }}
+  REGION: ${{ vars.GCP_REGION || 'asia-southeast1' }}
+  REPOSITORY: ${{ vars.GCP_REPOSITORY || 'catscan' }}
+  REGISTRY_HOST: ${{ vars.GCP_REGISTRY_HOST || 'asia-southeast1-docker.pkg.dev' }}
 
 jobs:
   test:

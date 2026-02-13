@@ -1010,18 +1010,11 @@ sudo systemctl enable --now catscan-home-refresh.timer
 "
 ```
 
-#### C. Database Cleanup Cron (optional, for data retention)
+#### C. Database Retention (recommended via app settings)
 
-```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap --command="
-cat <<'EOF' | sudo tee /etc/cron.d/catscan-db-cleanup
-# Database cleanup - runs weekly on Sunday at 2am UTC
-# Deletes data older than 90 days (configurable via CATSCAN_RETENTION_DAYS)
-0 2 * * 0 root docker exec catscan-api python scripts/cleanup_old_data.py >> /var/log/catscan-db-cleanup.log 2>&1
-EOF
-sudo chmod 644 /etc/cron.d/catscan-db-cleanup
-"
-```
+`scripts/cleanup_old_data.py` has been removed. Configure retention in:
+- Dashboard: `Settings -> Retention`
+- API: `POST /retention/run` (authenticated admin)
 
 ### 12. Verify Maintenance Jobs
 
@@ -1042,7 +1035,6 @@ sudo docker system df
 
 **Expected cron.d contents:**
 - `docker-cleanup` - Daily Docker cleanup at 4am UTC
-- `catscan-db-cleanup` - Weekly database cleanup (optional)
 
 **Expected timers:**
 - `catscan-home-refresh.timer` - Daily home page refresh at 3am UTC
@@ -1058,7 +1050,7 @@ sudo docker system df
 | Old Docker images | Docker storage | Each deployment pulls new images | `docker-cleanup` cron |
 | Dead containers | Docker storage | Container restarts leave orphans | `docker-cleanup` cron |
 | Large backup files | `/tmp/*.db.gz` | Backup script failures | Fix backup script or delete manually |
-| Old import files | `~/.catscan/imports/` | Gmail imports accumulate | `cleanup_old_data.py` or manual |
+| Old import files | `~/.catscan/imports/` | Gmail imports accumulate | Configure retention in app settings or prune manually |
 | Stale precomputed tables | Postgres serving | Timer not running | `catscan-home-refresh.timer` |
 
 ### Manual Cleanup Commands

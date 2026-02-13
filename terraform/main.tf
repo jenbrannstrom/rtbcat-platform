@@ -88,7 +88,7 @@ resource "aws_security_group" "catscan" {
       from_port   = 3000
       to_port     = 3000
       protocol    = "tcp"
-      cidr_blocks = ["0.0.0.0/0"]
+      cidr_blocks = [var.allowed_app_cidr]
     }
   }
 
@@ -99,7 +99,7 @@ resource "aws_security_group" "catscan" {
       from_port   = 8000
       to_port     = 8000
       protocol    = "tcp"
-      cidr_blocks = ["0.0.0.0/0"]
+      cidr_blocks = [var.allowed_app_cidr]
     }
   }
 
@@ -262,13 +262,15 @@ resource "aws_instance" "catscan" {
   }
 
   user_data = base64encode(templatefile("${path.module}/user_data.sh", {
-    s3_bucket            = aws_s3_bucket.catscan.id
-    environment          = var.environment
-    domain_name          = var.domain_name
-    enable_https         = var.enable_https ? "true" : "false"
-    basic_auth_user      = var.basic_auth_user
-    basic_auth_hash      = var.basic_auth_password != "" ? bcrypt(var.basic_auth_password) : ""
-    catscan_auth_cookie  = var.catscan_auth_cookie
+    s3_bucket           = aws_s3_bucket.catscan.id
+    environment         = var.environment
+    domain_name         = var.domain_name
+    enable_https        = var.enable_https ? "true" : "false"
+    github_repo         = var.github_repo
+    github_branch       = var.github_branch
+    basic_auth_user     = var.basic_auth_user
+    basic_auth_hash     = var.basic_auth_password != "" ? bcrypt(var.basic_auth_password) : ""
+    catscan_auth_cookie = var.catscan_auth_cookie
   }))
 
   tags = {

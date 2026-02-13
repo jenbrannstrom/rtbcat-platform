@@ -56,10 +56,13 @@ cloudflare_zone_id   = ""
 google_oauth_client_id     = "123456789-xxxxxxxxxx.apps.googleusercontent.com"
 google_oauth_client_secret = "GOCSPX-xxxxxxxxxx"
 
-# Optional: Restrict access to specific email domains
-# Leave empty to allow any Google account
+# Restrict access to specific email domains (recommended)
 # Example: ["company.com", "partner.org"]
-allowed_email_domains = []
+allowed_email_domains = ["example.com"]
+
+# If true and allowed_email_domains is empty, any Google account may sign in.
+# Keep false for production.
+allow_any_google_accounts = false
 
 # =============================================================================
 # Analytics storage + BigQuery
