@@ -10,5 +10,5 @@ ALTER TABLE import_history ADD COLUMN IF NOT EXISTS buyer_id TEXT;
 ALTER TABLE import_history ADD COLUMN IF NOT EXISTS bidder_id TEXT;
 
 INSERT INTO schema_migrations (version, applied_at, description)
-VALUES (39, CURRENT_TIMESTAMP, 'Extend ingestion_runs with report_type/filename/bidder_id; add buyer_id/bidder_id to import_history')
+VALUES ('039_ingestion_runs_extend', CURRENT_TIMESTAMP, 'Extend ingestion_runs with report_type/filename/bidder_id; add buyer_id/bidder_id to import_history')
 ON CONFLICT (version) DO NOTHING;
