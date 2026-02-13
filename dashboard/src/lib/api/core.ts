@@ -157,3 +157,29 @@ export async function lookupGeoNames(geoIds: string[]): Promise<Record<string, s
   }
   return result;
 }
+
+export interface GeoSearchResult {
+  geo_id: string;
+  label: string;
+  country_code?: string | null;
+  country_name?: string | null;
+  city_name?: string | null;
+  type: "country" | "city";
+}
+
+export async function searchGeoTargets(
+  query: string,
+  options?: { limit?: number; type?: "all" | "country" | "city" }
+): Promise<GeoSearchResult[]> {
+  const normalized = query.trim();
+  if (!normalized) return [];
+
+  const params = new URLSearchParams({ q: normalized });
+  if (options?.limit) params.set("limit", String(options.limit));
+  if (options?.type) params.set("type", options.type);
+
+  const response = await fetchApi<{ results: GeoSearchResult[] }>(
+    `/geos/search?${params.toString()}`
+  );
+  return response.results || [];
+}

@@ -334,10 +334,10 @@ class ActionsService:
         }
 
     async def _apply_change_to_client(
-        self, change: dict[str, Any], client: PretargetingClient, config_id: str, billing_id: str
+        self, change: dict[str, Any], client: PretargetingClient, config_id: str, _billing_id: str
     ) -> None:
         change_type = change["change_type"]
-        value = change["value"]
+        value = (change.get("value") or "").strip()
 
         if change_type == "add_size":
             parts = value.split("x")
@@ -355,22 +355,50 @@ class ActionsService:
             await client.add_geos_to_config(config_id, [value], exclude=True)
         elif change_type == "remove_excluded_geo":
             await client.remove_geos_from_config(config_id, [value], from_excluded=True)
+        elif change_type in {"add_format", "remove_format"}:
+            current = await client.get_pretargeting_config_by_id(config_id)
+            if not current:
+                raise ValueError(f"Pretargeting config {config_id} not found")
+            current_formats = list(current.get("includedFormats") or [])
+            if change_type == "add_format":
+                if value and value not in current_formats:
+                    current_formats.append(value)
+            elif value:
+                current_formats = [fmt for fmt in current_formats if fmt != value]
+            await client.patch_pretargeting_config(
+                config_id=config_id,
+                update_body={"includedFormats": current_formats},
+                update_mask="includedFormats",
+            )
+        elif change_type == "set_maximum_qps":
+            try:
+                maximum_qps = int(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"Invalid QPS limit: {value}") from exc
+            if maximum_qps < 0:
+                raise ValueError("QPS limit must be >= 0")
+            await client.patch_pretargeting_config(
+                config_id=config_id,
+                update_body={"maximumQps": maximum_qps},
+                update_mask="maximumQps",
+            )
         elif change_type in {"add_publisher", "remove_publisher", "set_publisher_mode"}:
-            config_row = await self._pretargeting.get_config(billing_id)
-            raw_config = (config_row.get("raw_config") if config_row else None) or {}
-            if isinstance(raw_config, str):
-                raw_config = json.loads(raw_config)
-            publisher_targeting = raw_config.get("publisherTargeting") or {}
+            current = await client.get_pretargeting_config_by_id(config_id)
+            if not current:
+                raise ValueError(f"Pretargeting config {config_id} not found")
+            publisher_targeting = current.get("publisherTargeting") or {}
             current_mode = publisher_targeting.get("targetingMode") or "EXCLUSIVE"
             current_values = list(publisher_targeting.get("values") or [])
 
             if change_type == "set_publisher_mode":
+                if value not in {"INCLUSIVE", "EXCLUSIVE"}:
+                    raise ValueError(f"Invalid publisher targeting mode: {value}")
                 updated_mode = value
                 updated_values = []
             else:
                 updated_mode = current_mode
                 updated_values = current_values.copy()
-                if change_type == "add_publisher" and value not in updated_values:
+                if change_type == "add_publisher" and value and value not in updated_values:
                     updated_values.append(value)
                 elif change_type == "remove_publisher" and value in updated_values:
                     updated_values.remove(value)

@@ -11,13 +11,15 @@ import {
   cancelPendingChange,
   applyAllPendingChanges,
   syncPretargetingConfigs,
+  searchGeoTargets,
   type ConfigBreakdownType,
   type ConfigBreakdownItem,
   type ConfigCreativesItem,
+  type GeoSearchResult,
   type PendingChange,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Loader2, AlertCircle, AlertTriangle, ArrowUpDown, ChevronRight, Info, Image, X, Check, Clock, Upload } from 'lucide-react';
+import { Loader2, AlertCircle, AlertTriangle, ArrowUpDown, ChevronRight, Info, Image, X, Check, Clock, Upload, Search } from 'lucide-react';
 import { AppDrilldownModal } from './app-drilldown-modal';
 import { useAccount } from '@/contexts/account-context';
 import { PreviewModal } from '@/components/preview-modal';
@@ -50,6 +52,37 @@ function formatMoney(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
+function describePendingChange(change: PendingChange, publisherMode: string): string {
+  switch (change.change_type) {
+    case 'add_size':
+      return `Allow size: ${change.value}`;
+    case 'remove_size':
+      return `Block size: ${change.value}`;
+    case 'add_geo':
+      return `Add geo: ${change.value}`;
+    case 'remove_geo':
+      return `Remove geo: ${change.value}`;
+    case 'add_format':
+      return `Enable format: ${change.value}`;
+    case 'remove_format':
+      return `Disable format: ${change.value}`;
+    case 'set_maximum_qps':
+      return `Set QPS limit: ${change.value}`;
+    case 'add_publisher':
+      return publisherMode === 'INCLUSIVE'
+        ? `Allow publisher: ${change.value}`
+        : `Block publisher: ${change.value}`;
+    case 'remove_publisher':
+      return publisherMode === 'INCLUSIVE'
+        ? `Block publisher: ${change.value}`
+        : `Unblock publisher: ${change.value}`;
+    case 'set_publisher_mode':
+      return `Publisher mode: ${change.value}`;
+    default:
+      return `${change.change_type}: ${change.value}`;
+  }
+}
+
 export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBreakdownPanelProps) {
   const [activeTab, setActiveTab] = useState<ConfigBreakdownType>('creative');
   const [sortKey, setSortKey] = useState<'name' | 'spend' | 'reached' | 'impressions' | 'win_rate'>('reached');
@@ -70,6 +103,12 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
   const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
   const [showLowVolumeSizes, setShowLowVolumeSizes] = useState(false);
   const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set());
+  const [geoSearchQuery, setGeoSearchQuery] = useState('');
+  const [geoSearchType, setGeoSearchType] = useState<'all' | 'country' | 'city'>('all');
+  const [geoSearchResults, setGeoSearchResults] = useState<GeoSearchResult[]>([]);
+  const [selectedGeoId, setSelectedGeoId] = useState('');
+  const [isGeoSearchLoading, setIsGeoSearchLoading] = useState(false);
+  const [qpsInput, setQpsInput] = useState('');
   const selectAllSizesRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -84,7 +123,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
   const { data: configDetail } = useQuery({
     queryKey: ['pretargeting-detail', billing_id],
     queryFn: () => getPretargetingConfigDetail(billing_id),
-    enabled: isExpanded && activeTab === 'size',
+    enabled: isExpanded,
   });
 
   const { data: sizeCreativeData, isLoading: sizeCreativesLoading } = useQuery({
@@ -126,7 +165,8 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
       setPushResult({ success: false, message: error.message });
     },
   });
-  const sizeActionBusy = createChangeMutation.isPending || cancelChangeMutation.isPending || applyAllMutation.isPending;
+  const changeActionBusy =
+    createChangeMutation.isPending || cancelChangeMutation.isPending || applyAllMutation.isPending;
 
   // Animate height changes
   useEffect(() => {
@@ -146,6 +186,10 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
     setSortDir('desc');
     setShowLowVolumeSizes(false);
     setSelectedSizes(new Set());
+    setGeoSearchQuery('');
+    setGeoSearchResults([]);
+    setSelectedGeoId('');
+    setQpsInput('');
   }, [activeTab, billing_id]);
 
   useEffect(() => {
@@ -206,6 +250,56 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
       .finally(() => setIsLoadingCreative(false));
   }, [selectedCreative]);
 
+  useEffect(() => {
+    const qpsValue = configDetail?.effective_maximum_qps ?? configDetail?.maximum_qps;
+    setQpsInput(qpsValue === null || qpsValue === undefined ? '' : String(qpsValue));
+  }, [billing_id, configDetail?.effective_maximum_qps, configDetail?.maximum_qps]);
+
+  useEffect(() => {
+    if (activeTab !== 'geo') {
+      setGeoSearchResults([]);
+      setSelectedGeoId('');
+      setIsGeoSearchLoading(false);
+      return;
+    }
+
+    const query = geoSearchQuery.trim();
+    if (query.length < 2) {
+      setGeoSearchResults([]);
+      setSelectedGeoId('');
+      setIsGeoSearchLoading(false);
+      return;
+    }
+
+    let isCancelled = false;
+    const timeoutId = setTimeout(async () => {
+      try {
+        setIsGeoSearchLoading(true);
+        const results = await searchGeoTargets(query, { limit: 25, type: geoSearchType });
+        if (isCancelled) return;
+        setGeoSearchResults(results);
+        setSelectedGeoId((previous) => {
+          if (previous && results.some((item) => item.geo_id === previous)) return previous;
+          return results[0]?.geo_id || '';
+        });
+      } catch {
+        if (!isCancelled) {
+          setGeoSearchResults([]);
+          setSelectedGeoId('');
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsGeoSearchLoading(false);
+        }
+      }
+    }, 250);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [activeTab, geoSearchQuery, geoSearchType]);
+
   // Sort breakdown by reached descending
   const sortedBreakdown = data?.breakdown
     ? [...data.breakdown].sort((a, b) => {
@@ -235,24 +329,39 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
     : [];
 
   const pendingChanges = configDetail?.pending_changes || [];
-  const pendingSizeAdds = pendingChanges.filter((change) => change.change_type === 'add_size');
-  const pendingSizeRemoves = pendingChanges.filter((change) => change.change_type === 'remove_size');
-  const pendingSizeChanges = pendingChanges.filter((change) =>
-    change.change_type === 'add_size' || change.change_type === 'remove_size'
+  const pendingSizeChanges = pendingChanges.filter(
+    (change) => change.change_type === 'add_size' || change.change_type === 'remove_size'
   );
-  const hasPendingSizeChanges = pendingSizeChanges.length > 0;
-  const hasOtherPendingChanges = pendingChanges.length > pendingSizeChanges.length;
-  const effectiveIncludedSizes = (() => {
-    const included = new Set(configDetail?.included_sizes || []);
-    pendingSizeAdds.forEach((change) => included.add(change.value));
-    pendingSizeRemoves.forEach((change) => included.delete(change.value));
-    return included;
-  })();
+  const pendingQpsChanges = pendingChanges.filter((change) => change.change_type === 'set_maximum_qps');
+  const latestPendingQpsChange =
+    pendingQpsChanges.length > 0 ? pendingQpsChanges[pendingQpsChanges.length - 1] : null;
+  const hasPendingChanges = pendingChanges.length > 0;
 
-  const findPendingChange = (sizeName: string, type: 'add_size' | 'remove_size'): PendingChange | undefined =>
-    pendingChanges.find((change) => change.change_type === type && change.value === sizeName);
+  const findPendingChange = (changeType: string, value: string): PendingChange | undefined =>
+    pendingChanges.find((change) => change.change_type === changeType && change.value === value);
+
+  const effectiveIncludedSizes = new Set(configDetail?.effective_sizes || configDetail?.included_sizes || []);
+  const effectiveIncludedGeos = new Set(configDetail?.effective_geos || configDetail?.included_geos || []);
+  const effectiveFormats = new Set(configDetail?.effective_formats || configDetail?.included_formats || []);
+  const effectivePublisherMode =
+    configDetail?.effective_publisher_targeting_mode ||
+    configDetail?.publisher_targeting_mode ||
+    'EXCLUSIVE';
+  const effectivePublisherValues = new Set(
+    configDetail?.effective_publisher_targeting_values || configDetail?.publisher_targeting_values || []
+  );
+  const persistedQpsLimit = configDetail?.maximum_qps ?? null;
+  const effectiveQpsLimit = configDetail?.effective_maximum_qps ?? persistedQpsLimit;
 
   const isSizeIncluded = (sizeName: string): boolean => effectiveIncludedSizes.has(sizeName);
+  const isFormatEnabled = (format: string): boolean => effectiveFormats.has(format);
+  const isPublisherListed = (publisherValue: string): boolean => effectivePublisherValues.has(publisherValue);
+  const isPublisherBlocked = (publisherValue: string): boolean => {
+    if (effectivePublisherMode === 'INCLUSIVE') {
+      return !isPublisherListed(publisherValue);
+    }
+    return isPublisherListed(publisherValue);
+  };
 
   const sizeRows = activeTab === 'size' ? sortedBreakdown : [];
   const visibleSizeRows = activeTab === 'size'
@@ -278,8 +387,8 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
   };
 
   const setSizeInclusionState = (sizeName: string, shouldInclude: boolean) => {
-    const pendingAdd = findPendingChange(sizeName, 'add_size');
-    const pendingRemove = findPendingChange(sizeName, 'remove_size');
+    const pendingAdd = findPendingChange('add_size', sizeName);
+    const pendingRemove = findPendingChange('remove_size', sizeName);
     const currentlyIncluded = isSizeIncluded(sizeName);
 
     if (shouldInclude) {
@@ -352,6 +461,167 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
 
   const applySelectionState = (shouldInclude: boolean) => {
     selectedSizes.forEach((sizeName) => setSizeInclusionState(sizeName, shouldInclude));
+  };
+
+  const setFormatEnabledState = (format: string, shouldEnable: boolean) => {
+    const pendingAdd = findPendingChange('add_format', format);
+    const pendingRemove = findPendingChange('remove_format', format);
+    const currentlyEnabled = isFormatEnabled(format);
+
+    if (shouldEnable) {
+      if (pendingRemove) {
+        cancelChangeMutation.mutate(pendingRemove.id);
+        return;
+      }
+      if (pendingAdd || currentlyEnabled) return;
+      createChangeMutation.mutate({
+        billing_id,
+        change_type: 'add_format',
+        field_name: 'included_formats',
+        value: format,
+        reason: 'Enabled from Home breakdown',
+      });
+      return;
+    }
+
+    if (pendingAdd) {
+      cancelChangeMutation.mutate(pendingAdd.id);
+      return;
+    }
+    if (pendingRemove || !currentlyEnabled) return;
+    createChangeMutation.mutate({
+      billing_id,
+      change_type: 'remove_format',
+      field_name: 'included_formats',
+      value: format,
+      reason: 'Disabled from Home breakdown',
+    });
+  };
+
+  const setPublisherBlockedState = (publisherValue: string, shouldBlock: boolean) => {
+    const pendingAdd = findPendingChange('add_publisher', publisherValue);
+    const pendingRemove = findPendingChange('remove_publisher', publisherValue);
+    const currentlyListed = isPublisherListed(publisherValue);
+    const isInclusiveMode = effectivePublisherMode === 'INCLUSIVE';
+
+    if (isInclusiveMode) {
+      // INCLUSIVE (whitelist): listed = allowed, not listed = blocked.
+      if (shouldBlock) {
+        if (pendingAdd) {
+          cancelChangeMutation.mutate(pendingAdd.id);
+          return;
+        }
+        if (!currentlyListed || pendingRemove) return;
+        createChangeMutation.mutate({
+          billing_id,
+          change_type: 'remove_publisher',
+          field_name: 'publisher_targeting',
+          value: publisherValue,
+          reason: 'Blocked from Home publisher breakdown',
+        });
+        return;
+      }
+
+      if (pendingRemove) {
+        cancelChangeMutation.mutate(pendingRemove.id);
+        return;
+      }
+      if (currentlyListed || pendingAdd) return;
+      createChangeMutation.mutate({
+        billing_id,
+        change_type: 'add_publisher',
+        field_name: 'publisher_targeting',
+        value: publisherValue,
+        reason: 'Allowed from Home publisher breakdown',
+      });
+      return;
+    }
+
+    // EXCLUSIVE (blacklist): listed = blocked, not listed = unblocked.
+    if (shouldBlock) {
+      if (pendingRemove) {
+        cancelChangeMutation.mutate(pendingRemove.id);
+        return;
+      }
+      if (currentlyListed || pendingAdd) return;
+      createChangeMutation.mutate({
+        billing_id,
+        change_type: 'add_publisher',
+        field_name: 'publisher_targeting',
+        value: publisherValue,
+        reason: 'Blocked from Home publisher breakdown',
+      });
+      return;
+    }
+
+    if (pendingAdd) {
+      cancelChangeMutation.mutate(pendingAdd.id);
+      return;
+    }
+    if (!currentlyListed || pendingRemove) return;
+    createChangeMutation.mutate({
+      billing_id,
+      change_type: 'remove_publisher',
+      field_name: 'publisher_targeting',
+      value: publisherValue,
+      reason: 'Unblocked from Home publisher breakdown',
+    });
+  };
+
+  const applyQpsChange = () => {
+    if (!configDetail) return;
+
+    const normalized = qpsInput.trim();
+    if (!normalized) {
+      pendingQpsChanges.forEach((change) => cancelChangeMutation.mutate(change.id));
+      return;
+    }
+
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isFinite(parsed) || parsed < 0) return;
+
+    const desired = String(parsed);
+    pendingQpsChanges
+      .filter((change) => change.value !== desired)
+      .forEach((change) => cancelChangeMutation.mutate(change.id));
+
+    if (persistedQpsLimit === parsed) {
+      pendingQpsChanges
+        .filter((change) => change.value === desired)
+        .forEach((change) => cancelChangeMutation.mutate(change.id));
+      return;
+    }
+
+    if (latestPendingQpsChange?.value === desired) return;
+
+    createChangeMutation.mutate({
+      billing_id,
+      change_type: 'set_maximum_qps',
+      field_name: 'maximum_qps',
+      value: desired,
+      reason: 'Updated from Home QPS control',
+    });
+  };
+
+  const addGeoFromSearch = () => {
+    if (!selectedGeoId) return;
+    const pendingAdd = findPendingChange('add_geo', selectedGeoId);
+    const pendingRemove = findPendingChange('remove_geo', selectedGeoId);
+    const currentlyIncluded = effectiveIncludedGeos.has(selectedGeoId);
+
+    if (pendingRemove) {
+      cancelChangeMutation.mutate(pendingRemove.id);
+      return;
+    }
+    if (pendingAdd || currentlyIncluded) return;
+
+    createChangeMutation.mutate({
+      billing_id,
+      change_type: 'add_geo',
+      field_name: 'included_geos',
+      value: selectedGeoId,
+      reason: 'Added from By Geo search dropdown',
+    });
   };
 
   const handleSort = (key: typeof sortKey) => {
@@ -441,8 +711,8 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
               <div className="mb-3 flex items-center gap-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
                 <Info className="h-4 w-4 text-amber-500 flex-shrink-0" />
                 <span>
-                  This table shows observed publisher performance from imported analytics data. Your editable
-                  publisher blocklist is available in the pretargeting settings editor.
+                  Publisher mode is currently <span className="font-semibold">{effectivePublisherMode === 'INCLUSIVE' ? 'Whitelist' : 'Blacklist'}</span>.
+                  Use Block/Unblock to stage pending publisher targeting updates.
                 </span>
               </div>
             )}
@@ -464,7 +734,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                           : `Show low-volume (${hiddenLowVolumeSizeCount})`}
                       </button>
                     )}
-                    {hasPendingSizeChanges && (
+                    {pendingSizeChanges.length > 0 && (
                       <span className="font-medium">
                         {pendingSizeChanges.length} pending
                       </span>
@@ -474,39 +744,139 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={selectAllVisibleSizes}
-                    disabled={sizeActionBusy || visibleSizeRows.length === 0}
+                    disabled={changeActionBusy || visibleSizeRows.length === 0}
                     className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                   >
                     Select all
                   </button>
                   <button
                     onClick={invertVisibleSizeSelection}
-                    disabled={sizeActionBusy || visibleSizeRows.length === 0}
+                    disabled={changeActionBusy || visibleSizeRows.length === 0}
                     className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                   >
                     Invert
                   </button>
                   <button
                     onClick={clearSelectedSizes}
-                    disabled={sizeActionBusy || selectedSizes.size === 0}
+                    disabled={changeActionBusy || selectedSizes.size === 0}
                     className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                   >
                     Clear ({selectedSizes.size})
                   </button>
                   <button
                     onClick={() => applySelectionState(false)}
-                    disabled={sizeActionBusy || selectedSizes.size === 0}
+                    disabled={changeActionBusy || selectedSizes.size === 0}
                     className="rounded border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
                   >
                     Block selected
                   </button>
                   <button
                     onClick={() => applySelectionState(true)}
-                    disabled={sizeActionBusy || selectedSizes.size === 0}
+                    disabled={changeActionBusy || selectedSizes.size === 0}
                     className="rounded border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-50"
                   >
                     Allow selected
                   </button>
+                </div>
+              </div>
+            )}
+            {activeTab === 'geo' && (
+              <div className="mb-3 space-y-2 p-2 bg-teal-50 border border-teal-200 rounded text-xs text-teal-800">
+                <div className="flex items-center gap-2">
+                  <Search className="h-3.5 w-3.5 text-teal-600" />
+                  <span className="font-medium">Add Country / City</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="text"
+                    value={geoSearchQuery}
+                    onChange={(event) => setGeoSearchQuery(event.target.value)}
+                    placeholder="Search country, city, or geo ID"
+                    className="w-56 rounded border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-300"
+                  />
+                  <select
+                    value={geoSearchType}
+                    onChange={(event) => setGeoSearchType(event.target.value as 'all' | 'country' | 'city')}
+                    className="rounded border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700"
+                  >
+                    <option value="all">All</option>
+                    <option value="country">Country</option>
+                    <option value="city">City</option>
+                  </select>
+                  <select
+                    value={selectedGeoId}
+                    onChange={(event) => setSelectedGeoId(event.target.value)}
+                    className="min-w-[16rem] rounded border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700"
+                    disabled={isGeoSearchLoading || geoSearchResults.length === 0}
+                  >
+                    {isGeoSearchLoading && <option value="">Searching…</option>}
+                    {!isGeoSearchLoading && geoSearchResults.length === 0 && (
+                      <option value="">Type at least 2 characters</option>
+                    )}
+                    {!isGeoSearchLoading && geoSearchResults.map((result) => (
+                      <option key={result.geo_id} value={result.geo_id}>
+                        {result.label} ({result.geo_id})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={addGeoFromSearch}
+                    disabled={changeActionBusy || !selectedGeoId}
+                    className="rounded border border-teal-300 bg-teal-100 px-2 py-1 text-[11px] font-medium text-teal-800 hover:bg-teal-200 disabled:opacity-50"
+                  >
+                    Add Geo
+                  </button>
+                </div>
+              </div>
+            )}
+            {activeTab !== 'creative' && (
+              <div className="mb-3 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">QPS limit</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={qpsInput}
+                    onChange={(event) => setQpsInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        applyQpsChange();
+                      }
+                    }}
+                    className="w-28 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    placeholder={effectiveQpsLimit === null || effectiveQpsLimit === undefined ? 'unset' : String(effectiveQpsLimit)}
+                  />
+                  <button
+                    onClick={applyQpsChange}
+                    disabled={changeActionBusy}
+                    className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                  >
+                    Set QPS
+                  </button>
+                  {latestPendingQpsChange && (
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">
+                      Pending: {latestPendingQpsChange.value}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  {[
+                    { label: 'Banner', value: 'HTML' },
+                    { label: 'Audio and Video', value: 'VIDEO' },
+                    { label: 'Native', value: 'NATIVE' },
+                  ].map((formatOption) => (
+                    <label key={formatOption.value} className="inline-flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={isFormatEnabled(formatOption.value)}
+                        disabled={changeActionBusy}
+                        onChange={(event) => setFormatEnabledState(formatOption.value, event.target.checked)}
+                        className="h-3.5 w-3.5 rounded border-gray-300"
+                      />
+                      <span>{formatOption.label}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
             )}
@@ -529,6 +899,8 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   ? "grid-cols-[repeat(14,minmax(0,1fr))]"
                   : activeTab === "size"
                   ? "grid-cols-[repeat(15,minmax(0,1fr))]"
+                  : activeTab === "publisher"
+                  ? "grid-cols-[repeat(14,minmax(0,1fr))]"
                   : "grid-cols-12"
               )}
             >
@@ -549,7 +921,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                         });
                       }
                     }}
-                    disabled={sizeActionBusy || visibleSizeRows.length === 0}
+                    disabled={changeActionBusy || visibleSizeRows.length === 0}
                     className="h-3.5 w-3.5 rounded border-gray-300"
                     title="Select visible sizes"
                   />
@@ -623,48 +995,78 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   <div className="col-span-1 text-right">Action</div>
                 </>
               )}
+              {activeTab === "publisher" && (
+                <>
+                  <div className="col-span-1 text-right">Status</div>
+                  <div className="col-span-1 text-right">Action</div>
+                </>
+              )}
             </div>
 
             {/* Table body */}
-            <div className="divide-y divide-gray-100">
-              {(activeTab === 'size' ? visibleSizeRows : sortedBreakdown).map((item, index) => {
-                const isClickable = false;
-                const winRate = item.win_rate ?? 0;
-                const winRateClass =
-                  winRate < 51 ? 'text-red-600' : winRate < 75 ? 'text-orange-600' : 'text-green-600';
-                const nameColSpan = 'col-span-4';
-                const pendingAdd = activeTab === 'size' ? findPendingChange(item.name, 'add_size') : undefined;
-                const pendingRemove = activeTab === 'size' ? findPendingChange(item.name, 'remove_size') : undefined;
-                const hasPendingToggle = Boolean(pendingAdd || pendingRemove);
-                const includedInConfig = activeTab === 'size' ? isSizeIncluded(item.name) : false;
-                const selectedForBulk = activeTab === 'size' ? selectedSizes.has(item.name) : false;
-                const sizeStatus = hasPendingToggle
-                  ? (pendingAdd ? 'Pending allow' : 'Pending block')
-                  : (includedInConfig ? 'Allowed' : 'Blocked');
-                return (
-                  <div key={`${item.name}-${index}`}>
-                    <div
-                      onClick={() => isClickable && setSelectedApp(item.name)}
-                      className={cn(
-                        'grid gap-2 px-3 py-2 text-sm items-center',
-                        activeTab === 'creative'
-                          ? 'grid-cols-[repeat(14,minmax(0,1fr))]'
-                          : activeTab === 'size'
-                          ? 'grid-cols-[repeat(15,minmax(0,1fr))]'
-                          : 'grid-cols-12',
-                        'hover:bg-gray-50 transition-colors',
-                        isClickable && 'cursor-pointer hover:bg-blue-50',
-                        activeTab === 'size' && hasPendingToggle && 'bg-amber-50',
-                        activeTab === 'size' && selectedForBulk && 'ring-1 ring-blue-200'
-                      )}
-                    >
+	            <div className="divide-y divide-gray-100">
+	              {(activeTab === 'size' ? visibleSizeRows : sortedBreakdown).map((item, index) => {
+	                const isClickable = false;
+	                const winRate = item.win_rate ?? 0;
+	                const winRateClass =
+	                  winRate < 51 ? 'text-red-600' : winRate < 75 ? 'text-orange-600' : 'text-green-600';
+	                const nameColSpan = 'col-span-4';
+	                const pendingAdd = activeTab === 'size' ? findPendingChange('add_size', item.name) : undefined;
+	                const pendingRemove = activeTab === 'size' ? findPendingChange('remove_size', item.name) : undefined;
+	                const hasPendingToggle = Boolean(pendingAdd || pendingRemove);
+	                const includedInConfig = activeTab === 'size' ? isSizeIncluded(item.name) : false;
+	                const selectedForBulk = activeTab === 'size' ? selectedSizes.has(item.name) : false;
+	                const sizeStatus = hasPendingToggle
+	                  ? (pendingAdd ? 'Pending allow' : 'Pending block')
+	                  : (includedInConfig ? 'Allowed' : 'Blocked');
+	                const publisherTargetValue = activeTab === 'publisher'
+	                  ? (item.target_value || item.name)
+	                  : '';
+	                const pendingPublisherAdd = activeTab === 'publisher'
+	                  ? findPendingChange('add_publisher', publisherTargetValue)
+	                  : undefined;
+	                const pendingPublisherRemove = activeTab === 'publisher'
+	                  ? findPendingChange('remove_publisher', publisherTargetValue)
+	                  : undefined;
+	                const publisherBlocked = activeTab === 'publisher'
+	                  ? isPublisherBlocked(publisherTargetValue)
+	                  : false;
+	                const publisherStatus = activeTab !== 'publisher'
+	                  ? ''
+	                  : pendingPublisherAdd
+	                  ? (effectivePublisherMode === 'INCLUSIVE' ? 'Pending unblock' : 'Pending block')
+	                  : pendingPublisherRemove
+	                  ? (effectivePublisherMode === 'INCLUSIVE' ? 'Pending block' : 'Pending unblock')
+	                  : publisherBlocked
+	                  ? 'Blocked'
+	                  : 'Unblocked';
+	                return (
+	                  <div key={`${item.name}-${index}`}>
+	                    <div
+	                      onClick={() => isClickable && setSelectedApp(item.name)}
+	                      className={cn(
+	                        'grid gap-2 px-3 py-2 text-sm items-center',
+	                        activeTab === 'creative'
+	                          ? 'grid-cols-[repeat(14,minmax(0,1fr))]'
+	                          : activeTab === 'size'
+	                          ? 'grid-cols-[repeat(15,minmax(0,1fr))]'
+	                          : activeTab === 'publisher'
+	                          ? 'grid-cols-[repeat(14,minmax(0,1fr))]'
+	                          : 'grid-cols-12',
+	                        'hover:bg-gray-50 transition-colors',
+	                        isClickable && 'cursor-pointer hover:bg-blue-50',
+	                        activeTab === 'size' && hasPendingToggle && 'bg-amber-50',
+	                        activeTab === 'size' && selectedForBulk && 'ring-1 ring-blue-200',
+	                        activeTab === 'publisher' && (pendingPublisherAdd || pendingPublisherRemove) && 'bg-amber-50'
+	                      )}
+	                    >
                       {activeTab === 'size' && (
                         <div className="col-span-1 flex justify-center">
                           <input
                             type="checkbox"
                             checked={selectedForBulk}
                             onChange={() => toggleSizeSelection(item.name)}
-                            disabled={sizeActionBusy}
+                            disabled={changeActionBusy}
                             className="h-3.5 w-3.5 rounded border-gray-300"
                             title={`Select ${item.name}`}
                           />
@@ -683,7 +1085,14 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                           setSelectedCreative({ id: item.name });
                         }}
                       >
-                        <span className="truncate">{item.name}</span>
+	                        {activeTab === 'publisher' && item.target_value && item.target_value !== item.name ? (
+	                          <div className="min-w-0">
+	                            <div className="truncate">{item.name}</div>
+	                            <div className="truncate text-[10px] font-mono text-gray-500">{item.target_value}</div>
+	                          </div>
+	                        ) : (
+	                          <span className="truncate">{item.name}</span>
+	                        )}
                         {activeTab === 'size' && (
                           <button
                             onClick={(event) => {
@@ -744,8 +1153,8 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                           </div>
                         </>
                       )}
-                      {activeTab === 'size' && (
-                        <>
+	                      {activeTab === 'size' && (
+	                        <>
                           <div className="col-span-1 text-right text-xs">
                             <span
                               className={cn(
@@ -765,7 +1174,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                               event.stopPropagation();
                               toggleSizeBlockState(item.name);
                             }}
-                            disabled={sizeActionBusy}
+                            disabled={changeActionBusy}
                             className={cn(
                               'inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50',
                               includedInConfig
@@ -778,9 +1187,44 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                             {includedInConfig ? 'Block' : 'Allow'}
                           </button>
                         </div>
-                        </>
-                      )}
-                    </div>
+	                        </>
+	                      )}
+	                      {activeTab === 'publisher' && (
+	                        <>
+	                          <div className="col-span-1 text-right text-xs">
+	                            <span
+	                              className={cn(
+	                                'rounded px-1.5 py-0.5 font-medium',
+	                                publisherStatus === 'Blocked' && 'bg-red-50 text-red-700',
+	                                publisherStatus === 'Unblocked' && 'bg-green-50 text-green-700',
+	                                publisherStatus.startsWith('Pending') && 'bg-amber-100 text-amber-800'
+	                              )}
+	                            >
+	                              {publisherStatus}
+	                            </span>
+	                          </div>
+	                          <div className="col-span-1 flex justify-end">
+	                            <button
+	                              onClick={(event) => {
+	                                event.stopPropagation();
+	                                setPublisherBlockedState(publisherTargetValue, !publisherBlocked);
+	                              }}
+	                              disabled={changeActionBusy || !publisherTargetValue}
+	                              className={cn(
+	                                'inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50',
+	                                publisherBlocked
+	                                  ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+	                                  : 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+	                              )}
+	                              title={publisherBlocked ? 'Unblock publisher' : 'Block publisher'}
+	                            >
+	                              {publisherBlocked ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+	                              {publisherBlocked ? 'Unblock' : 'Block'}
+	                            </button>
+	                          </div>
+	                        </>
+	                      )}
+	                    </div>
                     {activeTab === 'size' && selectedSize === item.name && (
                       <div className="border-t bg-gray-50 px-3 py-2">
                         <div className="grid grid-cols-6 gap-2 text-xs font-medium text-gray-500 border-b pb-1">
@@ -859,22 +1303,20 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
               )}
             </div>
           </div>
-          {activeTab === 'size' && hasPendingSizeChanges && (
+          {activeTab !== 'creative' && hasPendingChanges && (
             <div className="sticky bottom-3 mt-3 flex justify-end">
               <div className="w-full max-w-md rounded-lg border border-yellow-300 bg-yellow-50 p-3 shadow-sm">
                 <div className="flex items-center gap-2 text-sm font-medium text-yellow-900">
                   <Clock className="h-4 w-4" />
-                  Pending Size Changes ({pendingSizeChanges.length})
+                  Pending Changes ({pendingChanges.length})
                 </div>
                 <div className="mt-2 max-h-24 overflow-y-auto space-y-1 text-xs text-yellow-800">
-                  {pendingSizeChanges.map((change) => (
+                  {pendingChanges.map((change) => (
                     <div key={change.id} className="flex items-center justify-between gap-2">
-                      <span className="truncate">
-                        {change.change_type === 'add_size' ? 'Allow' : 'Block'}: {change.value}
-                      </span>
+                      <span className="truncate">{describePendingChange(change, effectivePublisherMode)}</span>
                       <button
                         onClick={() => cancelChangeMutation.mutate(change.id)}
-                        disabled={sizeActionBusy}
+                        disabled={changeActionBusy}
                         className="text-yellow-700 hover:text-yellow-900"
                         title="Undo change"
                       >
@@ -885,15 +1327,15 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                 </div>
                 <div className="mt-3 flex items-center justify-between">
                   <button
-                    onClick={() => pendingSizeChanges.forEach((change) => cancelChangeMutation.mutate(change.id))}
-                    disabled={sizeActionBusy}
+                    onClick={() => pendingChanges.forEach((change) => cancelChangeMutation.mutate(change.id))}
+                    disabled={changeActionBusy}
                     className="text-xs text-yellow-700 hover:text-yellow-900 disabled:opacity-50"
                   >
                     Discard All
                   </button>
                   <button
                     onClick={() => setShowConfirmPush(true)}
-                    disabled={sizeActionBusy}
+                    disabled={changeActionBusy}
                     className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                   >
                     <Upload className="h-3 w-3" />
@@ -912,17 +1354,12 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
             <div className="relative mx-4 w-full max-w-lg rounded-lg border bg-white p-4 shadow-xl">
               <h3 className="text-sm font-semibold text-gray-900">Confirm Changes to Google</h3>
               <p className="mt-1 text-xs text-gray-600">
-                You are about to commit {pendingSizeChanges.length} size change{pendingSizeChanges.length !== 1 ? 's' : ''} for billing ID {billing_id}.
+                You are about to commit {pendingChanges.length} pending change{pendingChanges.length !== 1 ? 's' : ''} for billing ID {billing_id}.
               </p>
-              {hasOtherPendingChanges && (
-                <p className="mt-2 rounded bg-yellow-50 px-2 py-1 text-xs text-yellow-800">
-                  This billing ID also has {pendingChanges.length - pendingSizeChanges.length} other pending change(s), and they will be committed too.
-                </p>
-              )}
               <div className="mt-3 max-h-40 overflow-y-auto space-y-1 rounded border bg-gray-50 p-2 text-xs">
-                {pendingSizeChanges.map((change) => (
+                {pendingChanges.map((change) => (
                   <div key={`confirm-${change.id}`}>
-                    • {change.change_type === 'add_size' ? 'Allow' : 'Block'} {change.value}
+                    • {describePendingChange(change, effectivePublisherMode)}
                   </div>
                 ))}
               </div>
