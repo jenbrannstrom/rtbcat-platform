@@ -21,6 +21,7 @@ env:
   VM_NAME: ${{ vars.VM_NAME || 'catscan-production' }}
   APP_DIR: ${{ vars.APP_DIR || '/opt/catscan' }}
   GIT_BRANCH: ${{ vars.GIT_BRANCH || 'unified-platform' }}
+  IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY || 'europe-west1-docker.pkg.dev/catscan-prod-202601/catscan' }}
   ALLOW_CONTRACT_FAILURE: ${{ vars.ALLOW_CONTRACT_FAILURE || 'false' }}
 
 jobs:
@@ -60,7 +61,7 @@ jobs:
               sudo -u catscan git reset --hard origin/${{ env.GIT_BRANCH }}
 
               # Set image registry and tag for prebuilt images
-              export IMAGE_REGISTRY=europe-west1-docker.pkg.dev/catscan-prod-202601/catscan
+              export IMAGE_REGISTRY=${{ env.IMAGE_REGISTRY }}
               export IMAGE_TAG=sha-${SHORT_SHA}
 
               echo \"Deploying version: \$(cat VERSION) (sha-${SHORT_SHA})\"

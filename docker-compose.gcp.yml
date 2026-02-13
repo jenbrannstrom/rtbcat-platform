@@ -51,6 +51,7 @@ services:
       - cloudsql-proxy
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/home/rtbcat/.catscan/credentials/google-credentials.json
+      - UVICORN_WORKERS=${UVICORN_WORKERS:-2}
       # DATABASE_PATH removed - using Postgres via POSTGRES_DSN from .env
       - POSTGRES_DSN=${POSTGRES_DSN}
       - POSTGRES_SERVING_DSN=${POSTGRES_SERVING_DSN}
