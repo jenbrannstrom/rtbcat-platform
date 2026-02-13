@@ -1,17 +1,23 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getConfigBreakdown,
   getConfigCreatives,
   getCreative,
+  getPretargetingConfigDetail,
+  createPendingChange,
+  cancelPendingChange,
+  applyAllPendingChanges,
+  syncPretargetingConfigs,
   type ConfigBreakdownType,
   type ConfigBreakdownItem,
   type ConfigCreativesItem,
+  type PendingChange,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Loader2, AlertCircle, AlertTriangle, ArrowUpDown, ChevronRight, Info, Image, Square, CheckSquare, Ban, Shield } from 'lucide-react';
+import { Loader2, AlertCircle, AlertTriangle, ArrowUpDown, ChevronRight, Info, Image, X, Check, Clock, Upload } from 'lucide-react';
 import { AppDrilldownModal } from './app-drilldown-modal';
 import { useAccount } from '@/contexts/account-context';
 import { PreviewModal } from '@/components/preview-modal';
@@ -60,8 +66,9 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
   const [creativeLoadError, setCreativeLoadError] = useState<string | null>(null);
   const [fullCreative, setFullCreative] = useState<any | null>(null);
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
-  const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set());
-  const [sizeActionPending, setSizeActionPending] = useState(false);
+  const [showConfirmPush, setShowConfirmPush] = useState(false);
+  const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
+  const queryClient = useQueryClient();
 
   // Query for breakdown data
   const { data, isLoading, error } = useQuery({
@@ -71,12 +78,52 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
     staleTime: 30000, // Cache for 30 seconds
   });
 
+  const { data: configDetail } = useQuery({
+    queryKey: ['pretargeting-detail', billing_id],
+    queryFn: () => getPretargetingConfigDetail(billing_id),
+    enabled: isExpanded && activeTab === 'size',
+  });
+
   const { data: sizeCreativeData, isLoading: sizeCreativesLoading } = useQuery({
     queryKey: ['config-creatives', billing_id, selectedSize, selectedBuyerId, days],
     queryFn: () => getConfigCreatives(billing_id, selectedSize || undefined, selectedBuyerId || undefined, days),
     enabled: isExpanded && activeTab === 'size' && !!selectedSize,
     staleTime: 30000,
   });
+
+  const createChangeMutation = useMutation({
+    mutationFn: createPendingChange,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+      queryClient.invalidateQueries({ queryKey: ['config-breakdown', billing_id] });
+    },
+  });
+
+  const cancelChangeMutation = useMutation({
+    mutationFn: cancelPendingChange,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+      queryClient.invalidateQueries({ queryKey: ['config-breakdown', billing_id] });
+    },
+  });
+
+  const applyAllMutation = useMutation({
+    mutationFn: () => applyAllPendingChanges(billing_id, false),
+    onSuccess: async (result) => {
+      await syncPretargetingConfigs();
+      setPushResult({ success: true, message: result.message });
+      setShowConfirmPush(false);
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+      queryClient.invalidateQueries({ queryKey: ['config-breakdown', billing_id] });
+    },
+    onError: (error: Error) => {
+      setPushResult({ success: false, message: error.message });
+    },
+  });
+  const sizeActionBusy = createChangeMutation.isPending || cancelChangeMutation.isPending || applyAllMutation.isPending;
 
   // Animate height changes
   useEffect(() => {
@@ -92,7 +139,6 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
     setFullCreative(null);
     setCreativeLoadError(null);
     setExpandedCountries(new Set());
-    setSelectedSizes(new Set());
     setSortKey('reached');
     setSortDir('desc');
   }, [activeTab, billing_id]);
@@ -107,63 +153,6 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
       }
       return next;
     });
-  };
-
-  // Size selection handlers
-  const toggleSizeSelection = (sizeName: string) => {
-    setSelectedSizes((prev) => {
-      const next = new Set(prev);
-      if (next.has(sizeName)) {
-        next.delete(sizeName);
-      } else {
-        next.add(sizeName);
-      }
-      return next;
-    });
-  };
-
-  const selectAllSizes = () => {
-    const allSizeNames = sortedBreakdown.map((item) => item.name);
-    setSelectedSizes(new Set(allSizeNames));
-  };
-
-  const clearSizeSelection = () => {
-    setSelectedSizes(new Set());
-  };
-
-  const invertSizeSelection = () => {
-    const allSizeNames = new Set(sortedBreakdown.map((item) => item.name));
-    const inverted = new Set<string>();
-    allSizeNames.forEach((name) => {
-      if (!selectedSizes.has(name)) {
-        inverted.add(name);
-      }
-    });
-    setSelectedSizes(inverted);
-  };
-
-  const handleBulkBlock = async () => {
-    if (selectedSizes.size === 0) return;
-    setSizeActionPending(true);
-    // TODO: Wire to backend API when available
-    console.log('Block sizes:', Array.from(selectedSizes));
-    // Placeholder: simulate action
-    setTimeout(() => {
-      setSizeActionPending(false);
-      setSelectedSizes(new Set());
-    }, 500);
-  };
-
-  const handleBulkUnblock = async () => {
-    if (selectedSizes.size === 0) return;
-    setSizeActionPending(true);
-    // TODO: Wire to backend API when available
-    console.log('Unblock sizes:', Array.from(selectedSizes));
-    // Placeholder: simulate action
-    setTimeout(() => {
-      setSizeActionPending(false);
-      setSelectedSizes(new Set());
-    }, 500);
   };
 
   useEffect(() => {
@@ -217,6 +206,49 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
         return ((aVal as number) - (bVal as number)) * dir;
       })
     : [];
+
+  const pendingChanges = configDetail?.pending_changes || [];
+  const pendingSizeAdds = pendingChanges.filter((change) => change.change_type === 'add_size');
+  const pendingSizeRemoves = pendingChanges.filter((change) => change.change_type === 'remove_size');
+  const pendingSizeChanges = pendingChanges.filter((change) =>
+    change.change_type === 'add_size' || change.change_type === 'remove_size'
+  );
+  const hasPendingSizeChanges = pendingSizeChanges.length > 0;
+  const hasOtherPendingChanges = pendingChanges.length > pendingSizeChanges.length;
+  const effectiveIncludedSizes = (() => {
+    const included = new Set(configDetail?.included_sizes || []);
+    pendingSizeAdds.forEach((change) => included.add(change.value));
+    pendingSizeRemoves.forEach((change) => included.delete(change.value));
+    return included;
+  })();
+
+  const findPendingChange = (sizeName: string, type: 'add_size' | 'remove_size'): PendingChange | undefined =>
+    pendingChanges.find((change) => change.change_type === type && change.value === sizeName);
+
+  const isSizeIncluded = (sizeName: string): boolean => effectiveIncludedSizes.has(sizeName);
+
+  const toggleSizeBlockState = (sizeName: string) => {
+    const pendingAdd = findPendingChange(sizeName, 'add_size');
+    if (pendingAdd) {
+      cancelChangeMutation.mutate(pendingAdd.id);
+      return;
+    }
+
+    const pendingRemove = findPendingChange(sizeName, 'remove_size');
+    if (pendingRemove) {
+      cancelChangeMutation.mutate(pendingRemove.id);
+      return;
+    }
+
+    const currentlyIncluded = isSizeIncluded(sizeName);
+    createChangeMutation.mutate({
+      billing_id,
+      change_type: currentlyIncluded ? 'remove_size' : 'add_size',
+      field_name: 'included_sizes',
+      value: sizeName,
+      reason: currentlyIncluded ? 'Blocked from Home size breakdown' : 'Unblocked from Home size breakdown',
+    });
+  };
 
   const handleSort = (key: typeof sortKey) => {
     if (key === sortKey) {
@@ -310,55 +342,26 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                 </span>
               </div>
             )}
-            {/* Size tab bulk toolbar */}
             {activeTab === 'size' && (
-              <div className="mb-3 flex items-center justify-between p-2 bg-gray-50 border border-gray-200 rounded">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">
-                    {selectedSizes.size > 0 ? `${selectedSizes.size} selected` : 'Select sizes to block/unblock'}
+              <div className="mb-3 flex items-center justify-between p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+                <span>
+                  Click <span className="font-semibold">X</span> to block a size or <span className="font-semibold">✓</span> to unblock it.
+                </span>
+                {hasPendingSizeChanges && (
+                  <span className="font-medium">
+                    {pendingSizeChanges.length} pending
                   </span>
-                  <button
-                    onClick={selectAllSizes}
-                    className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 rounded transition-colors"
-                  >
-                    Select all
-                  </button>
-                  <button
-                    onClick={invertSizeSelection}
-                    className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 rounded transition-colors"
-                  >
-                    Invert
-                  </button>
-                  {selectedSizes.size > 0 && (
-                    <button
-                      onClick={clearSizeSelection}
-                      className="px-2 py-1 text-xs text-gray-400 hover:text-gray-600 rounded transition-colors"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleBulkBlock}
-                    disabled={selectedSizes.size === 0 || sizeActionPending}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-red-50 text-red-600 hover:bg-red-100 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Ban className="h-3 w-3" />
-                    Block
-                  </button>
-                  <button
-                    onClick={handleBulkUnblock}
-                    disabled={selectedSizes.size === 0 || sizeActionPending}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-green-50 text-green-600 hover:bg-green-100 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Shield className="h-3 w-3" />
-                    Unblock
-                  </button>
-                  <span className="text-[10px] uppercase tracking-wide text-gray-400">
-                    Feature #001 ROADMAP.md
-                  </span>
-                </div>
+                )}
+              </div>
+            )}
+            {pushResult && (
+              <div className={cn(
+                "mb-3 rounded border px-3 py-2 text-xs",
+                pushResult.success
+                  ? "bg-green-50 border-green-200 text-green-800"
+                  : "bg-red-50 border-red-200 text-red-800"
+              )}>
+                {pushResult.message}
               </div>
             )}
             <div className="bg-white rounded-lg border overflow-hidden">
@@ -373,32 +376,11 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   : "grid-cols-12"
               )}
             >
-              {activeTab === 'size' && (
-                <div className="col-span-1 flex items-center">
-                  <button
-                    onClick={() => {
-                      if (selectedSizes.size === sortedBreakdown.length) {
-                        clearSizeSelection();
-                      } else {
-                        selectAllSizes();
-                      }
-                    }}
-                    className="p-0.5 text-gray-400 hover:text-gray-600"
-                    title={selectedSizes.size === sortedBreakdown.length ? "Deselect all" : "Select all"}
-                  >
-                    {selectedSizes.size === sortedBreakdown.length && sortedBreakdown.length > 0 ? (
-                      <CheckSquare className="h-4 w-4" />
-                    ) : (
-                      <Square className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-              )}
               <button
                 type="button"
                 onClick={() => handleSort("name")}
                 className={cn(
-                  activeTab === "creative" ? "col-span-4" : activeTab === "size" ? "col-span-4" : "col-span-4",
+                  "col-span-4",
                   "flex items-center gap-1 text-left",
                   sortKey === "name" && "text-gray-700"
                 )}
@@ -456,6 +438,9 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   <div className="col-span-1">Creative Lang</div>
                 </>
               )}
+              {activeTab === "size" && (
+                <div className="col-span-1 text-right">Action</div>
+              )}
             </div>
 
             {/* Table body */}
@@ -465,8 +450,11 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                 const winRate = item.win_rate ?? 0;
                 const winRateClass =
                   winRate < 51 ? 'text-red-600' : winRate < 75 ? 'text-orange-600' : 'text-green-600';
-                const nameColSpan = activeTab === 'creative' ? 'col-span-4' : activeTab === 'size' ? 'col-span-3' : 'col-span-4';
-                const isSelected = activeTab === 'size' && selectedSizes.has(item.name);
+                const nameColSpan = 'col-span-4';
+                const pendingAdd = activeTab === 'size' ? findPendingChange(item.name, 'add_size') : undefined;
+                const pendingRemove = activeTab === 'size' ? findPendingChange(item.name, 'remove_size') : undefined;
+                const hasPendingToggle = Boolean(pendingAdd || pendingRemove);
+                const includedInConfig = activeTab === 'size' ? isSizeIncluded(item.name) : false;
                 return (
                   <div key={`${item.name}-${index}`}>
                     <div
@@ -480,26 +468,9 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                           : 'grid-cols-12',
                         'hover:bg-gray-50 transition-colors',
                         isClickable && 'cursor-pointer hover:bg-blue-50',
-                        isSelected && 'bg-blue-50'
+                        activeTab === 'size' && hasPendingToggle && 'bg-amber-50'
                       )}
                     >
-                      {activeTab === 'size' && (
-                        <div className="col-span-1 flex items-center">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleSizeSelection(item.name);
-                            }}
-                            className="p-0.5 text-gray-400 hover:text-gray-600"
-                          >
-                            {isSelected ? (
-                              <CheckSquare className="h-4 w-4 text-blue-600" />
-                            ) : (
-                              <Square className="h-4 w-4" />
-                            )}
-                          </button>
-                        </div>
-                      )}
                       <div
                         className={cn(
                           nameColSpan,
@@ -574,6 +545,26 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                           </div>
                         </>
                       )}
+                      {activeTab === 'size' && (
+                        <div className="col-span-1 flex justify-end">
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleSizeBlockState(item.name);
+                            }}
+                            disabled={sizeActionBusy}
+                            className={cn(
+                              'inline-flex h-6 w-6 items-center justify-center rounded border transition-colors disabled:opacity-50',
+                              includedInConfig
+                                ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100'
+                                : 'border-green-200 bg-green-50 text-green-600 hover:bg-green-100'
+                            )}
+                            title={includedInConfig ? 'Block size (remove from targeting)' : 'Unblock size (add to targeting)'}
+                          >
+                            {includedInConfig ? <X className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
+                          </button>
+                        </div>
+                      )}
                     </div>
                     {activeTab === 'size' && selectedSize === item.name && (
                       <div className="border-t bg-gray-50 px-3 py-2">
@@ -640,7 +631,92 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
               })}
             </div>
           </div>
+          {activeTab === 'size' && hasPendingSizeChanges && (
+            <div className="sticky bottom-3 mt-3 flex justify-end">
+              <div className="w-full max-w-md rounded-lg border border-yellow-300 bg-yellow-50 p-3 shadow-sm">
+                <div className="flex items-center gap-2 text-sm font-medium text-yellow-900">
+                  <Clock className="h-4 w-4" />
+                  Pending Size Changes ({pendingSizeChanges.length})
+                </div>
+                <div className="mt-2 max-h-24 overflow-y-auto space-y-1 text-xs text-yellow-800">
+                  {pendingSizeChanges.map((change) => (
+                    <div key={change.id} className="flex items-center justify-between gap-2">
+                      <span className="truncate">
+                        {change.change_type === 'add_size' ? 'Unblock' : 'Block'}: {change.value}
+                      </span>
+                      <button
+                        onClick={() => cancelChangeMutation.mutate(change.id)}
+                        disabled={sizeActionBusy}
+                        className="text-yellow-700 hover:text-yellow-900"
+                        title="Undo change"
+                      >
+                        Undo
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center justify-between">
+                  <button
+                    onClick={() => pendingSizeChanges.forEach((change) => cancelChangeMutation.mutate(change.id))}
+                    disabled={sizeActionBusy}
+                    className="text-xs text-yellow-700 hover:text-yellow-900 disabled:opacity-50"
+                  >
+                    Discard All
+                  </button>
+                  <button
+                    onClick={() => setShowConfirmPush(true)}
+                    disabled={sizeActionBusy}
+                    className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    <Upload className="h-3 w-3" />
+                    Review & Commit
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           </>
+        )}
+
+        {showConfirmPush && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setShowConfirmPush(false)} />
+            <div className="relative mx-4 w-full max-w-lg rounded-lg border bg-white p-4 shadow-xl">
+              <h3 className="text-sm font-semibold text-gray-900">Confirm Changes to Google</h3>
+              <p className="mt-1 text-xs text-gray-600">
+                You are about to commit {pendingSizeChanges.length} size change{pendingSizeChanges.length !== 1 ? 's' : ''} for billing ID {billing_id}.
+              </p>
+              {hasOtherPendingChanges && (
+                <p className="mt-2 rounded bg-yellow-50 px-2 py-1 text-xs text-yellow-800">
+                  This billing ID also has {pendingChanges.length - pendingSizeChanges.length} other pending change(s), and they will be committed too.
+                </p>
+              )}
+              <div className="mt-3 max-h-40 overflow-y-auto space-y-1 rounded border bg-gray-50 p-2 text-xs">
+                {pendingSizeChanges.map((change) => (
+                  <div key={`confirm-${change.id}`}>
+                    • {change.change_type === 'add_size' ? 'Unblock' : 'Block'} {change.value}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  onClick={() => setShowConfirmPush(false)}
+                  disabled={applyAllMutation.isPending}
+                  className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => applyAllMutation.mutate()}
+                  disabled={applyAllMutation.isPending}
+                  className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {applyAllMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                  Commit to Google
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Drill-down modal */}
