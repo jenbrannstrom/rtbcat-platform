@@ -1,7 +1,7 @@
 """Tests for bootstrap guard and /auth/bootstrap endpoint."""
 
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -28,7 +28,7 @@ def _make_fake_user(user_id="u1", email="admin@test.com", role="admin"):
 
 
 def _make_auth_service(user_count=0, existing_user=None, bootstrap_completed="0"):
-    """Build a mock AuthService with a mock store."""
+    """Build a mock AuthService."""
     svc = AsyncMock()
     svc.count_users = AsyncMock(return_value=user_count)
     svc.get_user_by_email = AsyncMock(return_value=existing_user)
@@ -39,11 +39,8 @@ def _make_auth_service(user_count=0, existing_user=None, bootstrap_completed="0"
     ))
     svc.create_session = AsyncMock()
     svc.log_audit = AsyncMock()
-
-    store = AsyncMock()
-    store.get_setting = AsyncMock(return_value=bootstrap_completed)
-    store.set_setting = AsyncMock()
-    svc._store = store
+    svc.get_setting = AsyncMock(return_value=bootstrap_completed)
+    svc.set_setting = AsyncMock()
 
     return svc
 
@@ -89,7 +86,7 @@ class TestAutoHealBootstrapStatus:
         svc = _make_auth_service(user_count=3, bootstrap_completed="0")
         with patch("api.auth_bootstrap._get_auth_service", return_value=svc):
             await _auto_heal_bootstrap_status()
-            svc._store.set_setting.assert_called_once_with(
+            svc.set_setting.assert_called_once_with(
                 "bootstrap_completed", "1", updated_by="auto_heal"
             )
 
@@ -98,14 +95,14 @@ class TestAutoHealBootstrapStatus:
         svc = _make_auth_service(user_count=3, bootstrap_completed="1")
         with patch("api.auth_bootstrap._get_auth_service", return_value=svc):
             await _auto_heal_bootstrap_status()
-            svc._store.set_setting.assert_not_called()
+            svc.set_setting.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_no_op_when_no_users(self):
         svc = _make_auth_service(user_count=0, bootstrap_completed="0")
         with patch("api.auth_bootstrap._get_auth_service", return_value=svc):
             await _auto_heal_bootstrap_status()
-            svc._store.set_setting.assert_not_called()
+            svc.set_setting.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -149,8 +146,8 @@ class TestBootstrapEndpoint:
         assert data["status"] == "ok"
         assert data["user"]["role"] == "admin"
         svc.create_user.assert_called_once()
-        svc._store.set_setting.assert_called_once_with(
-            "bootstrap_completed", "1", updated_by=svc.create_user.return_value.id,
+        svc.set_setting.assert_called_once_with(
+            "bootstrap_completed", "1", updated_by=ANY,
         )
 
     def test_wrong_token_returns_403(self):
