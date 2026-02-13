@@ -516,5 +516,7 @@ async def get_stats(store=Depends(get_store)):
 @router.get("/sizes", response_model=SizesResponse)
 async def get_sizes(store=Depends(get_store)):
     """Get available creative sizes from the database."""
-    sizes = await store.get_available_sizes()
+    rows = await store.get_available_sizes()
+    # store returns list[dict] with canonical_size/count; extract strings
+    sizes = [row["canonical_size"] for row in rows if row.get("canonical_size")]
     return SizesResponse(sizes=sizes)
