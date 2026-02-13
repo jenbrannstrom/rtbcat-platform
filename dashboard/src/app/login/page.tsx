@@ -44,6 +44,18 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
 
+      // Handle non-JSON error responses (e.g. nginx 502/504 HTML pages)
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        setErrorMessage(
+          response.status >= 500
+            ? "Server is temporarily unavailable. Please try again in a moment."
+            : "Unexpected response from server."
+        );
+        setIsLoading(false);
+        return;
+      }
+
       const data = await response.json();
 
       if (!response.ok) {
@@ -55,7 +67,8 @@ export default function LoginPage() {
       // Redirect to callback URL or home
       router.push(callbackUrl);
     } catch (err) {
-      setErrorMessage("Network error. Please try again.");
+      // True network failure — fetch itself could not connect
+      setErrorMessage("Cannot connect to server. Please check your connection and try again.");
       setIsLoading(false);
     }
   };

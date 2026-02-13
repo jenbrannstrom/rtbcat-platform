@@ -64,12 +64,22 @@ def get_connection() -> psycopg.Connection:
 
 
 def ensure_migrations_table(conn: psycopg.Connection) -> None:
-    """Create schema_migrations table if it doesn't exist."""
+    """Create schema_migrations table if it doesn't exist.
+
+    Also adds the ``description`` column for existing tables that were
+    created before migrations 027/039/040 started referencing it.
+    """
     conn.execute("""
         CREATE TABLE IF NOT EXISTS schema_migrations (
             version TEXT PRIMARY KEY,
-            applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            description TEXT
         )
+    """)
+    # Existing tables may lack the column — add idempotently.
+    conn.execute("""
+        ALTER TABLE schema_migrations
+        ADD COLUMN IF NOT EXISTS description TEXT
     """)
     conn.commit()
 
