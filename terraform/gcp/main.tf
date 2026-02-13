@@ -637,6 +637,118 @@ resource "google_secret_manager_secret" "ab_service_account" {
 }
 
 # =============================================================================
+# SCHEDULER + OAUTH SECRETS (GSM-managed, Phase 1)
+# =============================================================================
+# These secrets were previously injected only via templatefile() into the
+# startup script, exposing them in tfstate and VM metadata.  Now they are
+# stored in GSM so the VM can fetch them at boot without metadata exposure.
+
+resource "google_secret_manager_secret" "precompute_refresh_secret" {
+  secret_id = "${var.app_name}-precompute-refresh-secret"
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    app         = var.app_name
+    environment = var.environment
+    type        = "scheduler"
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+resource "google_secret_manager_secret_version" "precompute_refresh_secret" {
+  secret      = google_secret_manager_secret.precompute_refresh_secret.id
+  secret_data = random_password.precompute_refresh_secret.result
+}
+
+resource "google_secret_manager_secret" "precompute_monitor_secret" {
+  secret_id = "${var.app_name}-precompute-monitor-secret"
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    app         = var.app_name
+    environment = var.environment
+    type        = "scheduler"
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+resource "google_secret_manager_secret_version" "precompute_monitor_secret" {
+  secret      = google_secret_manager_secret.precompute_monitor_secret.id
+  secret_data = random_password.precompute_monitor_secret.result
+}
+
+resource "google_secret_manager_secret" "gmail_import_secret" {
+  secret_id = "${var.app_name}-gmail-import-secret"
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    app         = var.app_name
+    environment = var.environment
+    type        = "scheduler"
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+resource "google_secret_manager_secret_version" "gmail_import_secret" {
+  secret      = google_secret_manager_secret.gmail_import_secret.id
+  secret_data = random_password.gmail_import_secret.result
+}
+
+resource "google_secret_manager_secret" "creative_cache_refresh_secret" {
+  secret_id = "${var.app_name}-creative-cache-refresh-secret"
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    app         = var.app_name
+    environment = var.environment
+    type        = "scheduler"
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+resource "google_secret_manager_secret_version" "creative_cache_refresh_secret" {
+  secret      = google_secret_manager_secret.creative_cache_refresh_secret.id
+  secret_data = random_password.creative_cache_refresh_secret.result
+}
+
+resource "google_secret_manager_secret" "oauth_client_secret" {
+  secret_id = "${var.app_name}-oauth-client-secret"
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    app         = var.app_name
+    environment = var.environment
+    type        = "oauth"
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+resource "google_secret_manager_secret_version" "oauth_client_secret" {
+  secret      = google_secret_manager_secret.oauth_client_secret.id
+  secret_data = var.google_oauth_client_secret
+}
+
+# =============================================================================
 # SERVING DB CREDENTIALS (for Postgres read-routing)
 # =============================================================================
 
@@ -862,6 +974,36 @@ resource "google_secret_manager_secret_iam_member" "ab_service_account_access" {
 
 resource "google_secret_manager_secret_iam_member" "serving_db_credentials_access" {
   secret_id = google_secret_manager_secret.serving_db_credentials.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.catscan.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "precompute_refresh_secret_access" {
+  secret_id = google_secret_manager_secret.precompute_refresh_secret.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.catscan.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "precompute_monitor_secret_access" {
+  secret_id = google_secret_manager_secret.precompute_monitor_secret.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.catscan.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "gmail_import_secret_access" {
+  secret_id = google_secret_manager_secret.gmail_import_secret.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.catscan.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "creative_cache_refresh_secret_access" {
+  secret_id = google_secret_manager_secret.creative_cache_refresh_secret.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.catscan.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "oauth_client_secret_access" {
+  secret_id = google_secret_manager_secret.oauth_client_secret.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.catscan.email}"
 }

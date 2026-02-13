@@ -15,6 +15,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr
 
+from api.auth_bootstrap import is_bootstrap_token_required, is_bootstrap_completed
 from services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
@@ -236,6 +237,12 @@ async def register(request: Request, response: Response, register_data: Register
     # Check if this is the first user (becomes admin)
     user_count = await auth_svc.count_users()
     is_first_user = user_count == 0
+
+    if is_first_user and is_bootstrap_token_required() and not await is_bootstrap_completed():
+        raise HTTPException(
+            status_code=403,
+            detail="First admin must be created via /auth/bootstrap with the bootstrap token.",
+        )
 
     if _is_single_user_mode() and not is_first_user:
         raise HTTPException(

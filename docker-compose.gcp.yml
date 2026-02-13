@@ -71,6 +71,9 @@ services:
       - RAW_PARQUET_BUCKET=${RAW_PARQUET_BUCKET:-}
       - CATSCAN_BQ_DATASET=${CATSCAN_BQ_DATASET:-}
       - CATSCAN_BQ_PROJECT=${CATSCAN_BQ_PROJECT:-}
+      - SECRETS_BACKEND=${SECRETS_BACKEND:-env}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
+      - CATSCAN_BOOTSTRAP_TOKEN=${CATSCAN_BOOTSTRAP_TOKEN:-}
     restart: always
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
