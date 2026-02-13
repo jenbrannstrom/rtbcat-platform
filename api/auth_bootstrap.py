@@ -46,8 +46,7 @@ def is_bootstrap_token_required() -> bool:
 async def is_bootstrap_completed() -> bool:
     """Return True when bootstrap_completed == '1' in system_settings."""
     auth_svc = _get_auth_service()
-    store = auth_svc._store  # noqa: SLF001 – access internal store
-    value = await store.get_setting("bootstrap_completed")
+    value = await auth_svc.get_setting("bootstrap_completed")
     return value == "1"
 
 
@@ -60,8 +59,7 @@ async def _auto_heal_bootstrap_status() -> None:
     auth_svc = _get_auth_service()
     user_count = await auth_svc.count_users()
     if user_count > 0 and not await is_bootstrap_completed():
-        store = auth_svc._store  # noqa: SLF001
-        await store.set_setting("bootstrap_completed", "1", updated_by="auto_heal")
+        await auth_svc.set_setting("bootstrap_completed", "1", updated_by="auto_heal")
         logger.info(
             "Auto-healed bootstrap_completed flag (found %d existing users)",
             user_count,
@@ -109,8 +107,7 @@ async def bootstrap_first_admin(
     user_count = await auth_svc.count_users()
     if user_count > 0:
         # Mark bootstrap as completed so we don't get stuck
-        store = auth_svc._store  # noqa: SLF001
-        await store.set_setting("bootstrap_completed", "1", updated_by="auto_heal")
+        await auth_svc.set_setting("bootstrap_completed", "1", updated_by="auto_heal")
         raise HTTPException(
             status_code=403,
             detail="Users already exist. Bootstrap is no longer available.",
@@ -141,8 +138,7 @@ async def bootstrap_first_admin(
         await _set_user_password_hash(user_id, password_hash)
 
     # Mark bootstrap as completed
-    store = auth_svc._store  # noqa: SLF001
-    await store.set_setting("bootstrap_completed", "1", updated_by=user_id)
+    await auth_svc.set_setting("bootstrap_completed", "1", updated_by=user_id)
 
     # Create session
     session_id = str(uuid.uuid4())
