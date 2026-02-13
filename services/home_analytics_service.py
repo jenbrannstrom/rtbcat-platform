@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
 from typing import Any
 
 from storage.postgres_repositories.home_repo import HomeAnalyticsRepository
@@ -293,12 +292,31 @@ class HomeAnalyticsService:
         total_impressions = int((funnel_row or {}).get("total_impressions") or 0)
         total_bid_requests = int((funnel_row or {}).get("total_bid_requests") or 0)
 
-        end_date = date.today()
-        start_date = end_date - timedelta(days=max(days - 1, 0))
+        start_date, end_date = self._repo.get_window_bounds(days)
         window_seconds = days * 24 * 3600
 
         funnel_proxy_qps = (total_reached / window_seconds) if window_seconds > 0 else 0.0
-        win_rate_pct = (total_impressions / total_reached * 100) if total_reached > 0 else 0.0
+        delivery_win_rate_pct = (
+            (total_impressions / total_reached * 100) if total_reached > 0 else 0.0
+        )
+
+        bidstream_summary = await self._repo.get_bidstream_summary(days, buyer_id)
+        total_bids = int((bidstream_summary or {}).get("total_bids") or 0)
+        total_bids_in_auction = int((bidstream_summary or {}).get("total_bids_in_auction") or 0)
+        total_auctions_won = int((bidstream_summary or {}).get("total_auctions_won") or 0)
+        filtered_bids = max(total_bids - total_bids_in_auction, 0)
+
+        auction_win_rate_over_bids_pct = (
+            (total_auctions_won / total_bids * 100) if total_bids > 0 else None
+        )
+        auction_win_rate_over_bids_in_auction_pct = (
+            (total_auctions_won / total_bids_in_auction * 100)
+            if total_bids_in_auction > 0
+            else None
+        )
+        filtered_bid_rate_pct = (
+            (filtered_bids / total_bids * 100) if total_bids > 0 else None
+        )
 
         bidder_id = None
         if buyer_id:
@@ -433,12 +451,50 @@ class HomeAnalyticsService:
         if missing or extra:
             status = "warning"
 
+        home_seat_coverage = await self._repo.get_home_seat_coverage(days, buyer_id)
+        bidstream_coverage = await self._repo.get_bidstream_coverage(days, buyer_id)
+        latest_observed_at = max(
+            (r.get("observed_at") for r in observed_rows if r.get("observed_at") is not None),
+            default=None,
+        )
+
+        requested_days = max(days, 1)
+        home_seat_days_with_data = int(home_seat_coverage.get("days_with_data") or 0)
+        bidstream_days_with_data = int(bidstream_coverage.get("days_with_data") or 0)
+
         return {
             "period_days": days,
             "window": {
-                "start_date": start_date.isoformat(),
-                "end_date": end_date.isoformat(),
+                "start_date": start_date,
+                "end_date": end_date,
                 "seconds": window_seconds,
+            },
+            "data_coverage": {
+                "requested_window": {
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "days": requested_days,
+                },
+                "home_seat_daily": {
+                    "start_date": home_seat_coverage.get("min_date"),
+                    "end_date": home_seat_coverage.get("max_date"),
+                    "days_with_data": home_seat_days_with_data,
+                    "row_count": int(home_seat_coverage.get("row_count") or 0),
+                    "is_complete": home_seat_days_with_data >= requested_days,
+                },
+                "rtb_bidstream": {
+                    "start_date": bidstream_coverage.get("min_date"),
+                    "end_date": bidstream_coverage.get("max_date"),
+                    "days_with_data": bidstream_days_with_data,
+                    "row_count": int(bidstream_coverage.get("row_count") or 0),
+                    "is_complete": bidstream_days_with_data >= requested_days,
+                },
+                "endpoint_feed": {
+                    "latest_observed_at": latest_observed_at.isoformat()
+                    if hasattr(latest_observed_at, "isoformat")
+                    else latest_observed_at,
+                    "rows_with_positive_qps": len(observed_rows),
+                },
             },
             "summary": {
                 "allocated_qps": allocated_qps,
@@ -449,7 +505,26 @@ class HomeAnalyticsService:
                 "allocation_overshoot_x": round(overshoot_x, 2) if overshoot_x is not None else None,
                 "total_reached_queries": total_reached,
                 "total_impressions": total_impressions,
-                "win_rate_pct": round(win_rate_pct, 2),
+                # Delivery win = impressions / reached queries (legacy CatScan card).
+                "delivery_win_rate_pct": round(delivery_win_rate_pct, 2),
+                # Backward compatibility for older clients.
+                "win_rate_pct": round(delivery_win_rate_pct, 2),
+                # AB-style auction funnel parity metrics (from rtb_bidstream).
+                "bids": total_bids,
+                "bids_in_auction": total_bids_in_auction,
+                "auctions_won": total_auctions_won,
+                "filtered_bids": filtered_bids,
+                "filtered_bid_rate_pct": round(filtered_bid_rate_pct, 2)
+                if filtered_bid_rate_pct is not None
+                else None,
+                "auction_win_rate_over_bids_pct": round(auction_win_rate_over_bids_pct, 2)
+                if auction_win_rate_over_bids_pct is not None
+                else None,
+                "auction_win_rate_over_bids_in_auction_pct": round(
+                    auction_win_rate_over_bids_in_auction_pct, 2
+                )
+                if auction_win_rate_over_bids_in_auction_pct is not None
+                else None,
             },
             "endpoint_reconciliation": {
                 "status": status,
