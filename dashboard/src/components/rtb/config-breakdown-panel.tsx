@@ -68,6 +68,9 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
   const [showConfirmPush, setShowConfirmPush] = useState(false);
   const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [showLowVolumeSizes, setShowLowVolumeSizes] = useState(false);
+  const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set());
+  const selectAllSizesRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
   // Query for breakdown data
@@ -141,7 +144,31 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
     setExpandedCountries(new Set());
     setSortKey('reached');
     setSortDir('desc');
+    setShowLowVolumeSizes(false);
+    setSelectedSizes(new Set());
   }, [activeTab, billing_id]);
+
+  useEffect(() => {
+    if (activeTab !== 'size') {
+      setSelectedSizes(new Set());
+      return;
+    }
+    const validNames = new Set((data?.breakdown || []).map((item) => item.name));
+    setSelectedSizes((prev) => {
+      const next = new Set([...prev].filter((name) => validNames.has(name)));
+      if (next.size === prev.size) {
+        let same = true;
+        for (const value of next) {
+          if (!prev.has(value)) {
+            same = false;
+            break;
+          }
+        }
+        if (same) return prev;
+      }
+      return next;
+    });
+  }, [activeTab, data?.breakdown]);
 
   const toggleCountries = (creativeId: string) => {
     setExpandedCountries((prev) => {
@@ -227,27 +254,104 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
 
   const isSizeIncluded = (sizeName: string): boolean => effectiveIncludedSizes.has(sizeName);
 
+  const sizeRows = activeTab === 'size' ? sortedBreakdown : [];
+  const visibleSizeRows = activeTab === 'size'
+    ? (showLowVolumeSizes ? sizeRows : sizeRows.filter((row) => (row.impressions ?? 0) >= 1000))
+    : [];
+  const hiddenLowVolumeSizeCount = activeTab === 'size'
+    ? sizeRows.length - visibleSizeRows.length
+    : 0;
+  const visibleSizeNames = new Set(visibleSizeRows.map((row) => row.name));
+  const selectedVisibleSizeCount = [...selectedSizes].filter((name) => visibleSizeNames.has(name)).length;
+  const allVisibleSizesSelected = visibleSizeRows.length > 0 && selectedVisibleSizeCount === visibleSizeRows.length;
+  const hasPartialVisibleSelection =
+    selectedVisibleSizeCount > 0 && selectedVisibleSizeCount < visibleSizeRows.length;
+
+  useEffect(() => {
+    if (!selectAllSizesRef.current) return;
+    selectAllSizesRef.current.indeterminate = hasPartialVisibleSelection;
+  }, [hasPartialVisibleSelection, allVisibleSizesSelected]);
+
   const toggleSizeBlockState = (sizeName: string) => {
+    const currentlyIncluded = isSizeIncluded(sizeName);
+    setSizeInclusionState(sizeName, !currentlyIncluded);
+  };
+
+  const setSizeInclusionState = (sizeName: string, shouldInclude: boolean) => {
     const pendingAdd = findPendingChange(sizeName, 'add_size');
+    const pendingRemove = findPendingChange(sizeName, 'remove_size');
+    const currentlyIncluded = isSizeIncluded(sizeName);
+
+    if (shouldInclude) {
+      if (pendingRemove) {
+        cancelChangeMutation.mutate(pendingRemove.id);
+        return;
+      }
+      if (pendingAdd || currentlyIncluded) return;
+      createChangeMutation.mutate({
+        billing_id,
+        change_type: 'add_size',
+        field_name: 'included_sizes',
+        value: sizeName,
+        reason: 'Allowed from Home size breakdown',
+      });
+      return;
+    }
+
     if (pendingAdd) {
       cancelChangeMutation.mutate(pendingAdd.id);
       return;
     }
-
-    const pendingRemove = findPendingChange(sizeName, 'remove_size');
-    if (pendingRemove) {
-      cancelChangeMutation.mutate(pendingRemove.id);
-      return;
-    }
-
-    const currentlyIncluded = isSizeIncluded(sizeName);
+    if (pendingRemove || !currentlyIncluded) return;
     createChangeMutation.mutate({
       billing_id,
-      change_type: currentlyIncluded ? 'remove_size' : 'add_size',
+      change_type: 'remove_size',
       field_name: 'included_sizes',
       value: sizeName,
-      reason: currentlyIncluded ? 'Blocked from Home size breakdown' : 'Unblocked from Home size breakdown',
+      reason: 'Blocked from Home size breakdown',
     });
+  };
+
+  const toggleSizeSelection = (sizeName: string) => {
+    setSelectedSizes((prev) => {
+      const next = new Set(prev);
+      if (next.has(sizeName)) {
+        next.delete(sizeName);
+      } else {
+        next.add(sizeName);
+      }
+      return next;
+    });
+  };
+
+  const selectAllVisibleSizes = () => {
+    setSelectedSizes((prev) => {
+      const next = new Set(prev);
+      visibleSizeRows.forEach((row) => next.add(row.name));
+      return next;
+    });
+  };
+
+  const invertVisibleSizeSelection = () => {
+    setSelectedSizes((prev) => {
+      const next = new Set(prev);
+      visibleSizeRows.forEach((row) => {
+        if (next.has(row.name)) {
+          next.delete(row.name);
+        } else {
+          next.add(row.name);
+        }
+      });
+      return next;
+    });
+  };
+
+  const clearSelectedSizes = () => {
+    setSelectedSizes(new Set());
+  };
+
+  const applySelectionState = (shouldInclude: boolean) => {
+    selectedSizes.forEach((sizeName) => setSizeInclusionState(sizeName, shouldInclude));
   };
 
   const handleSort = (key: typeof sortKey) => {
@@ -343,15 +447,67 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
               </div>
             )}
             {activeTab === 'size' && (
-              <div className="mb-3 flex items-center justify-between p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
-                <span>
-                  Click <span className="font-semibold">X</span> to block a size or <span className="font-semibold">✓</span> to unblock it.
-                </span>
-                {hasPendingSizeChanges && (
-                  <span className="font-medium">
-                    {pendingSizeChanges.length} pending
+              <div className="mb-3 space-y-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+                <div className="flex items-center justify-between gap-2">
+                  <span>
+                    <span className="font-semibold">Status</span> shows if a size is currently targeted:
+                    {' '}<span className="font-semibold">Allowed</span> or <span className="font-semibold">Blocked</span>.
                   </span>
-                )}
+                  <div className="flex items-center gap-2">
+                    {hiddenLowVolumeSizeCount > 0 && (
+                      <button
+                        onClick={() => setShowLowVolumeSizes((prev) => !prev)}
+                        className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+                      >
+                        {showLowVolumeSizes
+                          ? 'Show only >=1k imp'
+                          : `Show low-volume (${hiddenLowVolumeSizeCount})`}
+                      </button>
+                    )}
+                    {hasPendingSizeChanges && (
+                      <span className="font-medium">
+                        {pendingSizeChanges.length} pending
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={selectAllVisibleSizes}
+                    disabled={sizeActionBusy || visibleSizeRows.length === 0}
+                    className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                  >
+                    Select all
+                  </button>
+                  <button
+                    onClick={invertVisibleSizeSelection}
+                    disabled={sizeActionBusy || visibleSizeRows.length === 0}
+                    className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                  >
+                    Invert
+                  </button>
+                  <button
+                    onClick={clearSelectedSizes}
+                    disabled={sizeActionBusy || selectedSizes.size === 0}
+                    className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                  >
+                    Clear ({selectedSizes.size})
+                  </button>
+                  <button
+                    onClick={() => applySelectionState(false)}
+                    disabled={sizeActionBusy || selectedSizes.size === 0}
+                    className="rounded border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                  >
+                    Block selected
+                  </button>
+                  <button
+                    onClick={() => applySelectionState(true)}
+                    disabled={sizeActionBusy || selectedSizes.size === 0}
+                    className="rounded border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-50"
+                  >
+                    Allow selected
+                  </button>
+                </div>
               </div>
             )}
             {pushResult && (
@@ -372,10 +528,33 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                 activeTab === "creative"
                   ? "grid-cols-[repeat(14,minmax(0,1fr))]"
                   : activeTab === "size"
-                  ? "grid-cols-[repeat(13,minmax(0,1fr))]"
+                  ? "grid-cols-[repeat(15,minmax(0,1fr))]"
                   : "grid-cols-12"
               )}
             >
+              {activeTab === "size" && (
+                <div className="col-span-1 flex justify-center">
+                  <input
+                    ref={selectAllSizesRef}
+                    type="checkbox"
+                    checked={allVisibleSizesSelected}
+                    onChange={(event) => {
+                      if (event.target.checked) {
+                        selectAllVisibleSizes();
+                      } else {
+                        setSelectedSizes((prev) => {
+                          const next = new Set(prev);
+                          visibleSizeRows.forEach((row) => next.delete(row.name));
+                          return next;
+                        });
+                      }
+                    }}
+                    disabled={sizeActionBusy || visibleSizeRows.length === 0}
+                    className="h-3.5 w-3.5 rounded border-gray-300"
+                    title="Select visible sizes"
+                  />
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => handleSort("name")}
@@ -439,13 +618,16 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                 </>
               )}
               {activeTab === "size" && (
-                <div className="col-span-1 text-right">Action</div>
+                <>
+                  <div className="col-span-1 text-right">Status</div>
+                  <div className="col-span-1 text-right">Action</div>
+                </>
               )}
             </div>
 
             {/* Table body */}
             <div className="divide-y divide-gray-100">
-              {sortedBreakdown.map((item, index) => {
+              {(activeTab === 'size' ? visibleSizeRows : sortedBreakdown).map((item, index) => {
                 const isClickable = false;
                 const winRate = item.win_rate ?? 0;
                 const winRateClass =
@@ -455,6 +637,10 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                 const pendingRemove = activeTab === 'size' ? findPendingChange(item.name, 'remove_size') : undefined;
                 const hasPendingToggle = Boolean(pendingAdd || pendingRemove);
                 const includedInConfig = activeTab === 'size' ? isSizeIncluded(item.name) : false;
+                const selectedForBulk = activeTab === 'size' ? selectedSizes.has(item.name) : false;
+                const sizeStatus = hasPendingToggle
+                  ? (pendingAdd ? 'Pending allow' : 'Pending block')
+                  : (includedInConfig ? 'Allowed' : 'Blocked');
                 return (
                   <div key={`${item.name}-${index}`}>
                     <div
@@ -464,13 +650,26 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                         activeTab === 'creative'
                           ? 'grid-cols-[repeat(14,minmax(0,1fr))]'
                           : activeTab === 'size'
-                          ? 'grid-cols-[repeat(13,minmax(0,1fr))]'
+                          ? 'grid-cols-[repeat(15,minmax(0,1fr))]'
                           : 'grid-cols-12',
                         'hover:bg-gray-50 transition-colors',
                         isClickable && 'cursor-pointer hover:bg-blue-50',
-                        activeTab === 'size' && hasPendingToggle && 'bg-amber-50'
+                        activeTab === 'size' && hasPendingToggle && 'bg-amber-50',
+                        activeTab === 'size' && selectedForBulk && 'ring-1 ring-blue-200'
                       )}
                     >
+                      {activeTab === 'size' && (
+                        <div className="col-span-1 flex justify-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedForBulk}
+                            onChange={() => toggleSizeSelection(item.name)}
+                            disabled={sizeActionBusy}
+                            className="h-3.5 w-3.5 rounded border-gray-300"
+                            title={`Select ${item.name}`}
+                          />
+                        </div>
+                      )}
                       <div
                         className={cn(
                           nameColSpan,
@@ -546,7 +745,21 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                         </>
                       )}
                       {activeTab === 'size' && (
-                        <div className="col-span-1 flex justify-end">
+                        <>
+                          <div className="col-span-1 text-right text-xs">
+                            <span
+                              className={cn(
+                                'rounded px-1.5 py-0.5 font-medium',
+                                sizeStatus === 'Allowed' && 'bg-green-50 text-green-700',
+                                sizeStatus === 'Blocked' && 'bg-gray-100 text-gray-700',
+                                sizeStatus === 'Pending allow' && 'bg-amber-100 text-amber-800',
+                                sizeStatus === 'Pending block' && 'bg-amber-100 text-amber-800'
+                              )}
+                            >
+                              {sizeStatus}
+                            </span>
+                          </div>
+                          <div className="col-span-1 flex justify-end">
                           <button
                             onClick={(event) => {
                               event.stopPropagation();
@@ -554,16 +767,18 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                             }}
                             disabled={sizeActionBusy}
                             className={cn(
-                              'inline-flex h-6 w-6 items-center justify-center rounded border transition-colors disabled:opacity-50',
+                              'inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50',
                               includedInConfig
-                                ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100'
-                                : 'border-green-200 bg-green-50 text-green-600 hover:bg-green-100'
+                                ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+                                : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
                             )}
-                            title={includedInConfig ? 'Block size (remove from targeting)' : 'Unblock size (add to targeting)'}
+                            title={includedInConfig ? 'Block size (remove from targeting)' : 'Allow size (add to targeting)'}
                           >
-                            {includedInConfig ? <X className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
+                            {includedInConfig ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}
+                            {includedInConfig ? 'Block' : 'Allow'}
                           </button>
                         </div>
+                        </>
                       )}
                     </div>
                     {activeTab === 'size' && selectedSize === item.name && (
@@ -629,6 +844,19 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   </div>
                 );
               })}
+              {activeTab === 'size' && visibleSizeRows.length === 0 && sortedBreakdown.length > 0 && (
+                <div className="px-3 py-4 text-sm text-gray-500">
+                  No sizes meet the default threshold of <span className="font-medium">1,000 impressions</span>.
+                  {hiddenLowVolumeSizeCount > 0 && (
+                    <button
+                      onClick={() => setShowLowVolumeSizes(true)}
+                      className="ml-2 text-blue-600 hover:text-blue-800"
+                    >
+                      Show all sizes
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           {activeTab === 'size' && hasPendingSizeChanges && (
@@ -642,7 +870,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   {pendingSizeChanges.map((change) => (
                     <div key={change.id} className="flex items-center justify-between gap-2">
                       <span className="truncate">
-                        {change.change_type === 'add_size' ? 'Unblock' : 'Block'}: {change.value}
+                        {change.change_type === 'add_size' ? 'Allow' : 'Block'}: {change.value}
                       </span>
                       <button
                         onClick={() => cancelChangeMutation.mutate(change.id)}
@@ -694,7 +922,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
               <div className="mt-3 max-h-40 overflow-y-auto space-y-1 rounded border bg-gray-50 p-2 text-xs">
                 {pendingSizeChanges.map((change) => (
                   <div key={`confirm-${change.id}`}>
-                    • {change.change_type === 'add_size' ? 'Unblock' : 'Block'} {change.value}
+                    • {change.change_type === 'add_size' ? 'Allow' : 'Block'} {change.value}
                   </div>
                 ))}
               </div>
