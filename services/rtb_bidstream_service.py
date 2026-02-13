@@ -530,6 +530,9 @@ class RtbBidstreamService:
                 "data_source": row.get("data_source", "csv"),
             }
 
+            if row.get("target_value"):
+                item["target_value"] = str(row["target_value"])
+
             if bids > 0 or bids_in_auction > 0:
                 item["bids"] = bids
                 item["bids_in_auction"] = bids_in_auction

@@ -18,16 +18,47 @@ class PretargetingRepository:
     async def list_configs(self, bidder_id: str | None = None) -> list[dict[str, Any]]:
         if bidder_id:
             return await pg_query(
-                "SELECT * FROM pretargeting_configs WHERE bidder_id = %s ORDER BY billing_id",
+                """
+                SELECT * FROM (
+                    SELECT
+                        pc.*,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id)
+                            ORDER BY pc.synced_at DESC NULLS LAST, pc.id DESC
+                        ) AS rn
+                    FROM pretargeting_configs pc
+                    WHERE pc.bidder_id = %s
+                ) deduped
+                WHERE rn = 1
+                ORDER BY billing_id
+                """,
                 (bidder_id,),
             )
         return await pg_query(
-            "SELECT * FROM pretargeting_configs ORDER BY billing_id"
+            """
+            SELECT * FROM (
+                SELECT
+                    pc.*,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id)
+                        ORDER BY pc.synced_at DESC NULLS LAST, pc.id DESC
+                    ) AS rn
+                FROM pretargeting_configs pc
+            ) deduped
+            WHERE rn = 1
+            ORDER BY billing_id
+            """
         )
 
     async def get_config_by_billing_id(self, billing_id: str) -> dict[str, Any] | None:
         return await pg_query_one(
-            "SELECT * FROM pretargeting_configs WHERE billing_id = %s",
+            """
+            SELECT *
+            FROM pretargeting_configs
+            WHERE billing_id = %s
+            ORDER BY synced_at DESC NULLS LAST, id DESC
+            LIMIT 1
+            """,
             (billing_id,),
         )
 

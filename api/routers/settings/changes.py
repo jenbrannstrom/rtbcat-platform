@@ -53,6 +53,7 @@ async def create_pending_change(
         'add_excluded_geo', 'remove_excluded_geo',
         'add_publisher', 'remove_publisher',
         'set_publisher_mode',
+        'set_maximum_qps',
         'change_state',
     ]
     if request.change_type not in valid_change_types:
@@ -65,6 +66,13 @@ async def create_pending_change(
             status_code=400,
             detail="Invalid publisher mode. Must be INCLUSIVE or EXCLUSIVE."
         )
+    if request.change_type == "set_maximum_qps":
+        try:
+            qps_limit = int(request.value)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="QPS limit must be an integer.") from None
+        if qps_limit < 0:
+            raise HTTPException(status_code=400, detail="QPS limit must be >= 0.")
 
     try:
         change_service = ChangesService()
@@ -263,6 +271,12 @@ async def get_pretargeting_config_detail(
         publisher_targeting = raw_config.get("publisherTargeting") or {}
         publisher_mode = publisher_targeting.get("targetingMode")
         publisher_values = publisher_targeting.get("values") or []
+        maximum_qps = raw_config.get("maximumQps")
+        if maximum_qps is not None:
+            try:
+                maximum_qps = int(maximum_qps)
+            except (TypeError, ValueError):
+                maximum_qps = None
 
         # Build pending changes list
         pending_changes = [
@@ -286,6 +300,7 @@ async def get_pretargeting_config_detail(
         effective_sizes = set(included_sizes)
         effective_geos = set(included_geos)
         effective_formats = set(included_formats)
+        effective_maximum_qps = maximum_qps
         effective_publisher_mode = publisher_mode
         effective_publishers = set(publisher_values)
 
@@ -302,6 +317,11 @@ async def get_pretargeting_config_detail(
                 effective_formats.add(change.value)
             elif change.change_type == 'remove_format':
                 effective_formats.discard(change.value)
+            elif change.change_type == 'set_maximum_qps':
+                try:
+                    effective_maximum_qps = int(change.value)
+                except (TypeError, ValueError):
+                    continue
             elif change.change_type == 'set_publisher_mode':
                 effective_publisher_mode = change.value
                 effective_publishers = set()
@@ -322,6 +342,7 @@ async def get_pretargeting_config_detail(
             included_sizes=included_sizes,
             included_geos=included_geos,
             excluded_geos=excluded_geos,
+            maximum_qps=maximum_qps,
             publisher_targeting_mode=publisher_mode,
             publisher_targeting_values=publisher_values,
             synced_at=str(config["synced_at"]) if config["synced_at"] else None,
@@ -330,6 +351,7 @@ async def get_pretargeting_config_detail(
             effective_sizes=sorted(list(effective_sizes)),
             effective_geos=sorted(list(effective_geos)),
             effective_formats=sorted(list(effective_formats)),
+            effective_maximum_qps=effective_maximum_qps,
             effective_publisher_targeting_mode=effective_publisher_mode,
             effective_publisher_targeting_values=sorted(list(effective_publishers)),
         )

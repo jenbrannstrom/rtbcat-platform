@@ -197,6 +197,7 @@ class ConfigDetailResponse(BaseModel):
     included_sizes: list[str] = []
     included_geos: list[str] = []
     excluded_geos: list[str] = []
+    maximum_qps: Optional[int] = None
     publisher_targeting_mode: Optional[str] = None
     publisher_targeting_values: list[str] = []
     # Pending changes summary
@@ -205,6 +206,7 @@ class ConfigDetailResponse(BaseModel):
     effective_sizes: list[str] = []
     effective_geos: list[str] = []
     effective_formats: list[str] = []
+    effective_maximum_qps: Optional[int] = None
     effective_publisher_targeting_mode: Optional[str] = None
     effective_publisher_targeting_values: list[str] = []
     # Recent history

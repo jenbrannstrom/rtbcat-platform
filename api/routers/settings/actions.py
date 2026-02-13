@@ -35,6 +35,7 @@ async def apply_pending_change(
     - add_size / remove_size
     - add_geo / remove_geo
     - add_format / remove_format
+    - set_maximum_qps
     - add_publisher / remove_publisher
     - set_publisher_mode
     """

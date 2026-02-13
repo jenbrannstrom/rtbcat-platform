@@ -136,5 +136,6 @@ class PretargetingConfigDict(TypedDict, total=False):
     webTargeting: Optional[StringTargetingDimension]
     publisherTargeting: Optional[StringTargetingDimension]
     minimumViewabilityDecile: Optional[int]
+    maximumQps: Optional[int]
     collectedAt: str
     source: Literal["authorized_buyers_api"]

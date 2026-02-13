@@ -204,6 +204,7 @@ def parse_pretargeting_config(config_data: dict) -> PretargetingConfigDict:
             config_data.get("publisherTargeting")
         ),
         "minimumViewabilityDecile": config_data.get("minimumViewabilityDecile"),
+        "maximumQps": config_data.get("maximumQps"),
         "collectedAt": datetime.now(timezone.utc).isoformat(),
         "source": "authorized_buyers_api",
     }
