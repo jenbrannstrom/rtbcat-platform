@@ -51,6 +51,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.auth import APIKeyAuthMiddleware
 from api.session_middleware import SessionAuthMiddleware
+from api.auth_bootstrap import router as bootstrap_router, _auto_heal_bootstrap_status
 from api.auth_oauth_proxy import router as auth_router, cleanup_sessions
 from api.auth_authing import router as authing_router
 from api.auth_password import router as password_router
@@ -122,6 +123,12 @@ async def lifespan(app: FastAPI):
     # Set dependencies for routers
     set_store(_store)
     set_config_manager(_config_manager)
+
+    # Auto-heal bootstrap status for existing deployments
+    try:
+        await _auto_heal_bootstrap_status()
+    except Exception as e:
+        logger.warning("Failed to auto-heal bootstrap status: %s", e)
 
     # Validate required secrets for enabled features at startup
     secrets_health = get_secrets_health()
@@ -207,6 +214,7 @@ app = create_app()
 # =============================================================================
 
 # Authentication routes (must be first for login/logout)
+app.include_router(bootstrap_router)
 app.include_router(auth_router)
 app.include_router(authing_router)
 app.include_router(password_router)

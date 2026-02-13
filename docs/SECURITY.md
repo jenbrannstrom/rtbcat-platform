@@ -129,6 +129,44 @@ Even if you think it's "just for testing":
 
 ---
 
+## Secret Management Architecture
+
+Cat-Scan uses a layered approach to secret management:
+
+### Backend hierarchy
+
+| Backend | When used | How secrets are stored |
+|---------|-----------|----------------------|
+| **GCP Secret Manager** | Production (GCE VMs) | Terraform creates GSM secrets; startup.sh fetches at boot |
+| **Environment variables** | Local dev / Docker | Plain `.env` file (gitignored) |
+| **Template fallback** | Phase 1 migration | Terraform `templatefile()` injects into startup script |
+
+### Secrets stored in GSM (production)
+
+| Secret ID pattern | Source | Used by |
+|-------------------|--------|---------|
+| `{app}-precompute-refresh-secret` | `random_password` | Cloud Scheduler precompute refresh |
+| `{app}-precompute-monitor-secret` | `random_password` | Cloud Scheduler precompute monitoring |
+| `{app}-gmail-import-secret` | `random_password` | Cloud Scheduler Gmail import |
+| `{app}-creative-cache-refresh-secret` | `random_password` | Cloud Scheduler creative cache refresh |
+| `{app}-oauth-client-secret` | `var.google_oauth_client_secret` | OAuth2 Proxy Google login |
+| `{app}-gmail-oauth-client` | Manual upload | Gmail API authentication |
+| `{app}-gmail-token` | Manual upload | Gmail API token |
+| `{app}-ab-service-account` | Manual upload | Authorized Buyers API |
+| `{app}-serving-db-credentials` | Terraform (Cloud SQL) | Postgres DSN |
+
+### Bootstrap token
+
+On GCP deployments, `CATSCAN_BOOTSTRAP_TOKEN` is generated at VM startup via `openssl rand -hex 24` and written to `/etc/catscan.env`. This prevents an attacker from racing to become admin on a fresh deploy. Retrieve it with:
+
+```bash
+sudo grep CATSCAN_BOOTSTRAP_TOKEN /etc/catscan.env
+```
+
+See [AUTHENTICATION.md](AUTHENTICATION.md) for the bootstrap flow.
+
+---
+
 ## GCP Security Checklist
 
 When deploying on Google Cloud Platform, verify:
