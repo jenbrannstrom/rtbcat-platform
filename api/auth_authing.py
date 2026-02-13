@@ -24,6 +24,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
+from api.auth_bootstrap import is_bootstrap_token_required, is_bootstrap_completed
 from services.auth_service import AuthService
 from services.secrets_manager import get_secrets_manager
 
@@ -321,6 +322,15 @@ async def authing_callback(
         # Auto-create user (first user gets admin role)
         user_id = str(uuid.uuid4())
         user_count = await auth_svc.count_users()
+        if user_count == 0 and is_bootstrap_token_required() and not await is_bootstrap_completed():
+            logger.warning(
+                "Blocked Authing first-user auto-admin for %s (CATSCAN_BOOTSTRAP_TOKEN is set, use /auth/bootstrap)",
+                email,
+            )
+            return RedirectResponse(
+                url="/login?error=First+admin+must+be+created+via+bootstrap+token.+See+server+logs.",
+                status_code=302,
+            )
         if user_count > 0 and not _is_auto_user_provisioning_enabled():
             logger.warning(
                 "Blocked Authing auto-provisioning for %s (CATSCAN_ALLOW_AUTO_USER_PROVISIONING=false)",

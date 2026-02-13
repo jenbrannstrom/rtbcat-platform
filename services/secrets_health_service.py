@@ -63,6 +63,10 @@ def _is_clustering_enabled() -> bool:
     )
 
 
+def _is_oauth2_proxy_enabled() -> bool:
+    return _env_true("OAUTH2_PROXY_ENABLED", default=False)
+
+
 def _feature_checks() -> list[FeatureCheck]:
     return [
         FeatureCheck(
@@ -100,6 +104,12 @@ def _feature_checks() -> list[FeatureCheck]:
             description="Anthropic clustering analysis",
             required_keys=("ANTHROPIC_API_KEY",),
             enabled=_is_clustering_enabled(),
+        ),
+        FeatureCheck(
+            name="oauth2_proxy",
+            description="Google OAuth2 Proxy authentication",
+            required_keys=("GOOGLE_OAUTH_CLIENT_SECRET",),
+            enabled=_is_oauth2_proxy_enabled(),
         ),
     ]
 
