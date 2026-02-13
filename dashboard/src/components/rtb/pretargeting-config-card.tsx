@@ -2,12 +2,10 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
-import { setPretargetingName, lookupGeoNames } from '@/lib/api';
-import { ChevronRight, Pencil, Check, X, AlertTriangle, AlertCircle, Settings } from 'lucide-react';
+import { setPretargetingName, lookupGeoNames, suspendPretargeting, activatePretargeting, syncPretargetingConfigs } from '@/lib/api';
+import { ChevronRight, Pencil, Check, X, AlertTriangle, AlertCircle, Pause, Play, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useRouter } from 'next/navigation';
 import { SnapshotComparisonPanel } from './snapshot-comparison-panel';
-import { PretargetingSettingsEditor } from './pretargeting-settings-editor';
 
 export interface PretargetingConfig {
   billing_id: string;
@@ -117,10 +115,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   const handleToggle = onToggleExpand || (() => setInternalExpanded(!internalExpanded));
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(config.name);
-  const [showSettingsEditor, setShowSettingsEditor] = useState(false);
-  const [editorTab, setEditorTab] = useState<'publishers' | 'settings'>('settings');
   const inputRef = useRef<HTMLInputElement>(null);
-  const router = useRouter();
   const queryClient = useQueryClient();
 
   const nameMutation = useMutation({
@@ -129,6 +124,22 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
       setIsEditing(false);
+    },
+  });
+
+  const suspendMutation = useMutation({
+    mutationFn: () => suspendPretargeting(config.billing_id),
+    onSuccess: async () => {
+      await syncPretargetingConfigs();
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+    },
+  });
+
+  const activateMutation = useMutation({
+    mutationFn: () => activatePretargeting(config.billing_id),
+    onSuccess: async () => {
+      await syncPretargetingConfigs();
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
     },
   });
 
@@ -174,6 +185,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
 
   // Check if using display_name from Google (not user-defined)
   const isGoogleName = !config.user_name && config.display_name;
+  const stateMutationPending = suspendMutation.isPending || activateMutation.isPending;
 
   return (
     <div
@@ -318,39 +330,35 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
               <SettingPill label="Sizes" values={config.sizes} max={4} />
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditorTab('settings');
-                  setShowSettingsEditor(!showSettingsEditor);
-                }}
-                className={cn(
-                  'flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors',
-                  showSettingsEditor && editorTab === 'settings'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                )}
-              >
-                <Settings className="h-3 w-3" />
-                {showSettingsEditor && editorTab === 'settings' ? 'Hide Settings' : 'Config Settings'}
-              </button>
+              {config.state === 'ACTIVE' ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    suspendMutation.mutate();
+                  }}
+                  disabled={stateMutationPending}
+                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200 disabled:opacity-50"
+                >
+                  {suspendMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Pause className="h-3 w-3" />}
+                  Pause
+                </button>
+              ) : (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    activateMutation.mutate();
+                  }}
+                  disabled={stateMutationPending}
+                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
+                >
+                  {activateMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                  Activate
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Settings Editor */}
-          {showSettingsEditor && (
-            <div className="mb-4 -mx-4 border-y">
-              <PretargetingSettingsEditor
-                billing_id={config.billing_id}
-                configName={config.name}
-                initialTab={editorTab}
-                onClose={() => setShowSettingsEditor(false)}
-              />
-            </div>
-          )}
-
-          {!showSettingsEditor && (
-            <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-4 gap-4">
               <div className="bg-white rounded-lg p-3 border">
                 <div className="text-xs text-gray-500 mb-1">Reached</div>
                 <div className="text-xl font-bold text-gray-900">
@@ -393,9 +401,8 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                 </div>
               </div>
             </div>
-          )}
 
-          {/* A/B Comparison Panel */}
+          {/* History Panel */}
           <div className="mt-4">
             <SnapshotComparisonPanel
               billing_id={config.billing_id}

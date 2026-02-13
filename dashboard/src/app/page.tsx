@@ -252,6 +252,15 @@ function WasteAnalysisContent() {
   // explicit formulas and source coverage metadata.
   const endpointSummary = endpointEfficiency?.summary;
   const coverage = endpointEfficiency?.data_coverage;
+  const observedQpsByEndpointId = endpointEfficiency?.endpoint_reconciliation?.rows?.reduce<Record<string, number | null>>(
+    (acc, row) => {
+      if (row.catscan_endpoint_id) {
+        acc[row.catscan_endpoint_id] = row.google_current_qps;
+      }
+      return acc;
+    },
+    {}
+  ) ?? {};
   const deliveryWinRate = endpointSummary
     ? (endpointSummary.delivery_win_rate_pct ?? endpointSummary.win_rate_pct)
     : (reached && impressions ? (impressions / reached * 100) : null);
@@ -339,7 +348,10 @@ function WasteAnalysisContent() {
         </div>
       )}
       {/* Account Endpoints Header with integrated funnel metrics */}
-      <AccountEndpointsHeader funnelData={funnelDataForHeader} />
+      <AccountEndpointsHeader
+        funnelData={funnelDataForHeader}
+        observedQpsByEndpointId={observedQpsByEndpointId}
+      />
 
       {endpointEfficiency && !endpointEfficiencyLoading && (
         <EndpointEfficiencyPanel data={endpointEfficiency} />

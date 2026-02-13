@@ -51,9 +51,10 @@ interface AccountEndpointsHeaderProps {
     homeSeatDataThrough?: string | null;
     bidstreamDataThrough?: string | null;
   };
+  observedQpsByEndpointId?: Record<string, number | null>;
 }
 
-export function AccountEndpointsHeader({ funnelData }: AccountEndpointsHeaderProps) {
+export function AccountEndpointsHeader({ funnelData, observedQpsByEndpointId }: AccountEndpointsHeaderProps) {
   const { selectedBuyerId, selectedServiceAccountId } = useAccount();
   const [showQpsInfo, setShowQpsInfo] = useState(false);
   const [showDataQualityInfo, setShowDataQualityInfo] = useState(false);
@@ -219,6 +220,10 @@ export function AccountEndpointsHeader({ funnelData }: AccountEndpointsHeaderPro
           </div>
 
           <div className="space-y-1">
+            <div className="flex items-center justify-end gap-6 px-3 text-[10px] uppercase tracking-wide text-gray-400">
+              <span className="w-24 text-right">Allocated QPS</span>
+              <span className="w-24 text-right">Observed QPS</span>
+            </div>
             {data.endpoints.map((endpoint) => (
               <div
                 key={endpoint.endpoint_id}
@@ -237,8 +242,13 @@ export function AccountEndpointsHeader({ funnelData }: AccountEndpointsHeaderPro
                   <span className="text-xs text-gray-500">
                     {endpoint.bid_protocol?.replace('OPENRTB_', 'OpenRTB ').replace('_', '.') || 'Unknown'}
                   </span>
-                  <span className="font-medium text-gray-900 min-w-[80px] text-right text-sm">
+                  <span className="font-medium text-gray-900 min-w-[96px] text-right text-sm">
                     {formatQPS(endpoint.maximum_qps)} QPS
+                  </span>
+                  <span className="font-medium text-slate-700 min-w-[96px] text-right text-sm">
+                    {observedQpsByEndpointId?.[endpoint.endpoint_id] != null
+                      ? `${Number(observedQpsByEndpointId[endpoint.endpoint_id]).toLocaleString(undefined, { maximumFractionDigits: 2 })} QPS`
+                      : '—'}
                   </span>
                 </div>
               </div>

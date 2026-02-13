@@ -13,15 +13,14 @@ import {
 import {
   Camera,
   GitCompare,
-  Plus,
-  ChevronDown,
-  ChevronUp,
   Clock,
   TrendingUp,
   TrendingDown,
   Minus,
   CheckCircle,
   AlertCircle,
+  History,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -171,7 +170,7 @@ function ComparisonCard({ comparison }: { comparison: SnapshotComparison }) {
 }
 
 export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComparisonPanelProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [showDialog, setShowDialog] = useState(false);
   const [showCreateSnapshot, setShowCreateSnapshot] = useState(false);
   const [snapshotName, setSnapshotName] = useState('');
   const [snapshotNotes, setSnapshotNotes] = useState('');
@@ -180,13 +179,13 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
   const { data: snapshots, isLoading: snapshotsLoading } = useQuery({
     queryKey: ['snapshots', billing_id],
     queryFn: () => getSnapshots({ billing_id, limit: 10 }),
-    enabled: isExpanded,
+    enabled: showDialog,
   });
 
   const { data: comparisons, isLoading: comparisonsLoading } = useQuery({
     queryKey: ['comparisons', billing_id],
     queryFn: () => getComparisons({ billing_id, limit: 10 }),
-    enabled: isExpanded,
+    enabled: showDialog,
   });
 
   const createSnapshotMutation = useMutation({
@@ -207,26 +206,50 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
     });
   };
 
+  const closeDialog = () => {
+    setShowDialog(false);
+    setShowCreateSnapshot(false);
+    setSnapshotName('');
+    setSnapshotNotes('');
+  };
+
   return (
-    <div className="border-t">
+    <div className="border-t pt-2">
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-4 py-2 flex items-center justify-between text-sm text-gray-600 hover:bg-gray-50"
+        onClick={() => setShowDialog(true)}
+        className="w-full px-4 py-2 flex items-center justify-between text-sm text-gray-600 hover:bg-gray-50 rounded"
       >
         <span className="flex items-center gap-2">
-          <GitCompare className="h-4 w-4" />
-          A/B Comparison
+          <History className="h-4 w-4" />
+          History
           {snapshots && snapshots.length > 0 && (
             <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-xs">
               {snapshots.length} snapshot{snapshots.length !== 1 && 's'}
             </span>
           )}
         </span>
-        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        <span className="text-xs text-gray-400">Open</span>
       </button>
 
-      {isExpanded && (
-        <div className="px-4 pb-4 space-y-4">
+      {showDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={closeDialog}
+          />
+          <div className="relative mx-4 max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg border bg-white p-4 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="text-sm font-semibold text-gray-900">
+                History - {configName}
+              </h3>
+              <button
+                onClick={closeDialog}
+                className="rounded p-1 text-gray-500 hover:bg-gray-100"
+                aria-label="Close history dialog"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           {/* Create Snapshot Section */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
             <div className="flex items-center justify-between mb-2">
@@ -315,6 +338,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
               </div>
             )}
           </div>
+        </div>
         </div>
       )}
     </div>
