@@ -25,8 +25,11 @@ if [[ -f .env ]]; then
   else
     printf "\nIMAGE_TAG=%s\n" "$IMAGE_TAG" >> .env
   fi
+  if ! grep -q '^UVICORN_WORKERS=' .env; then
+    printf "UVICORN_WORKERS=2\n" >> .env
+  fi
 else
-  printf "IMAGE_TAG=%s\n" "$IMAGE_TAG" > .env
+  printf "IMAGE_TAG=%s\nUVICORN_WORKERS=2\n" "$IMAGE_TAG" > .env
 fi
 
 # Build and restart containers with new tag/version

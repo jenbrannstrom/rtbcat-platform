@@ -120,9 +120,15 @@ variable "google_oauth_client_secret" {
 }
 
 variable "allowed_email_domains" {
-  description = "Email domains allowed to access (e.g., ['rtb.cat', 'company.com']). Empty list = any Google account."
+  description = "Email domains allowed to access (e.g., ['rtb.cat', 'company.com']). Empty list is denied by default unless allow_any_google_accounts=true."
   type        = list(string)
   default     = []
+}
+
+variable "allow_any_google_accounts" {
+  description = "Allow any Google account when allowed_email_domains is empty (not recommended for production)."
+  type        = bool
+  default     = false
 }
 
 # =============================================================================
