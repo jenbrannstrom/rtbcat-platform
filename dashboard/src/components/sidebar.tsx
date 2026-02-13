@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Image,
@@ -34,6 +34,11 @@ import { useAccount } from "@/contexts/account-context";
 import { useAuth } from "@/contexts/auth-context";
 import { useTranslation } from "@/contexts/i18n-context";
 import { LanguageSelector } from "@/components/language-selector";
+import {
+  replaceBuyerInPath,
+  splitBuyerPath,
+  toBuyerScopedPath,
+} from "@/lib/buyer-routes";
 
 const SIDEBAR_COLLAPSED_KEY = "rtbcat-sidebar-collapsed";
 const SIDEBAR_SETTINGS_EXPANDED_KEY = "rtbcat-sidebar-settings-expanded";
@@ -70,6 +75,7 @@ const adminItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { selectedBuyerId, setSelectedBuyerId } = useAccount();
@@ -101,11 +107,15 @@ export function Sidebar() {
 
   // Use context for buyer_id (persistent across pages)
   const currentBuyerId = selectedBuyerId;
+  const { pathWithoutBuyer } = splitBuyerPath(pathname || "/");
+  const queryString = searchParams.toString();
 
   // Check if current path is in settings or admin section
-  const isInSettings = pathname?.startsWith("/settings");
-  const isInAdmin = pathname?.startsWith("/admin");
-  const isInQps = pathname?.startsWith("/qps");
+  const isInSettings = pathWithoutBuyer.startsWith("/settings");
+  const isInAdmin = pathWithoutBuyer.startsWith("/admin");
+  const isInQps = pathWithoutBuyer.startsWith("/qps");
+
+  const getSeatScopedHref = (href: string) => toBuyerScopedPath(href, currentBuyerId);
 
   // Load collapsed and expanded states from localStorage
   useEffect(() => {
@@ -211,6 +221,15 @@ export function Sidebar() {
     setSeatDropdownOpen(false);
     // Update the context (persisted to localStorage)
     setSelectedBuyerId(seatId);
+
+    const currentPath = pathname || "/";
+    const nextPath = replaceBuyerInPath(currentPath, seatId);
+    const nextUrl = queryString ? `${nextPath}?${queryString}` : nextPath;
+    const currentUrl = queryString ? `${currentPath}?${queryString}` : currentPath;
+    if (nextUrl !== currentUrl) {
+      router.push(nextUrl, { scroll: false });
+    }
+
     // Invalidate queries so they refetch with new buyer_id
     queryClient.invalidateQueries({ queryKey: ["creatives"] });
     queryClient.invalidateQueries({ queryKey: ["campaigns"] });
@@ -387,8 +406,8 @@ export function Sidebar() {
           <button
             onClick={() => {
               toggleQpsExpanded();
-              if (pathname !== "/") {
-                router.push("/");
+              if (pathWithoutBuyer !== "/") {
+                router.push(getSeatScopedHref("/"));
               }
             }}
             className={cn(
@@ -422,12 +441,12 @@ export function Sidebar() {
           {(!collapsed && qpsExpanded) && (
             <div className="ml-6 space-y-1">
               {qpsItems.map((item) => {
-                const isActive = pathname?.startsWith(item.href);
+                const isActive = pathWithoutBuyer.startsWith(item.href);
                 const itemName = t.qpsNav?.[item.key] || item.key;
                 return (
                   <Link
                     key={item.key}
-                    href={item.href}
+                    href={getSeatScopedHref(item.href)}
                     className={cn(
                       "flex items-center px-3 py-2 text-sm rounded-md transition-colors",
                       isActive
@@ -447,13 +466,13 @@ export function Sidebar() {
         {/* Main navigation items */}
         {navigationItems.map((item) => {
           const isActive = item.href === "/"
-            ? pathname === "/"
-            : pathname.startsWith(item.href);
+            ? pathWithoutBuyer === "/"
+            : pathWithoutBuyer.startsWith(item.href);
           const itemName = t.navigation[item.key];
           return (
             <Link
               key={item.key}
-              href={item.href}
+              href={getSeatScopedHref(item.href)}
               className={cn(
                 "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                 isActive
@@ -517,7 +536,7 @@ export function Sidebar() {
           {settingsExpanded && !collapsed && (
             <div className="mt-1 ml-4 space-y-1">
               {settingsItems.map((item) => {
-                const isActive = pathname === item.href;
+                const isActive = pathWithoutBuyer === item.href;
                 const itemName = t.settingsNav?.[item.key] || item.key;
                 return (
                   <Link
@@ -586,10 +605,10 @@ export function Sidebar() {
             </button>
             {adminExpanded && !collapsed && (
               <div className="mt-1 ml-4 space-y-1">
-                {adminItems.map((item) => {
-                  const isActive = pathname === item.href;
-                  const itemName = t.adminNav?.[item.key] || item.key;
-                  return (
+              {adminItems.map((item) => {
+                const isActive = pathWithoutBuyer === item.href;
+                const itemName = t.adminNav?.[item.key] || item.key;
+                return (
                     <Link
                       key={item.key}
                       href={item.href}

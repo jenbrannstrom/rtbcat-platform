@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { GeoAnalysisSection } from "@/components/waste-analyzer";
 import { getRTBFunnel, getSeats } from "@/lib/api";
 import { useAccount } from "@/contexts/account-context";
@@ -16,6 +16,7 @@ const PERIOD_OPTIONS = [
 
 export default function GeoQpsPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { selectedBuyerId, setSelectedBuyerId } = useAccount();
   const { t } = useTranslation();
@@ -46,7 +47,8 @@ export default function GeoQpsPage() {
     setDays(newDays);
     const params = new URLSearchParams();
     params.set("days", String(newDays));
-    router.replace(`/qps/geo?${params.toString()}`, { scroll: false });
+    const targetPath = pathname || "/qps/geo";
+    router.replace(`${targetPath}?${params.toString()}`, { scroll: false });
   };
 
   return (

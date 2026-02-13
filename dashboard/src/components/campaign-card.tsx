@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useAccount } from "@/contexts/account-context";
+import { toBuyerScopedPath } from "@/lib/buyer-routes";
 
 interface CampaignPerformance {
   impressions: number;
@@ -47,10 +49,12 @@ function formatCurrency(amount: number): string {
 }
 
 export function CampaignCard({ campaign, period }: CampaignCardProps) {
+  const { selectedBuyerId } = useAccount();
   const perf = campaign.performance;
+  const campaignHref = toBuyerScopedPath(`/campaigns/${campaign.id}`, selectedBuyerId);
 
   return (
-    <Link href={`/campaigns/${campaign.id}`}>
+    <Link href={campaignHref}>
       <div className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
         <div className="flex justify-between items-start mb-3">
           <h3 className="font-semibold text-lg text-gray-900 truncate flex-1 mr-2">

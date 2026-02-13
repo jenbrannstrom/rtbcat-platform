@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, Suspense, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, AlertTriangle, ArrowUp, ArrowDown, ChevronsUpDown, Loader2 } from "lucide-react";
 import { AccountEndpointsHeader } from "@/components/rtb/account-endpoints-header";
@@ -57,6 +57,7 @@ function transformConfigToProps(
 
 function WasteAnalysisContent() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { selectedBuyerId, setSelectedBuyerId } = useAccount();
   const { t } = useTranslation();
@@ -102,9 +103,10 @@ function WasteAnalysisContent() {
     (newDays: number) => {
       const params = new URLSearchParams();
       params.set("days", String(newDays));
-      router.replace(`/?${params.toString()}`, { scroll: false });
+      const targetPath = pathname || "/";
+      router.replace(`${targetPath}?${params.toString()}`, { scroll: false });
     },
-    [router]
+    [pathname, router]
   );
 
   const handleDaysChange = useCallback(

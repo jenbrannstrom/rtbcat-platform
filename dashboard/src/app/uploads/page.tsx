@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useAccount } from "@/contexts/account-context";
+import { splitBuyerPath, toBuyerScopedPath } from "@/lib/buyer-routes";
 
 /**
  * Redirect /uploads to /import
@@ -9,10 +11,14 @@ import { useRouter } from "next/navigation";
  */
 export default function UploadsPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const { selectedBuyerId } = useAccount();
+  const { buyerIdInPath } = splitBuyerPath(pathname || "/");
 
   useEffect(() => {
-    router.replace("/import");
-  }, [router]);
+    const targetPath = toBuyerScopedPath("/import", buyerIdInPath || selectedBuyerId);
+    router.replace(targetPath);
+  }, [buyerIdInPath, router, selectedBuyerId]);
 
   return (
     <div className="p-6 flex items-center justify-center min-h-[400px]">

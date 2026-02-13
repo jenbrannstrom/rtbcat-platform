@@ -35,6 +35,8 @@ import {
   detectReportType,
   getMissingRequiredColumns,
 } from "@/lib/report-metadata";
+import { useAccount } from "@/contexts/account-context";
+import { toBuyerScopedPath } from "@/lib/buyer-routes";
 
 type ImportStep = "upload" | "preview" | "importing" | "success" | "error";
 
@@ -43,6 +45,7 @@ const CHUNKED_UPLOAD_THRESHOLD = 5 * 1024 * 1024;
 
 export default function ImportPage() {
   const router = useRouter();
+  const { selectedBuyerId } = useAccount();
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const [step, setStep] = useState<ImportStep>("upload");
@@ -457,7 +460,11 @@ export default function ImportPage() {
 
       {/* Success Step */}
       {step === "success" && importResult && (
-        <ImportResultCard result={importResult} onReset={resetForm} onViewCreatives={() => router.push("/creatives")} />
+        <ImportResultCard
+          result={importResult}
+          onReset={resetForm}
+          onViewCreatives={() => router.push(toBuyerScopedPath("/clusters", selectedBuyerId))}
+        />
       )}
 
       {/* Error Step */}
