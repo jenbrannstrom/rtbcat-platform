@@ -89,6 +89,11 @@ def is_oauth2_proxy_enabled() -> bool:
     return os.environ.get("OAUTH2_PROXY_ENABLED", "").lower() in ("1", "true", "yes")
 
 
+def is_auto_user_provisioning_enabled() -> bool:
+    """Whether unknown OAuth users may be auto-created after bootstrap."""
+    return os.environ.get("CATSCAN_ALLOW_AUTO_USER_PROVISIONING", "").lower() in ("1", "true", "yes")
+
+
 def _is_trusted_proxy_client(request: Request) -> bool:
     """Only trust auth headers from loopback/private clients (or explicit allowlist)."""
     if not request.client or not request.client.host:
@@ -170,7 +175,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             logger.warning(f"Session validation failed: {e}")
             return None
 
-    async def _get_or_create_oauth2_user(self, email: str, request: Request) -> Optional[User]:
+    async def _get_or_create_oauth2_user(self, email: str, request: Request) -> tuple[Optional[User], bool]:
         """Get or create a user from OAuth2 Proxy authentication.
 
         When behind OAuth2 Proxy, we trust the X-Email header.
@@ -186,7 +191,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             # Try to find existing user
             user = await auth_svc.get_user_by_email(email)
             if user:
-                return user
+                return user, False
 
             # Auto-create user from OAuth2 Proxy
             user_id = str(uuid.uuid4())
@@ -194,6 +199,12 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
 
             # First user gets admin role, others get user role
             user_count = await auth_svc.count_users()
+            if user_count > 0 and not is_auto_user_provisioning_enabled():
+                logger.warning(
+                    "Blocked OAuth2 auto-provisioning for %s (CATSCAN_ALLOW_AUTO_USER_PROVISIONING=false)",
+                    email,
+                )
+                return None, True
             role = "admin" if user_count == 0 else "user"
 
             user = await auth_svc.create_user(
@@ -204,14 +215,14 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             )
 
             logger.info(f"Auto-created user from OAuth2 Proxy: {email} (role={role})")
-            return user
+            return user, False
 
         except Exception as e:
             logger.error(f"Failed to get/create OAuth2 user: {e}")
             # Propagate DB error so /auth/check returns 503, not "unauthenticated"
             request.state.auth_error = "database_unavailable"
             request.state.auth_error_detail = str(e)
-            return None
+            return None, False
 
     async def dispatch(self, request: Request, call_next):
         # Allow public paths without authentication
@@ -219,7 +230,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             # Still attach user if available (for /auth/check, /auth/me etc.)
             oauth2_email = request.headers.get(OAUTH2_PROXY_EMAIL_HEADER)
             if oauth2_email and is_oauth2_proxy_enabled() and _is_trusted_proxy_client(request):
-                user = await self._get_or_create_oauth2_user(oauth2_email, request)
+                user, _denied = await self._get_or_create_oauth2_user(oauth2_email, request)
                 if user:
                     request.state.user = user
                     request.state.oauth2_authenticated = True
@@ -233,11 +244,16 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
         oauth2_email = request.headers.get(OAUTH2_PROXY_EMAIL_HEADER)
         if oauth2_email and is_oauth2_proxy_enabled():
             if _is_trusted_proxy_client(request):
-                user = await self._get_or_create_oauth2_user(oauth2_email, request)
+                user, denied = await self._get_or_create_oauth2_user(oauth2_email, request)
                 if user:
                     request.state.user = user
                     request.state.oauth2_authenticated = True
                     return await call_next(request)
+                if denied:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "User provisioning disabled. Contact an administrator."},
+                    )
             else:
                 logger.warning(
                     "Ignoring OAuth2 proxy headers from untrusted client IP: %s",
