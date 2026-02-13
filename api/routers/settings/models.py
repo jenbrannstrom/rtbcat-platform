@@ -23,7 +23,7 @@ class RTBEndpointsResponse(BaseModel):
     account_name: Optional[str] = None
     endpoints: list[RTBEndpointItem]
     total_qps_allocated: int
-    qps_current: Optional[int] = None
+    qps_current: Optional[float] = None
     synced_at: Optional[str] = None
 
 
