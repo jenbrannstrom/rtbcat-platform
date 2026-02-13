@@ -61,6 +61,11 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         if is_public_path(request.url.path):
             return await call_next(request)
 
+        # If an upstream auth middleware already authenticated the user,
+        # do not force API key auth for browser/session traffic.
+        if getattr(request.state, "user", None) or getattr(request.state, "oauth2_authenticated", False):
+            return await call_next(request)
+
         # Check for Authorization header
         auth_header = request.headers.get("Authorization")
 

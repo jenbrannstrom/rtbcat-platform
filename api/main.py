@@ -190,11 +190,12 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type", "Authorization", "X-API-Key"],
     )
 
+    # API key middleware is inner. Session middleware runs first and can
+    # authenticate browser/OAuth traffic before API-key checks.
+    application.add_middleware(APIKeyAuthMiddleware)
+
     # Session-based authentication (multi-user mode)
     application.add_middleware(SessionAuthMiddleware)
-
-    # API Key authentication fallback (only enforced if CATSCAN_API_KEY is set)
-    application.add_middleware(APIKeyAuthMiddleware)
 
     return application
 
