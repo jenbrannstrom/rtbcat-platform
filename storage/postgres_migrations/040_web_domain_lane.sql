@@ -28,5 +28,5 @@ CREATE INDEX IF NOT EXISTS idx_web_domain_daily_buyer
     ON web_domain_daily(metric_date, buyer_account_id);
 
 INSERT INTO schema_migrations (version, applied_at, description)
-VALUES (40, CURRENT_TIMESTAMP, 'Add web_domain_daily table for optional domain lane')
+VALUES ('040_web_domain_lane', CURRENT_TIMESTAMP, 'Add web_domain_daily table for optional domain lane')
 ON CONFLICT (version) DO NOTHING;

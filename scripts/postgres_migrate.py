@@ -15,6 +15,9 @@ Usage:
 
     # Show current migration status
     python scripts/postgres_migrate.py --status
+
+    # Audit schema_migrations version markers (numeric vs canonical)
+    python scripts/postgres_migrate.py --audit-versions
 """
 
 from __future__ import annotations
@@ -90,6 +93,59 @@ def get_applied_migrations(conn: psycopg.Connection) -> set[str]:
     return {row[0] for row in cursor.fetchall()}
 
 
+def extract_migration_number(version: str) -> Optional[int]:
+    """Extract numeric migration order from a version marker.
+
+    Examples:
+      - "027_schema_alignment" -> 27
+      - "27" -> 27
+      - "001_init" -> 1
+    """
+    match = re.match(r"^0*(\d+)(?:_.*)?$", str(version).strip())
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def _get_applied_migration_numbers(applied_versions: set[str]) -> set[int]:
+    """Get numeric migration IDs represented by applied version markers."""
+    numbers: set[int] = set()
+    for version in applied_versions:
+        number = extract_migration_number(version)
+        if number is not None:
+            numbers.add(number)
+    return numbers
+
+
+def filter_pending_migrations(
+    pending: list[tuple[str, Path]],
+    applied_versions: set[str],
+) -> tuple[list[tuple[str, Path]], list[tuple[str, int]]]:
+    """Filter pending migrations using exact and numeric-equivalent matching.
+
+    Returns:
+        Tuple:
+        - Migrations to apply.
+        - Migrations skipped because a numeric-equivalent marker already exists.
+    """
+    applied_numbers = _get_applied_migration_numbers(applied_versions)
+    to_apply: list[tuple[str, Path]] = []
+    skipped_legacy: list[tuple[str, int]] = []
+
+    for version, filepath in pending:
+        if version in applied_versions:
+            continue
+
+        number = extract_migration_number(version)
+        if number is not None and number in applied_numbers:
+            skipped_legacy.append((version, number))
+            continue
+
+        to_apply.append((version, filepath))
+
+    return to_apply, skipped_legacy
+
+
 def get_pending_migrations() -> list[tuple[str, Path]]:
     """Get list of pending migration files sorted by version.
 
@@ -163,8 +219,16 @@ def run_migrations(dry_run: bool = False) -> tuple[int, int]:
         applied = get_applied_migrations(conn)
         pending = get_pending_migrations()
 
-        # Filter to only pending migrations
-        to_apply = [(v, p) for v, p in pending if v not in applied]
+        # Filter to only pending migrations (including numeric-equivalent markers)
+        to_apply, skipped_legacy = filter_pending_migrations(pending, applied)
+
+        if skipped_legacy:
+            for version, number in skipped_legacy:
+                logger.info(
+                    "Skipping %s (numeric-equivalent migration marker already present: %s)",
+                    version,
+                    number,
+                )
 
         if not to_apply:
             logger.info("No pending migrations.")
@@ -215,17 +279,76 @@ def show_status() -> None:
             print("  (none)")
 
         print("\nPending migrations:")
-        pending_versions = [(v, p) for v, p in pending if v not in applied]
+        pending_versions, skipped_legacy = filter_pending_migrations(pending, applied)
         if pending_versions:
             for version, filepath in pending_versions:
                 print(f"  [ ] {version} ({filepath.name})")
         else:
             print("  (none)")
 
+        if skipped_legacy:
+            print("\nSkipped due to numeric-equivalent applied marker:")
+            for version, number in skipped_legacy:
+                print(f"  [~] {version} (already marked by {number})")
+
         print()
 
     finally:
         conn.close()
+
+
+def audit_version_markers() -> int:
+    """Audit schema_migrations for mixed numeric/canonical version markers.
+
+    Returns:
+        0 when no anomalies found, 1 when mixed or unparseable markers exist.
+    """
+    conn = get_connection()
+    try:
+        ensure_migrations_table(conn)
+        cursor = conn.execute("SELECT version FROM schema_migrations ORDER BY version")
+        versions = [str(row[0]) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+    if not versions:
+        print("No schema_migrations rows found.")
+        return 0
+
+    by_number: dict[int, list[str]] = {}
+    unparseable: list[str] = []
+
+    for version in versions:
+        number = extract_migration_number(version)
+        if number is None:
+            unparseable.append(version)
+            continue
+        by_number.setdefault(number, []).append(version)
+
+    mixed = {
+        number: sorted(set(markers))
+        for number, markers in by_number.items()
+        if len(set(markers)) > 1
+    }
+
+    print("\n=== schema_migrations version-marker audit ===\n")
+    print(f"Total markers: {len(versions)}")
+    print(f"Numeric IDs seen: {len(by_number)}")
+
+    if mixed:
+        print("\nMixed markers detected (same migration ID, different version strings):")
+        for number in sorted(mixed):
+            print(f"  - {number}: {', '.join(mixed[number])}")
+    else:
+        print("\nNo mixed markers detected.")
+
+    if unparseable:
+        print("\nUnparseable markers (cannot map to numeric migration ID):")
+        for marker in sorted(unparseable):
+            print(f"  - {marker}")
+
+    print()
+    return 1 if (mixed or unparseable) else 0
 
 
 def main() -> int:
@@ -243,6 +366,11 @@ def main() -> int:
         action="store_true",
         help="Show current migration status",
     )
+    parser.add_argument(
+        "--audit-versions",
+        action="store_true",
+        help="Audit schema_migrations for mixed numeric/canonical version markers",
+    )
 
     args = parser.parse_args()
 
@@ -250,6 +378,9 @@ def main() -> int:
         if args.status:
             show_status()
             return 0
+
+        if args.audit_versions:
+            return audit_version_markers()
 
         applied, failed = run_migrations(dry_run=args.dry_run)
 
