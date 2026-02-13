@@ -415,9 +415,11 @@ export interface ConfigPerformanceResponse {
 
 export interface EndpointReconciliationRow {
   catscan_endpoint_id: string | null;
+  catscan_url?: string | null;
   catscan_location: string | null;
   allocated_qps: number | null;
   google_location: string | null;
+  google_url?: string | null;
   google_current_qps: number | null;
   mapping_status: "mapped" | "missing_in_google" | "extra_in_google";
 }
