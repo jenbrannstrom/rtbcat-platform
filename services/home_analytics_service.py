@@ -340,12 +340,14 @@ class HomeAnalyticsService:
             rows.append(
                 {
                     "catscan_endpoint_id": eid,
+                    "catscan_url": endpoint.get("url"),
                     "catscan_location": endpoint.get("trading_location"),
                     "allocated_qps": int(endpoint.get("maximum_qps") or 0),
                     "google_location": (
                         endpoint.get("trading_location")
                         or ((obs or {}).get("trading_location"))
                     ),
+                    "google_url": (obs or {}).get("url"),
                     "google_current_qps": float(obs.get("current_qps")) if obs else None,
                     "mapping_status": "mapped" if obs else "missing_in_google",
                 }
@@ -356,9 +358,11 @@ class HomeAnalyticsService:
             rows.append(
                 {
                     "catscan_endpoint_id": None,
+                    "catscan_url": None,
                     "catscan_location": None,
                     "allocated_qps": None,
                     "google_location": obs.get("trading_location"),
+                    "google_url": obs.get("url"),
                     "google_current_qps": float(obs.get("current_qps") or 0),
                     "mapping_status": "extra_in_google",
                 }
