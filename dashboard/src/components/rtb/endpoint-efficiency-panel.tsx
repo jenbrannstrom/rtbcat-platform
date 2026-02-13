@@ -42,6 +42,17 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
   const summary = data.summary;
   const recon = data.endpoint_reconciliation;
   const bridge = data.funnel_breakout;
+  const coverage = data.data_coverage;
+  const requestedWindow = coverage?.requested_window;
+  const requestedDays = requestedWindow?.days ?? data.period_days;
+  const deliveryCoverage = coverage?.home_seat_daily;
+  const bidstreamCoverage = coverage?.rtb_bidstream;
+  const endpointFeedRows = coverage?.endpoint_feed?.rows_with_positive_qps ?? 0;
+  const deliveryWinRatePct = summary.delivery_win_rate_pct ?? summary.win_rate_pct;
+  const bids = summary.bids ?? 0;
+  const bidsInAuction = summary.bids_in_auction ?? 0;
+  const auctionsWon = summary.auctions_won ?? 0;
+  const filteredBids = summary.filtered_bids ?? Math.max(bids - bidsInAuction, 0);
   const usedPctFromOvershoot = summary.allocation_overshoot_x
     ? (100 / summary.allocation_overshoot_x)
     : null;
@@ -49,10 +60,19 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
   return (
     <section className="bg-white rounded-lg border p-4 space-y-4 overflow-visible">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-gray-900">Endpoint Efficiency</h3>
-        <span className="text-xs text-gray-500">
-          {data.window.start_date} to {data.window.end_date}
-        </span>
+        <div>
+          <h3 className="font-semibold text-gray-900">Endpoint Efficiency</h3>
+          <div className="text-xs text-gray-500">
+            Requested window: {requestedWindow?.start_date ?? data.window.start_date} to {requestedWindow?.end_date ?? data.window.end_date}
+          </div>
+          <div className="text-xs text-amber-700">
+            Delivery data: {deliveryCoverage?.start_date || "N/A"} to {deliveryCoverage?.end_date || "N/A"} ({deliveryCoverage?.days_with_data ?? 0}/{requestedDays} days)
+          </div>
+          <div className="text-xs text-indigo-700">
+            Auction-funnel data: {bidstreamCoverage?.start_date || "N/A"} to {bidstreamCoverage?.end_date || "N/A"} ({bidstreamCoverage?.days_with_data ?? 0}/{requestedDays} days)
+          </div>
+        </div>
+        <span className="text-xs text-gray-500">Endpoint feed rows: {endpointFeedRows}</span>
       </div>
 
       {data.alerts.length > 0 && (
@@ -117,6 +137,43 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
               Used: {usedPctFromOvershoot.toFixed(2)}%
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="rounded border p-3">
+        <div className="text-sm font-medium text-gray-900 mb-2">
+          Formula Clarity (AB Parity)
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+          <div className="rounded bg-purple-50 border border-purple-100 p-2">
+            <div className="text-xs text-purple-700 uppercase">Delivery Win</div>
+            <div className="font-semibold">
+              {typeof deliveryWinRatePct === "number" ? `${deliveryWinRatePct.toFixed(2)}%` : "N/A"}
+            </div>
+            <div className="text-[11px] text-gray-600">Impressions / Reached Queries</div>
+          </div>
+          <div className="rounded bg-cyan-50 border border-cyan-100 p-2">
+            <div className="text-xs text-cyan-700 uppercase">Auction Win</div>
+            <div className="font-semibold">
+              {summary.auction_win_rate_over_bids_pct != null
+                ? `${summary.auction_win_rate_over_bids_pct.toFixed(2)}%`
+                : "N/A"}
+            </div>
+            <div className="text-[11px] text-gray-600">
+              Auctions Won / Bids ({formatNum(auctionsWon)} / {formatNum(bids)})
+            </div>
+          </div>
+          <div className="rounded bg-orange-50 border border-orange-100 p-2">
+            <div className="text-xs text-orange-700 uppercase">Filtered Bid Rate</div>
+            <div className="font-semibold">
+              {summary.filtered_bid_rate_pct != null
+                ? `${summary.filtered_bid_rate_pct.toFixed(2)}%`
+                : "N/A"}
+            </div>
+            <div className="text-[11px] text-gray-600">
+              (Bids - Bids in Auction) / Bids ({formatNum(filteredBids)})
+            </div>
+          </div>
         </div>
       </div>
 

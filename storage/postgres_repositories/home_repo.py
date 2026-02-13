@@ -12,12 +12,21 @@ class HomeAnalyticsRepository:
     """SQL-only repository for home analytics."""
 
     @staticmethod
-    def _cutoff_date(days: int) -> str:
-        """Return ISO date cutoff matching prior CURRENT_DATE + '-N days' behavior."""
-        return (date.today() - timedelta(days=days)).isoformat()
+    def _window_bounds(days: int) -> tuple[str, str]:
+        """Return inclusive ISO start/end dates for an exact N-day window."""
+        safe_days = max(days, 1)
+        end_date = date.today()
+        start_date = end_date - timedelta(days=safe_days - 1)
+        return start_date.isoformat(), end_date.isoformat()
+
+    @classmethod
+    def get_window_bounds(cls, days: int) -> tuple[str, str]:
+        """Public accessor for request window bounds."""
+        return cls._window_bounds(days)
 
     async def get_funnel_row(self, days: int, buyer_id: str | None) -> dict[str, Any] | None:
-        params: list[Any] = [self._cutoff_date(days)]
+        start_date, end_date = self._window_bounds(days)
+        params: list[Any] = [start_date, end_date]
         buyer_filter = ""
         if buyer_id:
             buyer_filter = " AND buyer_account_id = %s"
@@ -31,13 +40,14 @@ class HomeAnalyticsRepository:
                 SUM(successful_responses) as total_successful_responses,
                 SUM(bid_requests) as total_bid_requests
             FROM home_seat_daily
-            WHERE metric_date >= %s{buyer_filter}
+            WHERE metric_date BETWEEN %s AND %s{buyer_filter}
             """,
             tuple(params),
         )
 
     async def get_publisher_rows(self, days: int, buyer_id: str | None, limit: int) -> list[dict[str, Any]]:
-        params: list[Any] = [self._cutoff_date(days)]
+        start_date, end_date = self._window_bounds(days)
+        params: list[Any] = [start_date, end_date]
         buyer_filter = ""
         if buyer_id:
             buyer_filter = " AND buyer_account_id = %s"
@@ -55,7 +65,7 @@ class HomeAnalyticsRepository:
                 SUM(successful_responses) as successful_responses,
                 SUM(bid_requests) as bid_requests
             FROM home_publisher_daily
-            WHERE metric_date >= %s{buyer_filter}
+            WHERE metric_date BETWEEN %s AND %s{buyer_filter}
             GROUP BY publisher_id
             ORDER BY reached DESC
             LIMIT %s
@@ -64,7 +74,8 @@ class HomeAnalyticsRepository:
         )
 
     async def get_geo_rows(self, days: int, buyer_id: str | None, limit: int) -> list[dict[str, Any]]:
-        params: list[Any] = [self._cutoff_date(days)]
+        start_date, end_date = self._window_bounds(days)
+        params: list[Any] = [start_date, end_date]
         buyer_filter = ""
         if buyer_id:
             buyer_filter = " AND buyer_account_id = %s"
@@ -81,7 +92,7 @@ class HomeAnalyticsRepository:
                 SUM(successful_responses) as successful_responses,
                 SUM(bid_requests) as bid_requests
             FROM home_geo_daily
-            WHERE metric_date >= %s{buyer_filter}
+            WHERE metric_date BETWEEN %s AND %s{buyer_filter}
             GROUP BY country
             ORDER BY reached DESC
             LIMIT %s
@@ -90,7 +101,8 @@ class HomeAnalyticsRepository:
         )
 
     async def get_publisher_count(self, days: int, buyer_id: str | None) -> int:
-        params: list[Any] = [self._cutoff_date(days)]
+        start_date, end_date = self._window_bounds(days)
+        params: list[Any] = [start_date, end_date]
         buyer_filter = ""
         if buyer_id:
             buyer_filter = " AND buyer_account_id = %s"
@@ -99,14 +111,15 @@ class HomeAnalyticsRepository:
             f"""
             SELECT COUNT(DISTINCT publisher_id) as cnt
             FROM home_publisher_daily
-            WHERE metric_date >= %s{buyer_filter}
+            WHERE metric_date BETWEEN %s AND %s{buyer_filter}
             """,
             tuple(params),
         )
         return row["cnt"] if row else 0
 
     async def get_country_count(self, days: int, buyer_id: str | None) -> int:
-        params: list[Any] = [self._cutoff_date(days)]
+        start_date, end_date = self._window_bounds(days)
+        params: list[Any] = [start_date, end_date]
         buyer_filter = ""
         if buyer_id:
             buyer_filter = " AND buyer_account_id = %s"
@@ -115,14 +128,15 @@ class HomeAnalyticsRepository:
             f"""
             SELECT COUNT(DISTINCT country) as cnt
             FROM home_geo_daily
-            WHERE metric_date >= %s{buyer_filter}
+            WHERE metric_date BETWEEN %s AND %s{buyer_filter}
             """,
             tuple(params),
         )
         return row["cnt"] if row else 0
 
     async def get_config_rows(self, days: int, buyer_id: str | None) -> list[dict[str, Any]]:
-        params: list[Any] = [self._cutoff_date(days)]
+        start_date, end_date = self._window_bounds(days)
+        params: list[Any] = [start_date, end_date]
         buyer_filter = ""
         if buyer_id:
             buyer_filter = " AND buyer_account_id = %s"
@@ -136,7 +150,7 @@ class HomeAnalyticsRepository:
                 SUM(bids_in_auction) as total_bids_in_auction,
                 SUM(auctions_won) as total_auctions_won
             FROM home_config_daily
-            WHERE metric_date >= %s{buyer_filter}
+            WHERE metric_date BETWEEN %s AND %s{buyer_filter}
             GROUP BY billing_id
             ORDER BY total_reached DESC
             """,
@@ -199,3 +213,71 @@ class HomeAnalyticsRepository:
             """,
             tuple(params),
         )
+
+    async def get_home_seat_coverage(self, days: int, buyer_id: str | None) -> dict[str, Any]:
+        """Get actual home_seat_daily data coverage in requested window."""
+        start_date, end_date = self._window_bounds(days)
+        params: list[Any] = [start_date, end_date]
+        buyer_filter = ""
+        if buyer_id:
+            buyer_filter = " AND buyer_account_id = %s"
+            params.append(buyer_id)
+        row = await pg_query_one(
+            f"""
+            SELECT
+                MIN(metric_date)::text AS min_date,
+                MAX(metric_date)::text AS max_date,
+                COUNT(DISTINCT metric_date)::int AS days_with_data,
+                COUNT(*)::bigint AS row_count
+            FROM home_seat_daily
+            WHERE metric_date BETWEEN %s AND %s{buyer_filter}
+            """,
+            tuple(params),
+        )
+        return dict(row or {})
+
+    async def get_bidstream_summary(self, days: int, buyer_id: str | None) -> dict[str, Any]:
+        """Get RTB bidstream funnel aggregates for AB-parity style metrics."""
+        start_date, end_date = self._window_bounds(days)
+        params: list[Any] = [start_date, end_date]
+        buyer_filter = ""
+        if buyer_id:
+            buyer_filter = " AND buyer_account_id = %s"
+            params.append(buyer_id)
+        row = await pg_query_one(
+            f"""
+            SELECT
+                COALESCE(SUM(bids), 0)::bigint AS total_bids,
+                COALESCE(SUM(bids_in_auction), 0)::bigint AS total_bids_in_auction,
+                COALESCE(SUM(auctions_won), 0)::bigint AS total_auctions_won,
+                COALESCE(SUM(reached_queries), 0)::bigint AS total_reached_queries,
+                COALESCE(SUM(impressions), 0)::bigint AS total_impressions,
+                COUNT(*)::bigint AS row_count
+            FROM rtb_bidstream
+            WHERE metric_date BETWEEN %s AND %s{buyer_filter}
+            """,
+            tuple(params),
+        )
+        return dict(row or {})
+
+    async def get_bidstream_coverage(self, days: int, buyer_id: str | None) -> dict[str, Any]:
+        """Get actual rtb_bidstream data coverage in requested window."""
+        start_date, end_date = self._window_bounds(days)
+        params: list[Any] = [start_date, end_date]
+        buyer_filter = ""
+        if buyer_id:
+            buyer_filter = " AND buyer_account_id = %s"
+            params.append(buyer_id)
+        row = await pg_query_one(
+            f"""
+            SELECT
+                MIN(metric_date)::text AS min_date,
+                MAX(metric_date)::text AS max_date,
+                COUNT(DISTINCT metric_date)::int AS days_with_data,
+                COUNT(*)::bigint AS row_count
+            FROM rtb_bidstream
+            WHERE metric_date BETWEEN %s AND %s{buyer_filter}
+            """,
+            tuple(params),
+        )
+        return dict(row or {})

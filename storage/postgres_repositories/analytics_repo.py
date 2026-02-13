@@ -12,9 +12,12 @@ class AnalyticsRepository:
     """SQL-only repository for analytics queries."""
 
     @staticmethod
-    def _cutoff_date(days: int) -> str:
-        """Return ISO date cutoff matching prior CURRENT_DATE + '-N days' behavior."""
-        return (date.today() - timedelta(days=days)).isoformat()
+    def _window_bounds(days: int) -> tuple[str, str]:
+        """Return inclusive ISO start/end dates for an exact N-day window."""
+        safe_days = max(days, 1)
+        end_date = date.today()
+        start_date = end_date - timedelta(days=safe_days - 1)
+        return start_date.isoformat(), end_date.isoformat()
 
     # =========================================================================
     # Precompute Status
@@ -41,8 +44,9 @@ class AnalyticsRepository:
         params: Optional[list] = None,
     ) -> int:
         """Get row count from a precompute table for the requested date range."""
-        where_clauses = ["metric_date >= %s"]
-        query_params: list = [self._cutoff_date(days)]
+        start_date, end_date = self._window_bounds(days)
+        where_clauses = ["metric_date BETWEEN %s AND %s"]
+        query_params: list = [start_date, end_date]
         if filters:
             where_clauses.extend(filters)
             if params:
@@ -113,16 +117,17 @@ class AnalyticsRepository:
         self, days: int, billing_id: str
     ) -> dict[str, Any]:
         """Get spend stats filtered by a specific billing_id."""
+        start_date, end_date = self._window_bounds(days)
         row = await pg_query_one(
             """
             SELECT
                 COALESCE(SUM(impressions), 0) as total_impressions,
                 COALESCE(SUM(spend_micros), 0) as total_spend_micros
             FROM rtb_app_daily
-            WHERE metric_date >= %s
+            WHERE metric_date BETWEEN %s AND %s
               AND billing_id = %s
             """,
-            (self._cutoff_date(days), billing_id),
+            (start_date, end_date, billing_id),
         )
         return dict(row) if row else {"total_impressions": 0, "total_spend_micros": 0}
 
@@ -130,29 +135,31 @@ class AnalyticsRepository:
         self, days: int, billing_ids: list[str]
     ) -> dict[str, Any]:
         """Get spend stats filtered by multiple billing_ids."""
+        start_date, end_date = self._window_bounds(days)
         row = await pg_query_one(
             """
             SELECT
                 COALESCE(SUM(impressions), 0) as total_impressions,
                 COALESCE(SUM(spend_micros), 0) as total_spend_micros
             FROM rtb_app_daily
-            WHERE metric_date >= %s
+            WHERE metric_date BETWEEN %s AND %s
               AND billing_id = ANY(%s)
             """,
-            (self._cutoff_date(days), billing_ids),
+            (start_date, end_date, billing_ids),
         )
         return dict(row) if row else {"total_impressions": 0, "total_spend_micros": 0}
 
     async def get_spend_stats_all(self, days: int) -> dict[str, Any]:
         """Get spend stats without billing_id filter."""
+        start_date, end_date = self._window_bounds(days)
         row = await pg_query_one(
             """
             SELECT
                 COALESCE(SUM(impressions), 0) as total_impressions,
                 COALESCE(SUM(spend_micros), 0) as total_spend_micros
             FROM rtb_app_daily
-            WHERE metric_date >= %s
+            WHERE metric_date BETWEEN %s AND %s
             """,
-            (self._cutoff_date(days),),
+            (start_date, end_date),
         )
         return dict(row) if row else {"total_impressions": 0, "total_spend_micros": 0}

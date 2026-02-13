@@ -33,11 +33,23 @@ function formatNumber(num: number): string {
   return num.toLocaleString();
 }
 
+function formatIsoDate(value: string | null | undefined): string {
+  if (!value) return "N/A";
+  return value;
+}
+
 interface AccountEndpointsHeaderProps {
   funnelData?: {
     reached: number | null;
     impressions: number;
-    winRate: number | null;
+    deliveryWinRate: number | null;
+    auctionWinRate: number | null;
+    auctionsWon: number | null;
+    filteredBids: number | null;
+    filteredBidRate: number | null;
+    requestedEndDate?: string | null;
+    homeSeatDataThrough?: string | null;
+    bidstreamDataThrough?: string | null;
   };
 }
 
@@ -271,7 +283,7 @@ export function AccountEndpointsHeader({ funnelData }: AccountEndpointsHeaderPro
         </div>
 
         {/* Right: Compact Funnel Metrics */}
-        <div className="w-56 flex flex-col justify-center">
+        <div className="w-72 flex flex-col justify-center">
           {hasFunnelData ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between px-2">
@@ -299,6 +311,21 @@ export function AccountEndpointsHeader({ funnelData }: AccountEndpointsHeaderPro
                   )}
                 </div>
               </div>
+              {funnelData?.requestedEndDate && (
+                <div className="px-2 text-[10px] text-gray-500">
+                  Requested through {formatIsoDate(funnelData.requestedEndDate)}
+                </div>
+              )}
+              {funnelData?.homeSeatDataThrough && (
+                <div className="px-2 text-[10px] text-amber-700">
+                  Delivery data through {formatIsoDate(funnelData.homeSeatDataThrough)}
+                </div>
+              )}
+              {funnelData?.bidstreamDataThrough && (
+                <div className="px-2 text-[10px] text-indigo-700">
+                  Auction-funnel data through {formatIsoDate(funnelData.bidstreamDataThrough)}
+                </div>
+              )}
               {/* Reached */}
               <div className="flex items-center justify-between px-3 py-1.5 bg-blue-50 rounded border border-blue-100">
                 <span className="text-xs text-blue-600 uppercase tracking-wide">Reached Queries</span>
@@ -309,10 +336,32 @@ export function AccountEndpointsHeader({ funnelData }: AccountEndpointsHeaderPro
                 <span className="text-xs text-green-600 uppercase tracking-wide">Impressions</span>
                 <span className="text-sm font-bold text-green-700">{formatNumber(funnelData!.impressions)}</span>
               </div>
-              {/* Win Rate */}
+              {/* Delivery Win Rate */}
               <div className="flex items-center justify-between px-3 py-1.5 bg-purple-50 rounded border border-purple-100">
-                <span className="text-xs text-purple-600 uppercase tracking-wide">Win Rate</span>
-                <span className="text-sm font-bold text-purple-700">{funnelData!.winRate?.toFixed(1)}%</span>
+                <span className="text-xs text-purple-600 uppercase tracking-wide">Delivery Win (Impr/Reached)</span>
+                <span className="text-sm font-bold text-purple-700">
+                  {funnelData!.deliveryWinRate !== null ? `${funnelData!.deliveryWinRate.toFixed(1)}%` : "N/A"}
+                </span>
+              </div>
+              {/* AB-style parity metrics */}
+              <div className="flex items-center justify-between px-3 py-1.5 bg-indigo-50 rounded border border-indigo-100">
+                <span className="text-xs text-indigo-600 uppercase tracking-wide">Auctions Won</span>
+                <span className="text-sm font-bold text-indigo-700">
+                  {funnelData!.auctionsWon !== null ? formatNumber(funnelData!.auctionsWon) : "N/A"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-1.5 bg-orange-50 rounded border border-orange-100">
+                <span className="text-xs text-orange-600 uppercase tracking-wide">Filtered Bids</span>
+                <span className="text-sm font-bold text-orange-700">
+                  {funnelData!.filteredBids !== null ? formatNumber(funnelData!.filteredBids) : "N/A"}
+                  {funnelData!.filteredBidRate !== null ? ` (${funnelData!.filteredBidRate.toFixed(1)}%)` : ""}
+                </span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-1.5 bg-cyan-50 rounded border border-cyan-100">
+                <span className="text-xs text-cyan-700 uppercase tracking-wide">Auction Win (Won/Bids)</span>
+                <span className="text-sm font-bold text-cyan-700">
+                  {funnelData!.auctionWinRate !== null ? `${funnelData!.auctionWinRate.toFixed(1)}%` : "N/A"}
+                </span>
               </div>
             </div>
           ) : (

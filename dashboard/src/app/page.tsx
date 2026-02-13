@@ -248,12 +248,25 @@ function WasteAnalysisContent() {
 
   const activeConfigsCount = displayConfigs.filter(c => c.state === 'ACTIVE').length;
 
-  // Calculate funnel metrics for compact display
-  const winRate = reached && impressions ? (impressions / reached * 100) : null;
+  // Header metrics: prefer endpoint-efficiency API because it includes
+  // explicit formulas and source coverage metadata.
+  const endpointSummary = endpointEfficiency?.summary;
+  const coverage = endpointEfficiency?.data_coverage;
+  const deliveryWinRate = endpointSummary
+    ? (endpointSummary.delivery_win_rate_pct ?? endpointSummary.win_rate_pct)
+    : (reached && impressions ? (impressions / reached * 100) : null);
+
   const funnelDataForHeader = {
-    reached,
-    impressions: impressions || 0,
-    winRate,
+    reached: endpointSummary?.total_reached_queries ?? reached,
+    impressions: endpointSummary?.total_impressions ?? impressions ?? 0,
+    deliveryWinRate,
+    auctionWinRate: endpointSummary?.auction_win_rate_over_bids_pct ?? null,
+    auctionsWon: endpointSummary?.auctions_won ?? null,
+    filteredBids: endpointSummary?.filtered_bids ?? null,
+    filteredBidRate: endpointSummary?.filtered_bid_rate_pct ?? null,
+    requestedEndDate: coverage?.requested_window?.end_date ?? null,
+    homeSeatDataThrough: coverage?.home_seat_daily?.end_date ?? null,
+    bidstreamDataThrough: coverage?.rtb_bidstream?.end_date ?? null,
   };
 
   return (
