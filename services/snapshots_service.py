@@ -51,7 +51,9 @@ class SnapshotsService:
         ctr = (clicks / imps * 100) if imps > 0 else None
         cpm = (spend / imps * 1000) if imps > 0 else None
 
-        raw_config = json.loads(config["raw_config"]) if config.get("raw_config") else {}
+        raw_config = config.get("raw_config") or {}
+        if isinstance(raw_config, str):
+            raw_config = json.loads(raw_config)
         publisher_targeting = raw_config.get("publisherTargeting") or {}
         publisher_mode = publisher_targeting.get("targetingMode")
         publisher_values = publisher_targeting.get("values") or []
