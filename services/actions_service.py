@@ -357,7 +357,9 @@ class ActionsService:
             await client.remove_geos_from_config(config_id, [value], from_excluded=True)
         elif change_type in {"add_publisher", "remove_publisher", "set_publisher_mode"}:
             config_row = await self._pretargeting.get_config(billing_id)
-            raw_config = json.loads(config_row["raw_config"]) if config_row and config_row.get("raw_config") else {}
+            raw_config = (config_row.get("raw_config") if config_row else None) or {}
+            if isinstance(raw_config, str):
+                raw_config = json.loads(raw_config)
             publisher_targeting = raw_config.get("publisherTargeting") or {}
             current_mode = publisher_targeting.get("targetingMode") or "EXCLUSIVE"
             current_values = list(publisher_targeting.get("values") or [])
