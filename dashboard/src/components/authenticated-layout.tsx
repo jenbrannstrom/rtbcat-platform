@@ -18,6 +18,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { useTranslation } from "@/contexts/i18n-context";
 import { Sidebar } from "@/components/sidebar";
 import { FirstRunCheck } from "@/components/first-run-check";
+import { BuyerRouteSync } from "@/components/buyer-route-sync";
 
 interface AuthenticatedLayoutProps {
   children: ReactNode;
@@ -71,6 +72,7 @@ export function AuthenticatedLayout({
   // Authenticated users get the full layout with sidebar
   return (
     <FirstRunCheck>
+      <BuyerRouteSync />
       <div className="flex h-screen bg-gray-50">
         <Suspense fallback={sidebarFallback}>
           <Sidebar />
