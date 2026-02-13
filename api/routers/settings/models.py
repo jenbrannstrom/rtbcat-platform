@@ -1,6 +1,8 @@
 """Pydantic models for RTB Settings routers."""
 
+from datetime import datetime
 from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -113,7 +115,7 @@ class SnapshotResponse(BaseModel):
     avg_daily_spend_usd: Optional[float] = None
     ctr_pct: Optional[float] = None
     cpm_usd: Optional[float] = None
-    created_at: str
+    created_at: datetime
     notes: Optional[str] = None
 
 
@@ -145,8 +147,8 @@ class ComparisonResponse(BaseModel):
     cpm_delta_pct: Optional[float] = None
     status: Optional[str] = None
     conclusion: Optional[str] = None
-    created_at: str
-    completed_at: Optional[str] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
     sizes_removed: int = 0
 
 
@@ -176,9 +178,9 @@ class PendingChangeResponse(BaseModel):
     reason: Optional[str] = None
     estimated_qps_impact: Optional[int] = None
     status: str  # 'pending', 'applied', 'cancelled'
-    created_at: str
+    created_at: datetime
     created_by: Optional[str] = None
-    applied_at: Optional[str] = None
+    applied_at: Optional[datetime] = None
 
 
 class ConfigDetailResponse(BaseModel):
