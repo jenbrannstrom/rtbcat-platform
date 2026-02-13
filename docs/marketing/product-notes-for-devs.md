@@ -71,6 +71,13 @@ Even with that limit, it’s still a better control surface than what most other
 - CI builds images; VMs pull and restart.
 - when installing only add the seat access JSON key ONLY AT THE END to prevent leaks or exposure
 
+## Setup steps
+
+- Keep the current core CSV reports unchanged.
+- Add optional CSV #7 for domain lane: `catscan-domains-<buyerid>-yesterday-UTC.csv`.
+- In CSV #7, make `inventory_type` required (`web` or `app`) and make `publisher_domain` optional.
+- Do not infer `inventory_type` in app logic; use Google’s explicit field as the single source of truth.
+
 ## ARCHITECTURE
 
 This system exists to preserve truth from source to decision: each contract defines a non-negotiable rule that must hold at every stage from import to precompute to API output.  
