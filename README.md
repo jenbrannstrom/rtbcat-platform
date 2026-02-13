@@ -64,6 +64,35 @@ cd rtbcat-platform
 
 See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
 
+### Security-First Install Sequence (First Principles)
+
+Treat setup as four separate capabilities:
+
+1. **Boot capability**: App can start and users can log in.
+2. **Ingestion capability**: App can import daily CSV performance data from Gmail.
+3. **Analysis capability**: App can compute metrics from imported data.
+4. **Google write capability**: App can modify live Authorized Buyers pretargeting via API.
+
+For safety-first single-tenant installs, enable them in this order:
+
+1. **Provision infrastructure and minimum secrets** (DB + runtime secrets only).
+2. **Start app without AB service-account key** so the app is operational but cannot change Google RTB configs.
+3. **Bootstrap first admin explicitly** using the bootstrap token flow (production) in **[AUTHENTICATION.md](docs/AUTHENTICATION.md)**.
+4. **Set up daily CSV ingestion from Gmail**:
+   - create Gmail OAuth client credentials,
+   - run Gmail OAuth authorization (`scripts/gmail_auth.py`) once,
+   - upload/store Gmail secrets,
+   - configure scheduler/import label.
+5. **Verify ingestion is working** (new daily CSV emails are imported and visible in dashboard metrics).
+6. **Only then add AB API credentials** (service-account JSON) when you are ready to allow live Google config actions (pause/activate/apply changes).
+
+What can be automated vs manual:
+
+- **Automatable**: infra provisioning, startup, secret creation/upload, bootstrap API call, scheduler wiring, health checks.
+- **Manual (by design)**: Gmail OAuth browser consent and any Google-side permission approvals.
+
+This sequence keeps a fresh install useful but low-risk: no live Google write access until explicitly enabled.
+
 ---
 
 ## Features
