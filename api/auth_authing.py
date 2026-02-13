@@ -17,6 +17,7 @@ import secrets
 import urllib.parse
 import ipaddress
 import re
+import os
 from typing import Optional
 
 import httpx
@@ -84,6 +85,11 @@ def _get_client_ip(request: Request) -> Optional[str]:
     if request.client:
         return request.client.host
     return None
+
+
+def _is_auto_user_provisioning_enabled() -> bool:
+    """Whether unknown OIDC users may be auto-created after bootstrap."""
+    return os.environ.get("CATSCAN_ALLOW_AUTO_USER_PROVISIONING", "").lower() in ("1", "true", "yes")
 
 
 def _is_trusted_proxy_request(request: Request) -> bool:
@@ -315,6 +321,15 @@ async def authing_callback(
         # Auto-create user (first user gets admin role)
         user_id = str(uuid.uuid4())
         user_count = await auth_svc.count_users()
+        if user_count > 0 and not _is_auto_user_provisioning_enabled():
+            logger.warning(
+                "Blocked Authing auto-provisioning for %s (CATSCAN_ALLOW_AUTO_USER_PROVISIONING=false)",
+                email,
+            )
+            return RedirectResponse(
+                url="/login?error=User+provisioning+disabled.+Contact+administrator",
+                status_code=302,
+            )
         role = "admin" if user_count == 0 else "user"
 
         user = await auth_svc.create_user(

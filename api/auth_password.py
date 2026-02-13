@@ -117,6 +117,12 @@ def _is_secure_request(request: Request) -> bool:
     return request.url.scheme == "https"
 
 
+def _is_single_user_mode() -> bool:
+    """Single-user mode is secure default unless explicitly disabled."""
+    raw = os.environ.get("CATSCAN_SINGLE_USER_MODE", "true").strip().lower()
+    return raw in ("1", "true", "yes")
+
+
 # ==================== Auth Endpoints ====================
 
 @router.post("/login", response_model=AuthResponse)
@@ -230,6 +236,12 @@ async def register(request: Request, response: Response, register_data: Register
     # Check if this is the first user (becomes admin)
     user_count = await auth_svc.count_users()
     is_first_user = user_count == 0
+
+    if _is_single_user_mode() and not is_first_user:
+        raise HTTPException(
+            status_code=403,
+            detail="Single-user mode is enabled. Additional users are disabled.",
+        )
 
     if not is_first_user:
         # Check if requester is admin
