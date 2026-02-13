@@ -13,12 +13,15 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from api.dependencies import get_store
+from api.dependencies import get_store, require_admin
 from services.config_service import ConfigService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["Configuration"])
+router = APIRouter(
+    tags=["Configuration"],
+    dependencies=[Depends(require_admin)],
+)
 
 
 # =============================================================================

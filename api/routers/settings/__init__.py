@@ -20,7 +20,8 @@ Migration plan:
 """
 
 # Re-export models for easy importing
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from api.dependencies import require_admin
 
 # Re-export models for easy importing
 from .models import (
@@ -57,7 +58,10 @@ from .snapshots import router as snapshots_router
 from .changes import router as changes_router
 from .actions import router as actions_router
 
-router = APIRouter(tags=["RTB Settings"])
+router = APIRouter(
+    tags=["RTB Settings"],
+    dependencies=[Depends(require_admin)],
+)
 router.include_router(endpoints_router)
 router.include_router(pretargeting_router)
 router.include_router(snapshots_router)

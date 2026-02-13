@@ -107,6 +107,16 @@ def _get_client_ip(request: Request) -> Optional[str]:
     return None
 
 
+def _is_secure_request(request: Request) -> bool:
+    """Treat X-Forwarded-Proto=https as secure when behind a reverse proxy."""
+    forwarded_proto = request.headers.get("X-Forwarded-Proto")
+    if forwarded_proto:
+        proto = forwarded_proto.split(",")[0].strip().lower()
+        if proto in {"http", "https"}:
+            return proto == "https"
+    return request.url.scheme == "https"
+
+
 # ==================== Auth Endpoints ====================
 
 @router.post("/login", response_model=AuthResponse)
@@ -180,7 +190,7 @@ async def login(request: Request, response: Response, login_data: LoginRequest):
         key=SESSION_COOKIE_NAME,
         value=session_id,
         httponly=True,
-        secure=request.url.scheme == "https",
+        secure=_is_secure_request(request),
         samesite="lax",
         max_age=30 * 24 * 60 * 60,  # 30 days
     )
@@ -278,7 +288,7 @@ async def register(request: Request, response: Response, register_data: Register
             key=SESSION_COOKIE_NAME,
             value=session_id,
             httponly=True,
-            secure=request.url.scheme == "https",
+            secure=_is_secure_request(request),
             samesite="lax",
             max_age=30 * 24 * 60 * 60,
         )

@@ -13,6 +13,7 @@ OAuth2 Proxy is trusted for authentication. Users are auto-created on first acce
 import logging
 import os
 import uuid
+import ipaddress
 from typing import Optional
 
 from fastapi import Request
@@ -86,6 +87,36 @@ def is_oauth2_proxy_enabled() -> bool:
     # Trust X-Email header when OAUTH2_PROXY_ENABLED env var is set
     # or when running in GCP (detected by presence of Google metadata)
     return os.environ.get("OAUTH2_PROXY_ENABLED", "").lower() in ("1", "true", "yes")
+
+
+def _is_trusted_proxy_client(request: Request) -> bool:
+    """Only trust auth headers from loopback/private clients (or explicit allowlist)."""
+    if not request.client or not request.client.host:
+        return False
+
+    try:
+        client_ip = ipaddress.ip_address(request.client.host)
+    except ValueError:
+        return False
+
+    trusted = os.environ.get("OAUTH2_PROXY_TRUSTED_IPS", "").strip()
+    if trusted:
+        for entry in trusted.split(","):
+            token = entry.strip()
+            if not token:
+                continue
+            try:
+                if "/" in token:
+                    if client_ip in ipaddress.ip_network(token, strict=False):
+                        return True
+                else:
+                    if client_ip == ipaddress.ip_address(token):
+                        return True
+            except ValueError:
+                continue
+        return False
+
+    return client_ip.is_loopback or client_ip.is_private
 
 
 class SessionAuthMiddleware(BaseHTTPMiddleware):
@@ -187,7 +218,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
         if is_public_path(request.url.path):
             # Still attach user if available (for /auth/check, /auth/me etc.)
             oauth2_email = request.headers.get(OAUTH2_PROXY_EMAIL_HEADER)
-            if oauth2_email and is_oauth2_proxy_enabled():
+            if oauth2_email and is_oauth2_proxy_enabled() and _is_trusted_proxy_client(request):
                 user = await self._get_or_create_oauth2_user(oauth2_email, request)
                 if user:
                     request.state.user = user
@@ -201,11 +232,17 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
         # Check for OAuth2 Proxy authentication first (GCP deployment)
         oauth2_email = request.headers.get(OAUTH2_PROXY_EMAIL_HEADER)
         if oauth2_email and is_oauth2_proxy_enabled():
-            user = await self._get_or_create_oauth2_user(oauth2_email, request)
-            if user:
-                request.state.user = user
-                request.state.oauth2_authenticated = True
-                return await call_next(request)
+            if _is_trusted_proxy_client(request):
+                user = await self._get_or_create_oauth2_user(oauth2_email, request)
+                if user:
+                    request.state.user = user
+                    request.state.oauth2_authenticated = True
+                    return await call_next(request)
+            else:
+                logger.warning(
+                    "Ignoring OAuth2 proxy headers from untrusted client IP: %s",
+                    request.client.host if request.client else "unknown",
+                )
 
         # Check multi-user mode
         multi_user_enabled = await self._check_multi_user_mode()
