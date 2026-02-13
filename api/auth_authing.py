@@ -15,6 +15,8 @@ import uuid
 import logging
 import secrets
 import urllib.parse
+import ipaddress
+import re
 from typing import Optional
 
 import httpx
@@ -84,12 +86,66 @@ def _get_client_ip(request: Request) -> Optional[str]:
     return None
 
 
+def _is_trusted_proxy_request(request: Request) -> bool:
+    """Return True when request appears to come from a trusted local/private proxy."""
+    if not request.client or not request.client.host:
+        return False
+    try:
+        client_ip = ipaddress.ip_address(request.client.host)
+    except ValueError:
+        return False
+    return client_ip.is_loopback or client_ip.is_private
+
+
+def _get_request_scheme(request: Request) -> str:
+    """Resolve request scheme, honoring forwarded proto from trusted proxies only."""
+    scheme = request.url.scheme
+    if _is_trusted_proxy_request(request):
+        forwarded_proto = request.headers.get("X-Forwarded-Proto")
+        if forwarded_proto:
+            proto = forwarded_proto.split(",")[0].strip().lower()
+            if proto in {"http", "https"}:
+                scheme = proto
+    return scheme
+
+
+def _is_secure_request(request: Request) -> bool:
+    return _get_request_scheme(request) == "https"
+
+
+def _sanitize_callback_url(callback_url: str) -> str:
+    """Allow only local relative redirects to prevent open redirects."""
+    if not callback_url:
+        return "/"
+    value = urllib.parse.unquote(callback_url).strip()
+    if not value.startswith("/") or value.startswith("//"):
+        return "/"
+    parsed = urllib.parse.urlparse(value)
+    if parsed.scheme or parsed.netloc:
+        return "/"
+    return value
+
+
+def _normalize_host(value: str) -> Optional[str]:
+    """Normalize and validate Host header style values."""
+    host = (value or "").strip()
+    if not host or "/" in host or "\\" in host or " " in host:
+        return None
+    if not re.fullmatch(r"[A-Za-z0-9.\-:]+", host):
+        return None
+    return host
+
+
 def _get_callback_url(request: Request) -> str:
     """Build the callback URL for Authing redirect."""
-    # Use X-Forwarded headers if behind proxy
-    scheme = request.headers.get("X-Forwarded-Proto", request.url.scheme)
-    host = request.headers.get("X-Forwarded-Host", request.url.netloc)
-
+    scheme = _get_request_scheme(request)
+    host = _normalize_host(request.url.netloc) or request.url.netloc
+    if _is_trusted_proxy_request(request):
+        forwarded_host = request.headers.get("X-Forwarded-Host")
+        if forwarded_host:
+            # RFC7239-style forwarding can include multiple hosts; use left-most
+            forwarded_value = forwarded_host.split(",")[0].strip()
+            host = _normalize_host(forwarded_value) or host
     return f"{scheme}://{host}/api/auth/authing/callback"
 
 
@@ -103,6 +159,7 @@ async def authing_login(request: Request, callback_url: str = "/"):
         callback_url: URL to redirect to after successful login (default: /)
     """
     config = get_authing_config()
+    safe_callback_url = _sanitize_callback_url(callback_url)
 
     # Generate state for CSRF protection
     state = secrets.token_urlsafe(32)
@@ -122,9 +179,9 @@ async def authing_login(request: Request, callback_url: str = "/"):
     response = RedirectResponse(url=auth_url, status_code=302)
     response.set_cookie(
         key=STATE_COOKIE_NAME,
-        value=f"{state}:{callback_url}",
+        value=f"{state}|{safe_callback_url}",
         httponly=True,
-        secure=request.url.scheme == "https",
+        secure=_is_secure_request(request),
         samesite="lax",
         max_age=600,  # 10 minutes
     )
@@ -161,17 +218,22 @@ async def authing_callback(
 
     # Validate state (CSRF protection)
     state_cookie = request.cookies.get(STATE_COOKIE_NAME)
-    if not state_cookie or not state_cookie.startswith(state):
+    if not state_cookie or "|" not in state_cookie:
+        logger.warning("Authing callback missing/invalid state cookie format")
+        return RedirectResponse(
+            url="/login?error=Invalid+state",
+            status_code=302,
+        )
+
+    cookie_state, callback_url = state_cookie.split("|", 1)
+    if not secrets.compare_digest(cookie_state, state):
         logger.warning("Authing callback state mismatch")
         return RedirectResponse(
             url="/login?error=Invalid+state",
             status_code=302,
         )
 
-    # Extract callback URL from state cookie
-    callback_url = "/"
-    if ":" in state_cookie:
-        _, callback_url = state_cookie.split(":", 1)
+    callback_url = _sanitize_callback_url(callback_url)
 
     config = get_authing_config()
 
@@ -294,7 +356,7 @@ async def authing_callback(
         key=SESSION_COOKIE_NAME,
         value=session_id,
         httponly=True,
-        secure=request.url.scheme == "https",
+        secure=_is_secure_request(request),
         samesite="lax",
         max_age=30 * 24 * 60 * 60,  # 30 days
     )
