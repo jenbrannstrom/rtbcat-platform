@@ -32,7 +32,7 @@ export function generateClusterName(url: string | null): string {
 
   try {
     // Decode URL-encoded strings
-    let decoded = decodeURIComponent(url);
+    const decoded = decodeURIComponent(url);
 
     // Extract bundle ID from AppsFlyer URLs
     // e.g., https://app.appsflyer.com/com.example.app?pid=...

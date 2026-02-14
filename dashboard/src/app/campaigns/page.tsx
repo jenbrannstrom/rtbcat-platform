@@ -47,6 +47,7 @@ import {
   SuggestionsPanel,
   SortFilterControls,
 } from '@/components/campaigns';
+import type { Creative as PreviewCreative } from '@/types/api';
 
 // Local type alias for Creative used in this file
 type Creative = CampaignCreative;
@@ -486,7 +487,7 @@ export default function CampaignsPage() {
     // - When buyer is selected: only show campaigns with creatives from that buyer
     // - When country filter is active: only show campaigns with creatives from that country
     // - Phase 29: When issues filter is active, only show campaigns with disapproved creatives
-    let filtered = campaignsWithTotals.filter(c => {
+    const filtered = campaignsWithTotals.filter(c => {
       // If a buyer is selected, filter to campaigns with creatives from that buyer
       if (selectedBuyerId && !c._hasBuyerCreatives) return false;
       // If country filter active, filter by country
@@ -755,7 +756,7 @@ export default function CampaignsPage() {
       {/* Preview Modal (Phase 24) */}
       {previewCreative && (
         <PreviewModal
-          creative={previewCreative as any}
+          creative={previewCreative as unknown as PreviewCreative}
           onClose={() => setPreviewCreativeId(null)}
         />
       )}

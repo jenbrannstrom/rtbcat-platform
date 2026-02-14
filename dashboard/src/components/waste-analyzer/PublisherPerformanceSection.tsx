@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { BarChart3, Upload, ArrowRight, Trophy, AlertCircle, TrendingUp, Ban } from "lucide-react";
 import type { PublisherPerformance } from "@/lib/api";
 import { formatNumber } from "./FunnelCard";
@@ -60,9 +61,9 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
                 </div>
                 <p className="mt-2 text-gray-500">Schedule: <strong>Daily</strong></p>
               </div>
-              <a href="/setup?tab=import" className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
+              <Link href="/setup?tab=import" className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
                 Go to Import → <ArrowRight className="h-3 w-3" />
-              </a>
+              </Link>
             </div>
           </div>
         </div>

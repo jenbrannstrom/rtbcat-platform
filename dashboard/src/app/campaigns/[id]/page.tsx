@@ -62,13 +62,7 @@ export default function CampaignDetailPage() {
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
 
-  useEffect(() => {
-    if (campaignId) {
-      fetchCampaignData();
-    }
-  }, [campaignId, period]);
-
-  const fetchCampaignData = async () => {
+  async function fetchCampaignData() {
     setLoading(true);
     setError(null);
 
@@ -103,7 +97,13 @@ export default function CampaignDetailPage() {
     }
 
     setLoading(false);
-  };
+  }
+
+  useEffect(() => {
+    if (campaignId) {
+      fetchCampaignData();
+    }
+  }, [campaignId, period]);
 
   const handleRemoveCreative = async (creativeId: string) => {
     if (!confirm("Remove this creative from the campaign?")) return;

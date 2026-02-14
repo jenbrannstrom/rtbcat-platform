@@ -313,7 +313,7 @@ export function parseDestinationUrls(rawUrl: string | null | undefined): ParsedU
   if (extractedUrls.length === 0) return [];
 
   // Categorize each URL
-  let categorized = extractedUrls.map((url) => categorizeUrl(url));
+  const categorized = extractedUrls.map((url) => categorizeUrl(url));
 
   // Filter out tracking pixels and simple domain landing pages if we have better URLs
   let displayUrls = categorized.filter((u) => u.type !== "tracking_pixel");
