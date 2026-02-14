@@ -23,6 +23,7 @@ import { Loader2, AlertCircle, AlertTriangle, ArrowUpDown, ChevronRight, Info, I
 import { AppDrilldownModal } from './app-drilldown-modal';
 import { useAccount } from '@/contexts/account-context';
 import { PreviewModal } from '@/components/preview-modal';
+import type { Creative } from '@/types/api';
 
 interface ConfigBreakdownPanelProps {
   billing_id: string;
@@ -97,7 +98,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
   const [selectedCreative, setSelectedCreative] = useState<null | { id: string }>(null);
   const [isLoadingCreative, setIsLoadingCreative] = useState(false);
   const [creativeLoadError, setCreativeLoadError] = useState<string | null>(null);
-  const [fullCreative, setFullCreative] = useState<any | null>(null);
+  const [fullCreative, setFullCreative] = useState<Creative | null>(null);
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
   const [showConfirmPush, setShowConfirmPush] = useState(false);
   const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);

@@ -78,11 +78,11 @@ function WasteAnalysisContent() {
     }
   }, [selectedBuyerId, seats, setSelectedBuyerId]);
 
+  const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
+
   useEffect(() => {
     setExpandedConfigId(null);
   }, [selectedBuyerId]);
-
-  const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
 
   // Sorting state for pretargeting configs
   type SortColumn = 'name' | 'reached' | 'win_rate' | 'waste_rate';

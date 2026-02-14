@@ -6,6 +6,8 @@ const mockRedirect = vi.fn();
 const mockNext = vi.fn();
 
 vi.mock("next/server", () => {
+  type CloneableUrl = URL & { clone(): CloneableUrl };
+
   class MockNextResponse {
     static redirect(url: URL) {
       mockRedirect(url.pathname + url.search);
@@ -25,12 +27,13 @@ vi.mock("next/server", () => {
     constructor(url: string, opts?: { cookies?: Record<string, string> }) {
       const parsed = new URL(url, "http://localhost:3000");
       // Add clone() method that Next.js NextURL provides
-      (parsed as any).clone = () => {
-        const cloned = new URL(parsed.href);
-        (cloned as any).clone = (parsed as any).clone;
+      const cloneableParsed = parsed as CloneableUrl;
+      cloneableParsed.clone = () => {
+        const cloned = new URL(parsed.href) as CloneableUrl;
+        cloned.clone = cloneableParsed.clone;
         return cloned;
       };
-      this.nextUrl = parsed as URL & { clone(): URL };
+      this.nextUrl = cloneableParsed;
       this.cookies = new Map();
       this.headers = new Headers();
       if (opts?.cookies) {
@@ -52,7 +55,13 @@ function makeRequest(
   pathname: string,
   cookies?: Record<string, string>
 ): InstanceType<typeof NextRequest> {
-  return new (NextRequest as any)(
+  const NextRequestCtor = NextRequest as unknown as {
+    new (
+      url: string,
+      opts?: { cookies?: Record<string, string> }
+    ): InstanceType<typeof NextRequest>;
+  };
+  return new NextRequestCtor(
     `http://localhost:3000${pathname}`,
     { cookies }
   );

@@ -125,7 +125,7 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
   // Filter and sort creatives
   const sortedCreatives = useMemo(() => {
     // Apply country exclusion filter first
-    let filtered = excludedCountries.size === 0
+    const filtered = excludedCountries.size === 0
       ? creatives
       : creatives.filter(c => !excludedCountries.has(c.country || 'Unknown'));
 
