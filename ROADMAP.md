@@ -1,6 +1,6 @@
 # Cat-Scan Roadmap
 
-**Last Updated:** January 2026
+**Last Updated:** February 14, 2026
 
 ---
 
@@ -18,6 +18,68 @@
 - [x] **Duplicate migration numbers** - resolved
 - [ ] ~~**CI/CD pipeline** - Build images in GitHub Actions and deploy via docker pull (Artifact Registry)~~ **(Done)**
 - [ ] **BigQuery raw_facts coverage** - Data only through Jan 25; Jan 26–28 pending reprocess after pipeline fix
+
+---
+
+## Schema Status Review (2026-02-14)
+
+**Scope decision (pre-release):** single shared DB remains in scope; introducing a second staging DB is out of scope for now.
+
+### Execution Priority (Locked for current phase)
+- [ ] **P0: Current reliability issues first (no schema renames yet)**
+  - Scheduler/import freshness: fix missing dates and verify imports are landing in the active runtime path.
+  - Precompute freshness parity: bring all serving/precompute tables to the same latest date and keep them in sync.
+  - Pretargeting sync reliability: resolve "Sync All" failures and validate end-to-end fetch/update path.
+  - Routing/URL consistency: finalize buyer-in-URL route model and remove broken/legacy route targets.
+  - Data semantics cleanup in UI: clarify block/allow wording and wasted-QPS visibility so actions match user intent.
+- [ ] **P0 Exit criteria**
+  - Last 3 scheduled import runs are successful with non-zero expected ingestion or explicit "no new mail" reason logged.
+  - Raw fact latest date and all precompute latest dates differ by at most 1 day.
+  - "Sync All" succeeds for active buyer seats without manual intervention.
+  - No broken nav routes (`/creatives` redirect/replace behavior settled where required).
+
+- [ ] **P1: Naming alignment only after P0 passes**
+  - Keep physical table names unchanged in first step.
+  - Add compatibility views/canonical aliases, then migrate reads/writes.
+  - Defer hard table renames until after first-release stabilization window.
+
+### Implemented Schema Changes (in repo)
+- [x] `001_init` baseline tables include creative language fields (`detected_language`, `detected_language_code`, `language_confidence`, `language_source`, `language_analyzed_at`, `language_analysis_error`).
+- [x] `027_schema_alignment` added raw fact tables (`rtb_daily`, `rtb_bidstream`, `rtb_bid_filtering`, `rtb_quality`), `pretargeting_publishers`, and BIGINT upgrades.
+- [x] `030_auth_baseline_tables` added auth baseline tables for first-admin/bootstrap path.
+- [x] `034_user_passwords` added password auth schema updates.
+- [x] `035_audit_log` added audit log table.
+- [x] `036_live_fetch_and_thumbnail_retry` added live creative fetch + thumbnail retry support tables/fields.
+- [x] `037_data_reliability_foundation` added `ingestion_runs` and `source_coverage_daily`.
+- [x] `038_canonical_fact_reconciliation` added `fact_delivery_daily` and `fact_dimension_gaps_daily`.
+- [x] `039_ingestion_runs_extend` extended ingestion/import attribution fields.
+- [x] `040_web_domain_lane` added optional `web_domain_daily`.
+- [x] `041_bootstrap_tracking` added bootstrap completion setting.
+- [x] `042_precompute_refresh_runs` added append-only precompute run ledger (`run_id`, table/domain status, row_count, error, host/version/sha, timing).
+
+### Proposed Schema Changes Still Open
+- [ ] Universal serving tables for fixed windows (`7/14/30`) under Phase U1 (`serve_home_*`, `serve_qps_*`, `serve_config_*`), including metadata fields (`as_of_date`, `last_refreshed_at`, `refresh_run_id`, `data_state`) and read indexes.
+- [ ] Stronger seat/config integrity guarantees from Home Phase 1 TODOs (persisted seat identity and stricter billing/join-safe keys). Existing columns exist, but strict enforcement is still pending.
+- [x] Precompute observability upgrade: append-only run table (per refresh run/table/status/row_count/error/host/version) to diagnose partial refreshes and stale tables quickly.
+- [ ] Ingestion lineage extension: persist importer host/version + source message lineage (where available) so scheduler "200 OK but no new data" can be traced deterministically.
+
+### Stale Schema Notes Corrected
+- [x] Language-detection schema is already present in Postgres baseline; previous roadmap text referencing `migrations/015_language_detection.sql` was stale for current repo layout.
+
+### Nomenclature Alignment (Google-centric terminology)
+- [ ] Introduce canonical naming in SQL layer using compatibility views first (no hard table rename in first step).
+  - `home_config_daily` → `pretarg_daily`
+  - `config_size_daily` → `pretarg_size_daily`
+  - `config_geo_daily` → `pretarg_geo_daily`
+  - `config_publisher_daily` → `pretarg_publisher_daily`
+  - `config_creative_daily` → `pretarg_creative_daily`
+  - `home_size_daily` → `seat_size_daily`
+  - `home_geo_daily` → `seat_geo_daily`
+  - `home_publisher_daily` → `seat_publisher_daily`
+  - `home_seat_daily` → `seat_daily`
+- [ ] Migrate read paths to canonical names after views are in place.
+- [ ] Keep backward-compatible aliases until first release stabilizes, then decide whether physical table renames are worth migration risk.
+- [ ] Add terminology map in API/docs/UI labels so "billing_id" is consistently presented as "pretargeting config" where users expect Google UI wording.
 
 ---
 
@@ -52,7 +114,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [ ] **MCP Integration** - Connect AI tools via Model Context Protocol
 - [ ] **Navigation restructure** - Cleaner sidebar organization with unified Settings
 - [x] **Creative geo display (MVP)** - Serving countries + language mismatch alerts in UI
-- [ ] **Creative language detection (AI)** - Automated OCR/Gemini language detection pipeline
+- [x] **Creative language detection (AI)** - Automated OCR/Gemini language detection pipeline (implemented)
 
   **Requirements:**
   - Gemini API detects language on first creative sync (one-time analysis)
@@ -65,7 +127,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 
   **Implementation:**
 
-  1. **Database Schema** (`migrations/015_language_detection.sql`)
+  1. **Database Schema** (implemented in `storage/postgres_migrations/001_init.sql`)
      - `detected_language` (TEXT) - "German", "English", etc.
      - `detected_language_code` (TEXT) - ISO 639-1: "de", "en"
      - `language_confidence` (REAL) - 0.0 to 1.0
@@ -121,7 +183,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
   **Critical Files:**
   | File | Change |
   |------|--------|
-  | `migrations/015_language_detection.sql` | New migration |
+  | `storage/postgres_migrations/001_init.sql` | Creative language columns |
   | `storage/models.py` | Add 6 new fields to Creative |
   | `api/analysis/language_analyzer.py` | New Gemini analyzer module |
   | `utils/language_country_map.py` | New language-country mapping |
@@ -134,7 +196,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
   | `requirements.txt` | Add google-generativeai |
 
   **Verification:**
-  1. Set `GEMINI_API_KEY` env var, run migration, test endpoint
+  1. Set `GEMINI_API_KEY` env var and test endpoint behavior (schema columns already present)
   2. Open creative modal, verify language section and mismatch alerts
   3. Sync creatives, verify auto-analysis populates `language_analyzed_at`
 
@@ -198,9 +260,9 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 **Goal:** Home page shows only data for the selected seat (buyer_id). Admins can switch seats; users only see assigned seats.
 
 ### Feature #001 — Size block/unblock controls (Home breakdown)
-- [ ] Implement backend endpoints to block/unblock selected sizes from the Home > By Size table
-- [ ] Wire bulk actions to pretargeting updates (and persist pending changes)
-- [ ] Ensure audit logging + rollback support
+- [x] Implement backend endpoints to block/unblock selected sizes from the Home > By Size table
+- [x] Wire bulk actions to pretargeting updates (and persist pending changes)
+- [x] Ensure audit logging + rollback support
 
 ### Phase 0 — Audit & Baseline
 - [ ] **Data source audit** - For each Home section, list data tables used and % of rows missing `bidder_id`/`billing_id`
