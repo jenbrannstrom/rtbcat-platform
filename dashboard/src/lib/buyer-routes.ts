@@ -1,5 +1,8 @@
 const BUYER_ID_PATTERN = /^\d+$/;
 
+export const SELECTED_BUYER_STORAGE_KEY = "rtbcat-selected-buyer-id";
+export const SELECTED_BUYER_COOKIE = "rtbcat-selected-buyer-id";
+
 const NON_BUYER_SCOPED_PREFIXES = [
   "/admin",
   "/api",
@@ -96,4 +99,3 @@ export function replaceBuyerInPath(
 ): string {
   return toBuyerScopedPath(pathname, buyerId);
 }
-

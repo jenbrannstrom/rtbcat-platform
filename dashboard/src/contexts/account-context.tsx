@@ -1,9 +1,27 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { SELECTED_BUYER_COOKIE, SELECTED_BUYER_STORAGE_KEY } from "@/lib/buyer-routes";
 
-const SELECTED_BUYER_KEY = "rtbcat-selected-buyer-id";
 const SELECTED_SERVICE_ACCOUNT_KEY = "rtbcat-selected-service-account-id";
+const BUYER_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
+
+function readCookie(name: string): string | null {
+  const prefix = `${name}=`;
+  const cookie = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(prefix));
+  return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : null;
+}
+
+function writeCookie(name: string, value: string | null) {
+  if (value) {
+    document.cookie = `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${BUYER_COOKIE_MAX_AGE_SECONDS}; SameSite=Lax`;
+    return;
+  }
+  document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax`;
+}
 
 interface AccountContextValue {
   selectedBuyerId: string | null;
@@ -21,7 +39,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
 
   // Load from localStorage on mount
   useEffect(() => {
-    const storedBuyer = localStorage.getItem(SELECTED_BUYER_KEY);
+    const storedBuyer = localStorage.getItem(SELECTED_BUYER_STORAGE_KEY) || readCookie(SELECTED_BUYER_COOKIE);
     if (storedBuyer) {
       setSelectedBuyerIdState(storedBuyer);
     }
@@ -36,10 +54,11 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const setSelectedBuyerId = useCallback((buyerId: string | null) => {
     setSelectedBuyerIdState(buyerId);
     if (buyerId) {
-      localStorage.setItem(SELECTED_BUYER_KEY, buyerId);
+      localStorage.setItem(SELECTED_BUYER_STORAGE_KEY, buyerId);
     } else {
-      localStorage.removeItem(SELECTED_BUYER_KEY);
+      localStorage.removeItem(SELECTED_BUYER_STORAGE_KEY);
     }
+    writeCookie(SELECTED_BUYER_COOKIE, buyerId);
   }, []);
 
   // Persist service account to localStorage when changed
