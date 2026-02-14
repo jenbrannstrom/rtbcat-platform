@@ -14,6 +14,7 @@ const NON_BUYER_SCOPED_PREFIXES = [
 
 const BUYER_SCOPED_PREFIXES = [
   "/",
+  "/bill_id",
   "/campaigns",
   "/clusters",
   "/creatives",
