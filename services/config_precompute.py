@@ -6,6 +6,8 @@ Creates and refreshes daily config breakdown tables for fast UI queries.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
+import uuid
 from typing import Optional, Sequence
 
 from google.cloud import bigquery
@@ -13,6 +15,7 @@ from google.cloud import bigquery
 from services.precompute_utils import (
     normalize_refresh_dates,
     record_refresh_log_postgres,
+    record_refresh_run_postgres,
     refresh_window,
 )
 
@@ -415,6 +418,8 @@ async def refresh_config_breakdowns(
         refresh_end,
         buyer_account_id,
     )
+    run_id = str(uuid.uuid4())
+    run_started_at = datetime.utcnow().isoformat()
 
     client = get_bigquery_client()
     rtb_daily_table = build_table_ref(
@@ -708,7 +713,48 @@ async def refresh_config_breakdowns(
             dates=date_list,
         )
 
-    await pg_transaction_async(_run)
+        return {
+            "row_counts": {
+                "config_size_daily": len(size_rows),
+                "config_geo_daily": len(geo_rows),
+                "config_publisher_daily": len(publisher_rows),
+                "config_creative_daily": len(creative_rows),
+            }
+        }
+
+    async def _record_run_rows(status: str, row_counts: dict[str, int], error_text: Optional[str]) -> None:
+        def _write(conn):
+            for table_name, row_count in row_counts.items():
+                record_refresh_run_postgres(
+                    conn,
+                    run_id=run_id,
+                    cache_name="config_breakdowns",
+                    table_name=table_name,
+                    buyer_account_id=buyer_account_id,
+                    dates=date_list,
+                    status=status,
+                    row_count=row_count,
+                    error_text=error_text,
+                    started_at=run_started_at,
+                    finished_at=datetime.utcnow().isoformat(),
+                )
+
+        try:
+            await pg_transaction_async(_write)
+        except Exception:
+            logger.exception(
+                "Failed to write precompute_refresh_runs rows for run_id=%s cache=config_breakdowns",
+                run_id,
+            )
+
+    try:
+        run_meta = await pg_transaction_async(_run)
+    except Exception as exc:
+        await _record_run_rows(status="failed", row_counts={"__all__": 0}, error_text=str(exc))
+        raise
+
+    row_counts = (run_meta or {}).get("row_counts", {})
+    await _record_run_rows(status="success", row_counts=row_counts, error_text=None)
 
     # Return monitoring data for scheduled refresh
     return {
@@ -716,4 +762,5 @@ async def refresh_config_breakdowns(
         "end_date": refresh_end,
         "buyer_account_id": buyer_account_id,
         "dates": date_list,
+        "refresh_run_id": run_id,
     }

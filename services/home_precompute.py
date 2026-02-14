@@ -6,6 +6,8 @@ Creates and refreshes daily summary tables for fast Home page queries.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
+import uuid
 from typing import Optional, Sequence
 
 from google.cloud import bigquery
@@ -13,6 +15,7 @@ from google.cloud import bigquery
 from services.precompute_utils import (
     normalize_refresh_dates,
     record_refresh_log_postgres,
+    record_refresh_run_postgres,
     refresh_window,
 )
 from storage.bigquery import build_table_ref, coerce_dates, get_bigquery_client, run_query
@@ -128,6 +131,8 @@ async def refresh_home_summaries(
         refresh_end,
         buyer_account_id,
     )
+    run_id = str(uuid.uuid4())
+    run_started_at = datetime.utcnow().isoformat()
     client = get_bigquery_client()
     bidstream_table = build_table_ref(
         client, table_env="BIGQUERY_RTB_BIDSTREAM_TABLE", default_table="rtb_bidstream"
@@ -452,6 +457,47 @@ async def refresh_home_summaries(
             "end_date": refresh_end,
             "buyer_account_id": buyer_account_id,
             "dates": date_list,
+            "row_counts": {
+                "home_seat_daily": len(seat_rows),
+                "home_publisher_daily": len(publisher_rows),
+                "home_geo_daily": len(geo_rows),
+                "home_config_daily": len(config_rows) + len(gap_fill_params),
+                "home_size_daily": len(size_rows),
+            },
         }
 
-    return await pg_transaction_async(_run)
+    async def _record_run_rows(status: str, row_counts: dict[str, int], error_text: Optional[str]) -> None:
+        def _write(conn):
+            for table_name, row_count in row_counts.items():
+                record_refresh_run_postgres(
+                    conn,
+                    run_id=run_id,
+                    cache_name="home_summaries",
+                    table_name=table_name,
+                    buyer_account_id=buyer_account_id,
+                    dates=date_list,
+                    status=status,
+                    row_count=row_count,
+                    error_text=error_text,
+                    started_at=run_started_at,
+                    finished_at=datetime.utcnow().isoformat(),
+                )
+
+        try:
+            await pg_transaction_async(_write)
+        except Exception:
+            logger.exception(
+                "Failed to write precompute_refresh_runs rows for run_id=%s cache=home_summaries",
+                run_id,
+            )
+
+    try:
+        result = await pg_transaction_async(_run)
+    except Exception as exc:
+        await _record_run_rows(status="failed", row_counts={"__all__": 0}, error_text=str(exc))
+        raise
+
+    row_counts = result.pop("row_counts", {})
+    await _record_run_rows(status="success", row_counts=row_counts, error_text=None)
+    result["refresh_run_id"] = run_id
+    return result
