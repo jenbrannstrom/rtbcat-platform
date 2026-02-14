@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, Suspense, useRef, useMemo } from "react";
+import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Search, X, TrendingUp, Loader2, Play, Square, AlertTriangle } from "lucide-react";
@@ -690,9 +691,9 @@ function CreativesContent() {
               : t.creatives.noCreativesFound}
           </p>
           {!hasActiveFilters && !selectedSeatId && (
-            <a href="/connect" className="btn-primary mt-4 inline-flex">
+            <Link href="/connect" className="btn-primary mt-4 inline-flex">
               {t.creatives.connectAccount}
-            </a>
+            </Link>
           )}
           {!hasActiveFilters && selectedSeatId && (
             <p className="mt-2 text-sm text-gray-400">

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ArrowRight, Upload } from "lucide-react";
 
 /**
@@ -146,9 +147,9 @@ export function FunnelCard({
                     </div>
                   </div>
                 </div>
-                <a href="/setup?tab=import" className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
+                <Link href="/setup?tab=import" className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
                   Go to Import → <ArrowRight className="h-3 w-3" />
-                </a>
+                </Link>
               </div>
             </div>
           </div>

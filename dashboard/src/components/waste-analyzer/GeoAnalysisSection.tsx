@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Globe, Upload, ArrowRight, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
 import type { GeoPerformance } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,11 @@ interface GeoAnalysisSectionProps {
  * Shows win rates by country and identifies optimization opportunities.
  */
 export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) {
+  type SortColumn = "country" | "reached" | "bids" | "wins" | "win_rate";
+  type SortDirection = "asc" | "desc";
+  const [sortColumn, setSortColumn] = useState<SortColumn>("wins");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
   const hasGeoData = geos && geos.length > 0;
 
   if (!hasGeoData) {
@@ -62,20 +68,15 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
                 </div>
                 <p className="mt-2 text-gray-500">Schedule: <strong>Daily</strong></p>
               </div>
-              <a href="/setup?tab=import" className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
+              <Link href="/setup?tab=import" className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
                 Go to Import → <ArrowRight className="h-3 w-3" />
-              </a>
+              </Link>
             </div>
           </div>
         </div>
       </div>
     );
   }
-
-  type SortColumn = "country" | "reached" | "bids" | "wins" | "win_rate";
-  type SortDirection = "asc" | "desc";
-  const [sortColumn, setSortColumn] = useState<SortColumn>("wins");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -131,7 +132,6 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
   });
 
   const displayGeos = sortedGeos.slice(0, 15);
-  const totalBids = displayGeos.reduce((sum, g) => sum + (g.bids ?? 0), 0);
   const totalReached = displayGeos.reduce((sum, g) => sum + g.reached_queries, 0);
   const totalWins = displayGeos.reduce((sum, g) => sum + (g.auctions_won ?? g.impressions ?? 0), 0);
   const overallWinRate = totalReached > 0 ? (totalWins / totalReached * 100) : 0;
