@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type MouseEvent } from 'react';
+import Link from 'next/link';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { setPretargetingName, lookupGeoNames, suspendPretargeting, activatePretargeting, syncPretargetingConfigs } from '@/lib/api';
 import { ChevronRight, Pencil, Check, X, AlertTriangle, AlertCircle, Pause, Play, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SnapshotComparisonPanel } from './snapshot-comparison-panel';
+import { useAccount } from '@/contexts/account-context';
+import { toBuyerScopedPath } from '@/lib/buyer-routes';
 
 export interface PretargetingConfig {
   billing_id: string;
@@ -109,6 +112,7 @@ function WasteMiniBar({ pct }: { pct: number }) {
 }
 
 export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: PretargetingConfigCardProps) {
+  const { selectedBuyerId } = useAccount();
   // Support both controlled and uncontrolled expansion
   const [internalExpanded, setInternalExpanded] = useState(false);
   const expanded = isExpanded !== undefined ? isExpanded : internalExpanded;
@@ -186,6 +190,10 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   // Check if using display_name from Google (not user-defined)
   const isGoogleName = !config.user_name && config.display_name;
   const stateMutationPending = suspendMutation.isPending || activateMutation.isPending;
+  const configDetailHref = toBuyerScopedPath(
+    `/bill_id/${encodeURIComponent(config.billing_id)}`,
+    selectedBuyerId
+  );
 
   return (
     <div
@@ -220,9 +228,13 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
         </div>
 
         {/* Billing ID */}
-        <span className="font-mono text-xs text-gray-400 w-24 shrink-0">
+        <Link
+          href={configDetailHref}
+          onClick={(e: MouseEvent<HTMLAnchorElement>) => e.stopPropagation()}
+          className="font-mono text-xs text-gray-500 hover:text-primary-600 hover:underline w-24 shrink-0"
+        >
           {config.billing_id}
-        </span>
+        </Link>
 
         {/* Name - editable */}
         <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
