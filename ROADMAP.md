@@ -83,6 +83,7 @@
   - [x] Home analytics, endpoints QPS, data health, RTB config breakdown, and contract checks now query canonical aliases (`seat_*`, `pretarg_*`) while preserving API compatibility keys.
   - [x] Precompute validation + service/repository read SQL now use canonical aliases; legacy table names remain on write paths and compatibility responses.
 - [ ] Keep backward-compatible aliases until first release stabilizes, then decide whether physical table renames are worth migration risk.
+  - [x] Added canonical↔legacy fallback resolution in precompute-status paths (analytics + RTB service) so mixed migration states remain readable.
 - [x] Add terminology map in API/docs/UI labels so "billing_id" is consistently presented as "pretargeting config" where users expect Google UI wording.
 
 ---
