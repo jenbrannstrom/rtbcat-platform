@@ -537,6 +537,9 @@ CREATE TABLE IF NOT EXISTS pretargeting_configs (
     included_geos JSONB,
     excluded_geos JSONB,
     included_operating_systems JSONB,
+    included_publishers JSONB,
+    excluded_publishers JSONB,
+    publisher_targeting_mode TEXT,
     raw_config JSONB,
     synced_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(bidder_id, config_id)

@@ -377,6 +377,56 @@ CREATE TABLE IF NOT EXISTS rtb_app_creative_daily (
 );
 
 -- ============================================================================
+-- CANONICAL COMPATIBILITY VIEWS
+-- ============================================================================
+
+DO $$
+DECLARE
+    alias_map CONSTANT TEXT[][] := ARRAY[
+        ARRAY['pretarg_daily', 'home_config_daily'],
+        ARRAY['pretarg_size_daily', 'config_size_daily'],
+        ARRAY['pretarg_geo_daily', 'config_geo_daily'],
+        ARRAY['pretarg_publisher_daily', 'config_publisher_daily'],
+        ARRAY['pretarg_creative_daily', 'config_creative_daily'],
+        ARRAY['seat_size_daily', 'home_size_daily'],
+        ARRAY['seat_geo_daily', 'home_geo_daily'],
+        ARRAY['seat_publisher_daily', 'home_publisher_daily'],
+        ARRAY['seat_daily', 'home_seat_daily']
+    ];
+    pair TEXT[];
+    target_view TEXT;
+    source_table TEXT;
+    target_kind CHAR;
+BEGIN
+    FOREACH pair SLICE 1 IN ARRAY alias_map LOOP
+        target_view := pair[1];
+        source_table := pair[2];
+        target_kind := NULL;
+
+        IF to_regclass('public.' || source_table) IS NULL THEN
+            CONTINUE;
+        END IF;
+
+        SELECT c.relkind
+        INTO target_kind
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND c.relname = target_view;
+
+        IF target_kind IS NOT NULL AND target_kind <> 'v' THEN
+            CONTINUE;
+        END IF;
+
+        EXECUTE format(
+            'CREATE OR REPLACE VIEW %I AS SELECT * FROM %I',
+            target_view,
+            source_table
+        );
+    END LOOP;
+END $$;
+
+-- ============================================================================
 -- AI CAMPAIGNS AND RECOMMENDATIONS
 -- ============================================================================
 
@@ -545,6 +595,9 @@ CREATE TABLE IF NOT EXISTS pretargeting_configs (
     included_geos JSONB,
     excluded_geos JSONB,
     included_operating_systems JSONB,
+    included_publishers JSONB,
+    excluded_publishers JSONB,
+    publisher_targeting_mode TEXT,
     raw_config JSONB,
     synced_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(bidder_id, config_id)

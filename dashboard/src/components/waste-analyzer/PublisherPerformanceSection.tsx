@@ -75,7 +75,10 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
   const highWinRate = publishers.filter(p => p.win_rate >= 40 && p.impressions > 0);
   const moderateWinRate = publishers.filter(p => p.win_rate >= 20 && p.win_rate < 40 && p.impressions > 0);
   const lowWinRate = publishers.filter(p => p.win_rate < 20 && p.impressions > 0);
-  const blocked = publishers.filter(p => p.reached_queries === 0 && (p.bid_requests ?? 0) > 100000);
+  const blockedTrafficThreshold = 100000;
+  const blocked = publishers.filter(
+    (p) => p.reached_queries === 0 && (p.bid_requests ?? 0) > blockedTrafficThreshold
+  );
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -179,7 +182,7 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
           <div>
             <div className="flex items-center gap-2 text-sm font-medium text-red-700 mb-2">
               <Ban className="h-4 w-4" />
-              Blocked by Pretargeting (0 Reached) - {blocked.length} publishers
+              Potentially blocked by pretargeting (0 reached, &gt;{formatNumber(blockedTrafficThreshold)} bids) - {blocked.length} publishers
             </div>
             <div className="bg-red-50 rounded-lg p-3">
               <div className="flex flex-wrap gap-2">
@@ -194,9 +197,14 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
                 ))}
               </div>
               <p className="text-xs text-red-600 mt-2">
-                These publishers have traffic but pretargeting blocks all of it. Review if intentional.
+                These publishers have bid requests but zero reached queries. This may be intentional; review against current pretargeting goals.
               </p>
             </div>
+          </div>
+        )}
+        {blocked.length === 0 && (
+          <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">
+            No high-volume blocked publishers detected in this seat snapshot.
           </div>
         )}
       </div>

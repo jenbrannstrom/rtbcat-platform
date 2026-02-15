@@ -12,11 +12,10 @@ Credential modes:
 import json
 import logging
 from datetime import datetime
-from pathlib import Path
 from typing import Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from config import ConfigManager
 from storage import creative_dicts_to_storage
@@ -81,7 +80,7 @@ async def _trigger_background_language_analysis(
         logger.warning(f"Language analyzer not available: {e}")
         return 0
 
-    analyzer = GeminiLanguageAnalyzer(db_path=store.db_path)
+    analyzer = GeminiLanguageAnalyzer(db_path=getattr(store, "db_path", None))
     if not analyzer.is_configured:
         logger.debug("Gemini API key not configured, skipping language analysis")
         return 0
@@ -185,6 +184,7 @@ class SyncAllResponse(BaseModel):
     pretargeting_synced: int
     message: str
     last_synced: Optional[str] = None
+    errors: list[str] = Field(default_factory=list)
 
 
 class DiscoverSeatsResponse(BaseModel):
@@ -251,6 +251,7 @@ async def discover_seats(
     config: ConfigManager = Depends(get_config),
     seats_service: SeatsService = Depends(get_seats_service),
     store: StoreType = Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """Discover buyer seats under a bidder account.
 
@@ -334,7 +335,7 @@ async def discover_seats(
             try:
                 logger.info("Auto-syncing data after seat discovery...")
                 sync_result = await sync_all_data(
-                    seats_service=seats_service, store=store, config=config
+                    seats_service=seats_service, store=store, config=config, user=user
                 )
             except Exception as e:
                 logger.warning(f"Auto-sync failed (discovery still successful): {e}")
@@ -491,27 +492,9 @@ async def sync_all_data(
             detail="No buyer seats found. Discover seats first via /seats/discover.",
         )
 
-    # Get service account for API access (or use ADC in GCP mode)
-    creds_path: Optional[str] = None
-    use_adc = False
-
-    service_accounts = await seats_service.get_service_accounts(active_only=True)
-    if service_accounts:
-        service_account = service_accounts[0]
-        if service_account.credentials_path:
-            expanded_path = Path(service_account.credentials_path).expanduser()
-            if expanded_path.exists():
-                creds_path = str(expanded_path)
-
-    if not creds_path and is_gcp_mode():
-        logger.info("Using ADC (Application Default Credentials) for sync-all")
-        use_adc = True
-
-    if not creds_path and not use_adc:
-        raise HTTPException(
-            status_code=400,
-            detail="No service account configured. Add a service account in Setup.",
-        )
+    seats_by_bidder: dict[str, list[BuyerSeat]] = {}
+    for seat in seats:
+        seats_by_bidder.setdefault(seat.bidder_id, []).append(seat)
 
     # 1. Sync creatives for each buyer seat
     for seat in seats:
@@ -533,20 +516,40 @@ async def sync_all_data(
             logger.error(f"Failed to sync creatives for seat {seat.buyer_id}: {e}")
             errors.append(f"Creatives for {seat.buyer_id}: {str(e)}")
 
-    # Get all unique bidder_ids for endpoints and pretargeting sync
-    # Each bidder may have different endpoints and pretargeting configs
-    if user.role == "admin":
-        bidder_ids_list = await seats_service.get_distinct_bidder_ids()
-    else:
-        bidder_ids_list = list({seat.bidder_id for seat in seats})
+    # Endpoints + pretargeting are bidder-scoped. Only process active bidders
+    # represented by the selected seats to avoid stale/unlinked bidder failures.
+    bidder_ids_list = sorted(seats_by_bidder.keys())
 
     for account_id in bidder_ids_list:
         logger.info(f"Syncing endpoints and pretargeting for bidder {account_id}")
+        bidder_seats = seats_by_bidder.get(account_id, [])
+
+        bidder_credentials: Optional[str] = None
+        bidder_credentials_error: Optional[str] = None
+        for seat in bidder_seats:
+            try:
+                bidder_credentials = await get_credentials_for_seat_with_fallback(
+                    seats_service,
+                    seat,
+                    config,
+                )
+                bidder_credentials_error = None
+                break
+            except HTTPException as e:
+                bidder_credentials_error = str(e.detail)
+            except Exception as e:
+                bidder_credentials_error = str(e)
+
+        if bidder_credentials is None and not is_gcp_mode():
+            detail = bidder_credentials_error or "No valid credentials resolved for bidder."
+            logger.error("Failed to resolve credentials for bidder %s: %s", account_id, detail)
+            errors.append(f"Credentials for {account_id}: {detail}")
+            continue
 
         # 2. Sync RTB endpoints for this bidder
         try:
             endpoints_client = EndpointsClient(
-                credentials_path=creds_path,  # None for ADC mode
+                credentials_path=bidder_credentials,  # None for ADC mode
                 account_id=account_id,
             )
             endpoints = await endpoints_client.list_endpoints()
@@ -561,64 +564,78 @@ async def sync_all_data(
         try:
             pretargeting_service = PretargetingService()
             pretargeting_client = PretargetingClient(
-                credentials_path=creds_path,  # None for ADC mode
+                credentials_path=bidder_credentials,  # None for ADC mode
                 account_id=account_id,
             )
             configs = await pretargeting_client.fetch_all_pretargeting_configs()
+            synced_for_bidder = 0
 
             for cfg in configs:
-                sizes = []
-                for dim in cfg.get("includedCreativeDimensions", []):
-                    if dim.get("width") and dim.get("height"):
-                        sizes.append(f"{dim['width']}x{dim['height']}")
+                try:
+                    sizes = []
+                    for dim in cfg.get("includedCreativeDimensions", []):
+                        if dim.get("width") and dim.get("height"):
+                            sizes.append(f"{dim['width']}x{dim['height']}")
 
-                geo_targeting = cfg.get("geoTargeting", {}) or {}
-                included_geos = geo_targeting.get("includedIds", [])
-                excluded_geos = geo_targeting.get("excludedIds", [])
-                included_os = cfg.get("includedMobileOperatingSystemIds", [])
+                    geo_targeting = cfg.get("geoTargeting", {}) or {}
+                    included_geos = geo_targeting.get("includedIds", [])
+                    excluded_geos = geo_targeting.get("excludedIds", [])
+                    included_os = cfg.get("includedMobileOperatingSystemIds", [])
 
-                await pretargeting_service.save_config({
-                    "bidder_id": account_id,
-                    "config_id": cfg["configId"],
-                    "billing_id": str(cfg.get("billingId", "")).strip() or None,
-                    "display_name": cfg.get("displayName"),
-                    "state": cfg.get("state", "ACTIVE"),
-                    "included_formats": json.dumps(cfg.get("includedFormats", [])),
-                    "included_platforms": json.dumps(cfg.get("includedPlatforms", [])),
-                    "included_sizes": json.dumps(sizes),
-                    "included_geos": json.dumps(included_geos),
-                    "excluded_geos": json.dumps(excluded_geos),
-                    "included_operating_systems": json.dumps(included_os) if included_os else None,
-                    "raw_config": json.dumps(cfg),
-                })
+                    await pretargeting_service.save_config({
+                        "bidder_id": account_id,
+                        "config_id": cfg["configId"],
+                        "billing_id": str(cfg.get("billingId", "")).strip() or None,
+                        "display_name": cfg.get("displayName"),
+                        "state": cfg.get("state", "ACTIVE"),
+                        "included_formats": json.dumps(cfg.get("includedFormats", [])),
+                        "included_platforms": json.dumps(cfg.get("includedPlatforms", [])),
+                        "included_sizes": json.dumps(sizes),
+                        "included_geos": json.dumps(included_geos),
+                        "excluded_geos": json.dumps(excluded_geos),
+                        "included_operating_systems": json.dumps(included_os) if included_os else None,
+                        "raw_config": json.dumps(cfg),
+                    })
 
-                billing_id = str(cfg.get("billingId", "")).strip()
-                if billing_id:
-                    publisher_targeting = cfg.get("publisherTargeting", {}) or {}
-                    publisher_mode = publisher_targeting.get("targetingMode") or "EXCLUSIVE"
-                    publisher_values = publisher_targeting.get("values", [])
-                    included_publishers = publisher_values if publisher_mode == "INCLUSIVE" else []
-                    excluded_publishers = publisher_values if publisher_mode == "EXCLUSIVE" else []
+                    billing_id = str(cfg.get("billingId", "")).strip()
+                    if billing_id:
+                        publisher_targeting = cfg.get("publisherTargeting", {}) or {}
+                        publisher_mode = publisher_targeting.get("targetingMode") or "EXCLUSIVE"
+                        publisher_values = publisher_targeting.get("values", [])
+                        included_publishers = publisher_values if publisher_mode == "INCLUSIVE" else []
+                        excluded_publishers = publisher_values if publisher_mode == "EXCLUSIVE" else []
 
-                    await pretargeting_service.clear_sync_publishers(billing_id)
-                    for pub_id in included_publishers:
-                        await pretargeting_service.add_publisher(
-                            billing_id=billing_id,
-                            publisher_id=str(pub_id),
-                            mode="WHITELIST",
-                            status="active",
-                            source="api_sync",
-                        )
-                    for pub_id in excluded_publishers:
-                        await pretargeting_service.add_publisher(
-                            billing_id=billing_id,
-                            publisher_id=str(pub_id),
-                            mode="BLACKLIST",
-                            status="active",
-                            source="api_sync",
-                        )
-            pretargeting_synced += len(configs)
-            logger.info(f"Synced {len(configs)} pretargeting configs for bidder {account_id}")
+                        await pretargeting_service.clear_sync_publishers(billing_id)
+                        for pub_id in included_publishers:
+                            await pretargeting_service.add_publisher(
+                                billing_id=billing_id,
+                                publisher_id=str(pub_id),
+                                mode="WHITELIST",
+                                status="active",
+                                source="api_sync",
+                            )
+                        for pub_id in excluded_publishers:
+                            await pretargeting_service.add_publisher(
+                                billing_id=billing_id,
+                                publisher_id=str(pub_id),
+                                mode="BLACKLIST",
+                                status="active",
+                                source="api_sync",
+                            )
+                    synced_for_bidder += 1
+                except Exception as e:
+                    cfg_id = cfg.get("configId", "unknown")
+                    logger.error(
+                        "Failed to sync pretargeting config %s for bidder %s: %s",
+                        cfg_id,
+                        account_id,
+                        e,
+                    )
+                    errors.append(f"Pretargeting config {cfg_id} for {account_id}: {str(e)}")
+                    continue
+
+            pretargeting_synced += synced_for_bidder
+            logger.info(f"Synced {synced_for_bidder}/{len(configs)} pretargeting configs for bidder {account_id}")
         except Exception as e:
             logger.error(f"Failed to sync pretargeting configs for bidder {account_id}: {e}")
             errors.append(f"Pretargeting for {account_id}: {str(e)}")
@@ -647,4 +664,5 @@ async def sync_all_data(
         pretargeting_synced=pretargeting_synced,
         message=message,
         last_synced=sync_time,
+        errors=errors,
     )

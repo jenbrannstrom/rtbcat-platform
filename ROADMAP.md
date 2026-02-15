@@ -26,17 +26,18 @@
 **Scope decision (pre-release):** single shared DB remains in scope; introducing a second staging DB is out of scope for now.
 
 ### Execution Priority (Locked for current phase)
-- [ ] **P0: Current reliability issues first (no schema renames yet)**
+- [x] **P0: Current reliability issues first (no schema renames yet)**
   - Scheduler/import freshness: fix missing dates and verify imports are landing in the active runtime path.
   - Precompute freshness parity: bring all serving/precompute tables to the same latest date and keep them in sync.
   - Pretargeting sync reliability: resolve "Sync All" failures and validate end-to-end fetch/update path.
   - Routing/URL consistency: finalize buyer-in-URL route model and remove broken/legacy route targets.
   - Data semantics cleanup in UI: clarify block/allow wording and wasted-QPS visibility so actions match user intent.
-- [ ] **P0 Exit criteria**
-  - Last 3 scheduled import runs are successful with non-zero expected ingestion or explicit "no new mail" reason logged.
-  - Raw fact latest date and all precompute latest dates differ by at most 1 day.
-  - "Sync All" succeeds for active buyer seats without manual intervention.
-  - No broken nav routes (`/creatives` redirect/replace behavior settled where required).
+- [x] **P0 Exit criteria**
+  - [x] Last 3 scheduled import runs are successful with non-zero expected ingestion or explicit "no new mail" reason logged.
+  - [x] Raw fact latest date and all precompute latest dates differ by at most 1 day.
+  - [x] "Sync All" succeeds for active buyer seats without manual intervention.
+  - [x] No broken nav routes (`/creatives` redirect/replace behavior settled where required).
+  - Verified on 2026-02-15 (UTC): latest raw/serving dates aligned at 2026-02-12, recent import windows completed successfully, and sync-all completed for active seats.
 
 - [ ] **P1: Naming alignment only after P0 passes**
   - Keep physical table names unchanged in first step.
@@ -67,7 +68,7 @@
 - [x] Language-detection schema is already present in Postgres baseline; previous roadmap text referencing `migrations/015_language_detection.sql` was stale for current repo layout.
 
 ### Nomenclature Alignment (Google-centric terminology)
-- [ ] Introduce canonical naming in SQL layer using compatibility views first (no hard table rename in first step).
+- [x] Introduce canonical naming in SQL layer using compatibility views first (no hard table rename in first step).
   - `home_config_daily` → `pretarg_daily`
   - `config_size_daily` → `pretarg_size_daily`
   - `config_geo_daily` → `pretarg_geo_daily`
@@ -78,6 +79,7 @@
   - `home_publisher_daily` → `seat_publisher_daily`
   - `home_seat_daily` → `seat_daily`
 - [ ] Migrate read paths to canonical names after views are in place.
+  - [x] Precompute health read path now prefers canonical aliases with legacy fallback.
 - [ ] Keep backward-compatible aliases until first release stabilizes, then decide whether physical table renames are worth migration risk.
 - [ ] Add terminology map in API/docs/UI labels so "billing_id" is consistently presented as "pretargeting config" where users expect Google UI wording.
 

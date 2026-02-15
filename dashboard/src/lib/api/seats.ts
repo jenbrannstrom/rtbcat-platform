@@ -89,6 +89,7 @@ export interface SyncAllResponse {
   pretargeting_synced: number;
   message: string;
   last_synced: string | null;
+  errors?: string[];
 }
 
 export async function syncAllData(): Promise<SyncAllResponse> {
