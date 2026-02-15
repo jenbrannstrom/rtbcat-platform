@@ -37,6 +37,28 @@ class SpendStats:
 class AnalyticsService:
     """Orchestrates analytics queries for common/spend endpoints."""
 
+    # Canonical <-> legacy compatibility map for staged naming rollout.
+    PRECOMPUTE_TABLE_ALIASES: dict[str, str] = {
+        "seat_daily": "home_seat_daily",
+        "seat_geo_daily": "home_geo_daily",
+        "seat_publisher_daily": "home_publisher_daily",
+        "seat_size_daily": "home_size_daily",
+        "pretarg_daily": "home_config_daily",
+        "pretarg_size_daily": "config_size_daily",
+        "pretarg_geo_daily": "config_geo_daily",
+        "pretarg_publisher_daily": "config_publisher_daily",
+        "pretarg_creative_daily": "config_creative_daily",
+        "home_seat_daily": "seat_daily",
+        "home_geo_daily": "seat_geo_daily",
+        "home_publisher_daily": "seat_publisher_daily",
+        "home_size_daily": "seat_size_daily",
+        "home_config_daily": "pretarg_daily",
+        "config_size_daily": "pretarg_size_daily",
+        "config_geo_daily": "pretarg_geo_daily",
+        "config_publisher_daily": "pretarg_publisher_daily",
+        "config_creative_daily": "pretarg_creative_daily",
+    }
+
     def __init__(self, repo: AnalyticsRepository | None = None) -> None:
         self._repo = repo or AnalyticsRepository()
 
@@ -62,16 +84,26 @@ class AnalyticsService:
         Returns:
             PrecomputeStatus with table existence and row count.
         """
-        if not await self._repo.table_exists(table_name):
-            return PrecomputeStatus(
-                table=table_name,
-                exists=False,
-                has_rows=False,
-                row_count=0,
-            )
+        source_table_name = table_name
+        if not await self._repo.table_exists(source_table_name):
+            fallback_name = self.PRECOMPUTE_TABLE_ALIASES.get(table_name)
+            if fallback_name and await self._repo.table_exists(fallback_name):
+                logger.info(
+                    "Precompute status using fallback table %s for requested %s",
+                    fallback_name,
+                    table_name,
+                )
+                source_table_name = fallback_name
+            else:
+                return PrecomputeStatus(
+                    table=table_name,
+                    exists=False,
+                    has_rows=False,
+                    row_count=0,
+                )
 
         row_count = await self._repo.get_precompute_row_count(
-            table_name, days, filters, params
+            source_table_name, days, filters, params
         )
         return PrecomputeStatus(
             table=table_name,
