@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from storage.postgres_repositories.rtb_bidstream_repo import RtbBidstreamRepository
-from services.home_analytics_service import HomeAnalyticsService
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +36,30 @@ class PrecomputeStatus:
 class RtbBidstreamService:
     """Service for RTB bidstream analytics."""
 
-    def __init__(self):
-        self._repo = RtbBidstreamRepository()
+    # Canonical <-> legacy compatibility map for staged naming rollout.
+    PRECOMPUTE_TABLE_ALIASES: dict[str, str] = {
+        "seat_daily": "home_seat_daily",
+        "seat_geo_daily": "home_geo_daily",
+        "seat_publisher_daily": "home_publisher_daily",
+        "seat_size_daily": "home_size_daily",
+        "pretarg_daily": "home_config_daily",
+        "pretarg_size_daily": "config_size_daily",
+        "pretarg_geo_daily": "config_geo_daily",
+        "pretarg_publisher_daily": "config_publisher_daily",
+        "pretarg_creative_daily": "config_creative_daily",
+        "home_seat_daily": "seat_daily",
+        "home_geo_daily": "seat_geo_daily",
+        "home_publisher_daily": "seat_publisher_daily",
+        "home_size_daily": "seat_size_daily",
+        "home_config_daily": "pretarg_daily",
+        "config_size_daily": "pretarg_size_daily",
+        "config_geo_daily": "pretarg_geo_daily",
+        "config_publisher_daily": "pretarg_publisher_daily",
+        "config_creative_daily": "pretarg_creative_daily",
+    }
+
+    def __init__(self, repo: RtbBidstreamRepository | None = None):
+        self._repo = repo or RtbBidstreamRepository()
 
     # =========================================================================
     # Precompute Status
@@ -52,7 +73,19 @@ class RtbBidstreamService:
         params: Optional[list] = None,
     ) -> PrecomputeStatus:
         """Check if a precompute table exists and has data."""
-        exists = await self._repo.table_exists(table_name)
+        source_table_name = table_name
+        exists = await self._repo.table_exists(source_table_name)
+        if not exists:
+            fallback_name = self.PRECOMPUTE_TABLE_ALIASES.get(table_name)
+            if fallback_name and await self._repo.table_exists(fallback_name):
+                logger.info(
+                    "Precompute status using fallback table %s for requested %s",
+                    fallback_name,
+                    table_name,
+                )
+                source_table_name = fallback_name
+                exists = True
+
         if not exists:
             return PrecomputeStatus(
                 table=table_name,
@@ -62,7 +95,7 @@ class RtbBidstreamService:
             )
 
         row_count = await self._repo.get_precompute_row_count(
-            table_name, days, filters, params
+            source_table_name, days, filters, params
         )
         return PrecomputeStatus(
             table=table_name,
@@ -338,6 +371,8 @@ class RtbBidstreamService:
         This endpoint now reads from home precompute tables to avoid costly
         runtime scans/aggregations from config_size/fact tables on Home loads.
         """
+        from services.home_analytics_service import HomeAnalyticsService
+
         payload = await HomeAnalyticsService().get_config_payload(
             days=days,
             buyer_id=buyer_id,
