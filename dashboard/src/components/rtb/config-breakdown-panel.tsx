@@ -363,6 +363,23 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
     }
     return isPublisherListed(publisherValue);
   };
+  const publisherModeLabel = effectivePublisherMode === 'INCLUSIVE' ? 'Whitelist' : 'Blacklist';
+  const publisherActionLabel = (publisherBlocked: boolean): string => {
+    if (effectivePublisherMode === 'INCLUSIVE') {
+      return publisherBlocked ? 'Allow' : 'Block';
+    }
+    return publisherBlocked ? 'Unblock' : 'Block';
+  };
+  const publisherActionTitle = (publisherBlocked: boolean): string => {
+    if (effectivePublisherMode === 'INCLUSIVE') {
+      return publisherBlocked
+        ? 'Allow publisher (add to allowlist)'
+        : 'Block publisher (remove from allowlist)';
+    }
+    return publisherBlocked
+      ? 'Unblock publisher (remove from denylist)'
+      : 'Block publisher (add to denylist)';
+  };
 
   const sizeRows = activeTab === 'size' ? sortedBreakdown : [];
   const visibleSizeRows = activeTab === 'size'
@@ -712,8 +729,10 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
               <div className="mb-3 flex items-center gap-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
                 <Info className="h-4 w-4 text-amber-500 flex-shrink-0" />
                 <span>
-                  Publisher mode is currently <span className="font-semibold">{effectivePublisherMode === 'INCLUSIVE' ? 'Whitelist' : 'Blacklist'}</span>.
-                  Use Block/Unblock to stage pending publisher targeting updates.
+                  Publisher mode is currently <span className="font-semibold">{publisherModeLabel}</span>.
+                  {effectivePublisherMode === 'INCLUSIVE'
+                    ? ' Block removes a publisher from the allowlist; Allow adds it back.'
+                    : ' Block adds a publisher to the denylist; Unblock removes it from that denylist.'}
                 </span>
               </div>
             )}
@@ -1035,12 +1054,15 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
 	                const publisherStatus = activeTab !== 'publisher'
 	                  ? ''
 	                  : pendingPublisherAdd
-	                  ? (effectivePublisherMode === 'INCLUSIVE' ? 'Pending unblock' : 'Pending block')
+	                  ? (effectivePublisherMode === 'INCLUSIVE' ? 'Pending allow' : 'Pending block')
 	                  : pendingPublisherRemove
 	                  ? (effectivePublisherMode === 'INCLUSIVE' ? 'Pending block' : 'Pending unblock')
 	                  : publisherBlocked
 	                  ? 'Blocked'
-	                  : 'Unblocked';
+	                  : 'Allowed';
+                  const nextPublisherActionLabel =
+                    activeTab === 'publisher' ? publisherActionLabel(publisherBlocked) : '';
+                  const nextPublisherActionWillBlock = nextPublisherActionLabel === 'Block';
 	                return (
 	                  <div key={`${item.name}-${index}`}>
 	                    <div
@@ -1197,7 +1219,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
 	                              className={cn(
 	                                'rounded px-1.5 py-0.5 font-medium',
 	                                publisherStatus === 'Blocked' && 'bg-red-50 text-red-700',
-	                                publisherStatus === 'Unblocked' && 'bg-green-50 text-green-700',
+	                                publisherStatus === 'Allowed' && 'bg-green-50 text-green-700',
 	                                publisherStatus.startsWith('Pending') && 'bg-amber-100 text-amber-800'
 	                              )}
 	                            >
@@ -1213,14 +1235,14 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
 	                              disabled={changeActionBusy || !publisherTargetValue}
 	                              className={cn(
 	                                'inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50',
-	                                publisherBlocked
-	                                  ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
-	                                  : 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+	                                nextPublisherActionWillBlock
+	                                  ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+	                                  : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
 	                              )}
-	                              title={publisherBlocked ? 'Unblock publisher' : 'Block publisher'}
+	                              title={publisherActionTitle(publisherBlocked)}
 	                            >
-	                              {publisherBlocked ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
-	                              {publisherBlocked ? 'Unblock' : 'Block'}
+	                              {nextPublisherActionWillBlock ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}
+	                              {nextPublisherActionLabel}
 	                            </button>
 	                          </div>
 	                        </>

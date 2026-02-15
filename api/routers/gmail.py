@@ -34,6 +34,13 @@ class GmailStatusResponse(BaseModel):
     recent_history: list = Field(default_factory=list, description="Recent import history")
     running: bool = Field(False, description="Whether an import is currently running")
     current_job_id: Optional[str] = Field(None, description="Current import job ID")
+    last_reason: Optional[str] = Field(None, description="Reason code for last run outcome")
+    latest_metric_date: Optional[str] = Field(
+        None, description="Latest metric_date visible in active runtime Postgres"
+    )
+    rows_on_latest_metric_date: int = Field(
+        0, description="Rows present on latest_metric_date in active runtime Postgres"
+    )
 
 
 class GmailImportResponse(BaseModel):
@@ -48,6 +55,11 @@ class GmailImportResponse(BaseModel):
     files_imported: int = 0
     files: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
+    no_new_mail: bool = False
+    no_new_mail_reason: Optional[str] = None
+    runtime_path_verified: bool = False
+    latest_metric_date: Optional[str] = None
+    rows_on_latest_metric_date: int = 0
 
 
 # =============================================================================

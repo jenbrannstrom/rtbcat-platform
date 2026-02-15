@@ -43,6 +43,11 @@ class PrecomputeHealthResponse(BaseModel):
     stale_caches: list[str] = Field(default_factory=list)
     missing_caches: list[str] = Field(default_factory=list)
     cache_refresh_times: dict[str, str] = Field(default_factory=dict)
+    latest_source_metric_date: str | None = None
+    serving_metric_dates: dict[str, str | None] = Field(default_factory=dict)
+    serving_lag_days: dict[str, int | None] = Field(default_factory=dict)
+    max_date_drift_days: int | None = None
+    date_parity_ok: bool = False
 
 
 @router.post("/precompute/refresh/scheduled", response_model=PrecomputeRefreshResponse)
@@ -101,6 +106,11 @@ async def precompute_health(request: Request):
         stale_caches=status.stale_caches,
         missing_caches=status.missing_caches,
         cache_refresh_times=status.cache_refresh_times,
+        latest_source_metric_date=status.latest_source_metric_date,
+        serving_metric_dates=status.serving_metric_dates,
+        serving_lag_days=status.serving_lag_days,
+        max_date_drift_days=status.max_date_drift_days,
+        date_parity_ok=status.date_parity_ok,
     )
 
     if not status.ok:
