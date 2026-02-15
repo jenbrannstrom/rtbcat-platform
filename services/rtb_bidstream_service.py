@@ -358,10 +358,10 @@ class RtbBidstreamService:
     ) -> dict[str, Any]:
         """Get detailed breakdown for a specific config."""
         table_map = {
-            "size": "config_size_daily",
-            "geo": "config_geo_daily",
-            "publisher": "config_publisher_daily",
-            "creative": "config_creative_daily",
+            "size": "pretarg_size_daily",
+            "geo": "pretarg_geo_daily",
+            "publisher": "pretarg_publisher_daily",
+            "creative": "pretarg_creative_daily",
         }
         table_name = table_map.get(breakdown_type)
 
@@ -602,7 +602,7 @@ class RtbBidstreamService:
             params.append(buyer_account_id)
 
         status = await self.get_precompute_status(
-            "config_creative_daily", days, filters, params
+            "pretarg_creative_daily", days, filters, params
         )
 
         if not status.has_rows:

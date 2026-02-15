@@ -58,13 +58,13 @@ async def validate_precompute_totals(
         seat_filter = " AND buyer_account_id = ?"
         params.append(buyer_account_id)
 
-    # Home seat daily precomputed
+    # Seat daily precomputed
     home_pre_row = await db_query_one(
         f"""
         SELECT
             COALESCE(SUM(reached_queries), 0) AS reached_queries,
             COALESCE(SUM(impressions), 0) AS impressions
-        FROM home_seat_daily
+        FROM seat_daily
         WHERE metric_date BETWEEN ? AND ?{seat_filter}
         """,
         tuple(params),
@@ -90,14 +90,14 @@ async def validate_precompute_totals(
         tuple(raw_bidstream_params),
     )
 
-    # Config size daily precomputed
+    # Pretargeting size daily precomputed
     config_pre_row = await db_query_one(
         f"""
         SELECT
             COALESCE(SUM(reached_queries), 0) AS reached_queries,
             COALESCE(SUM(impressions), 0) AS impressions,
             COALESCE(SUM(spend_micros), 0) AS spend_micros
-        FROM config_size_daily
+        FROM pretarg_size_daily
         WHERE metric_date BETWEEN ? AND ?{seat_filter}
         """,
         tuple(params),

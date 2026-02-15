@@ -39,7 +39,7 @@ class HomeAnalyticsRepository:
                 SUM(bids) as total_bids,
                 SUM(successful_responses) as total_successful_responses,
                 SUM(bid_requests) as total_bid_requests
-            FROM home_seat_daily
+            FROM seat_daily
             WHERE metric_date BETWEEN %s AND %s{buyer_filter}
             """,
             tuple(params),
@@ -64,7 +64,7 @@ class HomeAnalyticsRepository:
                 SUM(auctions_won) as auctions_won,
                 SUM(successful_responses) as successful_responses,
                 SUM(bid_requests) as bid_requests
-            FROM home_publisher_daily
+            FROM seat_publisher_daily
             WHERE metric_date BETWEEN %s AND %s{buyer_filter}
             GROUP BY publisher_id
             ORDER BY reached DESC
@@ -91,7 +91,7 @@ class HomeAnalyticsRepository:
                 SUM(auctions_won) as auctions_won,
                 SUM(successful_responses) as successful_responses,
                 SUM(bid_requests) as bid_requests
-            FROM home_geo_daily
+            FROM seat_geo_daily
             WHERE metric_date BETWEEN %s AND %s{buyer_filter}
             GROUP BY country
             ORDER BY reached DESC
@@ -110,7 +110,7 @@ class HomeAnalyticsRepository:
         row = await pg_query_one(
             f"""
             SELECT COUNT(DISTINCT publisher_id) as cnt
-            FROM home_publisher_daily
+            FROM seat_publisher_daily
             WHERE metric_date BETWEEN %s AND %s{buyer_filter}
             """,
             tuple(params),
@@ -127,7 +127,7 @@ class HomeAnalyticsRepository:
         row = await pg_query_one(
             f"""
             SELECT COUNT(DISTINCT country) as cnt
-            FROM home_geo_daily
+            FROM seat_geo_daily
             WHERE metric_date BETWEEN %s AND %s{buyer_filter}
             """,
             tuple(params),
@@ -149,7 +149,7 @@ class HomeAnalyticsRepository:
                 SUM(impressions) as total_impressions,
                 SUM(bids_in_auction) as total_bids_in_auction,
                 SUM(auctions_won) as total_auctions_won
-            FROM home_config_daily
+            FROM pretarg_daily
             WHERE metric_date BETWEEN %s AND %s{buyer_filter}
             GROUP BY billing_id
             ORDER BY total_reached DESC
@@ -215,7 +215,7 @@ class HomeAnalyticsRepository:
         )
 
     async def get_home_seat_coverage(self, days: int, buyer_id: str | None) -> dict[str, Any]:
-        """Get actual home_seat_daily data coverage in requested window."""
+        """Get actual seat_daily data coverage in requested window."""
         start_date, end_date = self._window_bounds(days)
         params: list[Any] = [start_date, end_date]
         buyer_filter = ""
@@ -229,7 +229,7 @@ class HomeAnalyticsRepository:
                 MAX(metric_date)::text AS max_date,
                 COUNT(DISTINCT metric_date)::int AS days_with_data,
                 COUNT(*)::bigint AS row_count
-            FROM home_seat_daily
+            FROM seat_daily
             WHERE metric_date BETWEEN %s AND %s{buyer_filter}
             """,
             tuple(params),
