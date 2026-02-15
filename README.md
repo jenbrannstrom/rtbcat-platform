@@ -202,7 +202,7 @@ Cat-Scan requires **5 separate CSV reports** from Google Authorized Buyers due t
 | # | Report | Purpose | Key Fields | Table |
 |---|--------|---------|------------|-------|
 | 1 | **catscan-bidsinauction** | Bid metrics by creative | Creative ID, Bids in auction, Auctions won | `rtb_daily` |
-| 2 | **catscan-quality** | Quality/billing data | Billing ID, Reached queries, Impressions | `rtb_daily` |
+| 2 | **catscan-quality** | Quality/config data | Pretargeting config (Billing ID), Reached queries, Impressions | `rtb_daily` |
 | 3 | **catscan-pipeline-geo** | Bidstream by region | Country, Bid requests, Bids | `rtb_bidstream` |
 | 4 | **catscan-pipeline** | Bidstream by publisher | Publisher ID + Bid metrics | `rtb_bidstream` |
 | 5 | **catscan-bid-filtering** | Bid filtering reasons | Bid filtering status, Filtered bids | `rtb_bid_filtering` |
@@ -211,9 +211,10 @@ Cat-Scan requires **5 separate CSV reports** from Google Authorized Buyers due t
 
 Google's limitation: *"Billing ID is not compatible with [Bid requests]..."*
 
-- To get **Billing ID + spend** → you lose bid request metrics
+- In Cat-Scan UI/API, **Billing ID** is treated as **Pretargeting config ID** (`billing_id`)
+- To get **Pretargeting config (Billing ID) + spend** → you lose bid request metrics
 - To get **Bid request metrics** → you lose Billing ID
-- **JOIN Strategy:** Cat-Scan joins CSV #1 and #2 on (Day, Creative ID) to reconstruct per-billing_id bidstream metrics
+- **JOIN Strategy:** Cat-Scan joins CSV #1 and #2 on (Day, Creative ID) to reconstruct per-pretargeting-config (`billing_id`) bidstream metrics
 
 ### Data Quality Flags
 
@@ -234,7 +235,7 @@ Metrics: Bids, Bids in auction, Auctions won
 
 **Report 2 - Quality (catscan-quality):**
 ```
-Dimensions: Day, Hour, Buyer account ID, Billing ID, Creative ID, Region, Platform
+Dimensions: Day, Hour, Buyer account ID, Pretargeting config (Billing ID), Creative ID, Region, Platform
 Metrics: Reached queries, Impressions, Clicks, Spend
 ```
 
@@ -504,7 +505,7 @@ See **[docs/SECURITY.md](docs/SECURITY.md)** for the complete security guide.
 - Video thumbnail generation
 - UTC timezone standardization
 - Data quality flagging (legacy vs production data)
-- Per-billing_id bidstream metrics via JOIN strategy
+- Per-pretargeting-config (`billing_id`) bidstream metrics via JOIN strategy
 
 ### Roadmap
 

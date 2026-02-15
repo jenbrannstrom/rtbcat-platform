@@ -18,14 +18,17 @@ router = APIRouter(tags=["RTB Analytics"])
 @router.get("/analytics/spend-stats", tags=["RTB Analytics"])
 async def get_spend_stats(
     days: int = Query(7, ge=1, le=90),
-    billing_id: Optional[str] = Query(None, description="Filter by specific billing account ID")
+    billing_id: Optional[str] = Query(
+        None,
+        description="Filter by specific pretargeting config ID (billing_id)",
+    )
 ):
     """
     Get overall spend statistics for the selected period.
 
     Returns total spend, impressions, and avg CPM from rtb_app_daily precompute table.
-    Only includes data for billing_ids that belong to the current account.
-    Optionally filter by a specific billing_id.
+    Only includes data for pretargeting configs (`billing_id`) that belong to
+    the current account. Optionally filter by a specific `billing_id`.
     """
     try:
         service = AnalyticsService()

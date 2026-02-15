@@ -104,13 +104,14 @@ async def get_config_performance(
     """
     Get performance breakdown by pretargeting config (billing_id).
 
-    Reads from precomputed config breakdown tables and aggregates by billing_id to show:
+    Reads from precomputed config breakdown tables and aggregates by
+    pretargeting config ID (`billing_id`) to show:
     - Reached queries and impressions per config
     - Size-level performance within each config
     - Win rate vs waste percentages
     - Settings derived from the data (format, geos, platforms)
 
-    Only returns data for billing_ids that belong to the specified buyer seat
+    Only returns data for `billing_id` values that belong to the specified buyer seat
     (or current account if not specified).
 
     Args:

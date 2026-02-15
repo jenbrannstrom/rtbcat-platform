@@ -88,7 +88,10 @@ class PretargetingHistoryResponse(BaseModel):
 
 class SnapshotCreate(BaseModel):
     """Request to create a pretargeting config snapshot."""
-    billing_id: str = Field(..., description="Billing ID of the pretargeting config")
+    billing_id: str = Field(
+        ...,
+        description="Pretargeting config ID (billing_id)",
+    )
     snapshot_name: Optional[str] = Field(None, description="Snapshot name")
     notes: Optional[str] = Field(None, description="Optional snapshot notes")
     snapshot_type: Optional[str] = Field(None, description="manual, auto, before_change")
@@ -121,7 +124,10 @@ class SnapshotResponse(BaseModel):
 
 class ComparisonCreate(BaseModel):
     """Request to create a snapshot comparison."""
-    billing_id: str = Field(..., description="Billing ID to compare")
+    billing_id: str = Field(
+        ...,
+        description="Pretargeting config ID (billing_id) to compare",
+    )
     comparison_name: Optional[str] = Field(None, description="Comparison name")
     before_snapshot_id: int = Field(..., description="Snapshot ID to compare against")
     before_start_date: Optional[str] = Field(None, description="Comparison start date (before)")

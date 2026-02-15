@@ -69,10 +69,13 @@ async def create_pretargeting_snapshot(
 
 @router.get("/settings/pretargeting/snapshots", response_model=list[SnapshotResponse])
 async def list_pretargeting_snapshots(
-    billing_id: Optional[str] = Query(None, description="Filter by billing account"),
+    billing_id: Optional[str] = Query(
+        None,
+        description="Filter by pretargeting config ID (billing_id)",
+    ),
     limit: int = Query(50, ge=1, le=200),
 ):
-    """List pretargeting snapshots, optionally filtered by billing account."""
+    """List pretargeting snapshots, optionally filtered by pretargeting config ID."""
     try:
         snapshot_service = SnapshotsService()
         rows = await snapshot_service.list_snapshots(billing_id=billing_id, limit=limit)
@@ -160,11 +163,14 @@ async def create_comparison(
 
 @router.get("/settings/pretargeting/comparisons", response_model=list[ComparisonResponse])
 async def list_comparisons(
-    billing_id: Optional[str] = Query(None, description="Filter by billing account"),
+    billing_id: Optional[str] = Query(
+        None,
+        description="Filter by pretargeting config ID (billing_id)",
+    ),
     status: Optional[str] = Query(None, description="Filter by status (in_progress, completed)"),
     limit: int = Query(50, ge=1, le=200),
 ):
-    """List A/B comparisons, optionally filtered by billing account or status."""
+    """List A/B comparisons, optionally filtered by pretargeting config ID or status."""
     try:
         snapshot_service = SnapshotsService()
         rows = await snapshot_service.list_comparisons(

@@ -60,7 +60,7 @@ async def apply_all_pending_changes(
     dry_run: bool = Query(True, description="Preview changes without applying"),
 ):
     """
-    Apply all pending changes for a billing_id to Google.
+    Apply all pending changes for a pretargeting config ID (`billing_id`) to Google.
 
     WARNING: This modifies your live pretargeting configuration!
     Use dry_run=True (default) to preview changes first.

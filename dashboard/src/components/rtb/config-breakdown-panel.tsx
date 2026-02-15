@@ -705,7 +705,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                       ? 'Size breakdown is not available. This config may not have had bid activity in the selected period, or the precompute job has not yet processed this config.'
                       : activeTab === 'creative'
                       ? 'Creative breakdown is not available. This config may not have active creatives with bid activity, or the precompute job has not yet processed this config.'
-                      : `To see ${activeTab} breakdown, import both catscan-quality (has billing_id) and catscan-bidsinauction CSV reports.`
+                      : `To see ${activeTab} breakdown, import both catscan-quality (includes pretargeting config / billing_id) and catscan-bidsinauction CSV reports.`
                   )}
                 </p>
               </div>
@@ -1377,7 +1377,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
             <div className="relative mx-4 w-full max-w-lg rounded-lg border bg-white p-4 shadow-xl">
               <h3 className="text-sm font-semibold text-gray-900">Confirm Changes to Google</h3>
               <p className="mt-1 text-xs text-gray-600">
-                You are about to commit {pendingChanges.length} pending change{pendingChanges.length !== 1 ? 's' : ''} for billing ID {billing_id}.
+                You are about to commit {pendingChanges.length} pending change{pendingChanges.length !== 1 ? 's' : ''} for pretargeting config {billing_id}.
               </p>
               <div className="mt-3 max-h-40 overflow-y-auto space-y-1 rounded border bg-gray-50 p-2 text-xs">
                 {pendingChanges.map((change) => (
