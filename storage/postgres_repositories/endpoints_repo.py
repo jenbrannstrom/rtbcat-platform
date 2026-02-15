@@ -95,7 +95,7 @@ class EndpointsRepository:
         """Derive observed QPS from bidstream data and populate rtb_endpoints_current.
 
         For each configured endpoint in rtb_endpoints, computes observed QPS by:
-        1. Summing reached_queries from home_seat_daily over lookback_days
+        1. Summing reached_queries from seat_daily over lookback_days
         2. Converting to average QPS (total / window_seconds)
         3. Distributing across endpoints proportionally by maximum_qps
 
@@ -131,7 +131,7 @@ class EndpointsRepository:
                     SUM(hsd.reached_queries)::real
                         / GREATEST(COUNT(DISTINCT hsd.metric_date), 1)
                         / 86400 AS observed_qps
-                FROM home_seat_daily hsd
+                FROM seat_daily hsd
                 LEFT JOIN buyer_seats bs ON bs.buyer_id = hsd.buyer_account_id
                 WHERE hsd.metric_date >= CURRENT_DATE - make_interval(days => %s)
                 GROUP BY COALESCE(bs.bidder_id, hsd.buyer_account_id)

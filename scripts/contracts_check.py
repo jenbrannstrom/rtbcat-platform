@@ -213,7 +213,7 @@ async def check_ept_001() -> CheckResult:
 
 
 async def check_pre_002(days: int, buyers: list[dict]) -> CheckResult:
-    """C-PRE-002: All ACTIVE configs have rows in home_config_daily."""
+    """C-PRE-002: All ACTIVE configs have rows in pretarg_daily."""
     total_gap = 0
     buyer_gaps: dict[str, int] = {}
 
@@ -229,7 +229,7 @@ async def check_pre_002(days: int, buyers: list[dict]) -> CheckResult:
             "  ON bs.bidder_id = pc.bidder_id AND bs.active = true "
             "LEFT JOIN ( "
             "  SELECT DISTINCT buyer_account_id, billing_id "
-            "  FROM home_config_daily "
+            "  FROM pretarg_daily "
             "  WHERE metric_date::text >= (CURRENT_DATE - %s)::text "
             ") hcd ON hcd.buyer_account_id = pc.bidder_id "
             "  AND hcd.billing_id = pc.billing_id "
@@ -247,15 +247,15 @@ async def check_pre_002(days: int, buyers: list[dict]) -> CheckResult:
 
     if total_gap > 0:
         return CheckResult(
-            "C-PRE-002", "home_config_daily ACTIVE config coverage", "FAIL",
-            f"{total_gap} ACTIVE config(s) missing from home_config_daily: "
+            "C-PRE-002", "pretarg_daily ACTIVE config coverage", "FAIL",
+            f"{total_gap} ACTIVE config(s) missing from pretarg_daily: "
             f"{buyer_gaps}",
             {"total_gap": total_gap, "buyer_gaps": buyer_gaps},
         )
 
     return CheckResult(
-        "C-PRE-002", "home_config_daily ACTIVE config coverage", "PASS",
-        f"All ACTIVE configs have rows in home_config_daily ({days}d window)",
+        "C-PRE-002", "pretarg_daily ACTIVE config coverage", "PASS",
+        f"All ACTIVE configs have rows in pretarg_daily ({days}d window)",
         {"total_gap": 0, "buyers_checked": len(buyers)},
     )
 
@@ -263,16 +263,16 @@ async def check_pre_002(days: int, buyers: list[dict]) -> CheckResult:
 async def check_pre_003(
     days: int, buyers: list[dict], strict: bool = False,
 ) -> CheckResult:
-    """C-PRE-003: config_publisher_daily non-empty for buyers with data."""
+    """C-PRE-003: pretarg_publisher_daily non-empty for buyers with data."""
     missing: list[str] = []
     justified: list[str] = []
 
     for b in buyers:
         bid = b["buyer_id"]
 
-        # Does buyer have data in home_config_daily?
+        # Does buyer have data in pretarg_daily?
         hcd = await pg_query(
-            "SELECT COUNT(*) AS cnt FROM home_config_daily "
+            "SELECT COUNT(*) AS cnt FROM pretarg_daily "
             "WHERE buyer_account_id = %s "
             "AND metric_date::text >= (CURRENT_DATE - %s)::text",
             (bid, days),
@@ -280,9 +280,9 @@ async def check_pre_003(
         if (hcd[0]["cnt"] if hcd else 0) == 0:
             continue
 
-        # Check config_publisher_daily
+        # Check pretarg_publisher_daily
         cpd = await pg_query(
-            "SELECT COUNT(*) AS cnt FROM config_publisher_daily "
+            "SELECT COUNT(*) AS cnt FROM pretarg_publisher_daily "
             "WHERE buyer_account_id = %s "
             "AND metric_date >= (CURRENT_DATE - %s)::text",
             (bid, days),
@@ -311,29 +311,29 @@ async def check_pre_003(
 
     if missing:
         return CheckResult(
-            "C-PRE-003", "config_publisher_daily coverage", "FAIL",
-            f"{len(missing)} buyer(s) have home_config_daily but no "
-            f"config_publisher_daily: {missing}",
+            "C-PRE-003", "pretarg_publisher_daily coverage", "FAIL",
+            f"{len(missing)} buyer(s) have pretarg_daily but no "
+            f"pretarg_publisher_daily: {missing}",
             details,
         )
     if justified and strict:
         return CheckResult(
-            "C-PRE-003", "config_publisher_daily coverage", "FAIL",
+            "C-PRE-003", "pretarg_publisher_daily coverage", "FAIL",
             f"{len(justified)} justified exception(s) fail under --strict: "
             f"{justified}",
             details,
         )
     if justified:
         return CheckResult(
-            "C-PRE-003", "config_publisher_daily coverage", "WARN",
+            "C-PRE-003", "pretarg_publisher_daily coverage", "WARN",
             f"All covered; {len(justified)} justified exception(s) "
             f"(no publisher_id in source): {justified}",
             details,
         )
 
     return CheckResult(
-        "C-PRE-003", "config_publisher_daily coverage", "PASS",
-        "All buyers with home_config_daily have config_publisher_daily data",
+        "C-PRE-003", "pretarg_publisher_daily coverage", "PASS",
+        "All buyers with pretarg_daily have pretarg_publisher_daily data",
         details,
     )
 

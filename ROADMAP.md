@@ -80,6 +80,7 @@
   - `home_seat_daily` → `seat_daily`
 - [ ] Migrate read paths to canonical names after views are in place.
   - [x] Precompute health read path now prefers canonical aliases with legacy fallback.
+  - [x] Home analytics, endpoints QPS, data health, RTB config breakdown, and contract checks now query canonical aliases (`seat_*`, `pretarg_*`) while preserving API compatibility keys.
 - [ ] Keep backward-compatible aliases until first release stabilizes, then decide whether physical table renames are worth migration risk.
 - [ ] Add terminology map in API/docs/UI labels so "billing_id" is consistently presented as "pretargeting config" where users expect Google UI wording.
 

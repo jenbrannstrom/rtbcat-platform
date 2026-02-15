@@ -240,7 +240,7 @@ class RtbBidstreamRepository:
         buyer_id: Optional[str] = None,
         valid_billing_ids: Optional[list[str]] = None,
     ) -> list[dict[str, Any]]:
-        """Get config performance by billing_id and size from config_size_daily."""
+        """Get config performance by billing_id and size from pretarg_size_daily."""
         where = ["metric_date::date >= (CURRENT_DATE - %s * INTERVAL '1 day')"]
         params: list = [days]
 
@@ -259,7 +259,7 @@ class RtbBidstreamRepository:
                 creative_size,
                 SUM(reached_queries) as total_reached,
                 SUM(impressions) as total_impressions
-            FROM config_size_daily
+            FROM pretarg_size_daily
             WHERE {" AND ".join(where)}
             GROUP BY billing_id, creative_size
             ORDER BY SUM(reached_queries) DESC
@@ -417,7 +417,7 @@ class RtbBidstreamRepository:
                 COALESCE(SUM(d.spend_micros), 0) as total_spend_micros,
                 MAX(c.detected_language) as detected_language,
                 MAX(c.detected_language_code) as detected_language_code
-            FROM config_creative_daily d
+            FROM pretarg_creative_daily d
             LEFT JOIN creatives c ON c.id = d.creative_id
             WHERE {" AND ".join(where)}
             GROUP BY d.creative_id
@@ -454,7 +454,7 @@ class RtbBidstreamRepository:
                 SUM(reached_queries) as total_reached,
                 SUM(impressions) as total_impressions,
                 COALESCE(SUM(spend_micros), 0) as total_spend_micros
-            FROM config_size_daily
+            FROM pretarg_size_daily
             WHERE {" AND ".join(where)}
             GROUP BY creative_size
             ORDER BY SUM(reached_queries) DESC
@@ -497,7 +497,7 @@ class RtbBidstreamRepository:
         rows = await pg_query(
             f"""
             SELECT DISTINCT creative_id
-            FROM config_creative_daily
+            FROM pretarg_creative_daily
             WHERE {" AND ".join(where)}
             LIMIT %s
             """,
