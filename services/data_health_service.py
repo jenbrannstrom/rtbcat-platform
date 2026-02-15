@@ -83,7 +83,7 @@ class DataHealthService:
         row_home_geo = await pg_query_one(
             f"""
             SELECT MAX(metric_date::date) AS max_metric_date, COUNT(*) AS rows
-            FROM home_geo_daily
+            FROM seat_geo_daily
             WHERE metric_date::date >= CURRENT_DATE - %s::int{buyer_filter}
             """,
             tuple([days, *params]),
@@ -91,7 +91,7 @@ class DataHealthService:
         row_cfg_geo = await pg_query_one(
             f"""
             SELECT MAX(metric_date::date) AS max_metric_date, COUNT(*) AS rows
-            FROM config_geo_daily
+            FROM pretarg_geo_daily
             WHERE metric_date::date >= CURRENT_DATE - %s::int{buyer_filter}
             """,
             tuple([days, *params]),
@@ -99,7 +99,7 @@ class DataHealthService:
         row_cfg_pub = await pg_query_one(
             f"""
             SELECT MAX(metric_date::date) AS max_metric_date, COUNT(*) AS rows
-            FROM config_publisher_daily
+            FROM pretarg_publisher_daily
             WHERE metric_date::date >= CURRENT_DATE - %s::int{buyer_filter}
             """,
             tuple([days, *params]),
@@ -214,4 +214,3 @@ class DataHealthService:
         if serving["config_geo_daily"]["rows"] == 0 and serving["home_geo_daily"]["rows"] > 0:
             return "degraded"
         return "healthy"
-

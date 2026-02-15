@@ -70,9 +70,9 @@ async def test_all_pass():
         "FROM rtb_endpoints": [{"cnt": 3}],
         # C-PRE-002: no gap
         "FROM pretargeting_configs": [{"configured_active": 10, "observed_precompute": 10, "gap": 0}],
-        # C-PRE-003: buyer has home data AND publisher data
-        "FROM home_config_daily WHERE buyer_account_id": [{"cnt": 50}],
-        "FROM config_publisher_daily": [{"cnt": 30}],
+        # C-PRE-003: buyer has pretarg data AND publisher data
+        "FROM pretarg_daily WHERE buyer_account_id": [{"cnt": 50}],
+        "FROM pretarg_publisher_daily": [{"cnt": 30}],
     }
 
     with patch(PG_QUERY, new=_mock_pg(responses)):
@@ -139,11 +139,11 @@ async def test_pre_002_missing_config():
 
 @pytest.mark.asyncio
 async def test_pre_003_justified_exception_warn():
-    """Buyer has home data but no publisher data, and no publisher_id in
+    """Buyer has pretarg data but no publisher data, and no publisher_id in
     rtb_daily → justified exception → WARN in non-strict mode."""
     responses = {
-        "FROM home_config_daily WHERE buyer_account_id": [{"cnt": 50}],
-        "FROM config_publisher_daily": [{"cnt": 0}],
+        "FROM pretarg_daily WHERE buyer_account_id": [{"cnt": 50}],
+        "FROM pretarg_publisher_daily": [{"cnt": 0}],
         "FROM rtb_daily": [{"with_pub": 0}],
     }
 
@@ -163,8 +163,8 @@ async def test_pre_003_justified_exception_warn():
 async def test_pre_003_strict_fail():
     """Same justified exception as above, but --strict promotes WARN to FAIL."""
     responses = {
-        "FROM home_config_daily WHERE buyer_account_id": [{"cnt": 50}],
-        "FROM config_publisher_daily": [{"cnt": 0}],
+        "FROM pretarg_daily WHERE buyer_account_id": [{"cnt": 50}],
+        "FROM pretarg_publisher_daily": [{"cnt": 0}],
         "FROM rtb_daily": [{"with_pub": 0}],
     }
 
