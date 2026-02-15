@@ -74,7 +74,7 @@ export function ConfigPerformanceSection() {
   if (!data?.configs?.length) {
     return (
       <div className="bg-gray-50 border rounded-lg p-4 text-gray-500 text-sm">
-        No config data available. Import bidding metrics CSV with billing_id dimension.
+        No config data available. Import bidding metrics CSV with pretargeting config (`billing_id`) dimension.
       </div>
     );
   }

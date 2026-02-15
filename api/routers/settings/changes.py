@@ -82,7 +82,7 @@ async def create_pending_change(
         if not config:
             raise HTTPException(
                 status_code=404,
-                detail=f"Pretargeting config not found for billing_id: {request.billing_id}"
+                detail=f"Pretargeting config not found for ID (billing_id): {request.billing_id}"
             )
 
         config_id = config["config_id"]
@@ -136,7 +136,10 @@ async def create_pending_change(
 
 @router.get("/settings/pretargeting/pending-changes", response_model=list[PendingChangeResponse])
 async def list_pending_changes(
-    billing_id: Optional[str] = Query(None, description="Filter by billing account"),
+    billing_id: Optional[str] = Query(
+        None,
+        description="Filter by pretargeting config ID (billing_id)",
+    ),
     status: str = Query("pending", description="Filter by status (pending, applied, cancelled)"),
     limit: int = Query(100, ge=1, le=500),
 ):
@@ -251,7 +254,7 @@ async def get_pretargeting_config_detail(
         if not config:
             raise HTTPException(
                 status_code=404,
-                detail=f"Config not found for billing_id: {billing_id}"
+                detail=f"Pretargeting config not found for ID (billing_id): {billing_id}"
             )
 
         # Get pending changes (only pending status, ordered by created_at ASC)

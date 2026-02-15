@@ -23,7 +23,7 @@ export default function PretargetingBillingDetailPage() {
     return (
       <div className="p-6">
         <div className="rounded border bg-white p-6 text-sm text-gray-500">
-          Missing billing ID.
+          Missing pretargeting config ID (billing_id).
         </div>
       </div>
     );
@@ -48,4 +48,3 @@ export default function PretargetingBillingDetailPage() {
     </div>
   );
 }
-
