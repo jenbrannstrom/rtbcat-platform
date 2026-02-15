@@ -546,7 +546,7 @@ export const en: Translations = {
     daily: 'Daily',
     yesterday: 'Yesterday',
     day: 'Day',
-    billingId: 'Billing ID',
+    billingId: 'Pretargeting Config ID (Billing ID)',
     creativeId: 'Creative ID',
     creativeSize: 'Creative size',
     creativeFormat: 'Creative format',

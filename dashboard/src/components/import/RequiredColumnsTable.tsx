@@ -27,7 +27,7 @@ export function RequiredColumnsTable() {
             <tr className="bg-gray-50">
               <td className="p-2 border font-medium text-purple-700">catscan-quality</td>
               <td className="p-2 border">rtb_daily</td>
-              <td className="p-2 border">Day, Billing ID, Creative ID, Creative size, Reached queries, Impressions, Active view viewable</td>
+              <td className="p-2 border">Day, Pretargeting config (Billing ID), Creative ID, Creative size, Reached queries, Impressions, Active view viewable</td>
             </tr>
             <tr>
               <td className="p-2 border font-medium text-green-700">catscan-pipeline-geo</td>

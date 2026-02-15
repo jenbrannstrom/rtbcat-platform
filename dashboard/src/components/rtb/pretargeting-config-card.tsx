@@ -227,11 +227,13 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
           {!isGoodWinRate && !isHighWaste && <div className="w-4" />}
         </div>
 
-        {/* Billing ID */}
+        {/* Pretargeting config ID (billing_id) */}
         <Link
           href={configDetailHref}
           onClick={(e: MouseEvent<HTMLAnchorElement>) => e.stopPropagation()}
           className="font-mono text-xs text-gray-500 hover:text-primary-600 hover:underline w-24 shrink-0"
+          title="Pretargeting config ID"
+          aria-label={`Pretargeting config ID ${config.billing_id}`}
         >
           {config.billing_id}
         </Link>

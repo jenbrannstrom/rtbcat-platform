@@ -334,7 +334,7 @@ async def import_performance_csv(
     """Import performance data from Authorized Buyers CSV export.
 
     Uses the unified importer which:
-    - Validates required columns (Day, Creative ID, Billing ID, Creative size, Reached queries, Impressions)
+    - Validates required columns (Day, Creative ID, Pretargeting config/Billing ID, Creative size, Reached queries, Impressions)
     - Stores raw data in rtb_daily table
     - Returns detailed import statistics
     """

@@ -130,7 +130,7 @@ export function FunnelCard({
                       <p className="font-semibold text-gray-600 mb-1">Dimensions (in order):</p>
                       <ol className="list-decimal list-inside text-gray-700">
                         <li>Day</li>
-                        <li>Billing ID</li>
+                        <li>Pretargeting config (Billing ID)</li>
                         <li>Creative ID</li>
                         <li>Creative size</li>
                         <li>Creative format</li>
