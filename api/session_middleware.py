@@ -279,6 +279,14 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
                 user = await self._validate_session(session_id)
                 if user:
                     request.state.user = user
+            # Provide a default user so route dependencies don't fail
+            if not getattr(request.state, "user", None):
+                request.state.user = User(
+                    id="local-dev",
+                    email="dev@localhost",
+                    display_name="Local Dev",
+                    role="admin",
+                )
             return await call_next(request)
 
         # Multi-user mode: require authentication
