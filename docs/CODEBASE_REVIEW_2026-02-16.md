@@ -15,6 +15,7 @@ Three categories of issues block production readiness:
 1. **Data accuracy bugs** — undefined variables causing runtime crashes, inconsistent waste calculations, QPS averaging that misrepresents peak load
 2. **UI table loading failures** — race conditions with buyer ID initialization, 15s timeouts with no retry, missing query cache keys causing cross-buyer contamination
 3. **UX gaps for media buyers** — language mismatch detection exists in backend but is never surfaced in the dashboard, currency mismatch not implemented, no actionable inline optimizations
+4. UX has become very messy, empty sections in the UI, clogged sections on other places. Similar control features are scattered in diff places
 
 ---
 
@@ -183,6 +184,29 @@ Home page makes 6 parallel queries. If config performance fails but pretargeting
 **Filter State Lost on Navigation.** Campaign page filters (country, sort) use local `useState` — reset when navigating away.
 
 **No Data Freshness Indicators.** Home page doesn't show when data was last imported. A media buyer may not realize they're looking at week-old data.
+
+
+
+NOTE from project owner: "The UX of any one pretargting table has become scattered and illogical.
+
+OPening the hidden sizes is broken /home/x1-7/Pictures/Screenshots/Screenshot from 2026-02-13 23-40-49.png
+
+The QPS setting says "unset" - it should say what the AB UI says. It's also in the wrong place, it should be at the top, not inside 'By Publisher'. Same with checkboxes: "Banner, Audio and Video, Native". These are impotrant control settings - there is massive real-estate taken up by empty space of the metrics.
+/home/x1-7/Pictures/Screenshots/Screenshot from 2026-02-13 23-43-18.png
+
+Th eui should be grouped logicaly: control buttons such as the Pause button, QPS setting, 'Banner, Audio and Video, Native' selectors, maybe others are all control butons and can be grouped together. Then group top-level metrics.
+
+'By geo' there is no dropdown, only an empty field asking for country. make it a dropdown with all countries available and then cities within. Just like the Google UI. 
+
+The "history" on the left and "open" on the right is not needed. Just place History on the right. no second buton needed.
+
+Go back to the simple design: By Creative, By Size, By Geo, By Publisher - they show metrics and allow on/off.
+
+Make wireframes in .md, in /home/x1-7/Documents/rtbcat-platform/docs/ui-publisher-list-management.md
+
+Message: "Publisher mode is currently Blacklist. Use Block/Unblock to stage pending publisher targeting updates." this is great, but where do we switch to whitelist?
+
+Missing workflow: I selected to BLOCK a publisher and left it PENDING. I switched to another pretargeting setting. Then switched back. The pending was still on that specific publisher but the modal to "committo Google" is missing. THat dialog box must stay at as bottom bar on screen "
 
 ---
 
