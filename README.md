@@ -450,6 +450,7 @@ is deprecated; use the Postgres-based compose files instead.
 | **[docs/SECURITY.md](docs/SECURITY.md)** | Security guide for forks and deployments |
 | **[DATA_MODEL.md](DATA_MODEL.md)** | Complete database schema (41 tables) |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | System architecture |
+| **[docs/LOCAL_DEV_DATABASE.md](docs/LOCAL_DEV_DATABASE.md)** | Local DB subset workflow + schema safety gates |
 | **[METRICS_GUIDE.md](METRICS_GUIDE.md)** | RTB metrics and optimization reference |
 | **[ROADMAP.md](ROADMAP.md)** | Planned features and known bugs |
 | **[CHANGELOG.md](CHANGELOG.md)** | Version history and migration notes |

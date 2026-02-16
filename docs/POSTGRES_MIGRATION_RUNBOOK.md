@@ -93,6 +93,9 @@ Rules:
 - If historical context is required, link to `docs/archive/sqlite_legacy/`.
 - Remove accidental assistant artifacts (e.g., "claude:", pasted chat fragments).
 
+For local UI work with partial data and strict schema compatibility, use:
+- `docs/LOCAL_DEV_DATABASE.md`
+
 ## Phase 5: Verification and Regression Guard
 
 Run repo checks (excluding archive):
