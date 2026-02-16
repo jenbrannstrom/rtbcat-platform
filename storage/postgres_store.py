@@ -19,8 +19,10 @@ Environment:
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Optional
+from urllib.parse import urlparse
 
 from .postgres_database import (
     pg_query,
@@ -1277,17 +1279,78 @@ class PostgresStore:
 
         # Creative counts
         row = await pg_query_one("SELECT COUNT(*) as count FROM creatives")
-        stats["total_creatives"] = row["count"] if row else 0
+        stats["total_creatives"] = int(row["count"]) if row else 0
 
         # Format breakdown
         rows = await pg_query(
             "SELECT format, COUNT(*) as count FROM creatives GROUP BY format"
         )
-        stats["by_format"] = {row["format"]: row["count"] for row in rows}
+        stats["by_format"] = {
+            (row["format"] or "UNKNOWN"): int(row["count"])
+            for row in rows
+        }
 
         # Buyer seat count
         row = await pg_query_one("SELECT COUNT(*) as count FROM buyer_seats")
-        stats["total_buyer_seats"] = row["count"] if row else 0
+        stats["total_buyer_seats"] = int(row["count"]) if row else 0
+
+        # Campaign count (primary = ai_campaigns, fallback = legacy campaigns)
+        campaign_count = 0
+        try:
+            row = await pg_query_one("SELECT COUNT(*) as count FROM ai_campaigns")
+            campaign_count = int(row["count"]) if row else 0
+        except Exception:
+            row = await pg_query_one("SELECT COUNT(*) as count FROM campaigns")
+            campaign_count = int(row["count"]) if row else 0
+        stats["total_campaigns"] = campaign_count
+
+        # Cluster count: prefer creatives.cluster_id; fallback to creative_campaigns mapping.
+        cluster_count = 0
+        try:
+            row = await pg_query_one(
+                """
+                SELECT COUNT(DISTINCT cluster_id) as count
+                FROM creatives
+                WHERE cluster_id IS NOT NULL AND cluster_id <> ''
+                """
+            )
+            cluster_count = int(row["count"]) if row else 0
+        except Exception:
+            cluster_count = 0
+
+        if cluster_count == 0:
+            try:
+                row = await pg_query_one(
+                    """
+                    SELECT COUNT(DISTINCT campaign_id) as count
+                    FROM creative_campaigns
+                    WHERE campaign_id IS NOT NULL
+                    """
+                )
+                cluster_count = int(row["count"]) if row else 0
+            except Exception:
+                cluster_count = 0
+
+        stats["total_clusters"] = cluster_count if cluster_count > 0 else campaign_count
+
+        # Friendly, non-secret DB descriptor for UI.
+        dsn = (
+            os.getenv("POSTGRES_SERVING_DSN")
+            or os.getenv("POSTGRES_DSN")
+            or os.getenv("DATABASE_URL")
+            or ""
+        )
+        db_path = "postgresql"
+        if dsn:
+            try:
+                parsed = urlparse(dsn)
+                host = parsed.hostname or "localhost"
+                port = parsed.port or 5432
+                db_name = parsed.path.lstrip("/") or "postgres"
+                db_path = f"postgresql://{host}:{port}/{db_name}"
+            except Exception:
+                db_path = "postgresql"
+        stats["db_path"] = db_path
 
         return stats
 

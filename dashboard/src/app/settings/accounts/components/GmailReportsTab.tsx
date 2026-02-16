@@ -126,6 +126,7 @@ export function GmailReportsTab() {
 
   const isConfigured = gmailStatus?.configured === true;
   const isAuthorized = gmailStatus?.authorized === true;
+  const isConnected = isConfigured && isAuthorized;
   const isImportRunning = gmailStatus?.running === true;
 
   useEffect(() => {
@@ -222,16 +223,16 @@ export function GmailReportsTab() {
           ) : (
             <span className={cn(
               "px-2 py-1 text-xs font-medium rounded",
-              isAuthorized ? "bg-green-100 text-green-800" :
+              isConnected ? "bg-green-100 text-green-800" :
               isConfigured ? "bg-yellow-100 text-yellow-800" :
               "bg-gray-100 text-gray-600"
             )}>
-              {isAuthorized ? "Connected" : isConfigured ? "Not authorized" : "Not configured"}
+              {isConnected ? "Connected" : isConfigured ? "Not authorized" : "Not configured"}
             </span>
           )}
         </div>
 
-        {isAuthorized ? (
+        {isConnected ? (
           <div className="space-y-4">
             {/* Status display */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

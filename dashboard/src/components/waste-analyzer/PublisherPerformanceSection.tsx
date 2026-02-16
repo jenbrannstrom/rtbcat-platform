@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { BarChart3, Upload, ArrowRight, Trophy, AlertCircle, TrendingUp, Ban } from "lucide-react";
 import type { PublisherPerformance } from "@/lib/api";
+import { useAccount } from "@/contexts/account-context";
+import { toBuyerScopedPath } from "@/lib/buyer-routes";
 import { formatNumber } from "./FunnelCard";
 
 interface PublisherPerformanceSectionProps {
@@ -15,6 +17,8 @@ interface PublisherPerformanceSectionProps {
  * Shows publisher win rates categorized by performance tier.
  */
 export function PublisherPerformanceSection({ publishers, seatName }: PublisherPerformanceSectionProps) {
+  const { selectedBuyerId } = useAccount();
+  const importHref = toBuyerScopedPath("/import", selectedBuyerId);
   const hasPublisherData = publishers && publishers.length > 0;
 
   if (!hasPublisherData) {
@@ -61,7 +65,7 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
                 </div>
                 <p className="mt-2 text-gray-500">Schedule: <strong>Daily</strong></p>
               </div>
-              <Link href="/setup?tab=import" className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
+              <Link href={importHref} className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
                 Go to Import → <ArrowRight className="h-3 w-3" />
               </Link>
             </div>

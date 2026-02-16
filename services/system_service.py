@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from storage.postgres_database import pg_query
+from storage.postgres_database import pg_query, pg_query_one
 
 
 @dataclass
@@ -113,7 +113,6 @@ class SystemService:
         node_available, node_version = self._get_node_version()
         ffmpeg_available, ffmpeg_version = self._get_ffmpeg_version()
 
-        # Database size not available for Postgres via file stat
         database_size_mb = 0.0
 
         # Thumbnails count
@@ -127,6 +126,12 @@ class SystemService:
         creatives_count = 0
         videos_count = 0
         try:
+            db_size_row = await pg_query_one(
+                "SELECT pg_database_size(current_database()) AS size_bytes"
+            )
+            if db_size_row and db_size_row.get("size_bytes") is not None:
+                database_size_mb = float(db_size_row["size_bytes"]) / (1024 ** 2)
+
             rows = await pg_query("SELECT COUNT(*) as cnt FROM creatives")
             creatives_count = rows[0]["cnt"] if rows else 0
             video_rows = await pg_query("SELECT COUNT(*) as cnt FROM creatives WHERE format = 'VIDEO'")
