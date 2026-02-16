@@ -467,7 +467,10 @@ class StatsResponse(BaseModel):
     """Response model for database statistics."""
     creative_count: int
     buyer_seat_count: int
+    campaign_count: int = 0
+    cluster_count: int = 0
     formats: dict[str, int]
+    db_path: str = "postgresql"
 
 
 class SizesResponse(BaseModel):
@@ -552,7 +555,10 @@ async def get_stats(store=Depends(get_store)):
     return StatsResponse(
         creative_count=stats.get("total_creatives", 0),
         buyer_seat_count=stats.get("total_buyer_seats", 0),
+        campaign_count=stats.get("total_campaigns", 0),
+        cluster_count=stats.get("total_clusters", 0),
         formats=stats.get("by_format", {}),
+        db_path=stats.get("db_path", "postgresql"),
     )
 
 
