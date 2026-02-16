@@ -1,0 +1,278 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ReviewFinding",
+  "description": "Schema for structured findings produced during the map phase of codebase review.",
+  "type": "object",
+  "required": ["id", "chunk", "severity", "finding", "evidence", "impact", "confidence"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for this finding (e.g., 'ANALYTICS-001')",
+      "pattern": "^[A-Z]+-[0-9]+$"
+    },
+    "chunk": {
+      "type": "string",
+      "description": "Which review chunk this finding belongs to",
+      "enum": [
+        "analytics_core_metrics",
+        "importers_data_normalization",
+        "storage_models_schema",
+        "api_serialization_contracts",
+        "dashboard_query_caching",
+        "recommendation_actionability",
+        "language_currency_mismatch",
+        "reliability_timeouts_retries"
+      ]
+    },
+    "severity": {
+      "type": "string",
+      "description": "Priority band for implementation",
+      "enum": ["P0", "P1", "P2", "P3", "P4"]
+    },
+    "finding": {
+      "type": "string",
+      "description": "Concise description of the issue (1-2 sentences)"
+    },
+    "evidence": {
+      "type": "array",
+      "description": "One or more file:line references proving this finding",
+      "items": {
+        "type": "object",
+        "required": ["file", "line", "description"],
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "Relative file path from repo root"
+          },
+          "line": {
+            "type": ["integer", "null"],
+            "description": "Line number (null if the evidence is an absence)"
+          },
+          "description": {
+            "type": "string",
+            "description": "What this evidence shows"
+          },
+          "code_snippet": {
+            "type": "string",
+            "description": "Optional: the relevant code fragment"
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "impact": {
+      "type": "object",
+      "description": "Quantified impact of this finding",
+      "required": ["user_facing", "data_integrity", "description"],
+      "properties": {
+        "user_facing": {
+          "type": "boolean",
+          "description": "Does this affect what the end user sees?"
+        },
+        "data_integrity": {
+          "type": "boolean",
+          "description": "Does this cause incorrect data to be stored or displayed?"
+        },
+        "runtime_crash": {
+          "type": "boolean",
+          "description": "Can this cause a crash at runtime?"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable impact description"
+        },
+        "affected_endpoints": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "API endpoints affected by this finding"
+        },
+        "affected_pages": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Dashboard pages affected by this finding"
+        }
+      }
+    },
+    "confidence": {
+      "type": "string",
+      "description": "How confident are we in this finding?",
+      "enum": ["confirmed", "high", "medium", "low", "needs_runtime_validation"]
+    },
+    "needs_runtime_validation": {
+      "type": "boolean",
+      "description": "Whether this finding requires runtime testing to fully verify",
+      "default": false
+    },
+    "dependent_chunks": {
+      "type": "array",
+      "description": "Other chunks that are affected by or depend on this finding",
+      "items": { "type": "string" }
+    },
+    "fix": {
+      "type": "object",
+      "description": "Proposed fix for this finding",
+      "properties": {
+        "approach": {
+          "type": "string",
+          "description": "How to fix this issue"
+        },
+        "files_to_modify": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Files that need to be changed"
+        },
+        "estimated_complexity": {
+          "type": "string",
+          "enum": ["trivial", "small", "medium", "large", "breaking_change"],
+          "description": "Implementation complexity"
+        },
+        "breaking_change": {
+          "type": "boolean",
+          "description": "Does this fix change API contracts or data schemas?",
+          "default": false
+        },
+        "rollback_plan": {
+          "type": "string",
+          "description": "How to rollback if the fix causes issues"
+        },
+        "acceptance_test": {
+          "type": "string",
+          "description": "How to verify the fix works"
+        }
+      }
+    },
+    "related_findings": {
+      "type": "array",
+      "description": "IDs of findings that are related or need coordinated fixes",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": false,
+
+  "examples": [
+    {
+      "id": "ANALYTICS-001",
+      "chunk": "analytics_core_metrics",
+      "severity": "P0",
+      "finding": "LOW_WIN_RATE_THRESHOLD is used but never defined in creative_analyzer.py, causing NameError at runtime.",
+      "evidence": [
+        {
+          "file": "analytics/creative_analyzer.py",
+          "line": 379,
+          "description": "Uses LOW_WIN_RATE_THRESHOLD in SQL parameter binding",
+          "code_snippet": "\"\"\"...\"\"\", (f\"-{days} days\", LOW_WIN_RATE_THRESHOLD))"
+        },
+        {
+          "file": "analytics/creative_analyzer.py",
+          "line": 31,
+          "description": "Threshold constants section — LOW_WIN_RATE_THRESHOLD is NOT defined here"
+        }
+      ],
+      "impact": {
+        "user_facing": false,
+        "data_integrity": false,
+        "runtime_crash": true,
+        "description": "Calling _check_low_win_rate() throws NameError. Latent crash — only triggers when reached_queries data exists.",
+        "affected_endpoints": ["/recommendations"],
+        "affected_pages": []
+      },
+      "confidence": "confirmed",
+      "needs_runtime_validation": false,
+      "dependent_chunks": ["recommendation_actionability"],
+      "fix": {
+        "approach": "Add LOW_WIN_RATE_THRESHOLD = 0.05 to the module constants (line ~34)",
+        "files_to_modify": ["analytics/creative_analyzer.py"],
+        "estimated_complexity": "trivial",
+        "breaking_change": false,
+        "rollback_plan": "Remove the constant definition; behavior reverts to crash",
+        "acceptance_test": "Call _check_low_win_rate(days=7) with test data and verify no NameError"
+      },
+      "related_findings": ["ANALYTICS-002"]
+    },
+    {
+      "id": "ANALYTICS-002",
+      "chunk": "analytics_core_metrics",
+      "severity": "P0",
+      "finding": "HIGH_WASTE_RATE_THRESHOLD is used but never defined in geo_analyzer.py, causing NameError at runtime.",
+      "evidence": [
+        {
+          "file": "analytics/geo_analyzer.py",
+          "line": 211,
+          "description": "Uses HIGH_WASTE_RATE_THRESHOLD in conditional check",
+          "code_snippet": "if waste_rate > HIGH_WASTE_RATE_THRESHOLD:"
+        },
+        {
+          "file": "analytics/geo_analyzer.py",
+          "line": 31,
+          "description": "Threshold constants section — HIGH_WASTE_RATE_THRESHOLD is NOT defined here"
+        }
+      ],
+      "impact": {
+        "user_facing": false,
+        "data_integrity": false,
+        "runtime_crash": true,
+        "description": "Calling _check_high_waste_geos() throws NameError. Same latent crash pattern as ANALYTICS-001.",
+        "affected_endpoints": ["/recommendations"],
+        "affected_pages": []
+      },
+      "confidence": "confirmed",
+      "needs_runtime_validation": false,
+      "dependent_chunks": ["recommendation_actionability"],
+      "fix": {
+        "approach": "Add HIGH_WASTE_RATE_THRESHOLD = 0.80 to module constants (line ~36)",
+        "files_to_modify": ["analytics/geo_analyzer.py"],
+        "estimated_complexity": "trivial",
+        "breaking_change": false,
+        "rollback_plan": "Remove the constant; behavior reverts to crash",
+        "acceptance_test": "Call _check_high_waste_geos(days=7) with test data and verify no NameError"
+      },
+      "related_findings": ["ANALYTICS-001"]
+    },
+    {
+      "id": "DASHBOARD-001",
+      "chunk": "dashboard_query_caching",
+      "severity": "P0",
+      "finding": "selectedBuyerId missing from qps-summary query key causes cross-buyer cache contamination.",
+      "evidence": [
+        {
+          "file": "dashboard/src/app/page.tsx",
+          "line": 128,
+          "description": "queryKey only includes days, not selectedBuyerId",
+          "code_snippet": "queryKey: [\"qps-summary\", days],"
+        },
+        {
+          "file": "dashboard/src/app/page.tsx",
+          "line": 129,
+          "description": "But selectedBuyerId IS passed to the API call",
+          "code_snippet": "queryFn: () => getQPSSummary(days, selectedBuyerId || undefined),"
+        },
+        {
+          "file": "dashboard/src/app/page.tsx",
+          "line": 139,
+          "description": "Contrast: rtb-funnel query DOES include selectedBuyerId correctly",
+          "code_snippet": "queryKey: [\"rtb-funnel\", days, selectedBuyerId],"
+        }
+      ],
+      "impact": {
+        "user_facing": true,
+        "data_integrity": true,
+        "runtime_crash": false,
+        "description": "When user switches buyers, QPS summary shows cached data from previous buyer. User sees wrong data.",
+        "affected_endpoints": ["/analytics/qps-summary"],
+        "affected_pages": ["/ (home page)"]
+      },
+      "confidence": "confirmed",
+      "needs_runtime_validation": false,
+      "dependent_chunks": [],
+      "fix": {
+        "approach": "Add selectedBuyerId to query key: queryKey: ['qps-summary', days, selectedBuyerId]",
+        "files_to_modify": ["dashboard/src/app/page.tsx"],
+        "estimated_complexity": "trivial",
+        "breaking_change": false,
+        "rollback_plan": "Revert the queryKey change",
+        "acceptance_test": "Switch between two buyer seats; verify QPS summary data changes immediately"
+      },
+      "related_findings": ["DASHBOARD-002"]
+    }
+  ]
+}
