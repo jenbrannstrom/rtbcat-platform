@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 MIN_GEO_SPEND_USD = 10  # Minimum spend to analyze a geo
 LOW_CTR_THRESHOLD = 0.02  # 2% CTR is below average for display ads
 CTR_UNDERPERFORM_RATIO = 0.5  # CTR less than 50% of average = underperformer
+HIGH_WASTE_RATE_THRESHOLD = 0.80  # >80% query-to-impression waste is high risk
 SECONDS_PER_DAY = 86400
 
 
