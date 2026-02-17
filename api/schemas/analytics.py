@@ -1,6 +1,6 @@
 """Analytics and waste analysis schema models."""
 
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -36,6 +36,7 @@ class WasteReportResponse(BaseModel):
     size_coverage: list[SizeCoverageResponse]
     potential_savings_qps: float
     potential_savings_usd: Optional[float]
+    qps_basis: Literal["avg_daily"] = "avg_daily"
     analysis_period_days: int
     generated_at: str
     recommendations_summary: dict = Field(default_factory=dict)
