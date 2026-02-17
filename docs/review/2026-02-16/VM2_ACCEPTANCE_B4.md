@@ -4,7 +4,8 @@
 **Target branch:** `b4/import-quality-controls`
 **Base commit:** `9c5ed3f` (origin/unified-platform)
 **Scope:** Validate B4 Import Quality Controls (`IMPORT-001`, `IMPORT-002`) — code + automated tests.
-**Run status:** Code implemented and automated tests pass locally. VM2/browser/runtime checks pending deployment.
+**Deployed SHA:** `ba47234`
+**Run status:** Code implemented, automated tests pass locally, VM2 runtime validation PASS.
 
 ---
 
@@ -106,11 +107,65 @@ python3 -m pytest tests/test_import_quality.py -v
 
 ---
 
-## 5) Runtime Stability (Pending)
+## 5) Runtime Validation (VM2)
 
-- [ ] VM2 deploy and smoke test (out of scope per instructions).
-- [ ] Import a sample CSV on VM2 and verify canonical sizes in DB.
-- [ ] Import a CSV with date gaps and verify warning in import history.
+### Deployment
+
+- [x] Branch `b4/import-quality-controls` checked out on `catscan-production-sg2`
+- [x] API container rebuilt: `sudo docker compose -f docker-compose.gcp.yml build --no-cache api`
+- [x] API restarted: `sudo docker compose -f docker-compose.gcp.yml up -d api`
+- [x] Health check confirmed: `sha-ba47234`
+
+### IMPORT-001: Size Canonicalization (Runtime)
+
+**Command:**
+```bash
+sudo docker compose -f docker-compose.gcp.yml exec api \
+  python3 tests/b4_runtime_validation.py
+```
+
+**Result: PASS** — All 8 size strings correctly canonicalized in live DB:
+
+| Creative ID | Raw Input       | Expected                      | Actual                        | Status |
+|-------------|-----------------|-------------------------------|-------------------------------|--------|
+| cr_001      | `300x250`       | `300x250 (Medium Rectangle)`  | `300x250 (Medium Rectangle)`  | OK     |
+| cr_002      | `300 X 250`     | `300x250 (Medium Rectangle)`  | `300x250 (Medium Rectangle)`  | OK     |
+| cr_003      | `320×50`        | `320x50 (Mobile Banner)`      | `320x50 (Mobile Banner)`      | OK     |
+| cr_004      | `298x250`       | `300x250 (Medium Rectangle)`  | `300x250 (Medium Rectangle)`  | OK     |
+| cr_005      | `123x456`       | `Non-Standard (123x456)`      | `Non-Standard (123x456)`      | OK     |
+| cr_006      | `Native`        | `Native`                      | `Native`                      | OK     |
+| cr_007      | `Video/Overlay` | `Video/Overlay`               | `Video/Overlay`               | OK     |
+| cr_008      | `interstitial`  | `interstitial`                | `interstitial`                | OK     |
+
+### IMPORT-002: Date Gap Detection (Runtime)
+
+**Gap test result: PASS**
+- Input dates: `2026-02-10`, `2026-02-12`, `2026-02-14`
+- Expected gaps: `[2026-02-11, 2026-02-13]`
+- Actual gaps: `[2026-02-11, 2026-02-13]`
+- Warning present: yes
+- Verdict: gaps correctly detected
+
+**No-gap control result: PASS**
+- Input dates: `2026-02-10`, `2026-02-11`, `2026-02-12`
+- Gaps detected: none
+- Warning present: no
+- Verdict: no false positives
+
+### Overall Runtime Verdict
+
+```
+IMPORT-001:          PASS
+IMPORT-002 (gap):    PASS
+IMPORT-002 (no-gap): PASS
+OVERALL:             GO
+```
+
+### Regression / Safety
+
+- [x] API health check: `sha-ba47234` confirmed
+- [x] API logs: zero errors related to B4 changes
+- [x] No regressions observed in existing import paths
 
 ---
 
@@ -118,9 +173,9 @@ python3 -m pytest tests/test_import_quality.py -v
 
 - [x] Code changes: **PASS** (IMPORT-001 + IMPORT-002 implemented)
 - [x] Automated tests: **PASS** (26/26)
-- [ ] VM2 runtime validation: **PENDING** (deployment not requested)
+- [x] VM2 runtime validation: **PASS** (3/3 checks)
 
-**Outcome: GO (code + tests).** Runtime validation deferred until VM2 deployment is requested.
+**Outcome: GO.** All code, test, and runtime validation checks pass.
 
 ---
 
@@ -133,6 +188,11 @@ python3 -m pytest tests/test_import_quality.py -v
 | IMPORT-002 implementation | 2026-02-17 ~19:55 | PASS | `check_date_continuity()` + `_apply_date_continuity()` across all 4 import functions |
 | Automated tests written | 2026-02-17 ~20:00 | PASS | 26 tests covering canonicalization, gap detection, result population |
 | `pytest tests/test_import_quality.py -v` | 2026-02-17 ~20:05 | PASS | 26/26 passed in 0.91s |
+| VM2 deploy (`sha-ba47234`) | 2026-02-17 ~21:00 | PASS | Branch checked out, container rebuilt, health confirmed |
+| IMPORT-001 runtime (8 size rows) | 2026-02-17 ~21:10 | PASS | All 8 canonicalizations correct in live DB |
+| IMPORT-002 runtime (gap detection) | 2026-02-17 ~21:10 | PASS | Gaps `[2026-02-11, 2026-02-13]` correctly detected |
+| IMPORT-002 runtime (no-gap control) | 2026-02-17 ~21:10 | PASS | No false positives on contiguous data |
+| API log check | 2026-02-17 ~21:15 | PASS | Zero errors in API logs |
 
 ---
 
@@ -142,4 +202,8 @@ python3 -m pytest tests/test_import_quality.py -v
 |---|---|
 | `importers/unified_importer.py` | Added `canonicalize_size_string()`, `check_date_continuity()`, `_apply_date_continuity()`; applied canonicalization in `import_to_rtb_daily()`; added `observed_dates` tracking + continuity check in all 4 import functions; extended `UnifiedImportResult` with `date_gaps` + `date_gap_warning` |
 | `tests/test_import_quality.py` | New file: 26 tests for IMPORT-001 + IMPORT-002 |
+| `tests/b4_runtime_validation.py` | New file: VM2 runtime validation script (3 controlled imports) |
+| `tests/fixtures/b4_size_canonicalization.csv` | New fixture: 8 rows with mixed size formats |
+| `tests/fixtures/b4_date_gap.csv` | New fixture: 3 rows with date gaps |
+| `tests/fixtures/b4_date_contiguous.csv` | New fixture: 3 rows contiguous dates |
 | `docs/review/2026-02-16/VM2_ACCEPTANCE_B4.md` | This acceptance checklist |
