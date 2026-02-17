@@ -125,7 +125,7 @@ function WasteAnalysisContent() {
     isLoading: summaryLoading,
     refetch: refetchSummary,
   } = useQuery({
-    queryKey: ["qps-summary", days],
+    queryKey: ["qps-summary", days, selectedBuyerId],
     queryFn: () => getQPSSummary(days, selectedBuyerId || undefined),
     enabled: seatReady,
   });
