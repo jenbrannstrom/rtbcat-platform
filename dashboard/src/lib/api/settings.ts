@@ -152,7 +152,7 @@ export async function getPretargetingConfigs(params?: {
   const query = searchParams.toString();
   return fetchApi<PretargetingConfigResponse[]>(
     `/settings/pretargeting${query ? `?${query}` : ""}`,
-    { timeoutMs: 10000 }
+    { timeoutMs: 30000 }
   );
 }
 
