@@ -227,11 +227,11 @@
 
 ## P3 — Missing Spec Features
 
-### Finding 12: Language mismatch — backend done, dashboard not wired
+### Finding 12: Language mismatch — backend done, dashboard surface is partial
 
 **Review Claim:** Backend has complete language-country mismatch detection but dashboard never calls the endpoint.
 
-**Status: CONFIRMED**
+**Status: CHANGED**
 
 **Evidence:**
 - **Backend complete:**
@@ -239,11 +239,14 @@
   - `utils/language_country_map.py` — `check_language_country_match()`, `get_mismatch_alert()` implemented
   - `api/routers/creatives.py` — `GET /creatives/{creative_id}/geo-mismatch` endpoint registered
   - `dashboard/src/lib/api/creatives.ts` — `getCreativeGeoMismatch(id)` client function exists
-- **Dashboard NOT wired:**
-  - Searched dashboard components for `geo-mismatch`, `getCreativeGeoMismatch` usage — the function exists in the API client but is not called from any page component or creative card
-  - Creative cards show `detected_language` but do NOT show mismatch alerts
+- **Dashboard partially wired:**
+  - `dashboard/src/components/preview-modal/LanguageSection.tsx:29` — preview modal calls `getCreativeGeoMismatch(creative.id, 7)`
+  - `dashboard/src/components/creative-card.tsx:222` — creative cards show language labels but do NOT surface mismatch alerts
+  - Main creative browsing surfaces still lack mismatch visibility despite preview-level integration
 
-**Severity:** MEDIUM — feature gap, backend work wasted
+**Impact:** Feature is partially available (preview modal) but not visible in core triage surfaces.
+
+**Severity:** MEDIUM — partial feature gap
 
 ---
 
@@ -266,15 +269,15 @@
 
 **Review Claim:** Recommendations are generated but there are no "Apply" buttons to execute them.
 
-**Status: NEEDS RUNTIME VALIDATION**
+**Status: CONFIRMED**
 
 **Evidence:**
 - `api/routers/recommendations.py` — has `POST /recommendations/{id}/resolve` but this marks as resolved, not "apply"
 - `api/routers/settings/actions.py` — has `POST /settings/pretargeting/{billing_id}/apply` which CAN apply changes
-- `dashboard/src/components/recommendations/recommendation-card.tsx` — need to check if it renders an "Apply" button vs only "Resolve"
+- `dashboard/src/components/recommendations/recommendation-card.tsx:243-255` — action buttons are "Mark Resolved" and "Dismiss"; no "Apply" action wiring
 - The recommendation schema (`api/schemas/recommendations.py`) includes `ActionResponse` with `action_type`, `api_example` — the data structure supports it
 
-**Partial evidence:** The pretargeting settings page DOES have apply/suspend/activate buttons. The recommendation cards likely show "Resolve" (acknowledge) but not "Apply" (execute the action). Needs UI verification.
+**Note:** The pretargeting settings page has apply/suspend/activate controls, but recommendation cards do not execute those APIs directly.
 
 **Severity:** MEDIUM — UX gap, manual workflow required
 
@@ -348,8 +351,8 @@
 |--------|-------|
 | **CONFIRMED** | 14 |
 | **NOT FOUND** | 0 |
-| **CHANGED** | 0 |
-| **NEEDS RUNTIME** | 4 |
+| **CHANGED** | 1 |
+| **NEEDS RUNTIME** | 3 |
 
 ### Top 10 Validated Findings (by severity)
 
@@ -364,4 +367,4 @@
 | 7 | Hardcoded CPM $0.002/1000 | `analytics/waste_analyzer.py:40` | MEDIUM |
 | 8 | QPS average vs peak misrepresentation | `analytics/waste_analyzer.py:339-340` | MEDIUM |
 | 9 | Size canonicalization not in import pipeline | `importers/` (absent) | MEDIUM |
-| 10 | Language mismatch not wired to dashboard | `services/creative_language_service.py:115` (unused by UI) | MEDIUM |
+| 10 | Language mismatch only surfaced in preview modal | `dashboard/src/components/preview-modal/LanguageSection.tsx:29` + `dashboard/src/components/creative-card.tsx:222` | MEDIUM |

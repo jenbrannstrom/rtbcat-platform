@@ -155,6 +155,8 @@ Each chunk reviewer answers a fixed set of questions and produces structured fin
 | 3 | `FINDINGS_VALIDATION.md` | Claim-by-claim validation with evidence |
 | 4 | `FINDINGS_SCHEMA.json` | Structured schema for map-phase findings |
 | 5 | `COUNCIL_MASTER_PROMPT.md` | Council-ready prompt package for implementation planning |
+| 6 | `MAP_PHASE_FINDINGS.json` | Normalized findings dataset (P0-P4 + chunk labels) |
+| 7 | `REDUCE_PHASE_SUMMARY.md` | Deduped clusters, contradiction resolution, and execution batches |
 
 ---
 
