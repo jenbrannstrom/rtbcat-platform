@@ -115,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAuth = useCallback(async () => {
     // DEV BYPASS: skip auth when backend is not running
     if (process.env.NODE_ENV === "development") {
-      setUser({ id: "dev", email: "dev@localhost", name: "Dev User", role: "admin" } as User);
+      setUser({ id: "dev", email: "dev@localhost", display_name: "Dev User", role: "admin", is_admin: true });
       setPermissions(["admin", "read", "write"]);
       setAuthError(null);
       resetRedirectCount();
