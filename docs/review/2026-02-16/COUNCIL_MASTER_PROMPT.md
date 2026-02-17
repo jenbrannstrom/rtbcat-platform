@@ -77,7 +77,7 @@ Creatives, Pretargeting Configs, Endpoints      Performance CSVs (5 report types
 
 | # | Finding | Evidence | Impact |
 |---|---------|----------|--------|
-| **F13** | Language mismatch — backend done, dashboard not wired | `services/creative_language_service.py:115-157` — `get_geo_mismatch()` complete; `dashboard/src/lib/api/creatives.ts` has `getCreativeGeoMismatch()` but no component calls it | Feature exists but invisible. German-language creative targeting Brazil gets no warning. |
+| **F13** | Language mismatch — backend done, dashboard only partially surfaced | `services/creative_language_service.py:115-157` — `get_geo_mismatch()` complete; `dashboard/src/components/preview-modal/LanguageSection.tsx:29` calls `getCreativeGeoMismatch()`; `dashboard/src/components/creative-card.tsx:222` lacks mismatch alert surface | Feature exists but is mostly hidden in preview flow; mismatch context is missing from primary triage surfaces. |
 | **F14** | Currency mismatch — not implemented | `storage/models.py` — no `currency_code` field; no currency-country mapping | Entirely missing feature from spec. |
 | **F15** | No "Apply" buttons on recommendations | Recommendations generated with full `Action` objects but UI only shows "Resolve" (acknowledge) | User must manually implement recommendations in Google's UI. |
 
@@ -99,7 +99,7 @@ Creatives, Pretargeting Configs, Endpoints      Performance CSVs (5 report types
 
 2. **F7 (Race condition)**: When `selectedBuyerId` is loaded from localStorage on mount, does it trigger queries before the AccountContext is fully initialized? Need to check hydration timing.
 
-3. **F15 (Apply buttons)**: The pretargeting settings page HAS apply/suspend/activate buttons — do these also appear in the recommendations panel? Need to check `recommendation-card.tsx` rendering.
+3. **F15 (Apply workflow design)**: Recommendation cards currently expose "Resolve/Dismiss" only. Should recommendations invoke settings apply endpoints directly, or remain advisory with explicit handoff?
 
 4. **Precompute staleness**: When BQ precompute fails silently, does the UI show stale data indicators prominently enough for the user to notice?
 

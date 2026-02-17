@@ -295,13 +295,13 @@ dashboard/src/lib/api/creatives.ts  (language/geo-mismatch section)
 - **Maps:** `utils/language_country_map.py` (40+ language-country pairs)
 
 ### Likely Failure Modes
-1. **Dashboard never calls geo-mismatch** — backend done, frontend not wired (CONFIRMED)
+1. **Geo-mismatch is only partially surfaced** — preview modal calls geo-mismatch, but card/list triage surfaces do not show mismatch alerts (CONFIRMED)
 2. **No currency field** — creative model has no `currency_code` (CONFIRMED)
 3. **Gemini API unavailable** — no fallback for language detection when Gemini is down
 4. **Incomplete country map** — some RTB-heavy countries may be missing
 
 ### Verification Checks
-- [ ] `getCreativeGeoMismatch()` is called in creative card/list rendering
+- [ ] `getCreativeGeoMismatch()` (or equivalent mismatch data flow) is surfaced in creative card/list triage rendering, not only preview modal
 - [ ] Currency mismatch has a data model (creative.currency_code field)
 - [ ] Language detection has a non-Gemini fallback
 - [ ] Country-language map covers top 40 RTB traffic countries
