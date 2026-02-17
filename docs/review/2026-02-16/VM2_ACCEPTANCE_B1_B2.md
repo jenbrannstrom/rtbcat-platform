@@ -2,9 +2,9 @@
 
 **Date:** 2026-02-17  
 **Target branch:** `unified-platform`  
-**Target commit:** `b45644c`  
+**Target commit:** `b45644c` (baseline) → `77d0407` (rerun)
 **Scope:** Validate B1 (crash/cache guardrails) and B2 (dashboard reliability)
-**Run status:** Baseline run captured before follow-up reliability fixes; rerun required for final GO/NO-GO.
+**Run status:** Rerun completed at `sha-77d0407`. Same 2 failures persist — Checks 3 & 5 unchanged.
 
 ---
 
@@ -129,3 +129,15 @@ docker compose logs api --since 30m | rg -n "NameError|LOW_WIN_RATE_THRESHOLD|HI
 | B2 Metrics fallback | Claude | 2026-02-17 ~04:15 | 2026-02-17 ~04:20 | **PASS** | Warning banner shown ("metrics are delayed"); placeholders (`--`/`No data`) correct; wording differs from spec |
 | B2 Transient retries | Claude | 2026-02-17 ~04:20 | 2026-02-17 ~04:30 | **FAIL** | 1 attempt each for pretargeting + configs; no automatic retry after 8s block lifted; page stuck in failed state 23s+ later |
 | B1 Analyzer logs | Claude | 2026-02-17 ~04:30 | 2026-02-17 ~04:35 | **PASS** | 0 matches for NameError/threshold tracebacks in 30m of API logs (via IAP tunnel) |
+
+### Rerun at `sha-77d0407` (2026-02-17 ~05:30 UTC)
+
+| Check | Tester | Result | Notes |
+|---|---|---|---|
+| B1 Buyer-switch cache | Claude | **PASS** | Buyer A→B→A: data always matches current buyer, no stale data |
+| B2 Seat retry UX | Claude | **FAIL** | Still shows "No seats connected" / "Go to Settings to connect"; no error banner, no Retry button |
+| B2 Metrics fallback | Claude | **PASS** | Warning banner + `--`/`No data` placeholders correct |
+| B2 Transient retries | Claude | **FAIL** | 1 attempt each, 0 retries after 8s block lifted; stuck at "Pretargeting Configs (0 active)" 42s later |
+| B1 Analyzer logs | Claude | **PASS** | 0 matches in 30m API logs (IAP tunnel, project `catscan-prod-202601`) |
+
+**Rerun verdict: NO-GO** — same 2 failures (Checks 3, 5). Fix in `77d0407` did not reach the `[buyerId]/page.tsx` component where seat/retry logic is needed.
