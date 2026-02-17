@@ -45,6 +45,10 @@ const SIDEBAR_SETTINGS_EXPANDED_KEY = "rtbcat-sidebar-settings-expanded";
 const SIDEBAR_ADMIN_EXPANDED_KEY = "rtbcat-sidebar-admin-expanded";
 const SIDEBAR_QPS_EXPANDED_KEY = "rtbcat-sidebar-qps-expanded";
 
+function getRetryDelay(attemptIndex: number): number {
+  return Math.min(1000 * 2 ** attemptIndex, 5000);
+}
+
 // Main navigation items
 const navigationItems = [
   { key: "creatives" as const, href: "/clusters", icon: Image },
@@ -177,9 +181,17 @@ export function Sidebar() {
     localStorage.setItem(SIDEBAR_QPS_EXPANDED_KEY, String(newValue));
   };
 
-  const { data: seats } = useQuery({
+  const {
+    data: seats,
+    isError: seatsError,
+    refetch: refetchSeats,
+  } = useQuery({
     queryKey: ["seats"],
     queryFn: () => getSeats({ active_only: true }),
+    retry: 5,
+    retryDelay: getRetryDelay,
+    retryOnMount: true,
+    refetchOnReconnect: true,
   });
 
   const syncMutation = useMutation({
@@ -270,6 +282,16 @@ export function Sidebar() {
             <div className="h-6 w-6 mx-auto rounded-full bg-primary-100 flex items-center justify-center text-xs font-medium text-primary-700">
               {seats?.length === 1 ? (seats[0].display_name?.charAt(0) || "S") : (seats?.length || 0)}
             </div>
+          </div>
+        ) : seatsError ? (
+          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <p className="font-medium">Unable to load seats</p>
+            <button
+              onClick={() => refetchSeats()}
+              className="mt-2 px-2 py-1 text-xs font-medium rounded bg-red-100 hover:bg-red-200"
+            >
+              Retry
+            </button>
           </div>
         ) : !seats || seats.length === 0 ? (
           /* No seats - show connect message */

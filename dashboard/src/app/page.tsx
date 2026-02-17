@@ -80,7 +80,7 @@ function WasteAnalysisContent() {
   } = useQuery({
     queryKey: ["seats"],
     queryFn: () => getSeats({ active_only: true }),
-    retry: 2,
+    retry: 5,
     retryDelay: getRetryDelay,
     staleTime: 60_000,
   });
@@ -176,8 +176,10 @@ function WasteAnalysisContent() {
     queryKey: ["pretargeting-configs", selectedBuyerId],
     queryFn: () => getPretargetingConfigs({ buyer_id: selectedBuyerId || undefined }),
     enabled: seatReady,
-    retry: 2,
+    retry: 5,
     retryDelay: getRetryDelay,
+    retryOnMount: true,
+    refetchOnReconnect: true,
   });
 
   // Fetch config-level performance data (filtered by selected buyer)
@@ -191,8 +193,10 @@ function WasteAnalysisContent() {
     queryKey: ["rtb-funnel-configs", days, selectedBuyerId],
     queryFn: () => getRTBFunnelConfigs(days, selectedBuyerId || undefined),
     enabled: seatReady,
-    retry: 2,
+    retry: 5,
     retryDelay: getRetryDelay,
+    retryOnMount: true,
+    refetchOnReconnect: true,
   });
 
   const { data: endpointEfficiency, isLoading: endpointEfficiencyLoading } = useQuery({
