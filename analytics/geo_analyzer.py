@@ -16,6 +16,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 
+from analytics.cost_estimator import resolve_request_cost_per_1000
 from analytics.recommendation_engine import (
     Action,
     Confidence,
@@ -186,6 +187,7 @@ class GeoAnalyzer:
     async def _check_high_waste_geos(self, days: int) -> list[Recommendation]:
         """Check for geos with high query volume but low impression rate."""
         recommendations: list[Recommendation] = []
+        request_cost_per_1000 = await resolve_request_cost_per_1000(days=days)
 
         results = await db_query("""
             SELECT
@@ -236,7 +238,7 @@ class GeoAnalyzer:
                         wasted_queries_daily=int(wasted_daily),
                         wasted_spend_usd=0,
                         percent_of_total_waste=0,
-                        potential_savings_monthly=wasted_daily * 30 * 0.002 / 1000,
+                        potential_savings_monthly=(wasted_daily * 30 / 1000) * request_cost_per_1000,
                     ),
                     actions=[
                         Action(
