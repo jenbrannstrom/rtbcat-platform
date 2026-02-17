@@ -11,6 +11,7 @@ This is the recommended importer for all CSVs.
 import csv
 import os
 import hashlib
+import re
 import uuid
 import logging
 from typing import Any, Dict, List, Optional, Tuple
@@ -19,12 +20,15 @@ from dataclasses import dataclass, field
 import psycopg
 from psycopg.rows import dict_row
 
+from datetime import date, timedelta
+
 from importers.flexible_mapper import (
     map_columns, detect_best_report_type, get_default_value, MappingResult
 )
 from importers.domain_rollup import rollup_domains
 from importers.parquet_pipeline import ParquetExportManager
 from importers.utils import parse_date, parse_float, parse_int
+from utils.size_normalization import canonical_size_with_tolerance
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +88,10 @@ class UnifiedImportResult:
     # Metadata
     batch_id: str = ""
 
+    # Date continuity (IMPORT-002)
+    date_gaps: List[str] = field(default_factory=list)
+    date_gap_warning: Optional[str] = None
+
     # Errors
     errors: List[str] = field(default_factory=list)
 
@@ -100,6 +108,85 @@ def get_value(row: Dict, mapping: MappingResult, db_field: str, default: str = "
     if csv_col and csv_col in row:
         return row[csv_col].strip()
     return default
+
+
+_SIZE_SEPARATORS = re.compile(r"[xX×]")
+
+
+def canonicalize_size_string(raw: str) -> str:
+    """Parse a raw size string and return the canonical IAB category.
+
+    Handles formats like ``"300x250"``, ``"300 x 250"``, ``"300X250"``,
+    ``"Native"``, ``"Video/Overlay"``, etc.  Falls back to the original
+    (stripped) string when parsing fails so existing behaviour is preserved.
+    """
+    stripped = raw.strip()
+    if not stripped or stripped.lower() in ("unknown", "native", "video/overlay"):
+        return stripped
+
+    # Try WxH split
+    parts = _SIZE_SEPARATORS.split(stripped)
+    if len(parts) == 2:
+        try:
+            w = int(parts[0].strip())
+            h = int(parts[1].strip())
+            return canonical_size_with_tolerance(w, h)
+        except (ValueError, TypeError):
+            pass
+    return stripped
+
+
+def check_date_continuity(
+    observed_dates: set,
+    date_range_start: Optional[str],
+    date_range_end: Optional[str],
+) -> List[str]:
+    """Return a sorted list of YYYY-MM-DD strings for missing days.
+
+    ``observed_dates`` is a set of YYYY-MM-DD strings actually seen during
+    import.  The function generates the expected contiguous range from
+    *date_range_start* to *date_range_end* (inclusive) and returns any days
+    that were expected but absent.  Returns an empty list when the range is
+    invalid, absent, or fully covered.
+    """
+    if not date_range_start or not date_range_end:
+        return []
+    try:
+        start = date.fromisoformat(date_range_start)
+        end = date.fromisoformat(date_range_end)
+    except (ValueError, TypeError):
+        return []
+    if start > end:
+        return []
+
+    expected = set()
+    d = start
+    while d <= end:
+        expected.add(d.isoformat())
+        d += timedelta(days=1)
+
+    missing = sorted(expected - observed_dates)
+    return missing
+
+
+def _apply_date_continuity(
+    result: "UnifiedImportResult",
+    observed_dates: set,
+    min_date: Optional[str],
+    max_date: Optional[str],
+) -> None:
+    """Populate *result* with date range and any continuity gaps."""
+    result.date_range_start = min_date
+    result.date_range_end = max_date
+    gaps = check_date_continuity(observed_dates, min_date, max_date)
+    if gaps:
+        result.date_gaps = gaps
+        result.date_gap_warning = (
+            f"Import covers {min_date} to {max_date} but is missing "
+            f"{len(gaps)} expected day(s): {', '.join(gaps[:5])}"
+            + (f" (and {len(gaps) - 5} more)" if len(gaps) > 5 else "")
+        )
+        logger.warning("Date continuity gap: %s", result.date_gap_warning)
 
 
 def parse_bidder_id_from_filename(filename: str) -> Optional[str]:
@@ -322,6 +409,7 @@ def import_to_rtb_daily(
         "country", "publisher_id", "buyer_account_id", "bidder_id",
     ]
     min_date, max_date = None, None
+    observed_dates: set = set()
 
     insert_sql = """
         INSERT INTO rtb_daily (
@@ -366,6 +454,7 @@ def import_to_rtb_daily(
                         min_date = metric_date
                     if max_date is None or metric_date > max_date:
                         max_date = metric_date
+                    observed_dates.add(metric_date)
 
                     # Build row data with defaults
                     row_data = {
@@ -373,7 +462,9 @@ def import_to_rtb_daily(
                         "hour": parse_int(get_value(row, mapping, "hour", "0")),
                         "billing_id": get_value(row, mapping, "billing_id", "unknown"),
                         "creative_id": get_value(row, mapping, "creative_id", ""),
-                        "creative_size": get_value(row, mapping, "creative_size", "unknown"),
+                        "creative_size": canonicalize_size_string(
+                            get_value(row, mapping, "creative_size", "unknown")
+                        ),
                         "creative_format": get_value(row, mapping, "creative_format", ""),
                         "country": get_value(row, mapping, "country", ""),
                         "platform": get_value(row, mapping, "platform", ""),
@@ -453,8 +544,7 @@ def import_to_rtb_daily(
         flush_rows()
         conn.commit()
         result.success = True
-        result.date_range_start = min_date
-        result.date_range_end = max_date
+        _apply_date_continuity(result, observed_dates, min_date, max_date)
 
     except Exception as e:
         result.error_message = str(e)
@@ -482,6 +572,7 @@ def import_to_rtb_bidstream(
 
     hash_keys = ["metric_date", "hour", "country", "buyer_account_id", "publisher_id", "bidder_id"]
     min_date, max_date = None, None
+    observed_dates: set = set()
 
     insert_sql = """
         INSERT INTO rtb_bidstream (
@@ -522,6 +613,7 @@ def import_to_rtb_bidstream(
                         min_date = metric_date
                     if max_date is None or metric_date > max_date:
                         max_date = metric_date
+                    observed_dates.add(metric_date)
 
                     row_data = {
                         "metric_date": metric_date,
@@ -584,8 +676,7 @@ def import_to_rtb_bidstream(
         flush_rows()
         conn.commit()
         result.success = True
-        result.date_range_start = min_date
-        result.date_range_end = max_date
+        _apply_date_continuity(result, observed_dates, min_date, max_date)
 
     except Exception as e:
         result.error_message = str(e)
@@ -612,6 +703,7 @@ def import_to_rtb_bid_filtering(
 
     hash_keys = ["metric_date", "country", "filtering_reason", "creative_id", "bidder_id"]
     min_date, max_date = None, None
+    observed_dates: set = set()
 
     insert_sql = """
         INSERT INTO rtb_bid_filtering (
@@ -653,6 +745,7 @@ def import_to_rtb_bid_filtering(
                         min_date = metric_date
                     if max_date is None or metric_date > max_date:
                         max_date = metric_date
+                    observed_dates.add(metric_date)
 
                     row_data = {
                         "metric_date": metric_date,
@@ -704,8 +797,7 @@ def import_to_rtb_bid_filtering(
         flush_rows()
         conn.commit()
         result.success = True
-        result.date_range_start = min_date
-        result.date_range_end = max_date
+        _apply_date_continuity(result, observed_dates, min_date, max_date)
 
     except Exception as e:
         result.error_message = str(e)
@@ -750,6 +842,7 @@ def import_to_web_domain_daily(
         )
 
     min_date, max_date = None, None
+    observed_dates: set = set()
     all_rows: list[dict] = []
 
     try:
@@ -769,6 +862,7 @@ def import_to_web_domain_daily(
                         min_date = metric_date
                     if max_date is None or metric_date > max_date:
                         max_date = metric_date
+                    observed_dates.add(metric_date)
 
                     buyer_account_id = get_value(row, mapping, "buyer_account_id", "")
                     if not buyer_account_id and bidder_id:
@@ -883,8 +977,7 @@ def import_to_web_domain_daily(
         flush_rows()
         conn.commit()
         result.success = True
-        result.date_range_start = min_date
-        result.date_range_end = max_date
+        _apply_date_continuity(result, observed_dates, min_date, max_date)
 
     except Exception as e:
         result.error_message = str(e)
