@@ -46,6 +46,8 @@ class ImportHistoryEntry:
     billing_ids_found: Optional[list[str]]
     columns_found: Optional[list[str]]
     columns_missing: Optional[list[str]]
+    date_gaps: Optional[list[str]]
+    date_gap_warning: Optional[str]
 
 
 @dataclass
@@ -163,6 +165,7 @@ class UploadsService:
 
             columns_found = self._split_columns(row.get("columns_found"))
             columns_missing = self._split_columns(row.get("columns_missing"))
+            date_gaps = self._parse_date_gaps(row.get("date_gaps"))
 
             results.append(ImportHistoryEntry(
                 batch_id=row["batch_id"],
@@ -182,6 +185,8 @@ class UploadsService:
                 billing_ids_found=billing_ids,
                 columns_found=columns_found,
                 columns_missing=columns_missing,
+                date_gaps=date_gaps,
+                date_gap_warning=row.get("date_gap_warning"),
             ))
 
         return results
@@ -300,6 +305,25 @@ class UploadsService:
             return None
         columns = [col.strip() for col in value.split(",") if col.strip()]
         return columns or None
+
+    @staticmethod
+    def _parse_date_gaps(value: Any) -> Optional[list[str]]:
+        """Parse date_gaps field from JSON/text into a list of YYYY-MM-DD strings."""
+        if not value:
+            return None
+        if isinstance(value, list):
+            return [str(v) for v in value if v]
+        if isinstance(value, str):
+            # Preferred storage is JSON array text.
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list):
+                    return [str(v) for v in parsed if v]
+            except json.JSONDecodeError:
+                # Legacy fallback: comma-separated dates.
+                gaps = [part.strip() for part in value.split(",") if part.strip()]
+                return gaps or None
+        return None
 
     @staticmethod
     def _parse_single_billing_ids(value: Any) -> Optional[list[str]]:
