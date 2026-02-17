@@ -538,7 +538,7 @@ export async function getRTBFunnelConfigs(
   if (buyerId) params.set('buyer_id', buyerId);
   return fetchApi<ConfigPerformanceResponse>(
     `/analytics/home/configs?${params}`,
-    { timeoutMs: 12000 }
+    { timeoutMs: 30000 }
   );
 }
 
@@ -550,7 +550,7 @@ export async function getEndpointEfficiency(
   if (buyerId) params.set("buyer_id", buyerId);
   return fetchApi<EndpointEfficiencyResponse>(
     `/analytics/home/endpoint-efficiency?${params.toString()}`,
-    { timeoutMs: 12000 }
+    { timeoutMs: 30000 }
   );
 }
 
