@@ -25,6 +25,7 @@ export interface PretargetingConfig {
   win_rate: number;
   waste_rate: number;
   has_performance: boolean;
+  metrics_delayed?: boolean;
 }
 
 interface PretargetingConfigCardProps {
@@ -295,7 +296,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
         {/* Metrics summary */}
         <div className="flex items-center gap-4 text-xs shrink-0">
           <span className="text-gray-600 w-16 text-right">
-            {formatNumber(config.reached)}
+            {config.has_performance ? formatNumber(config.reached) : '--'}
           </span>
           {config.has_performance ? (
             <>
@@ -376,13 +377,13 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
               <div className="bg-white rounded-lg p-3 border">
                 <div className="text-xs text-gray-500 mb-1">Reached</div>
                 <div className="text-xl font-bold text-gray-900">
-                  {formatNumber(config.reached)}
+                  {config.has_performance ? formatNumber(config.reached) : '--'}
                 </div>
               </div>
               <div className="bg-white rounded-lg p-3 border">
                 <div className="text-xs text-gray-500 mb-1">Impressions</div>
                 <div className="text-xl font-bold text-gray-900">
-                  {formatNumber(config.impressions)}
+                  {config.has_performance ? formatNumber(config.impressions) : '--'}
                 </div>
               </div>
               <div className="bg-white rounded-lg p-3 border">

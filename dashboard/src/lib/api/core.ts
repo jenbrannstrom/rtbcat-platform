@@ -6,7 +6,7 @@
 import type { Stats, Health, SizesResponse } from "@/types/api";
 
 export const API_BASE = "/api";
-const DEFAULT_API_TIMEOUT_MS = 15000;
+const DEFAULT_API_TIMEOUT_MS = 30000;
 
 export interface FetchApiOptions extends RequestInit {
   timeoutMs?: number;
