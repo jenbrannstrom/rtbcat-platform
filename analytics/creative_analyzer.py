@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 MIN_IMPRESSIONS_FOR_ANALYSIS = 1000  # Need enough data
 ZERO_ENGAGEMENT_CTR_THRESHOLD = 0.001  # < 0.1% CTR = zero engagement
 LOW_CTR_RATIO = 0.3  # CTR less than 30% of average = underperformer
+LOW_WIN_RATE_THRESHOLD = 0.05  # <5% win rate triggers low-win recommendation
 MIN_SPEND_FOR_REVIEW = 10  # $10+ spend to flag for review
 SECONDS_PER_DAY = 86400
 
