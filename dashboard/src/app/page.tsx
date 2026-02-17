@@ -23,22 +23,6 @@ const PERIOD_OPTIONS = [
   { value: 30, label: "30 days" },
 ];
 
-const TRANSIENT_ERROR_MARKERS = [
-  "timed out",
-  "timeout",
-  "cannot connect",
-  "unavailable",
-  "network",
-  "failed to fetch",
-];
-
-function shouldRetryTransientQuery(failureCount: number, error: unknown): boolean {
-  if (failureCount >= 2) return false;
-  if (!(error instanceof Error)) return true;
-  const message = error.message.toLowerCase();
-  return TRANSIENT_ERROR_MARKERS.some((marker) => message.includes(marker));
-}
-
 function getRetryDelay(attemptIndex: number): number {
   return Math.min(1000 * 2 ** attemptIndex, 5000);
 }
@@ -96,7 +80,7 @@ function WasteAnalysisContent() {
   } = useQuery({
     queryKey: ["seats"],
     queryFn: () => getSeats({ active_only: true }),
-    retry: shouldRetryTransientQuery,
+    retry: 2,
     retryDelay: getRetryDelay,
     staleTime: 60_000,
   });
@@ -192,7 +176,7 @@ function WasteAnalysisContent() {
     queryKey: ["pretargeting-configs", selectedBuyerId],
     queryFn: () => getPretargetingConfigs({ buyer_id: selectedBuyerId || undefined }),
     enabled: seatReady,
-    retry: shouldRetryTransientQuery,
+    retry: 2,
     retryDelay: getRetryDelay,
   });
 
@@ -207,7 +191,7 @@ function WasteAnalysisContent() {
     queryKey: ["rtb-funnel-configs", days, selectedBuyerId],
     queryFn: () => getRTBFunnelConfigs(days, selectedBuyerId || undefined),
     enabled: seatReady,
-    retry: shouldRetryTransientQuery,
+    retry: 2,
     retryDelay: getRetryDelay,
   });
 
@@ -384,7 +368,18 @@ function WasteAnalysisContent() {
 
       {/* Content area with padding */}
       <div className="p-6 space-y-4">
-      {!seatReady && (
+      {seatsError && (
+        <div className="flex items-center justify-between gap-3 text-red-800 bg-red-50 border border-red-200 rounded px-3 py-2">
+          <span>Unable to load buyer seats. Retry to continue.</span>
+          <button
+            onClick={() => refetchSeats()}
+            className="px-2 py-1 text-xs font-medium rounded bg-red-100 hover:bg-red-200"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      {!seatReady && !seatsError && (
         <div className="rounded-lg p-4 text-sm border">
           {seatsLoading && (
             <div className="flex items-center gap-2 text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2">
@@ -392,23 +387,12 @@ function WasteAnalysisContent() {
               <span>Loading seat access...</span>
             </div>
           )}
-          {!seatsLoading && seatsError && (
-            <div className="flex items-center justify-between gap-3 text-red-800 bg-red-50 border border-red-200 rounded px-3 py-2">
-              <span>Unable to load buyer seats. Retry to continue.</span>
-              <button
-                onClick={() => refetchSeats()}
-                className="px-2 py-1 text-xs font-medium rounded bg-red-100 hover:bg-red-200"
-              >
-                Retry
-              </button>
-            </div>
-          )}
-          {!seatsLoading && !seatsError && seats && seats.length === 0 && (
+          {!seatsLoading && seats && seats.length === 0 && (
             <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">
               No active buyer seats found. Sync seats in Settings to load home analytics.
             </div>
           )}
-          {!seatsLoading && !seatsError && seats && seats.length > 0 && (
+          {!seatsLoading && seats && seats.length > 0 && (
             <div className="text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2">
               Select a seat to load home analytics.
             </div>
