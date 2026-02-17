@@ -23,15 +23,36 @@ const PERIOD_OPTIONS = [
   { value: 30, label: "30 days" },
 ];
 
+const TRANSIENT_ERROR_MARKERS = [
+  "timed out",
+  "timeout",
+  "cannot connect",
+  "unavailable",
+  "network",
+  "failed to fetch",
+];
+
+function shouldRetryTransientQuery(failureCount: number, error: unknown): boolean {
+  if (failureCount >= 2) return false;
+  if (!(error instanceof Error)) return true;
+  const message = error.message.toLowerCase();
+  return TRANSIENT_ERROR_MARKERS.some((marker) => message.includes(marker));
+}
+
+function getRetryDelay(attemptIndex: number): number {
+  return Math.min(1000 * 2 ** attemptIndex, 5000);
+}
+
 /**
  * Helper to transform API response to component props.
  */
 function transformConfigToProps(
   apiConfig: PretargetingConfigResponse,
-  performanceData?: { reached: number; impressions: number; win_rate: number; waste_rate: number }
+  performanceData?: { reached: number; impressions: number; win_rate: number; waste_rate: number },
+  metricsDelayed = false
 ): PretargetingConfig {
   const name = apiConfig.user_name || apiConfig.display_name || `Config ${apiConfig.billing_id}`;
-  const hasPerformance = !!performanceData && (performanceData.reached > 0 || performanceData.impressions > 0);
+  const hasPerformance = performanceData !== undefined;
   const reached = performanceData?.reached || 0;
   const impressions = performanceData?.impressions || 0;
   const win_rate = performanceData?.win_rate || 0;
@@ -52,6 +73,7 @@ function transformConfigToProps(
     win_rate,
     waste_rate,
     has_performance: hasPerformance,
+    metrics_delayed: metricsDelayed && !hasPerformance,
   };
 }
 
@@ -66,14 +88,25 @@ function WasteAnalysisContent() {
   const [days, setDays] = useState<number>(initialDays);
 
   // Fetch seats to auto-select first one if none selected
-  const { data: seats, isLoading: seatsLoading } = useQuery({
+  const {
+    data: seats,
+    isLoading: seatsLoading,
+    isError: seatsError,
+    refetch: refetchSeats,
+  } = useQuery({
     queryKey: ["seats"],
     queryFn: () => getSeats({ active_only: true }),
+    retry: shouldRetryTransientQuery,
+    retryDelay: getRetryDelay,
+    staleTime: 60_000,
   });
 
-  // Auto-select first seat if none selected (removes "All Seats" from Waste Analyzer)
+  // Keep selected seat valid and deterministic once seats resolve.
   useEffect(() => {
-    if (!selectedBuyerId && seats && seats.length > 0) {
+    if (!seats || seats.length === 0) return;
+
+    const hasSelectedSeat = !!selectedBuyerId && seats.some((seat) => seat.buyer_id === selectedBuyerId);
+    if (!hasSelectedSeat) {
       setSelectedBuyerId(seats[0].buyer_id);
     }
   }, [selectedBuyerId, seats, setSelectedBuyerId]);
@@ -146,7 +179,7 @@ function WasteAnalysisContent() {
     data: spendStats,
     refetch: refetchSpend,
   } = useQuery({
-    queryKey: ["spend-stats", days, expandedConfigId],
+    queryKey: ["spend-stats", days, selectedBuyerId, expandedConfigId],
     queryFn: () => getSpendStats(days, expandedConfigId || undefined),
   });
 
@@ -159,7 +192,8 @@ function WasteAnalysisContent() {
     queryKey: ["pretargeting-configs", selectedBuyerId],
     queryFn: () => getPretargetingConfigs({ buyer_id: selectedBuyerId || undefined }),
     enabled: seatReady,
-    retry: 0,
+    retry: shouldRetryTransientQuery,
+    retryDelay: getRetryDelay,
   });
 
   // Fetch config-level performance data (filtered by selected buyer)
@@ -173,7 +207,8 @@ function WasteAnalysisContent() {
     queryKey: ["rtb-funnel-configs", days, selectedBuyerId],
     queryFn: () => getRTBFunnelConfigs(days, selectedBuyerId || undefined),
     enabled: seatReady,
-    retry: 0,
+    retry: shouldRetryTransientQuery,
+    retryDelay: getRetryDelay,
   });
 
   const { data: endpointEfficiency, isLoading: endpointEfficiencyLoading } = useQuery({
@@ -198,6 +233,7 @@ function WasteAnalysisContent() {
   // Publishers and Geos from RTB data
 
   // Build a map of billing_id to performance data from config performance API
+  const configMetricsDelayed = configPerformanceLoading || configPerformanceFetching || configPerformanceError;
   const configPerformanceMap = new Map<string, { reached: number; impressions: number; win_rate: number; waste_rate: number }>();
   if (configPerformance?.configs) {
     for (const cfg of configPerformance.configs) {
@@ -212,7 +248,11 @@ function WasteAnalysisContent() {
 
   // Transform configs for display and sort
   const unsortedConfigs = (pretargetingConfigs || []).map(config =>
-    transformConfigToProps(config, configPerformanceMap.get(config.billing_id || config.config_id))
+    transformConfigToProps(
+      config,
+      configPerformanceMap.get(config.billing_id || config.config_id),
+      configMetricsDelayed
+    )
   );
 
   // Sort configs based on current sort settings
@@ -345,8 +385,34 @@ function WasteAnalysisContent() {
       {/* Content area with padding */}
       <div className="p-6 space-y-4">
       {!seatReady && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
-          {seatsLoading ? "Loading seat..." : "Select a seat to load home analytics."}
+        <div className="rounded-lg p-4 text-sm border">
+          {seatsLoading && (
+            <div className="flex items-center gap-2 text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Loading seat access...</span>
+            </div>
+          )}
+          {!seatsLoading && seatsError && (
+            <div className="flex items-center justify-between gap-3 text-red-800 bg-red-50 border border-red-200 rounded px-3 py-2">
+              <span>Unable to load buyer seats. Retry to continue.</span>
+              <button
+                onClick={() => refetchSeats()}
+                className="px-2 py-1 text-xs font-medium rounded bg-red-100 hover:bg-red-200"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {!seatsLoading && !seatsError && seats && seats.length === 0 && (
+            <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+              No active buyer seats found. Sync seats in Settings to load home analytics.
+            </div>
+          )}
+          {!seatsLoading && !seatsError && seats && seats.length > 0 && (
+            <div className="text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2">
+              Select a seat to load home analytics.
+            </div>
+          )}
         </div>
       )}
       {/* Account Endpoints Header with integrated funnel metrics */}
@@ -391,12 +457,16 @@ function WasteAnalysisContent() {
           </div>
         ) : (
           <div className="space-y-2">
-            {(configPerformanceLoading || configPerformanceError) && (
+            {configMetricsDelayed && (
               <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 flex items-center gap-2">
                 {(configPerformanceLoading || configPerformanceFetching) && (
                   <Loader2 className="h-3.5 w-3.5 animate-spin flex-shrink-0" />
                 )}
-                <span>Config performance metrics are delayed; showing base config list.</span>
+                <span>
+                  {configPerformanceError
+                    ? "Config performance metrics failed to load; showing config list without performance values."
+                    : "Config performance metrics are delayed; showing config list without performance values."}
+                </span>
               </div>
             )}
             {/* Sortable Column Headers */}
