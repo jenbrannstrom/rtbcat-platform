@@ -74,6 +74,8 @@ class FinalizeImportRequest(BaseModel):
     total_spend_usd: float = 0
     total_impressions: int = 0
     total_reached: int = 0
+    date_gaps: Optional[list[str]] = None
+    date_gap_warning: Optional[str] = None
 
 
 class StreamStartRequest(BaseModel):
@@ -149,6 +151,8 @@ def _build_import_response(result) -> CSVImportResult:
             columns_imported=list(result.columns_mapped.keys()),
             columns_mapped=result.columns_mapped,
             columns_defaulted=result.columns_defaulted,
+            date_gaps=result.date_gaps,
+            date_gap_warning=result.date_gap_warning,
             report_type=result.report_type,
             target_table=result.target_table,
         )
@@ -159,6 +163,8 @@ def _build_import_response(result) -> CSVImportResult:
         errors=result.errors,
         columns_mapped=result.columns_mapped,
         columns_found=list(result.columns_mapped.values()) + result.columns_unmapped,
+        date_gaps=getattr(result, "date_gaps", None),
+        date_gap_warning=getattr(result, "date_gap_warning", None),
     )
 
 
@@ -397,6 +403,8 @@ async def import_performance_csv(
             status="complete" if result.success else "failed",
             error_message=result.error_message,
             file_size_bytes=file_size_bytes,
+            date_gaps=result.date_gaps,
+            date_gap_warning=result.date_gap_warning,
             buyer_id=buyer_id,
             bidder_id=buyer_id,
         )
@@ -583,6 +591,34 @@ async def complete_stream_import(
 
     try:
         result = unified_import(str(final_path), source_filename=meta.get("filename"))
+        columns_found = []
+        seen_columns = set()
+        for col in list(result.columns_mapped.values()) + result.columns_unmapped:
+            if col not in seen_columns:
+                columns_found.append(col)
+                seen_columns.add(col)
+
+        buyer_id = parse_bidder_id_from_filename(meta.get("filename") or "")
+        perf_service = PerformanceService()
+        await perf_service.record_import(
+            batch_id=result.batch_id,
+            filename=meta.get("filename"),
+            rows_read=result.rows_read,
+            rows_imported=result.rows_imported,
+            rows_skipped=result.rows_skipped,
+            rows_duplicate=result.rows_duplicate,
+            date_range_start=result.date_range_start,
+            date_range_end=result.date_range_end,
+            columns_found=columns_found,
+            status="complete" if result.success else "failed",
+            error_message=result.error_message,
+            file_size_bytes=file_size_bytes,
+            date_gaps=result.date_gaps,
+            date_gap_warning=result.date_gap_warning,
+            buyer_id=buyer_id,
+            bidder_id=buyer_id,
+        )
+
         if result.success and result.date_range_start and result.date_range_end:
             background_tasks.add_task(
                 refresh_home_summaries,
@@ -874,6 +910,8 @@ async def finalize_import(request: FinalizeImportRequest):
             total_impressions=request.total_impressions,
             total_spend_usd=request.total_spend_usd,
             file_size_bytes=request.file_size_bytes,
+            date_gaps=request.date_gaps,
+            date_gap_warning=request.date_gap_warning,
         )
 
         logger.info(f"Import finalized: batch_id={request.batch_id}, rows={request.rows_imported}")
