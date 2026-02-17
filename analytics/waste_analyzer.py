@@ -19,11 +19,14 @@ import re
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
+from analytics.cost_estimator import (
+    DEFAULT_REQUEST_COST_PER_1000,
+    resolve_request_cost_per_1000,
+)
 from analytics.waste_models import SizeCoverage, SizeGap, TrafficRecord, WasteReport, ProblemFormat
 from storage.serving_database import db_query
 from utils.size_normalization import (
     IAB_STANDARD_SIZES,
-    canonical_size,
     canonical_size_with_tolerance,
     get_size_category,
 )
@@ -34,10 +37,6 @@ logger = logging.getLogger(__name__)
 HIGH_VOLUME_THRESHOLD = 10000  # requests/day
 MEDIUM_VOLUME_THRESHOLD = 1000  # requests/day
 SECONDS_PER_DAY = 86400
-
-# Estimated cost per 1000 requests (CPM) for waste calculation
-# This is a rough estimate for bandwidth/processing costs
-ESTIMATED_COST_PER_1000 = 0.002  # $0.002 per 1000 requests
 
 
 class TrafficWasteAnalyzer:
@@ -96,6 +95,10 @@ class TrafficWasteAnalyzer:
 
         # Calculate totals
         total_requests = sum(t["count"] for t in traffic.values())
+        request_cost_per_1000 = await resolve_request_cost_per_1000(
+            days=days,
+            buyer_id=buyer_id,
+        )
 
         # Find gaps and calculate coverage
         size_gaps: List[SizeGap] = []
@@ -144,6 +147,7 @@ class TrafficWasteAnalyzer:
                     creative_count=creative_count,
                     total_requests=total_requests,
                     days=days,
+                    request_cost_per_1000=request_cost_per_1000,
                 )
                 size_gaps.append(gap)
 
@@ -160,7 +164,11 @@ class TrafficWasteAnalyzer:
             else 0.0
         )
         potential_savings_qps = sum(g.estimated_qps for g in size_gaps)
-        potential_savings_usd = self._estimate_monthly_savings(total_waste_requests, days)
+        potential_savings_usd = self._estimate_monthly_savings(
+            total_waste_requests,
+            days,
+            request_cost_per_1000=request_cost_per_1000,
+        )
 
         # Generate recommendations summary
         recommendations_summary = self._generate_recommendations_summary(size_gaps)
@@ -176,6 +184,7 @@ class TrafficWasteAnalyzer:
             potential_savings_usd=potential_savings_usd,
             analysis_period_days=days,
             generated_at=datetime.now(timezone.utc).isoformat(),
+            qps_basis="avg_daily",
             recommendations_summary=recommendations_summary,
         )
 
@@ -322,6 +331,7 @@ class TrafficWasteAnalyzer:
         creative_count: int,
         total_requests: int,
         days: int,
+        request_cost_per_1000: float,
     ) -> SizeGap:
         """Create a SizeGap with recommendation.
 
@@ -347,7 +357,11 @@ class TrafficWasteAnalyzer:
         )
 
         # Estimate savings
-        potential_savings = self._estimate_monthly_savings(request_count, days)
+        potential_savings = self._estimate_monthly_savings(
+            request_count,
+            days,
+            request_cost_per_1000=request_cost_per_1000,
+        )
 
         return SizeGap(
             canonical_size=canonical_size,
@@ -399,7 +413,7 @@ class TrafficWasteAnalyzer:
                 qps = daily_requests / SECONDS_PER_DAY
                 return (
                     "Block",
-                    f"Block in pretargeting config. Saving {qps:.1f} QPS "
+                    f"Block in pretargeting config. Saving ~{qps:.1f} avg QPS "
                     f"({int(daily_requests):,} requests/day)",
                     closest_iab,
                 )
@@ -458,6 +472,7 @@ class TrafficWasteAnalyzer:
         self,
         request_count: int,
         days: int,
+        request_cost_per_1000: Optional[float] = None,
     ) -> float:
         """Estimate monthly cost savings from blocking waste traffic.
 
@@ -479,8 +494,12 @@ class TrafficWasteAnalyzer:
         daily_requests = request_count / days
         monthly_requests = daily_requests * 30
 
-        # Cost per 1000 requests
-        savings = (monthly_requests / 1000) * ESTIMATED_COST_PER_1000
+        effective_cost_per_1000 = (
+            request_cost_per_1000
+            if request_cost_per_1000 is not None
+            else DEFAULT_REQUEST_COST_PER_1000
+        )
+        savings = (monthly_requests / 1000) * effective_cost_per_1000
 
         return round(savings, 2)
 

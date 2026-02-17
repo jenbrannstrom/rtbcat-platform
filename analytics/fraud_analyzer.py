@@ -41,11 +41,24 @@ from storage.serving_database import db_query
 logger = logging.getLogger(__name__)
 
 # Fraud detection thresholds
-SUSPICIOUSLY_HIGH_CTR = 0.10  # 10% CTR is suspicious
+DEFAULT_SUSPICIOUSLY_HIGH_CTR = 0.10  # 10% CTR default for banner/display
 SUSPICIOUSLY_LOW_CTR = 0.00001  # Effectively zero
 MIN_IMPRESSIONS_FOR_ANALYSIS = 1000
 HIGH_SPEND_ZERO_CONVERSIONS = 50  # $50+ with no conversions is suspicious
 SECONDS_PER_DAY = 86400
+
+# Format-aware high-CTR thresholds reduce false positives across inventory types.
+SUSPICIOUSLY_HIGH_CTR_BY_FORMAT = {
+    "BANNER": 0.10,
+    "NATIVE": 0.12,
+    "VIDEO": 0.20,
+}
+
+FORMAT_ALIASES = {
+    "DISPLAY": "BANNER",
+    "HTML": "BANNER",
+    "HTML5": "BANNER",
+}
 
 
 class FraudAnalyzer:
@@ -100,44 +113,49 @@ class FraudAnalyzer:
         results = await db_query("""
             SELECT
                 pm.placement as source,
+                COALESCE(c.format, 'BANNER') as creative_format,
                 COALESCE(SUM(pm.impressions), 0) as impressions,
                 COALESCE(SUM(pm.clicks), 0) as clicks,
                 COALESCE(SUM(pm.spend_micros), 0) as spend_micros,
                 COUNT(DISTINCT pm.creative_id) as creative_count
             FROM performance_metrics pm
+            JOIN creatives c ON c.id = pm.creative_id
             WHERE pm.metric_date >= date('now', ?)
               AND pm.placement IS NOT NULL
               AND pm.placement != ''
-            GROUP BY pm.placement
+            GROUP BY pm.placement, COALESCE(c.format, 'BANNER')
             HAVING COALESCE(SUM(pm.impressions), 0) > ?
         """, (f"-{days} days", MIN_IMPRESSIONS_FOR_ANALYSIS))
 
         for row in results:
             source = row["source"]
+            creative_format = self._normalize_creative_format(row.get("creative_format"))
             impressions = row["impressions"]
             clicks = row["clicks"]
             spend_micros = row["spend_micros"]
             spend_usd = spend_micros / 1_000_000
             ctr = clicks / impressions if impressions > 0 else 0
+            high_ctr_threshold = self._high_ctr_threshold_for_format(creative_format)
 
             # Check for suspiciously high CTR
-            if ctr > SUSPICIOUSLY_HIGH_CTR:
+            if ctr > high_ctr_threshold:
                 rec = Recommendation(
                     id=f"click-fraud-{hash(source) % 100000}-{uuid.uuid4().hex[:8]}",
                     type=RecommendationType.FRAUD_ALERT,
                     severity=Severity.CRITICAL if spend_usd > 100 else Severity.HIGH,
                     confidence=Confidence.MEDIUM,
-                    title=f"Suspicious click rate: {source[:50]}",
+                    title=f"Suspicious click rate ({creative_format}): {source[:50]}",
                     description=(
                         f"Placement '{source[:80]}' has an abnormally high CTR of {ctr*100:.1f}% "
-                        f"({clicks:,} clicks from {impressions:,} impressions). This pattern "
-                        f"is consistent with click fraud. Spent ${spend_usd:.2f}. Block immediately."
+                        f"for {creative_format} traffic ({clicks:,} clicks from {impressions:,} impressions). "
+                        f"This exceeds the {high_ctr_threshold*100:.1f}% threshold and is consistent "
+                        f"with click fraud. Spent ${spend_usd:.2f}. Block immediately."
                     ),
                     evidence=[
                         Evidence(
                             metric_name="ctr",
                             metric_value=ctr * 100,
-                            threshold=SUSPICIOUSLY_HIGH_CTR * 100,
+                            threshold=high_ctr_threshold * 100,
                             comparison="above",
                             time_period_days=days,
                             sample_size=impressions,
@@ -175,6 +193,18 @@ class FraudAnalyzer:
                 recommendations.append(rec)
 
         return recommendations
+
+    @staticmethod
+    def _normalize_creative_format(format_name: str | None) -> str:
+        """Normalize raw creative format labels into threshold buckets."""
+        fmt = (format_name or "BANNER").strip().upper()
+        return FORMAT_ALIASES.get(fmt, fmt)
+
+    @staticmethod
+    def _high_ctr_threshold_for_format(format_name: str | None) -> float:
+        """Return high-CTR threshold for the given creative format."""
+        normalized = FraudAnalyzer._normalize_creative_format(format_name)
+        return SUSPICIOUSLY_HIGH_CTR_BY_FORMAT.get(normalized, DEFAULT_SUSPICIOUSLY_HIGH_CTR)
 
     async def _check_high_spend_no_conversions(self, days: int) -> list[Recommendation]:
         """Check for placements with high spend but zero meaningful engagement."""

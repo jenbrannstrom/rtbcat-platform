@@ -173,7 +173,7 @@ export function SizeCoverageChart({ sizeGaps, isLoading }: SizeCoverageChartProp
           <SortHeader field="request_count">Requests</SortHeader>
         </div>
         <div className="col-span-2 text-right">
-          <SortHeader field="estimated_qps">QPS</SortHeader>
+          <SortHeader field="estimated_qps">Avg QPS</SortHeader>
         </div>
         <div className="col-span-2 text-right">
           <SortHeader field="estimated_waste_pct">Waste %</SortHeader>

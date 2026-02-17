@@ -90,6 +90,7 @@ async def get_waste_report(
             ],
             potential_savings_qps=round(report.potential_savings_qps, 2),
             potential_savings_usd=report.potential_savings_usd,
+            qps_basis=report.qps_basis,
             analysis_period_days=report.analysis_period_days,
             generated_at=report.generated_at,
             recommendations_summary=report.recommendations_summary,

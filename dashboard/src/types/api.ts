@@ -180,6 +180,7 @@ export interface WasteReport {
   size_coverage: SizeCoverage[];
   potential_savings_qps: number;
   potential_savings_usd: number | null;
+  qps_basis: "avg_daily";
   analysis_period_days: number;
   generated_at: string;
   recommendations_summary: {
