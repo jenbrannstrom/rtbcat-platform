@@ -66,6 +66,8 @@ class ImportHistoryResponse(BaseModel):
     billing_ids_found: Optional[list[str]] = None
     columns_found: Optional[list[str]] = None
     columns_missing: Optional[list[str]] = None
+    date_gaps: Optional[list[str]] = None
+    date_gap_warning: Optional[str] = None
 
 
 class DailyFileUpload(BaseModel):

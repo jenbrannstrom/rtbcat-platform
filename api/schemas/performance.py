@@ -108,6 +108,8 @@ class CSVImportResult(BaseModel):
     columns_defaulted: Optional[list[str]] = None  # Fields that used default values
     required_missing: Optional[list[str]] = None
     errors: Optional[list[str]] = None
+    date_gaps: Optional[list[str]] = None
+    date_gap_warning: Optional[str] = None
     report_type: Optional[str] = None  # Detected report type (e.g., "performance_detail")
     target_table: Optional[str] = None  # Table data was imported to (e.g., "rtb_daily")
 

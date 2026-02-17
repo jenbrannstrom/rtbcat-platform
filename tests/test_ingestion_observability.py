@@ -128,6 +128,8 @@ async def test_import_history_buyer_id_populated():
         status="complete",
         error_message=None,
         file_size_bytes=1024,
+        date_gaps=["2026-02-09"],
+        date_gap_warning="Import covers 2026-02-09 to 2026-02-11 but is missing 1 expected day(s): 2026-02-10",
         buyer_id="123456",
         bidder_id="123456",
     )
@@ -137,6 +139,40 @@ async def test_import_history_buyer_id_populated():
     assert record["buyer_id"] == "123456"
     assert record["bidder_id"] == "123456"
     assert record["batch_id"] == "batch-001"
+    assert record["date_gaps"] == "[\"2026-02-09\"]"
+    assert "missing 1 expected day(s)" in record["date_gap_warning"]
+
+
+@pytest.mark.asyncio
+async def test_finalize_import_persists_date_gap_metadata():
+    repo = StubUploadsRepo()
+    svc = PerformanceService(uploads_repo=repo)
+
+    await svc.finalize_import(
+        batch_id="batch-finalize-001",
+        filename="chunked-import.csv",
+        rows_read=120,
+        rows_imported=118,
+        rows_skipped=2,
+        rows_duplicate=0,
+        date_range_start="2026-02-10",
+        date_range_end="2026-02-12",
+        total_reached=1000,
+        total_impressions=850,
+        total_spend_usd=42.5,
+        file_size_bytes=2048,
+        date_gaps=["2026-02-11"],
+        date_gap_warning="Import covers 2026-02-10 to 2026-02-12 but is missing 1 expected day(s): 2026-02-11",
+        buyer_id="buyer-finalize",
+        bidder_id="buyer-finalize",
+    )
+
+    assert len(repo.import_history) == 1
+    record = repo.import_history[0]
+    assert record["batch_id"] == "batch-finalize-001"
+    assert record["status"] == "complete"
+    assert record["date_gaps"] == "[\"2026-02-11\"]"
+    assert record["date_gap_warning"].endswith("2026-02-11")
 
 
 # ---------------------------------------------------------------------------

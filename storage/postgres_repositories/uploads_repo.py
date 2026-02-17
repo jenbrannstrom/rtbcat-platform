@@ -160,6 +160,8 @@ class UploadsRepository:
         status: str,
         error_message: Optional[str],
         file_size_bytes: int,
+        date_gaps: Optional[str] = None,
+        date_gap_warning: Optional[str] = None,
         buyer_id: Optional[str] = None,
         bidder_id: Optional[str] = None,
     ) -> None:
@@ -170,8 +172,8 @@ class UploadsRepository:
                 batch_id, filename, rows_read, rows_imported, rows_skipped, rows_duplicate,
                 date_range_start, date_range_end, columns_found, columns_missing,
                 total_reached, total_impressions, total_spend_usd, status, error_message,
-                file_size_bytes, buyer_id, bidder_id
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                file_size_bytes, date_gaps, date_gap_warning, buyer_id, bidder_id
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 batch_id,
@@ -190,6 +192,8 @@ class UploadsRepository:
                 status,
                 error_message,
                 file_size_bytes,
+                date_gaps,
+                date_gap_warning,
                 buyer_id,
                 bidder_id,
             ),
