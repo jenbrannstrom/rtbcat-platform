@@ -70,6 +70,7 @@ function WasteAnalysisContent() {
 
   const initialDays = parseInt(searchParams.get("days") || "7", 10);
   const [days, setDays] = useState<number>(initialDays);
+  const [dashboardLoadStartedAt] = useState<number>(() => Date.now());
 
   // Fetch seats to auto-select first one if none selected
   const {
@@ -180,6 +181,14 @@ function WasteAnalysisContent() {
     retryDelay: getRetryDelay,
     retryOnMount: true,
     refetchOnReconnect: true,
+    refetchInterval: (query) => {
+      if (!seatReady) return false;
+      if (Date.now() - dashboardLoadStartedAt > 120_000) return false;
+      if (query.state.status === "error") return 5000;
+      const rows = query.state.data as PretargetingConfigResponse[] | undefined;
+      if (Array.isArray(rows) && rows.length === 0) return 8000;
+      return false;
+    },
   });
 
   // Fetch config-level performance data (filtered by selected buyer)
@@ -197,6 +206,12 @@ function WasteAnalysisContent() {
     retryDelay: getRetryDelay,
     retryOnMount: true,
     refetchOnReconnect: true,
+    refetchInterval: (query) => {
+      if (!seatReady) return false;
+      if (Date.now() - dashboardLoadStartedAt > 120_000) return false;
+      if (query.state.status === "error") return 5000;
+      return false;
+    },
   });
 
   const { data: endpointEfficiency, isLoading: endpointEfficiencyLoading } = useQuery({

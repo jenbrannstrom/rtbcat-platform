@@ -298,6 +298,12 @@ export function Sidebar() {
           <div className="text-sm text-gray-500 text-center py-2">
             <p className="font-medium text-gray-700">{t.sidebar.noSeatsConnected}</p>
             <p className="text-xs mt-1">{t.sidebar.goToSettingsToConnect}</p>
+            <button
+              onClick={() => refetchSeats()}
+              className="mt-2 px-2 py-1 text-xs font-medium rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
+            >
+              Retry
+            </button>
           </div>
         ) : seats.length === 1 ? (
           /* Single seat - show as title with sync all button */
