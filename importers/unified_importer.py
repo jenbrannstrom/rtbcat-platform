@@ -376,6 +376,84 @@ def ensure_table_exists(cursor, table_name: str):
         )
 
 
+def ensure_performance_metrics_table(cursor) -> None:
+    """Ensure legacy performance_metrics table exists for downstream services.
+
+    Some services (for example creative cache refresh selection) still read from
+    ``performance_metrics``. New CSV imports land in ``rtb_daily``, so we keep
+    ``performance_metrics`` hydrated from rows accepted into that table.
+    """
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS performance_metrics (
+            id SERIAL PRIMARY KEY,
+            creative_id TEXT NOT NULL,
+            campaign_id TEXT,
+            metric_date DATE NOT NULL,
+            impressions INTEGER NOT NULL DEFAULT 0,
+            clicks INTEGER NOT NULL DEFAULT 0,
+            spend_micros BIGINT NOT NULL DEFAULT 0,
+            cpm_micros INTEGER,
+            cpc_micros INTEGER,
+            geography TEXT,
+            device_type TEXT,
+            placement TEXT,
+            seat_id INTEGER,
+            reached_queries INTEGER DEFAULT 0,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+        """
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_perf_unique_daily "
+        "ON performance_metrics(creative_id, metric_date, geography, device_type, placement)"
+    )
+
+
+def sync_performance_metrics_from_rtb_daily_batch(cursor, batch_id: str) -> None:
+    """Upsert performance_metrics rows from accepted rtb_daily batch rows."""
+    ensure_performance_metrics_table(cursor)
+    cursor.execute(
+        """
+        INSERT INTO performance_metrics (
+            creative_id, campaign_id, metric_date,
+            impressions, clicks, spend_micros,
+            geography, device_type, placement, reached_queries,
+            updated_at
+        )
+        SELECT
+            creative_id,
+            MAX(NULLIF(billing_id, '')) AS campaign_id,
+            metric_date::date AS metric_date,
+            COALESCE(SUM(impressions), 0) AS impressions,
+            COALESCE(SUM(clicks), 0) AS clicks,
+            COALESCE(SUM(spend_micros), 0) AS spend_micros,
+            COALESCE(NULLIF(country, ''), '') AS geography,
+            COALESCE(NULLIF(platform, ''), '') AS device_type,
+            COALESCE(NULLIF(environment, ''), '') AS placement,
+            COALESCE(SUM(reached_queries), 0) AS reached_queries,
+            NOW() AS updated_at
+        FROM rtb_daily
+        WHERE import_batch_id = %s
+          AND COALESCE(creative_id, '') <> ''
+        GROUP BY creative_id, metric_date::date,
+                 COALESCE(NULLIF(country, ''), ''),
+                 COALESCE(NULLIF(platform, ''), ''),
+                 COALESCE(NULLIF(environment, ''), '')
+        ON CONFLICT (creative_id, metric_date, geography, device_type, placement)
+        DO UPDATE SET
+            impressions = performance_metrics.impressions + EXCLUDED.impressions,
+            clicks = performance_metrics.clicks + EXCLUDED.clicks,
+            spend_micros = performance_metrics.spend_micros + EXCLUDED.spend_micros,
+            reached_queries = performance_metrics.reached_queries + EXCLUDED.reached_queries,
+            campaign_id = COALESCE(performance_metrics.campaign_id, EXCLUDED.campaign_id),
+            updated_at = NOW()
+        """,
+        (batch_id,),
+    )
+
+
 def import_to_rtb_daily(
     csv_path: str,
     mapping: MappingResult,
@@ -542,6 +620,8 @@ def import_to_rtb_daily(
                         result.errors.append(f"Row {row_num}: {str(e)}")
 
         flush_rows()
+        # Keep legacy performance_metrics populated from accepted rtb_daily rows.
+        sync_performance_metrics_from_rtb_daily_batch(cursor, batch_id)
         conn.commit()
         result.success = True
         _apply_date_continuity(result, observed_dates, min_date, max_date)
