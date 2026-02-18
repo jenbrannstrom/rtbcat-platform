@@ -242,6 +242,9 @@ function WasteAnalysisContent() {
 
   // Build a map of billing_id to performance data from config performance API
   const configMetricsDelayed = configPerformanceLoading || configPerformanceFetching || configPerformanceError;
+  const configFallbackApplied = configPerformance?.fallback_applied === true;
+  const configRequestedDays = configPerformance?.requested_days ?? days;
+  const configEffectiveDays = configPerformance?.effective_days ?? days;
   const configPerformanceMap = new Map<string, { reached: number; impressions: number; win_rate: number; waste_rate: number }>();
   if (configPerformance?.configs) {
     for (const cfg of configPerformance.configs) {
@@ -496,6 +499,16 @@ function WasteAnalysisContent() {
                   {configPerformanceError
                     ? "Config performance metrics failed to load; showing config list without performance values."
                     : "Config performance metrics are delayed; showing config list without performance values."}
+                  </span>
+              </div>
+            )}
+            {configFallbackApplied && (
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 flex items-center gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                <span>
+                  Showing last <span className="font-semibold">{configEffectiveDays} days</span>
+                  {" "}because no rows were found in the requested
+                  {" "}<span className="font-semibold">{configRequestedDays} day</span> window.
                 </span>
               </div>
             )}
