@@ -3,13 +3,26 @@
 **Date:** 2026-02-18
 **Environment:** Production (VM1 = `catscan-production-sg`)
 **URL:** `https://scan.rtb.cat`
-**Expected SHA:** `sha-372ea35`
-**Branch:** `b4/import-quality-controls` (unified-platform base)
+**Expected SHA:** `sha-372ea35` → superseded by `sha-7572df3`
+**Branch:** `unified-platform`
 **Buyer for checks:** `1487810529`
 
 ---
 
-## Verdict: CONDITIONAL GO
+## Final Verdict: GO (sha-7572df3)
+
+Supersedes the CONDITIONAL GO below. After the creatives routing fix was deployed (`7dbb573` + `1c2a565` → squashed as `7572df3`), a full re-acceptance was performed. All 16 checks PASS — see standalone report at `../2026-02-18/PROD_ACCEPTANCE_SHA_7572df3.md`.
+
+Key results at `sha-7572df3`:
+- OAuth login: PASS
+- `/1487810529/creatives` stays at correct URL, renders CreativesPage (304 of 304 cards, filters, thumbnails)
+- Sidebar "Creatives" href: `/1487810529/creatives` (not `/clusters`)
+- Zero console errors, 24/24 network requests 200
+- UX-001 data freshness and UX-002 URL persistence: both PASS
+
+---
+
+## Previous Verdict (sha-372ea35): CONDITIONAL GO
 
 **OAuth recovered. Core pages load. One nav bug found and fixed (see section 9).**
 
@@ -106,7 +119,7 @@
 2. `dashboard/src/lib/buyer-routes.ts` — Added `/creatives` to `BUYER_SCOPED_PREFIXES`
 3. `dashboard/src/app/[buyerId]/creatives/page.tsx` — Changed from redirect-to-clusters to re-export of `../../creatives/page`
 
-**Status:** Fix committed locally. Requires rebuild and redeploy to take effect on production.
+**Status:** Fixed and deployed. Commits `7dbb573` + `1c2a565` (deployed as `sha-7572df3`). Verified in live production — see `../2026-02-18/PROD_ACCEPTANCE_SHA_7572df3.md` for full verification.
 
 ---
 
