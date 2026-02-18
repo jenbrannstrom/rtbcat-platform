@@ -95,6 +95,8 @@ export interface SyncAllResponse {
 export async function syncAllData(): Promise<SyncAllResponse> {
   return fetchApi<SyncAllResponse>("/seats/sync-all", {
     method: "POST",
+    // Full-account sync can exceed the default 30s API timeout.
+    timeoutMs: 180000,
   });
 }
 
