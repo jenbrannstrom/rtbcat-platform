@@ -27,6 +27,11 @@ function getRetryDelay(attemptIndex: number): number {
   return Math.min(1000 * 2 ** attemptIndex, 5000);
 }
 
+function normalizeDateString(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value.slice(0, 10);
+}
+
 /**
  * Helper to transform API response to component props.
  */
@@ -322,12 +327,33 @@ function WasteAnalysisContent() {
     homeSeatDataThrough: coverage?.home_seat_daily?.end_date ?? null,
     bidstreamDataThrough: coverage?.rtb_bidstream?.end_date ?? null,
   };
+  const homeSeatDataAsOf = normalizeDateString(coverage?.home_seat_daily?.end_date ?? null);
+  const bidstreamDataAsOf = normalizeDateString(coverage?.rtb_bidstream?.end_date ?? null);
+  const availableDataDates = [homeSeatDataAsOf, bidstreamDataAsOf].filter((value): value is string => !!value);
+  const dataAsOf = availableDataDates.length > 0 ? [...availableDataDates].sort()[0] : null;
+  const hasDataDateDrift = !!homeSeatDataAsOf && !!bidstreamDataAsOf && homeSeatDataAsOf !== bidstreamDataAsOf;
 
   return (
     <div className="max-w-7xl mx-auto">
       {/* Compact Top Bar - CPM, Period Selector, Refresh */}
       <div className="sticky top-0 z-30 px-6 py-2 bg-white border-b border-gray-200">
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs text-gray-600">
+            {seatReady && dataAsOf && (
+              <span>
+                Data as of <strong>{dataAsOf}</strong>
+                {hasDataDateDrift && (
+                  <span className="ml-2 text-amber-700">
+                    (home: {homeSeatDataAsOf}, bidstream: {bidstreamDataAsOf})
+                  </span>
+                )}
+              </span>
+            )}
+            {seatReady && !dataAsOf && (
+              <span className="text-gray-500">Data freshness pending…</span>
+            )}
+          </div>
+          <div className="flex items-center justify-end gap-2">
           {/* CPM Badge - compact */}
           {spendStats?.has_spend_data && spendStats.avg_cpm_usd && (
             <div className={cn(
@@ -382,6 +408,7 @@ function WasteAnalysisContent() {
           >
             <RefreshCw className={cn("h-3.5 w-3.5 text-gray-600", (summaryLoading || funnelLoading) && "animate-spin")} />
           </button>
+          </div>
         </div>
       </div>
 
