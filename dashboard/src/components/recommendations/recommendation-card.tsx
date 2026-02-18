@@ -66,6 +66,7 @@ interface RecommendationCardProps {
   onApply?: (recommendation: Recommendation, billingId: string) => void;
   configOptions?: { billing_id: string; name: string }[];
   isApplying?: boolean;
+  canApply?: boolean;
 }
 
 export function RecommendationCard({
@@ -75,6 +76,7 @@ export function RecommendationCard({
   onApply,
   configOptions = [],
   isApplying = false,
+  canApply,
 }: RecommendationCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [showConfigDropdown, setShowConfigDropdown] = useState(false);
@@ -85,10 +87,15 @@ export function RecommendationCard({
   const TypeIcon = typeIcons[recommendation.type] || Info;
 
   const impact = recommendation.impact;
-  const hasActionableActions = recommendation.actions.some(
-    (action) => !!action.pretargeting_field || ["size", "geo", "publisher", "config", "app"].includes(action.target_type)
-  );
-  const canApply = hasActionableActions && configOptions.length > 0 && !!onApply;
+  const hasActionableActions = recommendation.actions.some((action) => {
+    const actionType = action.action_type.toLowerCase();
+    const targetType = action.target_type.toLowerCase();
+    return (
+      ["block", "exclude", "add", "remove"].includes(actionType) &&
+      ["size", "geo", "publisher", "config", "app"].includes(targetType)
+    );
+  });
+  const canApplyRecommendation = (canApply ?? hasActionableActions) && configOptions.length > 0 && !!onApply;
 
   return (
     <div className={cn(
@@ -253,7 +260,7 @@ export function RecommendationCard({
 
           {/* Action Buttons */}
           <div className="flex gap-2 pt-2">
-            {canApply && (
+            {canApplyRecommendation && (
               <>
                 <div className="relative">
                   <button
