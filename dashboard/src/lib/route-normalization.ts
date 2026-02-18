@@ -6,7 +6,6 @@ import {
 } from "./buyer-routes";
 
 const LEGACY_ALIASES: Record<string, string> = {
-  "/creatives": "/clusters",
   "/uploads": "/import",
   "/waste-analysis": "/",
 };
