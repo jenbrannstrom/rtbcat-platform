@@ -422,7 +422,11 @@ class RtbBidstreamService:
                     ),
                 }
 
-            if not status.has_rows and breakdown_type not in ("geo", "publisher"):
+            if (
+                not status.has_rows
+                and breakdown_type not in ("geo", "publisher")
+                and days >= 30
+            ):
                 return {
                     "billing_id": billing_id,
                     "breakdown_by": breakdown_type,
@@ -434,6 +438,11 @@ class RtbBidstreamService:
                         "Run a config refresh after imports."
                     ),
                     "precompute_status": {table_name: status.to_dict()},
+                    "requested_days": days,
+                    "effective_days": days,
+                    "data_state": "unavailable",
+                    "fallback_applied": False,
+                    "fallback_reason": "no_rows_for_window",
                 }
 
         # Get target countries for creative breakdown (language mismatch check)
@@ -444,10 +453,28 @@ class RtbBidstreamService:
                 billing_id
             )
 
+        requested_days = days
+        effective_days = days
+        fallback_applied = False
+        fallback_reason: Optional[str] = None
+
         # Fetch breakdown data
         rows = await self._get_breakdown_rows(
             breakdown_type, billing_id, days, buyer_account_id
         )
+
+        # If the short window is empty, fall back to 30d so users still see
+        # representative config behavior instead of a hard empty state.
+        if not rows and days < 30:
+            fallback_days = 30
+            fallback_rows = await self._get_breakdown_rows(
+                breakdown_type, billing_id, fallback_days, buyer_account_id
+            )
+            if fallback_rows:
+                rows = fallback_rows
+                effective_days = fallback_days
+                fallback_applied = True
+                fallback_reason = f"no_rows_{requested_days}d_used_{fallback_days}d"
 
         if not rows:
             reason_map = {
@@ -464,8 +491,10 @@ class RtbBidstreamService:
                 "has_funnel_metrics": False,
                 "no_data_reason": reason_map.get(breakdown_type, "No data available."),
                 "data_state": "unavailable",
-                "fallback_applied": False,
-                "fallback_reason": "no_canonical_rows",
+                "fallback_applied": fallback_applied,
+                "fallback_reason": fallback_reason or "no_canonical_rows",
+                "requested_days": requested_days,
+                "effective_days": effective_days,
             }
 
         # Build breakdown items
@@ -478,9 +507,11 @@ class RtbBidstreamService:
             "breakdown": breakdown,
             "is_aggregate": False,
             "has_funnel_metrics": any(item.get("bids_in_auction", 0) > 0 for item in breakdown),
-            "data_state": "healthy",
-            "fallback_applied": False,
-            "fallback_reason": None,
+            "data_state": "degraded" if fallback_applied else "healthy",
+            "fallback_applied": fallback_applied,
+            "fallback_reason": fallback_reason,
+            "requested_days": requested_days,
+            "effective_days": effective_days,
         }
 
     async def _get_breakdown_rows(

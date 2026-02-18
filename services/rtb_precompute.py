@@ -6,6 +6,7 @@ Creates and refreshes daily summary tables for RTB analytics endpoints.
 from __future__ import annotations
 
 import logging
+import os
 from datetime import date, datetime
 import uuid
 from typing import Optional
@@ -165,9 +166,29 @@ async def refresh_rtb_summaries(
     buyer_clause = " AND buyer_account_id = @buyer_account_id" if buyer_account_id else ""
     start_date_value = date.fromisoformat(start_date)
     end_date_value = date.fromisoformat(end_date)
+    query_timeout_seconds = float(
+        os.getenv(
+            "BIGQUERY_RTB_QUERY_TIMEOUT_SECONDS",
+            os.getenv("BIGQUERY_QUERY_TIMEOUT_SECONDS", "180"),
+        )
+    )
+    query_max_retries = int(
+        os.getenv(
+            "BIGQUERY_RTB_QUERY_MAX_RETRIES",
+            os.getenv("BIGQUERY_QUERY_MAX_RETRIES", "1"),
+        )
+    )
 
-    funnel_rows = run_query(
-        client,
+    def _run_rtb_query(*, sql: str, params: list[bigquery.QueryParameter]):
+        return run_query(
+            client,
+            sql=sql,
+            params=params,
+            timeout_seconds=query_timeout_seconds,
+            max_retries=query_max_retries,
+        )
+
+    funnel_rows = _run_rtb_query(
         sql=f"""
             SELECT
                 metric_date,
@@ -192,8 +213,7 @@ async def refresh_rtb_summaries(
             ),
         ],
     )
-    publisher_rows = run_query(
-        client,
+    publisher_rows = _run_rtb_query(
         sql=f"""
             SELECT
                 metric_date,
@@ -222,8 +242,7 @@ async def refresh_rtb_summaries(
             ),
         ],
     )
-    geo_rows = run_query(
-        client,
+    geo_rows = _run_rtb_query(
         sql=f"""
             SELECT
                 metric_date,
@@ -251,8 +270,7 @@ async def refresh_rtb_summaries(
             ),
         ],
     )
-    app_rows = run_query(
-        client,
+    app_rows = _run_rtb_query(
         sql=f"""
             SELECT
                 metric_date,
@@ -280,8 +298,7 @@ async def refresh_rtb_summaries(
             ),
         ],
     )
-    app_size_rows = run_query(
-        client,
+    app_size_rows = _run_rtb_query(
         sql=f"""
             SELECT
                 metric_date,
@@ -314,8 +331,7 @@ async def refresh_rtb_summaries(
             ),
         ],
     )
-    app_country_rows = run_query(
-        client,
+    app_country_rows = _run_rtb_query(
         sql=f"""
             SELECT
                 metric_date,
@@ -346,8 +362,7 @@ async def refresh_rtb_summaries(
             ),
         ],
     )
-    app_creative_rows = run_query(
-        client,
+    app_creative_rows = _run_rtb_query(
         sql=f"""
             SELECT
                 metric_date,
