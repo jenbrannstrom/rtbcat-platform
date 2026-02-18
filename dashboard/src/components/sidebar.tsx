@@ -51,7 +51,7 @@ function getRetryDelay(attemptIndex: number): number {
 
 // Main navigation items
 const navigationItems = [
-  { key: "creatives" as const, href: "/clusters", icon: Image },
+  { key: "creatives" as const, href: "/creatives", icon: Image },
   { key: "campaigns" as const, href: "/campaigns", icon: FolderKanban },
   { key: "changeHistory" as const, href: "/history", icon: History },
   { key: "import" as const, href: "/import", icon: RefreshCw },
