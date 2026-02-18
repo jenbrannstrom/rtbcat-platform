@@ -30,12 +30,14 @@ function mapActionToPendingChange(action: Action): PendingChangeMapping | null {
   const rawTarget = (action.target_id || action.target_name || '').trim();
   if (!rawTarget) return null;
 
-  const target = rawTarget.replace(/^format-/i, '');
   const actionType = action.action_type.toLowerCase();
   const targetType = action.target_type.toLowerCase();
   const field = (action.pretargeting_field || '').toLowerCase();
+  const normalizedFormat = rawTarget.replace(/^format-/i, '');
+  const target = targetType === 'config' ? normalizedFormat : rawTarget;
 
   if (targetType === 'size') {
+    if (!['block', 'exclude', 'add', 'remove'].includes(actionType)) return null;
     return {
       change_type: actionType === 'add' ? 'add_size' : 'remove_size',
       field_name: 'included_sizes',
@@ -44,42 +46,74 @@ function mapActionToPendingChange(action: Action): PendingChangeMapping | null {
   }
 
   if (targetType === 'geo') {
-    return actionType === 'add'
-      ? { change_type: 'add_geo', field_name: 'included_geos', value: target }
-      : { change_type: 'add_excluded_geo', field_name: 'excluded_geos', value: target };
+    if (actionType === 'add') {
+      return { change_type: 'add_geo', field_name: 'included_geos', value: target };
+    }
+    if (actionType === 'remove') {
+      return { change_type: 'remove_geo', field_name: 'included_geos', value: target };
+    }
+    if (actionType === 'exclude' || actionType === 'block') {
+      return { change_type: 'add_excluded_geo', field_name: 'excluded_geos', value: target };
+    }
+    return null;
   }
 
   if (targetType === 'publisher' || targetType === 'app') {
+    if (!['block', 'add', 'remove'].includes(actionType)) return null;
     return {
       change_type: actionType === 'remove' ? 'remove_publisher' : 'add_publisher',
-      field_name: 'publisher_targeting_values',
+      field_name: 'publisher_targeting',
       value: target,
     };
   }
 
   if (targetType === 'config') {
     if (field.includes('format')) {
+      if (!['exclude', 'block', 'add', 'remove'].includes(actionType)) return null;
       return {
         change_type: actionType === 'add' ? 'add_format' : 'remove_format',
         field_name: 'included_formats',
         value: target,
       };
     }
+    if (field.includes('excluded_geo')) {
+      if (actionType === 'remove') {
+        return { change_type: 'remove_excluded_geo', field_name: 'excluded_geos', value: target };
+      }
+      if (['add', 'exclude', 'block'].includes(actionType)) {
+        return { change_type: 'add_excluded_geo', field_name: 'excluded_geos', value: target };
+      }
+      return null;
+    }
     if (field.includes('geo')) {
-      return actionType === 'add'
-        ? { change_type: 'add_geo', field_name: 'included_geos', value: target }
-        : { change_type: 'add_excluded_geo', field_name: 'excluded_geos', value: target };
+      if (actionType === 'add') {
+        return { change_type: 'add_geo', field_name: 'included_geos', value: target };
+      }
+      if (actionType === 'remove') {
+        return { change_type: 'remove_geo', field_name: 'included_geos', value: target };
+      }
+      if (actionType === 'exclude' || actionType === 'block') {
+        return { change_type: 'add_excluded_geo', field_name: 'excluded_geos', value: target };
+      }
+      return null;
     }
     if (field.includes('publisher')) {
+      if (!['block', 'add', 'remove'].includes(actionType)) return null;
       return {
         change_type: actionType === 'remove' ? 'remove_publisher' : 'add_publisher',
-        field_name: 'publisher_targeting_values',
+        field_name: 'publisher_targeting',
         value: target,
       };
     }
   }
 
   return null;
+}
+
+function getActionablePendingChanges(recommendation: Recommendation): PendingChangeMapping[] {
+  return recommendation.actions
+    .map((action) => mapActionToPendingChange(action))
+    .filter((mapped): mapped is PendingChangeMapping => mapped !== null);
 }
 
 export function RecommendationsPanel({
@@ -128,10 +162,12 @@ export function RecommendationsPanel({
       recommendation: Recommendation;
       billingId: string;
     }) => {
-      let staged = 0;
-      for (const action of recommendation.actions) {
-        const mapped = mapActionToPendingChange(action);
-        if (!mapped) continue;
+      const mappings = getActionablePendingChanges(recommendation);
+      if (mappings.length === 0) {
+        throw new Error('No compatible pretargeting actions found for this recommendation.');
+      }
+
+      for (const mapped of mappings) {
         await createPendingChange({
           billing_id: billingId,
           change_type: mapped.change_type,
@@ -139,12 +175,8 @@ export function RecommendationsPanel({
           value: mapped.value,
           reason: `Recommendation ${recommendation.id}: ${recommendation.title}`,
         });
-        staged += 1;
       }
-      if (staged === 0) {
-        throw new Error('No compatible pretargeting actions found for this recommendation.');
-      }
-      return { staged };
+      return { staged: mappings.length };
     },
     onSuccess: ({ staged }, variables) => {
       setApplyFeedback((prev) => ({
@@ -198,10 +230,12 @@ export function RecommendationsPanel({
 
   const recs = recommendations || [];
   const counts = summary?.recommendation_count || { critical: 0, high: 0, medium: 0, low: 0 };
-  const configOptions = pretargetingConfigs.map((config) => ({
-    billing_id: config.billing_id || config.config_id,
-    name: config.user_name || config.display_name || `Config ${config.billing_id || config.config_id}`,
-  }));
+  const configOptions = pretargetingConfigs
+    .map((config) => ({
+      billing_id: config.billing_id || config.config_id,
+      name: config.user_name || config.display_name || `Config ${config.billing_id || config.config_id}`,
+    }))
+    .filter((config) => !!config.billing_id);
 
   return (
     <div>
@@ -276,6 +310,7 @@ export function RecommendationsPanel({
                 onApply={(recommendation, billingId) => applyMutation.mutate({ recommendation, billingId })}
                 configOptions={configOptions}
                 isApplying={applyMutation.isPending && applyMutation.variables?.recommendation.id === rec.id}
+                canApply={getActionablePendingChanges(rec).length > 0}
               />
               {applyFeedback[rec.id] && (
                 <div
