@@ -3,12 +3,6 @@ import { normalizeRoutePath } from "@/lib/route-normalization";
 
 describe("normalizeRoutePath", () => {
   describe("legacy aliases", () => {
-    it("maps /creatives to /clusters", () => {
-      const result = normalizeRoutePath("/creatives", null);
-      expect(result.targetPathname).toBe("/clusters");
-      expect(result.reason).toBe("legacy_alias");
-    });
-
     it("maps /uploads to /import", () => {
       const result = normalizeRoutePath("/uploads", null);
       expect(result.targetPathname).toBe("/import");
@@ -21,20 +15,16 @@ describe("normalizeRoutePath", () => {
       expect(result.reason).toBe("legacy_alias");
     });
 
-    it("preserves buyer prefix on alias", () => {
-      const result = normalizeRoutePath("/42/creatives", null);
-      expect(result.targetPathname).toBe("/42/clusters");
-    });
-
-    it("injects cookie buyer on alias", () => {
-      const result = normalizeRoutePath("/creatives", "42");
-      expect(result.targetPathname).toBe("/42/clusters");
-    });
-
     it("does not inject cookie buyer for non-scoped alias target", () => {
       const result = normalizeRoutePath("/waste-analysis", "42");
       // /waste-analysis -> / which IS buyer-scoped, so buyer should be injected
       expect(result.targetPathname).toBe("/42");
+    });
+
+    it("does not alias /creatives (real route)", () => {
+      const result = normalizeRoutePath("/creatives", "42");
+      expect(result.targetPathname).toBe("/42/creatives");
+      expect(result.reason).toBe("inject_buyer_prefix");
     });
   });
 

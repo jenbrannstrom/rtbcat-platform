@@ -95,10 +95,9 @@ describe("middleware - skip paths", () => {
 });
 
 describe("middleware - legacy aliases", () => {
-  it("redirects /creatives to /clusters", () => {
+  it("does not redirect /creatives (real route)", () => {
     const result = middleware(makeRequest("/creatives"));
-    expect(result.type).toBe("redirect");
-    expect(mockRedirect).toHaveBeenCalledWith(expect.stringContaining("/clusters"));
+    expect(mockRedirect).not.toHaveBeenCalledWith(expect.stringContaining("/clusters"));
   });
 
   it("redirects /uploads to /import", () => {
