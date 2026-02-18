@@ -3,15 +3,6 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   devIndicators: false,
-  async redirects() {
-    return [
-      {
-        source: "/creatives",
-        destination: "/clusters",
-        permanent: false,
-      },
-    ];
-  },
   async rewrites() {
     // When OAUTH2_PROXY_MODE is set (GCP deployment), don't rewrite API calls.
     // Let them go through nginx → OAuth2 Proxy → API so the X-Email header is set.
