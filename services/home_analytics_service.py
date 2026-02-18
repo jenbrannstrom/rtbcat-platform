@@ -5,7 +5,36 @@ from __future__ import annotations
 from typing import Any
 
 from storage.postgres_repositories.home_repo import HomeAnalyticsRepository
-from api.routers.analytics.common import get_precompute_status
+from services.analytics_service import AnalyticsService
+
+_analytics_service: AnalyticsService | None = None
+
+
+def _get_analytics_service() -> AnalyticsService:
+    global _analytics_service
+    if _analytics_service is None:
+        _analytics_service = AnalyticsService()
+    return _analytics_service
+
+
+async def _get_precompute_status(
+    table_name: str,
+    days: int,
+    filters: list[str] | None = None,
+    params: list[str] | None = None,
+) -> dict[str, Any]:
+    status = await _get_analytics_service().get_precompute_status(
+        table_name=table_name,
+        days=days,
+        filters=filters,
+        params=params,
+    )
+    return {
+        "table": status.table,
+        "exists": status.exists,
+        "has_rows": status.has_rows,
+        "row_count": status.row_count,
+    }
 
 
 class HomeAnalyticsService:
@@ -14,25 +43,29 @@ class HomeAnalyticsService:
     def __init__(self, repo: HomeAnalyticsRepository | None = None) -> None:
         self._repo = repo or HomeAnalyticsRepository()
 
+    @staticmethod
+    def _has_config_rows(rows: list[dict[str, Any]]) -> bool:
+        return len(rows) > 0
+
     async def get_funnel_payload(
         self,
         days: int,
         buyer_id: str | None,
         limit: int,
     ) -> dict[str, Any]:
-        seat_status = await get_precompute_status(
+        seat_status = await _get_precompute_status(
             "seat_daily",
             days,
             filters=["buyer_account_id = %s"] if buyer_id else None,
             params=[buyer_id] if buyer_id else None,
         )
-        publisher_status = await get_precompute_status(
+        publisher_status = await _get_precompute_status(
             "seat_publisher_daily",
             days,
             filters=["buyer_account_id = %s"] if buyer_id else None,
             params=[buyer_id] if buyer_id else None,
         )
-        geo_status = await get_precompute_status(
+        geo_status = await _get_precompute_status(
             "seat_geo_daily",
             days,
             filters=["buyer_account_id = %s"] if buyer_id else None,
@@ -189,19 +222,47 @@ class HomeAnalyticsService:
         }
 
     async def get_config_payload(self, days: int, buyer_id: str | None) -> dict[str, Any]:
-        config_status = await get_precompute_status(
+        requested_days = max(days, 1)
+        effective_days = requested_days
+        fallback_applied = False
+        fallback_reason: str | None = None
+
+        config_status = await _get_precompute_status(
             "pretarg_daily",
-            days,
+            requested_days,
             filters=["buyer_account_id = %s"] if buyer_id else None,
             params=[buyer_id] if buyer_id else None,
         )
-        if not config_status["has_rows"]:
+        rows: list[dict[str, Any]] = []
+        if config_status["has_rows"]:
+            rows = await self._repo.get_config_rows(requested_days, buyer_id)
+
+        if requested_days < 30 and not self._has_config_rows(rows):
+            fallback_days = 30
+            fallback_status = await _get_precompute_status(
+                "pretarg_daily",
+                fallback_days,
+                filters=["buyer_account_id = %s"] if buyer_id else None,
+                params=[buyer_id] if buyer_id else None,
+            )
+            if fallback_status["has_rows"]:
+                fallback_rows = await self._repo.get_config_rows(fallback_days, buyer_id)
+                if self._has_config_rows(fallback_rows):
+                    rows = fallback_rows
+                    effective_days = fallback_days
+                    fallback_applied = True
+                    fallback_reason = f"no_rows_{requested_days}d_used_{fallback_days}d"
+                    config_status = fallback_status
+
+        if not self._has_config_rows(rows):
             return {
-                "period_days": days,
+                "period_days": requested_days,
+                "requested_days": requested_days,
+                "effective_days": effective_days,
                 "data_source": "home_precompute",
                 "data_state": "unavailable",
-                "fallback_applied": False,
-                "fallback_reason": "no_precompute_rows",
+                "fallback_applied": fallback_applied,
+                "fallback_reason": fallback_reason or "no_precompute_rows",
                 "message": "No precompute available for requested date range.",
                 "configs": [],
                 "total_reached": 0,
@@ -209,21 +270,6 @@ class HomeAnalyticsService:
                 "overall_win_rate_pct": 0,
                 "overall_waste_pct": 100,
                 "precompute_status": {"home_config_daily": config_status},
-            }
-
-        rows = await self._repo.get_config_rows(days, buyer_id)
-        if not rows:
-            return {
-                "period_days": days,
-                "data_source": "home_precompute",
-                "data_state": "degraded",
-                "fallback_applied": True,
-                "fallback_reason": "empty_rows_after_precompute",
-                "configs": [],
-                "total_reached": 0,
-                "total_impressions": 0,
-                "overall_win_rate_pct": 0,
-                "overall_waste_pct": 100,
             }
 
         configs = []
@@ -269,11 +315,13 @@ class HomeAnalyticsService:
         overall_win = (total_impressions / total_reached * 100) if total_reached > 0 else 0
 
         return {
-            "period_days": days,
+            "period_days": requested_days,
+            "requested_days": requested_days,
+            "effective_days": effective_days,
             "data_source": "home_precompute",
-            "data_state": "healthy",
-            "fallback_applied": False,
-            "fallback_reason": None,
+            "data_state": "degraded" if fallback_applied else "healthy",
+            "fallback_applied": fallback_applied,
+            "fallback_reason": fallback_reason,
             "configs": configs[:20],
             "total_reached": total_reached,
             "total_impressions": total_impressions,
