@@ -17,6 +17,7 @@ const BUYER_SCOPED_PREFIXES = [
   "/bill_id",
   "/campaigns",
   "/clusters",
+  "/creatives",
   "/history",
   "/import",
   "/pretargeting",
