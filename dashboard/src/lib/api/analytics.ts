@@ -406,6 +406,8 @@ export interface ConfigPerformanceItem {
 
 export interface ConfigPerformanceResponse {
   period_days: number;
+  requested_days?: number;
+  effective_days?: number;
   total_configs: number;
   configs: ConfigPerformanceItem[];
   data_state?: "healthy" | "degraded" | "unavailable";
