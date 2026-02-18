@@ -715,6 +715,16 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
 
         {!isLoading && !error && sortedBreakdown.length > 0 && (
           <>
+            {data?.fallback_applied && (
+              <div className="mb-3 flex items-center gap-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+                <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                <span>
+                  Showing last <span className="font-semibold">{data.effective_days ?? 30} days</span>
+                  {' '}because no rows were found in the requested
+                  {' '}<span className="font-semibold">{data.requested_days ?? days} day</span> window.
+                </span>
+              </div>
+            )}
             {/* Creative tab info note explaining the metric */}
             {activeTab === 'creative' && (
               <div className="mb-3 flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">

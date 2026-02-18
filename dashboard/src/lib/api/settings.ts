@@ -254,6 +254,8 @@ export interface ConfigBreakdownResponse {
   data_state?: "healthy" | "degraded" | "unavailable";
   fallback_applied?: boolean;
   fallback_reason?: string | null;
+  requested_days?: number;
+  effective_days?: number;
   has_funnel_metrics?: boolean;
 }
 

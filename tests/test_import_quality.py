@@ -5,12 +5,14 @@ IMPORT-002: Date continuity gap detection.
 """
 
 import pytest
+from unittest.mock import MagicMock
 
 from importers.unified_importer import (
     canonicalize_size_string,
     check_date_continuity,
     _apply_date_continuity,
     UnifiedImportResult,
+    sync_performance_metrics_from_rtb_daily_batch,
 )
 
 
@@ -147,3 +149,28 @@ class TestApplyDateContinuity:
         assert len(result.date_gaps) == 13
         # Warning should mention "and N more"
         assert "more" in result.date_gap_warning
+
+
+# =========================================================================
+# IMPORT-003 — rtb_daily -> performance_metrics hydration
+# =========================================================================
+
+class TestPerformanceMetricsHydration:
+    """Verify legacy performance_metrics sync SQL is executed for imported batches."""
+
+    def test_sync_executes_expected_sql(self):
+        cursor = MagicMock()
+
+        sync_performance_metrics_from_rtb_daily_batch(cursor, "batch-123")
+
+        # ensure_performance_metrics_table emits CREATE TABLE + CREATE INDEX
+        assert cursor.execute.call_count >= 3
+
+        insert_call = cursor.execute.call_args_list[-1]
+        sql = insert_call.args[0]
+        params = insert_call.args[1]
+
+        assert "INSERT INTO performance_metrics" in sql
+        assert "FROM rtb_daily" in sql
+        assert "import_batch_id = %s" in sql
+        assert params == ("batch-123",)
