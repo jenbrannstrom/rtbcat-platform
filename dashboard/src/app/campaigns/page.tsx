@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   DndContext,
   DragOverlay,
@@ -52,10 +53,34 @@ import type { Creative as PreviewCreative } from '@/types/api';
 // Local type alias for Creative used in this file
 type Creative = CampaignCreative;
 
+function parseSortField(value: string | null): SortField {
+  switch (value) {
+    case 'name':
+    case 'impressions':
+    case 'clicks':
+    case 'creatives':
+    case 'spend':
+      return value;
+    default:
+      return 'spend';
+  }
+}
+
+function parseSortDir(value: string | null): SortDirection {
+  return value === 'asc' ? 'asc' : 'desc';
+}
+
+function parseViewMode(value: string | null): ViewMode {
+  return value === 'list' ? 'list' : 'grid';
+}
+
 export default function CampaignsPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { selectedBuyerId } = useAccount();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showAllSuggestions, setShowAllSuggestions] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
@@ -64,15 +89,15 @@ export default function CampaignsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastClickedId, setLastClickedId] = useState<string | null>(null);
   const [creativesMap, setCreativesMap] = useState<Map<string, Creative>>(new Map());
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => parseViewMode(searchParams.get('view')));
   const [campaignError, setCampaignError] = useState<string | null>(null);
 
   // Page-level sort/filter state (Phase 23)
-  const [pageSortField, setPageSortField] = useState<SortField>('spend');
-  const [pageSortDir, setPageSortDir] = useState<SortDirection>('desc');
-  const [countryFilter, setCountryFilter] = useState<string | null>(null);
+  const [pageSortField, setPageSortField] = useState<SortField>(() => parseSortField(searchParams.get('sort')));
+  const [pageSortDir, setPageSortDir] = useState<SortDirection>(() => parseSortDir(searchParams.get('dir')));
+  const [countryFilter, setCountryFilter] = useState<string | null>(() => searchParams.get('country') || null);
   // Phase 29: Issues filter
-  const [showIssuesOnly, setShowIssuesOnly] = useState(false);
+  const [showIssuesOnly, setShowIssuesOnly] = useState<boolean>(() => searchParams.get('issues') === '1');
 
   // Preview modal state (Phase 24)
   const [previewCreativeId, setPreviewCreativeId] = useState<string | null>(null);
@@ -92,6 +117,64 @@ export default function CampaignsPage() {
 
   // Snap modifier disabled for smoother dragging
   // const snapToGrid = createSnapModifier(60);
+
+  const syncQueryState = useCallback((next: Partial<{
+    viewMode: ViewMode;
+    sortField: SortField;
+    sortDir: SortDirection;
+    countryFilter: string | null;
+    showIssuesOnly: boolean;
+  }>) => {
+    const params = new URLSearchParams(searchParams.toString());
+    const merged = {
+      viewMode,
+      sortField: pageSortField,
+      sortDir: pageSortDir,
+      countryFilter,
+      showIssuesOnly,
+      ...next,
+    };
+
+    if (merged.viewMode === 'list') params.set('view', 'list');
+    else params.delete('view');
+
+    if (merged.sortField !== 'spend') params.set('sort', merged.sortField);
+    else params.delete('sort');
+
+    if (merged.sortDir !== 'desc') params.set('dir', merged.sortDir);
+    else params.delete('dir');
+
+    if (merged.countryFilter) params.set('country', merged.countryFilter);
+    else params.delete('country');
+
+    if (merged.showIssuesOnly) params.set('issues', '1');
+    else params.delete('issues');
+
+    const query = params.toString();
+    const targetPath = pathname || '/campaigns';
+    router.replace(query ? `${targetPath}?${query}` : targetPath, { scroll: false });
+  }, [countryFilter, pageSortDir, pageSortField, pathname, router, searchParams, showIssuesOnly, viewMode]);
+
+  const handleViewModeChange = useCallback((nextViewMode: ViewMode) => {
+    setViewMode(nextViewMode);
+    syncQueryState({ viewMode: nextViewMode });
+  }, [syncQueryState]);
+
+  const handleSortChange = useCallback((field: SortField, dir: SortDirection) => {
+    setPageSortField(field);
+    setPageSortDir(dir);
+    syncQueryState({ sortField: field, sortDir: dir });
+  }, [syncQueryState]);
+
+  const handleCountryFilterChange = useCallback((nextCountryFilter: string | null) => {
+    setCountryFilter(nextCountryFilter);
+    syncQueryState({ countryFilter: nextCountryFilter });
+  }, [syncQueryState]);
+
+  const handleShowIssuesOnlyChange = useCallback((nextShowIssuesOnly: boolean) => {
+    setShowIssuesOnly(nextShowIssuesOnly);
+    syncQueryState({ showIssuesOnly: nextShowIssuesOnly });
+  }, [syncQueryState]);
 
   // Queries
   const { data: campaigns = [], isLoading: loadingCampaigns } = useQuery({
@@ -560,7 +643,7 @@ export default function CampaignsPage() {
           {/* View Toggle */}
           <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
             <button
-              onClick={() => setViewMode('grid')}
+              onClick={() => handleViewModeChange('grid')}
               className={cn(
                 "p-2 rounded transition-colors",
                 viewMode === 'grid'
@@ -572,7 +655,7 @@ export default function CampaignsPage() {
               <LayoutGrid className="h-4 w-4" />
             </button>
             <button
-              onClick={() => setViewMode('list')}
+              onClick={() => handleViewModeChange('list')}
               className={cn(
                 "p-2 rounded transition-colors",
                 viewMode === 'list'
@@ -632,15 +715,12 @@ export default function CampaignsPage() {
       <SortFilterControls
         pageSortField={pageSortField}
         pageSortDir={pageSortDir}
-        onSortChange={(field, dir) => {
-          setPageSortField(field);
-          setPageSortDir(dir);
-        }}
+        onSortChange={handleSortChange}
         countryFilter={countryFilter}
-        onCountryFilterChange={setCountryFilter}
+        onCountryFilterChange={handleCountryFilterChange}
         allCountries={allCountries}
         showIssuesOnly={showIssuesOnly}
-        onShowIssuesOnlyChange={setShowIssuesOnly}
+        onShowIssuesOnlyChange={handleShowIssuesOnlyChange}
       />
 
       {campaignError && (
