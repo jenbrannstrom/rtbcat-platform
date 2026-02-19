@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
-import { setPretargetingName, lookupGeoNames, suspendPretargeting, activatePretargeting, syncPretargetingConfigs } from '@/lib/api';
-import { ChevronRight, Pencil, Check, X, AlertTriangle, AlertCircle, Pause, Play, Loader2 } from 'lucide-react';
+import { setPretargetingName, lookupGeoNames, suspendPretargeting, activatePretargeting, syncPretargetingConfigs, getPretargetingConfigDetail, createPendingChange, cancelPendingChange } from '@/lib/api';
+import { ChevronRight, Pencil, Check, X, AlertTriangle, AlertCircle, Pause, Play, Loader2, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SnapshotComparisonPanel } from './snapshot-comparison-panel';
 import { useAccount } from '@/contexts/account-context';
@@ -120,8 +120,16 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   const handleToggle = onToggleExpand || (() => setInternalExpanded(!internalExpanded));
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(config.name);
+  const [showHistory, setShowHistory] = useState(false);
+  const [qpsInput, setQpsInput] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
+
+  const { data: configDetail } = useQuery({
+    queryKey: ['pretargeting-detail', config.billing_id],
+    queryFn: () => getPretargetingConfigDetail(config.billing_id),
+    enabled: expanded,
+  });
 
   const nameMutation = useMutation({
     mutationFn: ({ billingId, userName }: { billingId: string; userName: string }) =>
@@ -148,6 +156,22 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
     },
   });
 
+  const createChangeMutation = useMutation({
+    mutationFn: createPendingChange,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', config.billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+    },
+  });
+
+  const cancelChangeMutation = useMutation({
+    mutationFn: cancelPendingChange,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', config.billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+    },
+  });
+
   // Focus input when editing starts
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -155,6 +179,12 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
       inputRef.current.select();
     }
   }, [isEditing]);
+
+  // Sync QPS input with config detail
+  useEffect(() => {
+    const qpsValue = configDetail?.effective_maximum_qps ?? configDetail?.maximum_qps;
+    setQpsInput(qpsValue === null || qpsValue === undefined ? '' : String(qpsValue));
+  }, [configDetail?.effective_maximum_qps, configDetail?.maximum_qps]);
 
   const handleStartEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -183,6 +213,43 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
     }
   };
 
+  const pendingQpsChanges = (configDetail?.pending_changes || []).filter(
+    (c) => c.change_type === 'set_maximum_qps'
+  );
+  const latestPendingQpsChange = pendingQpsChanges.length > 0
+    ? pendingQpsChanges[pendingQpsChanges.length - 1]
+    : null;
+  const persistedQpsLimit = configDetail?.maximum_qps ?? null;
+
+  const applyQpsChange = () => {
+    if (!configDetail) return;
+    const normalized = qpsInput.trim();
+    if (!normalized) {
+      pendingQpsChanges.forEach((c) => cancelChangeMutation.mutate(c.id));
+      return;
+    }
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isFinite(parsed) || parsed < 0) return;
+    const desired = String(parsed);
+    pendingQpsChanges
+      .filter((c) => c.value !== desired)
+      .forEach((c) => cancelChangeMutation.mutate(c.id));
+    if (persistedQpsLimit === parsed) {
+      pendingQpsChanges
+        .filter((c) => c.value === desired)
+        .forEach((c) => cancelChangeMutation.mutate(c.id));
+      return;
+    }
+    if (latestPendingQpsChange?.value === desired) return;
+    createChangeMutation.mutate({
+      billing_id: config.billing_id,
+      change_type: 'set_maximum_qps',
+      field_name: 'maximum_qps',
+      value: desired,
+      reason: 'Updated from config card QPS control',
+    });
+  };
+
   // Determine status indicator
   const isHighWaste = config.has_performance && config.waste_rate >= 70;
   const isCriticalWaste = config.has_performance && config.waste_rate >= 90;
@@ -191,6 +258,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   // Check if using display_name from Google (not user-defined)
   const isGoogleName = !config.user_name && config.display_name;
   const stateMutationPending = suspendMutation.isPending || activateMutation.isPending;
+  const qpsMutationPending = createChangeMutation.isPending || cancelChangeMutation.isPending;
   const configDetailHref = toBuyerScopedPath(
     `/bill_id/${encodeURIComponent(config.billing_id)}`,
     selectedBuyerId
@@ -335,22 +403,47 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
 
       {/* Expanded content */}
       {expanded && (
-        <div className="px-4 pb-4 pt-1 border-t bg-gray-50/50">
-          {/* Settings pills with entry buttons */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex flex-wrap gap-2">
+        <div className="border-t bg-gray-50/50">
+          {/* Sticky action header with Pause/Activate, QPS controls, and History */}
+          <div className="sticky top-0 z-10 bg-gray-50 border-b px-4 py-2 flex items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-1.5">
               <GeoSettingPill geoIds={config.included_geos} max={5} />
               <SettingPill label="Formats" values={config.formats} />
               <SettingPill label="Platforms" values={config.platforms} />
               <SettingPill label="Sizes" values={config.sizes} max={4} />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+              {/* QPS control inline */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-gray-500 font-medium">QPS</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={qpsInput}
+                  onChange={(e) => setQpsInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') applyQpsChange(); }}
+                  className="w-20 rounded border border-gray-300 bg-white px-1.5 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  placeholder="unset"
+                />
+                <button
+                  onClick={applyQpsChange}
+                  disabled={qpsMutationPending}
+                  className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                >
+                  Set
+                </button>
+                {latestPendingQpsChange && (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">
+                    Pending: {latestPendingQpsChange.value}
+                  </span>
+                )}
+              </div>
+              <div className="w-px h-5 bg-gray-300" />
+              {/* Pause/Activate */}
               {config.state === 'ACTIVE' ? (
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    suspendMutation.mutate();
-                  }}
+                  onClick={() => suspendMutation.mutate()}
                   disabled={stateMutationPending}
                   className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200 disabled:opacity-50"
                 >
@@ -359,10 +452,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                 </button>
               ) : (
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    activateMutation.mutate();
-                  }}
+                  onClick={() => activateMutation.mutate()}
                   disabled={stateMutationPending}
                   className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
                 >
@@ -370,27 +460,42 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                   Activate
                 </button>
               )}
+              {/* History toggle */}
+              <button
+                onClick={() => setShowHistory(!showHistory)}
+                className={cn(
+                  'flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors',
+                  showHistory
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                )}
+              >
+                <History className="h-3 w-3" />
+                History
+              </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-4">
-              <div className="bg-white rounded-lg p-3 border">
-                <div className="text-xs text-gray-500 mb-1">Reached</div>
-                <div className="text-xl font-bold text-gray-900">
+          <div className="px-4 pb-3 pt-2">
+            {/* Compact stat chips in one row */}
+            <div className="flex items-center gap-3 mb-2">
+              <div className="flex items-center gap-1.5 rounded bg-white border px-2.5 py-1.5">
+                <span className="text-[11px] text-gray-500">Reached</span>
+                <span className="text-sm font-bold text-gray-900">
                   {config.has_performance ? formatNumber(config.reached) : '--'}
-                </div>
+                </span>
               </div>
-              <div className="bg-white rounded-lg p-3 border">
-                <div className="text-xs text-gray-500 mb-1">Impressions</div>
-                <div className="text-xl font-bold text-gray-900">
+              <div className="flex items-center gap-1.5 rounded bg-white border px-2.5 py-1.5">
+                <span className="text-[11px] text-gray-500">Imp</span>
+                <span className="text-sm font-bold text-gray-900">
                   {config.has_performance ? formatNumber(config.impressions) : '--'}
-                </div>
+                </span>
               </div>
-              <div className="bg-white rounded-lg p-3 border">
-                <div className="text-xs text-gray-500 mb-1">Win Rate</div>
-                <div
+              <div className="flex items-center gap-1.5 rounded bg-white border px-2.5 py-1.5">
+                <span className="text-[11px] text-gray-500">Win</span>
+                <span
                   className={cn(
-                    'text-xl font-bold',
+                    'text-sm font-bold',
                     config.has_performance && config.win_rate >= 50 && 'text-green-600',
                     config.has_performance && config.win_rate >= 30 && config.win_rate < 50 && 'text-yellow-600',
                     config.has_performance && config.win_rate < 30 && 'text-red-600',
@@ -398,13 +503,13 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                   )}
                 >
                   {config.has_performance ? `${config.win_rate.toFixed(1)}%` : '--'}
-                </div>
+                </span>
               </div>
-              <div className="bg-white rounded-lg p-3 border">
-                <div className="text-xs text-gray-500 mb-1">Waste Rate</div>
-                <div
+              <div className="flex items-center gap-1.5 rounded bg-white border px-2.5 py-1.5">
+                <span className="text-[11px] text-gray-500">Waste</span>
+                <span
                   className={cn(
-                    'text-xl font-bold',
+                    'text-sm font-bold',
                     config.has_performance && config.waste_rate < 50 && 'text-gray-700',
                     config.has_performance && config.waste_rate >= 50 && config.waste_rate < 70 && 'text-yellow-600',
                     config.has_performance && config.waste_rate >= 70 && config.waste_rate < 90 && 'text-orange-600',
@@ -413,16 +518,20 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                   )}
                 >
                   {config.has_performance ? `${config.waste_rate.toFixed(1)}%` : '--'}
-                </div>
+                </span>
+                {config.has_performance && <WasteMiniBar pct={config.waste_rate} />}
               </div>
             </div>
 
-          {/* History Panel */}
-          <div className="mt-4">
-            <SnapshotComparisonPanel
-              billing_id={config.billing_id}
-              configName={config.name}
-            />
+            {/* History Panel - toggled via button */}
+            {showHistory && (
+              <div className="mt-2">
+                <SnapshotComparisonPanel
+                  billing_id={config.billing_id}
+                  configName={config.name}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
