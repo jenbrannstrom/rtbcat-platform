@@ -58,135 +58,107 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
     : null;
 
   return (
-    <section className="bg-white rounded-lg border p-4 space-y-4 overflow-visible">
+    <section className="bg-white rounded-lg border p-3 space-y-3 overflow-visible">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h3 className="font-semibold text-gray-900">Endpoint Efficiency</h3>
-          <div className="flex items-center gap-2 text-[11px]">
-            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-600">
-              {requestedWindow?.start_date ?? data.window.start_date} → {requestedWindow?.end_date ?? data.window.end_date}
-            </span>
-            <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">
-              Delivery: {deliveryCoverage?.days_with_data ?? 0}/{requestedDays}d
-            </span>
-            <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700">
-              Auction: {bidstreamCoverage?.days_with_data ?? 0}/{requestedDays}d
-            </span>
-            <span className="rounded bg-gray-50 px-1.5 py-0.5 text-gray-500">
-              Feed rows: {endpointFeedRows}
-            </span>
-          </div>
-        </div>
+        <h3 className="font-semibold text-gray-900">Endpoint Efficiency</h3>
       </div>
 
       {data.alerts.length > 0 && (
-        <div className="space-y-2">
+        <div className="flex flex-wrap gap-1.5">
           {data.alerts.map((alert) => (
-            <div
+            <span
               key={alert.code}
               className={
                 alert.severity === "high"
-                  ? "px-3 py-2 rounded border border-red-200 bg-red-50 text-red-800 text-sm"
-                  : "px-3 py-2 rounded border border-yellow-200 bg-yellow-50 text-yellow-800 text-sm"
+                  ? "px-2 py-1 rounded border border-red-200 bg-red-50 text-red-800 text-xs"
+                  : "px-2 py-1 rounded border border-yellow-200 bg-yellow-50 text-yellow-800 text-xs"
               }
             >
               {alert.message}
-            </div>
+            </span>
           ))}
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="rounded border bg-blue-50 border-blue-100 p-3">
-          <div className="text-[11px] uppercase text-blue-700">
-            Allocated QPS Cap
-            <InfoTooltip text="Total configured endpoint capacity in Cat-Scan (sum of maximum_qps)." />
-          </div>
-          <div className="text-xl font-bold text-blue-900">{summary.allocated_qps.toLocaleString()}</div>
-        </div>
-        <div className={`rounded border p-3 ${summary.endpoint_delivery_state === "missing" ? "bg-red-50 border-red-200" : "bg-slate-50 border-slate-200"}`}>
-          <div className="text-[11px] uppercase text-slate-600">
-            Observed Endpoint QPS
-            <InfoTooltip text="Measured endpoint delivery rate from rtb_endpoints_current. This is the observed feed, not configuration." />
+      <div className="grid grid-cols-3 gap-2">
+        <div className={`rounded border px-2.5 py-2 ${summary.endpoint_delivery_state === "missing" ? "bg-red-50 border-red-200" : "bg-slate-50 border-slate-200"}`}>
+          <div className="text-[10px] uppercase text-slate-600">
+            Observed QPS
+            <InfoTooltip text="Measured endpoint delivery rate from rtb_endpoints_current." />
           </div>
           {summary.observed_query_rate_qps !== null ? (
-            <div className="text-xl font-bold text-slate-900">{summary.observed_query_rate_qps.toLocaleString()} QPS</div>
+            <div className="text-lg font-bold text-slate-900">{summary.observed_query_rate_qps.toLocaleString()}</div>
           ) : (
-            <div className="text-sm font-medium text-red-700">Feed missing</div>
+            <div className="text-sm font-medium text-red-700">Missing</div>
           )}
-          <div className="text-[10px] text-gray-400 mt-1">
-            Funnel proxy: {summary.funnel_proxy_qps_avg.toLocaleString()} QPS
-            <InfoTooltip text="Proxy computed from reached queries in the selected period. Useful context, but not endpoint feed truth." />
+          <div className="text-[10px] text-gray-400">
+            Proxy: {summary.funnel_proxy_qps_avg.toLocaleString()}
           </div>
         </div>
-        <div className="rounded border bg-amber-50 border-amber-200 p-3">
-          <div className="text-[11px] uppercase text-amber-700">
+        <div className="rounded border bg-amber-50 border-amber-200 px-2.5 py-2">
+          <div className="text-[10px] uppercase text-amber-700">
             Utilization
-            <InfoTooltip text="Observed Endpoint QPS divided by Allocated QPS Cap. Low values mean allocated capacity is underused." />
+            <InfoTooltip text="Observed QPS / Allocated QPS. Low = underused capacity." />
           </div>
-          <div className="text-xl font-bold text-amber-900">
+          <div className="text-lg font-bold text-amber-900">
             {summary.qps_utilization_pct !== null ? `${summary.qps_utilization_pct.toFixed(2)}%` : "N/A"}
           </div>
         </div>
-        <div className="rounded border bg-emerald-50 border-emerald-200 p-3">
-          <div className="text-[11px] uppercase text-emerald-700">
-            Reserved vs Used
-            <InfoTooltip text="This shows how much capacity you reserved compared to what was actually used. Example: 607.5x means you reserved about 607.5 units for each 1 unit used." />
+        <div className="rounded border bg-emerald-50 border-emerald-200 px-2.5 py-2">
+          <div className="text-[10px] uppercase text-emerald-700">
+            Reserved / Used
+            <InfoTooltip text="Capacity reserved vs actually used. E.g. 607x = 607 reserved per 1 used." />
           </div>
-          <div className="text-xl font-bold text-emerald-900">
+          <div className="text-lg font-bold text-emerald-900">
             {summary.allocation_overshoot_x ? `${summary.allocation_overshoot_x.toFixed(1)}x` : "N/A"}
+            {usedPctFromOvershoot !== null && (
+              <span className="text-[11px] font-normal text-emerald-700 ml-1">({usedPctFromOvershoot.toFixed(2)}%)</span>
+            )}
           </div>
-          {usedPctFromOvershoot !== null && (
-            <div className="text-[12px] text-emerald-800 mt-1">
-              Used: {usedPctFromOvershoot.toFixed(2)}%
-            </div>
-          )}
         </div>
       </div>
 
-      <div className="rounded border p-3">
-        <div className="text-sm font-medium text-gray-900 mb-2">
-          Formula Clarity (AB Parity)
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-          <div className="rounded bg-purple-50 border border-purple-100 p-2">
-            <div className="text-xs text-purple-700 uppercase">Delivery Win</div>
+      <div className="rounded border p-2">
+        <div className="text-xs font-medium text-gray-900 mb-1.5">Win Rates</div>
+        <div className="grid grid-cols-3 gap-2 text-sm">
+          <div className="rounded bg-purple-50 border border-purple-100 px-2 py-1.5">
+            <div className="text-[10px] text-purple-700 uppercase">Delivery Win</div>
             <div className="font-semibold">
               {typeof deliveryWinRatePct === "number" ? `${deliveryWinRatePct.toFixed(2)}%` : "N/A"}
             </div>
-            <div className="text-[11px] text-gray-600">Impressions / Reached Queries</div>
+            <div className="text-[10px] text-gray-500">Impr / Reached ({formatNum(summary.total_impressions ?? 0)} / {formatNum(summary.total_reached_queries ?? 0)})</div>
           </div>
-          <div className="rounded bg-cyan-50 border border-cyan-100 p-2">
-            <div className="text-xs text-cyan-700 uppercase">Auction Win</div>
+          <div className="rounded bg-cyan-50 border border-cyan-100 px-2 py-1.5">
+            <div className="text-[10px] text-cyan-700 uppercase">Auction Win</div>
             <div className="font-semibold">
               {summary.auction_win_rate_over_bids_pct != null
                 ? `${summary.auction_win_rate_over_bids_pct.toFixed(2)}%`
                 : "N/A"}
             </div>
-            <div className="text-[11px] text-gray-600">
-              Auctions Won / Bids ({formatNum(auctionsWon)} / {formatNum(bids)})
+            <div className="text-[10px] text-gray-500">
+              Won / Bids ({formatNum(auctionsWon)} / {formatNum(bids)})
             </div>
           </div>
-          <div className="rounded bg-orange-50 border border-orange-100 p-2">
-            <div className="text-xs text-orange-700 uppercase">Filtered Bid Rate</div>
+          <div className="rounded bg-orange-50 border border-orange-100 px-2 py-1.5">
+            <div className="text-[10px] text-orange-700 uppercase">Filtered Bids</div>
             <div className="font-semibold">
               {summary.filtered_bid_rate_pct != null
                 ? `${summary.filtered_bid_rate_pct.toFixed(2)}%`
                 : "N/A"}
             </div>
-            <div className="text-[11px] text-gray-600">
-              (Bids - Bids in Auction) / Bids ({formatNum(filteredBids)})
+            <div className="text-[10px] text-gray-500">
+              {formatNum(filteredBids)} filtered
             </div>
           </div>
         </div>
       </div>
 
-      <div className="rounded border p-3">
-        <div className="text-sm font-medium text-gray-900 mb-2">
-          Endpoint Reconciliation
-        </div>
-        <div className="text-xs text-gray-600 mb-3">
-          CatScan endpoints: {recon.counts.catscan_endpoints} | Observed rows: {recon.counts.google_delivery_rows} | Missing: {recon.counts.missing_in_google}
+      <div className="rounded border p-2">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-xs font-medium text-gray-900">Endpoint Reconciliation</span>
+          <span className="text-[10px] text-gray-500">
+            {recon.counts.catscan_endpoints} configured · {recon.counts.google_delivery_rows} observed · {recon.counts.missing_in_google} missing
+          </span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -233,37 +205,33 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
         </div>
       </div>
 
-      <div className="rounded border p-3">
-        <div className="text-sm font-medium text-gray-900 mb-2">Funnel Bridge (proxy)</div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+      <div className="rounded border p-2">
+        <div className="text-xs font-medium text-gray-900 mb-1.5">Funnel Bridge (proxy)</div>
+        <div className="grid grid-cols-5 gap-2 text-sm">
           <div>
-            <div className="text-xs text-gray-500">Available Impressions</div>
+            <div className="text-[10px] text-gray-500">Available Impr</div>
             <div className="font-semibold">{formatNum(bridge.available_impressions)}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500">Inventory Matches</div>
+            <div className="text-[10px] text-gray-500">Inv Matches</div>
             <div className="font-semibold">{formatNum(bridge.inventory_matches)}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500">Filtered Impressions</div>
+            <div className="text-[10px] text-gray-500">Filtered Impr</div>
             <div className="font-semibold">{formatNum(bridge.filtered_impressions)}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500">Pretargeting Loss</div>
+            <div className="text-[10px] text-gray-500">PTGT Loss</div>
             <div className="font-semibold">
               {bridge.pretargeting_loss_pct !== null ? `${bridge.pretargeting_loss_pct.toFixed(1)}%` : "N/A"}
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500">Supply Capture</div>
+            <div className="text-[10px] text-gray-500">Supply Capture</div>
             <div className="font-semibold">
               {bridge.supply_capture_pct !== null ? `${bridge.supply_capture_pct.toFixed(1)}%` : "N/A"}
             </div>
           </div>
-        </div>
-        <div className="text-xs text-gray-500 mt-2">
-          Available impressions proxy source: <code>{bridge.available_impressions_proxy_source}</code>.
-          <InfoTooltip text="This value is estimated from bid requests in precomputed seat-level data, used as an availability proxy in the funnel bridge." />
         </div>
       </div>
     </section>

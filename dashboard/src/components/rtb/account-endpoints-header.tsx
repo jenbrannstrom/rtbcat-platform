@@ -25,39 +25,13 @@ function formatQPS(qps: number | null): string {
   return qps.toLocaleString();
 }
 
-// Helper to format large numbers
-function formatNumber(num: number): string {
-  if (num >= 1000000000) return `${(num / 1000000000).toFixed(1)}B`;
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-  return num.toLocaleString();
-}
-
-function formatIsoDate(value: string | null | undefined): string {
-  if (!value) return "N/A";
-  return value;
-}
-
 interface AccountEndpointsHeaderProps {
-  funnelData?: {
-    reached: number | null;
-    impressions: number;
-    deliveryWinRate: number | null;
-    auctionWinRate: number | null;
-    auctionsWon: number | null;
-    filteredBids: number | null;
-    filteredBidRate: number | null;
-    requestedEndDate?: string | null;
-    homeSeatDataThrough?: string | null;
-    bidstreamDataThrough?: string | null;
-  };
   observedQpsByEndpointId?: Record<string, number | null>;
 }
 
-export function AccountEndpointsHeader({ funnelData, observedQpsByEndpointId }: AccountEndpointsHeaderProps) {
+export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpointsHeaderProps) {
   const { selectedBuyerId, selectedServiceAccountId } = useAccount();
   const [showQpsInfo, setShowQpsInfo] = useState(false);
-  const [showDataQualityInfo, setShowDataQualityInfo] = useState(false);
   const queryClient = useQueryClient();
 
   // Use buyer_id for filtering - RTB endpoints are looked up via buyer -> bidder mapping
@@ -196,14 +170,9 @@ export function AccountEndpointsHeader({ funnelData, observedQpsByEndpointId }: 
     );
   }
 
-  // Calculate funnel metrics
-  const hasFunnelData = funnelData && funnelData.reached !== null && funnelData.reached > 0;
-
   return (
     <div className="bg-white rounded-lg border p-4">
-      <div className="flex gap-6">
-        {/* Left: Endpoints with Total QPS as sum row */}
-        <div className="flex-1">
+      <div>
           <div className="flex items-center gap-2 mb-3">
             <Server className="h-4 w-4 text-gray-500" />
             <h3 className="font-semibold text-gray-900">RTB Endpoints</h3>
@@ -291,100 +260,6 @@ export function AccountEndpointsHeader({ funnelData, observedQpsByEndpointId }: 
             </div>
           </div>
         </div>
-
-        {/* Right: Compact Funnel Metrics */}
-        <div className="w-72 flex flex-col justify-center">
-          {hasFunnelData ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between px-2">
-                <span className="text-[10px] uppercase tracking-wide text-gray-500">Observed Delivery</span>
-                <div className="relative">
-                  <button
-                    onClick={() => setShowDataQualityInfo(!showDataQualityInfo)}
-                    onMouseEnter={() => setShowDataQualityInfo(true)}
-                    onMouseLeave={() => setShowDataQualityInfo(false)}
-                    className="p-0.5 hover:bg-gray-100 rounded-full transition-colors"
-                    aria-label="Observed delivery data quality"
-                  >
-                    <Info className="h-3.5 w-3.5 text-gray-400" />
-                  </button>
-                  {showDataQualityInfo && (
-                    <div className="absolute right-0 top-6 w-80 p-3 bg-white border border-gray-200 rounded-lg shadow-lg z-10 text-xs text-gray-600">
-                      <p className="font-medium text-gray-900 mb-1">Configured vs Observed</p>
-                      <p>
-                        Endpoint rows above come from Google endpoint configuration (`/settings/endpoints`).
-                        Delivery metrics here come from imported CSV/precompute data. Missing or delayed CSV days can
-                        skew observed region comparisons, so treat these comparisons as directional and verify over
-                        longer windows before making hard decisions.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-              {(funnelData?.requestedEndDate || funnelData?.homeSeatDataThrough || funnelData?.bidstreamDataThrough) && (
-                <div className="flex flex-wrap items-center gap-1.5 px-2">
-                  {funnelData?.requestedEndDate && (
-                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">
-                      Through {formatIsoDate(funnelData.requestedEndDate)}
-                    </span>
-                  )}
-                  {funnelData?.homeSeatDataThrough && (
-                    <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">
-                      Delivery: {formatIsoDate(funnelData.homeSeatDataThrough)}
-                    </span>
-                  )}
-                  {funnelData?.bidstreamDataThrough && (
-                    <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] text-indigo-700">
-                      Auction: {formatIsoDate(funnelData.bidstreamDataThrough)}
-                    </span>
-                  )}
-                </div>
-              )}
-              {/* Reached */}
-              <div className="flex items-center justify-between px-3 py-1.5 bg-blue-50 rounded border border-blue-100">
-                <span className="text-xs text-blue-600 uppercase tracking-wide">Reached Queries</span>
-                <span className="text-sm font-bold text-blue-700">{formatNumber(funnelData!.reached!)}</span>
-              </div>
-              {/* Impressions */}
-              <div className="flex items-center justify-between px-3 py-1.5 bg-green-50 rounded border border-green-100">
-                <span className="text-xs text-green-600 uppercase tracking-wide">Impressions</span>
-                <span className="text-sm font-bold text-green-700">{formatNumber(funnelData!.impressions)}</span>
-              </div>
-              {/* Delivery Win Rate */}
-              <div className="flex items-center justify-between px-3 py-1.5 bg-purple-50 rounded border border-purple-100">
-                <span className="text-xs text-purple-600 uppercase tracking-wide">Delivery Win (Impr/Reached)</span>
-                <span className="text-sm font-bold text-purple-700">
-                  {funnelData!.deliveryWinRate !== null ? `${funnelData!.deliveryWinRate.toFixed(1)}%` : "N/A"}
-                </span>
-              </div>
-              {/* AB-style parity metrics */}
-              <div className="flex items-center justify-between px-3 py-1.5 bg-indigo-50 rounded border border-indigo-100">
-                <span className="text-xs text-indigo-600 uppercase tracking-wide">Auctions Won</span>
-                <span className="text-sm font-bold text-indigo-700">
-                  {funnelData!.auctionsWon !== null ? formatNumber(funnelData!.auctionsWon) : "N/A"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between px-3 py-1.5 bg-orange-50 rounded border border-orange-100">
-                <span className="text-xs text-orange-600 uppercase tracking-wide">Filtered Bids</span>
-                <span className="text-sm font-bold text-orange-700">
-                  {funnelData!.filteredBids !== null ? formatNumber(funnelData!.filteredBids) : "N/A"}
-                  {funnelData!.filteredBidRate !== null ? ` (${funnelData!.filteredBidRate.toFixed(1)}%)` : ""}
-                </span>
-              </div>
-              <div className="flex items-center justify-between px-3 py-1.5 bg-cyan-50 rounded border border-cyan-100">
-                <span className="text-xs text-cyan-700 uppercase tracking-wide">Auction Win (Won/Bids)</span>
-                <span className="text-sm font-bold text-cyan-700">
-                  {funnelData!.auctionWinRate !== null ? `${funnelData!.auctionWinRate.toFixed(1)}%` : "N/A"}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center p-4 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-              <p className="text-xs text-gray-400">Import RTB data to see funnel metrics</p>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
