@@ -44,7 +44,7 @@ def get_version() -> str:
         return version_file.read_text().strip()
 
     # Fallback
-    return "0.9.0"
+    return "0.9.2"
 
 
 from fastapi.middleware.cors import CORSMiddleware

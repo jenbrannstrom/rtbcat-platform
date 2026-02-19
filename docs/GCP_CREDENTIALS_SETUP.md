@@ -1007,7 +1007,7 @@ ssh -o StrictHostKeyChecking=accept-new catscan@scan.rtb.cat "hostname"
 **How to verify it's not a hack:**
 1. Check SSL certificate: `openssl s_client -connect scan.rtb.cat:443 | openssl x509 -noout -dates`
 2. Check GCP VMs: `gcloud compute instances list --project=catscan-prod-202601`
-3. Verify IP matches: `host scan.rtb.cat` should show `35.205.211.184`
+3. Verify IP matches: `host scan.rtb.cat` should show `34.143.222.60`
 
 ### Step 1: Authenticate gcloud
 
@@ -1315,7 +1315,7 @@ curl -s https://scan.rtb.cat/api/health
 
 Expected response:
 ```json
-{"status":"healthy","version":"0.9.0","configured":true,"has_credentials":true,"database_exists":true}
+{"status":"healthy","version":"sha-<gitsha>","git_sha":"<gitsha8>","configured":true,"has_credentials":true,"database_exists":true}
 ```
 
 **Test dashboard:**
