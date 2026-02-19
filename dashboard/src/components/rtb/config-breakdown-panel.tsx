@@ -865,27 +865,6 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                 </button>
               </div>
             )}
-            {activeTab !== 'creative' && (
-              <div className="mb-3 flex flex-wrap items-center gap-3 rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700">
-                <span className="font-medium text-slate-500">Formats:</span>
-                {[
-                  { label: 'Banner', value: 'HTML' },
-                  { label: 'Audio and Video', value: 'VIDEO' },
-                  { label: 'Native', value: 'NATIVE' },
-                ].map((formatOption) => (
-                  <label key={formatOption.value} className="inline-flex items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      checked={isFormatEnabled(formatOption.value)}
-                      disabled={changeActionBusy}
-                      onChange={(event) => setFormatEnabledState(formatOption.value, event.target.checked)}
-                      className="h-3.5 w-3.5 rounded border-gray-300"
-                    />
-                    <span>{formatOption.label}</span>
-                  </label>
-                ))}
-              </div>
-            )}
             {pushResult && (
               <div className={cn(
                 "mb-3 rounded border px-3 py-2 text-xs",

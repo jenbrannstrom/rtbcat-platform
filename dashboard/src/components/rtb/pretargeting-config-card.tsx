@@ -250,6 +250,50 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
     });
   };
 
+  // Format controls
+  const pendingChanges = configDetail?.pending_changes || [];
+  const effectiveFormats = new Set(configDetail?.effective_formats || configDetail?.included_formats || []);
+  const isFormatEnabled = (format: string): boolean => effectiveFormats.has(format);
+  const findPendingChange = (changeType: string, value: string) =>
+    pendingChanges.find((c: { change_type: string; value: string }) => c.change_type === changeType && c.value === value);
+
+  const setFormatEnabledState = (format: string, shouldEnable: boolean) => {
+    const pendingAdd = findPendingChange('add_format', format);
+    const pendingRemove = findPendingChange('remove_format', format);
+    const currentlyEnabled = isFormatEnabled(format);
+
+    if (shouldEnable) {
+      if (pendingRemove) {
+        cancelChangeMutation.mutate(pendingRemove.id);
+        return;
+      }
+      if (pendingAdd || currentlyEnabled) return;
+      createChangeMutation.mutate({
+        billing_id: config.billing_id,
+        change_type: 'add_format',
+        field_name: 'included_formats',
+        value: format,
+        reason: 'Enabled from config card',
+      });
+      return;
+    }
+
+    if (pendingAdd) {
+      cancelChangeMutation.mutate(pendingAdd.id);
+      return;
+    }
+    if (pendingRemove || !currentlyEnabled) return;
+    createChangeMutation.mutate({
+      billing_id: config.billing_id,
+      change_type: 'remove_format',
+      field_name: 'included_formats',
+      value: format,
+      reason: 'Disabled from config card',
+    });
+  };
+
+  const formatMutationPending = createChangeMutation.isPending || cancelChangeMutation.isPending;
+
   // Determine status indicator
   const isHighWaste = config.has_performance && config.waste_rate >= 70;
   const isCriticalWaste = config.has_performance && config.waste_rate >= 90;
@@ -408,11 +452,31 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
           <div className="sticky top-0 z-10 bg-gray-50 border-b px-4 py-2 flex items-center justify-between gap-3">
             <div className="flex flex-wrap gap-1.5">
               <GeoSettingPill geoIds={config.included_geos} max={5} />
-              <SettingPill label="Formats" values={config.formats} />
               <SettingPill label="Platforms" values={config.platforms} />
               <SettingPill label="Sizes" values={config.sizes} max={4} />
             </div>
             <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+              {/* Format checkboxes inline */}
+              <div className="flex items-center gap-2 text-xs text-slate-700">
+                <span className="text-[11px] text-gray-500 font-medium">Formats</span>
+                {[
+                  { label: 'Banner', value: 'HTML' },
+                  { label: 'Audio and Video', value: 'VIDEO' },
+                  { label: 'Native', value: 'NATIVE' },
+                ].map((formatOption) => (
+                  <label key={formatOption.value} className="inline-flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={isFormatEnabled(formatOption.value)}
+                      disabled={formatMutationPending}
+                      onChange={(event) => setFormatEnabledState(formatOption.value, event.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-gray-300"
+                    />
+                    <span className="text-[11px]">{formatOption.label}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="w-px h-5 bg-gray-300" />
               {/* QPS control inline */}
               <div className="flex items-center gap-1.5">
                 <span className="text-[11px] text-gray-500 font-medium">QPS</span>
