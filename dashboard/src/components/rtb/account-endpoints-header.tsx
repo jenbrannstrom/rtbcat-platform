@@ -321,19 +321,23 @@ export function AccountEndpointsHeader({ funnelData, observedQpsByEndpointId }: 
                   )}
                 </div>
               </div>
-              {funnelData?.requestedEndDate && (
-                <div className="px-2 text-[10px] text-gray-500">
-                  Requested through {formatIsoDate(funnelData.requestedEndDate)}
-                </div>
-              )}
-              {funnelData?.homeSeatDataThrough && (
-                <div className="px-2 text-[10px] text-amber-700">
-                  Delivery data through {formatIsoDate(funnelData.homeSeatDataThrough)}
-                </div>
-              )}
-              {funnelData?.bidstreamDataThrough && (
-                <div className="px-2 text-[10px] text-indigo-700">
-                  Auction-funnel data through {formatIsoDate(funnelData.bidstreamDataThrough)}
+              {(funnelData?.requestedEndDate || funnelData?.homeSeatDataThrough || funnelData?.bidstreamDataThrough) && (
+                <div className="flex flex-wrap items-center gap-1.5 px-2">
+                  {funnelData?.requestedEndDate && (
+                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">
+                      Through {formatIsoDate(funnelData.requestedEndDate)}
+                    </span>
+                  )}
+                  {funnelData?.homeSeatDataThrough && (
+                    <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">
+                      Delivery: {formatIsoDate(funnelData.homeSeatDataThrough)}
+                    </span>
+                  )}
+                  {funnelData?.bidstreamDataThrough && (
+                    <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] text-indigo-700">
+                      Auction: {formatIsoDate(funnelData.bidstreamDataThrough)}
+                    </span>
+                  )}
                 </div>
               )}
               {/* Reached */}

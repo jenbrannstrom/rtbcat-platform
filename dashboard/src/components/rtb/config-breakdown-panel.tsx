@@ -656,9 +656,9 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
       className="overflow-hidden transition-all duration-300 ease-in-out"
       style={{ height: isExpanded ? height : 0 }}
     >
-      <div ref={contentRef} className="border-t bg-gray-50/50 px-4 py-3">
+      <div ref={contentRef} className="border-t bg-gray-50/50 px-4 py-2">
         {/* Tabs */}
-        <div className="flex gap-1 mb-3">
+        <div className="flex gap-1 mb-2">
           {TABS.map((tab) => (
             <button
               key={tab.id}
@@ -690,224 +690,200 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
         )}
 
         {!isLoading && !error && sortedBreakdown.length === 0 && (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium text-gray-700 mb-1">
-                  No {activeTab} data for this config
-                </p>
-                <p className="text-gray-500 text-xs">
-                  {data?.no_data_reason || (
-                    activeTab === 'geo'
-                      ? 'Geographic breakdown is not available. This config may not have geographic targeting data, or the precompute job has not yet processed this config.'
-                      : activeTab === 'size'
-                      ? 'Size breakdown is not available. This config may not have had bid activity in the selected period, or the precompute job has not yet processed this config.'
-                      : activeTab === 'creative'
-                      ? 'Creative breakdown is not available. This config may not have active creatives with bid activity, or the precompute job has not yet processed this config.'
-                      : `To see ${activeTab} breakdown, import both catscan-quality (includes pretargeting config / billing_id) and catscan-bidsinauction CSV reports.`
-                  )}
-                </p>
+          <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
+            {activeTab === 'publisher' ? (
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-gray-700">
+                    No publisher breakdown available for this config
+                  </p>
+                  <p className="text-gray-500 text-xs mt-1">
+                    {data?.no_data_reason || 'Billing-level CSV missing or the precompute job has not yet processed publisher-level data for this config.'}
+                  </p>
+                  <a
+                    href="/import"
+                    className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-blue-600 hover:text-blue-800"
+                  >
+                    <Upload className="h-3 w-3" />
+                    Go to Import
+                  </a>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-gray-700">
+                    No {activeTab} data for this config
+                  </p>
+                  <p className="text-gray-500 text-xs mt-1">
+                    {data?.no_data_reason || (
+                      activeTab === 'geo'
+                        ? 'Geographic breakdown is not available. This config may not have geographic targeting data, or the precompute job has not yet processed this config.'
+                        : activeTab === 'size'
+                        ? 'Size breakdown is not available. This config may not have had bid activity in the selected period, or the precompute job has not yet processed this config.'
+                        : activeTab === 'creative'
+                        ? 'Creative breakdown is not available. This config may not have active creatives with bid activity, or the precompute job has not yet processed this config.'
+                        : `To see ${activeTab} breakdown, import both catscan-quality (includes pretargeting config / billing_id) and catscan-bidsinauction CSV reports.`
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {!isLoading && !error && sortedBreakdown.length > 0 && (
           <>
-            {data?.fallback_applied && (
-              <div className="mb-3 flex items-center gap-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
-                <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-                <span>
-                  Showing last <span className="font-semibold">{data.effective_days ?? 30} days</span>
-                  {' '}because no rows were found in the requested
-                  {' '}<span className="font-semibold">{data.requested_days ?? days} day</span> window.
+            <div className="mb-3 flex items-center gap-2">
+              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-600">
+                Window: {data?.requested_days ?? days}d
+                {data?.fallback_applied && data?.effective_days != null && (
+                  <> (effective: {data.effective_days}d)</>
+                )}
+              </span>
+              {data?.fallback_applied && (
+                <span className="flex items-center gap-1 rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[11px] text-amber-700">
+                  <AlertTriangle className="h-3 w-3 text-amber-500" />
+                  Fallback applied — no data in requested window
                 </span>
-              </div>
-            )}
-            {/* Creative tab info note explaining the metric */}
-            {activeTab === 'creative' && (
-              <div className="mb-3 flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
-                <Info className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                <span>
-                  Win rate shows reached-to-impression conversion for this config.
-                  This measures how efficiently bid requests convert to impressions.
-                </span>
-              </div>
-            )}
+              )}
+            </div>
             {activeTab === 'publisher' && (
-              <div className="mb-3 flex items-center gap-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
-                <Info className="h-4 w-4 text-amber-500 flex-shrink-0" />
+              <div className="mb-2 flex items-center gap-2 px-2 py-1.5 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+                <Info className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
                 <span>
-                  Publisher mode is currently <span className="font-semibold">{publisherModeLabel}</span>.
+                  Mode: <span className="font-semibold">{publisherModeLabel}</span>.
                   {effectivePublisherMode === 'INCLUSIVE'
-                    ? ' Block removes a publisher from the allowlist; Allow adds it back.'
-                    : ' Block adds a publisher to the denylist; Unblock removes it from that denylist.'}
+                    ? ' Block removes from allowlist; Allow adds back.'
+                    : ' Block adds to denylist; Unblock removes.'}
                 </span>
               </div>
             )}
             {activeTab === 'size' && (
-              <div className="mb-3 space-y-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+              <div className="mb-2 space-y-1.5 px-2 py-1.5 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
                 <div className="flex items-center justify-between gap-2">
-                  <span>
-                    <span className="font-semibold">Status</span> shows if a size is currently targeted:
-                    {' '}<span className="font-semibold">Allowed</span> or <span className="font-semibold">Blocked</span>.
-                  </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={selectAllVisibleSizes}
+                      disabled={changeActionBusy || visibleSizeRows.length === 0}
+                      className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                    >
+                      Select all
+                    </button>
+                    <button
+                      onClick={invertVisibleSizeSelection}
+                      disabled={changeActionBusy || visibleSizeRows.length === 0}
+                      className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                    >
+                      Invert
+                    </button>
+                    <button
+                      onClick={clearSelectedSizes}
+                      disabled={changeActionBusy || selectedSizes.size === 0}
+                      className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                    >
+                      Clear ({selectedSizes.size})
+                    </button>
+                    <button
+                      onClick={() => applySelectionState(false)}
+                      disabled={changeActionBusy || selectedSizes.size === 0}
+                      className="rounded border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                    >
+                      Block selected
+                    </button>
+                    <button
+                      onClick={() => applySelectionState(true)}
+                      disabled={changeActionBusy || selectedSizes.size === 0}
+                      className="rounded border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-50"
+                    >
+                      Allow selected
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
                     {hiddenLowVolumeSizeCount > 0 && (
                       <button
                         onClick={() => setShowLowVolumeSizes((prev) => !prev)}
                         className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
                       >
                         {showLowVolumeSizes
-                          ? 'Show only >=1k imp'
-                          : `Show low-volume (${hiddenLowVolumeSizeCount})`}
+                          ? '>=1k imp only'
+                          : `+${hiddenLowVolumeSizeCount} low-vol`}
                       </button>
                     )}
                     {pendingSizeChanges.length > 0 && (
-                      <span className="font-medium">
+                      <span className="font-medium text-amber-700">
                         {pendingSizeChanges.length} pending
                       </span>
                     )}
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    onClick={selectAllVisibleSizes}
-                    disabled={changeActionBusy || visibleSizeRows.length === 0}
-                    className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-                  >
-                    Select all
-                  </button>
-                  <button
-                    onClick={invertVisibleSizeSelection}
-                    disabled={changeActionBusy || visibleSizeRows.length === 0}
-                    className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-                  >
-                    Invert
-                  </button>
-                  <button
-                    onClick={clearSelectedSizes}
-                    disabled={changeActionBusy || selectedSizes.size === 0}
-                    className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-                  >
-                    Clear ({selectedSizes.size})
-                  </button>
-                  <button
-                    onClick={() => applySelectionState(false)}
-                    disabled={changeActionBusy || selectedSizes.size === 0}
-                    className="rounded border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
-                  >
-                    Block selected
-                  </button>
-                  <button
-                    onClick={() => applySelectionState(true)}
-                    disabled={changeActionBusy || selectedSizes.size === 0}
-                    className="rounded border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-50"
-                  >
-                    Allow selected
-                  </button>
-                </div>
               </div>
             )}
             {activeTab === 'geo' && (
-              <div className="mb-3 space-y-2 p-2 bg-teal-50 border border-teal-200 rounded text-xs text-teal-800">
-                <div className="flex items-center gap-2">
-                  <Search className="h-3.5 w-3.5 text-teal-600" />
-                  <span className="font-medium">Add Country / City</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    type="text"
-                    value={geoSearchQuery}
-                    onChange={(event) => setGeoSearchQuery(event.target.value)}
-                    placeholder="Search country, city, or geo ID"
-                    className="w-56 rounded border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-300"
-                  />
-                  <select
-                    value={geoSearchType}
-                    onChange={(event) => setGeoSearchType(event.target.value as 'all' | 'country' | 'city')}
-                    className="rounded border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700"
-                  >
-                    <option value="all">All</option>
-                    <option value="country">Country</option>
-                    <option value="city">City</option>
-                  </select>
-                  <select
-                    value={selectedGeoId}
-                    onChange={(event) => setSelectedGeoId(event.target.value)}
-                    className="min-w-[16rem] rounded border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700"
-                    disabled={isGeoSearchLoading || geoSearchResults.length === 0}
-                  >
-                    {isGeoSearchLoading && <option value="">Searching…</option>}
-                    {!isGeoSearchLoading && geoSearchResults.length === 0 && (
-                      <option value="">Type at least 2 characters</option>
-                    )}
-                    {!isGeoSearchLoading && geoSearchResults.map((result) => (
-                      <option key={result.geo_id} value={result.geo_id}>
-                        {result.label} ({result.geo_id})
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={addGeoFromSearch}
-                    disabled={changeActionBusy || !selectedGeoId}
-                    className="rounded border border-teal-300 bg-teal-100 px-2 py-1 text-[11px] font-medium text-teal-800 hover:bg-teal-200 disabled:opacity-50"
-                  >
-                    Add Geo
-                  </button>
-                </div>
+              <div className="mb-2 flex flex-wrap items-center gap-2 px-2 py-1.5 bg-teal-50 border border-teal-200 rounded text-xs text-teal-800">
+                <Search className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+                <input
+                  type="text"
+                  value={geoSearchQuery}
+                  onChange={(event) => setGeoSearchQuery(event.target.value)}
+                  placeholder="Search geo..."
+                  className="w-44 rounded border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-teal-300"
+                />
+                <select
+                  value={geoSearchType}
+                  onChange={(event) => setGeoSearchType(event.target.value as 'all' | 'country' | 'city')}
+                  className="rounded border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700"
+                >
+                  <option value="all">All</option>
+                  <option value="country">Country</option>
+                  <option value="city">City</option>
+                </select>
+                <select
+                  value={selectedGeoId}
+                  onChange={(event) => setSelectedGeoId(event.target.value)}
+                  className="min-w-[14rem] rounded border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700"
+                  disabled={isGeoSearchLoading || geoSearchResults.length === 0}
+                >
+                  {isGeoSearchLoading && <option value="">Searching…</option>}
+                  {!isGeoSearchLoading && geoSearchResults.length === 0 && (
+                    <option value="">Type 2+ chars</option>
+                  )}
+                  {!isGeoSearchLoading && geoSearchResults.map((result) => (
+                    <option key={result.geo_id} value={result.geo_id}>
+                      {result.label} ({result.geo_id})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={addGeoFromSearch}
+                  disabled={changeActionBusy || !selectedGeoId}
+                  className="rounded border border-teal-300 bg-teal-100 px-2 py-1 text-[11px] font-medium text-teal-800 hover:bg-teal-200 disabled:opacity-50"
+                >
+                  Add Geo
+                </button>
               </div>
             )}
             {activeTab !== 'creative' && (
-              <div className="mb-3 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">QPS limit</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={qpsInput}
-                    onChange={(event) => setQpsInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        applyQpsChange();
-                      }
-                    }}
-                    className="w-28 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    placeholder={effectiveQpsLimit === null || effectiveQpsLimit === undefined ? 'unset' : String(effectiveQpsLimit)}
-                  />
-                  <button
-                    onClick={applyQpsChange}
-                    disabled={changeActionBusy}
-                    className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-                  >
-                    Set QPS
-                  </button>
-                  {latestPendingQpsChange && (
-                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">
-                      Pending: {latestPendingQpsChange.value}
-                    </span>
-                  )}
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  {[
-                    { label: 'Banner', value: 'HTML' },
-                    { label: 'Audio and Video', value: 'VIDEO' },
-                    { label: 'Native', value: 'NATIVE' },
-                  ].map((formatOption) => (
-                    <label key={formatOption.value} className="inline-flex items-center gap-1.5">
-                      <input
-                        type="checkbox"
-                        checked={isFormatEnabled(formatOption.value)}
-                        disabled={changeActionBusy}
-                        onChange={(event) => setFormatEnabledState(formatOption.value, event.target.checked)}
-                        className="h-3.5 w-3.5 rounded border-gray-300"
-                      />
-                      <span>{formatOption.label}</span>
-                    </label>
-                  ))}
-                </div>
+              <div className="mb-3 flex flex-wrap items-center gap-3 rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700">
+                <span className="font-medium text-slate-500">Formats:</span>
+                {[
+                  { label: 'Banner', value: 'HTML' },
+                  { label: 'Audio and Video', value: 'VIDEO' },
+                  { label: 'Native', value: 'NATIVE' },
+                ].map((formatOption) => (
+                  <label key={formatOption.value} className="inline-flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={isFormatEnabled(formatOption.value)}
+                      disabled={changeActionBusy}
+                      onChange={(event) => setFormatEnabledState(formatOption.value, event.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-gray-300"
+                    />
+                    <span>{formatOption.label}</span>
+                  </label>
+                ))}
               </div>
             )}
             {pushResult && (
