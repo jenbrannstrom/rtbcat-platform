@@ -10,17 +10,6 @@ function formatNum(v: number): string {
   return v.toLocaleString();
 }
 
-function formatLocation(location: string | null): string {
-  if (!location) return "Unknown";
-  const map: Record<string, string> = {
-    US_WEST: "US West",
-    US_EAST: "US East",
-    EUROPE: "Europe",
-    ASIA: "Asia",
-  };
-  return map[location] || location;
-}
-
 function InfoTooltip({ text }: { text: string }) {
   return (
     <span className="relative inline-flex items-center ml-1 group">
@@ -32,15 +21,8 @@ function InfoTooltip({ text }: { text: string }) {
   );
 }
 
-function statusLabel(status: "mapped" | "missing_in_google" | "extra_in_google"): string {
-  if (status === "mapped") return "Mapped";
-  if (status === "missing_in_google") return "Missing in feed";
-  return "Extra in feed";
-}
-
 export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResponse }) {
   const summary = data.summary;
-  const recon = data.endpoint_reconciliation;
   const bridge = data.funnel_breakout;
   const coverage = data.data_coverage;
   const requestedWindow = coverage?.requested_window;
@@ -150,58 +132,6 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
               {formatNum(filteredBids)} filtered
             </div>
           </div>
-        </div>
-      </div>
-
-      <div className="rounded border p-2">
-        <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-xs font-medium text-gray-900">Endpoint Reconciliation</span>
-          <span className="text-[10px] text-gray-500">
-            {recon.counts.catscan_endpoints} configured · {recon.counts.google_delivery_rows} observed · {recon.counts.missing_in_google} missing
-          </span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-gray-500 border-b">
-                <th className="py-2 pr-3">Location</th>
-                <th className="py-2 pr-3">Allocated QPS</th>
-                <th className="py-2 pr-3">Observed QPS</th>
-                <th className="py-2">
-                  Status
-                  <InfoTooltip text="Mapped: configured endpoint has matching observed feed row. Missing in feed: configured endpoint has no observed row. Extra in feed: observed row exists without matching configured endpoint." />
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {recon.rows.map((row, idx) => (
-                <tr key={`${row.catscan_endpoint_id || "extra"}-${idx}`} className="border-b last:border-0">
-                  <td className="py-2 pr-3 text-gray-800">
-                    {formatLocation(row.catscan_location || row.google_location)}
-                  </td>
-                  <td className="py-2 pr-3 text-gray-700">
-                    {row.allocated_qps !== null ? row.allocated_qps.toLocaleString() : "—"}
-                  </td>
-                  <td className="py-2 pr-3 text-gray-700">
-                    {row.google_current_qps !== null ? row.google_current_qps.toFixed(1) : "—"}
-                  </td>
-                  <td className="py-2">
-                    <span
-                      className={
-                        row.mapping_status === "mapped"
-                          ? "text-green-700"
-                          : row.mapping_status === "missing_in_google"
-                            ? "text-red-700"
-                            : "text-amber-700"
-                      }
-                    >
-                      {statusLabel(row.mapping_status)}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       </div>
 
