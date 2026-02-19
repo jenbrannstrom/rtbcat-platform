@@ -60,19 +60,23 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
   return (
     <section className="bg-white rounded-lg border p-4 space-y-4 overflow-visible">
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex items-center gap-3">
           <h3 className="font-semibold text-gray-900">Endpoint Efficiency</h3>
-          <div className="text-xs text-gray-500">
-            Requested window: {requestedWindow?.start_date ?? data.window.start_date} to {requestedWindow?.end_date ?? data.window.end_date}
-          </div>
-          <div className="text-xs text-amber-700">
-            Delivery data: {deliveryCoverage?.start_date || "N/A"} to {deliveryCoverage?.end_date || "N/A"} ({deliveryCoverage?.days_with_data ?? 0}/{requestedDays} days)
-          </div>
-          <div className="text-xs text-indigo-700">
-            Auction-funnel data: {bidstreamCoverage?.start_date || "N/A"} to {bidstreamCoverage?.end_date || "N/A"} ({bidstreamCoverage?.days_with_data ?? 0}/{requestedDays} days)
+          <div className="flex items-center gap-2 text-[11px]">
+            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-600">
+              {requestedWindow?.start_date ?? data.window.start_date} → {requestedWindow?.end_date ?? data.window.end_date}
+            </span>
+            <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">
+              Delivery: {deliveryCoverage?.days_with_data ?? 0}/{requestedDays}d
+            </span>
+            <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700">
+              Auction: {bidstreamCoverage?.days_with_data ?? 0}/{requestedDays}d
+            </span>
+            <span className="rounded bg-gray-50 px-1.5 py-0.5 text-gray-500">
+              Feed rows: {endpointFeedRows}
+            </span>
           </div>
         </div>
-        <span className="text-xs text-gray-500">Endpoint feed rows: {endpointFeedRows}</span>
       </div>
 
       {data.alerts.length > 0 && (
