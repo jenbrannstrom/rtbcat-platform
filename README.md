@@ -1,6 +1,6 @@
 # Cat-Scan QPS Optimizer & Creative Intelligence Tool
 
-**Version:** 0.9.0 | **Phase:** Production | **Last Updated:** January 2026
+**Version:** 0.9.2 | **Runtime Build ID:** `sha-<gitsha>` | **Last Updated:** February 2026
 
 An **open-source** QPS optimization tool for Google Authorized Buyers. Cat-Scan helps RTB bidders improve QPS efficiency by learning which data-streams the bidder prefers to bid on, and fine-tune Pretargeting to allow more bid-requests through to the bidder for preferred placements/apps.
 
@@ -557,16 +557,12 @@ npm run dev
 
 ## Versioning
 
-The app version is managed via a single `VERSION` file at the repository root.
+Cat-Scan uses two version identifiers:
 
-**To bump the version:**
-1. Edit the `VERSION` file with the new version (e.g., `0.9.1`)
-2. Commit and push - deployment automatically uses the new version
+- `Release version` (human-readable): `VERSION` file (current: `0.9.2`)
+- `Runtime build ID` (source of truth in deployed environments): image tag / git SHA (for example `sha-3b96ce6`)
 
-The version is displayed in:
-- API health endpoint (`/health`)
-- API docs (`/docs`)
-- Dashboard sidebar footer
+In production, the UI footer and `/health` should show the SHA build ID. Use that value for exact deploy traceability.
 
 ---
 
