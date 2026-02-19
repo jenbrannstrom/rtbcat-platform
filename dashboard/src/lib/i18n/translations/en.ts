@@ -37,7 +37,7 @@ export const en: Translations = {
     date: 'Date',
     time: 'Time',
     never: 'Never',
-    version: 'v0.1.0',
+    version: '0.9.2',
     done: 'Done',
   },
 
