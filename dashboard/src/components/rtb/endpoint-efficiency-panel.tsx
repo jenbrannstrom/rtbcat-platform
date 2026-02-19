@@ -80,14 +80,7 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <div className="rounded border bg-blue-50 border-blue-100 px-2.5 py-2">
-          <div className="text-[10px] uppercase text-blue-700">
-            Allocated QPS
-            <InfoTooltip text="Total configured endpoint capacity in Cat-Scan (sum of maximum_qps)." />
-          </div>
-          <div className="text-lg font-bold text-blue-900">{summary.allocated_qps.toLocaleString()}</div>
-        </div>
+      <div className="grid grid-cols-3 gap-2">
         <div className={`rounded border px-2.5 py-2 ${summary.endpoint_delivery_state === "missing" ? "bg-red-50 border-red-200" : "bg-slate-50 border-slate-200"}`}>
           <div className="text-[10px] uppercase text-slate-600">
             Observed QPS
