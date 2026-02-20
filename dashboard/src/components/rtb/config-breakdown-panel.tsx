@@ -109,7 +109,6 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
   const [geoSearchResults, setGeoSearchResults] = useState<GeoSearchResult[]>([]);
   const [selectedGeoId, setSelectedGeoId] = useState('');
   const [isGeoSearchLoading, setIsGeoSearchLoading] = useState(false);
-  const [qpsInput, setQpsInput] = useState('');
   const selectAllSizesRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -190,7 +189,6 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
     setGeoSearchQuery('');
     setGeoSearchResults([]);
     setSelectedGeoId('');
-    setQpsInput('');
   }, [activeTab, billing_id]);
 
   useEffect(() => {
@@ -250,11 +248,6 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
       })
       .finally(() => setIsLoadingCreative(false));
   }, [selectedCreative]);
-
-  useEffect(() => {
-    const qpsValue = configDetail?.effective_maximum_qps ?? configDetail?.maximum_qps;
-    setQpsInput(qpsValue === null || qpsValue === undefined ? '' : String(qpsValue));
-  }, [billing_id, configDetail?.effective_maximum_qps, configDetail?.maximum_qps]);
 
   useEffect(() => {
     if (activeTab !== 'geo') {
@@ -333,9 +326,6 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
   const pendingSizeChanges = pendingChanges.filter(
     (change) => change.change_type === 'add_size' || change.change_type === 'remove_size'
   );
-  const pendingQpsChanges = pendingChanges.filter((change) => change.change_type === 'set_maximum_qps');
-  const latestPendingQpsChange =
-    pendingQpsChanges.length > 0 ? pendingQpsChanges[pendingQpsChanges.length - 1] : null;
   const hasPendingChanges = pendingChanges.length > 0;
 
   const findPendingChange = (changeType: string, value: string): PendingChange | undefined =>
@@ -351,9 +341,6 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
   const effectivePublisherValues = new Set(
     configDetail?.effective_publisher_targeting_values || configDetail?.publisher_targeting_values || []
   );
-  const persistedQpsLimit = configDetail?.maximum_qps ?? null;
-  const effectiveQpsLimit = configDetail?.effective_maximum_qps ?? persistedQpsLimit;
-
   const isSizeIncluded = (sizeName: string): boolean => effectiveIncludedSizes.has(sizeName);
   const isFormatEnabled = (format: string): boolean => effectiveFormats.has(format);
   const isPublisherListed = (publisherValue: string): boolean => effectivePublisherValues.has(publisherValue);
@@ -583,41 +570,6 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
       field_name: 'publisher_targeting',
       value: publisherValue,
       reason: 'Unblocked from Home publisher breakdown',
-    });
-  };
-
-  const applyQpsChange = () => {
-    if (!configDetail) return;
-
-    const normalized = qpsInput.trim();
-    if (!normalized) {
-      pendingQpsChanges.forEach((change) => cancelChangeMutation.mutate(change.id));
-      return;
-    }
-
-    const parsed = Number.parseInt(normalized, 10);
-    if (!Number.isFinite(parsed) || parsed < 0) return;
-
-    const desired = String(parsed);
-    pendingQpsChanges
-      .filter((change) => change.value !== desired)
-      .forEach((change) => cancelChangeMutation.mutate(change.id));
-
-    if (persistedQpsLimit === parsed) {
-      pendingQpsChanges
-        .filter((change) => change.value === desired)
-        .forEach((change) => cancelChangeMutation.mutate(change.id));
-      return;
-    }
-
-    if (latestPendingQpsChange?.value === desired) return;
-
-    createChangeMutation.mutate({
-      billing_id,
-      change_type: 'set_maximum_qps',
-      field_name: 'maximum_qps',
-      value: desired,
-      reason: 'Updated from Home QPS control',
     });
   };
 
