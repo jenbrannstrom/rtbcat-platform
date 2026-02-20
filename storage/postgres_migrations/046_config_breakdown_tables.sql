@@ -72,12 +72,38 @@ CREATE INDEX IF NOT EXISTS idx_cfg_creative_date_buyer_billing_size
 -- ============================================================================
 -- 3. Normalize column types on pre-existing tables
 --    (config_precompute.py creates with TEXT/INTEGER; canonical is DATE/BIGINT)
+--    Must drop dependent views first since ALTER TYPE fails with view refs.
 -- ============================================================================
 
 DO $$
 DECLARE
     col RECORD;
+    needs_normalize BOOLEAN := FALSE;
 BEGIN
+    -- Check whether any normalization is needed
+    SELECT EXISTS(
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND ((column_name = 'metric_date' AND data_type = 'text')
+               OR (column_name IN ('reached_queries', 'impressions', 'spend_micros')
+                   AND data_type = 'integer'))
+          AND table_name IN (
+              'config_size_daily', 'config_geo_daily',
+              'config_publisher_daily', 'config_creative_daily'
+          )
+    ) INTO needs_normalize;
+
+    IF NOT needs_normalize THEN
+        RAISE NOTICE 'Column types already correct, skipping normalization';
+        RETURN;
+    END IF;
+
+    -- Drop dependent alias views before altering columns
+    DROP VIEW IF EXISTS pretarg_size_daily;
+    DROP VIEW IF EXISTS pretarg_geo_daily;
+    DROP VIEW IF EXISTS pretarg_publisher_daily;
+    DROP VIEW IF EXISTS pretarg_creative_daily;
+
     -- Fix metric_date TEXT -> DATE
     FOR col IN
         SELECT table_name
@@ -119,7 +145,8 @@ END $$;
 
 -- ============================================================================
 -- 4. Create/refresh canonical alias views
---    (migration 044 skipped these if source tables did not exist yet)
+--    (migration 044 skipped these if source tables did not exist yet;
+--     step 3 drops them before ALTER so they are always recreated here)
 -- ============================================================================
 
 CREATE OR REPLACE VIEW pretarg_size_daily AS SELECT * FROM config_size_daily;
