@@ -1,12 +1,11 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getRTBEndpoints, getPretargetingConfigs, syncRTBEndpoints } from '@/lib/api';
+import { getRTBEndpoints, syncRTBEndpoints } from '@/lib/api';
 import { Server, AlertTriangle, Globe, Info, Loader2 } from 'lucide-react';
 import { useAccount } from '@/contexts/account-context';
 import { useState, useEffect, useRef } from 'react';
 
-// Helper to format trading location for display
 function formatLocation(location: string | null): string {
   if (!location) return 'Unknown';
   const map: Record<string, string> = {
@@ -19,7 +18,6 @@ function formatLocation(location: string | null): string {
   return map[location] || location;
 }
 
-// Helper to format QPS - show exact amounts with commas
 function formatQPS(qps: number | null): string {
   if (qps === null) return 'Unlimited';
   return qps.toLocaleString();
@@ -34,22 +32,12 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
   const [showQpsInfo, setShowQpsInfo] = useState(false);
   const queryClient = useQueryClient();
 
-  // Use buyer_id for filtering - RTB endpoints are looked up via buyer -> bidder mapping
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['rtb-endpoints', selectedBuyerId],
     queryFn: () => getRTBEndpoints({ buyer_id: selectedBuyerId || undefined }),
     enabled: !!selectedBuyerId,
   });
 
-  // Also fetch pretargeting configs to count active ones
-  const { data: configsData } = useQuery({
-    queryKey: ['pretargeting-configs', selectedBuyerId],
-    queryFn: () => getPretargetingConfigs({ buyer_id: selectedBuyerId || undefined }),
-    enabled: !!selectedBuyerId,
-    retry: 0,
-  });
-
-  // Mutation to sync endpoints from Google API
   const syncMutation = useMutation({
     mutationFn: () => syncRTBEndpoints({ service_account_id: selectedServiceAccountId || undefined }),
     onSuccess: () => {
@@ -58,7 +46,6 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
     },
   });
 
-  // Auto-sync endpoints on mount if none exist
   const hasSynced = useRef(false);
   useEffect(() => {
     if (!isLoading && !hasSynced.current && data && !data.endpoints?.length && selectedServiceAccountId) {
@@ -69,197 +56,144 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
 
   if (!selectedBuyerId) {
     return (
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
-        Select a seat to load RTB endpoints and pretargeting metrics.
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+        Select a seat to load RTB endpoints.
       </div>
     );
   }
 
-  const activeConfigsCount = configsData?.filter(c => c.state === 'ACTIVE').length || 0;
-
-  // Loading skeleton
   if (isLoading) {
     return (
-      <div className="bg-white rounded-lg border p-4">
-        <div className="animate-pulse flex justify-between items-start">
-          <div className="space-y-3 flex-1">
-            <div className="h-5 bg-gray-200 rounded w-48" />
-            <div className="flex gap-4">
-              <div className="h-16 bg-gray-100 rounded w-40" />
-              <div className="h-16 bg-gray-100 rounded w-40" />
-              <div className="h-16 bg-gray-100 rounded w-40" />
-            </div>
-          </div>
-          <div className="h-8 bg-gray-200 rounded w-20" />
+      <div className="bg-white rounded-lg border p-3">
+        <div className="animate-pulse space-y-2">
+          <div className="h-4 bg-gray-200 rounded w-40" />
+          <div className="h-8 bg-gray-100 rounded" />
+          <div className="h-8 bg-gray-100 rounded" />
         </div>
       </div>
     );
   }
 
-  // Error state - could be API not running or actual error
   if (error) {
     const isConnectionError = error instanceof Error &&
       (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('500'));
-
     return (
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <Server className="h-5 w-5 text-gray-400 mt-0.5" />
-          <div className="flex-1">
-            <h3 className="font-medium text-gray-700">RTB Endpoints</h3>
-            <p className="text-sm text-gray-500 mt-1">
-              {isConnectionError
-                ? "Unable to connect to API server. Make sure the backend is running."
-                : "Failed to load endpoint data. Try refreshing the page."}
-            </p>
-          </div>
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+        <div className="flex items-center gap-2">
+          <Server className="h-4 w-4 text-gray-400" />
+          <span className="text-sm text-gray-600">
+            {isConnectionError ? "Cannot connect to API." : "Failed to load endpoints."}
+          </span>
         </div>
       </div>
     );
   }
 
-  // No endpoints - show syncing state or error
   if (!data?.endpoints?.length) {
-    // If syncing, show loading indicator
     if (syncMutation.isPending) {
       return (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-center gap-3">
-            <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
-            <div>
-              <h3 className="font-medium text-blue-800">Syncing RTB Endpoints</h3>
-              <p className="text-sm text-blue-700 mt-1">
-                Fetching endpoint configuration from Google Authorized Buyers API...
-              </p>
-            </div>
-          </div>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
+          <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
+          <span className="text-sm text-blue-800">Syncing RTB Endpoints...</span>
         </div>
       );
     }
-
-    // If sync failed, show error
     if (syncMutation.isError) {
       return (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
-            <div>
-              <h3 className="font-medium text-red-800">Failed to Sync Endpoints</h3>
-              <p className="text-sm text-red-700 mt-1">
-                {syncMutation.error instanceof Error ? syncMutation.error.message : 'Could not fetch endpoint configuration. Check your service account credentials.'}
-              </p>
-            </div>
-          </div>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-red-600" />
+          <span className="text-sm text-red-800">
+            {syncMutation.error instanceof Error ? syncMutation.error.message : 'Failed to sync endpoints.'}
+          </span>
         </div>
       );
     }
-
-    // No endpoints and not syncing - probably no service account configured
     return (
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <Server className="h-5 w-5 text-gray-400 mt-0.5" />
-          <div>
-            <h3 className="font-medium text-gray-700">No RTB Endpoints</h3>
-            <p className="text-sm text-gray-500 mt-1">
-              Endpoints will sync automatically when a service account is configured.
-            </p>
-          </div>
-        </div>
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center gap-2">
+        <Server className="h-4 w-4 text-gray-400" />
+        <span className="text-sm text-gray-600">No RTB Endpoints. Sync a service account to load.</span>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-lg border p-4">
-      <div>
-          <div className="flex items-center gap-2 mb-3">
-            <Server className="h-4 w-4 text-gray-500" />
-            <h3 className="font-semibold text-gray-900">RTB Endpoints</h3>
-            {data.bidder_id && (
-              <span className="text-xs text-gray-500">
-                · {data.account_name || data.bidder_id}
-              </span>
-            )}
-            {selectedBuyerId && (
-              <span className="text-xs text-gray-500">
-                · {selectedBuyerId}
-              </span>
-            )}
-          </div>
+    <div className="bg-white rounded-lg border p-3">
+      <div className="flex items-center gap-2 mb-2">
+        <Server className="h-3.5 w-3.5 text-gray-400" />
+        <h3 className="text-sm font-semibold text-gray-900">RTB Endpoints</h3>
+        {data.bidder_id && (
+          <span className="text-xs text-gray-400">· {data.account_name || data.bidder_id}</span>
+        )}
+        {selectedBuyerId && (
+          <span className="text-xs text-gray-400">· {selectedBuyerId}</span>
+        )}
+      </div>
 
-          <div className="space-y-1">
-            <div className="flex items-center justify-end gap-6 px-3 text-[10px] uppercase tracking-wide text-gray-400">
-              <span className="w-24 text-right">Allocated QPS</span>
-              <span className="w-24 text-right">Observed QPS</span>
-            </div>
-            {data.endpoints.map((endpoint) => (
-              <div
-                key={endpoint.endpoint_id}
-                className="flex items-center justify-between px-3 py-1.5 bg-gray-50 rounded text-sm"
-              >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <Globe className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-                  <span className="font-medium text-gray-700 flex-shrink-0 w-16 text-sm">
-                    {formatLocation(endpoint.trading_location)}
-                  </span>
-                  <span className="text-xs text-gray-400 font-mono truncate" title={endpoint.url}>
-                    {endpoint.url.replace(/^https?:\/\//, '')}
-                  </span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-xs text-gray-500">
-                    {endpoint.bid_protocol?.replace('OPENRTB_', 'OpenRTB ').replace('_', '.') || 'Unknown'}
-                  </span>
-                  <span className="font-medium text-gray-900 min-w-[96px] text-right text-sm">
-                    {formatQPS(endpoint.maximum_qps)} QPS
-                  </span>
-                  <span className="font-medium text-slate-700 min-w-[96px] text-right text-sm">
-                    {observedQpsByEndpointId?.[endpoint.endpoint_id] != null
-                      ? `${Number(observedQpsByEndpointId[endpoint.endpoint_id]).toLocaleString(undefined, { maximumFractionDigits: 2 })} QPS`
-                      : '—'}
-                  </span>
-                </div>
-              </div>
-            ))}
-
-            {/* Total QPS Row - styled as a sum */}
-            <div className="flex items-center justify-between px-3 py-2 mt-2 bg-blue-50 border-2 border-blue-200 rounded-lg">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-blue-800">Allocated QPS Cap</span>
-                <div className="relative">
-                  <button
-                    onClick={() => setShowQpsInfo(!showQpsInfo)}
-                    onMouseEnter={() => setShowQpsInfo(true)}
-                    onMouseLeave={() => setShowQpsInfo(false)}
-                    className="p-0.5 hover:bg-blue-100 rounded-full transition-colors"
-                    aria-label="QPS allocation info"
-                  >
-                    <Info className="h-3.5 w-3.5 text-blue-400" />
-                  </button>
-                  {showQpsInfo && (
-                    <div className="absolute left-0 top-6 w-72 p-3 bg-white border border-gray-200 rounded-lg shadow-lg z-10 text-xs text-gray-600">
-                      <p className="font-medium text-gray-900 mb-1">QPS Allocation</p>
-                      <p>
-                        This is your configured QPS cap (invited capacity), not guaranteed incoming traffic.
-                        Actual delivery is spend-constrained and controlled by Google throttling. Use observed delivery
-                        metrics as directional, especially when CSV imports are missing on some dates.
-                      </p>
-                    </div>
-                  )}
-                </div>
-                {data.synced_at && (
-                  <span className="text-xs text-blue-400 ml-2">
-                    · {new Date(data.synced_at).toLocaleString()}
-                  </span>
-                )}
-              </div>
-              <span className="text-lg font-bold text-blue-900 min-w-[80px] text-right">
-                {formatQPS(data.total_qps_allocated)}
-              </span>
-            </div>
-          </div>
+      <div className="space-y-0.5">
+        <div className="flex items-center justify-end gap-4 px-2 text-[10px] uppercase tracking-wide text-gray-400">
+          <span className="w-20 text-right">Allocated</span>
+          <span className="w-20 text-right">Observed</span>
         </div>
+        {data.endpoints.map((endpoint) => (
+          <div
+            key={endpoint.endpoint_id}
+            className="flex items-center justify-between px-2 py-1 bg-gray-50 rounded text-xs"
+          >
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <Globe className="h-3 w-3 text-gray-400 flex-shrink-0" />
+              <span className="font-medium text-gray-700 w-14 flex-shrink-0">
+                {formatLocation(endpoint.trading_location)}
+              </span>
+              <span className="text-[11px] text-gray-400 font-mono truncate" title={endpoint.url}>
+                {endpoint.url.replace(/^https?:\/\//, '')}
+              </span>
+              <span className="text-[11px] text-gray-400 flex-shrink-0">
+                {endpoint.bid_protocol?.replace('OPENRTB_', 'OpenRTB ').replace('_', '.') || ''}
+              </span>
+            </div>
+            <div className="flex items-center gap-4 flex-shrink-0">
+              <span className="font-medium text-gray-800 w-20 text-right">
+                {formatQPS(endpoint.maximum_qps)}
+              </span>
+              <span className="font-medium text-slate-600 w-20 text-right">
+                {observedQpsByEndpointId?.[endpoint.endpoint_id] != null
+                  ? Number(observedQpsByEndpointId[endpoint.endpoint_id]).toLocaleString(undefined, { maximumFractionDigits: 1 })
+                  : '—'}
+              </span>
+            </div>
+          </div>
+        ))}
+
+        {/* Total row */}
+        <div className="flex items-center justify-between px-2 py-1.5 mt-1 bg-blue-50 border border-blue-200 rounded">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-blue-800">Total QPS Cap</span>
+            <div className="relative">
+              <button
+                onMouseEnter={() => setShowQpsInfo(true)}
+                onMouseLeave={() => setShowQpsInfo(false)}
+                className="p-0.5 hover:bg-blue-100 rounded-full"
+                aria-label="QPS info"
+              >
+                <Info className="h-3 w-3 text-blue-400" />
+              </button>
+              {showQpsInfo && (
+                <div className="absolute left-0 top-5 w-64 p-2 bg-white border border-gray-200 rounded shadow-lg z-10 text-[11px] text-gray-600">
+                  Configured capacity (invited), not guaranteed traffic. Actual delivery is spend-constrained.
+                </div>
+              )}
+            </div>
+            {data.synced_at && (
+              <span className="text-[10px] text-blue-400">
+                · {new Date(data.synced_at).toLocaleString()}
+              </span>
+            )}
+          </div>
+          <span className="text-sm font-bold text-blue-900">
+            {formatQPS(data.total_qps_allocated)}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
