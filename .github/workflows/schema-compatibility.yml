@@ -87,7 +87,10 @@ jobs:
               "pretargeting_configs",
               "rtb_daily",
               "home_publisher_daily",
+              "config_size_daily",
+              "config_geo_daily",
               "config_publisher_daily",
+              "config_creative_daily",
               "rtb_endpoints_current",
               "campaign_daily_summary",
           ]
