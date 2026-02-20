@@ -413,15 +413,27 @@ def apply_migration(conn: psycopg.Connection, version: str, filepath: Path) -> b
 def run_migrations(dry_run: bool = False) -> tuple[int, int]:
     """Run all pending migrations.
 
+    Uses a PostgreSQL advisory lock to prevent multiple workers from
+    applying migrations concurrently (avoids deadlocks when
+    UVICORN_WORKERS > 1).
+
     Args:
         dry_run: If True, only show what would be applied.
 
     Returns:
         Tuple of (applied_count, failed_count).
     """
+    # Advisory lock ID — arbitrary fixed constant for migration exclusivity.
+    MIGRATION_LOCK_ID = 7483640  # ascii sum of "catscan_migrate"
+
     conn = get_connection()
 
     try:
+        # Acquire advisory lock (blocks until available; released on conn close).
+        # pg_advisory_lock is session-level: held until connection closes.
+        conn.execute("SELECT pg_advisory_lock(%s)", (MIGRATION_LOCK_ID,))
+        logger.info("Acquired migration advisory lock.")
+
         ensure_migrations_table(conn)
         applied = get_applied_migrations(conn)
         pending = get_pending_migrations()
@@ -464,7 +476,7 @@ def run_migrations(dry_run: bool = False) -> tuple[int, int]:
         return applied_count, failed_count
 
     finally:
-        conn.close()
+        conn.close()  # Also releases the advisory lock
 
 
 def show_status() -> None:
