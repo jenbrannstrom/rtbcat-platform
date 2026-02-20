@@ -540,63 +540,15 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
             </div>
           </div>
 
-          <div className="px-4 pb-3 pt-2">
-            {/* Compact stat chips in one row */}
-            <div className="flex items-center gap-3 mb-2">
-              <div className="flex items-center gap-1.5 rounded bg-white border px-2.5 py-1.5">
-                <span className="text-[11px] text-gray-500">Reached</span>
-                <span className="text-sm font-bold text-gray-900">
-                  {config.has_performance ? formatNumber(config.reached) : '--'}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 rounded bg-white border px-2.5 py-1.5">
-                <span className="text-[11px] text-gray-500">Imp</span>
-                <span className="text-sm font-bold text-gray-900">
-                  {config.has_performance ? formatNumber(config.impressions) : '--'}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 rounded bg-white border px-2.5 py-1.5">
-                <span className="text-[11px] text-gray-500">Win</span>
-                <span
-                  className={cn(
-                    'text-sm font-bold',
-                    config.has_performance && config.win_rate >= 50 && 'text-green-600',
-                    config.has_performance && config.win_rate >= 30 && config.win_rate < 50 && 'text-yellow-600',
-                    config.has_performance && config.win_rate < 30 && 'text-red-600',
-                    !config.has_performance && 'text-gray-400'
-                  )}
-                >
-                  {config.has_performance ? `${config.win_rate.toFixed(1)}%` : '--'}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 rounded bg-white border px-2.5 py-1.5">
-                <span className="text-[11px] text-gray-500">Waste</span>
-                <span
-                  className={cn(
-                    'text-sm font-bold',
-                    config.has_performance && config.waste_rate < 50 && 'text-gray-700',
-                    config.has_performance && config.waste_rate >= 50 && config.waste_rate < 70 && 'text-yellow-600',
-                    config.has_performance && config.waste_rate >= 70 && config.waste_rate < 90 && 'text-orange-600',
-                    config.has_performance && config.waste_rate >= 90 && 'text-red-600',
-                    !config.has_performance && 'text-gray-400'
-                  )}
-                >
-                  {config.has_performance ? `${config.waste_rate.toFixed(1)}%` : '--'}
-                </span>
-                {config.has_performance && <WasteMiniBar pct={config.waste_rate} />}
-              </div>
+          {/* History Panel - toggled via button */}
+          {showHistory && (
+            <div className="px-4 pb-3 pt-2">
+              <SnapshotComparisonPanel
+                billing_id={config.billing_id}
+                configName={config.name}
+              />
             </div>
-
-            {/* History Panel - toggled via button */}
-            {showHistory && (
-              <div className="mt-2">
-                <SnapshotComparisonPanel
-                  billing_id={config.billing_id}
-                  configName={config.name}
-                />
-              </div>
-            )}
-          </div>
+          )}
         </div>
       )}
     </div>
