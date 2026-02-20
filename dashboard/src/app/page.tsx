@@ -233,13 +233,6 @@ function WasteAnalysisContent() {
     refetchConfigPerf();
   };
 
-  // Use real funnel data if available (has_data can be at top level or in funnel)
-  const hasFunnelData = rtbFunnel?.has_data ?? rtbFunnel?.funnel?.has_data ?? false;
-  const reached = hasFunnelData ? (rtbFunnel?.funnel?.total_reached_queries ?? null) : null;
-  const impressions = hasFunnelData ? (rtbFunnel?.funnel?.total_impressions ?? 0) : 0;
-
-  // Publishers and Geos from RTB data
-
   // Build a map of billing_id to performance data from config performance API
   const configMetricsDelayed = configPerformanceLoading || configPerformanceFetching || configPerformanceError;
   const configFallbackApplied = configPerformance?.fallback_applied === true;
@@ -301,9 +294,7 @@ function WasteAnalysisContent() {
 
   const activeConfigsCount = displayConfigs.filter(c => c.state === 'ACTIVE').length;
 
-  // Header metrics: prefer endpoint-efficiency API because it includes
-  // explicit formulas and source coverage metadata.
-  const endpointSummary = endpointEfficiency?.summary;
+  // Observed QPS by endpoint for endpoints header
   const coverage = endpointEfficiency?.data_coverage;
   const observedQpsByEndpointId = endpointEfficiency?.endpoint_reconciliation?.rows?.reduce<Record<string, number | null>>(
     (acc, row) => {
@@ -314,6 +305,7 @@ function WasteAnalysisContent() {
     },
     {}
   ) ?? {};
+
   const homeSeatDataAsOf = normalizeDateString(coverage?.home_seat_daily?.end_date ?? null);
   const bidstreamDataAsOf = normalizeDateString(coverage?.rtb_bidstream?.end_date ?? null);
   const availableDataDates = [homeSeatDataAsOf, bidstreamDataAsOf].filter((value): value is string => !!value);
@@ -325,28 +317,16 @@ function WasteAnalysisContent() {
       {/* Compact Top Bar - CPM, Period Selector, Refresh */}
       <div className="sticky top-0 z-30 px-6 py-2 bg-white border-b border-gray-200">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-xs text-gray-600">
+          <div className="text-xs text-gray-600">
             {seatReady && dataAsOf && (
-              <>
-                <span>
-                  Data as of <strong>{dataAsOf}</strong>
-                </span>
-                {coverage?.home_seat_daily && (
-                  <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">
-                    Delivery: {coverage.home_seat_daily.days_with_data ?? 0}/{coverage.requested_window?.days ?? days}d
-                  </span>
-                )}
-                {coverage?.rtb_bidstream && (
-                  <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] text-indigo-700">
-                    Auction: {coverage.rtb_bidstream.days_with_data ?? 0}/{coverage.requested_window?.days ?? days}d
-                  </span>
-                )}
+              <span>
+                Data as of <strong>{dataAsOf}</strong>
                 {hasDataDateDrift && (
-                  <span className="text-amber-700">
+                  <span className="ml-2 text-amber-700">
                     (home: {homeSeatDataAsOf}, bidstream: {bidstreamDataAsOf})
                   </span>
                 )}
-              </>
+              </span>
             )}
             {seatReady && !dataAsOf && (
               <span className="text-gray-500">Data freshness pending…</span>
@@ -412,7 +392,7 @@ function WasteAnalysisContent() {
       </div>
 
       {/* Content area with padding */}
-      <div className="p-4 space-y-3">
+      <div className="p-6 space-y-4">
       {seatsError && (
         <div className="flex items-center justify-between gap-3 text-red-800 bg-red-50 border border-red-200 rounded px-3 py-2">
           <span>Unable to load buyer seats. Retry to continue.</span>
@@ -444,7 +424,7 @@ function WasteAnalysisContent() {
           )}
         </div>
       )}
-      {/* Account Endpoints Header */}
+      {/* Account Endpoints Header - config only, no delivery duplication */}
       <AccountEndpointsHeader
         observedQpsByEndpointId={observedQpsByEndpointId}
       />
