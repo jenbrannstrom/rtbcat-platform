@@ -22,6 +22,30 @@ export interface UploadTrackingResponse {
   days_with_anomalies: number;
 }
 
+export interface ImportMatrixCell {
+  csv_type: string;
+  status: "pass" | "fail" | "not_imported";
+  source?: "manual" | "gmail-auto" | "gmail-manual" | null;
+  last_imported_at?: string | null;
+  error_summary?: string | null;
+}
+
+export interface AccountImportMatrix {
+  buyer_id: string;
+  bidder_id: string;
+  display_name?: string | null;
+  csv_types: ImportMatrixCell[];
+}
+
+export interface ImportTrackingMatrixResponse {
+  accounts: AccountImportMatrix[];
+  expected_csv_types: string[];
+  total_accounts: number;
+  pass_count: number;
+  fail_count: number;
+  not_imported_count: number;
+}
+
 export interface ImportHistoryItem {
   batch_id: string;
   filename?: string | null;
@@ -79,6 +103,17 @@ export interface NewlyUploadedCreativesResponse {
 
 export async function getUploadTracking(days: number = 30): Promise<UploadTrackingResponse> {
   return fetchApi<UploadTrackingResponse>(`/uploads/tracking?days=${days}`);
+}
+
+export async function getImportTrackingMatrix(
+  days: number = 30,
+  buyerId?: string
+): Promise<ImportTrackingMatrixResponse> {
+  const params = new URLSearchParams({ days: String(days) });
+  if (buyerId) {
+    params.set("buyer_id", buyerId);
+  }
+  return fetchApi<ImportTrackingMatrixResponse>(`/uploads/import-matrix?${params.toString()}`);
 }
 
 export async function getImportHistory(

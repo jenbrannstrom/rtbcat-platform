@@ -18,11 +18,18 @@ import {
   TroubleshootingSection,
   ImportResultCard,
   ImportHistorySection,
+  ImportTrackingMatrixSection,
 } from "@/components/import";
 import {
   type ExtendedValidationResult,
 } from "@/lib/csv-validator";
-import { importPerformanceData, getImportHistory, type ImportHistoryItem } from "@/lib/api";
+import {
+  importPerformanceData,
+  getImportHistory,
+  getImportTrackingMatrix,
+  type ImportHistoryItem,
+  type ImportTrackingMatrixResponse,
+} from "@/lib/api";
 import {
   uploadChunkedCSV,
   previewCSV,
@@ -67,22 +74,31 @@ export default function ImportPage() {
   // Import history state
   const [importHistory, setImportHistory] = useState<ImportHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [importMatrix, setImportMatrix] = useState<ImportTrackingMatrixResponse | null>(null);
+  const [matrixLoading, setMatrixLoading] = useState(true);
 
   // Load import history on mount and after successful imports
-  const loadHistory = useCallback(async () => {
+  const loadImportData = useCallback(async () => {
+    setHistoryLoading(true);
+    setMatrixLoading(true);
     try {
-      const history = await getImportHistory(10);
+      const [history, matrix] = await Promise.all([
+        getImportHistory(10, 0, selectedBuyerId || undefined),
+        getImportTrackingMatrix(30, selectedBuyerId || undefined),
+      ]);
       setImportHistory(history);
+      setImportMatrix(matrix);
     } catch (error) {
-      console.error("Failed to load import history:", error);
+      console.error("Failed to load import data:", error);
     } finally {
       setHistoryLoading(false);
+      setMatrixLoading(false);
     }
-  }, []);
+  }, [selectedBuyerId]);
 
   useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
+    loadImportData();
+  }, [loadImportData]);
 
   useEffect(() => {
     const isImportInFlight =
@@ -200,7 +216,7 @@ export default function ImportPage() {
         const duplicates = result.duplicates ?? 0;
         setStep(result.success || imported > 0 || duplicates > 0 ? "success" : "error");
         if (result.success || imported > 0 || duplicates > 0) {
-          loadHistory(); // Reload history after successful import
+          loadImportData(); // Reload import tracking after successful import
         }
       } else {
         // Use standard upload for small files
@@ -210,7 +226,7 @@ export default function ImportPage() {
 
         setImportResult(result);
         setStep("success");
-        loadHistory(); // Reload history after successful import
+        loadImportData(); // Reload import tracking after successful import
       }
     } catch (error) {
       console.error("Import error:", error);
@@ -299,11 +315,17 @@ export default function ImportPage() {
             </div>
           </details>
 
+          <ImportTrackingMatrixSection
+            matrix={importMatrix}
+            loading={matrixLoading}
+            onRefresh={loadImportData}
+          />
+
           {/* Recent Import History */}
           <ImportHistorySection
             history={importHistory}
             loading={historyLoading}
-            onRefresh={loadHistory}
+            onRefresh={loadImportData}
           />
         </div>
       )}
