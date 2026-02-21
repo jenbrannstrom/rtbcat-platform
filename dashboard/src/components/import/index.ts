@@ -8,6 +8,7 @@
  * - ColumnMappingCard.tsx: Column mapping display (~30 lines)
  * - ImportResultCard.tsx: Import result display (~120 lines)
  * - ImportHistorySection.tsx: Recent imports list (~95 lines)
+ * - ImportTrackingMatrixSection.tsx: account x CSV type coverage table
  */
 
 export { ExportInstructions } from "./ExportInstructions";
@@ -16,3 +17,4 @@ export { TroubleshootingSection } from "./TroubleshootingSection";
 export { ColumnMappingCard } from "./ColumnMappingCard";
 export { ImportResultCard } from "./ImportResultCard";
 export { ImportHistorySection } from "./ImportHistorySection";
+export { ImportTrackingMatrixSection } from "./ImportTrackingMatrixSection";
