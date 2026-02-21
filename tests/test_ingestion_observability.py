@@ -284,6 +284,7 @@ def test_gmail_record_import_run_writes_both_tables():
             date_range_start="2026-02-10",
             date_range_end="2026-02-10",
             columns_found="Day,Impressions,Clicks",
+            import_trigger="gmail-auto",
         )
 
     # Should have exactly 3 execute calls: INSERT running, UPDATE success, INSERT import_history
@@ -297,6 +298,7 @@ def test_gmail_record_import_run_writes_both_tables():
     # buyer_id and bidder_id should be seat_id
     assert first_params[1] == "654321"  # buyer_id
     assert first_params[2] == "654321"  # bidder_id
+    assert first_params[-1] == "gmail-auto"  # import_trigger
 
     # Second call: UPDATE to final status
     second_sql = mock_conn.execute.call_args_list[1][0][0]
