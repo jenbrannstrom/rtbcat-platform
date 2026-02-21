@@ -1613,7 +1613,7 @@ export function PretargetingSettingsEditor({
               {historyLoading ? (
                 <div className="space-y-2">
                   {[1, 2, 3].map(i => (
-                    <div key={i} className="h-12 bg-gray-100 rounded animate-pulse" />
+                    <div key={i} className="h-12 bg-gray-200 rounded animate-pulse" />
                   ))}
                 </div>
               ) : history && history.length > 0 ? (
@@ -1633,7 +1633,7 @@ export function PretargetingSettingsEditor({
               {snapshotsLoading ? (
                 <div className="space-y-2">
                   {[1, 2].map(i => (
-                    <div key={i} className="h-16 bg-gray-100 rounded animate-pulse" />
+                    <div key={i} className="h-16 bg-gray-200 rounded animate-pulse" />
                   ))}
                 </div>
               ) : snapshots && snapshots.length > 0 ? (

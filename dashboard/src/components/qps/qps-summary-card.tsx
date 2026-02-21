@@ -21,7 +21,7 @@ export function QPSSummaryCard({ days = 7 }: QPSSummaryCardProps) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[1, 2, 3, 4].map(i => (
-          <div key={i} className="h-28 bg-gray-100 rounded-lg animate-pulse" />
+          <div key={i} className="h-28 bg-gray-200 rounded-lg animate-pulse" />
         ))}
       </div>
     );
