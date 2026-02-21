@@ -69,6 +69,7 @@ class PerformanceService:
         date_gap_warning: Optional[str] = None,
         buyer_id: Optional[str] = None,
         bidder_id: Optional[str] = None,
+        import_trigger: str = "manual",
     ) -> None:
         """Record an import in history and update daily summary."""
         columns_str = ",".join(columns_found) if columns_found else None
@@ -95,6 +96,7 @@ class PerformanceService:
             date_gap_warning=date_gap_warning,
             buyer_id=buyer_id,
             bidder_id=bidder_id,
+            import_trigger=import_trigger,
         )
 
     async def finalize_import(
@@ -115,6 +117,7 @@ class PerformanceService:
         date_gap_warning: Optional[str] = None,
         buyer_id: Optional[str] = None,
         bidder_id: Optional[str] = None,
+        import_trigger: str = "manual",
     ) -> None:
         """Finalize a chunked import - record history and update daily summary."""
         date_gaps_json = json.dumps(date_gaps) if date_gaps else None
@@ -140,6 +143,7 @@ class PerformanceService:
             date_gap_warning=date_gap_warning,
             buyer_id=buyer_id,
             bidder_id=bidder_id,
+            import_trigger=import_trigger,
         )
 
         # Update daily summary

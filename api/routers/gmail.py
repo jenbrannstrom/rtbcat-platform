@@ -94,7 +94,7 @@ async def trigger_gmail_import(
     """
     try:
         service = GmailService()
-        result = await service.queue_import()
+        result = await service.queue_import(import_trigger="gmail-manual")
         return GmailImportResponse(**result)
 
     except ImportError as e:
@@ -126,7 +126,7 @@ async def trigger_gmail_import_scheduled(
 
     try:
         service = GmailService()
-        result = await service.queue_import()
+        result = await service.queue_import(import_trigger="gmail-auto")
         return GmailImportResponse(**result)
     except ImportError as e:
         logger.error(f"Gmail import script not found: {e}")

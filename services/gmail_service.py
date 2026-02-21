@@ -33,7 +33,7 @@ class GmailService:
                 "recent_history": [],
             }
 
-    async def queue_import(self) -> dict[str, Any]:
+    async def queue_import(self, import_trigger: str = "gmail-manual") -> dict[str, Any]:
         """Validate and enqueue a Gmail import job."""
         from scripts.gmail_import import get_status
 
@@ -59,8 +59,11 @@ class GmailService:
         if status.get("running"):
             raise HTTPException(status_code=409, detail="Gmail import already running")
 
+        if import_trigger not in {"gmail-auto", "gmail-manual"}:
+            raise HTTPException(status_code=400, detail="Invalid import trigger")
+
         job_id = str(uuid.uuid4())
-        self._spawn_import_worker(job_id)
+        self._spawn_import_worker(job_id, import_trigger)
 
         return {
             "success": True,
@@ -75,7 +78,7 @@ class GmailService:
             "errors": [],
         }
 
-    def _spawn_import_worker(self, job_id: str) -> None:
+    def _spawn_import_worker(self, job_id: str, import_trigger: str) -> None:
         """Spawn detached worker process so import survives request/SSH disconnects."""
         worker_path = Path(__file__).resolve().parent.parent / "scripts" / "gmail_import_worker.py"
         if not worker_path.exists():
@@ -90,7 +93,15 @@ class GmailService:
 
         with open(log_file, "a", encoding="utf-8") as fp:
             subprocess.Popen(
-                [sys.executable, str(worker_path), "--job-id", job_id, "--quiet"],
+                [
+                    sys.executable,
+                    str(worker_path),
+                    "--job-id",
+                    job_id,
+                    "--quiet",
+                    "--import-trigger",
+                    import_trigger,
+                ],
                 stdout=fp,
                 stderr=fp,
                 start_new_session=True,

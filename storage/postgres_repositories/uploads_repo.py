@@ -10,6 +10,17 @@ from storage.postgres_database import pg_query, pg_query_one, pg_execute
 class UploadsRepository:
     """SQL-only repository for upload tracking and import history."""
 
+    REPORT_TYPE_CASE_SQL = """
+        CASE
+            WHEN report_type IN ('quality', 'catscan-quality') THEN 'quality'
+            WHEN report_type IN ('bidsinauction', 'catscan-bidsinauction') THEN 'bidsinauction'
+            WHEN report_type IN ('pipeline-geo', 'catscan-pipeline-geo') THEN 'pipeline-geo'
+            WHEN report_type IN ('pipeline-publisher', 'pipeline', 'catscan-pipeline') THEN 'pipeline-publisher'
+            WHEN report_type IN ('bid-filtering', 'catscan-bid-filtering') THEN 'bid-filtering'
+            ELSE NULL
+        END
+    """
+
     async def get_daily_upload_summaries(self, limit: int) -> list[dict[str, Any]]:
         """Get daily upload summary records."""
         return await pg_query(
@@ -124,6 +135,99 @@ class UploadsRepository:
                 (allowed_bidder_ids,),
             )
 
+    async def get_active_import_accounts(
+        self,
+        allowed_bidder_ids: Optional[list[str]] = None,
+        buyer_id: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """Return active buyer accounts that should appear in import tracking."""
+        if buyer_id:
+            return await pg_query(
+                """
+                SELECT buyer_id, bidder_id, display_name
+                FROM buyer_seats
+                WHERE active = true AND buyer_id = %s
+                ORDER BY buyer_id
+                """,
+                (buyer_id,),
+            )
+
+        if allowed_bidder_ids is None:
+            return await pg_query(
+                """
+                SELECT buyer_id, bidder_id, display_name
+                FROM buyer_seats
+                WHERE active = true
+                ORDER BY buyer_id
+                """
+            )
+
+        return await pg_query(
+            """
+            SELECT buyer_id, bidder_id, display_name
+            FROM buyer_seats
+            WHERE active = true
+              AND bidder_id = ANY(%s)
+            ORDER BY buyer_id
+            """,
+            (allowed_bidder_ids,),
+        )
+
+    async def get_latest_import_matrix_runs(
+        self,
+        start_date: str,
+        buyer_ids: list[str],
+    ) -> list[dict[str, Any]]:
+        """Return latest ingestion run per buyer_id and canonical CSV type."""
+        if not buyer_ids:
+            return []
+
+        return await pg_query(
+            f"""
+            WITH normalized AS (
+                SELECT
+                    COALESCE(NULLIF(buyer_id, ''), NULLIF(bidder_id, '')) AS account_id,
+                    {self.REPORT_TYPE_CASE_SQL} AS csv_type,
+                    status,
+                    COALESCE(NULLIF(import_trigger, ''), 'manual') AS import_trigger,
+                    started_at,
+                    finished_at,
+                    error_summary
+                FROM ingestion_runs
+                WHERE COALESCE(finished_at, started_at) >= %s::timestamptz
+                  AND COALESCE(NULLIF(buyer_id, ''), NULLIF(bidder_id, '')) = ANY(%s)
+            ),
+            ranked AS (
+                SELECT
+                    account_id,
+                    csv_type,
+                    status,
+                    import_trigger,
+                    started_at,
+                    finished_at,
+                    error_summary,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY account_id, csv_type
+                        ORDER BY COALESCE(finished_at, started_at) DESC, started_at DESC
+                    ) AS rn
+                FROM normalized
+                WHERE account_id IS NOT NULL
+                  AND csv_type IS NOT NULL
+            )
+            SELECT
+                account_id,
+                csv_type,
+                status,
+                import_trigger,
+                started_at,
+                finished_at,
+                error_summary
+            FROM ranked
+            WHERE rn = 1
+            """,
+            (start_date, buyer_ids),
+        )
+
     async def get_unassigned_uploads_count(self) -> int:
         """Get count of imports without bidder_id."""
         row = await pg_query_one(
@@ -164,6 +268,7 @@ class UploadsRepository:
         date_gap_warning: Optional[str] = None,
         buyer_id: Optional[str] = None,
         bidder_id: Optional[str] = None,
+        import_trigger: str = "manual",
     ) -> None:
         """Record an import in import_history table."""
         await pg_execute(
@@ -172,8 +277,8 @@ class UploadsRepository:
                 batch_id, filename, rows_read, rows_imported, rows_skipped, rows_duplicate,
                 date_range_start, date_range_end, columns_found, columns_missing,
                 total_reached, total_impressions, total_spend_usd, status, error_message,
-                file_size_bytes, date_gaps, date_gap_warning, buyer_id, bidder_id
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                file_size_bytes, date_gaps, date_gap_warning, buyer_id, bidder_id, import_trigger
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 batch_id,
@@ -196,6 +301,7 @@ class UploadsRepository:
                 date_gap_warning,
                 buyer_id,
                 bidder_id,
+                import_trigger,
             ),
         )
 
@@ -207,16 +313,17 @@ class UploadsRepository:
         bidder_id: Optional[str] = None,
         report_type: Optional[str] = None,
         filename: Optional[str] = None,
+        import_trigger: str = "manual",
     ) -> None:
         """Insert a new ingestion_runs row with status='running'."""
         await pg_execute(
             """
             INSERT INTO ingestion_runs (
                 run_id, source_type, buyer_id, bidder_id, status,
-                report_type, filename
-            ) VALUES (%s, %s, %s, %s, 'running', %s, %s)
+                report_type, filename, import_trigger
+            ) VALUES (%s, %s, %s, %s, 'running', %s, %s, %s)
             """,
-            (run_id, source_type, buyer_id, bidder_id, report_type, filename),
+            (run_id, source_type, buyer_id, bidder_id, report_type, filename, import_trigger),
         )
 
     async def finish_ingestion_run(

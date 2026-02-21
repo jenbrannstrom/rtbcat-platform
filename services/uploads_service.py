@@ -78,8 +78,37 @@ class AccountUploadStats:
     billing_ids: list[str] = field(default_factory=list)
 
 
+@dataclass
+class ImportMatrixCell:
+    """Coverage status for one account and one CSV type."""
+    csv_type: str
+    status: str
+    source: Optional[str]
+    last_imported_at: Optional[str]
+    error_summary: Optional[str] = None
+
+
+@dataclass
+class AccountImportMatrix:
+    """Import matrix row group for a buyer account."""
+    buyer_id: str
+    bidder_id: str
+    display_name: Optional[str]
+    csv_types: list[ImportMatrixCell] = field(default_factory=list)
+
+
 class UploadsService:
     """Service layer for upload tracking and import history."""
+
+    EXPECTED_CSV_TYPES = [
+        "quality",
+        "bidsinauction",
+        "pipeline-geo",
+        "pipeline-publisher",
+        "bid-filtering",
+    ]
+
+    VALID_IMPORT_SOURCES = {"manual", "gmail-auto", "gmail-manual"}
 
     def __init__(self, repo: UploadsRepository | None = None) -> None:
         self._repo = repo or UploadsRepository()
@@ -296,6 +325,128 @@ class UploadsService:
             "accounts": accounts,
             "total_accounts": len(accounts),
             "unassigned_uploads": unassigned,
+        }
+
+    async def get_import_tracking_matrix(
+        self,
+        days: int,
+        allowed_bidder_ids: Optional[list[str]] = None,
+        buyer_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Return account x CSV-type matrix with pass/fail/not-imported status."""
+        if not await self._repo.table_exists("ingestion_runs"):
+            return {
+                "accounts": [],
+                "expected_csv_types": list(self.EXPECTED_CSV_TYPES),
+                "total_accounts": 0,
+                "pass_count": 0,
+                "fail_count": 0,
+                "not_imported_count": 0,
+            }
+
+        accounts = await self._repo.get_active_import_accounts(
+            allowed_bidder_ids=allowed_bidder_ids,
+            buyer_id=buyer_id,
+        )
+        if not accounts:
+            return {
+                "accounts": [],
+                "expected_csv_types": list(self.EXPECTED_CSV_TYPES),
+                "total_accounts": 0,
+                "pass_count": 0,
+                "fail_count": 0,
+                "not_imported_count": 0,
+            }
+
+        buyer_ids = [str(row["buyer_id"]) for row in accounts if row.get("buyer_id")]
+        if not buyer_ids:
+            return {
+                "accounts": [],
+                "expected_csv_types": list(self.EXPECTED_CSV_TYPES),
+                "total_accounts": 0,
+                "pass_count": 0,
+                "fail_count": 0,
+                "not_imported_count": 0,
+            }
+
+        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        latest_runs = await self._repo.get_latest_import_matrix_runs(
+            start_date=start_date,
+            buyer_ids=buyer_ids,
+        )
+
+        latest_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+        for row in latest_runs:
+            account_id = str(row.get("account_id") or "")
+            csv_type = str(row.get("csv_type") or "")
+            if not account_id or not csv_type:
+                continue
+            latest_by_key[(account_id, csv_type)] = row
+
+        pass_count = 0
+        fail_count = 0
+        not_imported_count = 0
+        matrix_accounts: list[AccountImportMatrix] = []
+
+        for row in accounts:
+            buyer_account = str(row.get("buyer_id") or "")
+            if not buyer_account:
+                continue
+
+            cells: list[ImportMatrixCell] = []
+            for csv_type in self.EXPECTED_CSV_TYPES:
+                latest = latest_by_key.get((buyer_account, csv_type))
+                if not latest:
+                    not_imported_count += 1
+                    cells.append(
+                        ImportMatrixCell(
+                            csv_type=csv_type,
+                            status="not_imported",
+                            source=None,
+                            last_imported_at=None,
+                            error_summary=None,
+                        )
+                    )
+                    continue
+
+                raw_status = str(latest.get("status") or "").lower()
+                status = "pass" if raw_status == "success" else "fail"
+                if status == "pass":
+                    pass_count += 1
+                else:
+                    fail_count += 1
+
+                source = str(latest.get("import_trigger") or "manual")
+                if source not in self.VALID_IMPORT_SOURCES:
+                    source = "manual"
+
+                last_imported = latest.get("finished_at") or latest.get("started_at")
+                cells.append(
+                    ImportMatrixCell(
+                        csv_type=csv_type,
+                        status=status,
+                        source=source,
+                        last_imported_at=str(last_imported) if last_imported else None,
+                        error_summary=latest.get("error_summary"),
+                    )
+                )
+
+            matrix_accounts.append(
+                AccountImportMatrix(
+                    buyer_id=buyer_account,
+                    bidder_id=str(row.get("bidder_id") or ""),
+                    display_name=row.get("display_name"),
+                    csv_types=cells,
+                )
+            )
+
+        return {
+            "accounts": matrix_accounts,
+            "expected_csv_types": list(self.EXPECTED_CSV_TYPES),
+            "total_accounts": len(matrix_accounts),
+            "pass_count": pass_count,
+            "fail_count": fail_count,
+            "not_imported_count": not_imported_count,
         }
 
     @staticmethod

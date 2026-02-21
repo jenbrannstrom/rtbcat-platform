@@ -369,7 +369,7 @@ def get_runtime_freshness_snapshot() -> dict[str, Any]:
     return snapshot
 
 
-def start_scheduler_ingestion_run(job_id: str) -> Optional[str]:
+def start_scheduler_ingestion_run(job_id: str, import_trigger: str) -> Optional[str]:
     """Create one ingestion_runs row for the scheduler-triggered import job."""
     conn = _get_sync_connection()
     if conn is None:
@@ -381,10 +381,10 @@ def start_scheduler_ingestion_run(job_id: str) -> Optional[str]:
                 """
                 INSERT INTO ingestion_runs (
                     run_id, source_type, buyer_id, bidder_id, status,
-                    report_type, filename, row_count, error_summary
-                ) VALUES (%s, 'csv', NULL, NULL, 'running', %s, %s, 0, NULL)
+                    report_type, filename, row_count, error_summary, import_trigger
+                ) VALUES (%s, 'csv', NULL, NULL, 'running', %s, %s, 0, NULL, %s)
                 """,
-                (run_id, "gmail-scheduled", f"scheduler:{job_id}"),
+                (run_id, "gmail-scheduled", f"scheduler:{job_id}", import_trigger),
             )
         return run_id
     except Exception as exc:
@@ -446,6 +446,7 @@ def record_import_run(
     date_range_end: Optional[str] = None,
     columns_found: Optional[str] = None,
     error: Optional[str] = None,
+    import_trigger: str = "gmail-manual",
 ) -> None:
     """Record import run in ingestion_runs and import_history.
 
@@ -464,9 +465,9 @@ def record_import_run(
             conn.execute(
                 """INSERT INTO ingestion_runs
                    (run_id, source_type, buyer_id, bidder_id, status,
-                    report_type, filename, row_count, error_summary)
-                   VALUES (%s, 'csv', %s, %s, 'running', %s, %s, 0, NULL)""",
-                (run_id, seat_id, seat_id, report_kind, filename),
+                    report_type, filename, row_count, error_summary, import_trigger)
+                   VALUES (%s, 'csv', %s, %s, 'running', %s, %s, 0, NULL, %s)""",
+                (run_id, seat_id, seat_id, report_kind, filename, import_trigger),
             )
             conn.execute(
                 """UPDATE ingestion_runs
@@ -481,14 +482,14 @@ def record_import_run(
                        (batch_id, filename, rows_read, rows_imported,
                         rows_skipped, rows_duplicate, date_range_start,
                         date_range_end, columns_found, status,
-                        error_message, file_size_bytes, buyer_id, bidder_id)
-                       VALUES (%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        error_message, file_size_bytes, buyer_id, bidder_id, import_trigger)
+                       VALUES (%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (
                         batch_id, filename, rows_read, rows_imported,
                         rows_duplicate, date_range_start, date_range_end,
                         columns_found,
                         "complete" if success else "failed",
-                        error, file_size_bytes, seat_id, seat_id,
+                        error, file_size_bytes, seat_id, seat_id, import_trigger,
                     ),
                 )
     except Exception as exc:
@@ -1127,7 +1128,11 @@ def release_lock():
         pass
 
 
-def run_import(verbose: bool = True, job_id: Optional[str] = None) -> Dict[str, Any]:
+def run_import(
+    verbose: bool = True,
+    job_id: Optional[str] = None,
+    import_trigger: str = "gmail-manual",
+) -> Dict[str, Any]:
     """
     Run the Gmail import process.
     Returns a dict with results for API use.
@@ -1153,7 +1158,10 @@ def run_import(verbose: bool = True, job_id: Optional[str] = None) -> Dict[str, 
         result["errors"].append(error_msg)
         return result
 
-    scheduler_run_id = start_scheduler_ingestion_run(job_id)
+    if import_trigger not in {"gmail-auto", "gmail-manual"}:
+        import_trigger = "gmail-manual"
+
+    scheduler_run_id = start_scheduler_ingestion_run(job_id, import_trigger)
     update_status(False, running=True, current_job_id=job_id, reason="running")
 
     def finalize(
@@ -1297,6 +1305,7 @@ def run_import(verbose: bool = True, job_id: Optional[str] = None) -> Dict[str, 
                         date_range_end=imp.date_range_end,
                         columns_found=imp.columns_found,
                         error=imp.error,
+                        import_trigger=import_trigger,
                     )
                     if imp.success:
                         total_imported += 1
@@ -1364,7 +1373,7 @@ def main():
         print(json.dumps(status, indent=2))
         return
 
-    result = run_import(verbose=not args.quiet, job_id=None)
+    result = run_import(verbose=not args.quiet, job_id=None, import_trigger="gmail-manual")
 
     if not result["success"]:
         sys.exit(1)
