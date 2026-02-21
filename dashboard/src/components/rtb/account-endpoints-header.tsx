@@ -66,9 +66,9 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
     return (
       <div className="bg-white rounded-lg border p-3">
         <div className="animate-pulse space-y-2">
-          <div className="h-4 bg-gray-200 rounded w-40" />
-          <div className="h-8 bg-gray-100 rounded" />
-          <div className="h-8 bg-gray-100 rounded" />
+          <div className="h-4 bg-gray-300 rounded w-40" />
+          <div className="h-8 bg-gray-200 rounded" />
+          <div className="h-8 bg-gray-200 rounded" />
         </div>
       </div>
     );

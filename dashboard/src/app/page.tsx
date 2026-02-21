@@ -452,7 +452,7 @@ function WasteAnalysisContent() {
         {configsLoading ? (
           <div className="space-y-2">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+              <div key={i} className="h-16 bg-gray-200 rounded-lg animate-pulse" />
             ))}
           </div>
         ) : displayConfigs.length === 0 ? (
@@ -556,12 +556,12 @@ function WasteAnalysisLoading() {
   return (
     <div className="p-8 max-w-7xl mx-auto">
       <div className="mb-8">
-        <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
-        <div className="mt-2 h-4 w-96 bg-gray-100 rounded animate-pulse" />
+        <div className="h-8 w-48 bg-gray-300 rounded animate-pulse" />
+        <div className="mt-2 h-4 w-96 bg-gray-200 rounded animate-pulse" />
       </div>
       <div className="space-y-6">
         {[1, 2, 3].map(i => (
-          <div key={i} className="h-64 bg-gray-100 rounded-xl animate-pulse" />
+          <div key={i} className="h-64 bg-gray-200 rounded-xl animate-pulse" />
         ))}
       </div>
     </div>
