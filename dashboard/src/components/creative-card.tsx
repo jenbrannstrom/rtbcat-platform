@@ -340,7 +340,7 @@ export function CreativeCard({ creative, onPreview, performance, sortField }: Cr
         {creative.disapproval_reasons && creative.disapproval_reasons.length > 0 && (
           <div className="mt-1.5 text-[10px] text-red-600 space-y-0.5">
             {creative.disapproval_reasons.map((r, i) => (
-              <div key={i}>{r.reason?.replace(/_/g, " ")}{r.details ? `: ${r.details}` : ""}</div>
+              <div key={i}>{r.reason?.replace(/_/g, " ")}{r.details ? <>{" — "}<a href={r.details} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>Read more</a></> : ""}</div>
             ))}
           </div>
         )}

@@ -44,7 +44,7 @@ export function getDataNotes(creative: Creative, performance?: CreativePerforman
   const notes: DataNote[] = [];
 
   if (!performance?.has_data) {
-    return [{ icon: "info", message: "No performance data imported yet" }];
+    return [];
   }
 
   const imps = performance.total_impressions || 0;
