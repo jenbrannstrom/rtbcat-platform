@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   History,
@@ -18,23 +18,82 @@ import {
   User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getPretargetingHistory, type PretargetingHistoryItem } from '@/lib/api';
+import { getPretargetingHistory, type PretargetingHistoryItem, getSnapshots, rollbackSnapshot, type PretargetingSnapshot } from '@/lib/api';
 import { useTranslation } from '@/contexts/i18n-context';
+
+/** Find the auto-snapshot created just before a push (within 30s). */
+function findAssociatedSnapshot(
+  pushTimestamp: string,
+  billingId: string,
+  snapshots: PretargetingSnapshot[]
+): PretargetingSnapshot | null {
+  const pushTime = new Date(pushTimestamp).getTime();
+  return (
+    snapshots.find((snap) => {
+      if (snap.billing_id !== billingId) return false;
+      const snapTime = new Date(snap.created_at).getTime();
+      const diff = pushTime - snapTime;
+      return diff >= 0 && diff < 30_000 && snap.snapshot_type === 'before_change';
+    }) || null
+  );
+}
 
 // Rollback modal component
 function RollbackModal({
   change,
-  onConfirm,
+  snapshot,
+  onSuccess,
   onCancel,
-  isLoading,
 }: {
   change: PretargetingHistoryItem;
-  onConfirm: (reason: string) => void;
+  snapshot: PretargetingSnapshot | null;
+  onSuccess: () => void;
   onCancel: () => void;
-  isLoading: boolean;
 }) {
   const { t } = useTranslation();
   const [reason, setReason] = useState('');
+  const [dryRunResult, setDryRunResult] = useState<{ changes_made: string[]; message: string } | null>(null);
+  const [dryRunLoading, setDryRunLoading] = useState(false);
+  const [dryRunError, setDryRunError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  // Run dry-run on mount if snapshot available
+  useEffect(() => {
+    if (!snapshot) return;
+    setDryRunLoading(true);
+    setDryRunError(null);
+    rollbackSnapshot({
+      billing_id: change.config_id,
+      snapshot_id: snapshot.id,
+      dry_run: true,
+    })
+      .then((result) => {
+        setDryRunResult(result);
+      })
+      .catch((err) => {
+        setDryRunError(err?.message || 'Failed to preview rollback');
+      })
+      .finally(() => setDryRunLoading(false));
+  }, [snapshot, change.config_id]);
+
+  const executeMutation = useMutation({
+    mutationFn: async () => {
+      if (!snapshot) throw new Error('No snapshot available');
+      return rollbackSnapshot({
+        billing_id: change.config_id,
+        snapshot_id: snapshot.id,
+        dry_run: false,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-history'] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-snapshots'] });
+      onSuccess();
+    },
+  });
+
+  const noSnapshot = !snapshot;
+  const noChanges = dryRunResult && dryRunResult.changes_made.length === 0;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -50,75 +109,115 @@ function RollbackModal({
         </div>
 
         <div className="p-6 space-y-4">
-          <p className="text-gray-600">{t.history.aboutToRollback}</p>
+          {noSnapshot ? (
+            <div className="bg-gray-50 rounded-lg p-4 flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-gray-500 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-gray-600">
+                No snapshot available for this change. Rollback requires an auto-snapshot
+                that was created before the push. Older changes may not have snapshots.
+              </p>
+            </div>
+          ) : dryRunLoading ? (
+            <div className="flex items-center justify-center py-8 gap-2 text-gray-500 text-sm">
+              <div className="h-4 w-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+              Previewing rollback&hellip;
+            </div>
+          ) : dryRunError ? (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-red-700">{dryRunError}</p>
+            </div>
+          ) : noChanges ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-2">
+              <Check className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-blue-700">
+                No differences found between current config and snapshot.
+                Config may have already been modified since then.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">{t.history.config}</span>
+                  <span className="font-medium text-gray-900">{change.config_id}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Restoring to</span>
+                  <span className="font-medium text-gray-900">
+                    {snapshot?.snapshot_name || `Snapshot #${snapshot?.id}`}
+                  </span>
+                </div>
+              </div>
 
-          <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">{t.history.config}</span>
-              <span className="font-medium text-gray-900">{change.config_id}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">{t.history.field}</span>
-              <span className="font-medium text-gray-900">{change.field_changed}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">{t.history.current}</span>
-              <span className="font-mono text-sm text-gray-900 truncate max-w-[200px]">
-                {change.new_value || t.history.empty}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">{t.history.restoreTo}</span>
-              <span className="font-mono text-sm text-blue-600 truncate max-w-[200px]">
-                {change.old_value || t.history.empty}
-              </span>
-            </div>
-          </div>
+              {dryRunResult && dryRunResult.changes_made.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-sm font-medium text-gray-700">These changes will be reversed on Google:</p>
+                  <div className="bg-gray-50 rounded-lg p-3 max-h-40 overflow-y-auto space-y-1">
+                    {dryRunResult.changes_made.map((desc, i) => (
+                      <div key={i} className="text-xs font-mono text-gray-700">{desc}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
-            <p className="text-sm text-amber-800">
-              {t.history.rollbackWarning}
-            </p>
-          </div>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-amber-800">
+                  This pushes to Google immediately. A new &ldquo;ROLLBACK&rdquo; entry will be recorded in history.
+                </p>
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t.history.reasonForRollback}
-            </label>
-            <input
-              type="text"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder={t.history.whyRollingBack}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t.history.reasonForRollback}
+                </label>
+                <input
+                  type="text"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder={t.history.whyRollingBack}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </>
+          )}
+
+          {executeMutation.isError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-red-700">
+                {(executeMutation.error as Error)?.message || 'Rollback failed'}
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="px-6 py-4 border-t flex justify-end gap-3">
           <button
             onClick={onCancel}
-            disabled={isLoading}
+            disabled={executeMutation.isPending}
             className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            {t.history.cancel}
+            {noSnapshot || noChanges ? 'Close' : t.history.cancel}
           </button>
-          <button
-            onClick={() => onConfirm(reason)}
-            disabled={isLoading || !reason.trim()}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg transition-colors',
-              'hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed'
-            )}
-          >
-            {isLoading ? (
-              <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <RotateCcw className="h-4 w-4" />
-            )}
-            {t.history.rollbackNow}
-          </button>
+          {!noSnapshot && !noChanges && dryRunResult && (
+            <button
+              onClick={() => executeMutation.mutate()}
+              disabled={executeMutation.isPending || !reason.trim()}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg transition-colors',
+                'hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed'
+              )}
+            >
+              {executeMutation.isPending ? (
+                <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <RotateCcw className="h-4 w-4" />
+              )}
+              {t.history.rollbackNow}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -266,16 +365,10 @@ export default function HistoryPage() {
       }),
   });
 
-  // Rollback mutation (placeholder - needs backend endpoint)
-  const rollbackMutation = useMutation({
-    mutationFn: async ({ changeId: _changeId, reason: _reason }: { changeId: number; reason: string }) => {
-      // TODO: Implement rollback endpoint
-      return { success: true };
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pretargeting-history'] });
-      setSelectedChange(null);
-    },
+  // Fetch snapshots (to associate with push events for rollback)
+  const { data: snapshots } = useQuery({
+    queryKey: ['pretargeting-snapshots'],
+    queryFn: () => getSnapshots(),
   });
 
   // Filter history by change type
@@ -422,11 +515,13 @@ export default function HistoryPage() {
       {selectedChange && (
         <RollbackModal
           change={selectedChange}
-          onConfirm={(reason) =>
-            rollbackMutation.mutate({ changeId: selectedChange.id, reason })
-          }
+          snapshot={findAssociatedSnapshot(
+            selectedChange.changed_at,
+            selectedChange.config_id,
+            snapshots || []
+          )}
+          onSuccess={() => setSelectedChange(null)}
           onCancel={() => setSelectedChange(null)}
-          isLoading={rollbackMutation.isPending}
         />
       )}
     </div>

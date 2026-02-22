@@ -12,14 +12,21 @@ import {
   applyAllPendingChanges,
   syncPretargetingConfigs,
   searchGeoTargets,
+  getPretargetingHistory,
+  getSnapshots,
+  rollbackSnapshot,
   type ConfigBreakdownType,
   type ConfigBreakdownItem,
   type ConfigCreativesItem,
   type GeoSearchResult,
   type PendingChange,
+  type PretargetingHistoryItem,
+  type PretargetingSnapshot,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Loader2, AlertCircle, AlertTriangle, ArrowUpDown, ChevronRight, Info, Image, X, Check, Clock, Upload, Search } from 'lucide-react';
+import { isValidPublisherId } from '@/lib/publisher-validation';
+import { COMMONLY_BLOCKED, type BlockSuggestion } from '@/lib/commonly-blocked-publishers';
+import { Loader2, AlertCircle, AlertTriangle, ArrowUpDown, ChevronRight, ChevronDown, Info, Image, X, Check, Clock, Upload, Search, ExternalLink, Ban, ShieldAlert, RotateCcw, History } from 'lucide-react';
 import { AppDrilldownModal } from './app-drilldown-modal';
 import { useAccount } from '@/contexts/account-context';
 import { PreviewModal } from '@/components/preview-modal';
@@ -104,6 +111,16 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
   const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
   const [showLowVolumeSizes, setShowLowVolumeSizes] = useState(false);
   const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set());
+  const [publisherBlockInput, setPublisherBlockInput] = useState('');
+  const [publisherBlockError, setPublisherBlockError] = useState<string | null>(null);
+  const [publisherFilter, setPublisherFilter] = useState('');
+  const [showBlockSuggestions, setShowBlockSuggestions] = useState(false);
+  const [showPublisherHistory, setShowPublisherHistory] = useState(false);
+  const [undoPushSnapshot, setUndoPushSnapshot] = useState<PretargetingSnapshot | null>(null);
+  const [undoDryRunResult, setUndoDryRunResult] = useState<{ changes_made: string[]; message: string } | null>(null);
+  const [undoDryRunLoading, setUndoDryRunLoading] = useState(false);
+  const [undoDryRunError, setUndoDryRunError] = useState<string | null>(null);
+  const [undoReason, setUndoReason] = useState('');
   const [geoSearchQuery, setGeoSearchQuery] = useState('');
   const [geoSearchType, setGeoSearchType] = useState<'all' | 'country' | 'city'>('all');
   const [geoSearchResults, setGeoSearchResults] = useState<GeoSearchResult[]>([]);
@@ -189,6 +206,10 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
     setGeoSearchQuery('');
     setGeoSearchResults([]);
     setSelectedGeoId('');
+    setPublisherBlockInput('');
+    setPublisherBlockError(null);
+    setPublisherFilter('');
+    setShowBlockSuggestions(false);
   }, [activeTab, billing_id]);
 
   useEffect(() => {
@@ -368,6 +389,13 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
       : 'Block publisher (add to denylist)';
   };
 
+  const filteredPublisherBreakdown = activeTab === 'publisher' && publisherFilter
+    ? sortedBreakdown.filter((item) => {
+        const q = publisherFilter.toLowerCase();
+        return item.name.toLowerCase().includes(q) ||
+          (item.target_value || '').toLowerCase().includes(q);
+      })
+    : sortedBreakdown;
   const sizeRows = activeTab === 'size' ? sortedBreakdown : [];
   const visibleSizeRows = activeTab === 'size'
     ? (showLowVolumeSizes ? sizeRows : sizeRows.filter((row) => (row.impressions ?? 0) >= 1000))
@@ -594,6 +622,227 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
     });
   };
 
+  const handleBlockPublisher = () => {
+    const value = publisherBlockInput.trim().toLowerCase();
+    if (!value) return;
+    if (!isValidPublisherId(value)) {
+      setPublisherBlockError('Invalid ID. Use com.example.app or publisher.com');
+      return;
+    }
+    // Check already blocked / already pending
+    const alreadyListed = effectivePublisherValues.has(value);
+    const pendingAdd = findPendingChange('add_publisher', value);
+    const pendingRemove = findPendingChange('remove_publisher', value);
+    if (effectivePublisherMode === 'EXCLUSIVE') {
+      // Blacklist: "block" means add to list
+      if (alreadyListed && !pendingRemove) {
+        setPublisherBlockError('Already in block list for this config');
+        return;
+      }
+      if (pendingAdd) {
+        setPublisherBlockError('Already in pending changes');
+        return;
+      }
+      if (pendingRemove) {
+        // Undo the pending unblock instead
+        cancelChangeMutation.mutate(pendingRemove.id);
+      } else {
+        createChangeMutation.mutate({
+          billing_id,
+          change_type: 'add_publisher',
+          field_name: 'publisher_targeting',
+          value,
+          reason: 'Blocked from Home publisher breakdown',
+        });
+      }
+    } else {
+      // Whitelist (INCLUSIVE): "block" means remove from list
+      if (!alreadyListed && !pendingAdd) {
+        setPublisherBlockError('Not in allow list — already blocked');
+        return;
+      }
+      if (pendingRemove) {
+        setPublisherBlockError('Already in pending changes');
+        return;
+      }
+      if (pendingAdd) {
+        cancelChangeMutation.mutate(pendingAdd.id);
+      } else {
+        createChangeMutation.mutate({
+          billing_id,
+          change_type: 'remove_publisher',
+          field_name: 'publisher_targeting',
+          value,
+          reason: 'Blocked from Home publisher breakdown',
+        });
+      }
+    }
+    setPublisherBlockInput('');
+    setPublisherBlockError(null);
+  };
+
+  /** Determine status of each block suggestion relative to current config. */
+  const getSuggestionStatus = (s: BlockSuggestion): 'available' | 'pending' | 'blocked' => {
+    const pid = s.publisher_id;
+    if (effectivePublisherMode === 'EXCLUSIVE') {
+      // Blacklist: listed = blocked
+      if (findPendingChange('add_publisher', pid)) return 'pending';
+      if (effectivePublisherValues.has(pid)) return 'blocked';
+    } else {
+      // Whitelist: not listed = blocked; pending remove = pending block
+      if (findPendingChange('remove_publisher', pid)) return 'pending';
+      if (!effectivePublisherValues.has(pid)) return 'blocked';
+    }
+    return 'available';
+  };
+
+  const availableSuggestions = COMMONLY_BLOCKED.filter(
+    (s) => getSuggestionStatus(s) === 'available'
+  );
+
+  const handleBlockAllSuggestions = () => {
+    availableSuggestions.forEach((s) => {
+      if (effectivePublisherMode === 'EXCLUSIVE') {
+        createChangeMutation.mutate({
+          billing_id,
+          change_type: 'add_publisher',
+          field_name: 'publisher_targeting',
+          value: s.publisher_id,
+          reason: `Blocked from commonly blocked suggestions (${s.category})`,
+        });
+      } else {
+        // Whitelist: block = remove from allowlist (only if currently listed)
+        if (effectivePublisherValues.has(s.publisher_id)) {
+          createChangeMutation.mutate({
+            billing_id,
+            change_type: 'remove_publisher',
+            field_name: 'publisher_targeting',
+            value: s.publisher_id,
+            reason: `Blocked from commonly blocked suggestions (${s.category})`,
+          });
+        }
+      }
+    });
+  };
+
+  const handleBlockSuggestion = (s: BlockSuggestion) => {
+    if (effectivePublisherMode === 'EXCLUSIVE') {
+      createChangeMutation.mutate({
+        billing_id,
+        change_type: 'add_publisher',
+        field_name: 'publisher_targeting',
+        value: s.publisher_id,
+        reason: `Blocked from commonly blocked suggestions (${s.category})`,
+      });
+    } else {
+      if (effectivePublisherValues.has(s.publisher_id)) {
+        createChangeMutation.mutate({
+          billing_id,
+          change_type: 'remove_publisher',
+          field_name: 'publisher_targeting',
+          value: s.publisher_id,
+          reason: `Blocked from commonly blocked suggestions (${s.category})`,
+        });
+      }
+    }
+  };
+
+  // ── Publisher history & rollback ───────────────────────────────
+  const { data: publisherHistory } = useQuery({
+    queryKey: ['pretargeting-history', billing_id, 30],
+    queryFn: () => getPretargetingHistory({ billing_id, days: 30 }),
+    enabled: isExpanded && activeTab === 'publisher',
+  });
+
+  const { data: historySnapshots } = useQuery({
+    queryKey: ['pretargeting-snapshots', billing_id],
+    queryFn: () => getSnapshots({ billing_id }),
+    enabled: isExpanded && activeTab === 'publisher' && showPublisherHistory,
+  });
+
+  /** Group history entries by push event (same minute + same source). */
+  const groupedHistory = (() => {
+    if (!publisherHistory) return [];
+    // Filter to publisher-related + syncs + rollbacks
+    const relevant = publisherHistory.filter(
+      (e) =>
+        e.field_changed === 'publisher_targeting' ||
+        e.change_type === 'rollback' ||
+        e.change_type === 'api_sync' ||
+        e.change_type === 'state_change'
+    );
+    const groups: {
+      key: string;
+      timestamp: string;
+      changeType: string;
+      entries: PretargetingHistoryItem[];
+      snapshot: PretargetingSnapshot | null;
+    }[] = [];
+    for (const entry of relevant) {
+      const minute = entry.changed_at.slice(0, 16); // YYYY-MM-DDTHH:MM
+      const groupKey = `${minute}__${entry.change_type}`;
+      const existing = groups.find((g) => g.key === groupKey);
+      if (existing) {
+        existing.entries.push(entry);
+      } else {
+        groups.push({
+          key: groupKey,
+          timestamp: entry.changed_at,
+          changeType: entry.change_type,
+          entries: [entry],
+          snapshot: null,
+        });
+      }
+    }
+    // Associate snapshots with push groups
+    if (historySnapshots) {
+      for (const group of groups) {
+        if (group.changeType === 'api_write') {
+          const pushTime = new Date(group.timestamp).getTime();
+          group.snapshot =
+            historySnapshots.find((snap) => {
+              const snapTime = new Date(snap.created_at).getTime();
+              const diff = pushTime - snapTime;
+              return diff >= 0 && diff < 30_000 && snap.snapshot_type === 'before_change';
+            }) || null;
+        }
+      }
+    }
+    return groups;
+  })();
+
+  /** Last push timestamp for the "last pushed" indicator. */
+  const lastPushEntry = publisherHistory?.find(
+    (e) => e.change_type === 'api_write' && e.field_changed === 'publisher_targeting'
+  );
+
+  const handleUndoPush = (snapshot: PretargetingSnapshot) => {
+    setUndoPushSnapshot(snapshot);
+    setUndoReason('');
+    setUndoDryRunResult(null);
+    setUndoDryRunError(null);
+    setUndoDryRunLoading(true);
+    rollbackSnapshot({ billing_id, snapshot_id: snapshot.id, dry_run: true })
+      .then((result) => setUndoDryRunResult(result))
+      .catch((err) => setUndoDryRunError(err?.message || 'Failed to preview rollback'))
+      .finally(() => setUndoDryRunLoading(false));
+  };
+
+  const undoExecuteMutation = useMutation({
+    mutationFn: async () => {
+      if (!undoPushSnapshot) throw new Error('No snapshot');
+      return rollbackSnapshot({ billing_id, snapshot_id: undoPushSnapshot.id, dry_run: false });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-history'] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-snapshots'] });
+      queryClient.invalidateQueries({ queryKey: ['config-breakdown'] });
+      queryClient.invalidateQueries({ queryKey: ['config-detail'] });
+      setUndoPushSnapshot(null);
+      setPushResult({ success: true, message: 'Push undone. Config restored to pre-push state.' });
+    },
+  });
+
   const handleSort = (key: typeof sortKey) => {
     if (key === sortKey) {
       setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
@@ -703,16 +952,224 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
               )}
             </div>
             {activeTab === 'publisher' && (
-              <div className="mb-2 flex items-center gap-2 px-2 py-1.5 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
-                <Info className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
-                <span>
-                  Mode: <span className="font-semibold">{publisherModeLabel}</span>.
-                  {effectivePublisherMode === 'INCLUSIVE'
-                    ? ' Block removes from allowlist; Allow adds back.'
-                    : ' Block adds to denylist; Unblock removes.'}
-                </span>
+              <div className="mb-2 space-y-1.5">
+                <div className="flex items-center gap-2 px-2 py-1.5 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+                  <Info className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                  <span className="flex-1">
+                    Mode: <span className="font-semibold">{publisherModeLabel}</span>.
+                    {effectivePublisherMode === 'INCLUSIVE'
+                      ? ' Block removes from allowlist; Allow adds back.'
+                      : ' Block adds to denylist; Unblock removes.'}
+                  </span>
+                  <button
+                    onClick={() => setShowPublisherHistory(!showPublisherHistory)}
+                    className={cn(
+                      'inline-flex items-center gap-1 font-medium whitespace-nowrap',
+                      showPublisherHistory
+                        ? 'text-blue-700 hover:text-blue-900'
+                        : 'text-amber-800 hover:text-amber-900'
+                    )}
+                  >
+                    <History className="h-3 w-3" />
+                    History
+                  </button>
+                  <a
+                    href={`/bill_id/${encodeURIComponent(billing_id)}?tab=publishers`}
+                    className="inline-flex items-center gap-1 text-amber-800 hover:text-amber-900 font-medium whitespace-nowrap"
+                  >
+                    Full Editor
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+                <div className="flex items-center gap-2 px-2">
+                  <Search className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                  <input
+                    type="text"
+                    value={publisherFilter}
+                    onChange={(e) => setPublisherFilter(e.target.value)}
+                    placeholder="Filter publishers..."
+                    className="flex-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-300"
+                  />
+                  {publisherFilter && (
+                    <button
+                      onClick={() => setPublisherFilter('')}
+                      className="text-gray-400 hover:text-gray-600"
+                      title="Clear filter"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                {/* Last pushed indicator */}
+                {lastPushEntry && (
+                  <div className="px-2 text-[10px] text-gray-500">
+                    Last pushed:{' '}
+                    {new Date(lastPushEntry.changed_at).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </div>
+                )}
               </div>
             )}
+
+            {/* ── Inline Publisher History Panel ── */}
+            {activeTab === 'publisher' && showPublisherHistory && (
+              <div className="mb-2 rounded-lg border border-blue-200 bg-blue-50/50">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-blue-200">
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-blue-900">
+                    <History className="h-3.5 w-3.5" />
+                    Publisher History
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={`/history?billing_id=${encodeURIComponent(billing_id)}`}
+                      className="text-[10px] text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      View all &rarr;
+                    </a>
+                    <button
+                      onClick={() => setShowPublisherHistory(false)}
+                      className="text-blue-400 hover:text-blue-600"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+                <div className="px-3 py-2 max-h-64 overflow-y-auto space-y-2">
+                  {!publisherHistory ? (
+                    <div className="flex items-center justify-center py-4 gap-1.5 text-xs text-blue-500">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Loading history&hellip;
+                    </div>
+                  ) : groupedHistory.length === 0 ? (
+                    <div className="py-4 text-center text-xs text-blue-600">
+                      No publisher changes recorded for this config.
+                      <br />
+                      Changes will appear here after your first push.
+                    </div>
+                  ) : (
+                    groupedHistory.map((group) => {
+                      const isPush = group.changeType === 'api_write';
+                      const isSync = group.changeType === 'api_sync';
+                      const isRollback = group.changeType === 'rollback';
+                      const isStateChange = group.changeType === 'state_change';
+                      const publisherEntries = group.entries.filter(
+                        (e) => e.field_changed === 'publisher_targeting'
+                      );
+                      const otherCount = group.entries.length - publisherEntries.length;
+                      const ts = new Date(group.timestamp);
+                      const dateStr = ts.toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      });
+
+                      return (
+                        <div
+                          key={group.key}
+                          className={cn(
+                            'rounded border p-2 text-xs',
+                            isRollback && 'bg-orange-50 border-orange-200',
+                            isPush && 'bg-white border-gray-200',
+                            isSync && 'bg-gray-50 border-gray-200',
+                            isStateChange && 'bg-gray-50 border-gray-200'
+                          )}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-gray-500">{dateStr}</span>
+                            <span
+                              className={cn(
+                                'rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase',
+                                isPush && 'bg-blue-100 text-blue-700',
+                                isSync && 'bg-gray-200 text-gray-600',
+                                isRollback && 'bg-orange-200 text-orange-700',
+                                isStateChange && 'bg-gray-200 text-gray-600'
+                              )}
+                            >
+                              {isPush ? 'PUSH' : isSync ? 'SYNC' : isRollback ? 'ROLLBACK' : 'STATE'}
+                            </span>
+                          </div>
+                          {isPush && publisherEntries.length > 0 && (
+                            <div className="space-y-0.5 mb-1.5">
+                              {publisherEntries.map((e) => (
+                                <div key={e.id} className="flex items-center gap-1.5 font-mono text-[11px]">
+                                  <span
+                                    className={cn(
+                                      'rounded px-1 py-0.5 text-[9px] font-bold uppercase',
+                                      e.change_type.includes('add')
+                                        ? 'bg-red-100 text-red-700'
+                                        : 'bg-green-100 text-green-700'
+                                    )}
+                                  >
+                                    {e.change_type.includes('add') ? 'BLOCK' : 'UNBLOCK'}
+                                  </span>
+                                  <span className="text-gray-700 truncate">{e.new_value || e.old_value}</span>
+                                </div>
+                              ))}
+                              {otherCount > 0 && (
+                                <div className="text-[10px] text-gray-500 pl-1">
+                                  + {otherCount} other change{otherCount > 1 ? 's' : ''} (view in Full History)
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {isSync && (
+                            <div className="text-gray-600 mb-1">
+                              Config synced from Google. No rollback for syncs.
+                            </div>
+                          )}
+                          {isRollback && (
+                            <div className="space-y-0.5 mb-1.5">
+                              {group.entries.map((e) => (
+                                <div key={e.id} className="text-orange-700">
+                                  {e.new_value || e.field_changed || 'Restored to snapshot'}
+                                </div>
+                              ))}
+                              <div className="text-[10px] text-orange-600 italic mt-1">
+                                Rollback entries cannot be undone from here.
+                              </div>
+                            </div>
+                          )}
+                          {isStateChange && (
+                            <div className="text-gray-600 mb-1">
+                              Config {group.entries[0]?.new_value || 'state changed'}
+                            </div>
+                          )}
+                          {/* Snapshot info + Undo Push button */}
+                          {isPush && group.snapshot && (
+                            <div className="flex items-center justify-between pt-1.5 border-t border-gray-100">
+                              <span className="text-[10px] text-gray-500 truncate">
+                                Snapshot: {group.snapshot.snapshot_name || `#${group.snapshot.id}`}
+                              </span>
+                              <button
+                                onClick={() => handleUndoPush(group.snapshot!)}
+                                disabled={changeActionBusy}
+                                className="inline-flex items-center gap-0.5 rounded border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-medium text-orange-700 hover:bg-orange-100 disabled:opacity-50"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                                Undo Push
+                              </button>
+                            </div>
+                          )}
+                          {isPush && !group.snapshot && (
+                            <div className="pt-1.5 border-t border-gray-100">
+                              <span className="text-[10px] text-gray-400">
+                                No snapshot available (Undo unavailable)
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
             {activeTab === 'size' && (
               <div className="mb-2 space-y-1.5 px-2 py-1.5 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
                 <div className="flex items-center justify-between gap-2">
@@ -819,12 +1276,28 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
             )}
             {pushResult && (
               <div className={cn(
-                "mb-3 rounded border px-3 py-2 text-xs",
+                "mb-3 rounded border px-3 py-2 text-xs flex items-center justify-between",
                 pushResult.success
                   ? "bg-green-50 border-green-200 text-green-800"
                   : "bg-red-50 border-red-200 text-red-800"
               )}>
-                {pushResult.message}
+                <div>
+                  <span className="font-medium">{pushResult.success ? 'Pushed to Google.' : 'Push failed.'}</span>
+                  {' '}{pushResult.message}
+                  {pushResult.success && (
+                    <span className="block mt-0.5 text-green-600">Snapshot saved. Use History to undo if needed.</span>
+                  )}
+                </div>
+                <button
+                  onClick={() => setPushResult(null)}
+                  className={cn(
+                    "ml-2 flex-shrink-0",
+                    pushResult.success ? "text-green-600 hover:text-green-800" : "text-red-600 hover:text-red-800"
+                  )}
+                  title="Dismiss"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </div>
             )}
             <div className="bg-white rounded-lg border overflow-hidden">
@@ -942,7 +1415,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
 
             {/* Table body */}
 	            <div className="divide-y divide-gray-100">
-	              {(activeTab === 'size' ? visibleSizeRows : sortedBreakdown).map((item, index) => {
+	              {(activeTab === 'size' ? visibleSizeRows : activeTab === 'publisher' ? filteredPublisherBreakdown : sortedBreakdown).map((item, index) => {
 	                const isClickable = false;
 	                const winRate = item.win_rate ?? 0;
 	                const winRateClass =
@@ -1243,6 +1716,145 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
               )}
             </div>
           </div>
+          {/* Publisher block input */}
+          {activeTab === 'publisher' && (
+            <div className="mt-2 rounded-lg border bg-white px-3 py-2">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-gray-600 whitespace-nowrap">
+                  <Ban className="inline h-3 w-3 mr-1" />
+                  {effectivePublisherMode === 'INCLUSIVE' ? 'Deny:' : 'Block:'}
+                </label>
+                <input
+                  type="text"
+                  value={publisherBlockInput}
+                  onChange={(e) => {
+                    setPublisherBlockInput(e.target.value);
+                    setPublisherBlockError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleBlockPublisher();
+                    }
+                  }}
+                  placeholder="com.example.app or publisher.com"
+                  className="flex-1 rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-red-300 focus:border-red-300"
+                  disabled={changeActionBusy}
+                />
+                <button
+                  onClick={handleBlockPublisher}
+                  disabled={changeActionBusy || !publisherBlockInput.trim()}
+                  className="inline-flex items-center gap-1 rounded border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                >
+                  <X className="h-3 w-3" />
+                  Block
+                </button>
+              </div>
+              {publisherBlockError && (
+                <p className="mt-1 text-xs text-red-600 pl-1">{publisherBlockError}</p>
+              )}
+            </div>
+          )}
+
+          {/* ── Commonly Blocked Publishers suggestions ── */}
+          {activeTab === 'publisher' && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/50">
+              <button
+                onClick={() => setShowBlockSuggestions(!showBlockSuggestions)}
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium text-amber-900 hover:bg-amber-100/50 rounded-lg"
+              >
+                <span className="flex items-center gap-1.5">
+                  <ShieldAlert className="h-3.5 w-3.5" />
+                  Commonly blocked publishers
+                  {availableSuggestions.length > 0 && (
+                    <span className="rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                      {availableSuggestions.length} suggestions
+                    </span>
+                  )}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    'h-3.5 w-3.5 transition-transform',
+                    showBlockSuggestions && 'rotate-180'
+                  )}
+                />
+              </button>
+              {showBlockSuggestions && (
+                <div className="border-t border-amber-200 px-3 py-2">
+                  {availableSuggestions.length === 0 ? (
+                    <div className="flex items-center gap-1.5 py-2 text-xs text-amber-700">
+                      <Check className="h-3.5 w-3.5 text-green-600" />
+                      All commonly blocked publishers are already blocked or pending.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-[10px] text-amber-700">
+                          Publishers frequently blocked by other media buyers
+                        </span>
+                        <button
+                          onClick={handleBlockAllSuggestions}
+                          disabled={changeActionBusy}
+                          className="inline-flex items-center gap-1 rounded border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                        >
+                          <Ban className="h-3 w-3" />
+                          Block all ({availableSuggestions.length})
+                        </button>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-amber-200 text-left text-[10px] uppercase text-amber-600">
+                              <th className="pb-1 pr-2">Publisher</th>
+                              <th className="pb-1 pr-2">Category</th>
+                              <th className="pb-1 pr-2 text-right">Buyers blocking</th>
+                              <th className="pb-1 text-right">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-amber-100">
+                            {COMMONLY_BLOCKED.map((s) => {
+                              const status = getSuggestionStatus(s);
+                              return (
+                                <tr key={s.publisher_id} className="group">
+                                  <td className="py-1.5 pr-2 font-mono text-[11px] text-gray-700" title={s.reason}>
+                                    {s.publisher_id}
+                                  </td>
+                                  <td className="py-1.5 pr-2 text-amber-700">{s.category}</td>
+                                  <td className="py-1.5 pr-2 text-right text-amber-800 font-medium">
+                                    {Math.round(s.block_rate * 100)}%
+                                  </td>
+                                  <td className="py-1.5 text-right">
+                                    {status === 'blocked' ? (
+                                      <span className="inline-flex items-center gap-0.5 text-[10px] text-gray-400">
+                                        <Check className="h-3 w-3" /> Blocked
+                                      </span>
+                                    ) : status === 'pending' ? (
+                                      <span className="inline-flex items-center gap-0.5 text-[10px] text-yellow-600">
+                                        <Clock className="h-3 w-3" /> Pending
+                                      </span>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleBlockSuggestion(s)}
+                                        disabled={changeActionBusy}
+                                        className="inline-flex items-center gap-0.5 rounded border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                                      >
+                                        <X className="h-3 w-3" /> Block
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab !== 'creative' && hasPendingChanges && (
             <div className="sticky bottom-3 mt-3 flex justify-end">
               <div className="w-full max-w-md rounded-lg border border-yellow-300 bg-yellow-50 p-3 shadow-sm">
@@ -1279,7 +1891,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                     className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                   >
                     <Upload className="h-3 w-3" />
-                    Review & Commit
+                    Review & Push to Google
                   </button>
                 </div>
               </div>
@@ -1292,16 +1904,20 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/40" onClick={() => setShowConfirmPush(false)} />
             <div className="relative mx-4 w-full max-w-lg rounded-lg border bg-white p-4 shadow-xl">
-              <h3 className="text-sm font-semibold text-gray-900">Confirm Changes to Google</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Push Changes to Google?</h3>
               <p className="mt-1 text-xs text-gray-600">
-                You are about to commit {pendingChanges.length} pending change{pendingChanges.length !== 1 ? 's' : ''} for pretargeting config {billing_id}.
+                {pendingChanges.length} change{pendingChanges.length !== 1 ? 's' : ''} will be applied to config {billing_id}.
               </p>
-              <div className="mt-3 max-h-40 overflow-y-auto space-y-1 rounded border bg-gray-50 p-2 text-xs">
+              <div className="mt-3 max-h-40 overflow-y-auto space-y-1 rounded border bg-gray-50 p-2 text-xs font-mono">
                 {pendingChanges.map((change) => (
                   <div key={`confirm-${change.id}`}>
-                    • {describePendingChange(change, effectivePublisherMode)}
+                    {describePendingChange(change, effectivePublisherMode)}
                   </div>
                 ))}
+              </div>
+              <div className="mt-3 flex items-start gap-2 rounded bg-blue-50 border border-blue-200 px-2 py-1.5 text-xs text-blue-700">
+                <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
+                <span>A snapshot will be saved automatically. Use History to undo if needed.</span>
               </div>
               <div className="mt-4 flex justify-end gap-2">
                 <button
@@ -1317,8 +1933,118 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                 >
                   {applyAllMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-                  Commit to Google
+                  Push to Google
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Undo Push modal */}
+        {undoPushSnapshot && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setUndoPushSnapshot(null)} />
+            <div className="relative mx-4 w-full max-w-lg rounded-lg border bg-white p-4 shadow-xl">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+                  <RotateCcw className="h-4 w-4 text-orange-600" />
+                  Undo Push to Google?
+                </h3>
+                <button onClick={() => setUndoPushSnapshot(null)} className="text-gray-400 hover:text-gray-600">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {undoDryRunLoading ? (
+                <div className="flex items-center justify-center py-8 gap-2 text-gray-500 text-xs">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Previewing rollback&hellip;
+                </div>
+              ) : undoDryRunError ? (
+                <div className="rounded bg-red-50 border border-red-200 p-3 text-xs text-red-700">
+                  {undoDryRunError}
+                </div>
+              ) : undoDryRunResult && undoDryRunResult.changes_made.length === 0 ? (
+                <div className="rounded bg-blue-50 border border-blue-200 p-3 flex items-start gap-2 text-xs text-blue-700">
+                  <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
+                  No differences found between current config and snapshot. Config may have been modified since then.
+                </div>
+              ) : (
+                <>
+                  <div className="text-xs text-gray-600 mb-2">
+                    Config: <span className="font-medium text-gray-900">{billing_id}</span>
+                    {' '}&middot;{' '}
+                    Restoring to: <span className="font-medium text-gray-900">
+                      {undoPushSnapshot.snapshot_name || `Snapshot #${undoPushSnapshot.id}`}
+                    </span>
+                  </div>
+                  {undoDryRunResult && undoDryRunResult.changes_made.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-xs font-medium text-gray-700 mb-1">These changes will be reversed on Google:</p>
+                      <div className="max-h-32 overflow-y-auto rounded border bg-gray-50 p-2 space-y-0.5">
+                        {undoDryRunResult.changes_made.map((desc, i) => (
+                          <div key={i} className="text-[11px] font-mono text-gray-700">{desc}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="mb-3 rounded bg-amber-50 border border-amber-200 p-2 flex items-start gap-2 text-xs text-amber-800">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                    <span>This pushes to Google immediately. A &ldquo;ROLLBACK&rdquo; entry will be recorded in history.</span>
+                  </div>
+                  {hasPendingChanges && (
+                    <div className="mb-3 rounded bg-blue-50 border border-blue-200 p-2 flex items-start gap-2 text-xs text-blue-700">
+                      <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
+                      <span>
+                        You have {pendingChanges.length} pending change{pendingChanges.length !== 1 ? 's' : ''} that haven&apos;t been pushed.
+                        Undoing this push won&apos;t affect your pending changes.
+                      </span>
+                    </div>
+                  )}
+                  <div className="mb-3">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Why are you undoing this push?
+                    </label>
+                    <input
+                      type="text"
+                      value={undoReason}
+                      onChange={(e) => setUndoReason(e.target.value)}
+                      placeholder="e.g. Blocked wrong publishers"
+                      className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-300"
+                    />
+                    <span className="text-[10px] text-gray-400">(required)</span>
+                  </div>
+                </>
+              )}
+
+              {undoExecuteMutation.isError && (
+                <div className="mb-3 rounded bg-red-50 border border-red-200 p-2 text-xs text-red-700">
+                  {(undoExecuteMutation.error as Error)?.message || 'Rollback failed'}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setUndoPushSnapshot(null)}
+                  disabled={undoExecuteMutation.isPending}
+                  className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {(!undoDryRunResult || undoDryRunResult.changes_made.length === 0) && !undoDryRunLoading ? 'Close' : 'Cancel'}
+                </button>
+                {undoDryRunResult && undoDryRunResult.changes_made.length > 0 && (
+                  <button
+                    onClick={() => undoExecuteMutation.mutate()}
+                    disabled={undoExecuteMutation.isPending || !undoReason.trim()}
+                    className="inline-flex items-center gap-1 rounded bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+                  >
+                    {undoExecuteMutation.isPending ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-3 w-3" />
+                    )}
+                    Undo Push
+                  </button>
+                )}
               </div>
             </div>
           </div>
