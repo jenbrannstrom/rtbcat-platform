@@ -1,4 +1,4 @@
--- Migration 047: Speed up creatives list queries used by dashboard.
+-- Migration 048: Speed up creatives list queries used by dashboard.
 --
 -- The creatives list endpoint orders by created_at DESC and frequently filters
 -- by buyer_id. Add covering order indexes so large creative tables do not need
@@ -12,7 +12,7 @@ CREATE INDEX IF NOT EXISTS idx_creatives_buyer_created_at_desc
 
 INSERT INTO schema_migrations (version, applied_at, description)
 VALUES (
-    '047_creatives_list_indexes',
+    '048_creatives_list_indexes',
     CURRENT_TIMESTAMP,
     'Add created_at indexes for creatives list performance'
 )

@@ -123,6 +123,22 @@ def _get_applied_migration_numbers(applied_versions: set[str]) -> set[int]:
     return numbers
 
 
+def _is_numeric_only_marker(version: str) -> bool:
+    """Return True for legacy numeric-only markers like '27' or '027'."""
+    return re.match(r"^0*\d+$", str(version).strip()) is not None
+
+
+def _get_applied_versions_by_number(applied_versions: set[str]) -> dict[int, set[str]]:
+    """Map numeric migration ID -> applied marker strings for that ID."""
+    by_number: dict[int, set[str]] = {}
+    for version in applied_versions:
+        number = extract_migration_number(version)
+        if number is None:
+            continue
+        by_number.setdefault(number, set()).add(version)
+    return by_number
+
+
 def filter_pending_migrations(
     pending: list[tuple[str, Path]],
     applied_versions: set[str],
@@ -135,6 +151,7 @@ def filter_pending_migrations(
         - Migrations skipped because a numeric-equivalent marker already exists.
     """
     applied_numbers = _get_applied_migration_numbers(applied_versions)
+    applied_by_number = _get_applied_versions_by_number(applied_versions)
     to_apply: list[tuple[str, Path]] = []
     skipped_legacy: list[tuple[str, int]] = []
 
@@ -144,8 +161,13 @@ def filter_pending_migrations(
 
         number = extract_migration_number(version)
         if number is not None and number in applied_numbers:
-            skipped_legacy.append((version, number))
-            continue
+            # Only skip when an old numeric-only marker exists (e.g., "27").
+            # If a different canonical marker is present, still apply to avoid
+            # silently skipping required migrations.
+            existing_markers = applied_by_number.get(number, set())
+            if any(_is_numeric_only_marker(marker) for marker in existing_markers):
+                skipped_legacy.append((version, number))
+                continue
 
         to_apply.append((version, filepath))
 
