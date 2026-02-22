@@ -140,6 +140,14 @@ class AuthService:
         """Count total number of users."""
         return await self._auth.count_users()
 
+    async def get_user_password_hash(self, user_id: str) -> Optional[str]:
+        """Get a user's password hash, if set."""
+        return await self._auth.get_user_password_hash(user_id)
+
+    async def set_user_password_hash(self, user_id: str, password_hash: str) -> None:
+        """Create or update a user's password hash."""
+        await self._auth.set_user_password_hash(user_id, password_hash)
+
     # ==================== Session Methods ====================
 
     async def create_session(

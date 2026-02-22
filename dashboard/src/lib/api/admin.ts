@@ -25,6 +25,8 @@ export interface CreateUserRequest {
   display_name?: string;
   role?: string;
   default_language?: string;
+  auth_method?: "local-password" | "oauth-precreate";
+  password?: string;
 }
 
 export interface CreateUserResponse {
