@@ -176,6 +176,177 @@ For "just user/pass for now":
 - Make admin UI support creating local users with password.
 - Clearly label external auth as optional integrations.
 
+## Visual Plan (UI + Workflow Diagrams)
+
+The goal of these diagrams is to make the target model easy to reason about before implementation.
+
+### 1. Proposed Authorization Model (Human summary)
+
+```text
+Platform Role (what kind of admin/user are you?)
+    +
+Seat Assignments (which buyer seats can you access/manage?)
+    =
+Effective Permissions
+
+Examples:
+- sudo + (none required)                    => global access
+- local-admin + seat 1487810529(admin)      => can manage users/settings for that seat only
+- local-read-only + seat 1487810529(read)   => can view seat data only
+- local-admin + no seats                     => can log in, but cannot operate on seat data
+```
+
+### 2. Role and Delegation Rules (Who can create/edit whom)
+
+```mermaid
+flowchart TD
+    S["sudo"] -->|can create/edit| S
+    S -->|can create/edit| A["local-admin"]
+    S -->|can create/edit| R["local-read-only"]
+
+    A -->|can create/edit within managed seats| A
+    A -->|can create/edit within managed seats| R
+
+    A -. cannot create/edit .-> S
+    R -. cannot manage users .-> S
+    R -. cannot manage users .-> A
+    R -. cannot manage users .-> R
+```
+
+### 3. Proposed Admin Users UI (Phase 1: local password creation)
+
+```text
+/admin/users
+
++----------------------------------------------------------------------------------+
+| Users                                                    [Create User]           |
+| Filters: [role v] [active-only v] [seat v (Phase 3)]                           |
++----------------------------------------------------------------------------------+
+| Email                 | Role            | Seats (Phase 3)  | Status | Actions    |
+| alice@...             | sudo            | ALL              | Active | Edit        |
+| ops1@...              | local-admin     | 1487810529(A)    | Active | Edit        |
+| analyst1@...          | local-read-only | 1487810529(R)    | Active | Edit        |
++----------------------------------------------------------------------------------+
+
+Create User Modal (Phase 1)
++------------------------------------------------------------------+
+| Create User                                                      |
+| Email:            [____________________________]                 |
+| Display name:     [____________________________]                 |
+| Role:             [local-read-only v] (Phase 2 roles)           |
+| Auth method:      [Local password v]                            |
+| Password:         [____________________________]                 |
+| Confirm password: [____________________________]                 |
+| Language:         [English v]                                   |
+|                                                                  |
+| (Phase 1 only) Service Account Access (legacy) [optional panel] |
+| [Cancel]                                          [Create User]  |
++------------------------------------------------------------------+
+```
+
+### 4. Proposed Admin Users UI (Phase 3: explicit seat assignment)
+
+```text
+Edit User: ops1@...
+
++----------------------------------------------------------------------------------+
+| Identity                                                                        |
+| Role: [local-admin v]                                                            |
+| Auth: Local password [Reset password]                                            |
++----------------------------------------------------------------------------------+
+| Seat Assignments                                                                 |
+| [Add Seat Access]                                                                 |
+|                                                                                  |
+| Buyer Seat         | Access Level | Granted By | Actions                         |
+| 1487810529         | admin        | sudo@...   | Change / Remove                 |
+| 1234567890         | read         | sudo@...   | Change / Remove                 |
+|                                                                                  |
+| Note: local-admin can only assign seats they already administer.                 |
++----------------------------------------------------------------------------------+
+| [Save Changes]                                                                    |
++----------------------------------------------------------------------------------+
+```
+
+### 5. Workflow Sequence: `sudo` creates a local user and assigns seats
+
+```mermaid
+sequenceDiagram
+    participant U as Sudo Admin (UI)
+    participant FE as Dashboard /admin/users
+    participant API as Admin API
+    participant AUTH as Auth Service
+    participant DB as Postgres
+
+    U->>FE: Open Create User modal
+    U->>FE: Enter email + role + password + seats
+    FE->>API: POST /admin/users (local auth payload)
+    API->>AUTH: Validate caller is sudo
+    AUTH-->>API: OK
+    API->>DB: Insert users row
+    API->>DB: Insert user_passwords hash
+    API->>DB: Insert seat assignments (Phase 3)
+    API->>DB: Insert audit log event
+    DB-->>API: Success
+    API-->>FE: 201 Created (user + assignments)
+    FE-->>U: Show user row + success message
+```
+
+### 6. Workflow Sequence: `local-admin` creates a user (seat-scoped)
+
+```mermaid
+sequenceDiagram
+    participant A as Local Admin
+    participant FE as Dashboard /admin/users
+    participant API as Admin API
+    participant AUTH as Authorization Layer
+    participant DB as Postgres
+
+    A->>FE: Create local-read-only user for Seat X
+    FE->>API: POST /admin/users + seat assignments
+    API->>AUTH: Check caller role + managed seats
+    AUTH->>DB: Read caller seat-admin assignments
+    DB-->>AUTH: Caller has Seat X admin
+    AUTH-->>API: Allowed (not sudo target)
+    API->>DB: Create user + password + Seat X assignment
+    DB-->>API: Success
+    API-->>FE: 201 Created
+
+    A->>FE: Try to create sudo user
+    FE->>API: POST /admin/users role=sudo
+    API->>AUTH: Check delegation rule
+    AUTH-->>API: Deny (only sudo may manage sudo)
+    API-->>FE: 403 Forbidden
+```
+
+### 7. Request Authorization Decision Flow (seat-scoped routes)
+
+```mermaid
+flowchart TD
+    Start["Request hits seat-scoped endpoint"] --> Authn{"Authenticated?"}
+    Authn -- No --> Deny401["401"]
+    Authn -- Yes --> Sudo{"User is sudo?"}
+    Sudo -- Yes --> Allow["Allow"]
+    Sudo -- No --> NeedsBuyer{"Buyer seat ID resolved?"}
+    NeedsBuyer -- No --> Deny400["400 / invalid seat context"]
+    NeedsBuyer -- Yes --> SeatCheck{"Has seat assignment?"}
+    SeatCheck -- No --> Deny403["403"]
+    SeatCheck -- Yes --> Level{"Required access met?"}
+    Level -- No --> Deny403b["403"]
+    Level -- Yes --> Allow
+```
+
+### 8. First-Admin Install (local-first) Future UX Sequence (Phase 5)
+
+```text
+Fresh install / first run
+    -> Admin opens /setup (or guided bootstrap page)
+    -> UI checks /api/auth/bootstrap/status
+    -> UI prompts for bootstrap token + email + password
+    -> API validates token and creates first sudo user
+    -> UI signs in and routes to /admin/users
+    -> Admin creates additional local-admin users + seat assignments
+```
+
 ## Implementation Plan (Phased)
 
 ### Phase 0: Audit Hardening and Terminology Cleanup (Low risk)
