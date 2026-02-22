@@ -41,6 +41,9 @@ class GmailStatusResponse(BaseModel):
     rows_on_latest_metric_date: int = Field(
         0, description="Rows present on latest_metric_date in active runtime Postgres"
     )
+    last_unread_report_emails: int = Field(
+        0, description="Unread report emails seen on the last Gmail import scan"
+    )
 
 
 class GmailImportResponse(BaseModel):

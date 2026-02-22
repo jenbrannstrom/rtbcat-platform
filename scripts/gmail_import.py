@@ -169,6 +169,7 @@ def load_status() -> Dict[str, Any]:
         "history": [],
         "running": False,
         "current_job_id": None,
+        "last_unread_report_emails": 0,
     }
 
 
@@ -196,6 +197,7 @@ def update_status(
     reason: Optional[str] = None,
     latest_metric_date: Optional[str] = None,
     rows_on_latest_metric_date: int = 0,
+    unread_report_emails: Optional[int] = None,
 ):
     """Update the import status after a run."""
     status = load_status()
@@ -214,6 +216,8 @@ def update_status(
     status["last_reason"] = reason
     status["latest_metric_date"] = latest_metric_date
     status["rows_on_latest_metric_date"] = rows_on_latest_metric_date
+    if unread_report_emails is not None:
+        status["last_unread_report_emails"] = int(unread_report_emails)
 
     # Keep last 50 history entries
     status["history"].insert(0, {
@@ -225,6 +229,7 @@ def update_status(
         "reason": reason,
         "latest_metric_date": latest_metric_date,
         "rows_on_latest_metric_date": rows_on_latest_metric_date,
+        "unread_report_emails": unread_report_emails,
     })
     status["history"] = status["history"][:50]
 
@@ -248,6 +253,7 @@ def get_status() -> Dict[str, Any]:
         "last_reason": status.get("last_reason"),
         "latest_metric_date": status.get("latest_metric_date"),
         "rows_on_latest_metric_date": int(status.get("rows_on_latest_metric_date") or 0),
+        "last_unread_report_emails": int(status.get("last_unread_report_emails") or 0),
     }
 
 
@@ -1141,6 +1147,7 @@ def run_import(
         "success": False,
         "emails_processed": 0,
         "files_imported": 0,
+        "unread_report_emails": 0,
         "emails_skipped": 0,
         "skipped_seat_ids": [],
         "errors": [],
@@ -1193,6 +1200,7 @@ def run_import(
             reason=reason,
             latest_metric_date=result["latest_metric_date"],
             rows_on_latest_metric_date=result["rows_on_latest_metric_date"],
+            unread_report_emails=result.get("unread_report_emails"),
         )
         finish_scheduler_ingestion_run(
             scheduler_run_id,
@@ -1237,6 +1245,7 @@ def run_import(
             return result
 
         messages = find_report_emails(service)
+        result["unread_report_emails"] = len(messages)
 
         if not messages:
             if verbose:
