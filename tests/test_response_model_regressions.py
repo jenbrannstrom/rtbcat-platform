@@ -10,6 +10,7 @@ No database or FastAPI required — pure model validation.
 
 from __future__ import annotations
 
+from pathlib import Path
 from pydantic import BaseModel, ValidationError
 from typing import Optional
 
@@ -127,3 +128,37 @@ class TestMigrationDDL:
         assert "description" in ddl_block, (
             f"description column missing from schema_migrations DDL: {ddl_block}"
         )
+
+    def test_migration_numbers_are_unique(self):
+        """Migration SQL filenames must not reuse numeric prefixes."""
+        migrations_dir = Path(__file__).parent.parent / "storage" / "postgres_migrations"
+        migration_files = sorted(migrations_dir.glob("*.sql"))
+        numbers = [path.name.split("_", 1)[0] for path in migration_files]
+        duplicates = sorted({n for n in numbers if numbers.count(n) > 1})
+        assert not duplicates, f"Duplicate migration numbers found: {', '.join(duplicates)}"
+
+    def test_filter_pending_only_skips_legacy_numeric_markers(self):
+        """A canonical marker should not suppress a different canonical migration."""
+        from scripts.postgres_migrate import filter_pending_migrations
+
+        pending = [("047_import_trigger_tracking", Path("047_import_trigger_tracking.sql"))]
+        to_apply, skipped = filter_pending_migrations(
+            pending=pending,
+            applied_versions={"047_creatives_list_indexes"},
+        )
+
+        assert to_apply == pending
+        assert skipped == []
+
+    def test_filter_pending_skips_when_legacy_numeric_marker_exists(self):
+        """Legacy numeric marker should still prevent duplicate canonical apply."""
+        from scripts.postgres_migrate import filter_pending_migrations
+
+        pending = [("027_schema_alignment", Path("027_schema_alignment.sql"))]
+        to_apply, skipped = filter_pending_migrations(
+            pending=pending,
+            applied_versions={"27"},
+        )
+
+        assert to_apply == []
+        assert skipped == [("027_schema_alignment", 27)]
