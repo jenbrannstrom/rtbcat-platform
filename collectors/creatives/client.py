@@ -154,26 +154,34 @@ class CreativesClient(BaseAuthorizedBuyersClient):
             ...     print(f"Found: {creative['format']} creative for buyer {creative['buyerId']}")
         """
         service = self._get_service()
-        effective_buyer = buyer_id or self.account_id
 
         try:
-            # Use buyers.creatives.get for full serving decision data
-            name = f"buyers/{effective_buyer}/creatives/{creative_id}"
-            params = {"name": name, "view": view}
+            # Use bidders.creatives.list (works for all creatives in account)
+            filter_str = f'creativeId="{creative_id}"'
+            params = {
+                "parent": self.parent,
+                "pageSize": 1,
+                "view": view,
+                "filter": filter_str,
+            }
             response = await self._execute_with_retry(
-                lambda p=params: service.buyers().creatives().get(**p)
+                lambda p=params: service.bidders().creatives().list(**p)
             )
 
-            if response:
-                creative = parse_creative_response(
-                    response, self.account_id, buyer_id=buyer_id
-                )
-                # If FULL view didn't include serving decision, fetch it separately
-                if (
-                    creative
-                    and creative.get("approvalStatus") in (None, "UNKNOWN")
-                    and view != "SERVING_DECISION_ONLY"
-                ):
+            creatives = response.get("creatives", [])
+            if not creatives:
+                return None
+
+            creative = parse_creative_response(
+                creatives[0], self.account_id, buyer_id=buyer_id
+            )
+
+            # bidders endpoint doesn't return full creativeServingDecision;
+            # fetch it via buyers.creatives.get with SERVING_DECISION_ONLY
+            if creative and not creative.get("disapprovalReasons"):
+                effective_buyer = buyer_id or self.account_id
+                try:
+                    name = f"buyers/{effective_buyer}/creatives/{creative_id}"
                     sd_params = {"name": name, "view": "SERVING_DECISION_ONLY"}
                     sd_response = await self._execute_with_retry(
                         lambda p=sd_params: service.buyers().creatives().get(**p)
@@ -186,8 +194,10 @@ class CreativesClient(BaseAuthorizedBuyersClient):
                             creative["approvalStatus"] = sd_parsed.get("approvalStatus") or creative.get("approvalStatus")
                             creative["disapprovalReasons"] = sd_parsed.get("disapprovalReasons") or creative.get("disapprovalReasons")
                             creative["servingRestrictions"] = sd_parsed.get("servingRestrictions") or creative.get("servingRestrictions")
-                return creative
-            return None
+                except HttpError:
+                    pass  # buyers endpoint may 404 for bidder-level creatives
+
+            return creative
 
         except HttpError as ex:
             logger.error(
