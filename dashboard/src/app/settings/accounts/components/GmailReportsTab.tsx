@@ -235,7 +235,7 @@ export function GmailReportsTab() {
         {isConnected ? (
           <div className="space-y-4">
             {/* Status display */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="p-3 bg-gray-50 rounded-lg">
                 <p className="text-xs text-gray-500 mb-1">Last Import</p>
                 <p className="font-medium text-gray-900">
@@ -251,10 +251,33 @@ export function GmailReportsTab() {
                 <p className="font-bold text-xl text-gray-900">{gmailStatus?.total_imports || 0}</p>
               </div>
               <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-gray-500 mb-1">Unread Reports</p>
+                <p
+                  className={cn(
+                    "font-bold text-xl",
+                    (gmailStatus?.last_unread_report_emails || 0) > 0 ? "text-amber-700" : "text-gray-900"
+                  )}
+                >
+                  {gmailStatus?.last_unread_report_emails || 0}
+                </p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-lg">
                 <p className="text-xs text-gray-500 mb-1">Schedule</p>
                 <p className="font-medium text-gray-900">Daily (cron)</p>
               </div>
             </div>
+
+            {(gmailStatus?.last_unread_report_emails || 0) > 0 && !isImportRunning && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <Inbox className="h-4 w-4 text-amber-600 mt-0.5" />
+                  <div className="text-sm text-amber-900">
+                    Last scan detected {gmailStatus?.last_unread_report_emails} unread report email(s).
+                    Use <strong>Import Now</strong> to process them immediately.
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Last error if any */}
             {gmailStatus?.last_error && (

@@ -69,6 +69,7 @@ export interface GmailStatus {
   recent_history: GmailImportHistoryItem[];
   running?: boolean;
   current_job_id?: string | null;
+  last_unread_report_emails?: number;
 }
 
 export interface GmailImportResult {
