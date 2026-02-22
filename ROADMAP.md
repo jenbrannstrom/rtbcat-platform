@@ -238,6 +238,15 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [x] **Bulk edit UX** - Inline add/remove rows with validation and diff preview before save
 - [x] **Publisher List UI layout** - Full-page editor + spec-aligned layout (pending deploy)
 
+  **Publisher List UI Spec Parity Tracking** (`docs/ui-publisher-list-management.md`)
+  - [x] Core entry point + dedicated full-page editor layout (Spec §§1-2) — implemented, pending deploy verification
+  - [x] Blacklist/whitelist table UX + mode-adaptive labels/actions (Spec §§3-5) — implemented, pending deploy verification
+  - [x] Inline add/remove staging flow + pending changes panel + apply/discard UX (Spec §§6-11) — implemented, pending deploy verification
+  - [x] Bulk list editing/import-export/history/rollback flows (Spec §§12-14) — implemented, pending deploy verification
+  - [ ] Empty/error states parity audit against spec examples (Spec §§15-16) — needs explicit UI pass
+  - [ ] Keyboard shortcuts + responsive behavior parity audit (Spec §§17-18) — needs explicit UI pass
+  - [ ] Acceptance checks run and documented against spec (Spec §19 / Acceptance Checks) — pending post-deploy validation
+
   **Publisher Targeting UX (per pretargeting config):**
   - Add a `Publishers` section under each config with mode toggle:
     - Whitelist (only these)
