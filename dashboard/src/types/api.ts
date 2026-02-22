@@ -59,6 +59,10 @@ export interface Creative {
   language_source: string | null;
   language_analyzed_at: string | null;
   language_analysis_error: string | null;
+  // Approval details
+  is_disapproved?: boolean;
+  disapproval_reasons?: Array<{ reason: string; details?: string }> | null;
+  serving_restrictions?: Array<{ status: string; contexts?: unknown[]; disapproval_reasons?: unknown[] }> | null;
   data_source?: {
     source: "live" | "cache" | string;
     cached_at: string | null;
