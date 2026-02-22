@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Optional
+from typing import Optional, Callable, Awaitable, Any
 
 from fastapi import HTTPException
 
@@ -34,9 +34,13 @@ class AdminService:
         self,
         auth_service: AuthService | None = None,
         repo: AdminRepository | None = None,
+        password_hasher: Callable[[str], str] | None = None,
+        password_hash_writer: Callable[[str, str], Awaitable[None]] | None = None,
     ) -> None:
         self._auth = auth_service or AuthService()
         self._repo = repo or AdminRepository()
+        self._password_hasher = password_hasher
+        self._password_hash_writer = password_hash_writer
 
     @staticmethod
     def _validate_default_language(value: Optional[str]) -> Optional[str]:
@@ -52,6 +56,41 @@ class AdminService:
             )
         return normalized
 
+    @staticmethod
+    def _validate_create_auth_method(value: Optional[str]) -> str:
+        if value is None:
+            return "oauth-precreate"  # backward-compatible default for older clients
+        normalized = value.strip().lower()
+        if normalized not in ("local-password", "oauth-precreate"):
+            raise HTTPException(
+                status_code=400,
+                detail="auth_method must be 'local-password' or 'oauth-precreate'",
+            )
+        return normalized
+
+    @staticmethod
+    def _validate_local_password(password: Optional[str]) -> str:
+        if password is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Password is required when auth_method is 'local-password'",
+            )
+        if len(password) < 8:
+            raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+        return password
+
+    async def _store_local_password(self, user_id: str, password: str) -> None:
+        if self._password_hasher is None:
+            from api.auth_password import hash_password
+
+            self._password_hasher = hash_password
+
+        if self._password_hash_writer is None:
+            self._password_hash_writer = self._auth.set_user_password_hash
+
+        password_hash = self._password_hasher(password)
+        await self._password_hash_writer(user_id, password_hash)
+
     async def list_users(self, active_only: bool, role: Optional[str]) -> list[User]:
         return await self._auth.get_users(active_only=active_only, role=role)
 
@@ -62,6 +101,8 @@ class AdminService:
         display_name: Optional[str],
         role: str,
         default_language: Optional[str],
+        auth_method: Optional[str],
+        password: Optional[str],
         client_ip: Optional[str],
     ) -> dict[str, str]:
         existing = await self._auth.get_user_by_email(email.lower().strip())
@@ -70,6 +111,17 @@ class AdminService:
 
         if role not in ("admin", "user"):
             raise HTTPException(status_code=400, detail="Role must be 'admin' or 'user'")
+
+        normalized_auth_method = self._validate_create_auth_method(auth_method)
+        if normalized_auth_method == "local-password":
+            normalized_password = self._validate_local_password(password)
+        else:
+            normalized_password = None
+            if password:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Password is only allowed when auth_method is 'local-password'",
+                )
 
         normalized_language = self._validate_default_language(default_language or "en")
         user_id = str(uuid.uuid4())
@@ -80,6 +132,9 @@ class AdminService:
             role=role,
             default_language=normalized_language or "en",
         )
+
+        if normalized_auth_method == "local-password":
+            await self._store_local_password(user_id, normalized_password)
 
         await self._auth.log_audit(
             audit_id=str(uuid.uuid4()),
@@ -92,16 +147,22 @@ class AdminService:
                     "email": user.email,
                     "role": user.role,
                     "created_by": admin.email,
+                    "auth_method": normalized_auth_method,
                 }
             ),
             ip_address=client_ip,
         )
 
+        if normalized_auth_method == "local-password":
+            message = "User created with local password authentication."
+        else:
+            message = "User created. They can now log in via external authentication."
+
         return {
             "status": "success",
             "user_id": user_id,
             "email": user.email,
-            "message": "User created. They can now log in via Google OAuth2.",
+            "message": message,
         }
 
     async def get_user(self, user_id: str) -> User | None:
