@@ -24,6 +24,7 @@ export async function getCreatives(params?: {
   format?: string;
   limit?: number;
   offset?: number;
+  slim?: boolean;
 }): Promise<Creative[]> {
   const searchParams = new URLSearchParams();
   if (params?.campaign_id) searchParams.set("campaign_id", params.campaign_id);
@@ -32,6 +33,7 @@ export async function getCreatives(params?: {
   if (params?.format) searchParams.set("format", params.format);
   if (params?.limit) searchParams.set("limit", String(params.limit));
   if (params?.offset) searchParams.set("offset", String(params.offset));
+  if (params?.slim !== undefined) searchParams.set("slim", String(params.slim));
 
   const query = searchParams.toString();
   return fetchApi<Creative[]>(`/creatives${query ? `?${query}` : ""}`);

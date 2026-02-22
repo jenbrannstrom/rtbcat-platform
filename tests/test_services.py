@@ -4,8 +4,10 @@ import pytest
 from fastapi import HTTPException
 
 from services.campaigns_service import CampaignsService
+from services.creative_preview_service import CreativePreviewService
 from services.creatives_service import CreativesService
 from services.traffic_service import TrafficService
+from storage.models import Creative
 
 
 class DummyCampaignRepo:
@@ -128,3 +130,42 @@ async def test_creatives_service_newly_uploaded_shape():
     creative = result.creatives[0]
     assert creative["id"] == "c1"
     assert creative["total_spend_usd"] == 2.0
+
+
+def test_creative_preview_video_fallback_uses_thumbnail_when_raw_data_omitted():
+    svc = CreativePreviewService()
+    creative = Creative(
+        id="creative-video-1",
+        name="bidders/123/creatives/creative-video-1",
+        format="VIDEO",
+    )
+
+    preview = svc.build_preview(
+        creative,
+        slim=True,
+        html_thumbnail_url="https://cdn.example.com/thumb.jpg",
+    )
+
+    assert preview["video"] is not None
+    assert preview["video"]["thumbnail_url"] == "https://cdn.example.com/thumb.jpg"
+    assert preview["video"]["video_url"] is None
+    assert preview["video"]["vast_xml"] is None
+
+
+def test_creative_preview_html_fallback_uses_thumbnail_when_raw_data_omitted():
+    svc = CreativePreviewService()
+    creative = Creative(
+        id="creative-html-1",
+        name="bidders/123/creatives/creative-html-1",
+        format="HTML",
+    )
+
+    preview = svc.build_preview(
+        creative,
+        slim=True,
+        html_thumbnail_url="https://cdn.example.com/html-thumb.jpg",
+    )
+
+    assert preview["html"] is not None
+    assert preview["html"]["thumbnail_url"] == "https://cdn.example.com/html-thumb.jpg"
+    assert preview["html"]["snippet"] is None

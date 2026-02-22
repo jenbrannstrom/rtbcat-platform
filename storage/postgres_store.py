@@ -234,13 +234,27 @@ class PostgresStore:
         buyer_id: Optional[str] = None,
         approval_status: Optional[str] = None,
         search: Optional[str] = None,
+        include_raw_data: bool = True,
     ) -> list[Creative]:
         """List creatives with optional filters.
 
         TODO: Implement full filtering logic.
         """
         # TODO: Implement full filtering - basic version for now
-        sql = "SELECT * FROM creatives"
+        select_columns = (
+            "*"
+            if include_raw_data
+            else (
+                "id, name, format, account_id, buyer_id, approval_status, width, height, "
+                "canonical_size, size_category, final_url, display_url, utm_source, utm_medium, "
+                "utm_campaign, utm_content, utm_term, advertiser_name, campaign_id, cluster_id, "
+                "app_id, app_name, app_store, disapproval_reasons, serving_restrictions, "
+                "detected_language, detected_language_code, language_confidence, language_source, "
+                "language_analyzed_at, language_analysis_error, first_seen_at, first_import_batch_id, "
+                "created_at, updated_at"
+            )
+        )
+        sql = f"SELECT {select_columns} FROM creatives"
         params: list[Any] = []
         conditions = []
 
