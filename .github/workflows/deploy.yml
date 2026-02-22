@@ -1,14 +1,23 @@
-name: Deploy to GCP
+name: CD Manual Deploy to GCP
 
 # MANUAL TRIGGER ONLY - Do NOT add push triggers!
 # Auto-deploy on push caused incidents (Jan 2026) when it competed
 # with manual SSH deployments, corrupting containers and losing data.
 on:
   workflow_dispatch:  # Manual trigger only - click "Run workflow" in GitHub
+    inputs:
+      confirm:
+        description: "Type DEPLOY to confirm this manual deployment."
+        required: true
+        default: ""
+      reason:
+        description: "Reason for this deployment (ticket/incident/context)."
+        required: false
+        default: ""
 
 # Prevent concurrent deployments
 concurrency:
-  group: production-deploy
+  group: cd-manual-deploy-${{ vars.VM_NAME || 'catscan-production' }}
   cancel-in-progress: true
 
 # Configuration via GitHub repository variables (Settings > Secrets and variables > Actions > Variables)
@@ -26,9 +35,18 @@ env:
 
 jobs:
   deploy:
+    if: ${{ github.event.inputs.confirm == 'DEPLOY' }}
+    name: Deploy to VM (manual gate)
+    environment: production
     runs-on: ubuntu-latest
 
     steps:
+      - name: Show deployment intent
+        run: |
+          echo "Manual deploy approved."
+          echo "Reason: ${{ github.event.inputs.reason }}"
+          echo "Target VM: ${{ env.VM_NAME }}"
+
       - name: Checkout code
         uses: actions/checkout@v4
 

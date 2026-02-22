@@ -1,4 +1,4 @@
-name: Schema Compatibility
+name: CI Schema Compatibility
 
 on:
   pull_request:
@@ -14,6 +14,10 @@ on:
       - "ROADMAP.md"
       - "CLAUDE.md"
   workflow_dispatch:
+
+concurrency:
+  group: ci-schema-compat-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

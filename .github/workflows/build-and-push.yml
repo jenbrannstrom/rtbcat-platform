@@ -1,4 +1,4 @@
-name: Build and Push Images
+name: CI Build and Push Images
 
 on:
   push:
@@ -11,6 +11,10 @@ on:
       - 'CLAUDE.md'
   workflow_dispatch:
 
+concurrency:
+  group: ci-build-and-push-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -22,6 +26,7 @@ env:
 
 jobs:
   test:
+    name: Contract and Recovery Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -52,6 +57,7 @@ jobs:
           path: test-results.xml
 
   build-and-push:
+    name: Build and Push API + Dashboard Images
     needs: test
     runs-on: ubuntu-latest
     steps:
