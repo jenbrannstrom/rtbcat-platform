@@ -154,25 +154,39 @@ class CreativesClient(BaseAuthorizedBuyersClient):
             ...     print(f"Found: {creative['format']} creative for buyer {creative['buyerId']}")
         """
         service = self._get_service()
+        effective_buyer = buyer_id or self.account_id
 
         try:
-            # Use list with filter since bidders.creatives has no get method
-            filter_str = f'creativeId="{creative_id}"'
-            params = {
-                "parent": self.parent,
-                "pageSize": 1,
-                "view": view,
-                "filter": filter_str,
-            }
+            # Use buyers.creatives.get for full serving decision data
+            name = f"buyers/{effective_buyer}/creatives/{creative_id}"
+            params = {"name": name, "view": view}
             response = await self._execute_with_retry(
-                lambda p=params: service.bidders().creatives().list(**p)
+                lambda p=params: service.buyers().creatives().get(**p)
             )
 
-            creatives = response.get("creatives", [])
-            if creatives:
-                return parse_creative_response(
-                    creatives[0], self.account_id, buyer_id=buyer_id
+            if response:
+                creative = parse_creative_response(
+                    response, self.account_id, buyer_id=buyer_id
                 )
+                # If FULL view didn't include serving decision, fetch it separately
+                if (
+                    creative
+                    and creative.get("approvalStatus") in (None, "UNKNOWN")
+                    and view != "SERVING_DECISION_ONLY"
+                ):
+                    sd_params = {"name": name, "view": "SERVING_DECISION_ONLY"}
+                    sd_response = await self._execute_with_retry(
+                        lambda p=sd_params: service.buyers().creatives().get(**p)
+                    )
+                    if sd_response:
+                        sd_parsed = parse_creative_response(
+                            sd_response, self.account_id, buyer_id=buyer_id
+                        )
+                        if sd_parsed:
+                            creative["approvalStatus"] = sd_parsed.get("approvalStatus") or creative.get("approvalStatus")
+                            creative["disapprovalReasons"] = sd_parsed.get("disapprovalReasons") or creative.get("disapprovalReasons")
+                            creative["servingRestrictions"] = sd_parsed.get("servingRestrictions") or creative.get("servingRestrictions")
+                return creative
             return None
 
         except HttpError as ex:
