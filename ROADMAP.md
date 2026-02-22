@@ -1,6 +1,31 @@
 # Cat-Scan Roadmap
 
-**Last Updated:** February 14, 2026
+**Last Updated:** February 22, 2026
+
+---
+
+## Incident RCA (2026-02-22)
+
+- [x] **Migration crash-loop recurrence**
+  - Root cause: two API workers attempted schema DDL migrations at startup simultaneously, causing Postgres deadlocks and restart loops.
+  - Permanent fix: advisory lock in migration runner (`scripts/postgres_migrate.py`) deployed in `a4c5c02`.
+  - Guardrail: keep worker count >1 safe without race conditions on any future migration.
+- [x] **Creatives page timeout / blank state (30s request timeout)**
+  - Root cause: creatives list path requested large payloads (`raw_data`) and always executed expensive list-context queries for every item.
+  - Fixes:
+    - `storage/postgres_store.py`: support list query without `raw_data` for slim responses.
+    - `api/routers/creatives.py`: fast path for `slim=true` (thumbnail context only).
+    - `services/creative_preview_service.py`: thumbnail-only fallback previews when raw payload is omitted.
+    - `dashboard/src/app/creatives/page.tsx`: initial fetch limit reduced (`1000 -> 300`).
+- [x] **Gmail unread backlog visibility gap**
+  - Root cause: status API did not expose unread report count from the last scan, so "import is behind" vs "no mail found" was opaque.
+  - Fixes:
+    - Persist unread count in status/history (`scripts/gmail_import.py`).
+    - Expose in API (`api/routers/gmail.py`).
+    - Display in UI (`dashboard/src/app/settings/accounts/components/GmailReportsTab.tsx`).
+- [x] **Import tracking coverage matrix requirement**
+  - Status: implemented and live (`082ce0b`, `75b6a54`).
+  - `/import` now shows account x CSV type with `pass/fail/not imported` and source (`gmail-auto`, `gmail-manual`, `manual`).
 
 ---
 
