@@ -348,6 +348,91 @@ class UploadsRepository:
             (status, row_count, error_summary, report_type, run_id),
         )
 
+    async def get_data_freshness_by_table(
+        self,
+        start_date: str,
+        buyer_id: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """Query target tables for per-date row counts to build a freshness grid.
+
+        Returns rows of (metric_date, csv_type, row_count) across all 5 report
+        categories, optionally filtered by buyer_account_id / bidder_id.
+        """
+        tables_to_check = [
+            ("rtb_daily", "bidsinauction"),
+            ("rtb_quality", "quality"),
+            ("rtb_bidstream", None),  # split into geo/publisher below
+            ("rtb_bid_filtering", "bid-filtering"),
+        ]
+
+        # Guard: skip any table that doesn't exist yet
+        existing: set[str] = set()
+        for table_name, _ in tables_to_check:
+            if await self.table_exists(table_name):
+                existing.add(table_name)
+
+        if not existing:
+            return []
+
+        subqueries: list[str] = []
+        params: list[Any] = []
+
+        buyer_filter = ""
+        if buyer_id:
+            buyer_filter = " AND buyer_account_id = %s"
+
+        if "rtb_daily" in existing:
+            subqueries.append(
+                f"SELECT metric_date, 'bidsinauction' AS csv_type, COUNT(*) AS row_count"
+                f" FROM rtb_daily WHERE metric_date >= %s{buyer_filter} GROUP BY metric_date"
+            )
+            params.append(start_date)
+            if buyer_id:
+                params.append(buyer_id)
+
+        if "rtb_quality" in existing:
+            subqueries.append(
+                f"SELECT metric_date, 'quality' AS csv_type, COUNT(*) AS row_count"
+                f" FROM rtb_quality WHERE metric_date >= %s{buyer_filter} GROUP BY metric_date"
+            )
+            params.append(start_date)
+            if buyer_id:
+                params.append(buyer_id)
+
+        if "rtb_bidstream" in existing:
+            subqueries.append(
+                f"SELECT metric_date, 'pipeline-geo' AS csv_type, COUNT(*) AS row_count"
+                f" FROM rtb_bidstream WHERE metric_date >= %s AND (publisher_id IS NULL OR publisher_id = '')"
+                f"{buyer_filter} GROUP BY metric_date"
+            )
+            params.append(start_date)
+            if buyer_id:
+                params.append(buyer_id)
+
+            subqueries.append(
+                f"SELECT metric_date, 'pipeline-publisher' AS csv_type, COUNT(*) AS row_count"
+                f" FROM rtb_bidstream WHERE metric_date >= %s AND publisher_id IS NOT NULL AND publisher_id != ''"
+                f"{buyer_filter} GROUP BY metric_date"
+            )
+            params.append(start_date)
+            if buyer_id:
+                params.append(buyer_id)
+
+        if "rtb_bid_filtering" in existing:
+            subqueries.append(
+                f"SELECT metric_date, 'bid-filtering' AS csv_type, COUNT(*) AS row_count"
+                f" FROM rtb_bid_filtering WHERE metric_date >= %s{buyer_filter} GROUP BY metric_date"
+            )
+            params.append(start_date)
+            if buyer_id:
+                params.append(buyer_id)
+
+        if not subqueries:
+            return []
+
+        sql = " UNION ALL ".join(subqueries)
+        return await pg_query(sql, tuple(params))
+
     async def get_current_date(self) -> Optional[str]:
         """Get current date from database."""
         row = await pg_query_one("SELECT CURRENT_DATE as dt")
