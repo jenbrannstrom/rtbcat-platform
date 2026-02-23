@@ -244,6 +244,7 @@ async def register(request: Request, response: Response, register_data: Register
             detail="First admin must be created via /auth/bootstrap with the bootstrap token.",
         )
 
+
     if _is_single_user_mode() and not is_first_user:
         raise HTTPException(
             status_code=403,

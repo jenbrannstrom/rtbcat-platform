@@ -1,4 +1,4 @@
-name: CI Security Checks
+name: Security Checks
 
 on:
   pull_request:
@@ -14,6 +14,7 @@ on:
 concurrency:
   group: ci-security-${{ github.ref }}
   cancel-in-progress: true
+
 
 permissions:
   contents: read
