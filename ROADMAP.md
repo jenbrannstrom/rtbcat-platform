@@ -1,6 +1,6 @@
 # Cat-Scan Roadmap
 
-**Last Updated:** February 22, 2026
+**Last Updated:** February 23, 2026
 
 ---
 
@@ -26,6 +26,26 @@
 - [x] **Import tracking coverage matrix requirement**
   - Status: implemented and live (`082ce0b`, `75b6a54`).
   - `/import` now shows account x CSV type with `pass/fail/not imported` and source (`gmail-auto`, `gmail-manual`, `manual`).
+
+---
+
+## Translation / i18n Audit (2026-02-23)
+
+- [x] **Phase 1: audit hardcoded UI strings (dashboard frontend)**
+  - Scope: `dashboard/src` only (frontend app/components/contexts/lib code that participates in dashboard i18n).
+  - Result: AST-based inventory completed.
+  - Findings summary:
+    - `141` frontend files scanned
+    - `83` files with hardcoded-string hits
+    - `1459` hardcoded string inventory items
+    - `103` app/components `.tsx` files, only `19` currently use `useTranslation()` (~18.4%)
+    - Non-English locales are currently aliases to English in `dashboard/src/lib/i18n/index.ts`
+  - Audit report: `docs/I18N_PHASE1_TRANSLATION_AUDIT_2026-02-23.md`
+  - Full inventory CSV: `docs/I18N_PHASE1_HARDCODED_STRING_INVENTORY_2026-02-23.csv`
+- [ ] **Phase 2: convert hardcoded strings to dynamic `t.*` lookups**
+  - Start with highest-impact hotspots from the Phase 1 report (login/auth, app shell/status/errors, import flows, RTB config panels, settings tabs).
+- [ ] **Phase 3: generate/author non-English translations**
+  - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
 
 ---
 
