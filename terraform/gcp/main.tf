@@ -475,88 +475,6 @@ resource "google_compute_instance" "catscan" {
 }
 
 # =============================================================================
-# COMPUTE - Parallel SG Instance (for migration, keeps EU intact)
-# =============================================================================
-
-resource "google_compute_address" "catscan_sg" {
-  count  = var.create_sg_instance ? 1 : 0
-  name   = "${var.app_name}-${var.environment}-sg-ip"
-  region = var.gcp_region
-
-  description = "Static IP for Cat-Scan (SG migration)"
-}
-
-resource "google_compute_instance" "catscan_sg" {
-  count        = var.create_sg_instance ? 1 : 0
-  name         = "${var.app_name}-${var.environment}-sg"
-  machine_type = var.machine_type
-  zone         = var.gcp_zone
-
-  tags = ["${var.app_name}-server"]
-
-  boot_disk {
-    initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
-      size  = var.boot_disk_size
-      type  = "pd-ssd"
-    }
-  }
-
-  network_interface {
-    network = data.google_compute_network.default.name
-
-    access_config {
-      nat_ip = google_compute_address.catscan_sg[0].address
-    }
-  }
-
-  service_account {
-    email  = google_service_account.catscan.email
-    scopes = ["cloud-platform"]
-  }
-
-  # Startup script - hardened setup with OAuth2 Proxy
-  # Note: Uses existing EU bucket during migration to avoid recreating it
-  metadata_startup_script = templatefile("${path.module}/startup.sh", {
-    app_name                      = var.app_name
-    environment                   = var.environment
-    domain_name                   = var.domain_name
-    enable_https                  = var.enable_https
-    github_repo                   = var.github_repo
-    github_branch                 = var.github_branch
-    gcp_region                    = var.gcp_region
-    gcs_bucket                    = "catscan-production-data-99957252"
-    google_oauth_client_id        = var.google_oauth_client_id
-    google_oauth_client_secret    = var.google_oauth_client_secret
-    allowed_email_domains         = var.allowed_email_domains
-    allow_any_google_accounts     = var.allow_any_google_accounts
-    precompute_refresh_secret     = random_password.precompute_refresh_secret.result
-    precompute_monitor_secret     = random_password.precompute_monitor_secret.result
-    gmail_import_secret           = random_password.gmail_import_secret.result
-    creative_cache_refresh_secret = random_password.creative_cache_refresh_secret.result
-    precompute_refresh_days       = var.precompute_refresh_days
-    precompute_refresh_max_age    = var.precompute_refresh_max_age_hours
-  })
-
-  deletion_protection = var.environment == "production"
-
-  labels = {
-    app         = var.app_name
-    environment = var.environment
-  }
-
-  shielded_instance_config {
-    enable_secure_boot          = true
-    enable_vtpm                 = true
-    enable_integrity_monitoring = true
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# =============================================================================
 # SECRET MANAGER - Credentials Storage
 # =============================================================================
 # Store credentials in Secret Manager so they persist across deployments.
@@ -825,8 +743,8 @@ resource "google_cloud_scheduler_job" "precompute_refresh" {
 
 resource "google_cloud_scheduler_job" "gmail_import" {
   name        = "${var.app_name}-gmail-import"
-  description = "Daily Gmail report import"
-  schedule    = "0 8 * * *"
+  description = "Daily Gmail report import - 1h after emails arrive (~11:00 UTC)"
+  schedule    = "0 12 * * *"
   time_zone   = "Etc/UTC"
   region      = var.gcp_region
 

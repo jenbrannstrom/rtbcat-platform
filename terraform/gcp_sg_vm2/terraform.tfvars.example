@@ -11,12 +11,12 @@ boot_disk_size = 80
 domain_name  = ""
 enable_https = false
 
-github_repo   = "https://github.com/jenbrannstrom/rtbcat-platform.git"
-github_branch = "unified-platform"
+github_repo   = "https://github.com/YOUR_ORG/rtbcat-platform.git"
+github_branch = "main"
 
 google_oauth_client_id     = "YOUR_CLIENT_ID.apps.googleusercontent.com"
 google_oauth_client_secret = "YOUR_CLIENT_SECRET"
-allowed_email_domains      = ["rtb.cat"]
+allowed_email_domains      = ["example.com"]
 
 service_account_email   = "catscan-production-sa@catscan-prod-202601.iam.gserviceaccount.com"
 artifact_registry_domain = "asia-southeast1-docker.pkg.dev"

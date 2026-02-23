@@ -141,6 +141,23 @@ class ImportTrackingMatrixResponse(BaseModel):
     not_imported_count: int
 
 
+class FreshnessSummaryResponse(BaseModel):
+    """Coverage summary for the data freshness grid."""
+    total_cells: int
+    imported_count: int
+    missing_count: int
+    coverage_pct: float
+
+
+class DataFreshnessGridResponse(BaseModel):
+    """Response for date x csv_type data freshness grid."""
+    dates: list[str]
+    csv_types: list[str]
+    cells: dict[str, dict[str, str]]
+    summary: FreshnessSummaryResponse
+    lookback_days: int
+
+
 # =============================================================================
 # Dependencies
 # =============================================================================
@@ -359,3 +376,50 @@ async def get_import_tracking_matrix(
     except Exception as e:
         logger.error(f"Failed to get import tracking matrix: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get import tracking matrix: {str(e)}")
+
+
+@router.get("/uploads/data-freshness", response_model=DataFreshnessGridResponse)
+async def get_data_freshness(
+    days: int = Query(7, description="Lookback window in days", ge=1, le=90),
+    buyer_id: Optional[str] = Query(None, description="Filter to a specific buyer account"),
+    user: User = Depends(get_current_user),
+    store=Depends(get_store),
+    service: UploadsService = Depends(get_uploads_service),
+):
+    """Get date x csv_type data freshness grid from actual target tables."""
+    try:
+        allowed_buyer_ids = await get_allowed_buyer_ids(store=store, user=user)
+        if allowed_buyer_ids is not None:
+            if not allowed_buyer_ids:
+                return DataFreshnessGridResponse(
+                    dates=[],
+                    csv_types=list(UploadsService.EXPECTED_CSV_TYPES),
+                    cells={},
+                    summary=FreshnessSummaryResponse(
+                        total_cells=0, imported_count=0, missing_count=0, coverage_pct=0.0,
+                    ),
+                    lookback_days=days,
+                )
+            if buyer_id and buyer_id not in allowed_buyer_ids:
+                raise HTTPException(status_code=403, detail="You don't have access to this buyer account.")
+
+        allowed_bidder_ids = await get_allowed_bidder_ids(store=store, user=user)
+        result = await service.get_data_freshness_grid(
+            days=days,
+            allowed_bidder_ids=allowed_bidder_ids,
+            buyer_id=buyer_id,
+        )
+
+        return DataFreshnessGridResponse(
+            dates=result["dates"],
+            csv_types=result["csv_types"],
+            cells=result["cells"],
+            summary=FreshnessSummaryResponse(**result["summary"]),
+            lookback_days=result["lookback_days"],
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get data freshness grid: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get data freshness grid: {str(e)}")

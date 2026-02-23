@@ -19,6 +19,7 @@ import {
   ImportResultCard,
   ImportHistorySection,
   ImportTrackingMatrixSection,
+  DataFreshnessGrid,
 } from "@/components/import";
 import {
   type ExtendedValidationResult,
@@ -27,8 +28,10 @@ import {
   importPerformanceData,
   getImportHistory,
   getImportTrackingMatrix,
+  getDataFreshnessGrid,
   type ImportHistoryItem,
   type ImportTrackingMatrixResponse,
+  type DataFreshnessGridResponse,
 } from "@/lib/api";
 import {
   uploadChunkedCSV,
@@ -76,29 +79,40 @@ export default function ImportPage() {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [importMatrix, setImportMatrix] = useState<ImportTrackingMatrixResponse | null>(null);
   const [matrixLoading, setMatrixLoading] = useState(true);
+  const [freshnessGrid, setFreshnessGrid] = useState<DataFreshnessGridResponse | null>(null);
+  const [freshnessLoading, setFreshnessLoading] = useState(true);
+  const [freshnessDays, setFreshnessDays] = useState(7);
 
   // Load import history on mount and after successful imports
   const loadImportData = useCallback(async () => {
     setHistoryLoading(true);
     setMatrixLoading(true);
+    setFreshnessLoading(true);
     try {
-      const [history, matrix] = await Promise.all([
+      const [history, matrix, freshness] = await Promise.all([
         getImportHistory(10, 0, selectedBuyerId || undefined),
         getImportTrackingMatrix(30, selectedBuyerId || undefined),
+        getDataFreshnessGrid(freshnessDays, selectedBuyerId || undefined),
       ]);
       setImportHistory(history);
       setImportMatrix(matrix);
+      setFreshnessGrid(freshness);
     } catch (error) {
       console.error("Failed to load import data:", error);
     } finally {
       setHistoryLoading(false);
       setMatrixLoading(false);
+      setFreshnessLoading(false);
     }
-  }, [selectedBuyerId]);
+  }, [selectedBuyerId, freshnessDays]);
 
   useEffect(() => {
     loadImportData();
   }, [loadImportData]);
+
+  const handleFreshnessDaysChange = useCallback((days: number) => {
+    setFreshnessDays(days);
+  }, []);
 
   useEffect(() => {
     const isImportInFlight =
@@ -288,6 +302,14 @@ export default function ImportPage() {
       {/* Upload Step */}
       {step === "upload" && (
         <div className="space-y-6">
+          <DataFreshnessGrid
+            grid={freshnessGrid}
+            loading={freshnessLoading}
+            selectedDays={freshnessDays}
+            onDaysChange={handleFreshnessDaysChange}
+            onRefresh={loadImportData}
+          />
+
           {/* Main Upload Area */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <ImportDropzone onFileSelect={handleFileSelect} maxSizeMB={500} />

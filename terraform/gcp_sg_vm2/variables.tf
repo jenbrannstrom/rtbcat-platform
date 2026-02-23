@@ -54,13 +54,13 @@ variable "enable_https" {
 variable "github_repo" {
   description = "GitHub repository URL for the application"
   type        = string
-  default     = "https://github.com/jenbrannstrom/rtbcat-platform.git"
+  default     = ""
 }
 
 variable "github_branch" {
   description = "GitHub branch to deploy"
   type        = string
-  default     = "unified-platform"
+  default     = "main"
 }
 
 variable "google_oauth_client_id" {
