@@ -223,7 +223,7 @@ export interface BatchPerformanceResponse {
   count: number;
 }
 
-export type PerformancePeriod = "yesterday" | "7d" | "30d" | "all_time";
+export type PerformancePeriod = "yesterday" | "7d" | "14d" | "30d" | "all_time";
 
 // Country Breakdown Types
 
