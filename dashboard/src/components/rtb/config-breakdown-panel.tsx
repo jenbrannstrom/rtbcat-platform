@@ -700,51 +700,44 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
     (s) => getSuggestionStatus(s) === 'available'
   );
 
-  const handleBlockAllSuggestions = () => {
-    availableSuggestions.forEach((s) => {
-      if (effectivePublisherMode === 'EXCLUSIVE') {
+  /** Block a single suggestion, canceling any opposite pending change first. */
+  const blockOneSuggestion = (s: BlockSuggestion) => {
+    const pid = s.publisher_id;
+    if (effectivePublisherMode === 'EXCLUSIVE') {
+      const pendingRemove = findPendingChange('remove_publisher', pid);
+      if (pendingRemove) {
+        cancelChangeMutation.mutate(pendingRemove.id);
+      } else {
         createChangeMutation.mutate({
           billing_id,
           change_type: 'add_publisher',
           field_name: 'publisher_targeting',
-          value: s.publisher_id,
+          value: pid,
           reason: `Blocked from commonly blocked suggestions (${s.category})`,
         });
-      } else {
-        // Whitelist: block = remove from allowlist (only if currently listed)
-        if (effectivePublisherValues.has(s.publisher_id)) {
-          createChangeMutation.mutate({
-            billing_id,
-            change_type: 'remove_publisher',
-            field_name: 'publisher_targeting',
-            value: s.publisher_id,
-            reason: `Blocked from commonly blocked suggestions (${s.category})`,
-          });
-        }
       }
-    });
-  };
-
-  const handleBlockSuggestion = (s: BlockSuggestion) => {
-    if (effectivePublisherMode === 'EXCLUSIVE') {
-      createChangeMutation.mutate({
-        billing_id,
-        change_type: 'add_publisher',
-        field_name: 'publisher_targeting',
-        value: s.publisher_id,
-        reason: `Blocked from commonly blocked suggestions (${s.category})`,
-      });
     } else {
-      if (effectivePublisherValues.has(s.publisher_id)) {
+      const pendingAdd = findPendingChange('add_publisher', pid);
+      if (pendingAdd) {
+        cancelChangeMutation.mutate(pendingAdd.id);
+      } else if (effectivePublisherValues.has(pid)) {
         createChangeMutation.mutate({
           billing_id,
           change_type: 'remove_publisher',
           field_name: 'publisher_targeting',
-          value: s.publisher_id,
+          value: pid,
           reason: `Blocked from commonly blocked suggestions (${s.category})`,
         });
       }
     }
+  };
+
+  const handleBlockAllSuggestions = () => {
+    availableSuggestions.forEach(blockOneSuggestion);
+  };
+
+  const handleBlockSuggestion = (s: BlockSuggestion) => {
+    blockOneSuggestion(s);
   };
 
   // ── Publisher history & rollback ───────────────────────────────

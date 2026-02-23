@@ -365,10 +365,11 @@ export default function HistoryPage() {
       }),
   });
 
-  // Fetch snapshots (to associate with push events for rollback)
+  // Fetch snapshots scoped to selected config (for reliable rollback association)
+  const snapshotBillingId = selectedChange?.config_id || billingIdFilter || undefined;
   const { data: snapshots } = useQuery({
-    queryKey: ['pretargeting-snapshots'],
-    queryFn: () => getSnapshots(),
+    queryKey: ['pretargeting-snapshots', snapshotBillingId],
+    queryFn: () => getSnapshots({ billing_id: snapshotBillingId, limit: 50 }),
   });
 
   // Filter history by change type
