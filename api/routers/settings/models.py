@@ -1,6 +1,8 @@
 """Pydantic models for RTB Settings routers."""
 
+from datetime import datetime
 from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -86,7 +88,10 @@ class PretargetingHistoryResponse(BaseModel):
 
 class SnapshotCreate(BaseModel):
     """Request to create a pretargeting config snapshot."""
-    billing_id: str = Field(..., description="Billing ID of the pretargeting config")
+    billing_id: str = Field(
+        ...,
+        description="Pretargeting config ID (billing_id)",
+    )
     snapshot_name: Optional[str] = Field(None, description="Snapshot name")
     notes: Optional[str] = Field(None, description="Optional snapshot notes")
     snapshot_type: Optional[str] = Field(None, description="manual, auto, before_change")
@@ -113,13 +118,16 @@ class SnapshotResponse(BaseModel):
     avg_daily_spend_usd: Optional[float] = None
     ctr_pct: Optional[float] = None
     cpm_usd: Optional[float] = None
-    created_at: str
+    created_at: datetime
     notes: Optional[str] = None
 
 
 class ComparisonCreate(BaseModel):
     """Request to create a snapshot comparison."""
-    billing_id: str = Field(..., description="Billing ID to compare")
+    billing_id: str = Field(
+        ...,
+        description="Pretargeting config ID (billing_id) to compare",
+    )
     comparison_name: Optional[str] = Field(None, description="Comparison name")
     before_snapshot_id: int = Field(..., description="Snapshot ID to compare against")
     before_start_date: Optional[str] = Field(None, description="Comparison start date (before)")
@@ -145,8 +153,8 @@ class ComparisonResponse(BaseModel):
     cpm_delta_pct: Optional[float] = None
     status: Optional[str] = None
     conclusion: Optional[str] = None
-    created_at: str
-    completed_at: Optional[str] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
     sizes_removed: int = 0
 
 
@@ -176,9 +184,9 @@ class PendingChangeResponse(BaseModel):
     reason: Optional[str] = None
     estimated_qps_impact: Optional[int] = None
     status: str  # 'pending', 'applied', 'cancelled'
-    created_at: str
+    created_at: datetime
     created_by: Optional[str] = None
-    applied_at: Optional[str] = None
+    applied_at: Optional[datetime] = None
 
 
 class ConfigDetailResponse(BaseModel):
@@ -195,6 +203,7 @@ class ConfigDetailResponse(BaseModel):
     included_sizes: list[str] = []
     included_geos: list[str] = []
     excluded_geos: list[str] = []
+    maximum_qps: Optional[int] = None
     publisher_targeting_mode: Optional[str] = None
     publisher_targeting_values: list[str] = []
     # Pending changes summary
@@ -203,6 +212,7 @@ class ConfigDetailResponse(BaseModel):
     effective_sizes: list[str] = []
     effective_geos: list[str] = []
     effective_formats: list[str] = []
+    effective_maximum_qps: Optional[int] = None
     effective_publisher_targeting_mode: Optional[str] = None
     effective_publisher_targeting_values: list[str] = []
     # Recent history

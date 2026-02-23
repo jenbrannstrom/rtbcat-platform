@@ -147,6 +147,27 @@ class AuthRepository:
         row = await pg_query_one("SELECT COUNT(*) as cnt FROM users")
         return row["cnt"] if row else 0
 
+    async def get_user_password_hash(self, user_id: str) -> Optional[str]:
+        """Get the stored password hash for a user, if any."""
+        row = await pg_query_one(
+            "SELECT password_hash FROM user_passwords WHERE user_id = %s",
+            (user_id,),
+        )
+        return row["password_hash"] if row else None
+
+    async def set_user_password_hash(self, user_id: str, password_hash: str) -> None:
+        """Insert or update a user's password hash."""
+        await pg_execute(
+            """
+            INSERT INTO user_passwords (user_id, password_hash, updated_at)
+            VALUES (%s, %s, NOW())
+            ON CONFLICT (user_id) DO UPDATE SET
+                password_hash = EXCLUDED.password_hash,
+                updated_at = NOW()
+            """,
+            (user_id, password_hash),
+        )
+
     # ==================== Session Methods ====================
 
     async def create_session(

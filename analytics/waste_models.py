@@ -86,9 +86,11 @@ class WasteReport:
         size_gaps: List of size gaps sorted by impact.
         size_coverage: Coverage metrics for all sizes.
         potential_savings_qps: Total QPS that could be saved by blocking.
+            This value is expressed using `qps_basis`.
         potential_savings_usd: Estimated monthly cost savings.
         analysis_period_days: Number of days of traffic analyzed.
         generated_at: Timestamp when report was generated.
+        qps_basis: Semantics for QPS metrics in this payload.
         recommendations_summary: High-level summary of recommendations.
     """
 
@@ -102,6 +104,7 @@ class WasteReport:
     potential_savings_usd: Optional[float]
     analysis_period_days: int
     generated_at: str
+    qps_basis: Literal["avg_daily"] = "avg_daily"
     recommendations_summary: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -137,6 +140,7 @@ class WasteReport:
             ],
             "potential_savings_qps": round(self.potential_savings_qps, 2),
             "potential_savings_usd": self.potential_savings_usd,
+            "qps_basis": self.qps_basis,
             "analysis_period_days": self.analysis_period_days,
             "generated_at": self.generated_at,
             "recommendations_summary": self.recommendations_summary,

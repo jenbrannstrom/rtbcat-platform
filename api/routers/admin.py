@@ -29,11 +29,19 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 # ==================== Request/Response Models ====================
 
 class CreateUserRequest(BaseModel):
-    """Request to create a new user (OAuth2 - no password needed)."""
+    """Request to create a new user (local password or OAuth pre-create)."""
     email: str = Field(..., description="User email address")
     display_name: Optional[str] = Field(None, description="User display name")
     role: str = Field("user", description="User role (admin or user)")
     default_language: Optional[str] = Field("en", description="Default UI language code")
+    auth_method: Optional[str] = Field(
+        None,
+        description="User auth method: local-password or oauth-precreate (defaults to oauth-precreate for legacy clients)",
+    )
+    password: Optional[str] = Field(
+        None,
+        description="Required when auth_method=local-password",
+    )
 
 
 class CreateUserResponse(BaseModel):
@@ -152,11 +160,11 @@ async def create_user(
     user_request: CreateUserRequest,
     admin: User = Depends(require_admin),
 ):
-    """Create a new user (pre-register for OAuth2 login).
+    """Create a new user (local password or OAuth pre-register).
 
-    Requires admin role. Users authenticate via Google OAuth2,
-    so no password is needed. This pre-creates the user record
-    with assigned role before they first log in.
+    Requires admin role.
+    - local-password: creates user and stores password hash immediately
+    - oauth-precreate: pre-creates user for external auth login
     """
     admin_svc = get_admin_service()
     result = await admin_svc.create_user(
@@ -165,6 +173,8 @@ async def create_user(
         display_name=user_request.display_name,
         role=user_request.role,
         default_language=user_request.default_language,
+        auth_method=user_request.auth_method,
+        password=user_request.password,
         client_ip=_get_client_ip(request),
     )
     return CreateUserResponse(**result)

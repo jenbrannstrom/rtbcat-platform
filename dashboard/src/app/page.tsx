@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, Suspense, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, AlertTriangle, ArrowUp, ArrowDown, ChevronsUpDown, Loader2 } from "lucide-react";
 import { AccountEndpointsHeader } from "@/components/rtb/account-endpoints-header";
@@ -23,15 +23,25 @@ const PERIOD_OPTIONS = [
   { value: 30, label: "30 days" },
 ];
 
+function getRetryDelay(attemptIndex: number): number {
+  return Math.min(1000 * 2 ** attemptIndex, 5000);
+}
+
+function normalizeDateString(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value.slice(0, 10);
+}
+
 /**
  * Helper to transform API response to component props.
  */
 function transformConfigToProps(
   apiConfig: PretargetingConfigResponse,
-  performanceData?: { reached: number; impressions: number; win_rate: number; waste_rate: number }
+  performanceData?: { reached: number; impressions: number; win_rate: number; waste_rate: number },
+  metricsDelayed = false
 ): PretargetingConfig {
   const name = apiConfig.user_name || apiConfig.display_name || `Config ${apiConfig.billing_id}`;
-  const hasPerformance = !!performanceData && (performanceData.reached > 0 || performanceData.impressions > 0);
+  const hasPerformance = performanceData !== undefined;
   const reached = performanceData?.reached || 0;
   const impressions = performanceData?.impressions || 0;
   const win_rate = performanceData?.win_rate || 0;
@@ -52,36 +62,50 @@ function transformConfigToProps(
     win_rate,
     waste_rate,
     has_performance: hasPerformance,
+    metrics_delayed: metricsDelayed && !hasPerformance,
   };
 }
 
 function WasteAnalysisContent() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { selectedBuyerId, setSelectedBuyerId } = useAccount();
   const { t } = useTranslation();
 
   const initialDays = parseInt(searchParams.get("days") || "7", 10);
   const [days, setDays] = useState<number>(initialDays);
+  const [dashboardLoadStartedAt] = useState<number>(() => Date.now());
 
   // Fetch seats to auto-select first one if none selected
-  const { data: seats, isLoading: seatsLoading } = useQuery({
+  const {
+    data: seats,
+    isLoading: seatsLoading,
+    isError: seatsError,
+    refetch: refetchSeats,
+  } = useQuery({
     queryKey: ["seats"],
     queryFn: () => getSeats({ active_only: true }),
+    retry: 5,
+    retryDelay: getRetryDelay,
+    staleTime: 60_000,
   });
 
-  // Auto-select first seat if none selected (removes "All Seats" from Waste Analyzer)
+  // Keep selected seat valid and deterministic once seats resolve.
   useEffect(() => {
-    if (!selectedBuyerId && seats && seats.length > 0) {
+    if (!seats || seats.length === 0) return;
+
+    const hasSelectedSeat = !!selectedBuyerId && seats.some((seat) => seat.buyer_id === selectedBuyerId);
+    if (!hasSelectedSeat) {
       setSelectedBuyerId(seats[0].buyer_id);
     }
   }, [selectedBuyerId, seats, setSelectedBuyerId]);
 
+  const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
+
   useEffect(() => {
     setExpandedConfigId(null);
   }, [selectedBuyerId]);
-
-  const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
 
   // Sorting state for pretargeting configs
   type SortColumn = 'name' | 'reached' | 'win_rate' | 'waste_rate';
@@ -102,9 +126,10 @@ function WasteAnalysisContent() {
     (newDays: number) => {
       const params = new URLSearchParams();
       params.set("days", String(newDays));
-      router.replace(`/?${params.toString()}`, { scroll: false });
+      const targetPath = pathname || "/";
+      router.replace(`${targetPath}?${params.toString()}`, { scroll: false });
     },
-    [router]
+    [pathname, router]
   );
 
   const handleDaysChange = useCallback(
@@ -123,7 +148,7 @@ function WasteAnalysisContent() {
     isLoading: summaryLoading,
     refetch: refetchSummary,
   } = useQuery({
-    queryKey: ["qps-summary", days],
+    queryKey: ["qps-summary", days, selectedBuyerId],
     queryFn: () => getQPSSummary(days, selectedBuyerId || undefined),
     enabled: seatReady,
   });
@@ -144,7 +169,7 @@ function WasteAnalysisContent() {
     data: spendStats,
     refetch: refetchSpend,
   } = useQuery({
-    queryKey: ["spend-stats", days, expandedConfigId],
+    queryKey: ["spend-stats", days, selectedBuyerId, expandedConfigId],
     queryFn: () => getSpendStats(days, expandedConfigId || undefined),
   });
 
@@ -157,7 +182,18 @@ function WasteAnalysisContent() {
     queryKey: ["pretargeting-configs", selectedBuyerId],
     queryFn: () => getPretargetingConfigs({ buyer_id: selectedBuyerId || undefined }),
     enabled: seatReady,
-    retry: 0,
+    retry: 5,
+    retryDelay: getRetryDelay,
+    retryOnMount: true,
+    refetchOnReconnect: true,
+    refetchInterval: (query) => {
+      if (!seatReady) return false;
+      if (Date.now() - dashboardLoadStartedAt > 120_000) return false;
+      if (query.state.status === "error") return 5000;
+      const rows = query.state.data as PretargetingConfigResponse[] | undefined;
+      if (Array.isArray(rows) && rows.length === 0) return 8000;
+      return false;
+    },
   });
 
   // Fetch config-level performance data (filtered by selected buyer)
@@ -171,7 +207,16 @@ function WasteAnalysisContent() {
     queryKey: ["rtb-funnel-configs", days, selectedBuyerId],
     queryFn: () => getRTBFunnelConfigs(days, selectedBuyerId || undefined),
     enabled: seatReady,
-    retry: 0,
+    retry: 5,
+    retryDelay: getRetryDelay,
+    retryOnMount: true,
+    refetchOnReconnect: true,
+    refetchInterval: (query) => {
+      if (!seatReady) return false;
+      if (Date.now() - dashboardLoadStartedAt > 120_000) return false;
+      if (query.state.status === "error") return 5000;
+      return false;
+    },
   });
 
   const { data: endpointEfficiency, isLoading: endpointEfficiencyLoading } = useQuery({
@@ -188,14 +233,11 @@ function WasteAnalysisContent() {
     refetchConfigPerf();
   };
 
-  // Use real funnel data if available (has_data can be at top level or in funnel)
-  const hasFunnelData = rtbFunnel?.has_data ?? rtbFunnel?.funnel?.has_data ?? false;
-  const reached = hasFunnelData ? (rtbFunnel?.funnel?.total_reached_queries ?? null) : null;
-  const impressions = hasFunnelData ? (rtbFunnel?.funnel?.total_impressions ?? 0) : 0;
-
-  // Publishers and Geos from RTB data
-
   // Build a map of billing_id to performance data from config performance API
+  const configMetricsDelayed = configPerformanceLoading || configPerformanceFetching || configPerformanceError;
+  const configFallbackApplied = configPerformance?.fallback_applied === true;
+  const configRequestedDays = configPerformance?.requested_days ?? days;
+  const configEffectiveDays = configPerformance?.effective_days ?? days;
   const configPerformanceMap = new Map<string, { reached: number; impressions: number; win_rate: number; waste_rate: number }>();
   if (configPerformance?.configs) {
     for (const cfg of configPerformance.configs) {
@@ -210,7 +252,11 @@ function WasteAnalysisContent() {
 
   // Transform configs for display and sort
   const unsortedConfigs = (pretargetingConfigs || []).map(config =>
-    transformConfigToProps(config, configPerformanceMap.get(config.billing_id || config.config_id))
+    transformConfigToProps(
+      config,
+      configPerformanceMap.get(config.billing_id || config.config_id),
+      configMetricsDelayed
+    )
   );
 
   // Sort configs based on current sort settings
@@ -248,19 +294,45 @@ function WasteAnalysisContent() {
 
   const activeConfigsCount = displayConfigs.filter(c => c.state === 'ACTIVE').length;
 
-  // Calculate funnel metrics for compact display
-  const winRate = reached && impressions ? (impressions / reached * 100) : null;
-  const funnelDataForHeader = {
-    reached,
-    impressions: impressions || 0,
-    winRate,
-  };
+  // Observed QPS by endpoint for endpoints header
+  const coverage = endpointEfficiency?.data_coverage;
+  const observedQpsByEndpointId = endpointEfficiency?.endpoint_reconciliation?.rows?.reduce<Record<string, number | null>>(
+    (acc, row) => {
+      if (row.catscan_endpoint_id) {
+        acc[row.catscan_endpoint_id] = row.google_current_qps;
+      }
+      return acc;
+    },
+    {}
+  ) ?? {};
+
+  const homeSeatDataAsOf = normalizeDateString(coverage?.home_seat_daily?.end_date ?? null);
+  const bidstreamDataAsOf = normalizeDateString(coverage?.rtb_bidstream?.end_date ?? null);
+  const availableDataDates = [homeSeatDataAsOf, bidstreamDataAsOf].filter((value): value is string => !!value);
+  const dataAsOf = availableDataDates.length > 0 ? [...availableDataDates].sort()[0] : null;
+  const hasDataDateDrift = !!homeSeatDataAsOf && !!bidstreamDataAsOf && homeSeatDataAsOf !== bidstreamDataAsOf;
 
   return (
     <div className="max-w-7xl mx-auto">
       {/* Compact Top Bar - CPM, Period Selector, Refresh */}
       <div className="sticky top-0 z-30 px-6 py-2 bg-white border-b border-gray-200">
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs text-gray-600">
+            {seatReady && dataAsOf && (
+              <span>
+                Data as of <strong>{dataAsOf}</strong>
+                {hasDataDateDrift && (
+                  <span className="ml-2 text-amber-700">
+                    (home: {homeSeatDataAsOf}, bidstream: {bidstreamDataAsOf})
+                  </span>
+                )}
+              </span>
+            )}
+            {seatReady && !dataAsOf && (
+              <span className="text-gray-500">Data freshness pending…</span>
+            )}
+          </div>
+          <div className="flex items-center justify-end gap-2">
           {/* CPM Badge - compact */}
           {spendStats?.has_spend_data && spendStats.avg_cpm_usd && (
             <div className={cn(
@@ -315,18 +387,47 @@ function WasteAnalysisContent() {
           >
             <RefreshCw className={cn("h-3.5 w-3.5 text-gray-600", (summaryLoading || funnelLoading) && "animate-spin")} />
           </button>
+          </div>
         </div>
       </div>
 
       {/* Content area with padding */}
       <div className="p-6 space-y-4">
-      {!seatReady && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
-          {seatsLoading ? "Loading seat..." : "Select a seat to load home analytics."}
+      {seatsError && (
+        <div className="flex items-center justify-between gap-3 text-red-800 bg-red-50 border border-red-200 rounded px-3 py-2">
+          <span>Unable to load buyer seats. Retry to continue.</span>
+          <button
+            onClick={() => refetchSeats()}
+            className="px-2 py-1 text-xs font-medium rounded bg-red-100 hover:bg-red-200"
+          >
+            Retry
+          </button>
         </div>
       )}
-      {/* Account Endpoints Header with integrated funnel metrics */}
-      <AccountEndpointsHeader funnelData={funnelDataForHeader} />
+      {!seatReady && !seatsError && (
+        <div className="rounded-lg p-4 text-sm border">
+          {seatsLoading && (
+            <div className="flex items-center gap-2 text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Loading seat access...</span>
+            </div>
+          )}
+          {!seatsLoading && seats && seats.length === 0 && (
+            <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+              No active buyer seats found. Sync seats in Settings to load home analytics.
+            </div>
+          )}
+          {!seatsLoading && seats && seats.length > 0 && (
+            <div className="text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2">
+              Select a seat to load home analytics.
+            </div>
+          )}
+        </div>
+      )}
+      {/* Account Endpoints Header - config only, no delivery duplication */}
+      <AccountEndpointsHeader
+        observedQpsByEndpointId={observedQpsByEndpointId}
+      />
 
       {endpointEfficiency && !endpointEfficiencyLoading && (
         <EndpointEfficiencyPanel data={endpointEfficiency} />
@@ -351,7 +452,7 @@ function WasteAnalysisContent() {
         {configsLoading ? (
           <div className="space-y-2">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+              <div key={i} className="h-16 bg-gray-200 rounded-lg animate-pulse" />
             ))}
           </div>
         ) : displayConfigs.length === 0 ? (
@@ -364,12 +465,26 @@ function WasteAnalysisContent() {
           </div>
         ) : (
           <div className="space-y-2">
-            {(configPerformanceLoading || configPerformanceError) && (
+            {configMetricsDelayed && (
               <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 flex items-center gap-2">
                 {(configPerformanceLoading || configPerformanceFetching) && (
                   <Loader2 className="h-3.5 w-3.5 animate-spin flex-shrink-0" />
                 )}
-                <span>Config performance metrics are delayed; showing base config list.</span>
+                <span>
+                  {configPerformanceError
+                    ? "Config performance metrics failed to load; showing config list without performance values."
+                    : "Config performance metrics are delayed; showing config list without performance values."}
+                  </span>
+              </div>
+            )}
+            {configFallbackApplied && (
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 flex items-center gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                <span>
+                  Showing last <span className="font-semibold">{configEffectiveDays} days</span>
+                  {" "}because no rows were found in the requested
+                  {" "}<span className="font-semibold">{configRequestedDays} day</span> window.
+                </span>
               </div>
             )}
             {/* Sortable Column Headers */}
@@ -441,12 +556,12 @@ function WasteAnalysisLoading() {
   return (
     <div className="p-8 max-w-7xl mx-auto">
       <div className="mb-8">
-        <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
-        <div className="mt-2 h-4 w-96 bg-gray-100 rounded animate-pulse" />
+        <div className="h-8 w-48 bg-gray-300 rounded animate-pulse" />
+        <div className="mt-2 h-4 w-96 bg-gray-200 rounded animate-pulse" />
       </div>
       <div className="space-y-6">
         {[1, 2, 3].map(i => (
-          <div key={i} className="h-64 bg-gray-100 rounded-xl animate-pulse" />
+          <div key={i} className="h-64 bg-gray-200 rounded-xl animate-pulse" />
         ))}
       </div>
     </div>

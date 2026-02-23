@@ -22,17 +22,40 @@ The login page at `/login` presents all three options.
 
 ### First user (bootstrap)
 
-If the database has **zero users**, anyone can register via the login page's email/password flow. The first user automatically gets the **admin** role.
+#### Production (CATSCAN_BOOTSTRAP_TOKEN is set)
 
-To bootstrap:
+On GCP deployments, the startup script generates a bootstrap token and writes it to `/etc/catscan.env`. The first admin **must** be created via the `/auth/bootstrap` endpoint with this token:
 
 ```bash
-curl -X POST https://vm2.scan.rtb.cat/api/auth/register \
+# 1. Get the token from the VM
+sudo grep CATSCAN_BOOTSTRAP_TOKEN /etc/catscan.env
+
+# 2. Create the first admin
+curl -X POST https://vm2.scan.rtb.cat/api/auth/bootstrap \
+  -H "Content-Type: application/json" \
+  -d '{"bootstrap_token": "<token>", "email": "admin@rtb.cat", "password": "securepassword", "display_name": "Admin"}'
+```
+
+While the bootstrap token is set and no admin exists:
+- Google OAuth login will not auto-create users
+- Authing OIDC login will not auto-create users
+- Password registration (`/auth/register`) will be blocked
+
+#### Local development (no CATSCAN_BOOTSTRAP_TOKEN)
+
+If `CATSCAN_BOOTSTRAP_TOKEN` is **not** set, the legacy behaviour remains: the first user to register or log in via any method automatically gets the **admin** role.
+
+```bash
+curl -X POST http://localhost:8000/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email": "admin@rtb.cat", "password": "securepassword", "display_name": "Admin"}'
 ```
 
-Or simply navigate to `/login`, click "Sign in with Email", and there will be an option to register (only shown when no users exist).
+Or navigate to `/login`, click "Sign in with Email", and register (only shown when no users exist).
+
+#### Existing deployments (upgrade path)
+
+When upgrading to a version with bootstrap guards, the app auto-heals: if users already exist, `bootstrap_completed` is automatically set to `1` on startup. No manual action required.
 
 ### Subsequent users
 

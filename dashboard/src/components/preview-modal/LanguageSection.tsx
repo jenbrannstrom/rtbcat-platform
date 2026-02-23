@@ -59,7 +59,7 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
   };
 
   const handleSaveEdit = async () => {
-    if (!editLanguage.trim() || !editLanguageCode.trim()) return;
+    if (!editLanguage.trim()) return;
 
     setIsAnalyzing(true);
     setError(null);
@@ -102,21 +102,10 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
               className="w-full mt-1 px-2 py-1 text-sm border rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          <div>
-            <label className="text-xs text-gray-500">Language Code (ISO 639-1)</label>
-            <input
-              type="text"
-              value={editLanguageCode}
-              onChange={(e) => setEditLanguageCode(e.target.value)}
-              placeholder="e.g., de"
-              maxLength={3}
-              className="w-full mt-1 px-2 py-1 text-sm border rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
           <div className="flex gap-2 pt-1">
             <button
               onClick={handleSaveEdit}
-              disabled={isAnalyzing || !editLanguage.trim() || !editLanguageCode.trim()}
+              disabled={isAnalyzing || !editLanguage.trim()}
               className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
             >
               {isAnalyzing ? "Saving..." : "Save"}

@@ -19,8 +19,10 @@ Environment:
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Optional
+from urllib.parse import urlparse
 
 from .postgres_database import (
     pg_query,
@@ -232,13 +234,27 @@ class PostgresStore:
         buyer_id: Optional[str] = None,
         approval_status: Optional[str] = None,
         search: Optional[str] = None,
+        include_raw_data: bool = True,
     ) -> list[Creative]:
         """List creatives with optional filters.
 
         TODO: Implement full filtering logic.
         """
         # TODO: Implement full filtering - basic version for now
-        sql = "SELECT * FROM creatives"
+        select_columns = (
+            "*"
+            if include_raw_data
+            else (
+                "id, name, format, account_id, buyer_id, approval_status, width, height, "
+                "canonical_size, size_category, final_url, display_url, utm_source, utm_medium, "
+                "utm_campaign, utm_content, utm_term, advertiser_name, campaign_id, cluster_id, "
+                "app_id, app_name, app_store, disapproval_reasons, serving_restrictions, "
+                "detected_language, detected_language_code, language_confidence, language_source, "
+                "language_analyzed_at, language_analysis_error, first_seen_at, first_import_batch_id, "
+                "created_at, updated_at"
+            )
+        )
+        sql = f"SELECT {select_columns} FROM creatives"
         params: list[Any] = []
         conditions = []
 
@@ -1277,17 +1293,78 @@ class PostgresStore:
 
         # Creative counts
         row = await pg_query_one("SELECT COUNT(*) as count FROM creatives")
-        stats["total_creatives"] = row["count"] if row else 0
+        stats["total_creatives"] = int(row["count"]) if row else 0
 
         # Format breakdown
         rows = await pg_query(
             "SELECT format, COUNT(*) as count FROM creatives GROUP BY format"
         )
-        stats["by_format"] = {row["format"]: row["count"] for row in rows}
+        stats["by_format"] = {
+            (row["format"] or "UNKNOWN"): int(row["count"])
+            for row in rows
+        }
 
         # Buyer seat count
         row = await pg_query_one("SELECT COUNT(*) as count FROM buyer_seats")
-        stats["total_buyer_seats"] = row["count"] if row else 0
+        stats["total_buyer_seats"] = int(row["count"]) if row else 0
+
+        # Campaign count (primary = ai_campaigns, fallback = legacy campaigns)
+        campaign_count = 0
+        try:
+            row = await pg_query_one("SELECT COUNT(*) as count FROM ai_campaigns")
+            campaign_count = int(row["count"]) if row else 0
+        except Exception:
+            row = await pg_query_one("SELECT COUNT(*) as count FROM campaigns")
+            campaign_count = int(row["count"]) if row else 0
+        stats["total_campaigns"] = campaign_count
+
+        # Cluster count: prefer creatives.cluster_id; fallback to creative_campaigns mapping.
+        cluster_count = 0
+        try:
+            row = await pg_query_one(
+                """
+                SELECT COUNT(DISTINCT cluster_id) as count
+                FROM creatives
+                WHERE cluster_id IS NOT NULL AND cluster_id <> ''
+                """
+            )
+            cluster_count = int(row["count"]) if row else 0
+        except Exception:
+            cluster_count = 0
+
+        if cluster_count == 0:
+            try:
+                row = await pg_query_one(
+                    """
+                    SELECT COUNT(DISTINCT campaign_id) as count
+                    FROM creative_campaigns
+                    WHERE campaign_id IS NOT NULL
+                    """
+                )
+                cluster_count = int(row["count"]) if row else 0
+            except Exception:
+                cluster_count = 0
+
+        stats["total_clusters"] = cluster_count if cluster_count > 0 else campaign_count
+
+        # Friendly, non-secret DB descriptor for UI.
+        dsn = (
+            os.getenv("POSTGRES_SERVING_DSN")
+            or os.getenv("POSTGRES_DSN")
+            or os.getenv("DATABASE_URL")
+            or ""
+        )
+        db_path = "postgresql"
+        if dsn:
+            try:
+                parsed = urlparse(dsn)
+                host = parsed.hostname or "localhost"
+                port = parsed.port or 5432
+                db_name = parsed.path.lstrip("/") or "postgres"
+                db_path = f"postgresql://{host}:{port}/{db_name}"
+            except Exception:
+                db_path = "postgresql"
+        stats["db_path"] = db_path
 
         return stats
 
@@ -1307,6 +1384,53 @@ class PostgresStore:
         """Get all clusters. TODO: Implement."""
         logger.warning("PostgresStore.get_clusters() is a stub")
         return []
+
+    async def get_creative_performance_summary(
+        self, creative_id: str, days: int = 30
+    ) -> dict:
+        """Get aggregated performance summary for a creative.
+
+        Queries pretarg_creative_daily (view over config_creative_daily)
+        aggregated across all configs/buyers for the given date range.
+
+        Returns dict with total_impressions, total_spend_micros, etc.
+        """
+        row = await pg_query_one(
+            """
+            SELECT
+                COALESCE(SUM(reached_queries), 0) as total_reached,
+                COALESCE(SUM(impressions), 0) as total_impressions,
+                COALESCE(SUM(spend_micros), 0) as total_spend_micros,
+                COUNT(DISTINCT metric_date) as days_with_data,
+                MIN(metric_date) as earliest_date,
+                MAX(metric_date) as latest_date
+            FROM pretarg_creative_daily
+            WHERE creative_id = %s
+              AND metric_date >= CURRENT_DATE - %s * INTERVAL '1 day'
+            """,
+            (creative_id, days),
+        )
+
+        total_impressions = int(row["total_impressions"]) if row else 0
+        total_spend_micros = int(row["total_spend_micros"]) if row else 0
+        days_with_data = int(row["days_with_data"]) if row else 0
+
+        # Compute CPM: (spend / impressions) * 1000
+        avg_cpm_micros = None
+        if total_impressions > 0 and total_spend_micros > 0:
+            avg_cpm_micros = int((total_spend_micros / total_impressions) * 1000)
+
+        return {
+            "total_impressions": total_impressions,
+            "total_clicks": 0,  # pretarg_creative_daily has no clicks column
+            "total_spend_micros": total_spend_micros,
+            "avg_cpm_micros": avg_cpm_micros,
+            "avg_cpc_micros": None,  # no clicks data available
+            "ctr_percent": None,  # no clicks data available
+            "days_with_data": days_with_data,
+            "earliest_date": str(row["earliest_date"]) if row and row["earliest_date"] else None,
+            "latest_date": str(row["latest_date"]) if row and row["latest_date"] else None,
+        }
 
     async def save_performance_metrics(self, metrics: list[PerformanceMetric]) -> int:
         """Save performance metrics. TODO: Implement."""

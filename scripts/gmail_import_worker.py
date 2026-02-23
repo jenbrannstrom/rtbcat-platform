@@ -27,10 +27,20 @@ def main() -> int:
     parser.add_argument("--job-id", required=True, help="Job ID to track in status")
     parser.add_argument("--quiet", action="store_true", help="Suppress verbose importer output")
     parser.add_argument("--refresh-days", type=int, default=30, help="Precompute refresh window")
+    parser.add_argument(
+        "--import-trigger",
+        choices=["gmail-auto", "gmail-manual"],
+        default="gmail-manual",
+        help="Source label for ingestion tracking",
+    )
     args = parser.parse_args()
 
     _print(f"Starting Gmail import job {args.job_id}")
-    result = run_import(verbose=not args.quiet, job_id=args.job_id)
+    result = run_import(
+        verbose=not args.quiet,
+        job_id=args.job_id,
+        import_trigger=args.import_trigger,
+    )
     _print(f"Import result: {json.dumps(result, default=str)}")
 
     if not result.get("success"):

@@ -113,6 +113,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Check authentication status
   const checkAuth = useCallback(async () => {
+    // DEV BYPASS: skip auth when backend is not running
+    if (process.env.NODE_ENV === "development") {
+      setUser({ id: "dev", email: "dev@localhost", display_name: "Dev User", role: "admin", is_admin: true });
+      setPermissions(["admin", "read", "write"]);
+      setAuthError(null);
+      resetRedirectCount();
+      return;
+    }
     try {
       const response = await fetch("/api/auth/check", {
         credentials: "include",

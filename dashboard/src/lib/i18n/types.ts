@@ -293,6 +293,7 @@ export interface Translations {
     defaultOrder: string;
     spendYesterday: string;
     spend7Days: string;
+    spend14Days: string;
     spend30Days: string;
     spendAllTime: string;
     video: string;
@@ -395,11 +396,20 @@ export interface Translations {
     displayNameOptional: string;
     userRole: string;
     adminRole: string;
+    authMethod: string;
+    localPasswordAuth: string;
+    oauthPrecreateAuth: string;
+    localPasswordHelp: string;
+    oauthPrecreateHelp: string;
     defaultLanguage: string;
     defaultLanguageHelp: string;
     seatAccess: string;
     seatAccessHelp: string;
     oauthInviteNote: string;
+    confirmPassword: string;
+    confirmPasswordHelp: string;
+    passwordMinLengthHelp: string;
+    passwordMismatch: string;
     passwordGenerated: string;
     creating: string;
     userCreatedSuccessfully: string;

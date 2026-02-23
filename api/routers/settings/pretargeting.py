@@ -133,8 +133,10 @@ async def sync_pretargeting_configs(
                 continue
 
             publisher_targeting = cfg.get("publisherTargeting", {}) or {}
-            included_publishers = publisher_targeting.get("includedIds", [])
-            excluded_publishers = publisher_targeting.get("excludedIds", [])
+            publisher_mode = publisher_targeting.get("targetingMode") or "EXCLUSIVE"
+            publisher_values = publisher_targeting.get("values", [])
+            included_publishers = publisher_values if publisher_mode == "INCLUSIVE" else []
+            excluded_publishers = publisher_values if publisher_mode == "EXCLUSIVE" else []
 
             # Clear stale api_sync entries for this billing_id before inserting new ones
             await pretargeting_service.clear_sync_publishers(billing_id)
@@ -266,7 +268,8 @@ async def set_pretargeting_name(
 ):
     """Set a custom user-defined name for a pretargeting config.
 
-    This name will be displayed in the UI alongside the billing_id,
+    This name will be displayed in the UI alongside the pretargeting
+    config ID (`billing_id`),
     making it easier to identify configs.
     """
     try:
@@ -277,7 +280,7 @@ async def set_pretargeting_name(
         if not current:
             raise HTTPException(
                 status_code=404,
-                detail=f"Pretargeting config with billing_id {billing_id} not found"
+                detail=f"Pretargeting config with ID (billing_id) {billing_id} not found"
             )
 
         old_name = current["user_name"]
@@ -316,7 +319,10 @@ async def set_pretargeting_name(
 @router.get("/settings/pretargeting/history", response_model=list[PretargetingHistoryResponse])
 async def get_pretargeting_history(
     config_id: Optional[str] = Query(None, description="Filter by config_id"),
-    billing_id: Optional[str] = Query(None, description="Filter by billing_id"),
+    billing_id: Optional[str] = Query(
+        None,
+        description="Filter by pretargeting config ID (billing_id)",
+    ),
     days: int = Query(30, description="Number of days of history to retrieve", ge=1, le=365),
 ):
     """Get pretargeting settings change history.

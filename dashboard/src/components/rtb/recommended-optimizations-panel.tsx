@@ -16,7 +16,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { AIControlSettings, useAIControlMode, type AIControlMode } from './ai-control-settings';
+import { AIControlSettings, useAIControlMode } from './ai-control-settings';
 import { useAccount } from '@/contexts/account-context';
 import {
   getPretargetingConfigs,
@@ -280,26 +280,23 @@ export function RecommendedOptimizationsPanel({
   onConfigSelect,
 }: RecommendedOptimizationsPanelProps) {
   const enabled = process.env.NEXT_PUBLIC_ENABLE_RECOMMENDED_OPTIMIZATIONS === 'true';
-  if (!enabled) {
-    return null;
-  }
   const aiMode = useAIControlMode();
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const queryClient = useQueryClient();
+  const { selectedBuyerId: buyerId } = useAccount();
 
   // Fetch size coverage to generate size mismatch recommendations
-  const { selectedBuyerId: buyerId } = useAccount();
   const { data: sizeCoverage, isLoading: sizeLoading } = useQuery({
     queryKey: ['size-coverage', days, buyerId],
     queryFn: () => getQPSSizeCoverage(days, undefined, buyerId || undefined),
-    enabled: aiMode !== 'manual',
+    enabled: enabled && aiMode !== 'manual',
   });
 
   // Fetch config performance for underperforming recommendations (filtered by selected buyer)
   const { data: configPerformance, isLoading: configPerfLoading } = useQuery({
     queryKey: ['rtb-funnel-configs', days, buyerId],
     queryFn: () => getRTBFunnelConfigs(days, buyerId || undefined),
-    enabled: aiMode !== 'manual',
+    enabled: enabled && aiMode !== 'manual',
   });
 
   const recsLoading = sizeLoading || configPerfLoading;
@@ -383,12 +380,11 @@ export function RecommendedOptimizationsPanel({
     }
   }
 
-  const { selectedBuyerId } = useAccount();
-
   // Fetch configs for the dropdown
   const { data: configs } = useQuery({
-    queryKey: ['pretargeting-configs', selectedBuyerId],
-    queryFn: () => getPretargetingConfigs({ buyer_id: selectedBuyerId || undefined }),
+    queryKey: ['pretargeting-configs', buyerId],
+    queryFn: () => getPretargetingConfigs({ buyer_id: buyerId || undefined }),
+    enabled,
   });
 
   // Mutation to apply recommendation
@@ -430,6 +426,10 @@ export function RecommendedOptimizationsPanel({
 
   // Filter out dismissed recommendations
   const visibleRecs = (recommendations || []).filter((r) => !dismissedIds.has(r.id));
+
+  if (!enabled) {
+    return null;
+  }
 
   // In manual mode, show minimal UI
   if (aiMode === 'manual') {
@@ -478,7 +478,7 @@ export function RecommendedOptimizationsPanel({
       {recsLoading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-24 bg-gray-100 rounded-lg animate-pulse" />
+            <div key={i} className="h-24 bg-gray-200 rounded-lg animate-pulse" />
           ))}
         </div>
       ) : (

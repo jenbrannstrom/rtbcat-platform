@@ -77,7 +77,7 @@ apt-get install -y \
 
 # Configure Docker to authenticate with Artifact Registry
 echo ">>> Configuring Docker authentication for Artifact Registry..."
-gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+gcloud auth configure-docker ${gcp_region}-docker.pkg.dev --quiet
 
 # -----------------------------------------------------------------------------
 # 1b. Install OAuth2 Proxy (Google Authentication)
@@ -248,6 +248,39 @@ chown -R 999:999 "$DATA_DIR/credentials"
 chown catscan:catscan "$DATA_DIR"
 
 # -----------------------------------------------------------------------------
+# 2c. Fetch Scheduler + OAuth Secrets from Secret Manager (GSM-preferred)
+# -----------------------------------------------------------------------------
+# Phase 1: Try GSM first, fall back to template variable if GSM unavailable.
+# Phase 2 (future): Remove template var fallback entirely.
+
+_fetch_secret() {
+    # Usage: _fetch_secret <gsm-secret-id> <fallback-value> <description>
+    local secret_id="$1"
+    local fallback="$2"
+    local desc="$3"
+    local value
+    value=$(gcloud secrets versions access latest --secret="$secret_id" --project="$PROJECT_ID" 2>/dev/null || true)
+    if [ -n "$value" ]; then
+        echo "    ✓ $desc loaded from GSM" >&2
+        echo "$value"
+    elif [ -n "$fallback" ]; then
+        echo "    ⚠ $desc: GSM unavailable, using template fallback" >&2
+        echo "$fallback"
+    else
+        echo "    ✗ $desc: not found in GSM or template" >&2
+        echo ""
+    fi
+}
+
+echo ">>> Fetching scheduler + OAuth secrets from Secret Manager..."
+
+PRECOMPUTE_REFRESH_SECRET=$(_fetch_secret "${app_name}-precompute-refresh-secret" "$PRECOMPUTE_REFRESH_SECRET" "Precompute refresh secret")
+PRECOMPUTE_MONITOR_SECRET=$(_fetch_secret "${app_name}-precompute-monitor-secret" "$PRECOMPUTE_MONITOR_SECRET" "Precompute monitor secret")
+GMAIL_IMPORT_SECRET=$(_fetch_secret "${app_name}-gmail-import-secret" "$GMAIL_IMPORT_SECRET" "Gmail import secret")
+CREATIVE_CACHE_REFRESH_SECRET=$(_fetch_secret "${app_name}-creative-cache-refresh-secret" "$CREATIVE_CACHE_REFRESH_SECRET" "Creative cache refresh secret")
+GOOGLE_OAUTH_CLIENT_SECRET=$(_fetch_secret "${app_name}-oauth-client-secret" "$GOOGLE_OAUTH_CLIENT_SECRET" "OAuth client secret")
+
+# -----------------------------------------------------------------------------
 # 3. Setup SSH Deploy Key (for private GitHub repo)
 # -----------------------------------------------------------------------------
 echo ">>> Setting up GitHub deploy key..."
@@ -296,6 +329,9 @@ fi
 # ---------------------------------------------------------------------------
 echo ">>> Writing runtime environment variables..."
 
+# Generate bootstrap token for first-admin provisioning
+CATSCAN_BOOTSTRAP_TOKEN=$(openssl rand -hex 24)
+
 cat > /etc/catscan.env << EOF
 PRECOMPUTE_REFRESH_SECRET=$PRECOMPUTE_REFRESH_SECRET
 PRECOMPUTE_MONITOR_SECRET=$PRECOMPUTE_MONITOR_SECRET
@@ -305,7 +341,12 @@ PRECOMPUTE_REFRESH_DAYS=$PRECOMPUTE_REFRESH_DAYS
 PRECOMPUTE_REFRESH_MAX_AGE_HOURS=$PRECOMPUTE_REFRESH_MAX_AGE_HOURS
 OAUTH2_PROXY_ENABLED=true
 UVICORN_WORKERS=2
+SECRETS_BACKEND=gcp
+GCP_PROJECT_ID=$PROJECT_ID
+CATSCAN_BOOTSTRAP_TOKEN=$CATSCAN_BOOTSTRAP_TOKEN
 EOF
+
+echo "  Bootstrap token generated. Retrieve with: sudo grep CATSCAN_BOOTSTRAP_TOKEN /etc/catscan.env"
 
 chmod 600 /etc/catscan.env
 
@@ -345,6 +386,9 @@ ENV_SOURCE="/etc/catscan.env"
     grep '^PRECOMPUTE_MONITOR_SECRET=' "$ENV_SOURCE" 2>/dev/null || true
     grep '^GMAIL_IMPORT_SECRET=' "$ENV_SOURCE" 2>/dev/null || true
     grep '^CREATIVE_CACHE_REFRESH_SECRET=' "$ENV_SOURCE" 2>/dev/null || true
+    grep '^SECRETS_BACKEND=' "$ENV_SOURCE" 2>/dev/null || true
+    grep '^GCP_PROJECT_ID=' "$ENV_SOURCE" 2>/dev/null || true
+    grep '^CATSCAN_BOOTSTRAP_TOKEN=' "$ENV_SOURCE" 2>/dev/null || true
 } > "$APP_ENV_FILE"
 
 chmod 600 "$APP_ENV_FILE"

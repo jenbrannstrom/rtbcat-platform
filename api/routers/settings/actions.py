@@ -35,6 +35,7 @@ async def apply_pending_change(
     - add_size / remove_size
     - add_geo / remove_geo
     - add_format / remove_format
+    - set_maximum_qps
     - add_publisher / remove_publisher
     - set_publisher_mode
     """
@@ -59,7 +60,7 @@ async def apply_all_pending_changes(
     dry_run: bool = Query(True, description="Preview changes without applying"),
 ):
     """
-    Apply all pending changes for a billing_id to Google.
+    Apply all pending changes for a pretargeting config ID (`billing_id`) to Google.
 
     WARNING: This modifies your live pretargeting configuration!
     Use dry_run=True (default) to preview changes first.

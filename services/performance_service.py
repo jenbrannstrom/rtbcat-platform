@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Optional
 
 from storage.postgres_repositories.performance_repo import PerformanceRepository
@@ -64,11 +65,15 @@ class PerformanceService:
         status: str,
         error_message: Optional[str],
         file_size_bytes: int,
+        date_gaps: Optional[list[str]] = None,
+        date_gap_warning: Optional[str] = None,
         buyer_id: Optional[str] = None,
         bidder_id: Optional[str] = None,
+        import_trigger: str = "manual",
     ) -> None:
         """Record an import in history and update daily summary."""
         columns_str = ",".join(columns_found) if columns_found else None
+        date_gaps_json = json.dumps(date_gaps) if date_gaps else None
 
         await self._uploads.record_import_history(
             batch_id=batch_id,
@@ -87,8 +92,11 @@ class PerformanceService:
             status=status,
             error_message=error_message,
             file_size_bytes=file_size_bytes,
+            date_gaps=date_gaps_json,
+            date_gap_warning=date_gap_warning,
             buyer_id=buyer_id,
             bidder_id=bidder_id,
+            import_trigger=import_trigger,
         )
 
     async def finalize_import(
@@ -105,10 +113,15 @@ class PerformanceService:
         total_impressions: int,
         total_spend_usd: float,
         file_size_bytes: int,
+        date_gaps: Optional[list[str]] = None,
+        date_gap_warning: Optional[str] = None,
         buyer_id: Optional[str] = None,
         bidder_id: Optional[str] = None,
+        import_trigger: str = "manual",
     ) -> None:
         """Finalize a chunked import - record history and update daily summary."""
+        date_gaps_json = json.dumps(date_gaps) if date_gaps else None
+
         await self._uploads.record_import_history(
             batch_id=batch_id,
             filename=filename,
@@ -126,8 +139,11 @@ class PerformanceService:
             status="complete",
             error_message=None,
             file_size_bytes=file_size_bytes,
+            date_gaps=date_gaps_json,
+            date_gap_warning=date_gap_warning,
             buyer_id=buyer_id,
             bidder_id=bidder_id,
+            import_trigger=import_trigger,
         )
 
         # Update daily summary

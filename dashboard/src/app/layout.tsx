@@ -22,12 +22,12 @@ function SidebarFallback() {
   return (
     <div className="flex flex-col w-64 bg-white border-r border-gray-200">
       <div className="flex items-center h-16 px-4 border-b border-gray-200">
-        <div className="h-10 w-10 rounded-lg bg-gray-200 animate-pulse" />
-        <div className="ml-3 h-6 w-20 bg-gray-200 rounded animate-pulse" />
+        <div className="h-10 w-10 rounded-lg bg-gray-300 animate-pulse" />
+        <div className="ml-3 h-6 w-20 bg-gray-300 rounded animate-pulse" />
       </div>
       <div className="flex-1 px-2 py-4 space-y-2">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="h-10 bg-gray-100 rounded-md animate-pulse" />
+          <div key={i} className="h-10 bg-gray-200 rounded-md animate-pulse" />
         ))}
       </div>
     </div>

@@ -210,23 +210,33 @@ def _get_approval_details(creative_data: dict) -> dict[str, Any]:
     serving_decision = creative_data.get("creativeServingDecision", {})
     network_compliance = serving_decision.get("networkPolicyCompliance", {})
 
-    # Extract disapproval reasons
-    # Format: [{"reason": "UNACCEPTABLE_CONTENT_SOFTWARE", "details": "..."}]
+    # Extract disapproval reasons — try legacy field first, then topics
     disapproval_reasons = network_compliance.get("disapprovalReasons", [])
 
+    # Google's current API uses "topics" inside networkPolicyCompliance
+    if not disapproval_reasons:
+        network_topics = network_compliance.get("topics", [])
+        if network_topics:
+            disapproval_reasons = [
+                {
+                    "reason": topic.get("policyTopic", "UNKNOWN"),
+                    "details": topic.get("helpCenterUrl"),
+                }
+                for topic in network_topics
+            ]
+
     # Extract serving restrictions
-    # Format: [{"restriction": "RESTRICTED_AUDIENCE", "contexts": [...]}]
     serving_restrictions = serving_decision.get("servingRestrictions", [])
 
-    # Also check for policy topics which provide more detail
-    policy_topics = serving_decision.get("policyTopics", [])
-    if policy_topics and not disapproval_reasons:
-        # Convert policy topics to disapproval reason format
-        disapproval_reasons = [
-            {"reason": topic.get("policyTopic", "UNKNOWN"), "details": None}
-            for topic in policy_topics
-            if topic.get("helpCenterUrl")  # Indicates a policy violation
-        ]
+    # Fallback: top-level policyTopics (older API versions)
+    if not disapproval_reasons:
+        policy_topics = serving_decision.get("policyTopics", [])
+        if policy_topics:
+            disapproval_reasons = [
+                {"reason": topic.get("policyTopic", "UNKNOWN"), "details": topic.get("helpCenterUrl")}
+                for topic in policy_topics
+                if topic.get("helpCenterUrl")
+            ]
 
     return {
         "disapproval_reasons": disapproval_reasons,

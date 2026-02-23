@@ -54,6 +54,14 @@ class CreativePreviewService:
                     "vast_xml": None if slim else vast_xml,
                     "duration": video_data.get("duration"),
                 }
+            elif html_thumbnail_url:
+                # Fallback path for slim list responses where raw_data is intentionally omitted.
+                result["video"] = {
+                    "video_url": None,
+                    "thumbnail_url": html_thumbnail_url,
+                    "vast_xml": None,
+                    "duration": None,
+                }
 
         elif creative.format == "HTML":
             html_data = raw_data.get("html")
@@ -62,6 +70,14 @@ class CreativePreviewService:
                     "snippet": None if slim else html_data.get("snippet"),
                     "width": html_data.get("width"),
                     "height": html_data.get("height"),
+                    "thumbnail_url": html_thumbnail_url,
+                }
+            elif html_thumbnail_url:
+                # Keep thumbnail previews available even when html snippet payload is excluded.
+                result["html"] = {
+                    "snippet": None,
+                    "width": None,
+                    "height": None,
                     "thumbnail_url": html_thumbnail_url,
                 }
 

@@ -377,6 +377,56 @@ CREATE TABLE IF NOT EXISTS rtb_app_creative_daily (
 );
 
 -- ============================================================================
+-- CANONICAL COMPATIBILITY VIEWS
+-- ============================================================================
+
+DO $$
+DECLARE
+    alias_map CONSTANT TEXT[][] := ARRAY[
+        ARRAY['pretarg_daily', 'home_config_daily'],
+        ARRAY['pretarg_size_daily', 'config_size_daily'],
+        ARRAY['pretarg_geo_daily', 'config_geo_daily'],
+        ARRAY['pretarg_publisher_daily', 'config_publisher_daily'],
+        ARRAY['pretarg_creative_daily', 'config_creative_daily'],
+        ARRAY['seat_size_daily', 'home_size_daily'],
+        ARRAY['seat_geo_daily', 'home_geo_daily'],
+        ARRAY['seat_publisher_daily', 'home_publisher_daily'],
+        ARRAY['seat_daily', 'home_seat_daily']
+    ];
+    pair TEXT[];
+    target_view TEXT;
+    source_table TEXT;
+    target_kind CHAR;
+BEGIN
+    FOREACH pair SLICE 1 IN ARRAY alias_map LOOP
+        target_view := pair[1];
+        source_table := pair[2];
+        target_kind := NULL;
+
+        IF to_regclass('public.' || source_table) IS NULL THEN
+            CONTINUE;
+        END IF;
+
+        SELECT c.relkind
+        INTO target_kind
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND c.relname = target_view;
+
+        IF target_kind IS NOT NULL AND target_kind <> 'v' THEN
+            CONTINUE;
+        END IF;
+
+        EXECUTE format(
+            'CREATE OR REPLACE VIEW %I AS SELECT * FROM %I',
+            target_view,
+            source_table
+        );
+    END LOOP;
+END $$;
+
+-- ============================================================================
 -- AI CAMPAIGNS AND RECOMMENDATIONS
 -- ============================================================================
 
@@ -497,6 +547,24 @@ CREATE TABLE IF NOT EXISTS daily_upload_summary (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS precompute_refresh_runs (
+    id BIGSERIAL PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    cache_name TEXT NOT NULL,
+    table_name TEXT NOT NULL,
+    buyer_account_id TEXT NOT NULL,
+    refresh_start TEXT,
+    refresh_end TEXT,
+    status TEXT NOT NULL CHECK (status IN ('running', 'success', 'failed')),
+    row_count BIGINT NOT NULL DEFAULT 0,
+    error_text TEXT,
+    host TEXT NOT NULL DEFAULT 'unknown',
+    app_version TEXT NOT NULL DEFAULT 'unknown',
+    git_sha TEXT NOT NULL DEFAULT 'unknown',
+    started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMPTZ
+);
+
 -- ============================================================================
 -- RTB ENDPOINTS AND PRETARGETING
 -- ============================================================================
@@ -527,6 +595,9 @@ CREATE TABLE IF NOT EXISTS pretargeting_configs (
     included_geos JSONB,
     excluded_geos JSONB,
     included_operating_systems JSONB,
+    included_publishers JSONB,
+    excluded_publishers JSONB,
+    publisher_targeting_mode TEXT,
     raw_config JSONB,
     synced_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(bidder_id, config_id)
@@ -713,6 +784,10 @@ CREATE INDEX IF NOT EXISTS idx_anomalies_import ON import_anomalies(import_id);
 CREATE INDEX IF NOT EXISTS idx_import_history_batch ON import_history(batch_id);
 CREATE INDEX IF NOT EXISTS idx_import_history_date ON import_history(imported_at DESC);
 CREATE INDEX IF NOT EXISTS idx_daily_upload_date ON daily_upload_summary(upload_date DESC);
+CREATE INDEX IF NOT EXISTS idx_precompute_runs_started_at ON precompute_refresh_runs(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_precompute_runs_run_id ON precompute_refresh_runs(run_id);
+CREATE INDEX IF NOT EXISTS idx_precompute_runs_cache_table_status ON precompute_refresh_runs(cache_name, table_name, status, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_precompute_runs_buyer_dates ON precompute_refresh_runs(buyer_account_id, refresh_start, refresh_end, started_at DESC);
 
 -- RTB endpoints and pretargeting
 CREATE INDEX IF NOT EXISTS idx_rtb_endpoints_bidder ON rtb_endpoints(bidder_id);

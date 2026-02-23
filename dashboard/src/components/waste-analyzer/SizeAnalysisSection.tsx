@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, AlertTriangle, Copy, CheckCircle, Upload, ArrowRight } from "lucide-react";
 import { getQPSSizeCoverage } from "@/lib/api";
+import { useAccount } from "@/contexts/account-context";
+import { toBuyerScopedPath } from "@/lib/buyer-routes";
 import { formatNumber } from "./FunnelCard";
 
 interface SizeBarProps {
@@ -73,21 +76,38 @@ interface SizeAnalysisSectionProps {
  * Shows which sizes convert to impressions and identifies coverage gaps.
  */
 export function SizeAnalysisSection({ days, buyerId }: SizeAnalysisSectionProps) {
+  const { selectedBuyerId } = useAccount();
+  const importHref = toBuyerScopedPath("/import", selectedBuyerId);
   const [copiedSizes, setCopiedSizes] = useState(false);
+  const MIN_VISIBLE_WASTED_QPS = 0.01;
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['size-coverage', days, buyerId],
     queryFn: () => getQPSSizeCoverage(days, undefined, buyerId),
   });
 
+  const gaps = data?.gaps || [];
+  const noCreativeRows = gaps
+    .map((g) => {
+      const daily = g.daily_estimate || g.queries_received || 0;
+      return {
+        size: g.size,
+        reached: g.queries_received || 0,
+        impressions: 0,
+        wastedQps: daily / 86400,
+      };
+    })
+    .filter((row) => row.wastedQps >= MIN_VISIBLE_WASTED_QPS)
+    .sort((a, b) => b.wastedQps - a.wastedQps);
+
   const copyBlockSizes = useCallback(() => {
-    if (data?.gaps) {
-      const sizes = data.gaps.map(g => g.size).join(', ');
+    if (noCreativeRows.length > 0) {
+      const sizes = noCreativeRows.map((row) => row.size).join(', ');
       navigator.clipboard.writeText(sizes);
       setCopiedSizes(true);
       setTimeout(() => setCopiedSizes(false), 2000);
     }
-  }, [data]);
+  }, [noCreativeRows]);
 
   if (isLoading) {
     return (
@@ -114,7 +134,6 @@ export function SizeAnalysisSection({ days, buyerId }: SizeAnalysisSectionProps)
   }
 
   const coveredSizes = data.covered_sizes || [];
-  const gaps = data.gaps || [];
 
   const allSizes = [
     ...coveredSizes.map(s => ({ ...s, hasCreative: true, requests: s.reached_queries || s.impressions })),
@@ -131,7 +150,7 @@ export function SizeAnalysisSection({ days, buyerId }: SizeAnalysisSectionProps)
   ].sort((a, b) => b.requests - a.requests);
 
   const maxRequests = Math.max(...allSizes.map(s => s.requests), 1);
-  const sizesWithoutCreative = gaps;
+  const sizesWithoutCreativeCount = gaps.length;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -192,7 +211,7 @@ export function SizeAnalysisSection({ days, buyerId }: SizeAnalysisSectionProps)
           <div>
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-medium text-gray-900">No Creatives</h4>
-              {sizesWithoutCreative.length > 0 && (
+              {noCreativeRows.length > 0 && (
                 <button
                   onClick={copyBlockSizes}
                   className="flex items-center gap-1 px-2.5 py-1 bg-red-100 hover:bg-red-200 text-red-800 rounded text-xs transition-colors"
@@ -203,27 +222,31 @@ export function SizeAnalysisSection({ days, buyerId }: SizeAnalysisSectionProps)
               )}
             </div>
             <p className="text-xs text-gray-500 mb-3">
-              You're receiving traffic for sizes you can't bid on. Add creatives or remove sizes from pretargeting.
+              Showing material waste only ({`>= ${MIN_VISIBLE_WASTED_QPS.toFixed(2)} QPS`}). Add creatives or remove sizes from pretargeting.
             </p>
             <div className="border rounded-lg overflow-hidden">
-              <div className="grid grid-cols-2 gap-2 px-3 py-2 text-xs font-medium text-gray-500 bg-gray-50 border-b">
+              <div className="grid grid-cols-4 gap-2 px-3 py-2 text-xs font-medium text-gray-500 bg-gray-50 border-b">
                 <div>Size</div>
+                <div className="text-right">Reached</div>
+                <div className="text-right">Imp</div>
                 <div className="text-right">Wasted QPS</div>
               </div>
               <div className="max-h-64 overflow-y-auto">
-                {sizesWithoutCreative.length === 0 && (
-                  <div className="px-3 py-3 text-sm text-gray-400">No gaps detected.</div>
+                {noCreativeRows.length === 0 && (
+                  <div className="px-3 py-3 text-sm text-gray-400">
+                    {sizesWithoutCreativeCount > 0
+                      ? `No material waste detected (all gaps below ${MIN_VISIBLE_WASTED_QPS.toFixed(2)} QPS).`
+                      : 'No gaps detected.'}
+                  </div>
                 )}
-                {sizesWithoutCreative.map((g) => {
-                  const daily = g.daily_estimate || g.queries_received || 0;
-                  const wastedQps = daily / 86400;
-                  return (
-                    <div key={g.size} className="grid grid-cols-2 gap-2 px-3 py-2 text-sm border-b last:border-b-0">
-                      <div className="font-mono text-gray-800">{g.size}</div>
-                      <div className="text-right text-red-700">{wastedQps.toFixed(2)}</div>
-                    </div>
-                  );
-                })}
+                {noCreativeRows.map((row) => (
+                  <div key={row.size} className="grid grid-cols-4 gap-2 px-3 py-2 text-sm border-b last:border-b-0">
+                    <div className="font-mono text-gray-800">{row.size}</div>
+                    <div className="text-right text-gray-700">{formatNumber(row.reached)}</div>
+                    <div className="text-right text-gray-700">{formatNumber(row.impressions)}</div>
+                    <div className="text-right text-red-700">{row.wastedQps.toFixed(2)}</div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -261,9 +284,9 @@ export function SizeAnalysisSection({ days, buyerId }: SizeAnalysisSectionProps)
                 </div>
                 <p className="mt-2 text-gray-500">Schedule: <strong>Daily</strong></p>
               </div>
-              <a href="/setup?tab=import" className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
+              <Link href={importHref} className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
                 Go to Import → <ArrowRight className="h-3 w-3" />
-              </a>
+              </Link>
             </div>
           </div>
         </div>

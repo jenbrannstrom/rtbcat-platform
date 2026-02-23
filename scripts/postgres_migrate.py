@@ -18,6 +18,12 @@ Usage:
 
     # Audit schema_migrations version markers (numeric vs canonical)
     python scripts/postgres_migrate.py --audit-versions
+
+    # Preview normalization plan for mixed markers
+    python scripts/postgres_migrate.py --normalize-versions
+
+    # Apply normalization (dedupe numeric/canonical duplicates)
+    python scripts/postgres_migrate.py --normalize-versions-apply
 """
 
 from __future__ import annotations
@@ -28,7 +34,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -67,7 +73,11 @@ def get_connection() -> psycopg.Connection:
 
 
 def ensure_migrations_table(conn: psycopg.Connection) -> None:
-    """Create schema_migrations table if it doesn't exist."""
+    """Create schema_migrations table if it doesn't exist.
+
+    Also adds the ``description`` column for existing tables that were
+    created before migrations 027/039/040 started referencing it.
+    """
     conn.execute("""
         CREATE TABLE IF NOT EXISTS schema_migrations (
             version TEXT PRIMARY KEY,
@@ -111,6 +121,23 @@ def _get_applied_migration_numbers(applied_versions: set[str]) -> set[int]:
     return numbers
 
 
+def _is_numeric_only_marker(version: str) -> bool:
+    """Return True for legacy numeric-only markers like '27' or '027'."""
+    return re.match(r"^0*\d+$", str(version).strip()) is not None
+
+
+def _get_applied_versions_by_number(applied_versions: set[str]) -> dict[int, set[str]]:
+    """Map numeric migration ID -> applied marker strings for that ID."""
+    by_number: dict[int, set[str]] = {}
+    for version in applied_versions:
+        number = extract_migration_number(version)
+        if number is None:
+            continue
+        by_number.setdefault(number, set()).add(version)
+    return by_number
+
+
+
 def filter_pending_migrations(
     pending: list[tuple[str, Path]],
     applied_versions: set[str],
@@ -123,6 +150,7 @@ def filter_pending_migrations(
         - Migrations skipped because a numeric-equivalent marker already exists.
     """
     applied_numbers = _get_applied_migration_numbers(applied_versions)
+    applied_by_number = _get_applied_versions_by_number(applied_versions)
     to_apply: list[tuple[str, Path]] = []
     skipped_legacy: list[tuple[str, int]] = []
 
@@ -132,8 +160,13 @@ def filter_pending_migrations(
 
         number = extract_migration_number(version)
         if number is not None and number in applied_numbers:
-            skipped_legacy.append((version, number))
-            continue
+            # Only skip when an old numeric-only marker exists (e.g., "27").
+            # If a different canonical marker is present, still apply to avoid
+            # silently skipping required migrations.
+            existing_markers = applied_by_number.get(number, set())
+            if any(_is_numeric_only_marker(marker) for marker in existing_markers):
+                skipped_legacy.append((version, number))
+                continue
 
         to_apply.append((version, filepath))
 
@@ -160,6 +193,207 @@ def get_pending_migrations() -> list[tuple[str, Path]]:
             migrations.append((version, filepath))
 
     return migrations
+
+
+def get_canonical_versions_by_number() -> dict[int, str]:
+    """Map migration number -> canonical version marker from SQL filenames."""
+    mapping: dict[int, str] = {}
+    for version, _ in get_pending_migrations():
+        number = extract_migration_number(version)
+        if number is not None and number not in mapping:
+            mapping[number] = version
+    return mapping
+
+
+def normalize_version_markers(apply_changes: bool = False) -> int:
+    """Normalize mixed schema_migrations markers to canonical filename-based versions.
+
+    This repairs historical cases like:
+      - 27 + 027_schema_alignment
+      - 39 + 039_ingestion_runs_extend
+
+    Args:
+        apply_changes: False = dry run (preview), True = apply updates/deletes.
+
+    Returns:
+        0 when table is clean after operation, 1 when anomalies remain/pending.
+    """
+    conn = get_connection()
+    try:
+        ensure_migrations_table(conn)
+        canonical_by_number = get_canonical_versions_by_number()
+
+        cursor = conn.execute(
+            "SELECT version, applied_at, description FROM schema_migrations ORDER BY applied_at, version"
+        )
+        rows = [
+            {"version": str(row[0]), "applied_at": row[1], "description": row[2]}
+            for row in cursor.fetchall()
+        ]
+
+        if not rows:
+            print("No schema_migrations rows found.")
+            return 0
+
+        grouped: dict[int, list[dict[str, Any]]] = {}
+        unparseable: list[str] = []
+        for row in rows:
+            number = extract_migration_number(row["version"])
+            if number is None:
+                unparseable.append(row["version"])
+                continue
+            grouped.setdefault(number, []).append(row)
+
+        plans: list[dict[str, Any]] = []
+        unresolved: list[tuple[int, list[str]]] = []
+
+        for number in sorted(grouped):
+            entries = grouped[number]
+            markers = sorted({str(e["version"]) for e in entries})
+            canonical = canonical_by_number.get(number)
+
+            if not canonical:
+                if len(markers) > 1:
+                    unresolved.append((number, markers))
+                continue
+
+            # Already clean for this migration number.
+            if markers == [canonical]:
+                continue
+
+            sorted_entries = sorted(
+                entries,
+                key=lambda e: (e["applied_at"] is None, e["applied_at"], e["version"]),
+            )
+            oldest = sorted_entries[0]
+            canonical_entry = next((e for e in entries if e["version"] == canonical), None)
+
+            rename_from: Optional[str] = None
+            remove_versions = [m for m in markers if m != canonical]
+            update_applied_at = False
+            description_to_set: Optional[str] = None
+
+            if canonical_entry is None:
+                # No canonical marker yet: rename oldest marker to canonical.
+                rename_from = str(oldest["version"])
+                remove_versions = [
+                    m for m in remove_versions if m != rename_from
+                ]
+            else:
+                # Canonical exists: preserve earliest observed applied_at.
+                if oldest["applied_at"] and canonical_entry["applied_at"] and oldest["applied_at"] < canonical_entry["applied_at"]:
+                    update_applied_at = True
+
+            # Preserve a non-empty description if canonical row lacks one.
+            canonical_desc = canonical_entry["description"] if canonical_entry else oldest["description"]
+            best_desc = next((e["description"] for e in sorted_entries if e["description"]), None)
+            if (not canonical_desc) and best_desc:
+                description_to_set = str(best_desc)
+
+            plans.append(
+                {
+                    "number": number,
+                    "canonical": canonical,
+                    "markers": markers,
+                    "rename_from": rename_from,
+                    "remove_versions": remove_versions,
+                    "update_applied_at": update_applied_at,
+                    "applied_at_value": oldest["applied_at"],
+                    "description_to_set": description_to_set,
+                }
+            )
+
+        mode = "APPLY" if apply_changes else "DRY-RUN"
+        print(f"\n=== schema_migrations normalization ({mode}) ===\n")
+        print(f"Canonical migration IDs known from files: {len(canonical_by_number)}")
+        print(f"Normalization plans: {len(plans)}")
+
+        if plans:
+            for p in plans:
+                print(f"- {p['number']}: {', '.join(p['markers'])} -> {p['canonical']}")
+                if p["rename_from"]:
+                    print(f"    rename: {p['rename_from']} -> {p['canonical']}")
+                if p["remove_versions"]:
+                    print(f"    delete: {', '.join(p['remove_versions'])}")
+                if p["update_applied_at"]:
+                    print("    update: canonical applied_at to earliest marker timestamp")
+                if p["description_to_set"]:
+                    print("    update: fill missing canonical description")
+        else:
+            print("No canonicalization actions needed.")
+
+        if unresolved:
+            print("\nUnresolved mixed markers (no matching SQL file number):")
+            for number, markers in unresolved:
+                print(f"  - {number}: {', '.join(markers)}")
+
+        if unparseable:
+            print("\nUnparseable markers:")
+            for marker in sorted(set(unparseable)):
+                print(f"  - {marker}")
+
+        if not apply_changes:
+            print("\nDry run only. Re-run with --normalize-versions-apply to execute changes.\n")
+            return 1 if (plans or unresolved or unparseable) else 0
+
+        # Apply canonicalization.
+        renamed = 0
+        deleted = 0
+        updated_applied_at = 0
+        updated_description = 0
+
+        try:
+            for p in plans:
+                canonical = p["canonical"]
+
+                if p["rename_from"]:
+                    conn.execute(
+                        "UPDATE schema_migrations SET version = %s WHERE version = %s",
+                        (canonical, p["rename_from"]),
+                    )
+                    renamed += 1
+
+                if p["update_applied_at"]:
+                    conn.execute(
+                        "UPDATE schema_migrations SET applied_at = %s WHERE version = %s",
+                        (p["applied_at_value"], canonical),
+                    )
+                    updated_applied_at += 1
+
+                if p["description_to_set"]:
+                    conn.execute(
+                        """
+                        UPDATE schema_migrations
+                        SET description = %s
+                        WHERE version = %s AND (description IS NULL OR description = '')
+                        """,
+                        (p["description_to_set"], canonical),
+                    )
+                    updated_description += 1
+
+                for version in p["remove_versions"]:
+                    res = conn.execute(
+                        "DELETE FROM schema_migrations WHERE version = %s",
+                        (version,),
+                    )
+                    deleted += res.rowcount
+
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+        print("\nApplied changes:")
+        print(f"  - Renamed markers: {renamed}")
+        print(f"  - Deleted duplicate markers: {deleted}")
+        print(f"  - applied_at updates: {updated_applied_at}")
+        print(f"  - description updates: {updated_description}")
+        print()
+
+        return 1 if (unresolved or unparseable) else 0
+
+    finally:
+        conn.close()
 
 
 def apply_migration(conn: psycopg.Connection, version: str, filepath: Path) -> bool:
@@ -200,15 +434,27 @@ def apply_migration(conn: psycopg.Connection, version: str, filepath: Path) -> b
 def run_migrations(dry_run: bool = False) -> tuple[int, int]:
     """Run all pending migrations.
 
+    Uses a PostgreSQL advisory lock to prevent multiple workers from
+    applying migrations concurrently (avoids deadlocks when
+    UVICORN_WORKERS > 1).
+
     Args:
         dry_run: If True, only show what would be applied.
 
     Returns:
         Tuple of (applied_count, failed_count).
     """
+    # Advisory lock ID — arbitrary fixed constant for migration exclusivity.
+    MIGRATION_LOCK_ID = 7483640  # ascii sum of "catscan_migrate"
+
     conn = get_connection()
 
     try:
+        # Acquire advisory lock (blocks until available; released on conn close).
+        # pg_advisory_lock is session-level: held until connection closes.
+        conn.execute("SELECT pg_advisory_lock(%s)", (MIGRATION_LOCK_ID,))
+        logger.info("Acquired migration advisory lock.")
+
         ensure_migrations_table(conn)
         applied = get_applied_migrations(conn)
         pending = get_pending_migrations()
@@ -251,7 +497,7 @@ def run_migrations(dry_run: bool = False) -> tuple[int, int]:
         return applied_count, failed_count
 
     finally:
-        conn.close()
+        conn.close()  # Also releases the advisory lock
 
 
 def show_status() -> None:
@@ -341,6 +587,10 @@ def audit_version_markers() -> int:
         for marker in sorted(unparseable):
             print(f"  - {marker}")
 
+    if mixed:
+        print("\nNext step:")
+        print("  python scripts/postgres_migrate.py --normalize-versions")
+
     print()
     return 1 if (mixed or unparseable) else 0
 
@@ -365,6 +615,16 @@ def main() -> int:
         action="store_true",
         help="Audit schema_migrations for mixed numeric/canonical version markers",
     )
+    parser.add_argument(
+        "--normalize-versions",
+        action="store_true",
+        help="Preview schema_migrations marker normalization plan (no writes)",
+    )
+    parser.add_argument(
+        "--normalize-versions-apply",
+        action="store_true",
+        help="Apply schema_migrations marker normalization (writes to DB)",
+    )
 
     args = parser.parse_args()
 
@@ -375,6 +635,13 @@ def main() -> int:
 
         if args.audit_versions:
             return audit_version_markers()
+
+        if args.normalize_versions_apply:
+            return normalize_version_markers(apply_changes=True)
+
+        if args.normalize_versions:
+            return normalize_version_markers(apply_changes=False)
+
 
         applied, failed = run_migrations(dry_run=args.dry_run)
 

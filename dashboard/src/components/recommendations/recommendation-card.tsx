@@ -63,20 +63,39 @@ interface RecommendationCardProps {
   recommendation: Recommendation;
   onResolve?: (id: string) => void;
   onDismiss?: (id: string) => void;
+  onApply?: (recommendation: Recommendation, billingId: string) => void;
+  configOptions?: { billing_id: string; name: string }[];
+  isApplying?: boolean;
+  canApply?: boolean;
 }
 
 export function RecommendationCard({
   recommendation,
   onResolve,
-  onDismiss
+  onDismiss,
+  onApply,
+  configOptions = [],
+  isApplying = false,
+  canApply,
 }: RecommendationCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [showConfigDropdown, setShowConfigDropdown] = useState(false);
+  const [selectedConfig, setSelectedConfig] = useState<string>("");
 
   const config = severityConfig[recommendation.severity as keyof typeof severityConfig] || severityConfig.low;
   const SeverityIcon = config.icon;
   const TypeIcon = typeIcons[recommendation.type] || Info;
 
   const impact = recommendation.impact;
+  const hasActionableActions = recommendation.actions.some((action) => {
+    const actionType = action.action_type.toLowerCase();
+    const targetType = action.target_type.toLowerCase();
+    return (
+      ["block", "exclude", "add", "remove"].includes(actionType) &&
+      ["size", "geo", "publisher", "config", "app"].includes(targetType)
+    );
+  });
+  const canApplyRecommendation = (canApply ?? hasActionableActions) && configOptions.length > 0 && !!onApply;
 
   return (
     <div className={cn(
@@ -241,6 +260,50 @@ export function RecommendationCard({
 
           {/* Action Buttons */}
           <div className="flex gap-2 pt-2">
+            {canApplyRecommendation && (
+              <>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowConfigDropdown((prev) => !prev)}
+                    className="px-3 py-2 bg-white text-gray-700 text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50"
+                  >
+                    {selectedConfig ? "Config selected" : "Select Config"}
+                  </button>
+                  {showConfigDropdown && (
+                    <div className="absolute z-10 mt-1 right-0 w-64 max-h-56 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg">
+                      {configOptions.map((configOption) => (
+                        <button
+                          key={configOption.billing_id}
+                          onClick={() => {
+                            setSelectedConfig(configOption.billing_id);
+                            setShowConfigDropdown(false);
+                          }}
+                          className={cn(
+                            "w-full text-left px-3 py-2 text-sm hover:bg-gray-50",
+                            selectedConfig === configOption.billing_id && "bg-blue-50 text-blue-700"
+                          )}
+                        >
+                          <div className="font-medium truncate">{configOption.name}</div>
+                          <div className="text-xs text-gray-500 font-mono">{configOption.billing_id}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => selectedConfig && onApply?.(recommendation, selectedConfig)}
+                  disabled={!selectedConfig || isApplying}
+                  className={cn(
+                    "px-4 py-2 text-sm font-medium rounded-lg",
+                    selectedConfig && !isApplying
+                      ? "bg-blue-600 text-white hover:bg-blue-700"
+                      : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                  )}
+                >
+                  {isApplying ? "Staging..." : "Stage Change"}
+                </button>
+              </>
+            )}
             <button
               onClick={() => onResolve?.(recommendation.id)}
               className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700"

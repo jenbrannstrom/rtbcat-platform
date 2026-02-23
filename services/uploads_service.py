@@ -46,6 +46,8 @@ class ImportHistoryEntry:
     billing_ids_found: Optional[list[str]]
     columns_found: Optional[list[str]]
     columns_missing: Optional[list[str]]
+    date_gaps: Optional[list[str]]
+    date_gap_warning: Optional[str]
 
 
 @dataclass
@@ -76,8 +78,37 @@ class AccountUploadStats:
     billing_ids: list[str] = field(default_factory=list)
 
 
+@dataclass
+class ImportMatrixCell:
+    """Coverage status for one account and one CSV type."""
+    csv_type: str
+    status: str
+    source: Optional[str]
+    last_imported_at: Optional[str]
+    error_summary: Optional[str] = None
+
+
+@dataclass
+class AccountImportMatrix:
+    """Import matrix row group for a buyer account."""
+    buyer_id: str
+    bidder_id: str
+    display_name: Optional[str]
+    csv_types: list[ImportMatrixCell] = field(default_factory=list)
+
+
 class UploadsService:
     """Service layer for upload tracking and import history."""
+
+    EXPECTED_CSV_TYPES = [
+        "quality",
+        "bidsinauction",
+        "pipeline-geo",
+        "pipeline-publisher",
+        "bid-filtering",
+    ]
+
+    VALID_IMPORT_SOURCES = {"manual", "gmail-auto", "gmail-manual"}
 
     def __init__(self, repo: UploadsRepository | None = None) -> None:
         self._repo = repo or UploadsRepository()
@@ -163,6 +194,7 @@ class UploadsService:
 
             columns_found = self._split_columns(row.get("columns_found"))
             columns_missing = self._split_columns(row.get("columns_missing"))
+            date_gaps = self._parse_date_gaps(row.get("date_gaps"))
 
             results.append(ImportHistoryEntry(
                 batch_id=row["batch_id"],
@@ -182,6 +214,8 @@ class UploadsService:
                 billing_ids_found=billing_ids,
                 columns_found=columns_found,
                 columns_missing=columns_missing,
+                date_gaps=date_gaps,
+                date_gap_warning=row.get("date_gap_warning"),
             ))
 
         return results
@@ -293,6 +327,192 @@ class UploadsService:
             "unassigned_uploads": unassigned,
         }
 
+    async def get_import_tracking_matrix(
+        self,
+        days: int,
+        allowed_bidder_ids: Optional[list[str]] = None,
+        buyer_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Return account x CSV-type matrix with pass/fail/not-imported status."""
+        if not await self._repo.table_exists("ingestion_runs"):
+            return {
+                "accounts": [],
+                "expected_csv_types": list(self.EXPECTED_CSV_TYPES),
+                "total_accounts": 0,
+                "pass_count": 0,
+                "fail_count": 0,
+                "not_imported_count": 0,
+            }
+
+        accounts = await self._repo.get_active_import_accounts(
+            allowed_bidder_ids=allowed_bidder_ids,
+            buyer_id=buyer_id,
+        )
+        if not accounts:
+            return {
+                "accounts": [],
+                "expected_csv_types": list(self.EXPECTED_CSV_TYPES),
+                "total_accounts": 0,
+                "pass_count": 0,
+                "fail_count": 0,
+                "not_imported_count": 0,
+            }
+
+        buyer_ids = [str(row["buyer_id"]) for row in accounts if row.get("buyer_id")]
+        if not buyer_ids:
+            return {
+                "accounts": [],
+                "expected_csv_types": list(self.EXPECTED_CSV_TYPES),
+                "total_accounts": 0,
+                "pass_count": 0,
+                "fail_count": 0,
+                "not_imported_count": 0,
+            }
+
+        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        latest_runs = await self._repo.get_latest_import_matrix_runs(
+            start_date=start_date,
+            buyer_ids=buyer_ids,
+        )
+
+        latest_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+        for row in latest_runs:
+            account_id = str(row.get("account_id") or "")
+            csv_type = str(row.get("csv_type") or "")
+            if not account_id or not csv_type:
+                continue
+            latest_by_key[(account_id, csv_type)] = row
+
+        pass_count = 0
+        fail_count = 0
+        not_imported_count = 0
+        matrix_accounts: list[AccountImportMatrix] = []
+
+        for row in accounts:
+            buyer_account = str(row.get("buyer_id") or "")
+            if not buyer_account:
+                continue
+
+            cells: list[ImportMatrixCell] = []
+            for csv_type in self.EXPECTED_CSV_TYPES:
+                latest = latest_by_key.get((buyer_account, csv_type))
+                if not latest:
+                    not_imported_count += 1
+                    cells.append(
+                        ImportMatrixCell(
+                            csv_type=csv_type,
+                            status="not_imported",
+                            source=None,
+                            last_imported_at=None,
+                            error_summary=None,
+                        )
+                    )
+                    continue
+
+                raw_status = str(latest.get("status") or "").lower()
+                status = "pass" if raw_status == "success" else "fail"
+                if status == "pass":
+                    pass_count += 1
+                else:
+                    fail_count += 1
+
+                source = str(latest.get("import_trigger") or "manual")
+                if source not in self.VALID_IMPORT_SOURCES:
+                    source = "manual"
+
+                last_imported = latest.get("finished_at") or latest.get("started_at")
+                cells.append(
+                    ImportMatrixCell(
+                        csv_type=csv_type,
+                        status=status,
+                        source=source,
+                        last_imported_at=str(last_imported) if last_imported else None,
+                        error_summary=latest.get("error_summary"),
+                    )
+                )
+
+            matrix_accounts.append(
+                AccountImportMatrix(
+                    buyer_id=buyer_account,
+                    bidder_id=str(row.get("bidder_id") or ""),
+                    display_name=row.get("display_name"),
+                    csv_types=cells,
+                )
+            )
+
+        return {
+            "accounts": matrix_accounts,
+            "expected_csv_types": list(self.EXPECTED_CSV_TYPES),
+            "total_accounts": len(matrix_accounts),
+            "pass_count": pass_count,
+            "fail_count": fail_count,
+            "not_imported_count": not_imported_count,
+        }
+
+    async def get_data_freshness_grid(
+        self,
+        days: int,
+        allowed_bidder_ids: Optional[list[str]] = None,
+        buyer_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Build a date x csv_type freshness grid from actual target tables.
+
+        Returns dates (descending, excluding today), csv_types, a cells dict
+        mapping date -> csv_type -> "imported"|"missing", and a coverage summary.
+        """
+        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        rows = await self._repo.get_data_freshness_by_table(
+            start_date=start_date,
+            buyer_id=buyer_id,
+        )
+
+        # Index query results: (date_str, csv_type) -> row_count
+        data_index: dict[tuple[str, str], int] = {}
+        for row in rows:
+            date_str = str(row["metric_date"])
+            csv_type = str(row["csv_type"])
+            data_index[(date_str, csv_type)] = int(row["row_count"])
+
+        # Build date list: yesterday .. today-days (descending)
+        today = datetime.now().date()
+        dates: list[str] = []
+        for i in range(1, days + 1):
+            dates.append((today - timedelta(days=i)).strftime("%Y-%m-%d"))
+
+        csv_types = list(self.EXPECTED_CSV_TYPES)
+
+        # Build cells
+        cells: dict[str, dict[str, str]] = {}
+        imported_count = 0
+        missing_count = 0
+
+        for date_str in dates:
+            cells[date_str] = {}
+            for csv_type in csv_types:
+                count = data_index.get((date_str, csv_type), 0)
+                if count > 0:
+                    cells[date_str][csv_type] = "imported"
+                    imported_count += 1
+                else:
+                    cells[date_str][csv_type] = "missing"
+                    missing_count += 1
+
+        total_cells = imported_count + missing_count
+        coverage_pct = round((imported_count / total_cells * 100), 1) if total_cells > 0 else 0.0
+
+        return {
+            "dates": dates,
+            "csv_types": csv_types,
+            "cells": cells,
+            "summary": {
+                "total_cells": total_cells,
+                "imported_count": imported_count,
+                "missing_count": missing_count,
+                "coverage_pct": coverage_pct,
+            },
+            "lookback_days": days,
+        }
+
     @staticmethod
     def _split_columns(value: Optional[str]) -> Optional[list[str]]:
         """Split comma-separated column string into list."""
@@ -300,6 +520,25 @@ class UploadsService:
             return None
         columns = [col.strip() for col in value.split(",") if col.strip()]
         return columns or None
+
+    @staticmethod
+    def _parse_date_gaps(value: Any) -> Optional[list[str]]:
+        """Parse date_gaps field from JSON/text into a list of YYYY-MM-DD strings."""
+        if not value:
+            return None
+        if isinstance(value, list):
+            return [str(v) for v in value if v]
+        if isinstance(value, str):
+            # Preferred storage is JSON array text.
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list):
+                    return [str(v) for v in parsed if v]
+            except json.JSONDecodeError:
+                # Legacy fallback: comma-separated dates.
+                gaps = [part.strip() for part in value.split(",") if part.strip()]
+                return gaps or None
+        return None
 
     @staticmethod
     def _parse_single_billing_ids(value: Any) -> Optional[list[str]]:

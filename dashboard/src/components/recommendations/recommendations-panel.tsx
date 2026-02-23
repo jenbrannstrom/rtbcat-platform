@@ -1,8 +1,18 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, RefreshCw, Sparkles } from 'lucide-react';
-import { getRecommendations, getRecommendationSummary, resolveRecommendation } from '@/lib/api';
+import {
+  getRecommendations,
+  getRecommendationSummary,
+  resolveRecommendation,
+  getPretargetingConfigs,
+  createPendingChange,
+  type Action,
+  type Recommendation,
+} from '@/lib/api';
+import { useAccount } from '@/contexts/account-context';
 import { RecommendationCard } from './recommendation-card';
 
 interface RecommendationsPanelProps {
@@ -10,11 +20,109 @@ interface RecommendationsPanelProps {
   minSeverity?: string;
 }
 
+type PendingChangeMapping = {
+  change_type: string;
+  field_name: string;
+  value: string;
+};
+
+function mapActionToPendingChange(action: Action): PendingChangeMapping | null {
+  const rawTarget = (action.target_id || action.target_name || '').trim();
+  if (!rawTarget) return null;
+
+  const actionType = action.action_type.toLowerCase();
+  const targetType = action.target_type.toLowerCase();
+  const field = (action.pretargeting_field || '').toLowerCase();
+  const normalizedFormat = rawTarget.replace(/^format-/i, '');
+  const target = targetType === 'config' ? normalizedFormat : rawTarget;
+
+  if (targetType === 'size') {
+    if (!['block', 'exclude', 'add', 'remove'].includes(actionType)) return null;
+    return {
+      change_type: actionType === 'add' ? 'add_size' : 'remove_size',
+      field_name: 'included_sizes',
+      value: target,
+    };
+  }
+
+  if (targetType === 'geo') {
+    if (actionType === 'add') {
+      return { change_type: 'add_geo', field_name: 'included_geos', value: target };
+    }
+    if (actionType === 'remove') {
+      return { change_type: 'remove_geo', field_name: 'included_geos', value: target };
+    }
+    if (actionType === 'exclude' || actionType === 'block') {
+      return { change_type: 'add_excluded_geo', field_name: 'excluded_geos', value: target };
+    }
+    return null;
+  }
+
+  if (targetType === 'publisher' || targetType === 'app') {
+    if (!['block', 'add', 'remove'].includes(actionType)) return null;
+    return {
+      change_type: actionType === 'remove' ? 'remove_publisher' : 'add_publisher',
+      field_name: 'publisher_targeting',
+      value: target,
+    };
+  }
+
+  if (targetType === 'config') {
+    if (field.includes('format')) {
+      if (!['exclude', 'block', 'add', 'remove'].includes(actionType)) return null;
+      return {
+        change_type: actionType === 'add' ? 'add_format' : 'remove_format',
+        field_name: 'included_formats',
+        value: target,
+      };
+    }
+    if (field.includes('excluded_geo')) {
+      if (actionType === 'remove') {
+        return { change_type: 'remove_excluded_geo', field_name: 'excluded_geos', value: target };
+      }
+      if (['add', 'exclude', 'block'].includes(actionType)) {
+        return { change_type: 'add_excluded_geo', field_name: 'excluded_geos', value: target };
+      }
+      return null;
+    }
+    if (field.includes('geo')) {
+      if (actionType === 'add') {
+        return { change_type: 'add_geo', field_name: 'included_geos', value: target };
+      }
+      if (actionType === 'remove') {
+        return { change_type: 'remove_geo', field_name: 'included_geos', value: target };
+      }
+      if (actionType === 'exclude' || actionType === 'block') {
+        return { change_type: 'add_excluded_geo', field_name: 'excluded_geos', value: target };
+      }
+      return null;
+    }
+    if (field.includes('publisher')) {
+      if (!['block', 'add', 'remove'].includes(actionType)) return null;
+      return {
+        change_type: actionType === 'remove' ? 'remove_publisher' : 'add_publisher',
+        field_name: 'publisher_targeting',
+        value: target,
+      };
+    }
+  }
+
+  return null;
+}
+
+function getActionablePendingChanges(recommendation: Recommendation): PendingChangeMapping[] {
+  return recommendation.actions
+    .map((action) => mapActionToPendingChange(action))
+    .filter((mapped): mapped is PendingChangeMapping => mapped !== null);
+}
+
 export function RecommendationsPanel({
   days = 7,
   minSeverity = 'low'
 }: RecommendationsPanelProps) {
   const queryClient = useQueryClient();
+  const { selectedBuyerId } = useAccount();
+  const [applyFeedback, setApplyFeedback] = useState<Record<string, { message: string; error: boolean }>>({});
 
   const {
     data: recommendations,
@@ -39,11 +147,65 @@ export function RecommendationsPanel({
     },
   });
 
+  const { data: pretargetingConfigs = [] } = useQuery({
+    queryKey: ['recommendation-config-options', selectedBuyerId],
+    queryFn: () => getPretargetingConfigs({ buyer_id: selectedBuyerId || undefined }),
+    enabled: !!selectedBuyerId,
+    staleTime: 60_000,
+  });
+
+  const applyMutation = useMutation({
+    mutationFn: async ({
+      recommendation,
+      billingId,
+    }: {
+      recommendation: Recommendation;
+      billingId: string;
+    }) => {
+      const mappings = getActionablePendingChanges(recommendation);
+      if (mappings.length === 0) {
+        throw new Error('No compatible pretargeting actions found for this recommendation.');
+      }
+
+      for (const mapped of mappings) {
+        await createPendingChange({
+          billing_id: billingId,
+          change_type: mapped.change_type,
+          field_name: mapped.field_name,
+          value: mapped.value,
+          reason: `Recommendation ${recommendation.id}: ${recommendation.title}`,
+        });
+      }
+      return { staged: mappings.length };
+    },
+    onSuccess: ({ staged }, variables) => {
+      setApplyFeedback((prev) => ({
+        ...prev,
+        [variables.recommendation.id]: {
+          message: `Staged ${staged} pending change${staged === 1 ? '' : 's'} for ${variables.billingId}. Review and push in Settings.`,
+          error: false,
+        },
+      }));
+      queryClient.invalidateQueries({ queryKey: ['pending-changes'] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail'] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+    },
+    onError: (error, variables) => {
+      setApplyFeedback((prev) => ({
+        ...prev,
+        [variables.recommendation.id]: {
+          message: error instanceof Error ? error.message : 'Failed to stage pending changes.',
+          error: true,
+        },
+      }));
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="space-y-4">
         {[1, 2, 3].map(i => (
-          <div key={i} className="h-32 bg-gray-100 rounded-lg animate-pulse" />
+          <div key={i} className="h-32 bg-gray-200 rounded-lg animate-pulse" />
         ))}
       </div>
     );
@@ -68,6 +230,12 @@ export function RecommendationsPanel({
 
   const recs = recommendations || [];
   const counts = summary?.recommendation_count || { critical: 0, high: 0, medium: 0, low: 0 };
+  const configOptions = pretargetingConfigs
+    .map((config) => ({
+      billing_id: config.billing_id || config.config_id,
+      name: config.user_name || config.display_name || `Config ${config.billing_id || config.config_id}`,
+    }))
+    .filter((config) => !!config.billing_id);
 
   return (
     <div>
@@ -134,12 +302,28 @@ export function RecommendationsPanel({
       ) : (
         <div className="space-y-4">
           {recs.map(rec => (
-            <RecommendationCard
-              key={rec.id}
-              recommendation={rec}
-              onResolve={(id) => resolveMutation.mutate(id)}
-              onDismiss={(id) => resolveMutation.mutate(id)}
-            />
+            <div key={rec.id} className="space-y-2">
+              <RecommendationCard
+                recommendation={rec}
+                onResolve={(id) => resolveMutation.mutate(id)}
+                onDismiss={(id) => resolveMutation.mutate(id)}
+                onApply={(recommendation, billingId) => applyMutation.mutate({ recommendation, billingId })}
+                configOptions={configOptions}
+                isApplying={applyMutation.isPending && applyMutation.variables?.recommendation.id === rec.id}
+                canApply={getActionablePendingChanges(rec).length > 0}
+              />
+              {applyFeedback[rec.id] && (
+                <div
+                  className={
+                    applyFeedback[rec.id].error
+                      ? "px-3 py-2 rounded border border-red-200 bg-red-50 text-xs text-red-700"
+                      : "px-3 py-2 rounded border border-amber-200 bg-amber-50 text-xs text-amber-800"
+                  }
+                >
+                  {applyFeedback[rec.id].message}
+                </div>
+              )}
+            </div>
           ))}
         </div>
       )}

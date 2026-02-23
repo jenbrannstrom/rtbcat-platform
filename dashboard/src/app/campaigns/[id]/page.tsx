@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -31,6 +31,8 @@ import { CreativeCard } from "@/components/creative-card";
 import { PreviewModal } from "@/components/preview-modal";
 import { formatNumber } from "@/lib/utils";
 import type { Creative } from "@/types/api";
+import { useAccount } from "@/contexts/account-context";
+import { toBuyerScopedPath } from "@/lib/buyer-routes";
 
 interface DailyTrend {
   date: string;
@@ -40,8 +42,12 @@ interface DailyTrend {
 }
 
 export default function CampaignDetailPage() {
+  const router = useRouter();
   const params = useParams();
+  const { selectedBuyerId } = useAccount();
   const campaignId = parseInt(params.id as string);
+  const campaignsHref = toBuyerScopedPath("/campaigns", selectedBuyerId);
+  const clustersHref = toBuyerScopedPath("/clusters", selectedBuyerId);
 
   const [campaign, setCampaign] = useState<AICampaign | null>(null);
   const [creatives, setCreatives] = useState<Creative[]>([]);
@@ -56,13 +62,7 @@ export default function CampaignDetailPage() {
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
 
-  useEffect(() => {
-    if (campaignId) {
-      fetchCampaignData();
-    }
-  }, [campaignId, period]);
-
-  const fetchCampaignData = async () => {
+  async function fetchCampaignData() {
     setLoading(true);
     setError(null);
 
@@ -97,7 +97,13 @@ export default function CampaignDetailPage() {
     }
 
     setLoading(false);
-  };
+  }
+
+  useEffect(() => {
+    if (campaignId) {
+      fetchCampaignData();
+    }
+  }, [campaignId, period]);
 
   const handleRemoveCreative = async (creativeId: string) => {
     if (!confirm("Remove this creative from the campaign?")) return;
@@ -135,7 +141,7 @@ export default function CampaignDetailPage() {
 
     try {
       await deleteAICampaign(campaignId);
-      window.location.href = "/campaigns";
+      router.push(campaignsHref);
     } catch (err) {
       alert("Failed to delete campaign");
     }
@@ -166,7 +172,7 @@ export default function CampaignDetailPage() {
     return (
       <div className="p-8">
         <Link
-          href="/campaigns"
+          href={campaignsHref}
           className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
@@ -190,7 +196,7 @@ export default function CampaignDetailPage() {
       {/* Header */}
       <div className="mb-6">
         <Link
-          href="/campaigns"
+          href={campaignsHref}
           className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
@@ -397,7 +403,7 @@ export default function CampaignDetailPage() {
       ) : (
         <div className="text-center py-12 bg-gray-50 rounded-lg">
           <p className="text-gray-500">No creatives in this campaign</p>
-          <Link href="/creatives" className="btn-primary mt-4 inline-flex">
+          <Link href={clustersHref} className="btn-primary mt-4 inline-flex">
             Browse Creatives
           </Link>
         </div>

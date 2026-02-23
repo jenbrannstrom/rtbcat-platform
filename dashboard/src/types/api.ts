@@ -59,6 +59,10 @@ export interface Creative {
   language_source: string | null;
   language_analyzed_at: string | null;
   language_analysis_error: string | null;
+  // Approval details
+  is_disapproved?: boolean;
+  disapproval_reasons?: Array<{ reason: string; details?: string }> | null;
+  serving_restrictions?: Array<{ status: string; contexts?: unknown[]; disapproval_reasons?: unknown[] }> | null;
   data_source?: {
     source: "live" | "cache" | string;
     cached_at: string | null;
@@ -180,6 +184,7 @@ export interface WasteReport {
   size_coverage: SizeCoverage[];
   potential_savings_qps: number;
   potential_savings_usd: number | null;
+  qps_basis: "avg_daily";
   analysis_period_days: number;
   generated_at: string;
   recommendations_summary: {
@@ -218,7 +223,7 @@ export interface BatchPerformanceResponse {
   count: number;
 }
 
-export type PerformancePeriod = "yesterday" | "7d" | "30d" | "all_time";
+export type PerformancePeriod = "yesterday" | "7d" | "14d" | "30d" | "all_time";
 
 // Country Breakdown Types
 

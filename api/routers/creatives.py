@@ -24,7 +24,7 @@ from api.schemas.creatives import (
 from services.auth_service import User
 from services.creative_countries_service import CreativeCountriesService
 from services.creative_response_builder import build_creative_response
-from services.creatives_service import CreativesService
+from services.creatives_service import CreativesService, CreativeListContext
 
 logger = logging.getLogger(__name__)
 
@@ -56,13 +56,22 @@ async def list_creatives(
         format=format,
         limit=limit if not active_only else limit * 3,
         offset=offset,
+        include_raw_data=not slim,
     )
 
     if active_only and creatives:
         creatives = await creatives_service.filter_active_creatives(creatives, days, limit)
 
     creative_ids = [c.id for c in creatives]
-    ctx = await creatives_service.get_list_context(store, creative_ids, days)
+    if slim:
+        thumbnail_statuses = await creatives_service.get_thumbnail_statuses(store, creative_ids)
+        ctx = CreativeListContext(
+            thumbnail_statuses=thumbnail_statuses,
+            waste_flags={},
+            country_data={},
+        )
+    else:
+        ctx = await creatives_service.get_list_context(store, creative_ids, days)
 
     return [
         build_creative_response(
@@ -106,13 +115,22 @@ async def list_creatives_paginated(
         format=format,
         limit=limit if not active_only else limit * 3,
         offset=offset,
+        include_raw_data=not slim,
     )
 
     if active_only and creatives:
         creatives = await creatives_service.filter_active_creatives(creatives, days, limit)
 
     creative_ids = [c.id for c in creatives]
-    ctx = await creatives_service.get_list_context(store, creative_ids, days)
+    if slim:
+        thumbnail_statuses = await creatives_service.get_thumbnail_statuses(store, creative_ids)
+        ctx = CreativeListContext(
+            thumbnail_statuses=thumbnail_statuses,
+            waste_flags={},
+            country_data={},
+        )
+    else:
+        ctx = await creatives_service.get_list_context(store, creative_ids, days)
 
     data = [
         build_creative_response(
@@ -258,4 +276,3 @@ async def get_creative_countries(
 
     payload = await countries_service.build_country_metrics(creative_id, days)
     return CreativeCountryBreakdownResponse(**payload)
-

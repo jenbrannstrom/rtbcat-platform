@@ -156,7 +156,7 @@ class CreativesClient(BaseAuthorizedBuyersClient):
         service = self._get_service()
 
         try:
-            # Use list with filter since bidders.creatives has no get method
+            # Use bidders.creatives.list (works for all creatives in account)
             filter_str = f'creativeId="{creative_id}"'
             params = {
                 "parent": self.parent,
@@ -169,11 +169,35 @@ class CreativesClient(BaseAuthorizedBuyersClient):
             )
 
             creatives = response.get("creatives", [])
-            if creatives:
-                return parse_creative_response(
-                    creatives[0], self.account_id, buyer_id=buyer_id
-                )
-            return None
+            if not creatives:
+                return None
+
+            creative = parse_creative_response(
+                creatives[0], self.account_id, buyer_id=buyer_id
+            )
+
+            # bidders endpoint doesn't return full creativeServingDecision;
+            # fetch it via buyers.creatives.get with SERVING_DECISION_ONLY
+            if creative and not creative.get("disapprovalReasons"):
+                effective_buyer = buyer_id or self.account_id
+                try:
+                    name = f"buyers/{effective_buyer}/creatives/{creative_id}"
+                    sd_params = {"name": name, "view": "SERVING_DECISION_ONLY"}
+                    sd_response = await self._execute_with_retry(
+                        lambda p=sd_params: service.buyers().creatives().get(**p)
+                    )
+                    if sd_response:
+                        sd_parsed = parse_creative_response(
+                            sd_response, self.account_id, buyer_id=buyer_id
+                        )
+                        if sd_parsed:
+                            creative["approvalStatus"] = sd_parsed.get("approvalStatus") or creative.get("approvalStatus")
+                            creative["disapprovalReasons"] = sd_parsed.get("disapprovalReasons") or creative.get("disapprovalReasons")
+                            creative["servingRestrictions"] = sd_parsed.get("servingRestrictions") or creative.get("servingRestrictions")
+                except HttpError:
+                    pass  # buyers endpoint may 404 for bidder-level creatives
+
+            return creative
 
         except HttpError as ex:
             logger.error(

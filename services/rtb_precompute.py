@@ -6,14 +6,20 @@ Creates and refreshes daily summary tables for RTB analytics endpoints.
 from __future__ import annotations
 
 import logging
-from datetime import date
+import os
+from datetime import date, datetime
+import uuid
 from typing import Optional
 
 from google.cloud import bigquery
 
 from storage.bigquery import build_table_ref, get_bigquery_client, run_query
 from storage.postgres import execute_many, pg_transaction_async
-from services.precompute_utils import normalize_refresh_dates, record_refresh_log_postgres
+from services.precompute_utils import (
+    normalize_refresh_dates,
+    record_refresh_log_postgres,
+    record_refresh_run_postgres,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +154,8 @@ async def refresh_rtb_summaries(
         end_date,
         buyer_account_id,
     )
+    run_id = str(uuid.uuid4())
+    run_started_at = datetime.utcnow().isoformat()
     client = get_bigquery_client()
     bidstream_table = build_table_ref(
         client, table_env="BIGQUERY_RTB_BIDSTREAM_TABLE", default_table="rtb_bidstream"
@@ -158,9 +166,29 @@ async def refresh_rtb_summaries(
     buyer_clause = " AND buyer_account_id = @buyer_account_id" if buyer_account_id else ""
     start_date_value = date.fromisoformat(start_date)
     end_date_value = date.fromisoformat(end_date)
+    query_timeout_seconds = float(
+        os.getenv(
+            "BIGQUERY_RTB_QUERY_TIMEOUT_SECONDS",
+            os.getenv("BIGQUERY_QUERY_TIMEOUT_SECONDS", "180"),
+        )
+    )
+    query_max_retries = int(
+        os.getenv(
+            "BIGQUERY_RTB_QUERY_MAX_RETRIES",
+            os.getenv("BIGQUERY_QUERY_MAX_RETRIES", "1"),
+        )
+    )
 
-    funnel_rows = run_query(
-        client,
+    def _run_rtb_query(*, sql: str, params: list[bigquery.QueryParameter]):
+        return run_query(
+            client,
+            sql=sql,
+            params=params,
+            timeout_seconds=query_timeout_seconds,
+            max_retries=query_max_retries,
+        )
+
+    funnel_rows = _run_rtb_query(
         sql=f"""
             SELECT
                 metric_date,
@@ -185,8 +213,7 @@ async def refresh_rtb_summaries(
             ),
         ],
     )
-    publisher_rows = run_query(
-        client,
+    publisher_rows = _run_rtb_query(
         sql=f"""
             SELECT
                 metric_date,
@@ -215,8 +242,7 @@ async def refresh_rtb_summaries(
             ),
         ],
     )
-    geo_rows = run_query(
-        client,
+    geo_rows = _run_rtb_query(
         sql=f"""
             SELECT
                 metric_date,
@@ -244,8 +270,7 @@ async def refresh_rtb_summaries(
             ),
         ],
     )
-    app_rows = run_query(
-        client,
+    app_rows = _run_rtb_query(
         sql=f"""
             SELECT
                 metric_date,
@@ -273,8 +298,7 @@ async def refresh_rtb_summaries(
             ),
         ],
     )
-    app_size_rows = run_query(
-        client,
+    app_size_rows = _run_rtb_query(
         sql=f"""
             SELECT
                 metric_date,
@@ -307,8 +331,7 @@ async def refresh_rtb_summaries(
             ),
         ],
     )
-    app_country_rows = run_query(
-        client,
+    app_country_rows = _run_rtb_query(
         sql=f"""
             SELECT
                 metric_date,
@@ -339,8 +362,7 @@ async def refresh_rtb_summaries(
             ),
         ],
     )
-    app_creative_rows = run_query(
-        client,
+    app_creative_rows = _run_rtb_query(
         sql=f"""
             SELECT
                 metric_date,
@@ -581,6 +603,49 @@ async def refresh_rtb_summaries(
             "end_date": end_date,
             "buyer_account_id": buyer_account_id,
             "dates": date_list,
+            "row_counts": {
+                "rtb_funnel_daily": len(funnel_rows),
+                "rtb_publisher_daily": len(publisher_rows),
+                "rtb_geo_daily": len(geo_rows),
+                "rtb_app_daily": len(app_rows),
+                "rtb_app_size_daily": len(app_size_rows),
+                "rtb_app_country_daily": len(app_country_rows),
+                "rtb_app_creative_daily": len(app_creative_rows),
+            },
         }
 
-    return await pg_transaction_async(_run)
+    async def _record_run_rows(status: str, row_counts: dict[str, int], error_text: Optional[str]) -> None:
+        def _write(conn):
+            for table_name, row_count in row_counts.items():
+                record_refresh_run_postgres(
+                    conn,
+                    run_id=run_id,
+                    cache_name="rtb_summaries",
+                    table_name=table_name,
+                    buyer_account_id=buyer_account_id,
+                    dates=date_list,
+                    status=status,
+                    row_count=row_count,
+                    error_text=error_text,
+                    started_at=run_started_at,
+                    finished_at=datetime.utcnow().isoformat(),
+                )
+
+        try:
+            await pg_transaction_async(_write)
+        except Exception:
+            logger.exception(
+                "Failed to write precompute_refresh_runs rows for run_id=%s cache=rtb_summaries",
+                run_id,
+            )
+
+    try:
+        result = await pg_transaction_async(_run)
+    except Exception as exc:
+        await _record_run_rows(status="failed", row_counts={"__all__": 0}, error_text=str(exc))
+        raise
+
+    row_counts = result.pop("row_counts", {})
+    await _record_run_rows(status="success", row_counts=row_counts, error_text=None)
+    result["refresh_run_id"] = run_id
+    return result

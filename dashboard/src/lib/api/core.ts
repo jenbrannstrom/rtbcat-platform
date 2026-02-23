@@ -6,7 +6,7 @@
 import type { Stats, Health, SizesResponse } from "@/types/api";
 
 export const API_BASE = "/api";
-const DEFAULT_API_TIMEOUT_MS = 15000;
+const DEFAULT_API_TIMEOUT_MS = 30000;
 
 export interface FetchApiOptions extends RequestInit {
   timeoutMs?: number;
@@ -156,4 +156,30 @@ export async function lookupGeoNames(geoIds: string[]): Promise<Record<string, s
     result[id] = geoNameCache[id] || id;
   }
   return result;
+}
+
+export interface GeoSearchResult {
+  geo_id: string;
+  label: string;
+  country_code?: string | null;
+  country_name?: string | null;
+  city_name?: string | null;
+  type: "country" | "city";
+}
+
+export async function searchGeoTargets(
+  query: string,
+  options?: { limit?: number; type?: "all" | "country" | "city" }
+): Promise<GeoSearchResult[]> {
+  const normalized = query.trim();
+  if (!normalized) return [];
+
+  const params = new URLSearchParams({ q: normalized });
+  if (options?.limit) params.set("limit", String(options.limit));
+  if (options?.type) params.set("type", options.type);
+
+  const response = await fetchApi<{ results: GeoSearchResult[] }>(
+    `/geos/search?${params.toString()}`
+  );
+  return response.results || [];
 }

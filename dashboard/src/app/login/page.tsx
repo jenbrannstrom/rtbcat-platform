@@ -44,6 +44,7 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
 
+      // Handle non-JSON error responses (e.g. nginx 502/504 HTML pages)
       const contentType = response.headers.get("content-type") || "";
       const isJson = contentType.includes("application/json");
       const data = isJson ? await response.json().catch(() => null) : null;
@@ -62,6 +63,7 @@ export default function LoginPage() {
       // Redirect to callback URL or home
       router.push(callbackUrl);
     } catch (err) {
+      // True network failure -- fetch itself could not connect
       setErrorMessage("Cannot reach server. Please check your connection and try again.");
     } finally {
       setIsLoading(false);

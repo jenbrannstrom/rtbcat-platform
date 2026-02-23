@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Image,
@@ -34,11 +34,20 @@ import { useAccount } from "@/contexts/account-context";
 import { useAuth } from "@/contexts/auth-context";
 import { useTranslation } from "@/contexts/i18n-context";
 import { LanguageSelector } from "@/components/language-selector";
+import {
+  replaceBuyerInPath,
+  splitBuyerPath,
+  toBuyerScopedPath,
+} from "@/lib/buyer-routes";
 
 const SIDEBAR_COLLAPSED_KEY = "rtbcat-sidebar-collapsed";
 const SIDEBAR_SETTINGS_EXPANDED_KEY = "rtbcat-sidebar-settings-expanded";
 const SIDEBAR_ADMIN_EXPANDED_KEY = "rtbcat-sidebar-admin-expanded";
 const SIDEBAR_QPS_EXPANDED_KEY = "rtbcat-sidebar-qps-expanded";
+
+function getRetryDelay(attemptIndex: number): number {
+  return Math.min(1000 * 2 ** attemptIndex, 5000);
+}
 
 // Main navigation items
 const navigationItems = [
@@ -70,6 +79,7 @@ const adminItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { selectedBuyerId, setSelectedBuyerId } = useAccount();
@@ -101,11 +111,15 @@ export function Sidebar() {
 
   // Use context for buyer_id (persistent across pages)
   const currentBuyerId = selectedBuyerId;
+  const { pathWithoutBuyer } = splitBuyerPath(pathname || "/");
+  const queryString = searchParams.toString();
 
   // Check if current path is in settings or admin section
-  const isInSettings = pathname?.startsWith("/settings");
-  const isInAdmin = pathname?.startsWith("/admin");
-  const isInQps = pathname?.startsWith("/qps");
+  const isInSettings = pathWithoutBuyer.startsWith("/settings");
+  const isInAdmin = pathWithoutBuyer.startsWith("/admin");
+  const isInQps = pathWithoutBuyer.startsWith("/qps");
+
+  const getSeatScopedHref = (href: string) => toBuyerScopedPath(href, currentBuyerId);
 
   // Load collapsed and expanded states from localStorage
   useEffect(() => {
@@ -167,9 +181,17 @@ export function Sidebar() {
     localStorage.setItem(SIDEBAR_QPS_EXPANDED_KEY, String(newValue));
   };
 
-  const { data: seats } = useQuery({
+  const {
+    data: seats,
+    isError: seatsError,
+    refetch: refetchSeats,
+  } = useQuery({
     queryKey: ["seats"],
     queryFn: () => getSeats({ active_only: true }),
+    retry: 5,
+    retryDelay: getRetryDelay,
+    retryOnMount: true,
+    refetchOnReconnect: true,
   });
 
   const syncMutation = useMutation({
@@ -186,7 +208,7 @@ export function Sidebar() {
     },
     onSuccess: (data) => {
       const msg = `${data.creatives_synced} creatives, ${data.endpoints_synced} endpoints, ${data.pretargeting_synced} configs`;
-      setSyncMessage({ type: "success", text: msg });
+      setSyncMessage({ type: data.status === "partial" ? "error" : "success", text: data.status === "partial" ? data.message : msg });
       queryClient.invalidateQueries({ queryKey: ["creatives"] });
       queryClient.invalidateQueries({ queryKey: ["seats"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
@@ -194,8 +216,9 @@ export function Sidebar() {
       queryClient.invalidateQueries({ queryKey: ["pretargeting-configs"] });
       setTimeout(() => setSyncMessage(null), 5000);
     },
-    onError: (error) => {
-      setSyncMessage({ type: "error", text: t.common.failed });
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : t.common.failed;
+      setSyncMessage({ type: "error", text: message });
       setTimeout(() => setSyncMessage(null), 3000);
     },
     onSettled: () => {
@@ -210,6 +233,15 @@ export function Sidebar() {
     setSeatDropdownOpen(false);
     // Update the context (persisted to localStorage)
     setSelectedBuyerId(seatId);
+
+    const currentPath = pathname || "/";
+    const nextPath = replaceBuyerInPath(currentPath, seatId);
+    const nextUrl = queryString ? `${nextPath}?${queryString}` : nextPath;
+    const currentUrl = queryString ? `${currentPath}?${queryString}` : currentPath;
+    if (nextUrl !== currentUrl) {
+      router.push(nextUrl, { scroll: false });
+    }
+
     // Invalidate queries so they refetch with new buyer_id
     queryClient.invalidateQueries({ queryKey: ["creatives"] });
     queryClient.invalidateQueries({ queryKey: ["campaigns"] });
@@ -251,11 +283,27 @@ export function Sidebar() {
               {seats?.length === 1 ? (seats[0].display_name?.charAt(0) || "S") : (seats?.length || 0)}
             </div>
           </div>
+        ) : seatsError ? (
+          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <p className="font-medium">Unable to load seats</p>
+            <button
+              onClick={() => refetchSeats()}
+              className="mt-2 px-2 py-1 text-xs font-medium rounded bg-red-100 hover:bg-red-200"
+            >
+              Retry
+            </button>
+          </div>
         ) : !seats || seats.length === 0 ? (
           /* No seats - show connect message */
           <div className="text-sm text-gray-500 text-center py-2">
             <p className="font-medium text-gray-700">{t.sidebar.noSeatsConnected}</p>
             <p className="text-xs mt-1">{t.sidebar.goToSettingsToConnect}</p>
+            <button
+              onClick={() => refetchSeats()}
+              className="mt-2 px-2 py-1 text-xs font-medium rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
+            >
+              Retry
+            </button>
           </div>
         ) : seats.length === 1 ? (
           /* Single seat - show as title with sync all button */
@@ -386,8 +434,8 @@ export function Sidebar() {
           <button
             onClick={() => {
               toggleQpsExpanded();
-              if (pathname !== "/") {
-                router.push("/");
+              if (pathWithoutBuyer !== "/") {
+                router.push(getSeatScopedHref("/"));
               }
             }}
             className={cn(
@@ -421,12 +469,12 @@ export function Sidebar() {
           {(!collapsed && qpsExpanded) && (
             <div className="ml-6 space-y-1">
               {qpsItems.map((item) => {
-                const isActive = pathname?.startsWith(item.href);
+                const isActive = pathWithoutBuyer.startsWith(item.href);
                 const itemName = t.qpsNav?.[item.key] || item.key;
                 return (
                   <Link
                     key={item.key}
-                    href={item.href}
+                    href={getSeatScopedHref(item.href)}
                     className={cn(
                       "flex items-center px-3 py-2 text-sm rounded-md transition-colors",
                       isActive
@@ -446,13 +494,13 @@ export function Sidebar() {
         {/* Main navigation items */}
         {navigationItems.map((item) => {
           const isActive = item.href === "/"
-            ? pathname === "/"
-            : pathname.startsWith(item.href);
+            ? pathWithoutBuyer === "/"
+            : pathWithoutBuyer.startsWith(item.href);
           const itemName = t.navigation[item.key];
           return (
             <Link
               key={item.key}
-              href={item.href}
+              href={getSeatScopedHref(item.href)}
               className={cn(
                 "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                 isActive
@@ -516,7 +564,7 @@ export function Sidebar() {
           {settingsExpanded && !collapsed && (
             <div className="mt-1 ml-4 space-y-1">
               {settingsItems.map((item) => {
-                const isActive = pathname === item.href;
+                const isActive = pathWithoutBuyer === item.href;
                 const itemName = t.settingsNav?.[item.key] || item.key;
                 return (
                   <Link
@@ -585,10 +633,10 @@ export function Sidebar() {
             </button>
             {adminExpanded && !collapsed && (
               <div className="mt-1 ml-4 space-y-1">
-                {adminItems.map((item) => {
-                  const isActive = pathname === item.href;
-                  const itemName = t.adminNav?.[item.key] || item.key;
-                  return (
+              {adminItems.map((item) => {
+                const isActive = pathWithoutBuyer === item.href;
+                const itemName = t.adminNav?.[item.key] || item.key;
+                return (
                     <Link
                       key={item.key}
                       href={item.href}

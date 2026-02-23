@@ -26,7 +26,10 @@ router = APIRouter(tags=["QPS Analytics"])
 @router.get("/analytics/size-coverage", tags=["QPS Analytics"])
 async def get_size_coverage(
     days: int = Query(7, ge=1, le=90),
-    billing_id: Optional[str] = Query(None, description="Filter by billing account ID (pretargeting config)"),
+    billing_id: Optional[str] = Query(
+        None,
+        description="Filter by pretargeting config ID (billing_id)",
+    ),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer/seat ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
@@ -37,7 +40,7 @@ async def get_size_coverage(
     Returns sizes receiving traffic but missing creatives.
     This is the core Cat-Scan analysis for identifying QPS waste.
 
-    Optional: Filter by billing_id to analyze a specific pretargeting config.
+    Optional: Filter by `billing_id` to analyze a specific pretargeting config.
     """
     try:
         # SizeCoverageAnalyzer uses its own db connection pattern

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from storage.postgres_database import pg_query
+from storage.postgres_database import pg_query, pg_query_one
 
 
 @dataclass
@@ -113,7 +113,6 @@ class SystemService:
         node_available, node_version = self._get_node_version()
         ffmpeg_available, ffmpeg_version = self._get_ffmpeg_version()
 
-        # Database size not available for Postgres via file stat
         database_size_mb = 0.0
 
         # Thumbnails count
@@ -127,6 +126,12 @@ class SystemService:
         creatives_count = 0
         videos_count = 0
         try:
+            db_size_row = await pg_query_one(
+                "SELECT pg_database_size(current_database()) AS size_bytes"
+            )
+            if db_size_row and db_size_row.get("size_bytes") is not None:
+                database_size_mb = float(db_size_row["size_bytes"]) / (1024 ** 2)
+
             rows = await pg_query("SELECT COUNT(*) as cnt FROM creatives")
             creatives_count = rows[0]["cnt"] if rows else 0
             video_rows = await pg_query("SELECT COUNT(*) as cnt FROM creatives WHERE format = 'VIDEO'")
@@ -197,3 +202,91 @@ class SystemService:
                     result[geo_id] = geo_id
 
         return result
+
+    async def search_geo_targets(
+        self,
+        query: str,
+        limit: int = 20,
+        target_type: str = "all",
+    ) -> list[dict[str, str]]:
+        """Search Google geo targets by country/city name or criterion ID."""
+        normalized = (query or "").strip()
+        if not normalized:
+            return []
+
+        safe_limit = max(1, min(limit, 50))
+        text_pattern = f"%{normalized}%"
+        type_filter_sql = ""
+        if target_type == "country":
+            type_filter_sql = "AND COALESCE(city_name, '') = ''"
+        elif target_type == "city":
+            type_filter_sql = "AND COALESCE(city_name, '') <> ''"
+
+        rows = []
+        try:
+            rows = await pg_query(
+                f"""
+                SELECT google_geo_id, country_code, country_name, city_name
+                FROM geographies
+                WHERE (
+                    google_geo_id::text = %s
+                    OR country_name ILIKE %s
+                    OR city_name ILIKE %s
+                    OR country_code ILIKE %s
+                )
+                {type_filter_sql}
+                ORDER BY
+                    CASE WHEN google_geo_id::text = %s THEN 0 ELSE 1 END,
+                    CASE WHEN city_name ILIKE %s THEN 0 ELSE 1 END,
+                    CASE WHEN country_name ILIKE %s THEN 0 ELSE 1 END,
+                    city_name NULLS LAST,
+                    country_name
+                LIMIT %s
+                """,
+                (
+                    normalized,
+                    text_pattern,
+                    text_pattern,
+                    text_pattern,
+                    normalized,
+                    text_pattern,
+                    text_pattern,
+                    safe_limit,
+                ),
+            )
+        except Exception:
+            # The geographies table may not exist in all environments.
+            return []
+
+        results: list[dict[str, str]] = []
+        seen_ids: set[str] = set()
+        for row in rows:
+            geo_id = str(row.get("google_geo_id") or "").strip()
+            if not geo_id or geo_id in seen_ids:
+                continue
+            seen_ids.add(geo_id)
+
+            country_code = (row.get("country_code") or "").strip().upper()
+            country_name = (row.get("country_name") or "").strip()
+            city_name = (row.get("city_name") or "").strip()
+
+            if city_name:
+                suffix = country_code or country_name
+                label = f"{city_name}, {suffix}" if suffix else city_name
+                item_type = "city"
+            else:
+                label = country_name or country_code or geo_id
+                item_type = "country"
+
+            results.append(
+                {
+                    "geo_id": geo_id,
+                    "label": label,
+                    "country_code": country_code,
+                    "country_name": country_name,
+                    "city_name": city_name,
+                    "type": item_type,
+                }
+            )
+
+        return results

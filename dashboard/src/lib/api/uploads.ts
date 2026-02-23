@@ -22,6 +22,30 @@ export interface UploadTrackingResponse {
   days_with_anomalies: number;
 }
 
+export interface ImportMatrixCell {
+  csv_type: string;
+  status: "pass" | "fail" | "not_imported";
+  source?: "manual" | "gmail-auto" | "gmail-manual" | null;
+  last_imported_at?: string | null;
+  error_summary?: string | null;
+}
+
+export interface AccountImportMatrix {
+  buyer_id: string;
+  bidder_id: string;
+  display_name?: string | null;
+  csv_types: ImportMatrixCell[];
+}
+
+export interface ImportTrackingMatrixResponse {
+  accounts: AccountImportMatrix[];
+  expected_csv_types: string[];
+  total_accounts: number;
+  pass_count: number;
+  fail_count: number;
+  not_imported_count: number;
+}
+
 export interface ImportHistoryItem {
   batch_id: string;
   filename?: string | null;
@@ -77,8 +101,47 @@ export interface NewlyUploadedCreativesResponse {
   period_end: string;
 }
 
+export type FreshnessStatus = "imported" | "missing";
+
+export interface FreshnessSummary {
+  total_cells: number;
+  imported_count: number;
+  missing_count: number;
+  coverage_pct: number;
+}
+
+export interface DataFreshnessGridResponse {
+  dates: string[];
+  csv_types: string[];
+  cells: Record<string, Record<string, FreshnessStatus>>;
+  summary: FreshnessSummary;
+  lookback_days: number;
+}
+
+export async function getDataFreshnessGrid(
+  days: number = 7,
+  buyerId?: string
+): Promise<DataFreshnessGridResponse> {
+  const params = new URLSearchParams({ days: String(days) });
+  if (buyerId) {
+    params.set("buyer_id", buyerId);
+  }
+  return fetchApi<DataFreshnessGridResponse>(`/uploads/data-freshness?${params.toString()}`);
+}
+
 export async function getUploadTracking(days: number = 30): Promise<UploadTrackingResponse> {
   return fetchApi<UploadTrackingResponse>(`/uploads/tracking?days=${days}`);
+}
+
+export async function getImportTrackingMatrix(
+  days: number = 30,
+  buyerId?: string
+): Promise<ImportTrackingMatrixResponse> {
+  const params = new URLSearchParams({ days: String(days) });
+  if (buyerId) {
+    params.set("buyer_id", buyerId);
+  }
+  return fetchApi<ImportTrackingMatrixResponse>(`/uploads/import-matrix?${params.toString()}`);
 }
 
 export async function getImportHistory(

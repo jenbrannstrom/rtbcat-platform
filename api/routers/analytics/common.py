@@ -4,7 +4,7 @@ Contains helper functions and Pydantic models used by multiple analytics endpoin
 """
 
 import logging
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -56,13 +56,13 @@ async def get_current_bidder_id() -> Optional[str]:
 
 
 async def get_valid_billing_ids() -> list[str]:
-    """Get list of billing_ids from pretargeting_configs table for current account.
+    """Get list of pretargeting config IDs (`billing_id`) for current account.
 
-    This ensures we only query data for billing IDs that belong to the
+    This ensures we only query data for pretargeting configs that belong to the
     currently configured account, preventing cross-account data mixing.
 
     The function first identifies the current bidder_id (account), then
-    returns only billing_ids associated with that account.
+    returns only `billing_id` values associated with that account.
 
     Billing IDs are normalized (trimmed) to match CSV import format.
     """
@@ -71,16 +71,16 @@ async def get_valid_billing_ids() -> list[str]:
 
 
 async def get_valid_billing_ids_for_buyer(buyer_id: Optional[str] = None) -> list[str]:
-    """Get list of billing_ids for a specific buyer seat.
+    """Get list of pretargeting config IDs (`billing_id`) for a buyer seat.
 
-    If buyer_id is provided, returns billing_ids for that specific buyer seat.
+    If buyer_id is provided, returns `billing_id` values for that specific buyer seat.
     This allows filtering data by selected buyer in multi-account scenarios.
 
     Args:
-        buyer_id: The buyer seat ID to filter by. If None, returns all billing_ids.
+        buyer_id: The buyer seat ID to filter by. If None, returns all `billing_id` values.
 
     Returns:
-        List of billing_id strings for the specified buyer (or all if not specified).
+        List of `billing_id` strings for the specified buyer (or all if not specified).
         Billing IDs are normalized (trimmed) to match CSV import format.
     """
     service = _get_analytics_service()
@@ -131,6 +131,7 @@ class WasteReportResponse(BaseModel):
     size_coverage: list[SizeCoverageResponse]
     potential_savings_qps: float
     potential_savings_usd: Optional[float]
+    qps_basis: Literal["avg_daily"] = "avg_daily"
     analysis_period_days: int
     generated_at: str
     recommendations_summary: dict = Field(default_factory=dict)

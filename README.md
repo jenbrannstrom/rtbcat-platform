@@ -1,6 +1,6 @@
 # Cat-Scan QPS Optimizer & Creative Intelligence Tool
 
-**Version:** 0.9.0 | **Phase:** Production | **Last Updated:** January 2026
+**Version:** 0.9.2 | **Runtime Build ID:** `sha-<gitsha>` | **Last Updated:** February 2026
 
 An **open-source** QPS optimization tool for Google Authorized Buyers. Cat-Scan helps RTB bidders improve QPS efficiency by learning which data-streams the bidder prefers to bid on, and fine-tune Pretargeting to allow more bid-requests through to the bidder for preferred placements/apps.
 
@@ -63,6 +63,35 @@ cd rtbcat-platform
 - ffmpeg (optional, for video thumbnails)
 
 See **[INSTALL.md](INSTALL.md)** for detailed installation instructions.
+
+### Security-First Install Sequence (First Principles)
+
+Treat setup as four separate capabilities:
+
+1. **Boot capability**: App can start and users can log in.
+2. **Ingestion capability**: App can import daily CSV performance data from Gmail.
+3. **Analysis capability**: App can compute metrics from imported data.
+4. **Google write capability**: App can modify live Authorized Buyers pretargeting via API.
+
+For safety-first single-tenant installs, enable them in this order:
+
+1. **Provision infrastructure and minimum secrets** (DB + runtime secrets only).
+2. **Start app without AB service-account key** so the app is operational but cannot change Google RTB configs.
+3. **Bootstrap first admin explicitly** using the bootstrap token flow (production) in **[AUTHENTICATION.md](docs/AUTHENTICATION.md)**.
+4. **Set up daily CSV ingestion from Gmail**:
+   - create Gmail OAuth client credentials,
+   - run Gmail OAuth authorization (`scripts/gmail_auth.py`) once,
+   - upload/store Gmail secrets,
+   - configure scheduler/import label.
+5. **Verify ingestion is working** (new daily CSV emails are imported and visible in dashboard metrics).
+6. **Only then add AB API credentials** (service-account JSON) when you are ready to allow live Google config actions (pause/activate/apply changes).
+
+What can be automated vs manual:
+
+- **Automatable**: infra provisioning, startup, secret creation/upload, bootstrap API call, scheduler wiring, health checks.
+- **Manual (by design)**: Gmail OAuth browser consent and any Google-side permission approvals.
+
+This sequence keeps a fresh install useful but low-risk: no live Google write access until explicitly enabled.
 
 ---
 
@@ -173,7 +202,7 @@ Cat-Scan requires **5 separate CSV reports** from Google Authorized Buyers due t
 | # | Report | Purpose | Key Fields | Table |
 |---|--------|---------|------------|-------|
 | 1 | **catscan-bidsinauction** | Bid metrics by creative | Creative ID, Bids in auction, Auctions won | `rtb_daily` |
-| 2 | **catscan-quality** | Quality/billing data | Billing ID, Reached queries, Impressions | `rtb_daily` |
+| 2 | **catscan-quality** | Quality/config data | Pretargeting config (Billing ID), Reached queries, Impressions | `rtb_daily` |
 | 3 | **catscan-pipeline-geo** | Bidstream by region | Country, Bid requests, Bids | `rtb_bidstream` |
 | 4 | **catscan-pipeline** | Bidstream by publisher | Publisher ID + Bid metrics | `rtb_bidstream` |
 | 5 | **catscan-bid-filtering** | Bid filtering reasons | Bid filtering status, Filtered bids | `rtb_bid_filtering` |
@@ -182,9 +211,10 @@ Cat-Scan requires **5 separate CSV reports** from Google Authorized Buyers due t
 
 Google's limitation: *"Billing ID is not compatible with [Bid requests]..."*
 
-- To get **Billing ID + spend** → you lose bid request metrics
+- In Cat-Scan UI/API, **Billing ID** is treated as **Pretargeting config ID** (`billing_id`)
+- To get **Pretargeting config (Billing ID) + spend** → you lose bid request metrics
 - To get **Bid request metrics** → you lose Billing ID
-- **JOIN Strategy:** Cat-Scan joins CSV #1 and #2 on (Day, Creative ID) to reconstruct per-billing_id bidstream metrics
+- **JOIN Strategy:** Cat-Scan joins CSV #1 and #2 on (Day, Creative ID) to reconstruct per-pretargeting-config (`billing_id`) bidstream metrics
 
 ### Data Quality Flags
 
@@ -205,7 +235,7 @@ Metrics: Bids, Bids in auction, Auctions won
 
 **Report 2 - Quality (catscan-quality):**
 ```
-Dimensions: Day, Hour, Buyer account ID, Billing ID, Creative ID, Region, Platform
+Dimensions: Day, Hour, Buyer account ID, Pretargeting config (Billing ID), Creative ID, Region, Platform
 Metrics: Reached queries, Impressions, Clicks, Spend
 ```
 
@@ -420,6 +450,7 @@ is deprecated; use the Postgres-based compose files instead.
 | **[docs/SECURITY.md](docs/SECURITY.md)** | Security guide for forks and deployments |
 | **[DATA_MODEL.md](DATA_MODEL.md)** | Complete database schema (41 tables) |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | System architecture |
+| **[docs/LOCAL_DEV_DATABASE.md](docs/LOCAL_DEV_DATABASE.md)** | Local DB subset workflow + schema safety gates |
 | **[METRICS_GUIDE.md](METRICS_GUIDE.md)** | RTB metrics and optimization reference |
 | **[ROADMAP.md](ROADMAP.md)** | Planned features and known bugs |
 | **[CHANGELOG.md](CHANGELOG.md)** | Version history and migration notes |
@@ -475,7 +506,7 @@ See **[docs/SECURITY.md](docs/SECURITY.md)** for the complete security guide.
 - Video thumbnail generation
 - UTC timezone standardization
 - Data quality flagging (legacy vs production data)
-- Per-billing_id bidstream metrics via JOIN strategy
+- Per-pretargeting-config (`billing_id`) bidstream metrics via JOIN strategy
 
 ### Roadmap
 
@@ -526,16 +557,12 @@ npm run dev
 
 ## Versioning
 
-The app version is managed via a single `VERSION` file at the repository root.
+Cat-Scan uses two version identifiers:
 
-**To bump the version:**
-1. Edit the `VERSION` file with the new version (e.g., `0.9.1`)
-2. Commit and push - deployment automatically uses the new version
+- `Release version` (human-readable): `VERSION` file (current: `0.9.2`)
+- `Runtime build ID` (source of truth in deployed environments): image tag / git SHA (for example `sha-3b96ce6`)
 
-The version is displayed in:
-- API health endpoint (`/health`)
-- API docs (`/docs`)
-- Dashboard sidebar footer
+In production, the UI footer and `/health` should show the SHA build ID. Use that value for exact deploy traceability.
 
 ---
 

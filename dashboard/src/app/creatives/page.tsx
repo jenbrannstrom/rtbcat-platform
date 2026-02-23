@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, Suspense, useRef, useMemo } from "react";
+import { useState, Suspense, useRef, useMemo } from "react";
+import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Search, X, TrendingUp, Loader2, Play, Square, AlertTriangle } from "lucide-react";
@@ -10,13 +11,16 @@ import { PreviewModal } from "@/components/preview-modal";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
 import type { Creative, PerformancePeriod, CreativePerformanceSummary } from "@/types/api";
-import { cn, getFormatLabel } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useAccount } from "@/contexts/account-context";
 import { useTranslation } from "@/contexts/i18n-context";
 
-// Sort options - labels will be translated in the component
-type SortOptionValue = PerformancePeriod | "none";
-const SORT_OPTION_VALUES: SortOptionValue[] = ["none", "yesterday", "7d", "30d", "all_time"];
+// Period options for date-range picker
+const PERIOD_OPTIONS = [
+  { value: 7, label: "7d", period: "7d" as PerformancePeriod },
+  { value: 14, label: "14d", period: "14d" as PerformancePeriod },
+  { value: 30, label: "30d", period: "30d" as PerformancePeriod },
+];
 
 // Performance tiers
 type PerformanceTier = "high" | "medium" | "low" | "no_data";
@@ -323,7 +327,8 @@ function CreativesContent() {
   const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [previewCreative, setPreviewCreative] = useState<Creative | null>(null);
-  const [sortBy, setSortBy] = useState<PerformancePeriod | "none">("none");
+  const [days, setDays] = useState(7);
+  const [sortBySpend, setSortBySpend] = useState(true);
   const [tierFilter, setTierFilter] = useState<PerformanceTier | "all">("all");
   const [approvalFilter, setApprovalFilter] = useState<"all" | "approved" | "not_approved">("all");
 
@@ -334,7 +339,7 @@ function CreativesContent() {
     refetch,
   } = useQuery({
     queryKey: ["creatives", selectedSeatId],
-    queryFn: () => getCreatives({ limit: 1000, buyer_id: selectedSeatId ?? undefined }),
+    queryFn: () => getCreatives({ limit: 300, buyer_id: selectedSeatId ?? undefined, slim: true }),
   });
 
   const { data: availableSizes } = useQuery({
@@ -351,32 +356,33 @@ function CreativesContent() {
     [creatives]
   );
 
-  // Fetch performance data when sorting by spend
+  // Always fetch performance data for the selected period
+  const period = PERIOD_OPTIONS.find((o) => o.value === days)?.period ?? "7d";
   const {
     data: performanceResponse,
     isLoading: isLoadingPerformance,
   } = useQuery({
-    queryKey: ["performance", creatives?.map((c) => c.id), sortBy],
+    queryKey: ["performance", creatives?.map((c) => c.id), period],
     queryFn: () => {
-      if (!creatives || creatives.length === 0 || sortBy === "none") {
+      if (!creatives || creatives.length === 0) {
         return null;
       }
       return getBatchPerformance(
         creatives.map((c) => c.id),
-        sortBy as PerformancePeriod
+        period
       );
     },
-    enabled: !!creatives && creatives.length > 0 && sortBy !== "none",
+    enabled: !!creatives && creatives.length > 0,
     staleTime: 60000, // Cache for 1 minute
   });
 
   const performanceData = performanceResponse?.performance;
 
   const { data: previewPerformanceResponse } = useQuery({
-    queryKey: ["preview-performance", previewCreative?.id],
+    queryKey: ["preview-performance", previewCreative?.id, period],
     queryFn: () => {
       if (!previewCreative) return null;
-      return getBatchPerformance([previewCreative.id], "30d");
+      return getBatchPerformance([previewCreative.id], period);
     },
     enabled: !!previewCreative && !performanceData?.[previewCreative.id],
     staleTime: 60000,
@@ -474,8 +480,8 @@ function CreativesContent() {
       return true;
     });
 
-    // Sort by spend if performance data is available
-    if (result && sortBy !== "none" && performanceData) {
+    // Sort by spend if enabled and performance data is available
+    if (result && sortBySpend && performanceData) {
       result = [...result].sort((a, b) => {
         const perfA = performanceData[a.id];
         const perfB = performanceData[b.id];
@@ -486,7 +492,7 @@ function CreativesContent() {
     }
 
     return result;
-  }, [creatives, selectedFormats, selectedSizes, search, sortBy, performanceData, tierFilter, tierAssignments, approvalFilter]);
+  }, [creatives, selectedFormats, selectedSizes, search, sortBySpend, performanceData, tierFilter, tierAssignments, approvalFilter]);
 
   const hasActiveFilters =
     selectedFormats.size > 0 ||
@@ -591,7 +597,7 @@ function CreativesContent() {
         </div>
 
         {/* Tier Filter - only show when performance data is available */}
-        {sortBy !== "none" && performanceData && (
+        {performanceData && (
           <div className="flex items-center gap-1">
             <span className="text-xs text-gray-500 mr-1">{t.creatives.tier}</span>
             {TIER_OPTION_VALUES.map((tier) => (
@@ -633,28 +639,42 @@ function CreativesContent() {
           </div>
         )}
 
-        {/* Sort by Spend Dropdown */}
-        <div className="relative flex items-center gap-1">
-          <TrendingUp className="h-4 w-4 text-gray-400" />
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as PerformancePeriod | "none")}
-            className="input py-1.5 pr-8 text-sm min-w-[140px]"
-          >
-            {SORT_OPTION_VALUES.map((value) => (
-              <option key={value} value={value}>
-                {value === 'none' ? t.creatives.defaultOrder :
-                 value === 'yesterday' ? t.creatives.spendYesterday :
-                 value === '7d' ? t.creatives.spend7Days :
-                 value === '30d' ? t.creatives.spend30Days :
-                 t.creatives.spendAllTime}
-              </option>
+        {/* Period Selector - compact buttons */}
+        <div className="flex items-center gap-2">
+          <div className="flex rounded border border-gray-300 overflow-hidden">
+            {PERIOD_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setDays(option.value)}
+                className={cn(
+                  "px-2.5 py-1 text-xs font-medium transition-colors",
+                  days === option.value
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-gray-600 hover:bg-gray-50"
+                )}
+              >
+                {option.label}
+              </button>
             ))}
-          </select>
+          </div>
           {isLoadingPerformance && (
             <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />
           )}
         </div>
+
+        {/* Sort toggle */}
+        <button
+          onClick={() => setSortBySpend(!sortBySpend)}
+          className={cn(
+            "flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors",
+            sortBySpend
+              ? "bg-primary-600 text-white"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          )}
+        >
+          <TrendingUp className="h-3.5 w-3.5" />
+          {sortBySpend ? t.creatives.spend7Days.split(' ')[0] : t.creatives.defaultOrder}
+        </button>
 
         {/* Clear Filters */}
         {hasActiveFilters && (
@@ -678,7 +698,7 @@ function CreativesContent() {
           creatives={filteredCreatives}
           onPreview={setPreviewCreative}
           performanceData={performanceData}
-          sortField={sortBy !== "none" ? "spend" : null}
+          sortField={sortBySpend ? "spend" : null}
         />
       ) : (
         <div className="text-center py-12">
@@ -690,9 +710,9 @@ function CreativesContent() {
               : t.creatives.noCreativesFound}
           </p>
           {!hasActiveFilters && !selectedSeatId && (
-            <a href="/connect" className="btn-primary mt-4 inline-flex">
+            <Link href="/connect" className="btn-primary mt-4 inline-flex">
               {t.creatives.connectAccount}
-            </a>
+            </Link>
           )}
           {!hasActiveFilters && selectedSeatId && (
             <p className="mt-2 text-sm text-gray-400">

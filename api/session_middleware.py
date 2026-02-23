@@ -20,6 +20,7 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
+from api.auth_bootstrap import is_bootstrap_token_required, is_bootstrap_completed
 from services.auth_service import AuthService, User
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ PUBLIC_PATHS = {
     "/redoc",
     "/auth/check",
     "/auth/me",
+    "/auth/bootstrap",  # First admin provisioning (token-gated)
     "/auth/login",  # Password login
     "/auth/register",  # First user registration
     "/auth/authing/login",  # Authing OIDC login redirect
@@ -199,6 +201,12 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
 
             # First user gets admin role, others get user role
             user_count = await auth_svc.count_users()
+            if user_count == 0 and is_bootstrap_token_required() and not await is_bootstrap_completed():
+                logger.warning(
+                    "Blocked OAuth2 first-user auto-admin for %s (CATSCAN_BOOTSTRAP_TOKEN is set, use /auth/bootstrap)",
+                    email,
+                )
+                return None, True
             if user_count > 0 and not is_auto_user_provisioning_enabled():
                 logger.warning(
                     "Blocked OAuth2 auto-provisioning for %s (CATSCAN_ALLOW_AUTO_USER_PROVISIONING=false)",
@@ -271,6 +279,14 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
                 user = await self._validate_session(session_id)
                 if user:
                     request.state.user = user
+            # Provide a default user so route dependencies don't fail
+            if not getattr(request.state, "user", None):
+                request.state.user = User(
+                    id="local-dev",
+                    email="dev@localhost",
+                    display_name="Local Dev",
+                    role="admin",
+                )
             return await call_next(request)
 
         # Multi-user mode: require authentication

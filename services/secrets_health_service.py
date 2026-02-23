@@ -63,6 +63,19 @@ def _is_clustering_enabled() -> bool:
     )
 
 
+def _is_oauth2_proxy_enabled() -> bool:
+    return _env_true("OAUTH2_PROXY_ENABLED", default=False)
+
+
+def _is_oauth_client_secret_required_in_api() -> bool:
+    """Whether API startup should require Google OAuth client secret.
+
+    Most deployments run oauth2-proxy as a separate process/service, so the API
+    does not need `GOOGLE_OAUTH_CLIENT_SECRET` locally. Keep this opt-in.
+    """
+    return _env_true("CATSCAN_REQUIRE_OAUTH_CLIENT_SECRET_IN_API", default=False)
+
+
 def _feature_checks() -> list[FeatureCheck]:
     return [
         FeatureCheck(
@@ -100,6 +113,16 @@ def _feature_checks() -> list[FeatureCheck]:
             description="Anthropic clustering analysis",
             required_keys=("ANTHROPIC_API_KEY",),
             enabled=_is_clustering_enabled(),
+        ),
+        FeatureCheck(
+            name="oauth2_proxy",
+            description="Google OAuth2 Proxy authentication",
+            required_keys=(
+                ("GOOGLE_OAUTH_CLIENT_SECRET",)
+                if _is_oauth_client_secret_required_in_api()
+                else ()
+            ),
+            enabled=_is_oauth2_proxy_enabled(),
         ),
     ]
 

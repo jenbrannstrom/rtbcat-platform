@@ -77,6 +77,7 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
   }
 
   const summary = report.recommendations_summary;
+  const qpsLabel = report.qps_basis === "avg_daily" ? "Avg QPS" : "QPS";
 
   return (
     <div className="space-y-6">
@@ -109,13 +110,14 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
             <div>
               <p className="text-sm font-medium text-gray-600">Potential Savings</p>
               <p className="text-3xl font-bold text-gray-900 mt-1">
-                {report.potential_savings_qps.toFixed(1)} <span className="text-lg font-normal text-gray-500">QPS</span>
+                {report.potential_savings_qps.toFixed(1)} <span className="text-lg font-normal text-gray-500">{qpsLabel}</span>
               </p>
               {report.potential_savings_usd && (
                 <p className="text-xs text-gray-500 mt-2">
                   ~${report.potential_savings_usd.toFixed(2)}/month
                 </p>
               )}
+              <p className="text-xs text-gray-500 mt-1">Based on daily average request volume</p>
             </div>
             <TrendingDown className="h-8 w-8 text-blue-500" />
           </div>
@@ -203,7 +205,7 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
               <p className="text-sm text-gray-600">
                 <span className="font-medium">Top savings opportunity:</span>{" "}
                 <span className="text-gray-900">{summary.top_savings_size}</span>{" "}
-                <span className="text-blue-600">({summary.top_savings_qps.toFixed(1)} QPS)</span>
+                <span className="text-blue-600">({summary.top_savings_qps.toFixed(1)} Avg QPS)</span>
               </p>
             </div>
           )}

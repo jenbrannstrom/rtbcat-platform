@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from storage.postgres_repositories.rtb_bidstream_repo import RtbBidstreamRepository
-from services.home_analytics_service import HomeAnalyticsService
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +36,30 @@ class PrecomputeStatus:
 class RtbBidstreamService:
     """Service for RTB bidstream analytics."""
 
-    def __init__(self):
-        self._repo = RtbBidstreamRepository()
+    # Canonical <-> legacy compatibility map for staged naming rollout.
+    PRECOMPUTE_TABLE_ALIASES: dict[str, str] = {
+        "seat_daily": "home_seat_daily",
+        "seat_geo_daily": "home_geo_daily",
+        "seat_publisher_daily": "home_publisher_daily",
+        "seat_size_daily": "home_size_daily",
+        "pretarg_daily": "home_config_daily",
+        "pretarg_size_daily": "config_size_daily",
+        "pretarg_geo_daily": "config_geo_daily",
+        "pretarg_publisher_daily": "config_publisher_daily",
+        "pretarg_creative_daily": "config_creative_daily",
+        "home_seat_daily": "seat_daily",
+        "home_geo_daily": "seat_geo_daily",
+        "home_publisher_daily": "seat_publisher_daily",
+        "home_size_daily": "seat_size_daily",
+        "home_config_daily": "pretarg_daily",
+        "config_size_daily": "pretarg_size_daily",
+        "config_geo_daily": "pretarg_geo_daily",
+        "config_publisher_daily": "pretarg_publisher_daily",
+        "config_creative_daily": "pretarg_creative_daily",
+    }
+
+    def __init__(self, repo: RtbBidstreamRepository | None = None):
+        self._repo = repo or RtbBidstreamRepository()
 
     # =========================================================================
     # Precompute Status
@@ -52,7 +73,19 @@ class RtbBidstreamService:
         params: Optional[list] = None,
     ) -> PrecomputeStatus:
         """Check if a precompute table exists and has data."""
-        exists = await self._repo.table_exists(table_name)
+        source_table_name = table_name
+        exists = await self._repo.table_exists(source_table_name)
+        if not exists:
+            fallback_name = self.PRECOMPUTE_TABLE_ALIASES.get(table_name)
+            if fallback_name and await self._repo.table_exists(fallback_name):
+                logger.info(
+                    "Precompute status using fallback table %s for requested %s",
+                    fallback_name,
+                    table_name,
+                )
+                source_table_name = fallback_name
+                exists = True
+
         if not exists:
             return PrecomputeStatus(
                 table=table_name,
@@ -62,7 +95,7 @@ class RtbBidstreamService:
             )
 
         row_count = await self._repo.get_precompute_row_count(
-            table_name, days, filters, params
+            source_table_name, days, filters, params
         )
         return PrecomputeStatus(
             table=table_name,
@@ -338,6 +371,8 @@ class RtbBidstreamService:
         This endpoint now reads from home precompute tables to avoid costly
         runtime scans/aggregations from config_size/fact tables on Home loads.
         """
+        from services.home_analytics_service import HomeAnalyticsService
+
         payload = await HomeAnalyticsService().get_config_payload(
             days=days,
             buyer_id=buyer_id,
@@ -358,10 +393,10 @@ class RtbBidstreamService:
     ) -> dict[str, Any]:
         """Get detailed breakdown for a specific config."""
         table_map = {
-            "size": "config_size_daily",
-            "geo": "config_geo_daily",
-            "publisher": "config_publisher_daily",
-            "creative": "config_creative_daily",
+            "size": "pretarg_size_daily",
+            "geo": "pretarg_geo_daily",
+            "publisher": "pretarg_publisher_daily",
+            "creative": "pretarg_creative_daily",
         }
         table_name = table_map.get(breakdown_type)
 
@@ -387,7 +422,11 @@ class RtbBidstreamService:
                     ),
                 }
 
-            if not status.has_rows and breakdown_type not in ("geo", "publisher"):
+            if (
+                not status.has_rows
+                and breakdown_type not in ("geo", "publisher")
+                and days >= 30
+            ):
                 return {
                     "billing_id": billing_id,
                     "breakdown_by": breakdown_type,
@@ -399,6 +438,11 @@ class RtbBidstreamService:
                         "Run a config refresh after imports."
                     ),
                     "precompute_status": {table_name: status.to_dict()},
+                    "requested_days": days,
+                    "effective_days": days,
+                    "data_state": "unavailable",
+                    "fallback_applied": False,
+                    "fallback_reason": "no_rows_for_window",
                 }
 
         # Get target countries for creative breakdown (language mismatch check)
@@ -409,10 +453,28 @@ class RtbBidstreamService:
                 billing_id
             )
 
+        requested_days = days
+        effective_days = days
+        fallback_applied = False
+        fallback_reason: Optional[str] = None
+
         # Fetch breakdown data
         rows = await self._get_breakdown_rows(
             breakdown_type, billing_id, days, buyer_account_id
         )
+
+        # If the short window is empty, fall back to 30d so users still see
+        # representative config behavior instead of a hard empty state.
+        if not rows and days < 30:
+            fallback_days = 30
+            fallback_rows = await self._get_breakdown_rows(
+                breakdown_type, billing_id, fallback_days, buyer_account_id
+            )
+            if fallback_rows:
+                rows = fallback_rows
+                effective_days = fallback_days
+                fallback_applied = True
+                fallback_reason = f"no_rows_{requested_days}d_used_{fallback_days}d"
 
         if not rows:
             reason_map = {
@@ -429,8 +491,10 @@ class RtbBidstreamService:
                 "has_funnel_metrics": False,
                 "no_data_reason": reason_map.get(breakdown_type, "No data available."),
                 "data_state": "unavailable",
-                "fallback_applied": False,
-                "fallback_reason": "no_canonical_rows",
+                "fallback_applied": fallback_applied,
+                "fallback_reason": fallback_reason or "no_canonical_rows",
+                "requested_days": requested_days,
+                "effective_days": effective_days,
             }
 
         # Build breakdown items
@@ -443,9 +507,11 @@ class RtbBidstreamService:
             "breakdown": breakdown,
             "is_aggregate": False,
             "has_funnel_metrics": any(item.get("bids_in_auction", 0) > 0 for item in breakdown),
-            "data_state": "healthy",
-            "fallback_applied": False,
-            "fallback_reason": None,
+            "data_state": "degraded" if fallback_applied else "healthy",
+            "fallback_applied": fallback_applied,
+            "fallback_reason": fallback_reason,
+            "requested_days": requested_days,
+            "effective_days": effective_days,
         }
 
     async def _get_breakdown_rows(
@@ -530,6 +596,9 @@ class RtbBidstreamService:
                 "data_source": row.get("data_source", "csv"),
             }
 
+            if row.get("target_value"):
+                item["target_value"] = str(row["target_value"])
+
             if bids > 0 or bids_in_auction > 0:
                 item["bids"] = bids
                 item["bids_in_auction"] = bids_in_auction
@@ -599,7 +668,7 @@ class RtbBidstreamService:
             params.append(buyer_account_id)
 
         status = await self.get_precompute_status(
-            "config_creative_daily", days, filters, params
+            "pretarg_creative_daily", days, filters, params
         )
 
         if not status.has_rows:

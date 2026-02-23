@@ -1,6 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { ArrowRight, Upload } from "lucide-react";
+import { useAccount } from "@/contexts/account-context";
+import { toBuyerScopedPath } from "@/lib/buyer-routes";
 
 /**
  * Utility to format large numbers with K/M/B suffixes.
@@ -29,6 +32,8 @@ export function FunnelCard({
   impressions,
   days,
 }: FunnelCardProps) {
+  const { selectedBuyerId } = useAccount();
+  const importHref = toBuyerScopedPath("/import", selectedBuyerId);
   // Only require reached to show funnel (bid_requests is optional)
   const hasFunnelData = reached !== null && reached > 0;
 
@@ -129,7 +134,7 @@ export function FunnelCard({
                       <p className="font-semibold text-gray-600 mb-1">Dimensions (in order):</p>
                       <ol className="list-decimal list-inside text-gray-700">
                         <li>Day</li>
-                        <li>Billing ID</li>
+                        <li>Pretargeting config (Billing ID)</li>
                         <li>Creative ID</li>
                         <li>Creative size</li>
                         <li>Creative format</li>
@@ -146,9 +151,9 @@ export function FunnelCard({
                     </div>
                   </div>
                 </div>
-                <a href="/setup?tab=import" className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
+                <Link href={importHref} className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
                   Go to Import → <ArrowRight className="h-3 w-3" />
-                </a>
+                </Link>
               </div>
             </div>
           </div>

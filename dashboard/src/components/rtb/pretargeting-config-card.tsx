@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type MouseEvent } from 'react';
+import Link from 'next/link';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
-import { setPretargetingName, lookupGeoNames } from '@/lib/api';
-import { ChevronRight, Pencil, Check, X, AlertTriangle, AlertCircle, Settings } from 'lucide-react';
+import { setPretargetingName, lookupGeoNames, suspendPretargeting, activatePretargeting, syncPretargetingConfigs, getPretargetingConfigDetail, createPendingChange, cancelPendingChange } from '@/lib/api';
+import { ChevronRight, Pencil, Check, X, AlertTriangle, AlertCircle, Pause, Play, Loader2, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useRouter } from 'next/navigation';
 import { SnapshotComparisonPanel } from './snapshot-comparison-panel';
-import { PretargetingSettingsEditor } from './pretargeting-settings-editor';
+import { useAccount } from '@/contexts/account-context';
+import { toBuyerScopedPath } from '@/lib/buyer-routes';
 
 export interface PretargetingConfig {
   billing_id: string;
@@ -24,6 +25,7 @@ export interface PretargetingConfig {
   win_rate: number;
   waste_rate: number;
   has_performance: boolean;
+  metrics_delayed?: boolean;
 }
 
 interface PretargetingConfigCardProps {
@@ -111,17 +113,23 @@ function WasteMiniBar({ pct }: { pct: number }) {
 }
 
 export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: PretargetingConfigCardProps) {
+  const { selectedBuyerId } = useAccount();
   // Support both controlled and uncontrolled expansion
   const [internalExpanded, setInternalExpanded] = useState(false);
   const expanded = isExpanded !== undefined ? isExpanded : internalExpanded;
   const handleToggle = onToggleExpand || (() => setInternalExpanded(!internalExpanded));
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(config.name);
-  const [showSettingsEditor, setShowSettingsEditor] = useState(false);
-  const [editorTab, setEditorTab] = useState<'publishers' | 'settings'>('settings');
+  const [showHistory, setShowHistory] = useState(false);
+  const [qpsInput, setQpsInput] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
-  const router = useRouter();
   const queryClient = useQueryClient();
+
+  const { data: configDetail } = useQuery({
+    queryKey: ['pretargeting-detail', config.billing_id],
+    queryFn: () => getPretargetingConfigDetail(config.billing_id),
+    enabled: expanded,
+  });
 
   const nameMutation = useMutation({
     mutationFn: ({ billingId, userName }: { billingId: string; userName: string }) =>
@@ -132,6 +140,38 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
     },
   });
 
+  const suspendMutation = useMutation({
+    mutationFn: () => suspendPretargeting(config.billing_id),
+    onSuccess: async () => {
+      await syncPretargetingConfigs();
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+    },
+  });
+
+  const activateMutation = useMutation({
+    mutationFn: () => activatePretargeting(config.billing_id),
+    onSuccess: async () => {
+      await syncPretargetingConfigs();
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+    },
+  });
+
+  const createChangeMutation = useMutation({
+    mutationFn: createPendingChange,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', config.billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+    },
+  });
+
+  const cancelChangeMutation = useMutation({
+    mutationFn: cancelPendingChange,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', config.billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+    },
+  });
+
   // Focus input when editing starts
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -139,6 +179,12 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
       inputRef.current.select();
     }
   }, [isEditing]);
+
+  // Sync QPS input with config detail
+  useEffect(() => {
+    const qpsValue = configDetail?.effective_maximum_qps ?? configDetail?.maximum_qps;
+    setQpsInput(qpsValue === null || qpsValue === undefined ? '' : String(qpsValue));
+  }, [configDetail?.effective_maximum_qps, configDetail?.maximum_qps]);
 
   const handleStartEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -167,6 +213,87 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
     }
   };
 
+  const pendingQpsChanges = (configDetail?.pending_changes || []).filter(
+    (c) => c.change_type === 'set_maximum_qps'
+  );
+  const latestPendingQpsChange = pendingQpsChanges.length > 0
+    ? pendingQpsChanges[pendingQpsChanges.length - 1]
+    : null;
+  const persistedQpsLimit = configDetail?.maximum_qps ?? null;
+
+  const applyQpsChange = () => {
+    if (!configDetail) return;
+    const normalized = qpsInput.trim();
+    if (!normalized) {
+      pendingQpsChanges.forEach((c) => cancelChangeMutation.mutate(c.id));
+      return;
+    }
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isFinite(parsed) || parsed < 0) return;
+    const desired = String(parsed);
+    pendingQpsChanges
+      .filter((c) => c.value !== desired)
+      .forEach((c) => cancelChangeMutation.mutate(c.id));
+    if (persistedQpsLimit === parsed) {
+      pendingQpsChanges
+        .filter((c) => c.value === desired)
+        .forEach((c) => cancelChangeMutation.mutate(c.id));
+      return;
+    }
+    if (latestPendingQpsChange?.value === desired) return;
+    createChangeMutation.mutate({
+      billing_id: config.billing_id,
+      change_type: 'set_maximum_qps',
+      field_name: 'maximum_qps',
+      value: desired,
+      reason: 'Updated from config card QPS control',
+    });
+  };
+
+  // Format controls
+  const pendingChanges = configDetail?.pending_changes || [];
+  const effectiveFormats = new Set(configDetail?.effective_formats || configDetail?.included_formats || []);
+  const isFormatEnabled = (format: string): boolean => effectiveFormats.has(format);
+  const findPendingChange = (changeType: string, value: string) =>
+    pendingChanges.find((c: { change_type: string; value: string }) => c.change_type === changeType && c.value === value);
+
+  const setFormatEnabledState = (format: string, shouldEnable: boolean) => {
+    const pendingAdd = findPendingChange('add_format', format);
+    const pendingRemove = findPendingChange('remove_format', format);
+    const currentlyEnabled = isFormatEnabled(format);
+
+    if (shouldEnable) {
+      if (pendingRemove) {
+        cancelChangeMutation.mutate(pendingRemove.id);
+        return;
+      }
+      if (pendingAdd || currentlyEnabled) return;
+      createChangeMutation.mutate({
+        billing_id: config.billing_id,
+        change_type: 'add_format',
+        field_name: 'included_formats',
+        value: format,
+        reason: 'Enabled from config card',
+      });
+      return;
+    }
+
+    if (pendingAdd) {
+      cancelChangeMutation.mutate(pendingAdd.id);
+      return;
+    }
+    if (pendingRemove || !currentlyEnabled) return;
+    createChangeMutation.mutate({
+      billing_id: config.billing_id,
+      change_type: 'remove_format',
+      field_name: 'included_formats',
+      value: format,
+      reason: 'Disabled from config card',
+    });
+  };
+
+  const formatMutationPending = createChangeMutation.isPending || cancelChangeMutation.isPending;
+
   // Determine status indicator
   const isHighWaste = config.has_performance && config.waste_rate >= 70;
   const isCriticalWaste = config.has_performance && config.waste_rate >= 90;
@@ -174,6 +301,12 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
 
   // Check if using display_name from Google (not user-defined)
   const isGoogleName = !config.user_name && config.display_name;
+  const stateMutationPending = suspendMutation.isPending || activateMutation.isPending;
+  const qpsMutationPending = createChangeMutation.isPending || cancelChangeMutation.isPending;
+  const configDetailHref = toBuyerScopedPath(
+    `/bill_id/${encodeURIComponent(config.billing_id)}`,
+    selectedBuyerId
+  );
 
   return (
     <div
@@ -207,10 +340,16 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
           {!isGoodWinRate && !isHighWaste && <div className="w-4" />}
         </div>
 
-        {/* Billing ID */}
-        <span className="font-mono text-xs text-gray-400 w-24 shrink-0">
+        {/* Pretargeting config ID (billing_id) */}
+        <Link
+          href={configDetailHref}
+          onClick={(e: MouseEvent<HTMLAnchorElement>) => e.stopPropagation()}
+          className="font-mono text-xs text-gray-500 hover:text-primary-600 hover:underline w-24 shrink-0"
+          title="Pretargeting config ID"
+          aria-label={`Pretargeting config ID ${config.billing_id}`}
+        >
           {config.billing_id}
-        </span>
+        </Link>
 
         {/* Name - editable */}
         <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
@@ -269,7 +408,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
         {/* Metrics summary */}
         <div className="flex items-center gap-4 text-xs shrink-0">
           <span className="text-gray-600 w-16 text-right">
-            {formatNumber(config.reached)}
+            {config.has_performance ? formatNumber(config.reached) : '--'}
           </span>
           {config.has_performance ? (
             <>
@@ -308,100 +447,108 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
 
       {/* Expanded content */}
       {expanded && (
-        <div className="px-4 pb-4 pt-1 border-t bg-gray-50/50">
-          {/* Settings pills with entry buttons */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex flex-wrap gap-2">
+        <div className="border-t bg-gray-50/50">
+          {/* Sticky action header with Pause/Activate, QPS controls, and History */}
+          <div className="sticky top-0 z-10 bg-gray-50 border-b px-4 py-2 flex items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-1.5">
               <GeoSettingPill geoIds={config.included_geos} max={5} />
-              <SettingPill label="Formats" values={config.formats} />
               <SettingPill label="Platforms" values={config.platforms} />
               <SettingPill label="Sizes" values={config.sizes} max={4} />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+              {/* Format checkboxes inline */}
+              <div className="flex items-center gap-2 text-xs text-slate-700">
+                <span className="text-[11px] text-gray-500 font-medium">Formats</span>
+                {[
+                  { label: 'Banner', value: 'HTML' },
+                  { label: 'Audio and Video', value: 'VIDEO' },
+                  { label: 'Native', value: 'NATIVE' },
+                ].map((formatOption) => (
+                  <label key={formatOption.value} className="inline-flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={isFormatEnabled(formatOption.value)}
+                      disabled={formatMutationPending}
+                      onChange={(event) => setFormatEnabledState(formatOption.value, event.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-gray-300"
+                    />
+                    <span className="text-[11px]">{formatOption.label}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="w-px h-5 bg-gray-300" />
+              {/* QPS control inline */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-gray-500 font-medium">QPS</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={qpsInput}
+                  onChange={(e) => setQpsInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') applyQpsChange(); }}
+                  className="w-20 rounded border border-gray-300 bg-white px-1.5 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  placeholder="unset"
+                />
+                <button
+                  onClick={applyQpsChange}
+                  disabled={qpsMutationPending}
+                  className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                >
+                  Set
+                </button>
+                {latestPendingQpsChange && (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">
+                    Pending: {latestPendingQpsChange.value}
+                  </span>
+                )}
+              </div>
+              <div className="w-px h-5 bg-gray-300" />
+              {/* Pause/Activate */}
+              {config.state === 'ACTIVE' ? (
+                <button
+                  onClick={() => suspendMutation.mutate()}
+                  disabled={stateMutationPending}
+                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200 disabled:opacity-50"
+                >
+                  {suspendMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Pause className="h-3 w-3" />}
+                  Pause
+                </button>
+              ) : (
+                <button
+                  onClick={() => activateMutation.mutate()}
+                  disabled={stateMutationPending}
+                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
+                >
+                  {activateMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                  Activate
+                </button>
+              )}
+              {/* History toggle */}
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditorTab('settings');
-                  setShowSettingsEditor(!showSettingsEditor);
-                }}
+                onClick={() => setShowHistory(!showHistory)}
                 className={cn(
                   'flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors',
-                  showSettingsEditor && editorTab === 'settings'
+                  showHistory
                     ? 'bg-blue-100 text-blue-700'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 )}
               >
-                <Settings className="h-3 w-3" />
-                {showSettingsEditor && editorTab === 'settings' ? 'Hide Settings' : 'Config Settings'}
+                <History className="h-3 w-3" />
+                History
               </button>
             </div>
           </div>
 
-          {/* Settings Editor */}
-          {showSettingsEditor && (
-            <div className="mb-4 -mx-4 border-y">
-              <PretargetingSettingsEditor
+          {/* History Panel - toggled via button */}
+          {showHistory && (
+            <div className="px-4 pb-3 pt-2">
+              <SnapshotComparisonPanel
                 billing_id={config.billing_id}
                 configName={config.name}
-                initialTab={editorTab}
-                onClose={() => setShowSettingsEditor(false)}
               />
             </div>
           )}
-
-          {!showSettingsEditor && (
-            <div className="grid grid-cols-4 gap-4">
-              <div className="bg-white rounded-lg p-3 border">
-                <div className="text-xs text-gray-500 mb-1">Reached</div>
-                <div className="text-xl font-bold text-gray-900">
-                  {formatNumber(config.reached)}
-                </div>
-              </div>
-              <div className="bg-white rounded-lg p-3 border">
-                <div className="text-xs text-gray-500 mb-1">Impressions</div>
-                <div className="text-xl font-bold text-gray-900">
-                  {formatNumber(config.impressions)}
-                </div>
-              </div>
-              <div className="bg-white rounded-lg p-3 border">
-                <div className="text-xs text-gray-500 mb-1">Win Rate</div>
-                <div
-                  className={cn(
-                    'text-xl font-bold',
-                    config.has_performance && config.win_rate >= 50 && 'text-green-600',
-                    config.has_performance && config.win_rate >= 30 && config.win_rate < 50 && 'text-yellow-600',
-                    config.has_performance && config.win_rate < 30 && 'text-red-600',
-                    !config.has_performance && 'text-gray-400'
-                  )}
-                >
-                  {config.has_performance ? `${config.win_rate.toFixed(1)}%` : '--'}
-                </div>
-              </div>
-              <div className="bg-white rounded-lg p-3 border">
-                <div className="text-xs text-gray-500 mb-1">Waste Rate</div>
-                <div
-                  className={cn(
-                    'text-xl font-bold',
-                    config.has_performance && config.waste_rate < 50 && 'text-gray-700',
-                    config.has_performance && config.waste_rate >= 50 && config.waste_rate < 70 && 'text-yellow-600',
-                    config.has_performance && config.waste_rate >= 70 && config.waste_rate < 90 && 'text-orange-600',
-                    config.has_performance && config.waste_rate >= 90 && 'text-red-600',
-                    !config.has_performance && 'text-gray-400'
-                  )}
-                >
-                  {config.has_performance ? `${config.waste_rate.toFixed(1)}%` : '--'}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* A/B Comparison Panel */}
-          <div className="mt-4">
-            <SnapshotComparisonPanel
-              billing_id={config.billing_id}
-              configName={config.name}
-            />
-          </div>
         </div>
       )}
     </div>

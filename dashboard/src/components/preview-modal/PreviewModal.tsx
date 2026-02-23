@@ -265,7 +265,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                 </div>
               </>
             ) : (
-              <div className="text-center text-gray-400 py-4">No performance data available</div>
+              <div className="text-center text-gray-400 py-2 text-xs">No performance data imported yet</div>
             )}
           </div>
 
@@ -317,6 +317,18 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                     <div className="flex justify-between">
                       <span className="text-gray-500">Rejection</span>
                       <span className="text-red-600">{rejectionReason}</span>
+                    </div>
+                  )}
+                  {creative.disapproval_reasons && creative.disapproval_reasons.length > 0 && (
+                    <div>
+                      <span className="text-gray-500 text-xs">Disapproval Reasons</span>
+                      <div className="mt-1 space-y-1">
+                        {creative.disapproval_reasons.map((r: { reason: string; details?: string }, i: number) => (
+                          <div key={i} className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">
+                            {r.reason?.replace(/_/g, " ")}{r.details ? <>{" — "}<a href={r.details} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Read more</a></> : ""}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                   {creative.advertiser_name && (

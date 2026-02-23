@@ -16,6 +16,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 
+from analytics.cost_estimator import resolve_request_cost_per_1000
 from analytics.recommendation_engine import (
     Action,
     Confidence,
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 MIN_GEO_SPEND_USD = 10  # Minimum spend to analyze a geo
 LOW_CTR_THRESHOLD = 0.02  # 2% CTR is below average for display ads
 CTR_UNDERPERFORM_RATIO = 0.5  # CTR less than 50% of average = underperformer
+HIGH_WASTE_RATE_THRESHOLD = 0.80  # >80% query-to-impression waste is high risk
 SECONDS_PER_DAY = 86400
 
 
@@ -185,6 +187,7 @@ class GeoAnalyzer:
     async def _check_high_waste_geos(self, days: int) -> list[Recommendation]:
         """Check for geos with high query volume but low impression rate."""
         recommendations: list[Recommendation] = []
+        request_cost_per_1000 = await resolve_request_cost_per_1000(days=days)
 
         results = await db_query("""
             SELECT
@@ -235,7 +238,7 @@ class GeoAnalyzer:
                         wasted_queries_daily=int(wasted_daily),
                         wasted_spend_usd=0,
                         percent_of_total_waste=0,
-                        potential_savings_monthly=wasted_daily * 30 * 0.002 / 1000,
+                        potential_savings_monthly=(wasted_daily * 30 / 1000) * request_cost_per_1000,
                     ),
                     actions=[
                         Action(

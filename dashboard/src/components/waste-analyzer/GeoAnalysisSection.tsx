@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Globe, Upload, ArrowRight, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
 import type { GeoPerformance } from "@/lib/api";
+import { useAccount } from "@/contexts/account-context";
+import { toBuyerScopedPath } from "@/lib/buyer-routes";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "./FunnelCard";
 
@@ -16,6 +19,13 @@ interface GeoAnalysisSectionProps {
  * Shows win rates by country and identifies optimization opportunities.
  */
 export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) {
+  const { selectedBuyerId } = useAccount();
+  const importHref = toBuyerScopedPath("/import", selectedBuyerId);
+  type SortColumn = "country" | "reached" | "bids" | "wins" | "win_rate";
+  type SortDirection = "asc" | "desc";
+  const [sortColumn, setSortColumn] = useState<SortColumn>("wins");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
   const hasGeoData = geos && geos.length > 0;
 
   if (!hasGeoData) {
@@ -62,20 +72,15 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
                 </div>
                 <p className="mt-2 text-gray-500">Schedule: <strong>Daily</strong></p>
               </div>
-              <a href="/setup?tab=import" className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
+              <Link href={importHref} className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
                 Go to Import → <ArrowRight className="h-3 w-3" />
-              </a>
+              </Link>
             </div>
           </div>
         </div>
       </div>
     );
   }
-
-  type SortColumn = "country" | "reached" | "bids" | "wins" | "win_rate";
-  type SortDirection = "asc" | "desc";
-  const [sortColumn, setSortColumn] = useState<SortColumn>("wins");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -131,10 +136,11 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
   });
 
   const displayGeos = sortedGeos.slice(0, 15);
-  const totalBids = displayGeos.reduce((sum, g) => sum + (g.bids ?? 0), 0);
   const totalReached = displayGeos.reduce((sum, g) => sum + g.reached_queries, 0);
   const totalWins = displayGeos.reduce((sum, g) => sum + (g.auctions_won ?? g.impressions ?? 0), 0);
-  const overallWinRate = totalReached > 0 ? (totalWins / totalReached * 100) : 0;
+  const overallWinRate = totalReached > 0
+    ? Math.min(100, totalWins / totalReached * 100)
+    : 0;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -196,7 +202,8 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
           <tbody>
             {displayGeos.map((geo, index) => {
               const wins = geo.auctions_won ?? geo.impressions ?? 0;
-              const isLow = geo.win_rate < 50 && wins > 0;
+              const safeWinRate = Math.min(100, Math.max(0, geo.win_rate));
+              const isLow = safeWinRate < 50 && wins > 0;
               const isTop = index === 0;
               return (
               <tr key={geo.country} className="border-b border-gray-100 last:border-0">
@@ -212,9 +219,9 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
                 <td className="py-2 text-right text-green-600">{formatNumber(wins)}</td>
                 <td className={cn(
                   "py-2 text-right font-medium",
-                  geo.win_rate < 30 ? "text-red-600" : geo.win_rate >= 60 ? "text-green-600" : "text-gray-900"
+                  safeWinRate < 30 ? "text-red-600" : safeWinRate >= 60 ? "text-green-600" : "text-gray-900"
                 )}>
-                  {geo.win_rate.toFixed(1)}%
+                  {safeWinRate.toFixed(1)}%
                 </td>
               </tr>
             )})}

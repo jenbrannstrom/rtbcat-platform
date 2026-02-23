@@ -169,6 +169,7 @@ def load_status() -> Dict[str, Any]:
         "history": [],
         "running": False,
         "current_job_id": None,
+        "last_unread_report_emails": 0,
     }
 
 
@@ -193,6 +194,10 @@ def update_status(
     emails_processed: int = 0,
     running: bool = False,
     current_job_id: Optional[str] = None,
+    reason: Optional[str] = None,
+    latest_metric_date: Optional[str] = None,
+    rows_on_latest_metric_date: int = 0,
+    unread_report_emails: Optional[int] = None,
 ):
     """Update the import status after a run."""
     status = load_status()
@@ -208,6 +213,11 @@ def update_status(
     status["total_imports"] += files_imported
     status["running"] = running
     status["current_job_id"] = current_job_id
+    status["last_reason"] = reason
+    status["latest_metric_date"] = latest_metric_date
+    status["rows_on_latest_metric_date"] = rows_on_latest_metric_date
+    if unread_report_emails is not None:
+        status["last_unread_report_emails"] = int(unread_report_emails)
 
     # Keep last 50 history entries
     status["history"].insert(0, {
@@ -215,7 +225,11 @@ def update_status(
         "success": success,
         "files_imported": files_imported,
         "emails_processed": emails_processed,
-        "error": error
+        "error": error,
+        "reason": reason,
+        "latest_metric_date": latest_metric_date,
+        "rows_on_latest_metric_date": rows_on_latest_metric_date,
+        "unread_report_emails": unread_report_emails,
     })
     status["history"] = status["history"][:50]
 
@@ -236,6 +250,10 @@ def get_status() -> Dict[str, Any]:
         "recent_history": status.get("history", [])[:10],
         "running": running,
         "current_job_id": status.get("current_job_id"),
+        "last_reason": status.get("last_reason"),
+        "latest_metric_date": status.get("latest_metric_date"),
+        "rows_on_latest_metric_date": int(status.get("rows_on_latest_metric_date") or 0),
+        "last_unread_report_emails": int(status.get("last_unread_report_emails") or 0),
     }
 
 
@@ -310,6 +328,115 @@ def _get_sync_connection():
     return psycopg.connect(dsn, row_factory=dict_row)
 
 
+def _normalize_metric_date(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+def get_runtime_freshness_snapshot() -> dict[str, Any]:
+    """Return a lightweight freshness snapshot from active runtime Postgres."""
+    snapshot: dict[str, Any] = {
+        "runtime_path_verified": False,
+        "latest_metric_date": None,
+        "rows_on_latest_metric_date": 0,
+    }
+    conn = _get_sync_connection()
+    if conn is None:
+        return snapshot
+    try:
+        with conn:
+            latest_row = conn.execute(
+                "SELECT MAX(metric_date::date) AS latest_metric_date FROM rtb_daily"
+            ).fetchone()
+            latest_metric_date = _normalize_metric_date(
+                (latest_row or {}).get("latest_metric_date")
+            )
+            snapshot["runtime_path_verified"] = True
+            snapshot["latest_metric_date"] = latest_metric_date
+            if latest_metric_date:
+                rows_row = conn.execute(
+                    """
+                    SELECT COUNT(*) AS rows_on_latest_metric_date
+                    FROM rtb_daily
+                    WHERE metric_date::date = %s::date
+                    """,
+                    (latest_metric_date,),
+                ).fetchone()
+                snapshot["rows_on_latest_metric_date"] = int(
+                    (rows_row or {}).get("rows_on_latest_metric_date") or 0
+                )
+    except Exception as exc:
+        print(f"  Warning: runtime freshness snapshot failed: {exc}")
+    finally:
+        conn.close()
+    return snapshot
+
+
+def start_scheduler_ingestion_run(job_id: str, import_trigger: str) -> Optional[str]:
+    """Create one ingestion_runs row for the scheduler-triggered import job."""
+    conn = _get_sync_connection()
+    if conn is None:
+        return None
+    run_id = str(uuid.uuid4())
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO ingestion_runs (
+                    run_id, source_type, buyer_id, bidder_id, status,
+                    report_type, filename, row_count, error_summary, import_trigger
+                ) VALUES (%s, 'csv', NULL, NULL, 'running', %s, %s, 0, NULL, %s)
+                """,
+                (run_id, "gmail-scheduled", f"scheduler:{job_id}", import_trigger),
+            )
+        return run_id
+    except Exception as exc:
+        print(f"  Warning: failed to start scheduler ingestion run: {exc}")
+        return None
+    finally:
+        conn.close()
+
+
+def finish_scheduler_ingestion_run(
+    run_id: Optional[str],
+    *,
+    success: bool,
+    rows_imported: int,
+    error: Optional[str],
+    reason: Optional[str],
+) -> None:
+    """Finalize the scheduler ingestion_runs row."""
+    if not run_id:
+        return
+    conn = _get_sync_connection()
+    if conn is None:
+        return
+    status = "success" if success else "failed"
+    summary = error
+    if not summary and reason == "no_new_mail":
+        summary = "no_new_mail"
+    try:
+        with conn:
+            conn.execute(
+                """
+                UPDATE ingestion_runs
+                SET status = %s,
+                    row_count = %s,
+                    error_summary = %s,
+                    finished_at = CURRENT_TIMESTAMP
+                WHERE run_id = %s AND finished_at IS NULL
+                """,
+                (status, rows_imported, summary, run_id),
+            )
+    except Exception as exc:
+        print(f"  Warning: failed to finish scheduler ingestion run: {exc}")
+    finally:
+        conn.close()
+
+
 def record_import_run(
     *,
     seat_id: Optional[str],
@@ -325,6 +452,7 @@ def record_import_run(
     date_range_end: Optional[str] = None,
     columns_found: Optional[str] = None,
     error: Optional[str] = None,
+    import_trigger: str = "gmail-manual",
 ) -> None:
     """Record import run in ingestion_runs and import_history.
 
@@ -343,9 +471,9 @@ def record_import_run(
             conn.execute(
                 """INSERT INTO ingestion_runs
                    (run_id, source_type, buyer_id, bidder_id, status,
-                    report_type, filename, row_count, error_summary)
-                   VALUES (%s, 'csv', %s, %s, 'running', %s, %s, 0, NULL)""",
-                (run_id, seat_id, seat_id, report_kind, filename),
+                    report_type, filename, row_count, error_summary, import_trigger)
+                   VALUES (%s, 'csv', %s, %s, 'running', %s, %s, 0, NULL, %s)""",
+                (run_id, seat_id, seat_id, report_kind, filename, import_trigger),
             )
             conn.execute(
                 """UPDATE ingestion_runs
@@ -360,14 +488,14 @@ def record_import_run(
                        (batch_id, filename, rows_read, rows_imported,
                         rows_skipped, rows_duplicate, date_range_start,
                         date_range_end, columns_found, status,
-                        error_message, file_size_bytes, buyer_id, bidder_id)
-                       VALUES (%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        error_message, file_size_bytes, buyer_id, bidder_id, import_trigger)
+                       VALUES (%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (
                         batch_id, filename, rows_read, rows_imported,
                         rows_duplicate, date_range_start, date_range_end,
                         columns_found,
                         "complete" if success else "failed",
-                        error, file_size_bytes, seat_id, seat_id,
+                        error, file_size_bytes, seat_id, seat_id, import_trigger,
                     ),
                 )
     except Exception as exc:
@@ -1006,7 +1134,11 @@ def release_lock():
         pass
 
 
-def run_import(verbose: bool = True, job_id: Optional[str] = None) -> Dict[str, Any]:
+def run_import(
+    verbose: bool = True,
+    job_id: Optional[str] = None,
+    import_trigger: str = "gmail-manual",
+) -> Dict[str, Any]:
     """
     Run the Gmail import process.
     Returns a dict with results for API use.
@@ -1015,10 +1147,16 @@ def run_import(verbose: bool = True, job_id: Optional[str] = None) -> Dict[str, 
         "success": False,
         "emails_processed": 0,
         "files_imported": 0,
+        "unread_report_emails": 0,
         "emails_skipped": 0,
         "skipped_seat_ids": [],
         "errors": [],
-        "files": []
+        "files": [],
+        "no_new_mail": False,
+        "no_new_mail_reason": None,
+        "runtime_path_verified": False,
+        "latest_metric_date": None,
+        "rows_on_latest_metric_date": 0,
     }
     job_id = job_id or str(datetime.now().timestamp()).replace(".", "")
 
@@ -1027,7 +1165,50 @@ def run_import(verbose: bool = True, job_id: Optional[str] = None) -> Dict[str, 
         result["errors"].append(error_msg)
         return result
 
-    update_status(False, running=True, current_job_id=job_id)
+    if import_trigger not in {"gmail-auto", "gmail-manual"}:
+        import_trigger = "gmail-manual"
+
+    scheduler_run_id = start_scheduler_ingestion_run(job_id, import_trigger)
+    update_status(False, running=True, current_job_id=job_id, reason="running")
+
+    def finalize(
+        *,
+        success: bool,
+        files_imported: int,
+        error: Optional[str] = None,
+        reason: Optional[str] = None,
+        no_new_mail: bool = False,
+    ) -> None:
+        snapshot = get_runtime_freshness_snapshot()
+        result["runtime_path_verified"] = bool(snapshot.get("runtime_path_verified"))
+        result["latest_metric_date"] = snapshot.get("latest_metric_date")
+        result["rows_on_latest_metric_date"] = int(
+            snapshot.get("rows_on_latest_metric_date") or 0
+        )
+        result["files_imported"] = files_imported
+        if no_new_mail:
+            result["no_new_mail"] = True
+            result["no_new_mail_reason"] = reason or "no_new_mail"
+
+        update_status(
+            success,
+            files_imported=files_imported,
+            error=error,
+            emails_processed=result["emails_processed"],
+            running=False,
+            current_job_id=None,
+            reason=reason,
+            latest_metric_date=result["latest_metric_date"],
+            rows_on_latest_metric_date=result["rows_on_latest_metric_date"],
+            unread_report_emails=result.get("unread_report_emails"),
+        )
+        finish_scheduler_ingestion_run(
+            scheduler_run_id,
+            success=success,
+            rows_imported=files_imported,
+            error=error,
+            reason=reason,
+        )
 
     try:
         if verbose:
@@ -1043,23 +1224,39 @@ def run_import(verbose: bool = True, job_id: Optional[str] = None) -> Dict[str, 
             if verbose:
                 print(f"ERROR: {error_msg}")
             result["errors"].append(error_msg)
-            update_status(False, error=error_msg, running=False, current_job_id=None)
+            finalize(
+                success=False,
+                files_imported=0,
+                error=error_msg,
+                reason="auth_missing_files",
+            )
             return result
         except Exception as e:
             error_msg = f"Gmail authentication failed: {e}"
             if verbose:
                 print(f"ERROR: {error_msg}")
             result["errors"].append(error_msg)
-            update_status(False, error=error_msg, running=False, current_job_id=None)
+            finalize(
+                success=False,
+                files_imported=0,
+                error=error_msg,
+                reason="auth_failed",
+            )
             return result
 
         messages = find_report_emails(service)
+        result["unread_report_emails"] = len(messages)
 
         if not messages:
             if verbose:
                 print("No new report emails found.")
             result["success"] = True
-            update_status(True, files_imported=0, emails_processed=0, running=False, current_job_id=None)
+            finalize(
+                success=True,
+                files_imported=0,
+                reason="no_new_mail",
+                no_new_mail=True,
+            )
             return result
 
         if verbose:
@@ -1117,6 +1314,7 @@ def run_import(verbose: bool = True, job_id: Optional[str] = None) -> Dict[str, 
                         date_range_end=imp.date_range_end,
                         columns_found=imp.columns_found,
                         error=imp.error,
+                        import_trigger=import_trigger,
                     )
                     if imp.success:
                         total_imported += 1
@@ -1137,7 +1335,6 @@ def run_import(verbose: bool = True, job_id: Optional[str] = None) -> Dict[str, 
             if verbose:
                 print()
 
-        result["files_imported"] = total_imported
         result["success"] = True
 
         if verbose:
@@ -1145,12 +1342,10 @@ def run_import(verbose: bool = True, job_id: Optional[str] = None) -> Dict[str, 
             print(f"Done! Imported {total_imported} file(s) to ~/.catscan/imports/")
             print("=" * 60)
 
-        update_status(
-            True,
+        finalize(
+            success=True,
             files_imported=total_imported,
-            emails_processed=result["emails_processed"],
-            running=False,
-            current_job_id=None,
+            reason="import_completed",
         )
 
         if result["skipped_seat_ids"]:
@@ -1162,7 +1357,12 @@ def run_import(verbose: bool = True, job_id: Optional[str] = None) -> Dict[str, 
         if verbose:
             print(f"ERROR: {error_msg}")
         result["errors"].append(error_msg)
-        update_status(False, error=error_msg, running=False, current_job_id=None)
+        finalize(
+            success=False,
+            files_imported=result["files_imported"],
+            error=error_msg,
+            reason="import_failed",
+        )
         return result
     finally:
         release_lock()
@@ -1182,7 +1382,7 @@ def main():
         print(json.dumps(status, indent=2))
         return
 
-    result = run_import(verbose=not args.quiet, job_id=None)
+    result = run_import(verbose=not args.quiet, job_id=None, import_trigger="gmail-manual")
 
     if not result["success"]:
         sys.exit(1)

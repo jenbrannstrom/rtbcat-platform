@@ -16,7 +16,7 @@ export function ExportInstructions() {
         <ul className="text-amber-700 space-y-1 ml-4">
           <li>• To get Creative-level bid metrics, you lose &quot;Bid requests&quot;</li>
           <li>• To get &quot;Bid requests&quot;, you lose Creative detail</li>
-          <li>• Billing ID cannot be combined with bid pipeline metrics</li>
+          <li>• Pretargeting config (Billing ID) cannot be combined with bid pipeline metrics</li>
         </ul>
       </div>
 
@@ -69,14 +69,14 @@ export function ExportInstructions() {
           <h4 className="font-semibold text-gray-900">catscan-quality</h4>
           <span className="text-xs text-gray-500 ml-auto">→ rtb_daily</span>
         </div>
-        <p className="text-gray-600 mb-3">Creative-level performance with viewability metrics. Has Billing ID for config analysis.</p>
+        <p className="text-gray-600 mb-3">Creative-level performance with viewability metrics. Includes pretargeting config (Billing ID) for config analysis.</p>
 
         <div className="grid md:grid-cols-2 gap-4">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Dimensions</p>
             <ul className="space-y-1 text-gray-700">
               <li>• Day</li>
-              <li>• Billing ID</li>
+              <li>• Pretargeting config (Billing ID)</li>
               <li>• Creative ID</li>
               <li>• Creative size</li>
               <li>• Creative format</li>

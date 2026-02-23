@@ -186,7 +186,7 @@ function PreviewThumbnail({ creative }: { creative: Creative }) {
 export function CreativeCard({ creative, onPreview, performance, sortField }: CreativeCardProps) {
   const [copied, setCopied] = useState(false);
   const [htmlCopied, setHtmlCopied] = useState(false);
-  const hasPreview = creative.video || creative.html || creative.native || creative.format === "IMAGE";
+  const hasPreview = true; // Modal fetches full data on open; slim mode strips preview fields
   const hasData = performance?.has_data;
 
   // Get Google Console URL
@@ -337,6 +337,13 @@ export function CreativeCard({ creative, onPreview, performance, sortField }: Cr
             </span>
           )}
         </div>
+        {creative.disapproval_reasons && creative.disapproval_reasons.length > 0 && (
+          <div className="mt-1.5 text-[10px] text-red-600 space-y-0.5">
+            {creative.disapproval_reasons.map((r, i) => (
+              <div key={i}>{r.reason?.replace(/_/g, " ")}{r.details ? <>{" — "}<a href={r.details} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>Read more</a></> : ""}</div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

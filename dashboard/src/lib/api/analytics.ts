@@ -406,6 +406,8 @@ export interface ConfigPerformanceItem {
 
 export interface ConfigPerformanceResponse {
   period_days: number;
+  requested_days?: number;
+  effective_days?: number;
   total_configs: number;
   configs: ConfigPerformanceItem[];
   data_state?: "healthy" | "degraded" | "unavailable";
@@ -431,6 +433,31 @@ export interface EndpointEfficiencyResponse {
     end_date: string;
     seconds: number;
   };
+  data_coverage?: {
+    requested_window: {
+      start_date: string;
+      end_date: string;
+      days: number;
+    };
+    home_seat_daily: {
+      start_date: string | null;
+      end_date: string | null;
+      days_with_data: number;
+      row_count: number;
+      is_complete: boolean;
+    };
+    rtb_bidstream: {
+      start_date: string | null;
+      end_date: string | null;
+      days_with_data: number;
+      row_count: number;
+      is_complete: boolean;
+    };
+    endpoint_feed: {
+      latest_observed_at: string | null;
+      rows_with_positive_qps: number;
+    };
+  };
   summary: {
     allocated_qps: number;
     observed_query_rate_qps: number | null;
@@ -440,7 +467,15 @@ export interface EndpointEfficiencyResponse {
     allocation_overshoot_x: number | null;
     total_reached_queries: number;
     total_impressions: number;
+    delivery_win_rate_pct?: number;
     win_rate_pct: number;
+    bids?: number;
+    bids_in_auction?: number;
+    auctions_won?: number;
+    filtered_bids?: number;
+    filtered_bid_rate_pct?: number | null;
+    auction_win_rate_over_bids_pct?: number | null;
+    auction_win_rate_over_bids_in_auction_pct?: number | null;
   };
   endpoint_reconciliation: {
     status: "healthy" | "warning";
@@ -505,7 +540,7 @@ export async function getRTBFunnelConfigs(
   if (buyerId) params.set('buyer_id', buyerId);
   return fetchApi<ConfigPerformanceResponse>(
     `/analytics/home/configs?${params}`,
-    { timeoutMs: 12000 }
+    { timeoutMs: 30000 }
   );
 }
 
@@ -517,7 +552,7 @@ export async function getEndpointEfficiency(
   if (buyerId) params.set("buyer_id", buyerId);
   return fetchApi<EndpointEfficiencyResponse>(
     `/analytics/home/endpoint-efficiency?${params.toString()}`,
-    { timeoutMs: 12000 }
+    { timeoutMs: 30000 }
   );
 }
 

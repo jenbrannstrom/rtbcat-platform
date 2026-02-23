@@ -70,6 +70,7 @@ export interface ConfigDetail {
   included_sizes: string[];
   included_geos: string[];
   excluded_geos: string[];
+  maximum_qps?: number | null;
   publisher_targeting_mode?: string | null;
   publisher_targeting_values?: string[];
   synced_at: string | null;
@@ -77,6 +78,7 @@ export interface ConfigDetail {
   effective_sizes: string[];
   effective_geos: string[];
   effective_formats: string[];
+  effective_maximum_qps?: number | null;
   effective_publisher_targeting_mode?: string | null;
   effective_publisher_targeting_values?: string[];
 }
@@ -150,7 +152,7 @@ export async function getPretargetingConfigs(params?: {
   const query = searchParams.toString();
   return fetchApi<PretargetingConfigResponse[]>(
     `/settings/pretargeting${query ? `?${query}` : ""}`,
-    { timeoutMs: 10000 }
+    { timeoutMs: 30000 }
   );
 }
 
@@ -228,6 +230,7 @@ export type ConfigBreakdownType = 'size' | 'geo' | 'publisher' | 'creative';
 
 export interface ConfigBreakdownItem {
   name: string;
+  target_value?: string;
   spend_usd?: number;
   reached: number;
   impressions: number;
@@ -251,6 +254,8 @@ export interface ConfigBreakdownResponse {
   data_state?: "healthy" | "degraded" | "unavailable";
   fallback_applied?: boolean;
   fallback_reason?: string | null;
+  requested_days?: number;
+  effective_days?: number;
   has_funnel_metrics?: boolean;
 }
 

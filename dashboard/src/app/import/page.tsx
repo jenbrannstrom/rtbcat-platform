@@ -18,11 +18,21 @@ import {
   TroubleshootingSection,
   ImportResultCard,
   ImportHistorySection,
+  ImportTrackingMatrixSection,
+  DataFreshnessGrid,
 } from "@/components/import";
 import {
   type ExtendedValidationResult,
 } from "@/lib/csv-validator";
-import { importPerformanceData, getImportHistory, type ImportHistoryItem } from "@/lib/api";
+import {
+  importPerformanceData,
+  getImportHistory,
+  getImportTrackingMatrix,
+  getDataFreshnessGrid,
+  type ImportHistoryItem,
+  type ImportTrackingMatrixResponse,
+  type DataFreshnessGridResponse,
+} from "@/lib/api";
 import {
   uploadChunkedCSV,
   previewCSV,
@@ -35,6 +45,8 @@ import {
   detectReportType,
   getMissingRequiredColumns,
 } from "@/lib/report-metadata";
+import { useAccount } from "@/contexts/account-context";
+import { toBuyerScopedPath } from "@/lib/buyer-routes";
 
 type ImportStep = "upload" | "preview" | "importing" | "success" | "error";
 
@@ -43,6 +55,7 @@ const CHUNKED_UPLOAD_THRESHOLD = 5 * 1024 * 1024;
 
 export default function ImportPage() {
   const router = useRouter();
+  const { selectedBuyerId } = useAccount();
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const [step, setStep] = useState<ImportStep>("upload");
@@ -64,22 +77,42 @@ export default function ImportPage() {
   // Import history state
   const [importHistory, setImportHistory] = useState<ImportHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [importMatrix, setImportMatrix] = useState<ImportTrackingMatrixResponse | null>(null);
+  const [matrixLoading, setMatrixLoading] = useState(true);
+  const [freshnessGrid, setFreshnessGrid] = useState<DataFreshnessGridResponse | null>(null);
+  const [freshnessLoading, setFreshnessLoading] = useState(true);
+  const [freshnessDays, setFreshnessDays] = useState(7);
 
   // Load import history on mount and after successful imports
-  const loadHistory = useCallback(async () => {
+  const loadImportData = useCallback(async () => {
+    setHistoryLoading(true);
+    setMatrixLoading(true);
+    setFreshnessLoading(true);
     try {
-      const history = await getImportHistory(10);
+      const [history, matrix, freshness] = await Promise.all([
+        getImportHistory(10, 0, selectedBuyerId || undefined),
+        getImportTrackingMatrix(30, selectedBuyerId || undefined),
+        getDataFreshnessGrid(freshnessDays, selectedBuyerId || undefined),
+      ]);
       setImportHistory(history);
+      setImportMatrix(matrix);
+      setFreshnessGrid(freshness);
     } catch (error) {
-      console.error("Failed to load import history:", error);
+      console.error("Failed to load import data:", error);
     } finally {
       setHistoryLoading(false);
+      setMatrixLoading(false);
+      setFreshnessLoading(false);
     }
-  }, []);
+  }, [selectedBuyerId, freshnessDays]);
 
   useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
+    loadImportData();
+  }, [loadImportData]);
+
+  const handleFreshnessDaysChange = useCallback((days: number) => {
+    setFreshnessDays(days);
+  }, []);
 
   useEffect(() => {
     const isImportInFlight =
@@ -197,7 +230,7 @@ export default function ImportPage() {
         const duplicates = result.duplicates ?? 0;
         setStep(result.success || imported > 0 || duplicates > 0 ? "success" : "error");
         if (result.success || imported > 0 || duplicates > 0) {
-          loadHistory(); // Reload history after successful import
+          loadImportData(); // Reload import tracking after successful import
         }
       } else {
         // Use standard upload for small files
@@ -207,7 +240,7 @@ export default function ImportPage() {
 
         setImportResult(result);
         setStep("success");
-        loadHistory(); // Reload history after successful import
+        loadImportData(); // Reload import tracking after successful import
       }
     } catch (error) {
       console.error("Import error:", error);
@@ -269,6 +302,14 @@ export default function ImportPage() {
       {/* Upload Step */}
       {step === "upload" && (
         <div className="space-y-6">
+          <DataFreshnessGrid
+            grid={freshnessGrid}
+            loading={freshnessLoading}
+            selectedDays={freshnessDays}
+            onDaysChange={handleFreshnessDaysChange}
+            onRefresh={loadImportData}
+          />
+
           {/* Main Upload Area */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <ImportDropzone onFileSelect={handleFileSelect} maxSizeMB={500} />
@@ -296,11 +337,17 @@ export default function ImportPage() {
             </div>
           </details>
 
+          <ImportTrackingMatrixSection
+            matrix={importMatrix}
+            loading={matrixLoading}
+            onRefresh={loadImportData}
+          />
+
           {/* Recent Import History */}
           <ImportHistorySection
             history={importHistory}
             loading={historyLoading}
-            onRefresh={loadHistory}
+            onRefresh={loadImportData}
           />
         </div>
       )}
@@ -457,7 +504,11 @@ export default function ImportPage() {
 
       {/* Success Step */}
       {step === "success" && importResult && (
-        <ImportResultCard result={importResult} onReset={resetForm} onViewCreatives={() => router.push("/creatives")} />
+        <ImportResultCard
+          result={importResult}
+          onReset={resetForm}
+          onViewCreatives={() => router.push(toBuyerScopedPath("/clusters", selectedBuyerId))}
+        />
       )}
 
       {/* Error Step */}
