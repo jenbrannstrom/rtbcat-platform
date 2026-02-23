@@ -47,6 +47,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { isValidPublisherId, detectPublisherType } from '@/lib/publisher-validation';
 
 interface PretargetingSettingsEditorProps {
   billing_id: string;
@@ -80,19 +81,7 @@ function normalizePublisherId(value: string): string {
   return value.trim();
 }
 
-function isValidPublisherId(value: string): boolean {
-  if (!value.includes('.')) return false;
-  return /^[a-zA-Z0-9][a-zA-Z0-9._-]*\.[a-zA-Z0-9._-]+$/.test(value);
-}
-
-function detectPublisherType(value: string): 'App' | 'Web' {
-  const parts = value.toLowerCase().split('.');
-  const appPrefixes = new Set(['com', 'net', 'org', 'io', 'co', 'app']);
-  if (parts.length >= 3 && appPrefixes.has(parts[0])) {
-    return 'App';
-  }
-  return 'Web';
-}
+// isValidPublisherId and detectPublisherType imported from @/lib/publisher-validation
 
 // Pill component for displaying values with remove action
 function ValuePill({
@@ -683,7 +672,7 @@ function PublisherTargetingSection({
                   onClick={onApplyPending}
                   className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
-                  Apply to Google
+                  Push to Google
                 </button>
                 <span className="text-xs text-yellow-600">
                   Changes apply immediately on Google.

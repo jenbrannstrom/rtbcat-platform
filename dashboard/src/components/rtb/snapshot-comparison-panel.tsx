@@ -7,6 +7,7 @@ import {
   createSnapshot,
   getComparisons,
   createComparison,
+  rollbackSnapshot,
   type PretargetingSnapshot,
   type SnapshotComparison,
 } from '@/lib/api';
@@ -19,8 +20,13 @@ import {
   Minus,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   History,
   X,
+  RotateCcw,
+  Loader2,
+  Eye,
+  Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -73,7 +79,58 @@ function DeltaIndicator({ value, suffix = '' }: { value: number | null; suffix?:
   );
 }
 
-function SnapshotCard({ snapshot }: { snapshot: PretargetingSnapshot }) {
+/** Parse a JSON string field from the snapshot (sizes, geos, formats are stored as JSON strings). */
+function parseSnapshotList(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Summarize a list with "item1, item2 + N more" format. */
+function summarizeList(items: string[], max: number = 3): string {
+  if (items.length === 0) return 'None';
+  const shown = items.slice(0, max);
+  const remainder = items.length - max;
+  return remainder > 0
+    ? `${shown.join(', ')} + ${remainder} more`
+    : shown.join(', ');
+}
+
+function SnapshotCard({
+  snapshot,
+  onRestore,
+}: {
+  snapshot: PretargetingSnapshot;
+  onRestore: (snapshot: PretargetingSnapshot) => void;
+}) {
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewResult, setPreviewResult] = useState<{ changes_made: string[]; message: string } | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  const sizes = parseSnapshotList(snapshot.included_sizes);
+  const geos = parseSnapshotList(snapshot.included_geos);
+  const formats = parseSnapshotList(snapshot.included_formats);
+
+  const handlePreview = () => {
+    if (showPreview) {
+      setShowPreview(false);
+      return;
+    }
+    setShowPreview(true);
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setPreviewResult(null);
+    rollbackSnapshot({ billing_id: snapshot.billing_id, snapshot_id: snapshot.id, dry_run: true })
+      .then((result) => setPreviewResult(result))
+      .catch((err) => setPreviewError(err?.message || 'Failed to preview restore'))
+      .finally(() => setPreviewLoading(false));
+  };
+
   return (
     <div className="bg-white border rounded-lg p-3 text-sm">
       <div className="flex justify-between items-start mb-2">
@@ -84,6 +141,9 @@ function SnapshotCard({ snapshot }: { snapshot: PretargetingSnapshot }) {
           <div className="text-xs text-gray-500 flex items-center gap-1">
             <Clock className="h-3 w-3" />
             {formatDate(snapshot.created_at)}
+            {snapshot.snapshot_type === 'before_change' && (
+              <span className="ml-1 rounded bg-blue-100 px-1 py-0.5 text-[10px] text-blue-700">auto</span>
+            )}
           </div>
         </div>
         <span
@@ -111,11 +171,79 @@ function SnapshotCard({ snapshot }: { snapshot: PretargetingSnapshot }) {
         </div>
       </div>
 
+      {/* Config summary */}
+      {(sizes.length > 0 || geos.length > 0 || formats.length > 0) && (
+        <div className="mt-2 space-y-0.5 text-xs text-gray-600 border-t pt-2">
+          {sizes.length > 0 && (
+            <div>Sizes: <span className="font-mono text-gray-700">{summarizeList(sizes)}</span></div>
+          )}
+          {geos.length > 0 && (
+            <div>Geos: <span className="font-mono text-gray-700">{summarizeList(geos)}</span></div>
+          )}
+          {formats.length > 0 && (
+            <div>Formats: <span className="font-mono text-gray-700">{summarizeList(formats, 4)}</span></div>
+          )}
+        </div>
+      )}
+
       {snapshot.notes && (
         <div className="mt-2 text-xs text-gray-600 bg-gray-50 rounded p-2">
           {snapshot.notes}
         </div>
       )}
+
+      {/* Preview restore diff (inline) */}
+      {showPreview && (
+        <div className="mt-2 rounded border border-orange-200 bg-orange-50/50 p-2">
+          {previewLoading ? (
+            <div className="flex items-center gap-1.5 py-2 text-xs text-gray-500 justify-center">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Previewing restore&hellip;
+            </div>
+          ) : previewError ? (
+            <div className="text-xs text-red-600">{previewError}</div>
+          ) : previewResult && previewResult.changes_made.length === 0 ? (
+            <div className="flex items-start gap-1.5 text-xs text-blue-700">
+              <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
+              No differences found. Current config matches this snapshot.
+            </div>
+          ) : previewResult ? (
+            <div className="space-y-1">
+              <div className="text-xs font-medium text-orange-800">
+                {previewResult.changes_made.length} change{previewResult.changes_made.length !== 1 ? 's' : ''} to restore:
+              </div>
+              <div className="max-h-28 overflow-y-auto space-y-0.5">
+                {previewResult.changes_made.map((desc, i) => (
+                  <div key={i} className="text-[11px] font-mono text-gray-700">{desc}</div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {/* Restore actions */}
+      <div className="mt-2 flex items-center justify-end gap-2 pt-1 border-t">
+        <button
+          onClick={handlePreview}
+          className={cn(
+            'inline-flex items-center gap-1 px-2 py-1 text-xs rounded border transition-colors',
+            showPreview
+              ? 'border-orange-300 bg-orange-100 text-orange-800'
+              : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+          )}
+        >
+          <Eye className="h-3 w-3" />
+          {showPreview ? 'Hide Preview' : 'Preview Restore'}
+        </button>
+        <button
+          onClick={() => onRestore(snapshot)}
+          className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
+        >
+          <RotateCcw className="h-3 w-3" />
+          Restore
+        </button>
+      </div>
     </div>
   );
 }
@@ -174,6 +302,12 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
   const [showCreateSnapshot, setShowCreateSnapshot] = useState(false);
   const [snapshotName, setSnapshotName] = useState('');
   const [snapshotNotes, setSnapshotNotes] = useState('');
+  const [restoreSnapshot, setRestoreSnapshot] = useState<PretargetingSnapshot | null>(null);
+  const [restoreDryRunResult, setRestoreDryRunResult] = useState<{ changes_made: string[]; message: string } | null>(null);
+  const [restoreDryRunLoading, setRestoreDryRunLoading] = useState(false);
+  const [restoreDryRunError, setRestoreDryRunError] = useState<string | null>(null);
+  const [restoreReason, setRestoreReason] = useState('');
+  const [restoreSuccess, setRestoreSuccess] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const { data: snapshots, isLoading: snapshotsLoading } = useQuery({
@@ -198,6 +332,35 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
     },
   });
 
+  const restoreExecuteMutation = useMutation({
+    mutationFn: async () => {
+      if (!restoreSnapshot) throw new Error('No snapshot selected');
+      return rollbackSnapshot({ billing_id, snapshot_id: restoreSnapshot.id, dry_run: false });
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['snapshots', billing_id] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-history'] });
+      queryClient.invalidateQueries({ queryKey: ['pretargeting-snapshots'] });
+      queryClient.invalidateQueries({ queryKey: ['config-breakdown'] });
+      queryClient.invalidateQueries({ queryKey: ['config-detail'] });
+      const name = restoreSnapshot?.snapshot_name || `Snapshot #${restoreSnapshot?.id}`;
+      setRestoreSnapshot(null);
+      setRestoreSuccess(`Config restored to "${name}". ${result.changes_made.length} change${result.changes_made.length !== 1 ? 's' : ''} applied to Google.`);
+    },
+  });
+
+  const handleOpenRestore = (snapshot: PretargetingSnapshot) => {
+    setRestoreSnapshot(snapshot);
+    setRestoreReason('');
+    setRestoreDryRunResult(null);
+    setRestoreDryRunError(null);
+    setRestoreDryRunLoading(true);
+    rollbackSnapshot({ billing_id, snapshot_id: snapshot.id, dry_run: true })
+      .then((result) => setRestoreDryRunResult(result))
+      .catch((err) => setRestoreDryRunError(err?.message || 'Failed to preview restore'))
+      .finally(() => setRestoreDryRunLoading(false));
+  };
+
   const handleCreateSnapshot = () => {
     createSnapshotMutation.mutate({
       billing_id,
@@ -211,6 +374,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
     setShowCreateSnapshot(false);
     setSnapshotName('');
     setSnapshotNotes('');
+    setRestoreSuccess(null);
   };
 
   return (
@@ -308,7 +472,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
             ) : snapshots && snapshots.length > 0 ? (
               <div className="space-y-2">
                 {snapshots.map((snapshot) => (
-                  <SnapshotCard key={snapshot.id} snapshot={snapshot} />
+                  <SnapshotCard key={snapshot.id} snapshot={snapshot} onRestore={handleOpenRestore} />
                 ))}
               </div>
             ) : (
@@ -338,7 +502,125 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
               </div>
             )}
           </div>
+
+          {/* Restore success banner */}
+          {restoreSuccess && (
+            <div className="flex items-center justify-between rounded-lg bg-green-50 border border-green-200 p-3">
+              <div className="flex items-start gap-2 text-sm text-green-800">
+                <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                {restoreSuccess}
+              </div>
+              <button onClick={() => setRestoreSuccess(null)} className="text-green-600 hover:text-green-800">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
+        </div>
+      )}
+
+      {/* Restore Confirmation Modal */}
+      {restoreSnapshot && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setRestoreSnapshot(null)} />
+          <div className="relative mx-4 w-full max-w-lg rounded-lg border bg-white p-4 shadow-xl">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+                <RotateCcw className="h-4 w-4 text-orange-600" />
+                Restore Snapshot?
+              </h3>
+              <button onClick={() => setRestoreSnapshot(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {restoreDryRunLoading ? (
+              <div className="flex items-center justify-center py-8 gap-2 text-gray-500 text-xs">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Previewing restore&hellip;
+              </div>
+            ) : restoreDryRunError ? (
+              <div className="rounded bg-red-50 border border-red-200 p-3 text-xs text-red-700">
+                {restoreDryRunError}
+              </div>
+            ) : restoreDryRunResult && restoreDryRunResult.changes_made.length === 0 ? (
+              <div className="rounded bg-blue-50 border border-blue-200 p-3 flex items-start gap-2 text-xs text-blue-700">
+                <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
+                No differences found between current config and this snapshot. Config already matches.
+              </div>
+            ) : (
+              <>
+                <div className="text-xs text-gray-600 mb-2">
+                  Config: <span className="font-medium text-gray-900">{billing_id}</span>
+                  {' '}&middot;{' '}
+                  Restoring to: <span className="font-medium text-gray-900">
+                    {restoreSnapshot.snapshot_name || `Snapshot #${restoreSnapshot.id}`}
+                  </span>
+                  {' '}&middot;{' '}
+                  <span className="text-gray-500">{formatDate(restoreSnapshot.created_at)}</span>
+                </div>
+                {restoreDryRunResult && restoreDryRunResult.changes_made.length > 0 && (
+                  <div className="mb-3">
+                    <p className="text-xs font-medium text-gray-700 mb-1">
+                      {restoreDryRunResult.changes_made.length} change{restoreDryRunResult.changes_made.length !== 1 ? 's' : ''} will be applied to Google:
+                    </p>
+                    <div className="max-h-32 overflow-y-auto rounded border bg-gray-50 p-2 space-y-0.5">
+                      {restoreDryRunResult.changes_made.map((desc, i) => (
+                        <div key={i} className="text-[11px] font-mono text-gray-700">{desc}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="mb-3 rounded bg-amber-50 border border-amber-200 p-2 flex items-start gap-2 text-xs text-amber-800">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                  <span>This pushes to Google immediately. A &ldquo;ROLLBACK&rdquo; entry will be recorded in history.</span>
+                </div>
+                <div className="mb-3">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Why are you restoring this snapshot?
+                  </label>
+                  <input
+                    type="text"
+                    value={restoreReason}
+                    onChange={(e) => setRestoreReason(e.target.value)}
+                    placeholder="e.g. Rolling back bad config change"
+                    className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-300"
+                  />
+                  <span className="text-[10px] text-gray-400">(required)</span>
+                </div>
+              </>
+            )}
+
+            {restoreExecuteMutation.isError && (
+              <div className="mb-3 rounded bg-red-50 border border-red-200 p-2 text-xs text-red-700">
+                {(restoreExecuteMutation.error as Error)?.message || 'Restore failed'}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setRestoreSnapshot(null)}
+                disabled={restoreExecuteMutation.isPending}
+                className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {(!restoreDryRunResult || restoreDryRunResult.changes_made.length === 0) && !restoreDryRunLoading ? 'Close' : 'Cancel'}
+              </button>
+              {restoreDryRunResult && restoreDryRunResult.changes_made.length > 0 && (
+                <button
+                  onClick={() => restoreExecuteMutation.mutate()}
+                  disabled={restoreExecuteMutation.isPending || !restoreReason.trim()}
+                  className="inline-flex items-center gap-1 rounded bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+                >
+                  {restoreExecuteMutation.isPending ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-3 w-3" />
+                  )}
+                  Restore Snapshot
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
