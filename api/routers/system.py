@@ -565,7 +565,15 @@ async def get_stats(store=Depends(get_store)):
 @router.get("/sizes", response_model=SizesResponse)
 async def get_sizes(store=Depends(get_store)):
     """Get available creative sizes from the database."""
-    rows = await store.get_available_sizes()
-    # store returns list[dict] with canonical_size/count; extract strings
-    sizes = [row["canonical_size"] for row in rows if row.get("canonical_size")]
-    return SizesResponse(sizes=sizes)
+    sizes = await store.get_available_sizes()
+    # PostgresStore currently returns [{canonical_size, size_category, count}]
+    # but this endpoint contract is list[str].
+    if sizes and isinstance(sizes[0], dict):
+        size_values = [
+            str(row.get("canonical_size"))
+            for row in sizes
+            if row.get("canonical_size")
+        ]
+    else:
+        size_values = [str(size) for size in sizes]
+    return SizesResponse(sizes=size_values)

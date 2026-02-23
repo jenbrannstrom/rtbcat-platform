@@ -85,11 +85,9 @@ def ensure_migrations_table(conn: psycopg.Connection) -> None:
             description TEXT
         )
     """)
-    # Existing tables may lack the column — add idempotently.
-    conn.execute("""
-        ALTER TABLE schema_migrations
-        ADD COLUMN IF NOT EXISTS description TEXT
-    """)
+    # Backward compatibility: older installs created this table without
+    # description, but newer SQL migrations insert into that column.
+    conn.execute("ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS description TEXT")
     conn.commit()
 
 
@@ -137,6 +135,7 @@ def _get_applied_versions_by_number(applied_versions: set[str]) -> dict[int, set
             continue
         by_number.setdefault(number, set()).add(version)
     return by_number
+
 
 
 def filter_pending_migrations(
@@ -642,6 +641,7 @@ def main() -> int:
 
         if args.normalize_versions:
             return normalize_version_markers(apply_changes=False)
+
 
         applied, failed = run_migrations(dry_run=args.dry_run)
 

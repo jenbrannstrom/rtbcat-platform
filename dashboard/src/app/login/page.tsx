@@ -63,7 +63,7 @@ export default function LoginPage() {
       // Redirect to callback URL or home
       router.push(callbackUrl);
     } catch (err) {
-      // True network failure — fetch itself could not connect
+      // True network failure -- fetch itself could not connect
       setErrorMessage("Cannot reach server. Please check your connection and try again.");
     } finally {
       setIsLoading(false);
