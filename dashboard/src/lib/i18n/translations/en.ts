@@ -292,6 +292,7 @@ export const en: Translations = {
     defaultOrder: 'Default Order',
     spendYesterday: 'Spend (Yesterday)',
     spend7Days: 'Spend (7 Days)',
+    spend14Days: 'Spend (14 Days)',
     spend30Days: 'Spend (30 Days)',
     spendAllTime: 'Spend (All Time)',
     video: 'Video',

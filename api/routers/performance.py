@@ -660,6 +660,7 @@ async def get_batch_performance(
         period_days = {
             "yesterday": 1,
             "7d": 7,
+            "14d": 14,
             "30d": 30,
             "all_time": 365,
         }

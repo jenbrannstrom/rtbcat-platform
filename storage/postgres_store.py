@@ -1385,6 +1385,53 @@ class PostgresStore:
         logger.warning("PostgresStore.get_clusters() is a stub")
         return []
 
+    async def get_creative_performance_summary(
+        self, creative_id: str, days: int = 30
+    ) -> dict:
+        """Get aggregated performance summary for a creative.
+
+        Queries pretarg_creative_daily (view over config_creative_daily)
+        aggregated across all configs/buyers for the given date range.
+
+        Returns dict with total_impressions, total_spend_micros, etc.
+        """
+        row = await pg_query_one(
+            """
+            SELECT
+                COALESCE(SUM(reached_queries), 0) as total_reached,
+                COALESCE(SUM(impressions), 0) as total_impressions,
+                COALESCE(SUM(spend_micros), 0) as total_spend_micros,
+                COUNT(DISTINCT metric_date) as days_with_data,
+                MIN(metric_date) as earliest_date,
+                MAX(metric_date) as latest_date
+            FROM pretarg_creative_daily
+            WHERE creative_id = %s
+              AND metric_date >= CURRENT_DATE - %s * INTERVAL '1 day'
+            """,
+            (creative_id, days),
+        )
+
+        total_impressions = int(row["total_impressions"]) if row else 0
+        total_spend_micros = int(row["total_spend_micros"]) if row else 0
+        days_with_data = int(row["days_with_data"]) if row else 0
+
+        # Compute CPM: (spend / impressions) * 1000
+        avg_cpm_micros = None
+        if total_impressions > 0 and total_spend_micros > 0:
+            avg_cpm_micros = int((total_spend_micros / total_impressions) * 1000)
+
+        return {
+            "total_impressions": total_impressions,
+            "total_clicks": 0,  # pretarg_creative_daily has no clicks column
+            "total_spend_micros": total_spend_micros,
+            "avg_cpm_micros": avg_cpm_micros,
+            "avg_cpc_micros": None,  # no clicks data available
+            "ctr_percent": None,  # no clicks data available
+            "days_with_data": days_with_data,
+            "earliest_date": str(row["earliest_date"]) if row and row["earliest_date"] else None,
+            "latest_date": str(row["latest_date"]) if row and row["latest_date"] else None,
+        }
+
     async def save_performance_metrics(self, metrics: list[PerformanceMetric]) -> int:
         """Save performance metrics. TODO: Implement."""
         logger.warning("PostgresStore.save_performance_metrics() is a stub")

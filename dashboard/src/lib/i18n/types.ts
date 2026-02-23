@@ -293,6 +293,7 @@ export interface Translations {
     defaultOrder: string;
     spendYesterday: string;
     spend7Days: string;
+    spend14Days: string;
     spend30Days: string;
     spendAllTime: string;
     video: string;
