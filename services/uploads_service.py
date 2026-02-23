@@ -449,6 +449,70 @@ class UploadsService:
             "not_imported_count": not_imported_count,
         }
 
+    async def get_data_freshness_grid(
+        self,
+        days: int,
+        allowed_bidder_ids: Optional[list[str]] = None,
+        buyer_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Build a date x csv_type freshness grid from actual target tables.
+
+        Returns dates (descending, excluding today), csv_types, a cells dict
+        mapping date -> csv_type -> "imported"|"missing", and a coverage summary.
+        """
+        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        rows = await self._repo.get_data_freshness_by_table(
+            start_date=start_date,
+            buyer_id=buyer_id,
+        )
+
+        # Index query results: (date_str, csv_type) -> row_count
+        data_index: dict[tuple[str, str], int] = {}
+        for row in rows:
+            date_str = str(row["metric_date"])
+            csv_type = str(row["csv_type"])
+            data_index[(date_str, csv_type)] = int(row["row_count"])
+
+        # Build date list: yesterday .. today-days (descending)
+        today = datetime.now().date()
+        dates: list[str] = []
+        for i in range(1, days + 1):
+            dates.append((today - timedelta(days=i)).strftime("%Y-%m-%d"))
+
+        csv_types = list(self.EXPECTED_CSV_TYPES)
+
+        # Build cells
+        cells: dict[str, dict[str, str]] = {}
+        imported_count = 0
+        missing_count = 0
+
+        for date_str in dates:
+            cells[date_str] = {}
+            for csv_type in csv_types:
+                count = data_index.get((date_str, csv_type), 0)
+                if count > 0:
+                    cells[date_str][csv_type] = "imported"
+                    imported_count += 1
+                else:
+                    cells[date_str][csv_type] = "missing"
+                    missing_count += 1
+
+        total_cells = imported_count + missing_count
+        coverage_pct = round((imported_count / total_cells * 100), 1) if total_cells > 0 else 0.0
+
+        return {
+            "dates": dates,
+            "csv_types": csv_types,
+            "cells": cells,
+            "summary": {
+                "total_cells": total_cells,
+                "imported_count": imported_count,
+                "missing_count": missing_count,
+                "coverage_pct": coverage_pct,
+            },
+            "lookback_days": days,
+        }
+
     @staticmethod
     def _split_columns(value: Optional[str]) -> Optional[list[str]]:
         """Split comma-separated column string into list."""

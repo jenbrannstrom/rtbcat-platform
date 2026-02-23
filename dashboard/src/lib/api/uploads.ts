@@ -101,6 +101,34 @@ export interface NewlyUploadedCreativesResponse {
   period_end: string;
 }
 
+export type FreshnessStatus = "imported" | "missing";
+
+export interface FreshnessSummary {
+  total_cells: number;
+  imported_count: number;
+  missing_count: number;
+  coverage_pct: number;
+}
+
+export interface DataFreshnessGridResponse {
+  dates: string[];
+  csv_types: string[];
+  cells: Record<string, Record<string, FreshnessStatus>>;
+  summary: FreshnessSummary;
+  lookback_days: number;
+}
+
+export async function getDataFreshnessGrid(
+  days: number = 7,
+  buyerId?: string
+): Promise<DataFreshnessGridResponse> {
+  const params = new URLSearchParams({ days: String(days) });
+  if (buyerId) {
+    params.set("buyer_id", buyerId);
+  }
+  return fetchApi<DataFreshnessGridResponse>(`/uploads/data-freshness?${params.toString()}`);
+}
+
 export async function getUploadTracking(days: number = 30): Promise<UploadTrackingResponse> {
   return fetchApi<UploadTrackingResponse>(`/uploads/tracking?days=${days}`);
 }

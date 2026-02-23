@@ -9,19 +9,13 @@ variable "gcp_project" {
 variable "gcp_region" {
   description = "GCP region for resources"
   type        = string
-  default     = "europe-west1"
+  default     = "asia-southeast1"
 }
 
 variable "gcp_zone" {
   description = "GCP zone for the VM"
   type        = string
-  default     = "europe-west1-b"
-}
-
-variable "create_sg_instance" {
-  description = "Create parallel SG VM for migration"
-  type        = bool
-  default     = false
+  default     = "asia-southeast1-b"
 }
 
 variable "app_name" {
@@ -69,13 +63,13 @@ variable "allowed_ssh_cidrs" {
 variable "github_repo" {
   description = "GitHub repository URL for the application"
   type        = string
-  default     = "https://github.com/jenbrannstrom/rtbcat-platform.git"
+  default     = ""
 }
 
 variable "github_branch" {
   description = "GitHub branch to deploy"
   type        = string
-  default     = "unified-platform"
+  default     = "main"
 }
 
 # Optional: Cloudflare integration
@@ -158,9 +152,9 @@ variable "bigquery_dataset_id" {
 }
 
 variable "bigquery_location" {
-  description = "BigQuery dataset location (should match or align with GCS)"
+  description = "BigQuery dataset location (should match or align with GCS region)"
   type        = string
-  default     = "EU"
+  default     = "asia-southeast1"
 }
 
 variable "bigquery_raw_facts_table_id" {

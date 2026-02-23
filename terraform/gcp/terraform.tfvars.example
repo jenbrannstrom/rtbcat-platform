@@ -6,12 +6,9 @@
 # Required: Your GCP Project ID
 gcp_project = "your-project-id"
 
-# Region and zone (europe-west1 recommended for Google API proximity)
-gcp_region = "europe-west1"
-gcp_zone   = "europe-west1-b"
-
-# Parallel SG migration VM (optional)
-create_sg_instance = false
+# Region and zone
+gcp_region = "asia-southeast1"
+gcp_zone   = "asia-southeast1-b"
 
 # Application settings
 app_name    = "catscan"
@@ -22,7 +19,7 @@ machine_type   = "e2-medium"
 boot_disk_size = 30
 
 # Domain name (required for HTTPS)
-domain_name  = "scan.rtb.cat"
+domain_name  = "scan.example.com"
 enable_https = true
 
 # SSH access (leave empty for IAP-only access - more secure)
@@ -30,9 +27,9 @@ enable_https = true
 allowed_ssh_cidrs = []
 # allowed_ssh_cidrs = ["1.2.3.4/32"]  # Your IP only
 
-# GitHub repository
-github_repo   = "https://github.com/jenbrannstrom/rtbcat-platform.git"
-github_branch = "unified-platform"
+# GitHub repository (your fork or clone of rtbcat-platform)
+github_repo   = "https://github.com/YOUR_ORG/rtbcat-platform.git"
+github_branch = "main"
 
 # Optional: Cloudflare DNS management
 # Leave empty if managing DNS manually
@@ -74,7 +71,7 @@ raw_parquet_lifecycle_days = 180
 
 # BigQuery dataset + raw facts table
 bigquery_dataset_id         = "rtbcat_analytics"
-bigquery_location           = "EU"
+bigquery_location           = "asia-southeast1"
 bigquery_raw_facts_table_id = "raw_facts"
 
 # =============================================================================
