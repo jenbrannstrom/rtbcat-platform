@@ -162,13 +162,8 @@ COMPOSEEOF
     echo "API: http://$PUBLIC_IP:8000"
 fi
 
-# Setup daily Gmail import cron
-# Email arrives ~7am (timezone unclear), so run at 8 AM UTC to be 1 hour after
-cat > /etc/cron.d/gmail-import << 'CRONEOF'
-# Cat-Scan Gmail import - runs daily at 8 AM UTC (1 hour after email arrives)
-0 8 * * * root docker exec catscan-api python scripts/gmail_import.py >> /var/log/gmail-import.log 2>&1
-CRONEOF
-chmod 644 /etc/cron.d/gmail-import
-
-echo "Cron job installed for daily Gmail import at 8 AM UTC"
+# Gmail import is triggered by Cloud Scheduler (not cron).
+# See terraform/gcp/main.tf google_cloud_scheduler_job.gmail_import
+# Emails arrive ~11:00 UTC (3 AM PST), scheduler fires at 12:00 UTC.
+echo "Gmail import scheduled via Cloud Scheduler (12:00 UTC daily)"
 date

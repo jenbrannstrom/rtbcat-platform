@@ -77,7 +77,7 @@ apt-get install -y \
 
 # Configure Docker to authenticate with Artifact Registry
 echo ">>> Configuring Docker authentication for Artifact Registry..."
-gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+gcloud auth configure-docker ${gcp_region}-docker.pkg.dev --quiet
 
 # -----------------------------------------------------------------------------
 # 1b. Install OAuth2 Proxy (Google Authentication)
