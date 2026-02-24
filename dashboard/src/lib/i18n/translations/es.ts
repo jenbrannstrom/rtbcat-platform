@@ -434,6 +434,34 @@ export const es: PartialTranslations = {
     previewFirstRowsCount: 'Vista previa (primeras {count} filas)',
     importingData: 'Importando datos...',
     pleaseWaitProcessingFile: 'Espera mientras procesamos tu archivo',
+    requiredTableReportBidsInAuction: 'catscan-bidsinauction',
+    requiredTableReportQuality: 'catscan-quality',
+    requiredTableReportPipelineGeo: 'catscan-pipeline-geo',
+    requiredTableReportPipeline: 'catscan-pipeline',
+    requiredTableReportBidFiltering: 'catscan-bid-filtering',
+    targetTableRtbDaily: 'rtb_daily',
+    targetTableRtbBidstream: 'rtb_bidstream',
+    targetTableRtbBidFiltering: 'rtb_bid_filtering',
+    requiredTableColumnsBidsInAuction:
+      'Day, Country, Creative ID, Buyer account ID, Bids in auction, Auctions won, Bids, Impressions',
+    requiredTableColumnsQuality:
+      'Day, Pretargeting config (Billing ID), Creative ID, Creative size, Reached queries, Impressions, Active view viewable',
+    requiredTableColumnsPipelineGeo:
+      'Day, Country, Hour, Bid requests, Bids, Impressions',
+    requiredTableColumnsPipeline:
+      'Day, Country, Publisher ID, Publisher name, Bid requests, Bids, Impressions',
+    requiredTableColumnsBidFiltering:
+      'Day, Country, Creative ID, Bid filtering reason, Bids',
+    autoDetectionRuleBidFiltering:
+      '¿Tiene Bid filtering reason? -> bid-filtering',
+    autoDetectionRuleBidsInAuction:
+      '¿Tiene Creative ID + Bids in auction? -> bidsinauction',
+    autoDetectionRuleQuality:
+      '¿Tiene Creative ID + Active view? -> quality',
+    autoDetectionRulePipeline:
+      '¿Tiene Bid requests + Publisher ID? -> pipeline',
+    autoDetectionRulePipelineGeo:
+      '¿Tiene solo Bid requests? -> pipeline-geo',
   },
 
   setup: {
