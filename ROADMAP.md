@@ -152,7 +152,8 @@
     - [x] Expanded Spanish (`es`) coverage for waste-analysis helper namespaces (`publishers`, `sizes`, `geo`, `aiControl`, `configPerformance`, `wasteAnalysis`) plus `errors`/`reports` support copy (`dashboard/src/lib/i18n/translations/es.ts`)
     - [x] Expanded Spanish (`es`) coverage for ops/support namespaces (`settings`, `retentionPage`, `history`, `connect`) (`dashboard/src/lib/i18n/translations/es.ts`)
     - [x] Filled Spanish (`es`) nested `import` report-label and auto-detection rule gaps (`dashboard/src/lib/i18n/translations/es.ts`)
-    - [ ] Expand Spanish coverage across remaining namespaces (`pretargeting`, preview modal, admin`)
+    - [x] Expanded Spanish (`es`) coverage for `previewModal` (cache/live state, URL labels/tooltips, approval/language/geo mismatch UI, media preview copy) (`dashboard/src/lib/i18n/translations/es.ts`)
+    - [ ] Expand Spanish coverage across remaining namespaces (`pretargeting`, `admin`)
     - [ ] Add real dictionaries for remaining locales (`pl`, `zh`, `ru`, `uk`, `da`, `fr`, `nl`, `he`, `ar`)
 
 ---
