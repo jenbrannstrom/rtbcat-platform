@@ -891,6 +891,8 @@ export interface Translations {
     create: string;
     creativeCount: string;
     creativeCountPlural: string;
+    creativeNounSingular: string;
+    creativeNounPlural: string;
     showLess: string;
     moreSuggestions: string;
     sort: string;

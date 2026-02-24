@@ -890,6 +890,8 @@ export const en: Translations = {
     create: 'Create',
     creativeCount: '{count} creative',
     creativeCountPlural: '{count} creatives',
+    creativeNounSingular: 'creative',
+    creativeNounPlural: 'creatives',
     showLess: 'Show less',
     moreSuggestions: '+{count} more suggestions',
     sort: 'Sort:',

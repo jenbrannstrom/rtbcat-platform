@@ -28,6 +28,8 @@ export function SuggestionsPanel({
   onDismiss,
 }: SuggestionsPanelProps) {
   const { t } = useTranslation();
+  const creativeCountUnit = (count: number) =>
+    count === 1 ? t.campaigns.creativeNounSingular : t.campaigns.creativeNounPlural;
 
   if (suggestions.length === 0) return null;
 
@@ -85,7 +87,7 @@ export function SuggestionsPanel({
                 )}
               </div>
               <p className={`text-sm ${isCreated ? 'text-green-700' : 'text-purple-700'}`}>
-                {suggestion.creative_ids.length} {suggestion.creative_ids.length !== 1 ? t.campaigns.creativeCountPlural.replace('{count}', '') : t.campaigns.creativeCount.replace('{count}', '')}
+                {suggestion.creative_ids.length} {creativeCountUnit(suggestion.creative_ids.length)}
               </p>
             </div>
           );
