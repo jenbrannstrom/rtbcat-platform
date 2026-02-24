@@ -17,7 +17,7 @@ on:
 
 # Prevent concurrent deployments
 concurrency:
-  group: cd-manual-deploy-${{ vars.VM_NAME || 'catscan-production' }}
+  group: cd-manual-deploy-${{ vars.VM_NAME || 'catscan-production-sg' }}
   cancel-in-progress: true
 
 # Configuration via GitHub repository variables (Settings > Secrets and variables > Actions > Variables)
@@ -26,11 +26,11 @@ concurrency:
 # Optional variables: GCP_ZONE, VM_NAME, APP_DIR, GIT_BRANCH
 env:
   GCP_PROJECT: ${{ vars.GCP_PROJECT }}
-  GCP_ZONE: ${{ vars.GCP_ZONE || 'europe-west1-b' }}
-  VM_NAME: ${{ vars.VM_NAME || 'catscan-production' }}
+  GCP_ZONE: ${{ vars.GCP_ZONE || 'asia-southeast1-b' }}
+  VM_NAME: ${{ vars.VM_NAME || 'catscan-production-sg' }}
   APP_DIR: ${{ vars.APP_DIR || '/opt/catscan' }}
   GIT_BRANCH: ${{ vars.GIT_BRANCH || 'unified-platform' }}
-  IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY || 'europe-west1-docker.pkg.dev/catscan-prod-202601/catscan' }}
+  IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY || 'asia-southeast1-docker.pkg.dev/catscan-prod-202601/catscan' }}
   ALLOW_CONTRACT_FAILURE: ${{ vars.ALLOW_CONTRACT_FAILURE || 'false' }}
 
 jobs:
