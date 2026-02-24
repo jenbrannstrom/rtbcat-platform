@@ -40,6 +40,7 @@ export const nl: PartialTranslations = {
     date: 'Datum',
     time: 'Tijd',
     never: 'Nooit',
+    version: '0.9.2',
     done: 'Klaar',
     redirectingTo: 'Doorsturen naar {destination}...',
   },
@@ -608,6 +609,74 @@ export const nl: PartialTranslations = {
     previewFirstRowsCount: 'Preview (eerste {count} rijen)',
     importingData: 'Data importeren...',
     pleaseWaitProcessingFile: 'Even wachten terwijl we je bestand verwerken',
+    exportGuideLoseBidRequestsForCreativeMetrics:
+      'Om creative-level bid metrics te krijgen, verlies je "Bid requests"',
+    exportGuideLoseCreativeDetailForBidRequests:
+      'Om "Bid requests" te krijgen, verlies je creative-detail',
+    exportGuidePretargetingCannotCombine:
+      'Pretargeting config (Billing ID) kan niet worden gecombineerd met bid-pipeline metrics',
+    exportGuideReport1Desc:
+      'Creative-level performance met bid-pipeline metrics per land.',
+    exportGuideReport2Desc:
+      'Creative-level performance met viewability metrics. Inclusief pretargeting config (Billing ID) voor configanalyse.',
+    exportGuideReport3Desc:
+      'Volledige bid-pipeline per land en uur. Toont het verkeersvolume dat je ontvangt.',
+    exportGuideReport4Desc:
+      'Bid-pipeline per publisher. Toont welke publishers je verkeer sturen.',
+    exportGuideReport5Desc:
+      'Begrijp waarom je bids worden gefilterd/afgewezen.',
+    exportGuideDimDay: 'Dag',
+    exportGuideDimCountry: 'Land',
+    exportGuideDimCreativeId: 'Creative ID',
+    exportGuideDimBuyerAccountId: 'Buyer account ID',
+    exportGuideDimPretargetingConfigBillingId:
+      'Pretargeting config (Billing ID)',
+    exportGuideDimCreativeSize: 'Creative size',
+    exportGuideDimCreativeFormat: 'Creative format',
+    exportGuideDimHour: 'Uur',
+    exportGuideDimPublisherId: 'Publisher ID',
+    exportGuideDimPublisherName: 'Publisher name',
+    exportGuideDimBidFilteringReason: 'Bid filtering reason',
+    exportGuideMetricBidsInAuction: 'Bids in auction',
+    exportGuideMetricAuctionsWon: 'Auctions won',
+    exportGuideMetricBids: 'Bids',
+    exportGuideMetricReachedQueries: 'Reached queries',
+    exportGuideMetricImpressions: 'Impressions',
+    exportGuideMetricSpendBuyerCurrency: 'Spend (buyer currency)',
+    exportGuideMetricActiveViewViewable: 'Active view viewable',
+    exportGuideMetricActiveViewMeasurable: 'Active view measurable',
+    exportGuideMetricBidRequests: 'Bid requests',
+    exportGuideMetricInventoryMatches: 'Inventory matches',
+    exportGuideMetricSuccessfulResponses: 'Successful responses',
+    exportGuideMetricClicks: 'Clicks',
+    requiredTableReportBidsInAuction: 'catscan-bidsinauction',
+    requiredTableReportQuality: 'catscan-quality',
+    requiredTableReportPipelineGeo: 'catscan-pipeline-geo',
+    requiredTableReportPipeline: 'catscan-pipeline',
+    requiredTableReportBidFiltering: 'catscan-bid-filtering',
+    targetTableRtbDaily: 'rtb_daily',
+    targetTableRtbBidstream: 'rtb_bidstream',
+    targetTableRtbBidFiltering: 'rtb_bid_filtering',
+    requiredTableColumnsBidsInAuction:
+      'Day, Country, Creative ID, Buyer account ID, Bids in auction, Auctions won, Bids, Impressions',
+    requiredTableColumnsQuality:
+      'Day, Pretargeting config (Billing ID), Creative ID, Creative size, Reached queries, Impressions, Active view viewable',
+    requiredTableColumnsPipelineGeo:
+      'Day, Country, Hour, Bid requests, Bids, Impressions',
+    requiredTableColumnsPipeline:
+      'Day, Country, Publisher ID, Publisher name, Bid requests, Bids, Impressions',
+    requiredTableColumnsBidFiltering:
+      'Day, Country, Creative ID, Bid filtering reason, Bids',
+    autoDetectionRuleBidFiltering:
+      'Heeft Bid filtering reason? -> bid-filtering',
+    autoDetectionRuleBidsInAuction:
+      'Heeft Creative ID + Bids in auction? -> bidsinauction',
+    autoDetectionRuleQuality:
+      'Heeft Creative ID + Active view? -> quality',
+    autoDetectionRulePipeline:
+      'Heeft Bid requests + Publisher ID? -> pipeline',
+    autoDetectionRulePipelineGeo:
+      'Heeft alleen Bid requests? -> pipeline-geo',
   },
 
   pretargeting: {
