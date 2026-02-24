@@ -47,6 +47,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useTranslation } from '@/contexts/i18n-context';
+import type { Translations } from '@/lib/i18n/types';
 import { cn } from '@/lib/utils';
 import { isValidPublisherId, detectPublisherType } from '@/lib/publisher-validation';
 
@@ -96,6 +97,7 @@ function ValuePill({
   isRemoved?: boolean;
   onRemove?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <span
       className={cn(
@@ -113,7 +115,7 @@ function ValuePill({
             onRemove();
           }}
           className="ml-0.5 text-gray-400 hover:text-red-600 transition-colors"
-          title="Remove"
+          title={t.pretargeting.remove}
         >
           <X className="h-3 w-3" />
         </button>
@@ -122,36 +124,55 @@ function ValuePill({
   );
 }
 
-function describePendingChange(change: PendingChange, publisherMode?: string | null): string {
-  const currentModeLabel = publisherMode === 'INCLUSIVE' ? 'Whitelist' : 'Blacklist';
-  const addLabel = publisherMode === 'INCLUSIVE' ? 'Add' : 'Block';
-  const removeLabel = publisherMode === 'INCLUSIVE' ? 'Remove' : 'Unblock';
+function describePendingChange(
+  change: PendingChange,
+  publisherMode: string | null | undefined,
+  t: Translations
+): string {
+  const currentModeLabel = publisherMode === 'INCLUSIVE'
+    ? t.pretargeting.publisherModeWhitelist
+    : t.pretargeting.publisherModeBlacklist;
+  const addLabel = publisherMode === 'INCLUSIVE' ? t.pretargeting.allow : t.pretargeting.block;
+  const removeLabel = publisherMode === 'INCLUSIVE' ? t.pretargeting.remove : t.pretargeting.unblock;
+  const nextModeLabel = change.value === 'INCLUSIVE'
+    ? t.pretargeting.publisherModeWhitelist
+    : change.value === 'EXCLUSIVE'
+      ? t.pretargeting.publisherModeBlacklist
+      : (change.value || '');
 
   switch (change.change_type) {
     case 'add_size':
-      return `Add size: ${change.value}`;
+      return t.pretargeting.pendingChangeAllowSize.replace('{value}', String(change.value || ''));
     case 'remove_size':
-      return `Remove size: ${change.value}`;
+      return t.pretargeting.pendingChangeBlockSize.replace('{value}', String(change.value || ''));
     case 'add_geo':
-      return `Add geo: ${change.value}`;
+      return t.pretargeting.pendingChangeAddGeo.replace('{value}', String(change.value || ''));
     case 'remove_geo':
-      return `Remove geo: ${change.value}`;
+      return t.pretargeting.pendingChangeRemoveGeo.replace('{value}', String(change.value || ''));
     case 'add_format':
-      return `Add format: ${change.value}`;
+      return t.pretargeting.pendingChangeEnableFormat.replace('{value}', String(change.value || ''));
     case 'remove_format':
-      return `Remove format: ${change.value}`;
+      return t.pretargeting.pendingChangeDisableFormat.replace('{value}', String(change.value || ''));
     case 'add_excluded_geo':
-      return `Exclude geo: ${change.value}`;
+      return t.pretargeting.pendingChangeFallback
+        .replace('{changeType}', t.pretargeting.pendingChangeAddExcludedGeo)
+        .replace('{value}', String(change.value || ''));
     case 'remove_excluded_geo':
-      return `Unexclude geo: ${change.value}`;
+      return t.pretargeting.pendingChangeFallback
+        .replace('{changeType}', t.pretargeting.pendingChangeRemoveExcludedGeo)
+        .replace('{value}', String(change.value || ''));
     case 'add_publisher':
       return `${addLabel}: ${change.value}`;
     case 'remove_publisher':
       return `${removeLabel}: ${change.value}`;
     case 'set_publisher_mode':
-      return `Mode changed: ${currentModeLabel} → ${formatPublisherMode(change.value)}`;
+      return t.pretargeting.pendingChangePublisherModeDetailed
+        .replace('{current}', currentModeLabel)
+        .replace('{next}', nextModeLabel || String(change.value || ''));
     default:
-      return `${change.change_type}: ${change.value}`;
+      return t.pretargeting.pendingChangeFallback
+        .replace('{changeType}', change.change_type)
+        .replace('{value}', String(change.value || ''));
   }
 }
 
@@ -167,9 +188,10 @@ function PendingChangeCard({
   onMarkApplied: () => void;
   publisherMode?: string | null;
 }) {
+  const { t } = useTranslation();
   const isRemove = change.change_type.startsWith('remove_');
   const Icon = isRemove ? Minus : Plus;
-  const label = describePendingChange(change, publisherMode);
+  const label = describePendingChange(change, publisherMode, t);
 
   return (
     <div className="flex items-center justify-between p-2 bg-yellow-50 border border-yellow-200 rounded text-sm">
@@ -184,16 +206,16 @@ function PendingChangeCard({
         <button
           onClick={onMarkApplied}
           className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200"
-          title="Mark as applied in Google"
+          title={t.pretargeting.markAsAppliedInGoogle}
         >
-          Applied
+          {t.pretargeting.applied}
         </button>
         <button
           onClick={onCancel}
           className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
-          title="Cancel change"
+          title={t.pretargeting.cancelChange}
         >
-          Cancel
+          {t.common.cancel}
         </button>
       </div>
     </div>
@@ -226,6 +248,7 @@ function TargetingSection({
   fieldName: string;
   showBulkActions?: boolean;
 }) {
+  const { t } = useTranslation();
   const [newValue, setNewValue] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -250,7 +273,9 @@ function TargetingSection({
         <div className="flex items-center gap-2">
           <Icon className="h-4 w-4 text-gray-500" />
           <span className="font-medium text-gray-900">{title}</span>
-          <span className="text-sm text-gray-500">({effectiveValues.length} values)</span>
+          <span className="text-sm text-gray-500">
+            ({t.pretargeting.valuesCount.replace('{count}', String(effectiveValues.length))})
+          </span>
           {pendingAdds.length > 0 && (
             <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">
               +{pendingAdds.length}
@@ -274,7 +299,13 @@ function TargetingSection({
               value={newValue}
               onChange={(e) => setNewValue(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-              placeholder={`Add ${fieldName === 'included_sizes' ? 'size (e.g., 300x250)' : fieldName === 'included_geos' ? 'geo (e.g., US)' : 'format'}`}
+              placeholder={
+                fieldName === 'included_sizes'
+                  ? t.pretargeting.addSizePlaceholder
+                  : fieldName === 'included_geos'
+                    ? t.pretargeting.addGeoPlaceholder
+                    : t.pretargeting.addFormatPlaceholder
+              }
               className="flex-1 px-3 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
@@ -289,13 +320,13 @@ function TargetingSection({
           {/* Bulk actions */}
           {showBulkActions && values.length > 0 && (
             <div className="flex items-center gap-2 pb-2 border-b">
-              <span className="text-xs text-gray-500">Bulk:</span>
+              <span className="text-xs text-gray-500">{t.pretargeting.bulkLabel}</span>
               {onSelectAll && (
                 <button
                   onClick={onSelectAll}
                   className="px-2 py-1 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
                 >
-                  Remove All
+                  {t.pretargeting.removeAll}
                 </button>
               )}
               {onInvertAll && (
@@ -303,7 +334,7 @@ function TargetingSection({
                   onClick={onInvertAll}
                   className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
                 >
-                  Invert
+                  {t.pretargeting.invertSelection}
                 </button>
               )}
             </div>
@@ -329,7 +360,7 @@ function TargetingSection({
           </div>
 
           {values.length === 0 && pendingAdds.length === 0 && (
-            <p className="text-sm text-gray-500 italic">No values configured</p>
+            <p className="text-sm text-gray-500 italic">{t.pretargeting.noValuesConfigured}</p>
           )}
         </div>
       )}
@@ -1348,7 +1379,7 @@ export function PretargetingSettingsEditor({
               <div className="mt-3 space-y-1">
                 {pendingChanges.map((change) => (
                   <div key={change.id} className="text-xs text-blue-800">
-                    • {describePendingChange(change, publisherMode)}
+                    • {describePendingChange(change, publisherMode, t)}
                   </div>
                 ))}
               </div>
