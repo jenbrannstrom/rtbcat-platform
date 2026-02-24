@@ -159,7 +159,7 @@
     - [x] Refactored English (`en`) translations into split namespace modules and added Chinese (`zh`) split dictionary scaffold (`dashboard/src/lib/i18n/translations/en/*`, `dashboard/src/lib/i18n/translations/zh/*`)
     - [x] Added first real Chinese (`zh`) split translations for core shell/auth/home namespaces (`common`, `relativeTime`, `navigation`, `qpsNav`, `settingsNav`, `adminNav`, `sidebar`, `auth`, `dashboard`, `errors`, `language`) (`dashboard/src/lib/i18n/translations/zh/*`)
     - [x] Added Chinese (`zh`) import core-flow translations (upload/preview/import states, import results, unified history table, freshness/matrix labels, troubleshooting shell copy) (`dashboard/src/lib/i18n/translations/zh/import.ts`)
-    - [ ] Expand Chinese (`zh`) coverage across remaining namespaces (`pretargeting`, `admin`, `setup`, `campaigns`, `creatives`, `previewModal`, etc.)
+    - [x] Expand Chinese (`zh`) coverage across remaining namespaces (`pretargeting`, `admin`, `setup`, `campaigns`, `creatives`, `previewModal`, `settings`, `wasteAnalysis`, `recommendations`, support namespaces)
       - [x] Added first Chinese (`zh`) `pretargeting` core chunk (page shell, tabs, breakdown states, history badges, push/suspend dialogs) (`dashboard/src/lib/i18n/translations/zh/pretargeting.ts`)
       - [x] Added second Chinese (`zh`) `pretargeting` chunk (snapshots/rollback, size+publisher editor, pending-change/history labels, config card + endpoint efficiency/header labels) (`dashboard/src/lib/i18n/translations/zh/pretargeting.ts`)
       - [x] Added third Chinese (`zh`) `pretargeting` chunk (recommendations panel + pretargeting recommendations panel labels) (`dashboard/src/lib/i18n/translations/zh/pretargeting.ts`)
@@ -168,8 +168,9 @@
       - [x] Added Chinese (`zh`) `previewModal` translations (live/cached state, URL labels/tooltips, approval/language-geo mismatch UI, media preview labels) (`dashboard/src/lib/i18n/translations/zh/previewModal.ts`)
       - [x] Added Chinese (`zh`) `campaigns` + `creatives` translations (clustering views, campaign detail labels, creatives filters/statuses/errors/drilldown copy) (`dashboard/src/lib/i18n/translations/zh/campaigns.ts`, `dashboard/src/lib/i18n/translations/zh/creatives.ts`)
       - [x] Added Chinese (`zh`) ops/support namespace translations (`settings`, `retentionPage`, `history`, `connect`) (`dashboard/src/lib/i18n/translations/zh/*.ts`)
+      - [x] Added Chinese (`zh`) remaining top-level namespace translations (`aiControl`, `configPerformance`, `geo`, `publishers`, `recommendations`, `reports`, `sizes`, `wasteAnalysis`) (`dashboard/src/lib/i18n/translations/zh/*.ts`)
       - [x] Removed hardcoded English date formatting (`en-US`) in shared/RTB UI date displays; now uses locale-aware formatting (`dashboard/src/lib/utils.ts`, `dashboard/src/components/rtb/config-breakdown-panel.tsx`)
-    - [ ] Add real dictionaries for remaining locales (`pl`, `ru`, `uk`, `da`, `fr`, `he`, `ar`) and expand `zh`/`es` remaining namespaces
+    - [ ] Add real dictionaries for remaining locales (`pl`, `ru`, `uk`, `da`, `fr`, `he`, `ar`) and expand `es` remaining namespaces
 
 ---
 

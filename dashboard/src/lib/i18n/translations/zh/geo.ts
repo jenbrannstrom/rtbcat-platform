@@ -1,0 +1,37 @@
+import type { PartialTranslations } from '../../types';
+
+const value: PartialTranslations['geo'] = {
+  title: '地理表现',
+  subtitle: '哪些地理区域的赢率最高？',
+  winRatesByCountry: '按国家查看赢率',
+  avgWinRate: '平均赢率',
+  countries: '国家',
+  reached: '触达',
+  bids: '出价',
+  wins: '获胜',
+  highWinRate: '高赢率（>80%）',
+  lowerWinRate: '较低赢率（<50%）',
+  optimizeThese: '优化这些',
+  geoDataNotAvailable: '地理数据不可用',
+  importCreativeBiddingReport: '导入创意竞价活动报表以查看地理赢率。',
+  country: '国家',
+  geoWasteActionExclude: '排除',
+  geoWasteActionMonitor: '监控',
+  geoWasteActionOk: '正常',
+  geoWasteActionExpand: '扩量',
+  geoWasteFailedToLoad: '加载地理浪费分析失败',
+  geoWasteTitle: '地理分析',
+  geoWasteSubtitle: '识别表现不佳的地理区域，并从预定向中排除',
+  geoWasteGeosAnalyzed: '已分析地理区域',
+  geoWastePerformingWell: '表现良好',
+  geoWasteWastedLabel: '浪费',
+  geoWasteExcludeFromPretargetingCount: '从预定向排除（{count}）',
+  geoWasteGeoBadgeTooltip: 'CTR：{ctr}%，花费：${spend}',
+  geoWasteClicks: '点击',
+  geoWasteCtr: 'CTR',
+  geoWasteSpend: '花费',
+  geoWasteCpm: 'CPM',
+  geoWasteActionHeader: '操作',
+};
+
+export default value;
