@@ -64,6 +64,7 @@ export interface ImportHistoryItem {
   billing_ids_found?: string[] | null;
   columns_found?: string[] | null;
   columns_missing?: string[] | null;
+  import_trigger?: string | null;
 }
 
 export interface PretargetingHistoryItem {

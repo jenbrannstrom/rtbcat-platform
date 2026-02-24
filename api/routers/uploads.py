@@ -73,6 +73,7 @@ class ImportHistoryResponse(BaseModel):
     columns_missing: Optional[list[str]] = None
     date_gaps: Optional[list[str]] = None
     date_gap_warning: Optional[str] = None
+    import_trigger: Optional[str] = None
 
 
 class DailyFileUpload(BaseModel):
@@ -233,7 +234,15 @@ async def get_import_history(
             allowed_bidder_ids=allowed_bidder_ids,
         )
 
-        return [ImportHistoryResponse(**asdict(e)) for e in entries]
+        result = []
+        for e in entries:
+            d = asdict(e)
+            # Convert datetime/date objects to strings for Pydantic str fields
+            for key in ("imported_at", "date_range_start", "date_range_end"):
+                if d.get(key) is not None and not isinstance(d[key], str):
+                    d[key] = str(d[key])
+            result.append(ImportHistoryResponse(**d))
+        return result
 
     except HTTPException:
         raise
