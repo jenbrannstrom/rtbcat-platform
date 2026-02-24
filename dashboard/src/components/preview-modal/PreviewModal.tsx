@@ -10,6 +10,7 @@ import {
   getGoogleAuthBuyersUrl,
   extractBuyerIdFromName,
 } from "@/lib/url-utils";
+import { useTranslation } from "@/contexts/i18n-context";
 
 import { formatSpend, formatNumber, formatCTR, formatCostMetric, getDataNotes, extractTrackingParams } from "./utils";
 import { CopyButton, MetricCard, DataNotesSection } from "./SharedComponents";
@@ -26,6 +27,7 @@ interface PreviewModalProps {
  * Main preview modal component for displaying creative details.
  */
 export function PreviewModal({ creative: initialCreative, performance, onClose }: PreviewModalProps) {
+  const { t } = useTranslation();
   const [creative, setCreative] = useState<Creative>(initialCreative);
   const [isLoadingFull, setIsLoadingFull] = useState(false);
   const [previewSource, setPreviewSource] = useState<"live" | "cache" | null>(null);
@@ -56,7 +58,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
         const fullCreative = await getCreative(initialCreative.id);
         setCreative(fullCreative);
         setPreviewSource("cache");
-        setPreviewMessage("Live fetch unavailable; showing cached snapshot.");
+        setPreviewMessage(t.previewModal.liveFetchUnavailableShowingCached);
       })
       .finally(() => setIsLoadingFull(false));
   }, [initialCreative.id]);
@@ -74,7 +76,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
       setPreviewMessage(resp.message);
     } catch (err) {
       console.error("Live refetch failed:", err);
-      setPreviewMessage("Live refetch failed. Still showing cached snapshot.");
+      setPreviewMessage(t.previewModal.liveRefetchFailedShowingCached);
       setPreviewSource("cache");
     } finally {
       setIsRefetchingLive(false);
@@ -127,7 +129,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                     : "bg-amber-100 text-amber-700 border-amber-200"
                 )}
               >
-                {effectiveSource === "live" ? "Live" : "Cached"}
+                {effectiveSource === "live" ? t.previewModal.liveBadge : t.previewModal.cachedBadge}
               </span>
             </div>
             {googleUrl && (
@@ -138,7 +140,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                 className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 mt-1"
               >
                 <ExternalLink className="h-3 w-3" />
-                View in Google Console
+                {t.previewModal.viewInGoogleConsole}
               </a>
             )}
           </div>
@@ -156,7 +158,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
               (isLoadingFull ? (
                 <div className="flex items-center justify-center h-48 bg-gray-100 text-gray-500">
                   <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                  Loading HTML preview...
+                  {t.previewModal.loadingHtmlPreview}
                 </div>
               ) : (
                 <HtmlPreviewFrame
@@ -171,7 +173,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
             )}
             {!["VIDEO", "HTML", "NATIVE"].includes(creative.format) && (
               <div className="flex items-center justify-center h-48 bg-gray-100 text-gray-400">
-                Preview not available for {creative.format} format
+                {t.previewModal.previewNotAvailableForFormat.replace("{format}", creative.format)}
               </div>
             )}
           </div>
@@ -182,13 +184,13 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                 ? "bg-green-50 text-green-700 border-green-100"
                 : "bg-amber-50 text-amber-700 border-amber-100"
             )}>
-              {effectiveSource === "live" ? "Source: Live from Google API." : "Source: Cached snapshot."}
+              {effectiveSource === "live" ? t.previewModal.sourceLiveApi : t.previewModal.sourceCachedSnapshot}
               {isStaleCache && (
                 <span className="ml-2 inline-flex items-center gap-1">
                   <AlertTriangle className="h-3 w-3" />
-                  Cache is stale
-                  {staleHours ? ` (${Math.round(staleHours)}h old` : ""}
-                  {staleThreshold ? `, threshold ${staleThreshold}h)` : staleHours ? ")" : ""}
+                  {t.previewModal.cacheIsStale}
+                  {staleHours ? ` (${Math.round(staleHours)}${t.previewModal.hoursAbbrev} ${t.previewModal.oldLabel}` : ""}
+                  {staleThreshold ? `, ${t.previewModal.thresholdLabel} ${staleThreshold}${t.previewModal.hoursAbbrev})` : staleHours ? ")" : ""}
                 </span>
               )}
               {previewMessage ? ` ${previewMessage}` : ""}
@@ -202,12 +204,12 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                   {isRefetchingLive ? (
                     <>
                       <Loader2 className="h-3 w-3 animate-spin" />
-                      Refetching
+                      {t.previewModal.refetching}
                     </>
                   ) : (
                     <>
                       <RefreshCw className="h-3 w-3" />
-                      Refetch live
+                      {t.previewModal.refetchLive}
                     </>
                   )}
                 </button>
@@ -221,7 +223,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide inline-flex items-center gap-1.5">
                     <FileCode className="h-3 w-3" />
-                    HTML Snippet
+                    {t.previewModal.htmlSnippet}
                   </h4>
                   {creative.html?.snippet && <CopyButton text={creative.html.snippet} />}
                 </div>
@@ -232,7 +234,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                       onClick={() => setShowHtmlCode((v) => !v)}
                       className="text-xs text-blue-600 hover:text-blue-800"
                     >
-                      {showHtmlCode ? "Hide HTML" : "Show HTML"}
+                      {showHtmlCode ? t.previewModal.hideHtml : t.previewModal.showHtml}
                     </button>
                     {showHtmlCode && (
                       <pre className="mt-2 max-h-40 overflow-auto rounded border bg-white p-2 text-[11px] text-gray-700">
@@ -241,7 +243,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                     )}
                   </div>
                 ) : (
-                  <p className="mt-2 text-xs text-gray-400 italic">No HTML snippet available</p>
+                  <p className="mt-2 text-xs text-gray-400 italic">{t.previewModal.noHtmlSnippetAvailable}</p>
                 )}
               </div>
             </div>
@@ -253,19 +255,19 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
               <>
                 {/* 4-metric grid */}
                 <div className="grid grid-cols-4 gap-2">
-                  <MetricCard value={formatSpend(performance.total_spend_micros)} label="Spend" />
-                  <MetricCard value={formatNumber(performance.total_impressions)} label="Imps" />
-                  <MetricCard value={formatNumber(performance.total_clicks)} label="Clicks" />
-                  <MetricCard value={formatCTR(performance.ctr_percent)} label="CTR" />
+                  <MetricCard value={formatSpend(performance.total_spend_micros)} label={t.previewModal.spend} />
+                  <MetricCard value={formatNumber(performance.total_impressions)} label={t.previewModal.imps} />
+                  <MetricCard value={formatNumber(performance.total_clicks)} label={t.previewModal.clicks} />
+                  <MetricCard value={formatCTR(performance.ctr_percent)} label={t.previewModal.ctr} />
                 </div>
                 {/* CPM/CPC secondary */}
                 <div className="mt-2 text-xs text-gray-500 text-center">
-                  CPM: {formatCostMetric(performance.avg_cpm_micros)} · CPC:{" "}
+                  {t.previewModal.cpm}: {formatCostMetric(performance.avg_cpm_micros)} · {t.previewModal.cpc}:{" "}
                   {formatCostMetric(performance.avg_cpc_micros)}
                 </div>
               </>
             ) : (
-              <div className="text-center text-gray-400 py-2 text-xs">No performance data imported yet</div>
+              <div className="text-center text-gray-400 py-2 text-xs">{t.previewModal.noPerformanceDataImportedYet}</div>
             )}
           </div>
 
@@ -297,17 +299,17 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
               {/* Creative Details */}
               <div className="bg-gray-50 rounded-lg p-3">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                  Creative Details
+                  {t.previewModal.creativeDetails}
                 </h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Status</span>
+                    <span className="text-gray-500">{t.previewModal.status}</span>
                     <span className={cn("badge", getStatusColor(creative.approval_status || ""))}>
                       {creative.approval_status?.replace(/_/g, " ") || "-"}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Format</span>
+                    <span className="text-gray-500">{t.previewModal.format}</span>
                     <span>
                       {getFormatLabel(creative.format)}
                       {creative.width && creative.height && ` (${creative.width}×${creative.height})`}
@@ -315,17 +317,17 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                   </div>
                   {rejectionReason && (
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Rejection</span>
+                      <span className="text-gray-500">{t.previewModal.rejection}</span>
                       <span className="text-red-600">{rejectionReason}</span>
                     </div>
                   )}
                   {creative.disapproval_reasons && creative.disapproval_reasons.length > 0 && (
                     <div>
-                      <span className="text-gray-500 text-xs">Disapproval Reasons</span>
+                      <span className="text-gray-500 text-xs">{t.previewModal.disapprovalReasons}</span>
                       <div className="mt-1 space-y-1">
                         {creative.disapproval_reasons.map((r: { reason: string; details?: string }, i: number) => (
                           <div key={i} className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">
-                            {r.reason?.replace(/_/g, " ")}{r.details ? <>{" — "}<a href={r.details} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Read more</a></> : ""}
+                            {r.reason?.replace(/_/g, " ")}{r.details ? <>{" — "}<a href={r.details} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{t.previewModal.readMore}</a></> : ""}
                           </div>
                         ))}
                       </div>
@@ -333,13 +335,13 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                   )}
                   {creative.advertiser_name && (
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Advertiser</span>
+                      <span className="text-gray-500">{t.previewModal.advertiser}</span>
                       <span>{creative.advertiser_name}</span>
                     </div>
                   )}
                   {appName && (
                     <div className="flex justify-between">
-                      <span className="text-gray-500">App Name</span>
+                      <span className="text-gray-500">{t.previewModal.appName}</span>
                       <span>{appName}</span>
                     </div>
                   )}
@@ -349,12 +351,12 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
               {/* Technical IDs */}
               <div className="bg-gray-50 rounded-lg p-3">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                  Account Info
+                  {t.previewModal.accountInfo}
                 </h4>
                 <div className="space-y-2 text-sm">
                   {creative.buyer_id && (
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-500">Buyer ID</span>
+                      <span className="text-gray-500">{t.previewModal.buyerId}</span>
                       <div className="flex items-center gap-1">
                         <span className="font-mono text-xs">{creative.buyer_id}</span>
                         <CopyButton text={creative.buyer_id} />
@@ -363,13 +365,13 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                   )}
                   {creative.seat_name && (
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-500">Buyer Name</span>
+                      <span className="text-gray-500">{t.previewModal.buyerName}</span>
                       <span className="text-xs text-gray-700">{creative.seat_name}</span>
                     </div>
                   )}
                   {bundleId && (
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-500">Bundle ID</span>
+                      <span className="text-gray-500">{t.previewModal.bundleId}</span>
                       <div className="flex items-center gap-1">
                         <span className="font-mono text-xs">{bundleId}</span>
                         <CopyButton text={bundleId} />
@@ -385,7 +387,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
               {/* Destination URLs */}
               <div className="bg-gray-50 rounded-lg p-3">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                  Destination
+                  {t.previewModal.destination}
                 </h4>
                 {parsedUrls.length > 0 ? (
                   <div className="space-y-3">
@@ -394,7 +396,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-medium text-gray-500">{url.label}</span>
                           {url.isPrimary && (
-                            <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Primary</span>
+                            <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{t.previewModal.primary}</span>
                           )}
                         </div>
                         <div className="flex items-start gap-2 min-w-0">
@@ -412,18 +414,20 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                       </div>
                     ))}
                     {parsedUrls.length > 4 && (
-                      <div className="text-xs text-gray-400">+{parsedUrls.length - 4} more URLs</div>
+                      <div className="text-xs text-gray-400">
+                        {t.previewModal.moreUrls.replace("{count}", String(parsedUrls.length - 4))}
+                      </div>
                     )}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-400 italic">No URLs found</p>
+                  <p className="text-sm text-gray-400 italic">{t.previewModal.noUrlsFound}</p>
                 )}
               </div>
 
               {/* Tracking Parameters */}
               <div className="bg-gray-50 rounded-lg p-3">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                  Tracking Parameters
+                  {t.previewModal.trackingParameters}
                 </h4>
                 {hasTrackingParams ? (
                   <div className="space-y-1 text-sm">
@@ -440,7 +444,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-400 italic">No tracking params</p>
+                  <p className="text-sm text-gray-400 italic">{t.previewModal.noTrackingParams}</p>
                 )}
               </div>
 
