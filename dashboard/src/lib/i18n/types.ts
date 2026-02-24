@@ -1136,6 +1136,28 @@ export interface Translations {
     bidRequestsTitle: string;
     blockedPublishersHint: string;
     noHighVolumeBlockedPublishers: string;
+    utilShort: string;
+    noCreative: string;
+    adsShort: string;
+    failedToLoadSizeAnalysis: string;
+    sizeAnalysis: string;
+    sizeAnalysisSubtitle: string;
+    requests: string;
+    trafficDistribution: string;
+    creatives: string;
+    noCreatives: string;
+    copySizes: string;
+    materialWasteOnlyHint: string;
+    wastedQps: string;
+    noMaterialWasteDetected: string;
+    noGapsDetected: string;
+    noSizeDataAvailable: string;
+    importCsvCreativeSizePromptPrefix: string;
+    importCsvCreativeSizePromptSuffix: string;
+    creativeSize: string;
+    requiredCsvFormat: string;
+    inGoogleAuthorizedBuyersNewReport: string;
+    dimensionCreativeSizeIndex: string;
   };
 
   setup: {
