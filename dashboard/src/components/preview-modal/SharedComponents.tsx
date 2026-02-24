@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Copy, Check, Info, AlertTriangle } from "lucide-react";
+import { useTranslation } from "@/contexts/i18n-context";
 import { cn } from "@/lib/utils";
 import type { DataNote } from "./utils";
 
@@ -9,6 +10,7 @@ import type { DataNote } from "./utils";
  * Copy to clipboard button component.
  */
 export function CopyButton({ text, className }: { text: string; className?: string }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async (e: React.MouseEvent) => {
@@ -23,7 +25,7 @@ export function CopyButton({ text, className }: { text: string; className?: stri
     <button
       onClick={handleCopy}
       className={cn("p-1 text-gray-400 hover:text-gray-600 rounded", className)}
-      title="Copy"
+      title={copied ? t.common.copied : t.common.copy}
     >
       {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
     </button>
