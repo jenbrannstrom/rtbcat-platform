@@ -5,39 +5,44 @@ import { AlertTriangle, CheckCircle, Globe, TrendingUp, XCircle, Eye } from 'luc
 import { getGeoWaste } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useAccount } from '@/contexts/account-context';
+import { useTranslation } from '@/contexts/i18n-context';
+import type { Translations } from '@/lib/i18n/types';
 
 interface GeoWastePanelProps {
   days?: number;
 }
 
-const recommendationConfig = {
-  EXCLUDE: {
-    icon: XCircle,
-    color: 'text-red-600',
-    bg: 'bg-red-100',
-    label: 'Exclude',
-  },
-  MONITOR: {
-    icon: Eye,
-    color: 'text-yellow-600',
-    bg: 'bg-yellow-100',
-    label: 'Monitor',
-  },
-  OK: {
-    icon: CheckCircle,
-    color: 'text-green-600',
-    bg: 'bg-green-100',
-    label: 'OK',
-  },
-  EXPAND: {
-    icon: TrendingUp,
-    color: 'text-blue-600',
-    bg: 'bg-blue-100',
-    label: 'Expand',
-  },
-};
+function getRecommendationConfig(t: Translations) {
+  return {
+    EXCLUDE: {
+      icon: XCircle,
+      color: 'text-red-600',
+      bg: 'bg-red-100',
+      label: t.geo.geoWasteActionExclude,
+    },
+    MONITOR: {
+      icon: Eye,
+      color: 'text-yellow-600',
+      bg: 'bg-yellow-100',
+      label: t.geo.geoWasteActionMonitor,
+    },
+    OK: {
+      icon: CheckCircle,
+      color: 'text-green-600',
+      bg: 'bg-green-100',
+      label: t.geo.geoWasteActionOk,
+    },
+    EXPAND: {
+      icon: TrendingUp,
+      color: 'text-blue-600',
+      bg: 'bg-blue-100',
+      label: t.geo.geoWasteActionExpand,
+    },
+  };
+}
 
 export function GeoWastePanel({ days = 7 }: GeoWastePanelProps) {
+  const { t } = useTranslation();
   const { selectedBuyerId } = useAccount();
   const { data, isLoading, error } = useQuery({
     queryKey: ['geo-waste', days, selectedBuyerId],
@@ -64,12 +69,13 @@ export function GeoWastePanel({ days = 7 }: GeoWastePanelProps) {
       <div className="bg-red-50 border border-red-200 rounded-lg p-4">
         <div className="flex items-center gap-2 text-red-700">
           <AlertTriangle className="h-5 w-5" />
-          <span>Failed to load geo waste analysis</span>
+          <span>{t.geo.geoWasteFailedToLoad}</span>
         </div>
       </div>
     );
   }
 
+  const recommendationConfig = getRecommendationConfig(t);
   const excludeGeos = data.geos.filter(g => g.recommendation === 'EXCLUDE');
 
   return (
@@ -78,15 +84,15 @@ export function GeoWastePanel({ days = 7 }: GeoWastePanelProps) {
         <div>
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <Globe className="h-5 w-5 text-blue-600" />
-            Geographic Analysis
+            {t.geo.geoWasteTitle}
           </h3>
           <p className="text-sm text-gray-500 mt-1">
-            Identify geos with poor performance to exclude from pretargeting
+            {t.geo.geoWasteSubtitle}
           </p>
         </div>
         <div className="text-right">
           <div className="text-2xl font-bold text-gray-900">{data.total_geos}</div>
-          <div className="text-sm text-gray-500">geos analyzed</div>
+          <div className="text-sm text-gray-500">{t.geo.geoWasteGeosAnalyzed}</div>
         </div>
       </div>
 
@@ -94,19 +100,19 @@ export function GeoWastePanel({ days = 7 }: GeoWastePanelProps) {
       <div className="grid grid-cols-4 gap-3 mb-6">
         <div className="text-center p-3 bg-green-50 rounded-lg">
           <div className="text-xl font-bold text-green-600">{data.geos_performing_well}</div>
-          <div className="text-xs text-gray-500">Performing Well</div>
+          <div className="text-xs text-gray-500">{t.geo.geoWastePerformingWell}</div>
         </div>
         <div className="text-center p-3 bg-yellow-50 rounded-lg">
           <div className="text-xl font-bold text-yellow-600">{data.geos_to_monitor}</div>
-          <div className="text-xs text-gray-500">Monitor</div>
+          <div className="text-xs text-gray-500">{t.geo.geoWasteActionMonitor}</div>
         </div>
         <div className="text-center p-3 bg-red-50 rounded-lg">
           <div className="text-xl font-bold text-red-600">{data.geos_to_exclude}</div>
-          <div className="text-xs text-gray-500">Exclude</div>
+          <div className="text-xs text-gray-500">{t.geo.geoWasteActionExclude}</div>
         </div>
         <div className="text-center p-3 bg-orange-50 rounded-lg">
           <div className="text-xl font-bold text-orange-600">${data.wasted_spend_usd.toFixed(0)}</div>
-          <div className="text-xs text-gray-500">Wasted</div>
+          <div className="text-xs text-gray-500">{t.geo.geoWasteWastedLabel}</div>
         </div>
       </div>
 
@@ -115,14 +121,16 @@ export function GeoWastePanel({ days = 7 }: GeoWastePanelProps) {
         <div className="mb-6 p-4 bg-red-50 rounded-lg border border-red-200">
           <h4 className="text-sm font-medium text-red-800 mb-2 flex items-center gap-2">
             <XCircle className="h-4 w-4" />
-            Exclude from Pretargeting ({excludeGeos.length})
+            {t.geo.geoWasteExcludeFromPretargetingCount.replace('{count}', String(excludeGeos.length))}
           </h4>
           <div className="flex flex-wrap gap-2">
             {excludeGeos.map(geo => (
               <span
                 key={geo.code}
                 className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium"
-                title={`CTR: ${geo.ctr_pct}%, Spend: $${geo.spend_usd}`}
+                title={t.geo.geoWasteGeoBadgeTooltip
+                  .replace('{ctr}', String(geo.ctr_pct))
+                  .replace('{spend}', String(geo.spend_usd))}
               >
                 {geo.code} - {geo.country}
               </span>
@@ -136,13 +144,13 @@ export function GeoWastePanel({ days = 7 }: GeoWastePanelProps) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200">
-              <th className="text-left py-2 font-medium text-gray-600">Country</th>
-              <th className="text-right py-2 font-medium text-gray-600">Impressions</th>
-              <th className="text-right py-2 font-medium text-gray-600">Clicks</th>
-              <th className="text-right py-2 font-medium text-gray-600">CTR</th>
-              <th className="text-right py-2 font-medium text-gray-600">Spend</th>
-              <th className="text-right py-2 font-medium text-gray-600">CPM</th>
-              <th className="text-right py-2 font-medium text-gray-600">Action</th>
+              <th className="text-left py-2 font-medium text-gray-600">{t.geo.country}</th>
+              <th className="text-right py-2 font-medium text-gray-600">{t.dashboard.impressions}</th>
+              <th className="text-right py-2 font-medium text-gray-600">{t.geo.geoWasteClicks}</th>
+              <th className="text-right py-2 font-medium text-gray-600">{t.geo.geoWasteCtr}</th>
+              <th className="text-right py-2 font-medium text-gray-600">{t.geo.geoWasteSpend}</th>
+              <th className="text-right py-2 font-medium text-gray-600">{t.geo.geoWasteCpm}</th>
+              <th className="text-right py-2 font-medium text-gray-600">{t.geo.geoWasteActionHeader}</th>
             </tr>
           </thead>
           <tbody>

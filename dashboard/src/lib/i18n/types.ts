@@ -215,6 +215,23 @@ export interface Translations {
     geoDataNotAvailable: string;
     importCreativeBiddingReport: string;
     country: string;
+    geoWasteActionExclude: string;
+    geoWasteActionMonitor: string;
+    geoWasteActionOk: string;
+    geoWasteActionExpand: string;
+    geoWasteFailedToLoad: string;
+    geoWasteTitle: string;
+    geoWasteSubtitle: string;
+    geoWasteGeosAnalyzed: string;
+    geoWastePerformingWell: string;
+    geoWasteWastedLabel: string;
+    geoWasteExcludeFromPretargetingCount: string;
+    geoWasteGeoBadgeTooltip: string;
+    geoWasteClicks: string;
+    geoWasteCtr: string;
+    geoWasteSpend: string;
+    geoWasteCpm: string;
+    geoWasteActionHeader: string;
   };
 
   pretargeting: {
