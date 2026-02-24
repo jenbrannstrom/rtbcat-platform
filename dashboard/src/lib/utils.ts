@@ -9,8 +9,8 @@ export function formatNumber(num: number): string {
   return new Intl.NumberFormat().format(num);
 }
 
-export function formatDate(date: string | Date): string {
-  return new Intl.DateTimeFormat("en-US", {
+export function formatDate(date: string | Date, locale?: string): string {
+  return new Intl.DateTimeFormat(locale, {
     year: "numeric",
     month: "short",
     day: "numeric",

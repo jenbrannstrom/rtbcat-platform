@@ -168,6 +168,7 @@
       - [x] Added Chinese (`zh`) `previewModal` translations (live/cached state, URL labels/tooltips, approval/language-geo mismatch UI, media preview labels) (`dashboard/src/lib/i18n/translations/zh/previewModal.ts`)
       - [x] Added Chinese (`zh`) `campaigns` + `creatives` translations (clustering views, campaign detail labels, creatives filters/statuses/errors/drilldown copy) (`dashboard/src/lib/i18n/translations/zh/campaigns.ts`, `dashboard/src/lib/i18n/translations/zh/creatives.ts`)
       - [x] Added Chinese (`zh`) ops/support namespace translations (`settings`, `retentionPage`, `history`, `connect`) (`dashboard/src/lib/i18n/translations/zh/*.ts`)
+      - [x] Removed hardcoded English date formatting (`en-US`) in shared/RTB UI date displays; now uses locale-aware formatting (`dashboard/src/lib/utils.ts`, `dashboard/src/components/rtb/config-breakdown-panel.tsx`)
     - [ ] Add real dictionaries for remaining locales (`pl`, `ru`, `uk`, `da`, `fr`, `he`, `ar`) and expand `zh`/`es` remaining namespaces
 
 ---
