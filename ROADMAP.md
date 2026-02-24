@@ -130,6 +130,11 @@
     - [x] Residual scan pass completed: remaining hardcoded UI-adjacent literals are intentional technical code examples/commands/filenames (e.g. `sudo apt install ffmpeg`, `python scripts/gmail_import.py`, sample CSV/report names) and product identifiers shown in `<code>` blocks
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
+  - Progress (2026-02-24):
+    - [x] Added partial-locale deep fallback to English (`dashboard/src/lib/i18n/index.ts`) so translations can ship incrementally per language
+    - [x] Added initial Spanish (`es`) dictionary for core shell/auth/navigation/sidebar + dashboard home summary copy (`dashboard/src/lib/i18n/translations/es.ts`)
+    - [ ] Expand Spanish coverage across remaining namespaces (`import`, `setup`, `campaigns`, `creatives`, `pretargeting`, admin/settings tabs)
+    - [ ] Add real dictionaries for remaining locales (`pl`, `zh`, `ru`, `uk`, `da`, `fr`, `nl`, `he`, `ar`)
 
 ---
 
