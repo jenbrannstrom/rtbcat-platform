@@ -103,7 +103,7 @@ export function SystemTab() {
             </div>
             <div className="p-3 bg-gray-50 rounded-lg">
               <p className="text-sm text-gray-500">{t.settings.database}</p>
-              <p className="font-medium text-gray-900">{systemStatus.database_size_mb} MB</p>
+              <p className="font-medium text-gray-900">{systemStatus.database_size_mb} {t.settings.mb}</p>
             </div>
           </div>
         ) : null}

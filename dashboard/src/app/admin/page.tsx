@@ -61,6 +61,12 @@ function AdminDashboard() {
 
   const currentRetention = settings?.audit_retention_days ?? "60";
   const multiUserEnabled = settings?.multi_user_enabled === "1";
+  const currentUserRoleLabel =
+    user?.role === "admin"
+      ? t.admin.adminRole
+      : user?.role === "user"
+        ? t.admin.userRole
+        : (user?.role ?? "-");
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -257,7 +263,7 @@ function AdminDashboard() {
           </div>
           <div>
             <p className="text-sm text-gray-500">{t.admin.role}</p>
-            <p className="font-medium text-gray-900 capitalize">{user?.role}</p>
+            <p className="font-medium text-gray-900 capitalize">{currentUserRoleLabel}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">{t.admin.status}</p>

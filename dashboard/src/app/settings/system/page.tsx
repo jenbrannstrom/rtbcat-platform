@@ -173,7 +173,7 @@ export default function SystemStatusPage() {
                 <div className="flex items-center justify-between py-1">
                   <span className="text-sm text-gray-600">{t.settings.databaseSize}</span>
                   <span className="text-sm font-medium text-gray-900">
-                    {systemStatus.database_size_mb} MB
+                    {systemStatus.database_size_mb} {t.settings.mb}
                   </span>
                 </div>
                 <div className="flex items-center justify-between py-1">

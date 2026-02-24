@@ -774,6 +774,7 @@ export interface Translations {
     notInstalled: string;
     diskSpace: string;
     gbFree: string;
+    mb: string;
     databaseSize: string;
     thumbnailsGenerated: string;
     database: string;
