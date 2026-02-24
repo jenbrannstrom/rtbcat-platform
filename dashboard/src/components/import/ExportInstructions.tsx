@@ -7,6 +7,116 @@ import { useTranslation } from "@/contexts/i18n-context";
  */
 export function ExportInstructions() {
   const { t } = useTranslation();
+  const reportCards = [
+    {
+      id: "1",
+      containerClass: "border-2 border-blue-200 rounded-lg p-4 bg-blue-50",
+      badgeClass: "bg-blue-600",
+      reportName: t.import.requiredTableReportBidsInAuction,
+      targetTable: t.import.targetTableRtbDaily,
+      description: t.import.exportGuideReport1Desc,
+      dimensions: [
+        t.import.exportGuideDimDay,
+        t.import.exportGuideDimCountry,
+        t.import.exportGuideDimCreativeId,
+        t.import.exportGuideDimBuyerAccountId,
+      ],
+      metrics: [
+        t.import.exportGuideMetricBidsInAuction,
+        t.import.exportGuideMetricAuctionsWon,
+        t.import.exportGuideMetricBids,
+        t.import.exportGuideMetricReachedQueries,
+        t.import.exportGuideMetricImpressions,
+        t.import.exportGuideMetricSpendBuyerCurrency,
+      ],
+    },
+    {
+      id: "2",
+      containerClass: "border-2 border-purple-200 rounded-lg p-4 bg-purple-50",
+      badgeClass: "bg-purple-600",
+      reportName: t.import.requiredTableReportQuality,
+      targetTable: t.import.targetTableRtbDaily,
+      description: t.import.exportGuideReport2Desc,
+      dimensions: [
+        t.import.exportGuideDimDay,
+        t.import.exportGuideDimPretargetingConfigBillingId,
+        t.import.exportGuideDimCreativeId,
+        t.import.exportGuideDimCreativeSize,
+        t.import.exportGuideDimCreativeFormat,
+      ],
+      metrics: [
+        t.import.exportGuideMetricReachedQueries,
+        t.import.exportGuideMetricImpressions,
+        t.import.exportGuideMetricSpendBuyerCurrency,
+        t.import.exportGuideMetricActiveViewViewable,
+        t.import.exportGuideMetricActiveViewMeasurable,
+      ],
+    },
+    {
+      id: "3",
+      containerClass: "border-2 border-green-200 rounded-lg p-4 bg-green-50",
+      badgeClass: "bg-green-600",
+      reportName: t.import.requiredTableReportPipelineGeo,
+      targetTable: t.import.targetTableRtbBidstream,
+      description: t.import.exportGuideReport3Desc,
+      dimensions: [
+        t.import.exportGuideDimDay,
+        t.import.exportGuideDimCountry,
+        t.import.exportGuideDimHour,
+      ],
+      metrics: [
+        t.import.exportGuideMetricBidRequests,
+        t.import.exportGuideMetricInventoryMatches,
+        t.import.exportGuideMetricSuccessfulResponses,
+        t.import.exportGuideMetricBids,
+        t.import.exportGuideMetricBidsInAuction,
+        t.import.exportGuideMetricAuctionsWon,
+        t.import.exportGuideMetricImpressions,
+        t.import.exportGuideMetricClicks,
+      ],
+    },
+    {
+      id: "4",
+      containerClass: "border-2 border-orange-200 rounded-lg p-4 bg-orange-50",
+      badgeClass: "bg-orange-600",
+      reportName: t.import.requiredTableReportPipeline,
+      targetTable: t.import.targetTableRtbBidstream,
+      description: t.import.exportGuideReport4Desc,
+      dimensions: [
+        t.import.exportGuideDimDay,
+        t.import.exportGuideDimHour,
+        t.import.exportGuideDimCountry,
+        t.import.exportGuideDimPublisherId,
+        t.import.exportGuideDimPublisherName,
+      ],
+      metrics: [
+        t.import.exportGuideMetricBidRequests,
+        t.import.exportGuideMetricInventoryMatches,
+        t.import.exportGuideMetricSuccessfulResponses,
+        t.import.exportGuideMetricReachedQueries,
+        t.import.exportGuideMetricBids,
+        t.import.exportGuideMetricBidsInAuction,
+        t.import.exportGuideMetricAuctionsWon,
+        t.import.exportGuideMetricImpressions,
+        t.import.exportGuideMetricClicks,
+      ],
+    },
+    {
+      id: "5",
+      containerClass: "border-2 border-red-200 rounded-lg p-4 bg-red-50",
+      badgeClass: "bg-red-600",
+      reportName: t.import.requiredTableReportBidFiltering,
+      targetTable: t.import.targetTableRtbBidFiltering,
+      description: t.import.exportGuideReport5Desc,
+      dimensions: [
+        t.import.exportGuideDimDay,
+        t.import.exportGuideDimCountry,
+        t.import.exportGuideDimCreativeId,
+        t.import.exportGuideDimBidFilteringReason,
+      ],
+      metrics: [t.import.exportGuideMetricBids],
+    },
+  ] as const;
 
   return (
     <div className="space-y-6 text-sm">
@@ -37,170 +147,37 @@ export function ExportInstructions() {
         </ol>
       </div>
 
-      {/* Report 1: Bids in Auction */}
-      <div className="border-2 border-blue-200 rounded-lg p-4 bg-blue-50">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded">1</span>
-          <h4 className="font-semibold text-gray-900">catscan-bidsinauction</h4>
-          <span className="text-xs text-gray-500 ml-auto">→ rtb_daily</span>
-        </div>
-        <p className="text-gray-600 mb-3">{t.import.exportGuideReport1Desc}</p>
+      {reportCards.map((report) => (
+        <div key={report.id} className={report.containerClass}>
+          <div className="flex items-center gap-2 mb-3">
+            <span className={`${report.badgeClass} text-white text-xs font-bold px-2 py-1 rounded`}>
+              {report.id}
+            </span>
+            <h4 className="font-semibold text-gray-900">{report.reportName}</h4>
+            <span className="text-xs text-gray-500 ml-auto">{`→ ${report.targetTable}`}</span>
+          </div>
+          <p className="text-gray-600 mb-3">{report.description}</p>
 
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{t.import.exportGuideDimensions}</p>
-            <ul className="space-y-1 text-gray-700">
-              <li>• Day</li>
-              <li>• Country</li>
-              <li>• Creative ID</li>
-              <li>• Buyer account ID</li>
-            </ul>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{t.import.exportGuideMetrics}</p>
-            <ul className="space-y-1 text-gray-700">
-              <li>• Bids in auction</li>
-              <li>• Auctions won</li>
-              <li>• Bids</li>
-              <li>• Reached queries</li>
-              <li>• Impressions</li>
-              <li>• Spend (buyer currency)</li>
-            </ul>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{t.import.exportGuideDimensions}</p>
+              <ul className="space-y-1 text-gray-700">
+                {report.dimensions.map((item, index) => (
+                  <li key={`${report.id}-dim-${index}`}>• {item}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{t.import.exportGuideMetrics}</p>
+              <ul className="space-y-1 text-gray-700">
+                {report.metrics.map((item, index) => (
+                  <li key={`${report.id}-metric-${index}`}>• {item}</li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* Report 2: Quality/Viewability */}
-      <div className="border-2 border-purple-200 rounded-lg p-4 bg-purple-50">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded">2</span>
-          <h4 className="font-semibold text-gray-900">catscan-quality</h4>
-          <span className="text-xs text-gray-500 ml-auto">→ rtb_daily</span>
-        </div>
-        <p className="text-gray-600 mb-3">{t.import.exportGuideReport2Desc}</p>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{t.import.exportGuideDimensions}</p>
-            <ul className="space-y-1 text-gray-700">
-              <li>• Day</li>
-              <li>• Pretargeting config (Billing ID)</li>
-              <li>• Creative ID</li>
-              <li>• Creative size</li>
-              <li>• Creative format</li>
-            </ul>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{t.import.exportGuideMetrics}</p>
-            <ul className="space-y-1 text-gray-700">
-              <li>• Reached queries</li>
-              <li>• Impressions</li>
-              <li>• Spend (buyer currency)</li>
-              <li>• Active view viewable</li>
-              <li>• Active view measurable</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      {/* Report 3: Pipeline Geo */}
-      <div className="border-2 border-green-200 rounded-lg p-4 bg-green-50">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="bg-green-600 text-white text-xs font-bold px-2 py-1 rounded">3</span>
-          <h4 className="font-semibold text-gray-900">catscan-pipeline-geo</h4>
-          <span className="text-xs text-gray-500 ml-auto">→ rtb_bidstream</span>
-        </div>
-        <p className="text-gray-600 mb-3">{t.import.exportGuideReport3Desc}</p>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{t.import.exportGuideDimensions}</p>
-            <ul className="space-y-1 text-gray-700">
-              <li>• Day</li>
-              <li>• Country</li>
-              <li>• Hour</li>
-            </ul>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{t.import.exportGuideMetrics}</p>
-            <ul className="space-y-1 text-gray-700">
-              <li>• Bid requests</li>
-              <li>• Inventory matches</li>
-              <li>• Successful responses</li>
-              <li>• Bids</li>
-              <li>• Bids in auction</li>
-              <li>• Auctions won</li>
-              <li>• Impressions</li>
-              <li>• Clicks</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      {/* Report 4: Pipeline Publishers */}
-      <div className="border-2 border-orange-200 rounded-lg p-4 bg-orange-50">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="bg-orange-600 text-white text-xs font-bold px-2 py-1 rounded">4</span>
-          <h4 className="font-semibold text-gray-900">catscan-pipeline</h4>
-          <span className="text-xs text-gray-500 ml-auto">→ rtb_bidstream</span>
-        </div>
-        <p className="text-gray-600 mb-3">{t.import.exportGuideReport4Desc}</p>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{t.import.exportGuideDimensions}</p>
-            <ul className="space-y-1 text-gray-700">
-              <li>• Day</li>
-              <li>• Hour</li>
-              <li>• Country</li>
-              <li>• Publisher ID</li>
-              <li>• Publisher name</li>
-            </ul>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{t.import.exportGuideMetrics}</p>
-            <ul className="space-y-1 text-gray-700">
-              <li>• Bid requests</li>
-              <li>• Inventory matches</li>
-              <li>• Successful responses</li>
-              <li>• Reached queries</li>
-              <li>• Bids</li>
-              <li>• Bids in auction</li>
-              <li>• Auctions won</li>
-              <li>• Impressions</li>
-              <li>• Clicks</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      {/* Report 5: Bid Filtering */}
-      <div className="border-2 border-red-200 rounded-lg p-4 bg-red-50">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="bg-red-600 text-white text-xs font-bold px-2 py-1 rounded">5</span>
-          <h4 className="font-semibold text-gray-900">catscan-bid-filtering</h4>
-          <span className="text-xs text-gray-500 ml-auto">→ rtb_bid_filtering</span>
-        </div>
-        <p className="text-gray-600 mb-3">{t.import.exportGuideReport5Desc}</p>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{t.import.exportGuideDimensions}</p>
-            <ul className="space-y-1 text-gray-700">
-              <li>• Day</li>
-              <li>• Country</li>
-              <li>• Creative ID</li>
-              <li>• Bid filtering reason</li>
-            </ul>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{t.import.exportGuideMetrics}</p>
-            <ul className="space-y-1 text-gray-700">
-              <li>• Bids</li>
-            </ul>
-          </div>
-        </div>
-      </div>
+      ))}
 
       {/* Naming Convention */}
       <div className="bg-gray-100 rounded-lg p-4">

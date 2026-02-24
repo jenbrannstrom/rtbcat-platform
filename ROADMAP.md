@@ -60,7 +60,7 @@
     - [x] Login/auth page primary UI strings + error messages converted (`dashboard/src/app/login/page.tsx`)
     - [x] Home dashboard seat/status/error banners + pretargeting fallback messages converted (`dashboard/src/app/page.tsx`)
     - [x] Import page runtime UI/errors + import reference/troubleshooting wrapper copy converted (`dashboard/src/app/import/page.tsx`, `dashboard/src/components/import/RequiredColumnsTable.tsx`, `dashboard/src/components/import/TroubleshootingSection.tsx`)
-    - [x] `ExportInstructions` long-form import guide prose/headings converted (`dashboard/src/components/import/ExportInstructions.tsx`) while keeping technical report IDs and Google field names literal
+    - [x] `ExportInstructions` import guide fully converted (prose/headings + report IDs/target tables + dimensions/metrics lists) (`dashboard/src/components/import/ExportInstructions.tsx`)
     - [x] RTB app drill-down modal UI strings/tooltips/empty states converted (`dashboard/src/components/rtb/app-drilldown-modal.tsx`)
     - [x] RTB config breakdown panel top-level UI + publisher controls copy converted (tabs/loading/error/empty states/window badges/filter/history header) (`dashboard/src/components/rtb/config-breakdown-panel.tsx`)
     - [x] RTB config breakdown panel row/editor controls copy converted (history entries, size/geo controls, table headers, row actions/statuses, suggestions, pending bar) (`dashboard/src/components/rtb/config-breakdown-panel.tsx`)
