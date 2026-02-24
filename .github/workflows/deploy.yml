@@ -6,6 +6,13 @@ name: CD Manual Deploy to GCP
 on:
   workflow_dispatch:  # Manual trigger only - click "Run workflow" in GitHub
     inputs:
+      target:
+        description: "Deploy target. Deploy to staging first, verify, then production."
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
       confirm:
         description: "Type DEPLOY to confirm this manual deployment."
         required: true
@@ -15,19 +22,14 @@ on:
         required: false
         default: ""
 
-# Prevent concurrent deployments
+# Prevent concurrent deployments to the same VM
 concurrency:
-  group: cd-manual-deploy-${{ vars.VM_NAME || 'catscan-production-sg' }}
+  group: cd-manual-deploy-${{ github.event.inputs.target }}
   cancel-in-progress: true
 
-# Configuration via GitHub repository variables (Settings > Secrets and variables > Actions > Variables)
-# This allows forks to use their own infrastructure without modifying the workflow file.
-# Required variables: GCP_PROJECT, GCP_SA_KEY (secret)
-# Optional variables: GCP_ZONE, VM_NAME, APP_DIR, GIT_BRANCH
 env:
   GCP_PROJECT: ${{ vars.GCP_PROJECT }}
   GCP_ZONE: ${{ vars.GCP_ZONE || 'asia-southeast1-b' }}
-  VM_NAME: ${{ vars.VM_NAME || 'catscan-production-sg' }}
   APP_DIR: ${{ vars.APP_DIR || '/opt/catscan' }}
   GIT_BRANCH: ${{ vars.GIT_BRANCH || 'unified-platform' }}
   IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY || 'asia-southeast1-docker.pkg.dev/catscan-prod-202601/catscan' }}
@@ -36,16 +38,19 @@ env:
 jobs:
   deploy:
     if: ${{ github.event.inputs.confirm == 'DEPLOY' }}
-    name: Deploy to VM (manual gate)
-    environment: production
+    name: Deploy to ${{ github.event.inputs.target }}
+    environment: ${{ github.event.inputs.target }}
     runs-on: ubuntu-latest
+
+    env:
+      VM_NAME: ${{ github.event.inputs.target == 'production' && 'catscan-production-sg' || 'catscan-production-sg2' }}
 
     steps:
       - name: Show deployment intent
         run: |
           echo "Manual deploy approved."
+          echo "Target: ${{ github.event.inputs.target }} (${{ env.VM_NAME }})"
           echo "Reason: ${{ github.event.inputs.reason }}"
-          echo "Target VM: ${{ env.VM_NAME }}"
 
       - name: Checkout code
         uses: actions/checkout@v4
