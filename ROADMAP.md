@@ -106,6 +106,7 @@
     - [x] AI control mode settings labels/descriptions/hints converted (`dashboard/src/components/rtb/ai-control-settings.tsx`)
     - [x] `GmailReportsTab` residual deep-copy audit completed; remaining literals are command/path examples kept intentionally (`dashboard/src/app/settings/accounts/components/GmailReportsTab.tsx`)
     - [x] RTB config performance panel labels/error/empty-state/table/settings-chip copy converted (`dashboard/src/components/rtb/config-performance.tsx`)
+    - [x] Campaign sort/issues filter control labels/tooltips + list-view unclustered label converted (`dashboard/src/components/campaigns/SortFilterControls.tsx`, `dashboard/src/app/campaigns/page.tsx`)
     - [ ] Remaining settings/admin/shared hotspots (deeper RTB/settings helper components)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
