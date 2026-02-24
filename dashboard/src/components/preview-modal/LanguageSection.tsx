@@ -5,6 +5,7 @@ import { Globe, Loader2, RefreshCw, Edit2, AlertTriangle, ChevronDown, ChevronUp
 import type { Creative, GeoMismatchResponse, CreativeCountryBreakdown } from "@/types/api";
 import { analyzeCreativeLanguage, updateCreativeLanguage, getCreativeGeoMismatch, getCreativeCountries } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/contexts/i18n-context";
 
 interface LanguageSectionProps {
   creative: Creative;
@@ -12,6 +13,7 @@ interface LanguageSectionProps {
 }
 
 export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionProps) {
+  const { t, language } = useTranslation();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [geoMismatch, setGeoMismatch] = useState<GeoMismatchResponse | null>(null);
   const [isLoadingMismatch, setIsLoadingMismatch] = useState(false);
@@ -52,7 +54,7 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
         setError(result.language_analysis_error);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to analyze language");
+      setError(err instanceof Error ? err.message : t.previewModal.failedToAnalyzeLanguage);
     } finally {
       setIsAnalyzing(false);
     }
@@ -73,7 +75,7 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
         setIsEditing(false);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update language");
+      setError(err instanceof Error ? err.message : t.previewModal.failedToUpdateLanguage);
     } finally {
       setIsAnalyzing(false);
     }
@@ -89,16 +91,16 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
     return (
       <div className="bg-gray-50 rounded-lg p-3">
         <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-          Edit Language
+          {t.previewModal.editLanguage}
         </h4>
         <div className="space-y-2">
           <div>
-            <label className="text-xs text-gray-500">Language Name</label>
+            <label className="text-xs text-gray-500">{t.previewModal.languageName}</label>
             <input
               type="text"
               value={editLanguage}
               onChange={(e) => setEditLanguage(e.target.value)}
-              placeholder="e.g., German"
+              placeholder={t.previewModal.languageNamePlaceholder}
               className="w-full mt-1 px-2 py-1 text-sm border rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
@@ -108,14 +110,14 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
               disabled={isAnalyzing || !editLanguage.trim()}
               className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
             >
-              {isAnalyzing ? "Saving..." : "Save"}
+              {isAnalyzing ? t.previewModal.saving : t.common.save}
             </button>
             <button
               onClick={() => setIsEditing(false)}
               disabled={isAnalyzing}
               className="px-3 py-1 text-xs text-gray-600 hover:text-gray-800"
             >
-              Cancel
+              {t.common.cancel}
             </button>
           </div>
         </div>
@@ -131,7 +133,7 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
     <div className="bg-gray-50 rounded-lg p-3">
       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
         <Globe className="h-3 w-3" />
-        Language + Country
+        {t.previewModal.languageAndCountry}
       </h4>
 
       {error && (
@@ -145,7 +147,7 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
           <div className="flex items-start gap-1.5">
             <AlertTriangle className="h-3.5 w-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
             <div className="text-xs text-amber-800">
-              <div className="font-medium">Geo Mismatch</div>
+              <div className="font-medium">{t.previewModal.geoMismatch}</div>
               <div className="mt-0.5">{geoMismatch.alert.message}</div>
             </div>
           </div>
@@ -153,7 +155,7 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
       )}
 
       <div className="text-sm text-gray-700 flex flex-wrap items-center gap-1.5">
-        <span className="text-gray-500">Language detected:</span>
+        <span className="text-gray-500">{t.previewModal.languageDetected}</span>
         {creative.detected_language ? (
           <span className="font-medium">
             {creative.detected_language}
@@ -162,14 +164,14 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
             ) : null}
           </span>
         ) : (
-          <span className="text-gray-400 italic">Not analyzed</span>
+          <span className="text-gray-400 italic">{t.previewModal.notAnalyzed}</span>
         )}
         <span className="text-gray-300">|</span>
-        <span className="text-gray-500">Country targeted:</span>
+        <span className="text-gray-500">{t.previewModal.countryTargeted}</span>
         {isLoadingCountries ? (
           <span className="inline-flex items-center gap-1 text-gray-400">
             <Loader2 className="h-3 w-3 animate-spin" />
-            Loading...
+            {t.common.loading}
           </span>
         ) : countries.length > 0 ? (
           <span className="font-medium">
@@ -177,7 +179,7 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
             {!showAllCountries && hasMoreCountries ? ` +${countries.length - 4}` : ""}
           </span>
         ) : (
-          <span className="text-gray-400 italic">No country data</span>
+          <span className="text-gray-400 italic">{t.previewModal.noCountryData}</span>
         )}
       </div>
 
@@ -190,12 +192,12 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
           {showAllCountries ? (
             <>
               <ChevronUp className="h-3 w-3" />
-              See less
+              {t.previewModal.seeLess}
             </>
           ) : (
             <>
               <ChevronDown className="h-3 w-3" />
-              See more
+              {t.previewModal.seeMore}
             </>
           )}
         </button>
@@ -226,14 +228,14 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
           ) : (
             <RefreshCw className="h-3 w-3" />
           )}
-          Rescan
+          {t.previewModal.rescan}
         </button>
         <button
           onClick={startEditing}
           className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
         >
           <Edit2 className="h-3 w-3" />
-          Edit
+          {t.common.edit}
         </button>
         {creative.language_confidence !== null && (
           <span className={cn(
@@ -244,16 +246,16 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
               ? "bg-yellow-100 text-yellow-700"
               : "bg-gray-100 text-gray-600"
           )}>
-            {Math.round(creative.language_confidence * 100)}% confidence
+            {Math.round(creative.language_confidence * 100)}% {t.previewModal.confidence}
           </span>
         )}
       </div>
 
       {creative.language_source && (
         <div className="text-xs text-gray-400 mt-1">
-          Source: {creative.language_source}
+          {t.previewModal.source}: {creative.language_source}
           {creative.language_analyzed_at && (
-            <> · {new Date(creative.language_analyzed_at).toLocaleDateString()}</>
+            <> · {new Date(creative.language_analyzed_at).toLocaleDateString(language)}</>
           )}
         </div>
       )}
@@ -261,7 +263,7 @@ export function LanguageSection({ creative, onLanguageUpdate }: LanguageSectionP
       {isLoadingMismatch && (
         <div className="mt-2 flex items-center gap-1 text-xs text-gray-400">
           <Loader2 className="h-3 w-3 animate-spin" />
-          Checking geo compatibility...
+          {t.previewModal.checkingGeoCompatibility}
         </div>
       )}
     </div>

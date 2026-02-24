@@ -1211,6 +1211,24 @@ export interface Translations {
     noUrlsFound: string;
     trackingParameters: string;
     noTrackingParams: string;
+    failedToAnalyzeLanguage: string;
+    failedToUpdateLanguage: string;
+    editLanguage: string;
+    languageName: string;
+    languageNamePlaceholder: string;
+    saving: string;
+    languageAndCountry: string;
+    geoMismatch: string;
+    languageDetected: string;
+    notAnalyzed: string;
+    countryTargeted: string;
+    noCountryData: string;
+    seeMore: string;
+    seeLess: string;
+    rescan: string;
+    confidence: string;
+    source: string;
+    checkingGeoCompatibility: string;
   };
 
   language: {
