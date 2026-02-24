@@ -198,6 +198,13 @@ async def get_allowed_buyer_ids(
         return None
 
     auth_svc = get_auth_service()
+
+    # Prefer explicit buyer-seat assignments when present (Phase 3 RBAC path).
+    # Fallback to legacy service-account-derived access during transition.
+    explicit_buyer_ids = await auth_svc.get_user_buyer_seat_ids(user.id)
+    if explicit_buyer_ids:
+        return explicit_buyer_ids
+
     service_account_ids = await auth_svc.get_user_service_account_ids(user.id)
     if not service_account_ids:
         return []

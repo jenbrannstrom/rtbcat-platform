@@ -16,20 +16,26 @@ import {
   getAdminUsers,
   createUser,
   deactivateUser,
+  getSeats,
   getUserPermissions,
+  getUserSeatPermissions,
   grantPermission,
+  grantUserSeatPermission,
   revokePermission,
+  revokeUserSeatPermission,
   getServiceAccounts,
   updateAdminUser,
   type AdminUser,
   type CreateUserRequest,
   type ServiceAccount,
   type UserPermission,
+  type UserSeatPermission,
 } from "@/lib/api";
 import { withAdminAuth } from "@/contexts/auth-context";
 import { useTranslation } from "@/contexts/i18n-context";
 import { cn } from "@/lib/utils";
 import { availableLanguages } from "@/lib/i18n";
+import type { BuyerSeat } from "@/types/api";
 
 function UsersPage() {
   const searchParams = useSearchParams();
@@ -42,7 +48,7 @@ function UsersPage() {
   const [permissionsUser, setPermissionsUser] = useState<AdminUser | null>(null);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [createPermissions, setCreatePermissions] = useState<Record<string, string>>({});
+  const [createSeatPermissions, setCreateSeatPermissions] = useState<Record<string, string>>({});
   const [createAuthMethod, setCreateAuthMethod] = useState<"local-password" | "oauth-precreate">(
     "local-password"
   );
@@ -56,10 +62,16 @@ function UsersPage() {
     queryFn: () => getAdminUsers({ active_only: activeOnly, role: roleFilter }),
   });
 
+  const { data: seats } = useQuery({
+    queryKey: ["buyer-seats", { activeOnly: true }],
+    queryFn: () => getSeats({ active_only: true }),
+    enabled: !!permissionsUser || showCreateModal,
+  });
+
   const { data: serviceAccounts } = useQuery({
     queryKey: ["service-accounts", { activeOnly: true }],
     queryFn: () => getServiceAccounts(true).then((res) => res.accounts),
-    enabled: !!permissionsUser || showCreateModal,
+    enabled: !!permissionsUser,
   });
 
   const { data: userPermissions } = useQuery({
@@ -69,8 +81,22 @@ function UsersPage() {
     enabled: !!permissionsUser,
   });
 
+  const { data: userSeatPermissions } = useQuery({
+    queryKey: ["user-seat-permissions", permissionsUser?.id],
+    queryFn: () =>
+      permissionsUser
+        ? getUserSeatPermissions(permissionsUser.id)
+        : Promise.resolve([] as UserSeatPermission[]),
+    enabled: !!permissionsUser,
+  });
+
   const permissionMap = (userPermissions || []).reduce<Record<string, string>>((acc, perm) => {
     acc[perm.service_account_id] = perm.permission_level;
+    return acc;
+  }, {});
+
+  const seatPermissionMap = (userSeatPermissions || []).reduce<Record<string, string>>((acc, perm) => {
+    acc[perm.buyer_id] = perm.access_level;
     return acc;
   }, {});
 
@@ -80,7 +106,7 @@ function UsersPage() {
 
   const resetCreateModalState = () => {
     setShowCreateModal(false);
-    setCreatePermissions({});
+    setCreateSeatPermissions({});
     setCreateAuthMethod("local-password");
     setError(null);
   };
@@ -107,6 +133,22 @@ function UsersPage() {
       revokePermission(params.userId, params.serviceAccountId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-permissions", permissionsUser?.id] });
+    },
+  });
+
+  const grantSeatPermissionMutation = useMutation({
+    mutationFn: (params: { userId: string; buyerId: string; level: "read" | "admin" }) =>
+      grantUserSeatPermission(params.userId, params.buyerId, params.level),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-seat-permissions", permissionsUser?.id] });
+    },
+  });
+
+  const revokeSeatPermissionMutation = useMutation({
+    mutationFn: (params: { userId: string; buyerId: string }) =>
+      revokeUserSeatPermission(params.userId, params.buyerId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-seat-permissions", permissionsUser?.id] });
     },
   });
 
@@ -137,13 +179,13 @@ function UsersPage() {
     }
     try {
       const created = await createMutation.mutateAsync(request);
-      const grants = Object.entries(createPermissions)
+      const seatGrants = Object.entries(createSeatPermissions)
         .filter(([, level]) => level !== "none")
-        .map(([serviceAccountId, level]) =>
-          grantPermission(created.user_id, serviceAccountId, level)
+        .map(([buyerId, level]) =>
+          grantUserSeatPermission(created.user_id, buyerId, level as "read" | "admin")
         );
-      if (grants.length > 0) {
-        await Promise.all(grants);
+      if (seatGrants.length > 0) {
+        await Promise.all(seatGrants);
       }
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
@@ -179,7 +221,7 @@ function UsersPage() {
         <button
           onClick={() => {
             setShowCreateModal(true);
-            setCreatePermissions({});
+            setCreateSeatPermissions({});
             setCreateAuthMethod("local-password");
             setError(null);
           }}
@@ -455,37 +497,39 @@ function UsersPage() {
               <div className="space-y-2">
                 <p className="text-sm font-medium text-gray-700">{t.admin.seatAccess}</p>
                 <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2">
-                  {(serviceAccounts || []).map((account: ServiceAccount) => {
-                    const currentLevel = createPermissions[account.id] || "none";
+                  {(seats || []).map((seat: BuyerSeat) => {
+                    const currentLevel = createSeatPermissions[seat.buyer_id] || "none";
                     return (
-                      <div key={account.id} className="flex items-center justify-between gap-3">
+                      <div key={seat.buyer_id} className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-sm text-gray-900 truncate">
-                            {account.display_name || account.client_email}
+                            {seat.display_name || seat.buyer_id}
                           </p>
-                          <p className="text-xs text-gray-500 truncate">{account.client_email}</p>
+                          <p className="text-xs text-gray-500 truncate">
+                            Buyer ID: {seat.buyer_id}
+                            {seat.bidder_id ? ` • Bidder: ${seat.bidder_id}` : ""}
+                          </p>
                         </div>
                         <select
                           value={currentLevel}
                           onChange={(e) => {
                             const level = e.target.value;
-                            setCreatePermissions((prev) => ({
+                            setCreateSeatPermissions((prev) => ({
                               ...prev,
-                              [account.id]: level,
+                              [seat.buyer_id]: level,
                             }));
                           }}
                           className="px-2 py-1 border border-gray-300 rounded text-sm"
                         >
                           <option value="none">{t.admin.noAccess}</option>
                           <option value="read">{t.admin.readAccess}</option>
-                          <option value="write">{t.admin.writeAccess}</option>
                           <option value="admin">{t.admin.adminAccess}</option>
                         </select>
                       </div>
                     );
                   })}
-                  {!serviceAccounts?.length && (
-                    <div className="text-sm text-gray-500">{t.admin.noServiceAccounts}</div>
+                  {!seats?.length && (
+                    <div className="text-sm text-gray-500">{t.admin.noSeatsConfigured}</div>
                   )}
                 </div>
                 <p className="text-xs text-gray-500">{t.admin.seatAccessHelp}</p>
@@ -563,51 +607,111 @@ function UsersPage() {
                   ))}
                 </select>
               </div>
-              {(serviceAccounts || []).map((account: ServiceAccount) => {
-                const currentLevel = permissionMap[account.id] || "none";
-                return (
-                  <div
-                    key={account.id}
-                    className="flex items-center justify-between border border-gray-200 rounded-lg p-3"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {account.display_name || account.client_email}
-                      </p>
-                      <p className="text-xs text-gray-500">{account.client_email}</p>
-                    </div>
-                    <select
-                      value={currentLevel}
-                      onChange={(e) => {
-                        const level = e.target.value;
-                        if (level === "none") {
-                          if (currentLevel !== "none") {
-                            revokePermissionMutation.mutate({
-                              userId: permissionsUser.id,
-                              serviceAccountId: account.id,
-                            });
-                          }
-                        } else {
-                          grantPermissionMutation.mutate({
-                            userId: permissionsUser.id,
-                            serviceAccountId: account.id,
-                            level,
-                          });
-                        }
-                      }}
-                      className="ml-4 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    >
-                      <option value="none">{t.admin.noAccess}</option>
-                      <option value="read">{t.admin.readAccess}</option>
-                      <option value="write">{t.admin.writeAccess}</option>
-                      <option value="admin">{t.admin.adminAccess}</option>
-                    </select>
-                  </div>
-                );
-              })}
-              {!serviceAccounts?.length && (
-                <div className="text-sm text-gray-500">{t.admin.noServiceAccounts}</div>
-              )}
+              <div className="border border-gray-200 rounded-lg p-3">
+                <p className="text-sm font-medium text-gray-900">{t.admin.seatAccess}</p>
+                <p className="text-xs text-gray-500 mt-1 mb-3">{t.admin.seatAccessManageHelp}</p>
+                <div className="space-y-2">
+                  {(seats || []).map((seat: BuyerSeat) => {
+                    const currentLevel = seatPermissionMap[seat.buyer_id] || "none";
+                    return (
+                      <div
+                        key={seat.buyer_id}
+                        className="flex items-center justify-between border border-gray-200 rounded-lg p-3"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {seat.display_name || seat.buyer_id}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Buyer ID: {seat.buyer_id}
+                            {seat.bidder_id ? ` • Bidder: ${seat.bidder_id}` : ""}
+                          </p>
+                        </div>
+                        <select
+                          value={currentLevel}
+                          onChange={(e) => {
+                            const level = e.target.value;
+                            if (level === "none") {
+                              if (currentLevel !== "none") {
+                                revokeSeatPermissionMutation.mutate({
+                                  userId: permissionsUser.id,
+                                  buyerId: seat.buyer_id,
+                                });
+                              }
+                            } else {
+                              grantSeatPermissionMutation.mutate({
+                                userId: permissionsUser.id,
+                                buyerId: seat.buyer_id,
+                                level: level as "read" | "admin",
+                              });
+                            }
+                          }}
+                          className="ml-4 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        >
+                          <option value="none">{t.admin.noAccess}</option>
+                          <option value="read">{t.admin.readAccess}</option>
+                          <option value="admin">{t.admin.adminAccess}</option>
+                        </select>
+                      </div>
+                    );
+                  })}
+                  {!seats?.length && (
+                    <div className="text-sm text-gray-500">{t.admin.noSeatsConfigured}</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-3">
+                <p className="text-sm font-medium text-gray-900">{t.admin.legacyServiceAccountAccess}</p>
+                <p className="text-xs text-gray-500 mt-1 mb-3">{t.admin.legacyServiceAccountAccessHelp}</p>
+                <div className="space-y-2">
+                  {(serviceAccounts || []).map((account: ServiceAccount) => {
+                    const currentLevel = permissionMap[account.id] || "none";
+                    return (
+                      <div
+                        key={account.id}
+                        className="flex items-center justify-between border border-gray-200 rounded-lg p-3"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {account.display_name || account.client_email}
+                          </p>
+                          <p className="text-xs text-gray-500">{account.client_email}</p>
+                        </div>
+                        <select
+                          value={currentLevel}
+                          onChange={(e) => {
+                            const level = e.target.value;
+                            if (level === "none") {
+                              if (currentLevel !== "none") {
+                                revokePermissionMutation.mutate({
+                                  userId: permissionsUser.id,
+                                  serviceAccountId: account.id,
+                                });
+                              }
+                            } else {
+                              grantPermissionMutation.mutate({
+                                userId: permissionsUser.id,
+                                serviceAccountId: account.id,
+                                level,
+                              });
+                            }
+                          }}
+                          className="ml-4 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        >
+                          <option value="none">{t.admin.noAccess}</option>
+                          <option value="read">{t.admin.readAccess}</option>
+                          <option value="write">{t.admin.writeAccess}</option>
+                          <option value="admin">{t.admin.adminAccess}</option>
+                        </select>
+                      </div>
+                    );
+                  })}
+                  {!serviceAccounts?.length && (
+                    <div className="text-sm text-gray-500">{t.admin.noServiceAccounts}</div>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="pt-4 flex justify-end">

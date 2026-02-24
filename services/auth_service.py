@@ -50,6 +50,21 @@ class UserPermission:
 
 
 @dataclass
+class UserBuyerSeatPermission:
+    """Explicit user permission for a buyer seat."""
+
+    id: str
+    user_id: str
+    buyer_id: str
+    access_level: str = "read"
+    granted_by: Optional[str] = None
+    granted_at: Optional[str] = None
+    buyer_display_name: Optional[str] = None
+    bidder_id: Optional[str] = None
+    active: Optional[bool] = None
+
+
+@dataclass
 class AuditLogEntry:
     """Audit log entry for tracking user actions."""
 
@@ -240,6 +255,41 @@ class AuthService:
         """Check if a user has the required permission for a service account."""
         return await self._perms.check_user_permission(user_id, service_account_id, required_level)
 
+    async def grant_user_buyer_seat_permission(
+        self,
+        permission_id: str,
+        user_id: str,
+        buyer_id: str,
+        access_level: str = "read",
+        granted_by: Optional[str] = None,
+    ) -> UserBuyerSeatPermission:
+        """Grant explicit access to a buyer seat."""
+        row = await self._perms.grant_buyer_seat_permission(
+            permission_id=permission_id,
+            user_id=user_id,
+            buyer_id=buyer_id,
+            access_level=access_level,
+            granted_by=granted_by,
+        )
+        return self._row_to_buyer_seat_permission(row)
+
+    async def revoke_user_buyer_seat_permission(self, user_id: str, buyer_id: str) -> bool:
+        """Revoke explicit access to a buyer seat."""
+        return await self._perms.revoke_buyer_seat_permission(user_id, buyer_id)
+
+    async def get_user_buyer_seat_permissions(self, user_id: str) -> list[UserBuyerSeatPermission]:
+        """List explicit buyer seat permissions for a user."""
+        rows = await self._perms.get_user_buyer_seat_permissions(user_id)
+        return [self._row_to_buyer_seat_permission(r) for r in rows]
+
+    async def get_user_buyer_seat_ids(
+        self,
+        user_id: str,
+        min_access_level: str = "read",
+    ) -> list[str]:
+        """Get buyer IDs from explicit seat permissions."""
+        return await self._perms.get_user_buyer_seat_ids(user_id, min_access_level=min_access_level)
+
     # ==================== Audit Log Methods ====================
 
     async def log_audit(
@@ -350,6 +400,21 @@ class AuthService:
             permission_level=row.get("permission_level", "read"),
             granted_by=row.get("granted_by"),
             granted_at=str(row["granted_at"]) if row.get("granted_at") else None,
+        )
+
+    @staticmethod
+    def _row_to_buyer_seat_permission(row: dict[str, Any]) -> UserBuyerSeatPermission:
+        """Convert a row to an explicit buyer seat permission dataclass."""
+        return UserBuyerSeatPermission(
+            id=row["id"],
+            user_id=row["user_id"],
+            buyer_id=row["buyer_id"],
+            access_level=row.get("access_level", "read"),
+            granted_by=row.get("granted_by"),
+            granted_at=str(row["granted_at"]) if row.get("granted_at") else None,
+            buyer_display_name=row.get("buyer_display_name"),
+            bidder_id=row.get("bidder_id"),
+            active=bool(row["active"]) if row.get("active") is not None else None,
         )
 
     @staticmethod

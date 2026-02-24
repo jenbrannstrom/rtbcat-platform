@@ -125,3 +125,107 @@ class PermissionsRepository:
             user_index = levels.index(user_level) if user_level in levels else -1
             return user_index >= required_index
         return False
+
+    # ==================== Explicit Buyer Seat Permissions ====================
+
+    async def grant_buyer_seat_permission(
+        self,
+        permission_id: str,
+        user_id: str,
+        buyer_id: str,
+        access_level: str = "read",
+        granted_by: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Grant a user explicit access to a buyer seat."""
+        now = datetime.utcnow().isoformat()
+
+        await pg_execute(
+            """
+            INSERT INTO user_buyer_seat_permissions
+            (id, user_id, buyer_id, access_level, granted_by, granted_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (user_id, buyer_id)
+            DO UPDATE SET
+                access_level = EXCLUDED.access_level,
+                granted_by = EXCLUDED.granted_by,
+                granted_at = EXCLUDED.granted_at
+            """,
+            (permission_id, user_id, buyer_id, access_level, granted_by, now),
+        )
+
+        row = await pg_query_one(
+            """
+            SELECT ubsp.id, ubsp.user_id, ubsp.buyer_id, ubsp.access_level,
+                   ubsp.granted_by, ubsp.granted_at,
+                   bs.display_name as buyer_display_name,
+                   bs.bidder_id,
+                   bs.active
+            FROM user_buyer_seat_permissions ubsp
+            LEFT JOIN buyer_seats bs ON bs.buyer_id = ubsp.buyer_id
+            WHERE ubsp.user_id = %s AND ubsp.buyer_id = %s
+            """,
+            (user_id, buyer_id),
+        )
+        if row is None:
+            raise RuntimeError("Failed to load buyer seat permission after upsert")
+        return row
+
+    async def revoke_buyer_seat_permission(
+        self,
+        user_id: str,
+        buyer_id: str,
+    ) -> bool:
+        """Revoke a user's explicit access to a buyer seat."""
+        rowcount = await pg_execute(
+            """
+            DELETE FROM user_buyer_seat_permissions
+            WHERE user_id = %s AND buyer_id = %s
+            """,
+            (user_id, buyer_id),
+        )
+        return rowcount > 0
+
+    async def get_user_buyer_seat_permissions(self, user_id: str) -> list[dict[str, Any]]:
+        """Get all explicit buyer seat permissions for a user."""
+        return await pg_query(
+            """
+            SELECT ubsp.id, ubsp.user_id, ubsp.buyer_id, ubsp.access_level,
+                   ubsp.granted_by, ubsp.granted_at,
+                   bs.display_name as buyer_display_name,
+                   bs.bidder_id,
+                   bs.active
+            FROM user_buyer_seat_permissions ubsp
+            LEFT JOIN buyer_seats bs ON bs.buyer_id = ubsp.buyer_id
+            WHERE ubsp.user_id = %s
+            ORDER BY COALESCE(bs.display_name, ubsp.buyer_id), ubsp.buyer_id
+            """,
+            (user_id,),
+        )
+
+    async def get_user_buyer_seat_ids(
+        self,
+        user_id: str,
+        min_access_level: str = "read",
+    ) -> list[str]:
+        """Get explicit buyer IDs a user can access with at least the given level."""
+        levels = ["read", "admin"]
+        min_index = levels.index(min_access_level) if min_access_level in levels else 0
+
+        rows = await pg_query(
+            """
+            SELECT ubsp.buyer_id, ubsp.access_level
+            FROM user_buyer_seat_permissions ubsp
+            JOIN buyer_seats bs ON bs.buyer_id = ubsp.buyer_id
+            WHERE ubsp.user_id = %s
+              AND COALESCE(bs.active, true) = true
+            """,
+            (user_id,),
+        )
+
+        result: list[str] = []
+        for row in rows:
+            level = row["access_level"]
+            level_index = levels.index(level) if level in levels else -1
+            if level_index >= min_index:
+                result.append(row["buyer_id"])
+        return result
