@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ChevronRight } from 'lucide-react';
+import { useTranslation } from '@/contexts/i18n-context';
 
 // Local formatNumber since the main utils might not have it
 function formatNumber(n: number): string {
@@ -50,6 +51,7 @@ interface ConfigPerformanceResponse {
 }
 
 export function ConfigPerformanceSection() {
+  const { t } = useTranslation();
   const { data, isLoading, error } = useQuery<ConfigPerformanceResponse>({
     queryKey: ['rtb-funnel-configs'],
     queryFn: async () => {
@@ -66,7 +68,7 @@ export function ConfigPerformanceSection() {
   if (error) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600 text-sm">
-        Failed to load config performance data
+        {t.configPerformance.failedToLoad}
       </div>
     );
   }
@@ -74,16 +76,16 @@ export function ConfigPerformanceSection() {
   if (!data?.configs?.length) {
     return (
       <div className="bg-gray-50 border rounded-lg p-4 text-gray-500 text-sm">
-        No config data available. Import bidding metrics CSV with pretargeting config (`billing_id`) dimension.
+        {t.configPerformance.noDataAvailable}
       </div>
     );
   }
 
   return (
     <div className="bg-white rounded-lg border p-4">
-      <h3 className="text-lg font-semibold mb-1">Pretargeting Configs</h3>
+      <h3 className="text-lg font-semibold mb-1">{t.configPerformance.pretargetingConfigs}</h3>
       <p className="text-xs text-gray-500 mb-3">
-        Click to expand settings and size breakdown
+        {t.configPerformance.clickToExpand}
       </p>
 
       <div className="space-y-1">
@@ -93,9 +95,9 @@ export function ConfigPerformanceSection() {
       </div>
 
       <div className="mt-3 pt-3 border-t flex justify-between text-sm">
-        <span className="text-gray-500">Total</span>
+        <span className="text-gray-500">{t.configPerformance.total}</span>
         <div className="flex gap-6">
-          <span>{formatNumber(data.total_reached)} reached</span>
+          <span>{t.configPerformance.totalReached.replace("{count}", formatNumber(data.total_reached))}</span>
           <span
             className={cn(
               data.overall_win_rate_pct >= 40 && 'text-green-600',
@@ -105,9 +107,11 @@ export function ConfigPerformanceSection() {
               data.overall_win_rate_pct < 20 && 'text-red-600'
             )}
           >
-            {data.overall_win_rate_pct.toFixed(1)}% win
+            {t.configPerformance.winPctValue.replace("{pct}", data.overall_win_rate_pct.toFixed(1))}
           </span>
-          <span className="text-red-600">{data.overall_waste_pct.toFixed(1)}% waste</span>
+          <span className="text-red-600">
+            {t.configPerformance.wastePctValue.replace("{pct}", data.overall_waste_pct.toFixed(1))}
+          </span>
         </div>
       </div>
     </div>
@@ -115,6 +119,7 @@ export function ConfigPerformanceSection() {
 }
 
 function ConfigRow({ config }: { config: ConfigData }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -139,7 +144,7 @@ function ConfigRow({ config }: { config: ConfigData }) {
           </>
         ) : (
           <span className="font-mono text-sm text-gray-700 flex-1 text-left">
-            Config {config.billing_id}
+            {t.configPerformance.configFallbackName.replace("{id}", config.billing_id)}
           </span>
         )}
 
@@ -155,7 +160,7 @@ function ConfigRow({ config }: { config: ConfigData }) {
               config.win_rate_pct < 20 && 'text-red-600'
             )}
           >
-            {config.win_rate_pct.toFixed(1)}% win
+            {t.configPerformance.winPctValue.replace("{pct}", config.win_rate_pct.toFixed(1))}
           </span>
           <span className="text-red-600 w-16 text-right">
             {config.waste_pct.toFixed(1)}%
@@ -169,20 +174,23 @@ function ConfigRow({ config }: { config: ConfigData }) {
         <div className="px-3 pb-3 pt-1 border-t bg-gray-50">
           {/* Settings row - compact horizontal */}
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs mb-3">
-            <SettingChip label="Format" value={config.settings.format} />
+            <SettingChip label={t.configPerformance.settingFormat} value={config.settings.format} />
             <SettingChip
-              label="Geos"
+              label={t.configPerformance.settingGeos}
               value={
                 config.settings.geos.slice(0, 5).join(', ') +
                 (config.settings.geos.length > 5 ? '...' : '')
               }
             />
-            <SettingChip label="Platform" value={config.settings.platforms.join(', ')} />
+            <SettingChip label={t.configPerformance.settingPlatform} value={config.settings.platforms.join(', ')} />
             {config.settings.qps_limit && (
-              <SettingChip label="QPS" value={config.settings.qps_limit.toString()} />
+              <SettingChip label={t.configPerformance.settingQps} value={config.settings.qps_limit.toString()} />
             )}
             {config.settings.budget_usd && (
-              <SettingChip label="Budget" value={`$${config.settings.budget_usd}/d`} />
+              <SettingChip
+                label={t.configPerformance.settingBudget}
+                value={t.configPerformance.budgetPerDayValue.replace("{amount}", String(config.settings.budget_usd))}
+              />
             )}
           </div>
 
@@ -190,10 +198,10 @@ function ConfigRow({ config }: { config: ConfigData }) {
           {config.sizes.length > 0 && (
             <div className="bg-white rounded border">
               <div className="grid grid-cols-5 gap-2 px-2 py-1 border-b text-xs text-gray-500">
-                <span>Size</span>
-                <span className="text-right">Reached</span>
-                <span className="text-right">Win%</span>
-                <span className="text-right">Waste</span>
+                <span>{t.configPerformance.size}</span>
+                <span className="text-right">{t.configPerformance.reached}</span>
+                <span className="text-right">{t.configPerformance.winPct}</span>
+                <span className="text-right">{t.configPerformance.waste}</span>
                 <span></span>
               </div>
               {config.sizes.map((size) => (

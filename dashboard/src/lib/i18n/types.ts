@@ -1415,6 +1415,28 @@ export interface Translations {
     assistedHint: string;
   };
 
+  configPerformance: {
+    failedToLoad: string;
+    noDataAvailable: string;
+    pretargetingConfigs: string;
+    clickToExpand: string;
+    total: string;
+    totalReached: string;
+    winPctValue: string;
+    wastePctValue: string;
+    configFallbackName: string;
+    settingFormat: string;
+    settingGeos: string;
+    settingPlatform: string;
+    settingQps: string;
+    settingBudget: string;
+    budgetPerDayValue: string;
+    size: string;
+    reached: string;
+    winPct: string;
+    waste: string;
+  };
+
   wasteAnalysis: {
     title: string;
     subtitle: string;
