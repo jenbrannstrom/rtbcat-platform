@@ -32,6 +32,7 @@ import { PreviewModal } from "@/components/preview-modal";
 import { formatNumber } from "@/lib/utils";
 import type { Creative } from "@/types/api";
 import { useAccount } from "@/contexts/account-context";
+import { useTranslation } from "@/contexts/i18n-context";
 import { toBuyerScopedPath } from "@/lib/buyer-routes";
 
 interface DailyTrend {
@@ -45,6 +46,7 @@ export default function CampaignDetailPage() {
   const router = useRouter();
   const params = useParams();
   const { selectedBuyerId } = useAccount();
+  const { t } = useTranslation();
   const campaignId = parseInt(params.id as string);
   const campaignsHref = toBuyerScopedPath("/campaigns", selectedBuyerId);
   const clustersHref = toBuyerScopedPath("/clusters", selectedBuyerId);
@@ -93,7 +95,7 @@ export default function CampaignDetailPage() {
         setCreatives([]);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load campaign");
+      setError(err instanceof Error ? err.message : t.campaigns.failedToLoadCampaign);
     }
 
     setLoading(false);
@@ -106,7 +108,7 @@ export default function CampaignDetailPage() {
   }, [campaignId, period]);
 
   const handleRemoveCreative = async (creativeId: string) => {
-    if (!confirm("Remove this creative from the campaign?")) return;
+    if (!confirm(t.campaigns.confirmRemoveCreative)) return;
 
     setRemovingId(creativeId);
     try {
@@ -116,7 +118,7 @@ export default function CampaignDetailPage() {
         setCampaign({ ...campaign, creative_count: campaign.creative_count - 1 });
       }
     } catch (err) {
-      alert("Failed to remove creative");
+      alert(t.campaigns.failedToRemoveCreative);
     }
     setRemovingId(null);
   };
@@ -132,18 +134,18 @@ export default function CampaignDetailPage() {
       );
       setEditing(false);
     } catch (err) {
-      alert("Failed to update campaign");
+      alert(t.campaigns.failedToUpdateCampaign);
     }
   };
 
   const handleDeleteCampaign = async () => {
-    if (!confirm("Delete this campaign? Creatives will be uncategorized.")) return;
+    if (!confirm(t.campaigns.confirmDeleteCampaign)) return;
 
     try {
       await deleteAICampaign(campaignId);
       router.push(campaignsHref);
     } catch (err) {
-      alert("Failed to delete campaign");
+      alert(t.campaigns.failedToDeleteCampaign);
     }
   };
 
@@ -176,15 +178,15 @@ export default function CampaignDetailPage() {
           className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Creative Clusters
+          {t.campaigns.backToCreativeClusters}
         </Link>
         <div className="text-center py-12">
-          <p className="text-red-600">{error || "Campaign not found"}</p>
+          <p className="text-red-600">{error || t.campaigns.campaignNotFound}</p>
           <button
             onClick={fetchCampaignData}
             className="mt-4 btn-primary"
           >
-            Retry
+            {t.common.retry}
           </button>
         </div>
       </div>
@@ -200,7 +202,7 @@ export default function CampaignDetailPage() {
           className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Creative Clusters
+          {t.campaigns.backToCreativeClusters}
         </Link>
 
         <div className="flex justify-between items-start">
@@ -212,18 +214,18 @@ export default function CampaignDetailPage() {
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                   className="text-2xl font-bold w-full border rounded px-3 py-2"
-                  placeholder="Campaign name"
+                  placeholder={t.campaigns.campaignNamePlaceholder}
                 />
                 <textarea
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
                   className="w-full border rounded px-3 py-2 text-sm"
-                  placeholder="Description (optional)"
+                  placeholder={t.campaigns.descriptionOptionalPlaceholder}
                   rows={2}
                 />
                 <div className="flex gap-2">
                   <button onClick={handleSaveEdit} className="btn-primary text-sm">
-                    Save
+                    {t.common.save}
                   </button>
                   <button
                     onClick={() => {
@@ -233,7 +235,7 @@ export default function CampaignDetailPage() {
                     }}
                     className="px-4 py-2 border rounded text-sm hover:bg-gray-50"
                   >
-                    Cancel
+                    {t.common.cancel}
                   </button>
                 </div>
               </div>
@@ -244,7 +246,7 @@ export default function CampaignDetailPage() {
                   {campaign.ai_generated && (
                     <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-purple-100 text-purple-700">
                       <Sparkles className="h-3 w-3" />
-                      AI Generated
+                      {t.campaigns.aiGenerated}
                       {campaign.ai_confidence && (
                         <span className="text-purple-500">
                           ({Math.round(campaign.ai_confidence * 100)}%)
@@ -263,7 +265,9 @@ export default function CampaignDetailPage() {
                 )}
                 <p className="mt-1 text-sm text-gray-500">
                   {campaign.clustering_method && `${campaign.clustering_method} - `}
-                  {formatNumber(creatives.length)} creative{creatives.length !== 1 ? "s" : ""}
+                  {creatives.length !== 1
+                    ? t.campaigns.creativeCountPlural.replace("{count}", formatNumber(creatives.length))
+                    : t.campaigns.creativeCount.replace("{count}", formatNumber(creatives.length))}
                 </p>
               </>
             )}
@@ -276,22 +280,22 @@ export default function CampaignDetailPage() {
                 onChange={(e) => setPeriod(e.target.value)}
                 className="border rounded px-3 py-2 text-sm"
               >
-                <option value="1d">Yesterday</option>
-                <option value="7d">Last 7 days</option>
-                <option value="30d">Last 30 days</option>
-                <option value="all">All time</option>
+                <option value="1d">{t.campaigns.periodYesterday}</option>
+                <option value="7d">{t.campaigns.periodLast7Days}</option>
+                <option value="30d">{t.campaigns.periodLast30Days}</option>
+                <option value="all">{t.campaigns.periodAllTime}</option>
               </select>
               <button
                 onClick={() => setEditing(true)}
                 className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
-                title="Edit campaign"
+                title={t.campaigns.editCampaign}
               >
                 <Pencil className="h-4 w-4" />
               </button>
               <button
                 onClick={handleDeleteCampaign}
                 className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
-                title="Delete campaign"
+                title={t.campaigns.deleteCampaign}
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -306,7 +310,7 @@ export default function CampaignDetailPage() {
           <div className="card p-4">
             <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
               <DollarSign className="h-4 w-4" />
-              Spend
+              {t.campaigns.spend}
             </div>
             <p className="text-2xl font-bold text-gray-900">
               ${performance.spend.toLocaleString(undefined, {
@@ -318,7 +322,7 @@ export default function CampaignDetailPage() {
           <div className="card p-4">
             <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
               <Eye className="h-4 w-4" />
-              Impressions
+              {t.campaigns.impressions}
             </div>
             <p className="text-2xl font-bold text-gray-900">
               {formatNumber(performance.impressions)}
@@ -327,25 +331,25 @@ export default function CampaignDetailPage() {
           <div className="card p-4">
             <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
               <MousePointer className="h-4 w-4" />
-              Clicks
+              {t.campaigns.clicks}
             </div>
             <p className="text-2xl font-bold text-gray-900">
               {formatNumber(performance.clicks)}
             </p>
             {performance.ctr !== null && (
-              <p className="text-xs text-gray-500">{performance.ctr.toFixed(2)}% CTR</p>
+              <p className="text-xs text-gray-500">{performance.ctr.toFixed(2)}% {t.creatives.ctr}</p>
             )}
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
               <Target className="h-4 w-4" />
-              Win Rate
+              {t.dashboard.winRate}
             </div>
             <p className="text-2xl font-bold text-gray-900">
               {performance.win_rate !== null ? `${performance.win_rate.toFixed(2)}%` : "N/A"}
             </p>
             {performance.cpm !== null && (
-              <p className="text-xs text-gray-500">${performance.cpm.toFixed(2)} CPM</p>
+              <p className="text-xs text-gray-500">${performance.cpm.toFixed(2)} {t.creatives.cpm}</p>
             )}
           </div>
         </div>
@@ -356,7 +360,7 @@ export default function CampaignDetailPage() {
         <div className="card p-4 mb-8">
           <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
             <TrendingUp className="h-4 w-4" />
-            Daily Performance
+            {t.campaigns.dailyPerformance}
           </h3>
           <div className="h-24 flex items-end gap-1">
             {dailyTrend.slice(-14).map((day, i) => {
@@ -367,7 +371,7 @@ export default function CampaignDetailPage() {
                   key={day.date}
                   className="flex-1 bg-primary-100 hover:bg-primary-200 rounded-t transition-colors"
                   style={{ height: `${Math.max(height, 2)}%` }}
-                  title={`${day.date}: $${day.spend.toFixed(2)} | ${formatNumber(day.impressions)} imps`}
+                  title={`${day.date}: $${day.spend.toFixed(2)} | ${formatNumber(day.impressions)} ${t.creatives.impsShort}`}
                 />
               );
             })}
@@ -381,7 +385,7 @@ export default function CampaignDetailPage() {
 
       {/* Creatives Grid */}
       <h3 className="text-lg font-medium text-gray-900 mb-4">
-        Creatives ({creatives.length})
+        {t.creatives.title} ({creatives.length})
       </h3>
 
       {creatives.length > 0 ? (
@@ -393,7 +397,7 @@ export default function CampaignDetailPage() {
                 onClick={() => handleRemoveCreative(creative.id)}
                 disabled={removingId === creative.id}
                 className="absolute top-2 right-2 p-1.5 bg-white/90 hover:bg-red-50 text-gray-500 hover:text-red-600 rounded-full shadow-sm border border-gray-200 transition-colors disabled:opacity-50"
-                title="Remove from Campaign"
+                title={t.campaigns.removeFromCampaign}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -402,9 +406,9 @@ export default function CampaignDetailPage() {
         </div>
       ) : (
         <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <p className="text-gray-500">No creatives in this campaign</p>
+          <p className="text-gray-500">{t.campaigns.noCreativesInCampaign}</p>
           <Link href={clustersHref} className="btn-primary mt-4 inline-flex">
-            Browse Creatives
+            {t.campaigns.browseCreatives}
           </Link>
         </div>
       )}
