@@ -263,11 +263,11 @@ export function Sidebar() {
       <div className="flex items-center h-16 px-4 border-b border-gray-200">
         <img
           src="/cat-scanning-stats.webp"
-          alt="Cat-Scan"
+          alt={t.auth.catScan}
           className="h-10 w-10 rounded-lg flex-shrink-0"
         />
         {!collapsed && (
-          <span className="ml-3 text-xl font-bold text-primary-600">Cat-Scan</span>
+          <span className="ml-3 text-xl font-bold text-primary-600">{t.auth.catScan}</span>
         )}
       </div>
 
@@ -285,12 +285,12 @@ export function Sidebar() {
           </div>
         ) : seatsError ? (
           <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-            <p className="font-medium">Unable to load seats</p>
+            <p className="font-medium">{t.sidebar.unableToLoadSeats}</p>
             <button
               onClick={() => refetchSeats()}
               className="mt-2 px-2 py-1 text-xs font-medium rounded bg-red-100 hover:bg-red-200"
             >
-              Retry
+              {t.common.retry}
             </button>
           </div>
         ) : !seats || seats.length === 0 ? (
@@ -302,7 +302,7 @@ export function Sidebar() {
               onClick={() => refetchSeats()}
               className="mt-2 px-2 py-1 text-xs font-medium rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
             >
-              Retry
+              {t.common.retry}
             </button>
           </div>
         ) : seats.length === 1 ? (
@@ -324,7 +324,7 @@ export function Sidebar() {
                   "p-1.5 rounded-md text-gray-500 hover:text-primary-600 hover:bg-primary-50",
                   "disabled:opacity-50 flex-shrink-0"
                 )}
-                title={t.common.syncAll || "Sync All Data"}
+                title={t.common.syncAll}
               >
                 <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
               </button>

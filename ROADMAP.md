@@ -74,7 +74,8 @@
     - [x] `GeminiApiKeySection` UI copy + local validation/fallback error messages converted (`dashboard/src/app/settings/accounts/components/GeminiApiKeySection.tsx`)
     - [x] `GmailReportsTab` top-level/status/import runtime/disconnected-state copy + import-phase labels converted (partial; remaining deep copy pending) (`dashboard/src/app/settings/accounts/components/GmailReportsTab.tsx`)
     - [x] Admin dashboard role display + system pages `MB` unit literals converted (`dashboard/src/app/admin/page.tsx`, `dashboard/src/app/settings/system/page.tsx`, `dashboard/src/app/settings/accounts/components/SystemTab.tsx`)
-    - [ ] Remaining settings/admin hotspot groups (`/settings/accounts/components/GmailReportsTab.tsx` remaining deep copy, and remaining settings/admin component literals)
+    - [x] Sidebar remaining brand/seat-error/retry strings converted (`dashboard/src/components/sidebar.tsx`)
+    - [ ] Remaining settings/admin hotspot groups (`/settings/accounts/components/GmailReportsTab.tsx` remaining deep copy, and remaining settings/admin/shared component literals)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
 
