@@ -54,7 +54,7 @@
     - Non-English locales are currently aliases to English in `dashboard/src/lib/i18n/index.ts`
   - Audit report: `docs/I18N_PHASE1_TRANSLATION_AUDIT_2026-02-23.md`
   - Full inventory CSV: `docs/I18N_PHASE1_HARDCODED_STRING_INVENTORY_2026-02-23.csv`
-- [ ] **Phase 2: convert hardcoded strings to dynamic `t.*` lookups**
+- [x] **Phase 2: convert hardcoded strings to dynamic `t.*` lookups** *(visible UI copy complete; intentional technical literals remain)*
   - Start with highest-impact hotspots from the Phase 1 report (login/auth, app shell/status/errors, import flows, RTB config panels, settings tabs).
   - Progress (2026-02-24):
     - [x] Login/auth page primary UI strings + error messages converted (`dashboard/src/app/login/page.tsx`)
@@ -127,7 +127,7 @@
     - [x] Campaign grid-view cluster card + draggable creative tooltip/badge/sort/zoom/stats copy converted (`dashboard/src/components/campaigns/cluster-card.tsx`, `dashboard/src/components/campaigns/draggable-creative.tsx`)
     - [x] Campaign suggestions panel creative-count noun rendering fixed (translation-safe singular/plural noun keys) (`dashboard/src/components/campaigns/SuggestionsPanel.tsx`)
     - [x] Size coverage chart table/empty-state/severity/footer labels converted (`dashboard/src/components/size-coverage-chart.tsx`)
-    - [ ] Remaining settings/admin/shared hotspots (deeper RTB/settings helper components)
+    - [x] Residual scan pass completed: remaining hardcoded UI-adjacent literals are intentional technical code examples/commands/filenames (e.g. `sudo apt install ffmpeg`, `python scripts/gmail_import.py`, sample CSV/report names) and product identifiers shown in `<code>` blocks
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
 
