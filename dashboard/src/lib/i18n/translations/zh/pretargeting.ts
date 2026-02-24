@@ -401,6 +401,67 @@ const value: PartialTranslations['pretargeting'] = {
   endpointsHeaderQpsInfoAria: 'QPS 信息',
   endpointsHeaderQpsInfoTooltip:
     '配置容量（受邀值），不是保证流量。实际投放仍受花费约束。',
+  recommendationsPanelTitle: '推荐优化',
+  recommendationsManualModeDisabled: '手动模式下已禁用 AI 推荐。',
+  recommendationsManualModeHint: '切换到“AI 提案”以查看优化建议。',
+  recommendationsConfigFallbackName: '配置 {id}',
+  recommendationsActionsCount: '{count} 项操作',
+  recommendationsIntroByDays:
+    '基于 {days} 天分析，以下是可减少浪费的方向：',
+  recommendationsLabelHighImpact: '高影响',
+  recommendationsLabelInvestigate: '需调查',
+  recommendationsLabelOpportunity: '机会',
+  recommendationsLabelSuggestion: '建议',
+  recommendationsSaveQpsPerDay: '每天节省 {count} QPS',
+  recommendationsPerMonthSuffix: '（每月 ${amount}）',
+  recommendationsHideDetails: '隐藏',
+  recommendationsShowDetails: '详情',
+  recommendationsApplyTo: '应用到',
+  recommendationsSelectConfigToApplySizeFilter:
+    '选择要应用尺寸筛选的配置',
+  recommendationsApprove: '批准',
+  recommendationsDismiss: '忽略',
+  recommendationsSizesToBlockCount: '待阻止尺寸（{count}）',
+  recommendationsWhyPrefix: '原因：',
+  recommendationsNoteLabel: '说明：',
+  recommendationsSizeFilteringIncludeOnlyNote:
+    '尺寸筛选为“仅包含”模式。向配置添加尺寸会排除所有未列出的尺寸。',
+  recommendationsLearnMore: '了解更多',
+  recommendationsSizeMismatchTitle:
+    '阻止 {count} 个没有创意的尺寸',
+  recommendationsSizeMismatchDescription:
+    '你正在接收 {count} 个你无法投放的尺寸流量。',
+  recommendationsSizeMismatchReasoning:
+    '这些尺寸有较高的日流量，但没有已批准创意。在预定向中阻止它们可减少浪费的 QPS。',
+  recommendationsUnderperformingTitle:
+    '{name} 表现低于阈值',
+  recommendationsUnderperformingDescription:
+    '赢标率 {winRate}%，账号平均 {avgWinRate}%',
+  recommendationsUnderperformingReasoning:
+    '该配置赢标率显著偏低。可考虑收窄地理定向或检查尺寸覆盖。',
+  recommendationsOpportunityTitle: '{size} 具有 {qps} QPS/天',
+  recommendationsOpportunityDescription:
+    '为该尺寸创建创意以获取更多流量。',
+  recommendationsOpportunityReasoning:
+    '该尺寸拥有显著日流量。添加创意后可参与这部分库存竞价。',
+  pretargetingPanelWasteReductionBadge: '-{pct}% 浪费',
+  pretargetingPanelImpressionsShort: '{count} 次展示',
+  pretargetingPanelSizesCount: '{count} 个尺寸',
+  pretargetingPanelGeosIncludedCount: '包含 {count} 个地理',
+  pretargetingPanelExcludedCount: '排除 {count} 个',
+  pretargetingPanelHideDetails: '隐藏详情',
+  pretargetingPanelShowTargetingDetails: '显示定向详情',
+  pretargetingPanelIncludedSizes: '包含尺寸',
+  pretargetingPanelMoreCount: '+另外 {count} 项',
+  pretargetingPanelIncludedGeos: '包含地理',
+  pretargetingPanelExcludedGeos: '排除地理',
+  pretargetingPanelCopyGeoConfigJson: '复制地理配置 JSON',
+  pretargetingPanelFailedToLoad: '加载预定向推荐失败',
+  pretargetingPanelTitle: '预定向配置',
+  pretargetingPanelConfigsCount: '{count} / {limit} 个配置',
+  pretargetingPanelTotalWasteReduction: '-{pct}% 总浪费降低',
+  pretargetingPanelNoRecommendations: '暂无预定向推荐。',
+  pretargetingPanelNeedMoreTrafficData: '需要更多流量数据才能分析。',
 };
 
 export default value;
