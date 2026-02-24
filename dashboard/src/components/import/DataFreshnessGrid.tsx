@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import type { DataFreshnessGridResponse, FreshnessStatus } from "@/lib/api";
+import { useTranslation } from "@/contexts/i18n-context";
 
 interface DataFreshnessGridProps {
   grid: DataFreshnessGridResponse | null;
@@ -10,19 +11,11 @@ interface DataFreshnessGridProps {
   onRefresh: () => void;
 }
 
-const CSV_TYPE_LABELS: Record<string, string> = {
-  quality: "Quality",
-  bidsinauction: "Performance",
-  "pipeline-geo": "Geo",
-  "pipeline-publisher": "Publisher",
-  "bid-filtering": "Filtering",
-};
-
 const DAY_OPTIONS = [7, 14, 30] as const;
 
-function formatDateLabel(dateStr: string): string {
+function formatDateLabel(dateStr: string, locale: string): string {
   const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return d.toLocaleDateString(locale, { month: "short", day: "numeric" });
 }
 
 function getCoverageBadgeClass(pct: number): string {
@@ -42,9 +35,17 @@ function CellTooltip({
   status: FreshnessStatus;
   children: React.ReactNode;
 }) {
+  const { t, language } = useTranslation();
   const [show, setShow] = useState(false);
-  const label = CSV_TYPE_LABELS[csvType] || csvType;
-  const statusText = status === "imported" ? "Data present" : "No data";
+  const csvTypeLabels: Record<string, string> = {
+    quality: t.import.csvTypeQuality,
+    bidsinauction: t.import.csvTypePerformance,
+    "pipeline-geo": t.import.csvTypeGeo,
+    "pipeline-publisher": t.import.csvTypePublisher,
+    "bid-filtering": t.import.csvTypeFiltering,
+  };
+  const label = csvTypeLabels[csvType] || csvType;
+  const statusText = status === "imported" ? t.import.dataPresent : t.import.noData;
 
   return (
     <div
@@ -55,7 +56,7 @@ function CellTooltip({
       {children}
       {show && (
         <div className="absolute z-10 bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 text-xs rounded bg-gray-900 text-white whitespace-nowrap pointer-events-none">
-          {formatDateLabel(date)} — {label}: {statusText}
+          {formatDateLabel(date, language)} - {label}: {statusText}
         </div>
       )}
     </div>
@@ -69,7 +70,15 @@ export function DataFreshnessGrid({
   onDaysChange,
   onRefresh,
 }: DataFreshnessGridProps) {
+  const { t, language } = useTranslation();
   const coveragePct = grid?.summary.coverage_pct ?? 0;
+  const csvTypeLabels: Record<string, string> = {
+    quality: t.import.csvTypeQuality,
+    bidsinauction: t.import.csvTypePerformance,
+    "pipeline-geo": t.import.csvTypeGeo,
+    "pipeline-publisher": t.import.csvTypePublisher,
+    "bid-filtering": t.import.csvTypeFiltering,
+  };
 
   return (
     <div className="bg-white rounded-lg border border-gray-200">
@@ -78,24 +87,24 @@ export function DataFreshnessGrid({
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1">
             <div className="flex items-center gap-3">
-              <h3 className="font-medium text-gray-900">Data Freshness</h3>
+              <h3 className="font-medium text-gray-900">{t.import.dataFreshness}</h3>
               {grid && (
                 <span
                   className={`px-2 py-0.5 rounded-full text-xs font-medium ${getCoverageBadgeClass(coveragePct)}`}
                 >
-                  {coveragePct}% coverage
+                  {t.import.coveragePercent.replace("{percent}", String(coveragePct))}
                 </span>
               )}
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              Does the last {selectedDays} days have data?
+              {t.import.lastDaysDataQuestion.replace("{days}", String(selectedDays))}
             </p>
           </div>
           <button
             onClick={onRefresh}
             disabled={loading}
             className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-            title="Refresh"
+            title={t.common.refresh}
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </button>
@@ -113,7 +122,7 @@ export function DataFreshnessGrid({
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
             >
-              {d} days
+              {t.import.dayCount.replace("{count}", String(d))}
             </button>
           ))}
         </div>
@@ -123,11 +132,11 @@ export function DataFreshnessGrid({
       {loading ? (
         <div className="p-8 text-center text-gray-500">
           <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2" />
-          Loading freshness data...
+          {t.import.loadingFreshnessData}
         </div>
       ) : !grid || grid.dates.length === 0 ? (
         <div className="p-8 text-center text-gray-500">
-          No data freshness information available.
+          {t.import.noDataFreshnessInformation}
         </div>
       ) : (
         <div className="p-4 overflow-x-auto">
@@ -140,7 +149,7 @@ export function DataFreshnessGrid({
                     key={ct}
                     className="text-center text-xs font-medium text-gray-500 pb-2 px-1"
                   >
-                    {CSV_TYPE_LABELS[ct] || ct}
+                    {csvTypeLabels[ct] || ct}
                   </th>
                 ))}
               </tr>
@@ -149,7 +158,7 @@ export function DataFreshnessGrid({
               {grid.dates.map((date) => (
                 <tr key={date}>
                   <td className="text-xs text-gray-600 pr-3 py-0.5 whitespace-nowrap">
-                    {formatDateLabel(date)}
+                    {formatDateLabel(date, language)}
                   </td>
                   {grid.csv_types.map((ct) => {
                     const status: FreshnessStatus =
@@ -177,15 +186,17 @@ export function DataFreshnessGrid({
           <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded bg-green-500" />
-              <span>Data present</span>
+              <span>{t.import.dataPresent}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded bg-gray-200" />
-              <span>No data</span>
+              <span>{t.import.noData}</span>
             </div>
             {grid.summary && (
               <span className="ml-auto text-gray-400">
-                {grid.summary.imported_count}/{grid.summary.total_cells} cells
+                {t.import.cellsCount
+                  .replace("{imported}", String(grid.summary.imported_count))
+                  .replace("{total}", String(grid.summary.total_cells))}
               </span>
             )}
           </div>

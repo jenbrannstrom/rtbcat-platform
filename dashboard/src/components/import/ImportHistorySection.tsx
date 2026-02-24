@@ -5,6 +5,7 @@ import {
   getMissingRequiredColumns,
   getRequiredColumns,
 } from "@/lib/report-metadata";
+import { useTranslation } from "@/contexts/i18n-context";
 
 interface ImportHistorySectionProps {
   history: ImportHistoryItem[];
@@ -20,6 +21,7 @@ export function ImportHistorySection({
   loading,
   onRefresh,
 }: ImportHistorySectionProps) {
+  const { t, language } = useTranslation();
   const normalizeColumn = (column: string) =>
     column.replace(/^#/, "").trim().toLowerCase();
 
@@ -36,11 +38,11 @@ export function ImportHistorySection({
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
 
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
+    if (diffMins < 1) return t.import.justNow;
+    if (diffMins < 60) return t.import.minutesAgoShort.replace("{count}", String(diffMins));
+    if (diffHours < 24) return t.import.hoursAgoShort.replace("{count}", String(diffHours));
+    if (diffDays < 7) return t.import.daysAgoShort.replace("{count}", String(diffDays));
+    return date.toLocaleDateString(language);
   };
 
   return (
@@ -48,13 +50,13 @@ export function ImportHistorySection({
       <div className="p-4 border-b border-gray-200 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <History className="h-5 w-5 text-gray-400" />
-          <h3 className="font-medium text-gray-900">Recent Imports</h3>
+          <h3 className="font-medium text-gray-900">{t.import.recentImports}</h3>
         </div>
         <button
           onClick={onRefresh}
           disabled={loading}
           className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-          title="Refresh"
+          title={t.common.refresh}
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </button>
@@ -64,11 +66,11 @@ export function ImportHistorySection({
         {loading ? (
           <div className="p-8 text-center text-gray-500">
             <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2" />
-            Loading...
+            {t.import.loading}
           </div>
         ) : history.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
-            No imports yet. Upload your first CSV above.
+            {t.import.noImportsYet}
           </div>
         ) : (
           history.map((item) => {
@@ -111,12 +113,15 @@ export function ImportHistorySection({
                   <p className="font-medium text-gray-900">
                     {item.rows_imported.toLocaleString()}
                   </p>
-                  <p className="text-sm text-gray-500">rows</p>
+                  <p className="text-sm text-gray-500">{t.import.rows}</p>
                 </div>
               </div>
                     {item.rows_duplicate > 0 && (
                       <p className="text-xs text-gray-400 mt-1 ml-8">
-                        {item.rows_duplicate.toLocaleString()} duplicates skipped
+                        {t.import.duplicatesSkippedCount.replace(
+                          "{count}",
+                          item.rows_duplicate.toLocaleString()
+                        )}
                       </p>
                     )}
               {columns.length > 0 && (
@@ -135,7 +140,7 @@ export function ImportHistorySection({
                               ? "border-blue-200 bg-blue-50 text-blue-700"
                               : "border-gray-200 bg-white text-gray-600"
                           }`}
-                          title={isRequired ? "Required column" : "Optional column"}
+                          title={isRequired ? t.import.requiredColumnTitle : t.import.optionalColumnTitle}
                         >
                           {isRequired ? "[R] " : ""}
                           {column}
@@ -146,7 +151,7 @@ export function ImportHistorySection({
                       <span
                         key={`missing-${column}`}
                         className="text-xs px-2 py-1 rounded-full border border-red-200 bg-red-50 text-red-700"
-                        title="Missing required column"
+                        title={t.import.missingRequiredColumnTitle}
                       >
                         [M] {column}
                       </span>
@@ -154,7 +159,8 @@ export function ImportHistorySection({
                   </div>
                   {missingOptional.length > 0 && (
                     <p className="text-xs text-gray-400 mt-2">
-                      Missing optional: {missingOptional.join(", ")}
+                      {t.import.missingOptionalColumns
+                        .replace("{columns}", missingOptional.join(", "))}
                     </p>
                       )}
                     </div>
