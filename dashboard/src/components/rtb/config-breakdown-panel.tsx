@@ -30,6 +30,7 @@ import { Loader2, AlertCircle, AlertTriangle, ArrowUpDown, ChevronRight, Chevron
 import { AppDrilldownModal } from './app-drilldown-modal';
 import { useAccount } from '@/contexts/account-context';
 import { useTranslation } from '@/contexts/i18n-context';
+import type { Translations } from '@/lib/i18n/types';
 import { PreviewModal } from '@/components/preview-modal';
 import type { Creative } from '@/types/api';
 
@@ -56,34 +57,36 @@ function formatMoney(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
-function describePendingChange(change: PendingChange, publisherMode: string): string {
+function describePendingChange(change: PendingChange, publisherMode: string, t: Translations): string {
   switch (change.change_type) {
     case 'add_size':
-      return `Allow size: ${change.value}`;
+      return t.pretargeting.pendingChangeAllowSize.replace('{value}', change.value);
     case 'remove_size':
-      return `Block size: ${change.value}`;
+      return t.pretargeting.pendingChangeBlockSize.replace('{value}', change.value);
     case 'add_geo':
-      return `Add geo: ${change.value}`;
+      return t.pretargeting.pendingChangeAddGeo.replace('{value}', change.value);
     case 'remove_geo':
-      return `Remove geo: ${change.value}`;
+      return t.pretargeting.pendingChangeRemoveGeo.replace('{value}', change.value);
     case 'add_format':
-      return `Enable format: ${change.value}`;
+      return t.pretargeting.pendingChangeEnableFormat.replace('{value}', change.value);
     case 'remove_format':
-      return `Disable format: ${change.value}`;
+      return t.pretargeting.pendingChangeDisableFormat.replace('{value}', change.value);
     case 'set_maximum_qps':
-      return `Set QPS limit: ${change.value}`;
+      return t.pretargeting.pendingChangeSetQpsLimit.replace('{value}', change.value);
     case 'add_publisher':
       return publisherMode === 'INCLUSIVE'
-        ? `Allow publisher: ${change.value}`
-        : `Block publisher: ${change.value}`;
+        ? t.pretargeting.pendingChangeAllowPublisher.replace('{value}', change.value)
+        : t.pretargeting.pendingChangeBlockPublisher.replace('{value}', change.value);
     case 'remove_publisher':
       return publisherMode === 'INCLUSIVE'
-        ? `Block publisher: ${change.value}`
-        : `Unblock publisher: ${change.value}`;
+        ? t.pretargeting.pendingChangeBlockPublisher.replace('{value}', change.value)
+        : t.pretargeting.pendingChangeUnblockPublisher.replace('{value}', change.value);
     case 'set_publisher_mode':
-      return `Publisher mode: ${change.value}`;
+      return t.pretargeting.pendingChangePublisherMode.replace('{value}', change.value);
     default:
-      return `${change.change_type}: ${change.value}`;
+      return t.pretargeting.pendingChangeFallback
+        .replace('{changeType}', change.change_type)
+        .replace('{value}', change.value);
   }
 }
 
@@ -396,12 +399,12 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
   const publisherActionTitle = (publisherBlocked: boolean): string => {
     if (effectivePublisherMode === 'INCLUSIVE') {
       return publisherBlocked
-        ? `${t.pretargeting.allow} publisher (add to allowlist)`
-        : `${t.pretargeting.block} publisher (remove from allowlist)`;
+        ? t.pretargeting.publisherActionTitleAllowAddAllowlist
+        : t.pretargeting.publisherActionTitleBlockRemoveAllowlist;
     }
     return publisherBlocked
-      ? `${t.pretargeting.unblock} publisher (remove from denylist)`
-      : `${t.pretargeting.block} publisher (add to denylist)`;
+      ? t.pretargeting.publisherActionTitleUnblockRemoveDenylist
+      : t.pretargeting.publisherActionTitleBlockAddDenylist;
   };
 
   const filteredPublisherBreakdown = activeTab === 'publisher' && publisherFilter
@@ -1903,7 +1906,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                 <div className="mt-2 max-h-24 overflow-y-auto space-y-1 text-xs text-yellow-800">
                   {pendingChanges.map((change) => (
                     <div key={change.id} className="flex items-center justify-between gap-2">
-                      <span className="truncate">{describePendingChange(change, effectivePublisherMode)}</span>
+                      <span className="truncate">{describePendingChange(change, effectivePublisherMode, t)}</span>
                       <button
                         onClick={() => cancelChangeMutation.mutate(change.id)}
                         disabled={changeActionBusy}
@@ -1942,20 +1945,22 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/40" onClick={() => setShowConfirmPush(false)} />
             <div className="relative mx-4 w-full max-w-lg rounded-lg border bg-white p-4 shadow-xl">
-              <h3 className="text-sm font-semibold text-gray-900">Push Changes to Google?</h3>
+              <h3 className="text-sm font-semibold text-gray-900">{t.pretargeting.confirmPushTitle}</h3>
               <p className="mt-1 text-xs text-gray-600">
-                {pendingChanges.length} change{pendingChanges.length !== 1 ? 's' : ''} will be applied to config {billing_id}.
+                {t.pretargeting.confirmPushChangesApplied
+                  .replace('{count}', String(pendingChanges.length))
+                  .replace('{billingId}', billing_id)}
               </p>
               <div className="mt-3 max-h-40 overflow-y-auto space-y-1 rounded border bg-gray-50 p-2 text-xs font-mono">
                 {pendingChanges.map((change) => (
                   <div key={`confirm-${change.id}`}>
-                    {describePendingChange(change, effectivePublisherMode)}
+                    {describePendingChange(change, effectivePublisherMode, t)}
                   </div>
                 ))}
               </div>
               <div className="mt-3 flex items-start gap-2 rounded bg-blue-50 border border-blue-200 px-2 py-1.5 text-xs text-blue-700">
                 <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
-                <span>A snapshot will be saved automatically. Use History to undo if needed.</span>
+                <span>{t.pretargeting.snapshotSavedUndoHint}</span>
               </div>
               <div className="mt-4 flex justify-end gap-2">
                 <button
@@ -1963,7 +1968,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   disabled={applyAllMutation.isPending}
                   className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
-                  Cancel
+                  {t.common.cancel}
                 </button>
                 <button
                   onClick={() => applyAllMutation.mutate()}
@@ -1971,7 +1976,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                 >
                   {applyAllMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-                  Push to Google
+                  {t.pretargeting.pushToGoogle}
                 </button>
               </div>
             </div>
@@ -1986,7 +1991,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
               <div className="flex items-center justify-between mb-3">
                 <h3 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
                   <RotateCcw className="h-4 w-4 text-orange-600" />
-                  Undo Push to Google?
+                  {t.pretargeting.undoPushToGoogleTitle}
                 </h3>
                 <button onClick={() => setUndoPushSnapshot(null)} className="text-gray-400 hover:text-gray-600">
                   <X className="h-4 w-4" />
@@ -1996,7 +2001,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
               {undoDryRunLoading ? (
                 <div className="flex items-center justify-center py-8 gap-2 text-gray-500 text-xs">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Previewing rollback&hellip;
+                  {t.pretargeting.previewingRollback}
                 </div>
               ) : undoDryRunError ? (
                 <div className="rounded bg-red-50 border border-red-200 p-3 text-xs text-red-700">
@@ -2005,20 +2010,20 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
               ) : undoDryRunResult && undoDryRunResult.changes_made.length === 0 ? (
                 <div className="rounded bg-blue-50 border border-blue-200 p-3 flex items-start gap-2 text-xs text-blue-700">
                   <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
-                  No differences found between current config and snapshot. Config may have been modified since then.
+                  {t.pretargeting.noDifferencesFromSnapshot}
                 </div>
               ) : (
                 <>
                   <div className="text-xs text-gray-600 mb-2">
-                    Config: <span className="font-medium text-gray-900">{billing_id}</span>
+                    {t.pretargeting.configLabel}: <span className="font-medium text-gray-900">{billing_id}</span>
                     {' '}&middot;{' '}
-                    Restoring to: <span className="font-medium text-gray-900">
-                      {undoPushSnapshot.snapshot_name || `Snapshot #${undoPushSnapshot.id}`}
+                    {t.pretargeting.restoringToLabel}: <span className="font-medium text-gray-900">
+                      {undoPushSnapshot.snapshot_name || t.pretargeting.snapshotNumber.replace('{id}', String(undoPushSnapshot.id))}
                     </span>
                   </div>
                   {undoDryRunResult && undoDryRunResult.changes_made.length > 0 && (
                     <div className="mb-3">
-                      <p className="text-xs font-medium text-gray-700 mb-1">These changes will be reversed on Google:</p>
+                      <p className="text-xs font-medium text-gray-700 mb-1">{t.pretargeting.rollbackChangesWillBeReversed}</p>
                       <div className="max-h-32 overflow-y-auto rounded border bg-gray-50 p-2 space-y-0.5">
                         {undoDryRunResult.changes_made.map((desc, i) => (
                           <div key={i} className="text-[11px] font-mono text-gray-700">{desc}</div>
@@ -2028,36 +2033,35 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   )}
                   <div className="mb-3 rounded bg-amber-50 border border-amber-200 p-2 flex items-start gap-2 text-xs text-amber-800">
                     <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
-                    <span>This pushes to Google immediately. A &ldquo;ROLLBACK&rdquo; entry will be recorded in history.</span>
+                    <span>{t.pretargeting.rollbackImmediateWarning}</span>
                   </div>
                   {hasPendingChanges && (
                     <div className="mb-3 rounded bg-blue-50 border border-blue-200 p-2 flex items-start gap-2 text-xs text-blue-700">
                       <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
                       <span>
-                        You have {pendingChanges.length} pending change{pendingChanges.length !== 1 ? 's' : ''} that haven&apos;t been pushed.
-                        Undoing this push won&apos;t affect your pending changes.
+                        {t.pretargeting.rollbackPendingChangesUnaffected.replace('{count}', String(pendingChanges.length))}
                       </span>
                     </div>
                   )}
                   <div className="mb-3">
                     <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Why are you undoing this push?
+                      {t.pretargeting.undoReasonLabel}
                     </label>
                     <input
                       type="text"
                       value={undoReason}
                       onChange={(e) => setUndoReason(e.target.value)}
-                      placeholder="e.g. Blocked wrong publishers"
+                      placeholder={t.pretargeting.undoReasonPlaceholder}
                       className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-300"
                     />
-                    <span className="text-[10px] text-gray-400">(required)</span>
+                    <span className="text-[10px] text-gray-400">{t.pretargeting.requiredLabel}</span>
                   </div>
                 </>
               )}
 
               {undoExecuteMutation.isError && (
                 <div className="mb-3 rounded bg-red-50 border border-red-200 p-2 text-xs text-red-700">
-                  {(undoExecuteMutation.error as Error)?.message || 'Rollback failed'}
+                  {(undoExecuteMutation.error as Error)?.message || t.pretargeting.rollbackFailed}
                 </div>
               )}
 
@@ -2067,7 +2071,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   disabled={undoExecuteMutation.isPending}
                   className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
-                  {(!undoDryRunResult || undoDryRunResult.changes_made.length === 0) && !undoDryRunLoading ? 'Close' : 'Cancel'}
+                  {(!undoDryRunResult || undoDryRunResult.changes_made.length === 0) && !undoDryRunLoading ? t.common.close : t.common.cancel}
                 </button>
                 {undoDryRunResult && undoDryRunResult.changes_made.length > 0 && (
                   <button
@@ -2101,7 +2105,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
             <div className="absolute inset-0 bg-black/50" onClick={() => setSelectedCreative(null)} />
             <div className="relative bg-white rounded-lg shadow-xl p-6 flex items-center gap-3 text-gray-600">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <span>Loading creative preview...</span>
+              <span>{t.creatives.loadingCreativePreview}</span>
             </div>
           </div>
         )}
@@ -2109,20 +2113,20 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/50" onClick={() => setSelectedCreative(null)} />
             <div className="relative bg-white rounded-lg shadow-xl p-5 max-w-md w-full mx-4">
-              <h3 className="text-sm font-semibold text-gray-900 mb-2">Creative preview unavailable</h3>
+              <h3 className="text-sm font-semibold text-gray-900 mb-2">{t.creatives.creativePreviewUnavailable}</h3>
               <p className="text-sm text-gray-600 mb-4">{creativeLoadError}</p>
               <div className="flex justify-end gap-2">
                 <button
                   className="px-3 py-1.5 text-sm rounded border border-gray-300 hover:bg-gray-50"
                   onClick={() => setSelectedCreative(null)}
                 >
-                  Close
+                  {t.common.close}
                 </button>
                 <button
                   className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
                   onClick={() => setSelectedCreative({ id: selectedCreative.id })}
                 >
-                  Retry
+                  {t.import.tryAgain}
                 </button>
               </div>
             </div>

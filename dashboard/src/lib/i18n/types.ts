@@ -324,6 +324,39 @@ export interface Translations {
     discardAll: string;
     reviewAndPushToGoogle: string;
     checkGeoTargets: string;
+    confirmPushTitle: string;
+    confirmPushChangesApplied: string;
+    pushToGoogle: string;
+    undoPushToGoogleTitle: string;
+    previewingRollback: string;
+    noDifferencesFromSnapshot: string;
+    configLabel: string;
+    restoringToLabel: string;
+    snapshotNumber: string;
+    rollbackChangesWillBeReversed: string;
+    rollbackImmediateWarning: string;
+    rollbackPendingChangesUnaffected: string;
+    undoReasonLabel: string;
+    undoReasonPlaceholder: string;
+    requiredLabel: string;
+    rollbackFailed: string;
+    closeOrCancel: string;
+    pendingChangeAllowSize: string;
+    pendingChangeBlockSize: string;
+    pendingChangeAddGeo: string;
+    pendingChangeRemoveGeo: string;
+    pendingChangeEnableFormat: string;
+    pendingChangeDisableFormat: string;
+    pendingChangeSetQpsLimit: string;
+    pendingChangeAllowPublisher: string;
+    pendingChangeBlockPublisher: string;
+    pendingChangeUnblockPublisher: string;
+    pendingChangePublisherMode: string;
+    pendingChangeFallback: string;
+    publisherActionTitleAllowAddAllowlist: string;
+    publisherActionTitleBlockRemoveAllowlist: string;
+    publisherActionTitleUnblockRemoveDenylist: string;
+    publisherActionTitleBlockAddDenylist: string;
   };
 
   import: {
@@ -519,6 +552,8 @@ export interface Translations {
     approved: string;
     notApproved: string;
     viewCreative: string;
+    loadingCreativePreview: string;
+    creativePreviewUnavailable: string;
     drilldownAnalysis: string;
     loadingAnalysis: string;
     failedToLoadDrilldownData: string;
