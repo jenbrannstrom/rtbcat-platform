@@ -209,7 +209,7 @@ export default function SystemStatusPage() {
             <div className="flex items-center justify-between py-2 border-b border-gray-100">
               <span className="text-sm text-gray-600">{t.settings.path}</span>
               <span className="text-sm font-mono text-gray-900">
-                {stats?.db_path || "N/A"}
+                {stats?.db_path || t.settings.notAvailable}
               </span>
             </div>
 

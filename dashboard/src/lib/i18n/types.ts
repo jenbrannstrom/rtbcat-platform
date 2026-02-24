@@ -811,6 +811,7 @@ export interface Translations {
     ffmpegNotFoundInstall: string;
     systemStatusUnavailable: string;
     failedToCheckApiStatus: string;
+    notAvailable: string;
     seats: string;
     seatsManagement: string;
     connectNewSeat: string;
@@ -1016,6 +1017,9 @@ export interface Translations {
     googleAuthorizedBuyers: string;
     autoFetchReports: string;
     statusAndSettings: string;
+    apiStatusLabel: string;
+    accountsStatusLabel: string;
+    tabsNavLabel: string;
     // API Connection Tab
     howToConnect: string;
     createServiceAccount: string;
