@@ -2,20 +2,24 @@
  * Information about required columns for each CSV report type.
  * Based on DATA_MODEL.md specifications.
  */
+import { useTranslation } from "@/contexts/i18n-context";
+
 export function RequiredColumnsTable() {
+  const { t } = useTranslation();
+
   return (
     <div className="space-y-4 text-sm">
       <p className="text-gray-600">
-        Cat-Scan auto-detects report type from columns. Here are the required columns for each:
+        {t.import.requiredColumnsIntro}
       </p>
 
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-gray-100">
-              <th className="p-2 border font-medium">Report Name</th>
-              <th className="p-2 border font-medium">Target Table</th>
-              <th className="p-2 border font-medium">Required Columns</th>
+              <th className="p-2 border font-medium">{t.import.reportName}</th>
+              <th className="p-2 border font-medium">{t.import.targetTable}</th>
+              <th className="p-2 border font-medium">{t.import.requiredColumnsHeader}</th>
             </tr>
           </thead>
           <tbody className="text-xs">
@@ -50,7 +54,7 @@ export function RequiredColumnsTable() {
 
       <div className="bg-gray-50 p-3 rounded-lg">
         <p className="text-gray-700">
-          <strong>Auto-detection logic:</strong>
+          <strong>{t.import.autoDetectionLogic}</strong>
         </p>
         <ul className="text-gray-600 mt-1 space-y-1 text-xs">
           <li>• Has <code className="bg-gray-200 px-1 rounded">Bid filtering reason</code>? → bid-filtering</li>

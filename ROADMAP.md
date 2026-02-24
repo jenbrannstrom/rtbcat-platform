@@ -59,7 +59,9 @@
   - Progress (2026-02-24):
     - [x] Login/auth page primary UI strings + error messages converted (`dashboard/src/app/login/page.tsx`)
     - [x] Home dashboard seat/status/error banners + pretargeting fallback messages converted (`dashboard/src/app/page.tsx`)
-    - [ ] Import flows and RTB config panels (remaining hotspot groups)
+    - [x] Import page runtime UI/errors + import reference/troubleshooting wrapper copy converted (`dashboard/src/app/import/page.tsx`, `dashboard/src/components/import/RequiredColumnsTable.tsx`, `dashboard/src/components/import/TroubleshootingSection.tsx`)
+    - [ ] `ExportInstructions` long-form import guide copy (deferred: needs careful handling of Google UI/field names)
+    - [ ] RTB config panels and remaining import/settings hotspot groups
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
 
