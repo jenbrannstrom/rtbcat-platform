@@ -65,7 +65,9 @@
     - [x] RTB config breakdown panel top-level UI + publisher controls copy converted (tabs/loading/error/empty states/window badges/filter/history header) (`dashboard/src/components/rtb/config-breakdown-panel.tsx`)
     - [x] RTB config breakdown panel row/editor controls copy converted (history entries, size/geo controls, table headers, row actions/statuses, suggestions, pending bar) (`dashboard/src/components/rtb/config-breakdown-panel.tsx`)
     - [x] RTB config breakdown panel confirm/undo/preview modals + pending-change descriptions/tooltips converted (`dashboard/src/components/rtb/config-breakdown-panel.tsx`)
-    - [ ] Remaining settings/admin hotspot groups
+    - [x] Admin Users page visible UI copy (placeholders, seat metadata labels, role badges, fallback errors) converted (`dashboard/src/app/admin/users/page.tsx`)
+    - [x] Admin Audit Log action labels/date formatting + Admin Settings redirect copy + Admin Configuration session-duration literal converted (`dashboard/src/app/admin/audit-log/page.tsx`, `dashboard/src/app/admin/settings/page.tsx`, `dashboard/src/app/admin/configuration/page.tsx`)
+    - [ ] Remaining settings/admin hotspot groups (additional admin/configuration literals + non-admin settings tabs)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
 

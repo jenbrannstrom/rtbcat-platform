@@ -40,7 +40,7 @@ import type { BuyerSeat } from "@/types/api";
 function UsersPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
 
   const [showCreateModal, setShowCreateModal] = useState(
     searchParams.get("action") === "create"
@@ -191,13 +191,13 @@ function UsersPage() {
       queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
       resetCreateModalState();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create user");
+      setError(err instanceof Error ? err.message : t.admin.createUserFailed);
     }
   };
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "-";
-    return new Date(dateStr).toLocaleDateString("en-US", {
+    return new Date(dateStr).toLocaleDateString(language, {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -306,7 +306,7 @@ function UsersPage() {
                           : "bg-gray-100 text-gray-800"
                       )}
                     >
-                      {user.role}
+                      {user.role === "admin" ? t.admin.adminRole : t.admin.userRole}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -398,7 +398,7 @@ function UsersPage() {
                   name="email"
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="user@example.com"
+                  placeholder={t.admin.emailPlaceholder}
                 />
               </div>
               <div>
@@ -409,7 +409,7 @@ function UsersPage() {
                   type="text"
                   name="display_name"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="John Doe"
+                  placeholder={t.admin.displayNamePlaceholder}
                 />
               </div>
               <div>
@@ -506,8 +506,10 @@ function UsersPage() {
                             {seat.display_name || seat.buyer_id}
                           </p>
                           <p className="text-xs text-gray-500 truncate">
-                            Buyer ID: {seat.buyer_id}
-                            {seat.bidder_id ? ` • Bidder: ${seat.bidder_id}` : ""}
+                            {t.admin.buyerIdLabel.replace("{buyerId}", seat.buyer_id)}
+                            {seat.bidder_id
+                              ? ` • ${t.admin.bidderLabel.replace("{bidderId}", seat.bidder_id)}`
+                              : ""}
                           </p>
                         </div>
                         <select
@@ -623,8 +625,10 @@ function UsersPage() {
                             {seat.display_name || seat.buyer_id}
                           </p>
                           <p className="text-xs text-gray-500">
-                            Buyer ID: {seat.buyer_id}
-                            {seat.bidder_id ? ` • Bidder: ${seat.bidder_id}` : ""}
+                            {t.admin.buyerIdLabel.replace("{buyerId}", seat.buyer_id)}
+                            {seat.bidder_id
+                              ? ` • ${t.admin.bidderLabel.replace("{bidderId}", seat.bidder_id)}`
+                              : ""}
                           </p>
                         </div>
                         <select
