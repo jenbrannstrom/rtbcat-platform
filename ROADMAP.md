@@ -60,8 +60,8 @@
     - [x] Login/auth page primary UI strings + error messages converted (`dashboard/src/app/login/page.tsx`)
     - [x] Home dashboard seat/status/error banners + pretargeting fallback messages converted (`dashboard/src/app/page.tsx`)
     - [x] Import page runtime UI/errors + import reference/troubleshooting wrapper copy converted (`dashboard/src/app/import/page.tsx`, `dashboard/src/components/import/RequiredColumnsTable.tsx`, `dashboard/src/components/import/TroubleshootingSection.tsx`)
-    - [ ] `ExportInstructions` long-form import guide copy (deferred: needs careful handling of Google UI/field names)
-    - [ ] RTB config panels and remaining import/settings hotspot groups
+    - [x] `ExportInstructions` long-form import guide prose/headings converted (`dashboard/src/components/import/ExportInstructions.tsx`) while keeping technical report IDs and Google field names literal
+    - [ ] RTB config panels and remaining settings/admin hotspot groups
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
 
