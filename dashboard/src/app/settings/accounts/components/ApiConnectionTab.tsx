@@ -30,6 +30,7 @@ import {
 import type { ServiceAccount } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { BuyerSeat } from "@/types/api";
+import { useTranslation } from "@/contexts/i18n-context";
 import { GeminiApiKeySection } from "./GeminiApiKeySection";
 
 /**
@@ -38,6 +39,7 @@ import { GeminiApiKeySection } from "./GeminiApiKeySection";
  */
 export function ApiConnectionTab() {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -80,12 +82,18 @@ export function ApiConnectionTab() {
       if (data.seats_discovered === 0) {
         setMessage({
           type: "error",
-          text: "No buyer seats found. Make sure the service account email is added to your Authorized Buyers accounts with 'Account Manager' or 'RTB Troubleshooter' role."
+          text: t.setup.noBuyerSeatsFoundRoleHint,
         });
         setTimeout(() => setMessage(null), 10000);
         return;
       }
-      setMessage({ type: "success", text: `Discovered ${data.seats_discovered} buyer seat(s). Syncing endpoints...` });
+      setMessage({
+        type: "success",
+        text: t.setup.discoveredSeatsSyncingEndpoints.replace(
+          "{count}",
+          String(data.seats_discovered)
+        ),
+      });
       queryClient.invalidateQueries({ queryKey: ["seats"] });
 
       try {
@@ -102,11 +110,19 @@ export function ApiConnectionTab() {
         // Silently fail pretargeting sync
       }
 
-      setMessage({ type: "success", text: `Discovered ${data.seats_discovered} seat(s) and synced ${data.sync_result?.creatives_synced || 0} creatives` });
+      setMessage({
+        type: "success",
+        text: t.setup.discoveredSeatsAndSyncedCreatives
+          .replace("{seats}", String(data.seats_discovered))
+          .replace("{creatives}", String(data.sync_result?.creatives_synced || 0)),
+      });
       setTimeout(() => setMessage(null), 5000);
     },
     onError: (error) => {
-      setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to discover seats" });
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : t.connect.failedToDiscoverSeats,
+      });
       setTimeout(() => setMessage(null), 8000);
     },
   });
@@ -129,18 +145,23 @@ export function ApiConnectionTab() {
       try {
         json = JSON.parse(contents);
       } catch {
-        throw new Error("Invalid JSON file. Please upload a valid service account key.");
+        throw new Error(t.connect.invalidJsonFile);
       }
       if (!json.type || !json.client_email || !json.private_key) {
-        throw new Error("Invalid service account format. Missing required fields.");
+        throw new Error(t.connect.invalidServiceAccountFormat);
       }
       if (json.type !== "service_account") {
-        throw new Error(`Invalid credential type: "${json.type}". Expected "service_account".`);
+        throw new Error(
+          t.connect.invalidCredentialType.replace("{type}", String(json.type))
+        );
       }
       return addServiceAccount(contents);
     },
     onSuccess: (data) => {
-      setMessage({ type: "success", text: `Connected as ${data.client_email}` });
+      setMessage({
+        type: "success",
+        text: t.connect.connectedAs.replace("{email}", data.client_email ?? ""),
+      });
       queryClient.invalidateQueries({ queryKey: ["health"] });
       queryClient.invalidateQueries({ queryKey: ["serviceAccounts"] });
       queryClient.invalidateQueries({ queryKey: ["seats"] });
@@ -148,14 +169,17 @@ export function ApiConnectionTab() {
       refetchHealth();
     },
     onError: (error) => {
-      setMessage({ type: "error", text: error instanceof Error ? error.message : "Upload failed" });
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : t.connect.uploadFailed,
+      });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (accountId: string) => deleteServiceAccount(accountId),
     onSuccess: () => {
-      setMessage({ type: "success", text: "Service account removed" });
+      setMessage({ type: "success", text: t.setup.serviceAccountRemoved });
       queryClient.invalidateQueries({ queryKey: ["health"] });
       queryClient.invalidateQueries({ queryKey: ["serviceAccounts"] });
       queryClient.invalidateQueries({ queryKey: ["seats"] });
@@ -164,7 +188,10 @@ export function ApiConnectionTab() {
       setTimeout(() => setMessage(null), 5000);
     },
     onError: (error) => {
-      setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to remove account" });
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : t.setup.failedToRemoveAccount,
+      });
       setDeletingAccountId(null);
       setTimeout(() => setMessage(null), 5000);
     },
@@ -178,7 +205,10 @@ export function ApiConnectionTab() {
   const syncMutation = useMutation({
     mutationFn: (buyerId: string) => syncSeat(buyerId),
     onSuccess: (data) => {
-      setMessage({ type: "success", text: `Synced ${data.creatives_synced} creatives` });
+      setMessage({
+        type: "success",
+        text: t.connect.syncedCreatives.replace("{count}", String(data.creatives_synced)),
+      });
       queryClient.invalidateQueries({ queryKey: ["creatives"] });
       queryClient.invalidateQueries({ queryKey: ["seats"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
@@ -186,7 +216,10 @@ export function ApiConnectionTab() {
       setTimeout(() => setMessage(null), 5000);
     },
     onError: (error) => {
-      setMessage({ type: "error", text: error instanceof Error ? error.message : "Sync failed" });
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : t.connect.syncFailed,
+      });
       setSyncingId(null);
       setTimeout(() => setMessage(null), 5000);
     },
@@ -210,7 +243,7 @@ export function ApiConnectionTab() {
 
   const handleSaveEdit = async (buyerId: string) => {
     if (!editValue.trim()) {
-      setMessage({ type: "error", text: "Display name cannot be empty" });
+      setMessage({ type: "error", text: t.setup.displayNameCannotBeEmpty });
       return;
     }
 
@@ -219,9 +252,9 @@ export function ApiConnectionTab() {
       await updateSeat(buyerId, { display_name: editValue.trim() });
       queryClient.invalidateQueries({ queryKey: ["seats"] });
       setEditingId(null);
-      setMessage({ type: "success", text: "Seat name updated" });
+      setMessage({ type: "success", text: t.setup.seatNameUpdated });
     } catch (error) {
-      setMessage({ type: "error", text: "Failed to update seat name" });
+      setMessage({ type: "error", text: t.setup.failedToUpdateSeatName });
     }
     setSavingSeat(false);
     setTimeout(() => setMessage(null), 3000);
@@ -229,11 +262,11 @@ export function ApiConnectionTab() {
 
   const handleFileSelect = useCallback((file: File) => {
     if (!file.name.endsWith(".json")) {
-      setMessage({ type: "error", text: "Please select a JSON file" });
+      setMessage({ type: "error", text: t.connect.pleaseSelectJsonFile });
       return;
     }
     uploadMutation.mutate(file);
-  }, [uploadMutation]);
+  }, [t, uploadMutation]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -289,33 +322,33 @@ export function ApiConnectionTab() {
 
       {/* Quick Start Guide - always visible */}
       <div className="card p-6 bg-blue-50 border-blue-200">
-        <h3 className="text-lg font-semibold text-blue-900 mb-4">How to Connect Your Account</h3>
+        <h3 className="text-lg font-semibold text-blue-900 mb-4">{t.setup.howToConnect}</h3>
         <div className="grid md:grid-cols-3 gap-4">
           <div className="bg-white rounded-lg p-4 border border-blue-200">
             <div className="flex items-center gap-2 mb-2">
               <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</span>
-              <span className="font-semibold text-gray-900">Create Service Account</span>
+              <span className="font-semibold text-gray-900">{t.setup.createServiceAccount}</span>
             </div>
             <p className="text-sm text-gray-600">
-              In <a href="https://console.cloud.google.com/iam-admin/serviceaccounts" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Google Cloud Console</a>, create a service account and download the JSON key file.
+              {t.setup.createServiceAccountDesc}
             </p>
           </div>
           <div className="bg-white rounded-lg p-4 border border-blue-200">
             <div className="flex items-center gap-2 mb-2">
               <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">2</span>
-              <span className="font-semibold text-gray-900">Grant RTB Access</span>
+              <span className="font-semibold text-gray-900">{t.setup.grantRtbAccess}</span>
             </div>
             <p className="text-sm text-gray-600">
-              In <a href="https://authorizedbuyers.google.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Authorized Buyers</a>, add the service account email as a user with RTB access.
+              {t.setup.grantRtbAccessDesc}
             </p>
           </div>
           <div className="bg-white rounded-lg p-4 border border-blue-200">
             <div className="flex items-center gap-2 mb-2">
               <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">3</span>
-              <span className="font-semibold text-gray-900">Upload Key File</span>
+              <span className="font-semibold text-gray-900">{t.setup.uploadKeyFile}</span>
             </div>
             <p className="text-sm text-gray-600">
-              Upload the JSON key file below. Cat-Scan will automatically discover your buyer seats.
+              {t.setup.uploadKeyFileDesc}
             </p>
           </div>
         </div>
@@ -332,8 +365,8 @@ export function ApiConnectionTab() {
               {isConfigured ? <CheckCircle className="w-5 h-5" /> : <Shield className="w-5 h-5" />}
             </div>
             <div>
-              <h3 className="text-lg font-medium text-gray-900">Service Accounts</h3>
-              <p className="text-sm text-gray-500">Service accounts with access to Authorized Buyers API</p>
+              <h3 className="text-lg font-medium text-gray-900">{t.setup.connectedAccounts}</h3>
+              <p className="text-sm text-gray-500">{t.setup.connectedAccountsDesc}</p>
             </div>
           </div>
           {isConfigured && !showAddAccount && (
@@ -342,7 +375,7 @@ export function ApiConnectionTab() {
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
             >
               <Upload className="h-4 w-4" />
-              Add Account
+              {t.setup.addAccount}
             </button>
           )}
         </div>
@@ -382,7 +415,7 @@ export function ApiConnectionTab() {
                   {deletingAccountId === account.id ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    "Remove"
+                    t.setup.remove
                   )}
                 </button>
               </div>
@@ -392,7 +425,7 @@ export function ApiConnectionTab() {
             {showAddAccount && (
               <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-medium text-gray-900">Add Another Account</h4>
+                  <h4 className="font-medium text-gray-900">{t.setup.addAnotherAccount}</h4>
                   <button onClick={() => setShowAddAccount(false)} className="text-gray-400 hover:text-gray-600">
                     <X className="h-4 w-4" />
                   </button>
@@ -411,15 +444,15 @@ export function ApiConnectionTab() {
                   {uploadMutation.isPending ? (
                     <>
                       <Loader2 className="h-8 w-8 text-blue-600 mx-auto mb-2 animate-spin" />
-                      <p className="text-sm text-gray-700">Uploading...</p>
+                      <p className="text-sm text-gray-700">{t.setup.uploading}</p>
                     </>
                   ) : (
                     <>
                       <FileJson className={cn("h-8 w-8 mx-auto mb-2", isDragging ? "text-blue-600" : "text-gray-400")} />
                       <p className="text-sm font-medium text-gray-700">
-                        {isDragging ? "Drop file here" : "Upload Service Account JSON"}
+                        {isDragging ? t.setup.dropFileHere : t.setup.uploadServiceAccountJson}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">Drag and drop or click to browse</p>
+                      <p className="text-xs text-gray-500 mt-1">{t.setup.dragAndDropOrClick}</p>
                     </>
                   )}
                 </div>
@@ -442,41 +475,38 @@ export function ApiConnectionTab() {
               {uploadMutation.isPending ? (
                 <>
                   <Loader2 className="h-10 w-10 text-blue-600 mx-auto mb-3 animate-spin" />
-                  <p className="font-medium text-gray-700">Uploading...</p>
+                  <p className="font-medium text-gray-700">{t.setup.uploading}</p>
                 </>
               ) : (
                 <>
                   <FileJson className={cn("h-10 w-10 mx-auto mb-3", isDragging ? "text-blue-600" : "text-gray-400")} />
                   <p className="font-medium text-gray-700">
-                    {isDragging ? "Drop file here" : "Upload Service Account JSON"}
+                    {isDragging ? t.setup.dropFileHere : t.setup.uploadServiceAccountJson}
                   </p>
-                  <p className="text-sm text-gray-500 mt-1">Drag and drop or click to browse</p>
+                  <p className="text-sm text-gray-500 mt-1">{t.setup.dragAndDropOrClick}</p>
                 </>
               )}
             </div>
 
             <details className="border border-gray-200 rounded-lg">
               <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg">
-                Detailed setup instructions
+                {t.setup.detailedSetupInstructions}
               </summary>
               <div className="px-4 pb-4 text-sm text-gray-600 space-y-3">
                 <ol className="list-decimal list-inside space-y-2">
-                  <li>Go to the <a href="https://console.cloud.google.com/iam-admin/serviceaccounts" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">GCP Service Accounts page</a></li>
-                  <li>Select your project (or create one)</li>
-                  <li>Click <strong>+ Create Service Account</strong></li>
-                  <li>Name it (e.g., &quot;catscan-service-account&quot;)</li>
-                  <li>Click <strong>Create and Continue</strong>, skip roles, click <strong>Done</strong></li>
-                  <li>Click on the new service account email</li>
-                  <li>Go to <strong>Keys</strong> tab → <strong>Add Key</strong> → <strong>Create new key</strong></li>
-                  <li>Select <strong>JSON</strong> and click <strong>Create</strong></li>
-                  <li>Upload the downloaded file above</li>
+                  <li>{t.connect.goToGcpServiceAccounts}</li>
+                  <li>{t.connect.selectYourProject}</li>
+                  <li>{t.connect.clickCreateServiceAccount}</li>
+                  <li>{t.connect.nameIt}</li>
+                  <li>{t.connect.clickCreateContinue}</li>
+                  <li>{t.connect.clickOnServiceAccountEmail}</li>
+                  <li>{t.connect.goToKeysTab}</li>
+                  <li>{t.connect.selectJsonClick}</li>
+                  <li>{t.connect.uploadDownloadedFile}</li>
                 </ol>
                 <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <p className="text-sm text-yellow-800">
-                    <strong>Important:</strong> Add the service account email as a user in your{" "}
-                    <a href="https://authorizedbuyers.google.com" target="_blank" rel="noopener noreferrer" className="underline">
-                      Authorized Buyers account
-                    </a> with RTB access.
+                    {t.connect.importantAddServiceAccount}
                   </p>
                 </div>
               </div>
@@ -508,8 +538,8 @@ export function ApiConnectionTab() {
               {hasSeats && seats.some((s: BuyerSeat) => s.creative_count > 0) ? <CheckCircle className="w-5 h-5" /> : <Users className="w-5 h-5" />}
             </div>
             <div>
-              <h3 className="text-lg font-medium text-gray-900">Buyer Seats</h3>
-              <p className="text-sm text-gray-500">Seats discovered from your connected accounts</p>
+              <h3 className="text-lg font-medium text-gray-900">{t.setup.buyerSeats}</h3>
+              <p className="text-sm text-gray-500">{t.setup.buyerSeatsDesc}</p>
             </div>
           </div>
           {isConfigured && (
@@ -524,12 +554,12 @@ export function ApiConnectionTab() {
               {discoverMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Discovering...
+                  {t.setup.discovering}
                 </>
               ) : (
                 <>
                   <RefreshCw className="h-4 w-4" />
-                  Discover Seats
+                  {t.setup.discoverSeats}
                 </>
               )}
             </button>
@@ -547,10 +577,9 @@ export function ApiConnectionTab() {
                 <div className="flex items-start gap-3">
                   <Loader2 className="h-5 w-5 text-blue-600 mt-0.5 animate-spin" />
                   <div>
-                    <p className="font-medium text-blue-900">Seat data is still populating</p>
+                    <p className="font-medium text-blue-900">{t.setup.seatDataPopulating}</p>
                     <p className="text-sm text-blue-700 mt-1">
-                      New seats can take several minutes to sync creatives, endpoints, and pretargeting data.
-                      This will update automatically.
+                      {t.setup.seatDataPopulatingHelp}
                     </p>
                   </div>
                 </div>
@@ -630,7 +659,7 @@ export function ApiConnectionTab() {
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
                   <div>
-                    <p className="font-medium text-yellow-800">No buyer seats discovered yet</p>
+                    <p className="font-medium text-yellow-800">{t.setup.noBuyerSeatsFound}</p>
                     <p className="text-sm text-yellow-700 mt-1">
                       If discovery returns no seats, verify that you've added the service account email
                       to your <a href="https://authorizedbuyers.google.com" target="_blank" rel="noopener noreferrer" className="underline">Authorized Buyers</a> account
@@ -647,7 +676,7 @@ export function ApiConnectionTab() {
             )}
           </div>
         ) : (
-          <p className="text-gray-500 py-4">Connect a service account to discover buyer seats</p>
+          <p className="text-gray-500 py-4">{t.setup.connectServiceAccount}</p>
         )}
       </div>
 

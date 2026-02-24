@@ -1020,6 +1020,17 @@ export interface Translations {
     apiStatusLabel: string;
     accountsStatusLabel: string;
     tabsNavLabel: string;
+    noBuyerSeatsFoundRoleHint: string;
+    discoveredSeatsSyncingEndpoints: string;
+    discoveredSeatsAndSyncedCreatives: string;
+    serviceAccountRemoved: string;
+    failedToRemoveAccount: string;
+    displayNameCannotBeEmpty: string;
+    seatNameUpdated: string;
+    failedToUpdateSeatName: string;
+    discoverSeats: string;
+    seatDataPopulating: string;
+    seatDataPopulatingHelp: string;
     // API Connection Tab
     howToConnect: string;
     createServiceAccount: string;
