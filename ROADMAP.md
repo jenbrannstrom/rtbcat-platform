@@ -82,6 +82,7 @@
     - [x] Import coverage matrix headings/status/source labels converted (`dashboard/src/components/import/ImportTrackingMatrixSection.tsx`)
     - [x] Creative card thumbnail badges/tooltips/copy actions/stale-cache labels converted (`dashboard/src/components/creative-card.tsx`)
     - [x] Pretargeting settings editor shell copy converted (header/tabs/status/history/confirm dialogs; deeper helper sections still pending) (`dashboard/src/components/rtb/pretargeting-settings-editor.tsx`)
+    - [x] Waste analyzer RTB funnel card copy + import instructions converted (`dashboard/src/components/waste-analyzer/FunnelCard.tsx`)
     - [ ] Remaining settings/admin/shared hotspots (`/settings/accounts/components/GmailReportsTab.tsx` remaining deep copy and deeper RTB/settings helper components)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.

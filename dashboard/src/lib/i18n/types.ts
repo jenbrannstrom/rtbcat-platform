@@ -1066,6 +1066,38 @@ export interface Translations {
   wasteAnalysis: {
     title: string;
     subtitle: string;
+    funnelTitle: string;
+    funnelSubtitle: string;
+    reachedYourBidder: string;
+    qps: string;
+    winRate: string;
+    ofReachedTraffic: string;
+    impressionsWon: string;
+    ips: string;
+    winShort: string;
+    yourEfficiency: string;
+    efficiencySentence: string;
+    efficiencyHealthy: string;
+    efficiencyNeedsImprovement: string;
+    reached: string;
+    needRtbReport: string;
+    impressions: string;
+    importRtbPerformanceToSeeFunnel: string;
+    createThisReportIn: string;
+    authorizedBuyersReportingNewReport: string;
+    funnelReportName: string;
+    dimensionsInOrder: string;
+    dimensionDay: string;
+    dimensionPretargetingConfigBillingId: string;
+    dimensionCreativeId: string;
+    dimensionCreativeSize: string;
+    dimensionCreativeFormat: string;
+    metrics: string;
+    metricReachedQueries: string;
+    metricImpressions: string;
+    schedule: string;
+    dailyYesterday: string;
+    goToImport: string;
   };
 
   setup: {
