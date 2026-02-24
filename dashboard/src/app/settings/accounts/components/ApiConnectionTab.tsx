@@ -664,9 +664,9 @@ export function ApiConnectionTab() {
                     <p className="font-medium text-yellow-800">{t.setup.noBuyerSeatsFound}</p>
                     <p className="text-sm text-yellow-700 mt-1">
                       {t.setup.noBuyerSeatsVerifyAccessPrefix}{" "}
-                      <a href="https://authorizedbuyers.google.com" target="_blank" rel="noopener noreferrer" className="underline">Authorized Buyers</a>{" "}
-                      {t.setup.noBuyerSeatsVerifyAccessSuffix} <strong>Account Manager</strong> {t.setup.orLabel}{" "}
-                      <strong>RTB Troubleshooter</strong> {t.setup.roleLabel}.
+                      <a href="https://authorizedbuyers.google.com" target="_blank" rel="noopener noreferrer" className="underline">{t.setup.googleAuthorizedBuyers}</a>{" "}
+                      {t.setup.noBuyerSeatsVerifyAccessSuffix} <strong>{t.setup.googleRoleAccountManager}</strong> {t.setup.orLabel}{" "}
+                      <strong>{t.setup.googleRoleRtbTroubleshooter}</strong> {t.setup.roleLabel}.
                     </p>
                     {serviceAccounts[0]?.client_email && (
                       <p className="text-sm text-yellow-700 mt-2">

@@ -1731,6 +1731,8 @@ export const en: Translations = {
     serviceAccountToAddLabel: 'Service account to add',
     orLabel: 'or',
     roleLabel: 'role',
+    googleRoleAccountManager: 'Account Manager',
+    googleRoleRtbTroubleshooter: 'RTB Troubleshooter',
     // API Connection Tab
     howToConnect: 'How to Connect Your Account',
     createServiceAccount: 'Create Service Account',

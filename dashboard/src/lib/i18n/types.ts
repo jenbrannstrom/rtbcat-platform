@@ -1732,6 +1732,8 @@ export interface Translations {
     serviceAccountToAddLabel: string;
     orLabel: string;
     roleLabel: string;
+    googleRoleAccountManager: string;
+    googleRoleRtbTroubleshooter: string;
     // API Connection Tab
     howToConnect: string;
     createServiceAccount: string;
