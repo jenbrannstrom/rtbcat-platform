@@ -848,6 +848,27 @@ export interface Translations {
     issuesFilterInactiveTitle: string;
     allCountries: string;
     clearFilter: string;
+    failedToLoadCampaign: string;
+    confirmRemoveCreative: string;
+    failedToRemoveCreative: string;
+    failedToUpdateCampaign: string;
+    confirmDeleteCampaign: string;
+    failedToDeleteCampaign: string;
+    backToCreativeClusters: string;
+    campaignNotFound: string;
+    campaignNamePlaceholder: string;
+    descriptionOptionalPlaceholder: string;
+    aiGenerated: string;
+    periodYesterday: string;
+    periodLast7Days: string;
+    periodLast30Days: string;
+    periodAllTime: string;
+    editCampaign: string;
+    deleteCampaign: string;
+    dailyPerformance: string;
+    removeFromCampaign: string;
+    noCreativesInCampaign: string;
+    browseCreatives: string;
   };
 
   creatives: {
