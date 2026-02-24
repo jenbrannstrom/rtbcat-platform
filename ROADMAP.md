@@ -149,7 +149,8 @@
     - [x] Expanded Spanish (`es`) coverage for core `import` flows (upload/preview/result/history/freshness/matrix/export guide) and `setup` tabs (API/Gmail/System primary UI/status copy) (`dashboard/src/lib/i18n/translations/es.ts`)
     - [x] Expanded Spanish (`es`) coverage for core `campaigns` and `creatives` namespaces (clusters/campaign detail/creatives page labels, states, errors) (`dashboard/src/lib/i18n/translations/es.ts`)
     - [x] Expanded Spanish (`es`) coverage for `recommendations` card/panel severity/type/action/impact/staging/empty-state copy (`dashboard/src/lib/i18n/translations/es.ts`)
-    - [ ] Expand Spanish coverage across remaining namespaces (`pretargeting`, preview modal, admin/settings deep tabs, waste-analysis helpers)
+    - [x] Expanded Spanish (`es`) coverage for waste-analysis helper namespaces (`publishers`, `sizes`, `geo`, `aiControl`, `configPerformance`, `wasteAnalysis`) plus `errors`/`reports` support copy (`dashboard/src/lib/i18n/translations/es.ts`)
+    - [ ] Expand Spanish coverage across remaining namespaces (`pretargeting`, preview modal, admin/settings deep tabs, connect/history/retention)
     - [ ] Add real dictionaries for remaining locales (`pl`, `zh`, `ru`, `uk`, `da`, `fr`, `nl`, `he`, `ar`)
 
 ---
