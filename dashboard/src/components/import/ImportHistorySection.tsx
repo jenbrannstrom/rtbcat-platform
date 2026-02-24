@@ -25,9 +25,22 @@ export function ImportHistorySection({
   const normalizeColumn = (column: string) =>
     column.replace(/^#/, "").trim().toLowerCase();
 
+  const reportTypeLabels: Record<string, string> = {
+    quality: t.import.csvTypeQuality,
+    bidsinauction: t.import.matrixCsvTypeBidsInAuction,
+    "pipeline-geo": t.import.matrixCsvTypePipelineGeo,
+    "pipeline-publisher": t.import.matrixCsvTypePipelinePublisher,
+    "bid-filtering": t.import.matrixCsvTypeBidFiltering,
+  };
+
   const formatFileSize = (mb: number) => {
-    if (mb < 1) return `${(mb * 1024).toFixed(0)} KB`;
-    return `${mb.toFixed(1)} MB`;
+    if (mb < 1) {
+      return t.import.fileSizeKilobytesShort.replace(
+        "{count}",
+        (mb * 1024).toFixed(0)
+      );
+    }
+    return t.import.fileSizeMegabytesShort.replace("{count}", mb.toFixed(1));
   };
 
   const formatDate = (dateStr: string) => {
@@ -103,7 +116,7 @@ export function ImportHistorySection({
                       {formatDate(item.imported_at)} · {formatFileSize(item.file_size_mb)}
                       {reportType !== "unknown" && (
                         <span className="ml-2 text-xs text-gray-400">
-                          {reportType.replace("-", " ")}
+                          {reportTypeLabels[reportType] || reportType.replace("-", " ")}
                         </span>
                       )}
                     </p>

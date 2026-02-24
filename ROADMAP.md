@@ -82,6 +82,7 @@
     - [x] `PreviewModal` renderers/shared copy button strings converted (`dashboard/src/components/preview-modal/PreviewRenderers.tsx`, `dashboard/src/components/preview-modal/SharedComponents.tsx`)
     - [x] `PreviewModal` country targeting / geo mismatch section copy converted (`dashboard/src/components/preview-modal/CountrySection.tsx`)
     - [x] Import coverage matrix headings/status/source labels converted (`dashboard/src/components/import/ImportTrackingMatrixSection.tsx`)
+    - [x] Import history report-type labels + localized file-size units and freshness grid CSV labels aligned to exact report names (`dashboard/src/components/import/ImportHistorySection.tsx`, `dashboard/src/components/import/DataFreshnessGrid.tsx`)
     - [x] Creative card thumbnail badges/tooltips/copy actions/stale-cache labels converted (`dashboard/src/components/creative-card.tsx`)
     - [x] Pretargeting settings editor shell copy converted (header/tabs/status/history/confirm dialogs; deeper helper sections still pending) (`dashboard/src/components/rtb/pretargeting-settings-editor.tsx`)
     - [x] Waste analyzer RTB funnel card copy + import instructions converted (`dashboard/src/components/waste-analyzer/FunnelCard.tsx`)

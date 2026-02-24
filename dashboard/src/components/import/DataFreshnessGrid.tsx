@@ -39,10 +39,10 @@ function CellTooltip({
   const [show, setShow] = useState(false);
   const csvTypeLabels: Record<string, string> = {
     quality: t.import.csvTypeQuality,
-    bidsinauction: t.import.csvTypePerformance,
-    "pipeline-geo": t.import.csvTypeGeo,
-    "pipeline-publisher": t.import.csvTypePublisher,
-    "bid-filtering": t.import.csvTypeFiltering,
+    bidsinauction: t.import.matrixCsvTypeBidsInAuction,
+    "pipeline-geo": t.import.matrixCsvTypePipelineGeo,
+    "pipeline-publisher": t.import.matrixCsvTypePipelinePublisher,
+    "bid-filtering": t.import.matrixCsvTypeBidFiltering,
   };
   const label = csvTypeLabels[csvType] || csvType;
   const statusText = status === "imported" ? t.import.dataPresent : t.import.noData;
@@ -74,10 +74,10 @@ export function DataFreshnessGrid({
   const coveragePct = grid?.summary.coverage_pct ?? 0;
   const csvTypeLabels: Record<string, string> = {
     quality: t.import.csvTypeQuality,
-    bidsinauction: t.import.csvTypePerformance,
-    "pipeline-geo": t.import.csvTypeGeo,
-    "pipeline-publisher": t.import.csvTypePublisher,
-    "bid-filtering": t.import.csvTypeFiltering,
+    bidsinauction: t.import.matrixCsvTypeBidsInAuction,
+    "pipeline-geo": t.import.matrixCsvTypePipelineGeo,
+    "pipeline-publisher": t.import.matrixCsvTypePipelinePublisher,
+    "bid-filtering": t.import.matrixCsvTypeBidFiltering,
   };
 
   return (
