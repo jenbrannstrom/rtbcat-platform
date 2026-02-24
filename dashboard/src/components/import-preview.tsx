@@ -1,12 +1,17 @@
+"use client";
+
+import { useTranslation } from "@/contexts/i18n-context";
+
 interface ImportPreviewProps {
   headers: string[];
   rows: Record<string, string>[];
 }
 
 export function ImportPreview({ headers, rows }: ImportPreviewProps) {
+  const { t } = useTranslation();
   if (rows.length === 0 || headers.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-500">No data to preview</div>
+      <div className="text-center py-8 text-gray-500">{t.import.noDataToPreview}</div>
     );
   }
 
@@ -14,7 +19,7 @@ export function ImportPreview({ headers, rows }: ImportPreviewProps) {
     <div className="border rounded-lg overflow-hidden">
       <div className="bg-gray-50 px-4 py-3 border-b">
         <h3 className="font-semibold text-gray-900">
-          Preview (first {rows.length} rows)
+          {t.import.previewFirstRowsCount.replace("{count}", String(rows.length))}
         </h3>
       </div>
 
