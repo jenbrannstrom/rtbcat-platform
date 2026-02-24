@@ -156,7 +156,9 @@
     - [x] Expanded Spanish (`es`) coverage for `admin` (admin dashboard, users/local-password + seat-access UI, admin settings, audit log copy) (`dashboard/src/lib/i18n/translations/es.ts`)
     - [ ] Expand Spanish coverage across remaining namespaces (`pretargeting`)
       - [x] Added first Spanish (`es`) `pretargeting` core chunk (page shell, tabs, breakdown states, history badges, push/suspend dialogs) (`dashboard/src/lib/i18n/translations/es.ts`)
-    - [ ] Add real dictionaries for remaining locales (`pl`, `zh`, `ru`, `uk`, `da`, `fr`, `nl`, `he`, `ar`)
+    - [x] Refactored English (`en`) translations into split namespace modules and added Chinese (`zh`) split dictionary scaffold (`dashboard/src/lib/i18n/translations/en/*`, `dashboard/src/lib/i18n/translations/zh/*`)
+    - [x] Added first real Chinese (`zh`) split translations for core shell/auth/home namespaces (`common`, `relativeTime`, `navigation`, `qpsNav`, `settingsNav`, `adminNav`, `sidebar`, `auth`, `dashboard`, `errors`, `language`) (`dashboard/src/lib/i18n/translations/zh/*`)
+    - [ ] Add real dictionaries for remaining locales (`pl`, `ru`, `uk`, `da`, `fr`, `he`, `ar`) and expand `zh`/`es` remaining namespaces
 
 ---
 
