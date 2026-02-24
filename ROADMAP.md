@@ -62,7 +62,8 @@
     - [x] Import page runtime UI/errors + import reference/troubleshooting wrapper copy converted (`dashboard/src/app/import/page.tsx`, `dashboard/src/components/import/RequiredColumnsTable.tsx`, `dashboard/src/components/import/TroubleshootingSection.tsx`)
     - [x] `ExportInstructions` long-form import guide prose/headings converted (`dashboard/src/components/import/ExportInstructions.tsx`) while keeping technical report IDs and Google field names literal
     - [x] RTB app drill-down modal UI strings/tooltips/empty states converted (`dashboard/src/components/rtb/app-drilldown-modal.tsx`)
-    - [ ] Remaining RTB config breakdown panel + settings/admin hotspot groups
+    - [x] RTB config breakdown panel top-level UI + publisher controls copy converted (tabs/loading/error/empty states/window badges/filter/history header) (`dashboard/src/components/rtb/config-breakdown-panel.tsx`)
+    - [ ] Remaining RTB config breakdown panel row/editor flows + settings/admin hotspot groups
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
 

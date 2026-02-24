@@ -213,6 +213,31 @@ export interface Translations {
     showingLast: string;
     becauseNoRowsFoundInRequested: string;
     dayWindow: string;
+    tabByCreative: string;
+    tabBySize: string;
+    tabByGeo: string;
+    tabByPublisher: string;
+    loadingBreakdown: string;
+    failedToLoadBreakdownData: string;
+    noPublisherBreakdownForConfig: string;
+    publisherBreakdownMissingCsvOrPrecompute: string;
+    noTabDataForConfig: string;
+    noGeoBreakdownAvailable: string;
+    noSizeBreakdownAvailable: string;
+    noCreativeBreakdownAvailable: string;
+    importQualityAndBidsCsvForBreakdown: string;
+    windowLabel: string;
+    effectiveLabel: string;
+    fallbackAppliedNoDataRequestedWindow: string;
+    modeLabel: string;
+    publisherModeInclusiveHelp: string;
+    publisherModeExclusiveHelp: string;
+    historyShort: string;
+    fullEditor: string;
+    filterPublishersPlaceholder: string;
+    lastPushed: string;
+    publisherHistory: string;
+    viewAllArrow: string;
   };
 
   import: {
