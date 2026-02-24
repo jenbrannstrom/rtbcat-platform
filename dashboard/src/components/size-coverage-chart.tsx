@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { ChevronDown, ChevronUp, ArrowUpDown, Ban, Plus, Maximize, Eye, AlertCircle } from "lucide-react";
 import type { SizeGap } from "@/types/api";
+import { useTranslation } from "@/contexts/i18n-context";
 import { cn } from "@/lib/utils";
 
 interface SizeCoverageChartProps {
@@ -65,20 +66,22 @@ export function SizeCoverageChartSkeleton() {
 }
 
 export function SizeCoverageChartEmpty() {
+  const { t } = useTranslation();
   return (
     <div className="text-center py-8">
       <div className="mx-auto h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
         <span className="text-2xl">&#10003;</span>
       </div>
-      <h3 className="mt-4 text-lg font-medium text-gray-900">No Size Gaps</h3>
+      <h3 className="mt-4 text-lg font-medium text-gray-900">{t.wasteAnalysis.sizeCoverageNoSizeGaps}</h3>
       <p className="mt-2 text-sm text-gray-500">
-        All requested sizes have creative coverage. No wasted traffic detected.
+        {t.wasteAnalysis.sizeCoverageNoSizeGapsDesc}
       </p>
     </div>
   );
 }
 
 export function SizeCoverageChart({ sizeGaps, isLoading }: SizeCoverageChartProps) {
+  const { t } = useTranslation();
   const [sortField, setSortField] = useState<SortField>("request_count");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
@@ -167,19 +170,19 @@ export function SizeCoverageChart({ sizeGaps, isLoading }: SizeCoverageChartProp
       {/* Table Header */}
       <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-gray-50 border-b border-gray-200">
         <div className="col-span-3">
-          <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Size</span>
+          <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">{t.creatives.size}</span>
         </div>
         <div className="col-span-2 text-right">
-          <SortHeader field="request_count">Requests</SortHeader>
+          <SortHeader field="request_count">{t.wasteAnalysis.requests}</SortHeader>
         </div>
         <div className="col-span-2 text-right">
-          <SortHeader field="estimated_qps">Avg QPS</SortHeader>
+          <SortHeader field="estimated_qps">{t.wasteAnalysis.wasteReportAvgQps}</SortHeader>
         </div>
         <div className="col-span-2 text-right">
-          <SortHeader field="estimated_waste_pct">Waste %</SortHeader>
+          <SortHeader field="estimated_waste_pct">{t.wasteAnalysis.wastePercent}</SortHeader>
         </div>
         <div className="col-span-3">
-          <SortHeader field="recommendation">Recommendation</SortHeader>
+          <SortHeader field="recommendation">{t.wasteAnalysis.recommendation}</SortHeader>
         </div>
       </div>
 
@@ -200,7 +203,13 @@ export function SizeCoverageChart({ sizeGaps, isLoading }: SizeCoverageChartProp
                 <div className="col-span-3 flex items-center gap-3">
                   <div
                     className={cn("w-2 h-8 rounded-full", getSeverityColor(gap.request_count))}
-                    title={gap.request_count >= 10000 ? "High volume" : gap.request_count >= 1000 ? "Medium volume" : "Low volume"}
+                    title={
+                      gap.request_count >= 10000
+                        ? t.wasteAnalysis.highVolume
+                        : gap.request_count >= 1000
+                          ? t.wasteAnalysis.mediumVolume
+                          : t.wasteAnalysis.lowVolume
+                    }
                   />
                   <div>
                     <p className="font-medium text-gray-900 text-sm truncate" title={gap.canonical_size}>
@@ -208,7 +217,7 @@ export function SizeCoverageChart({ sizeGaps, isLoading }: SizeCoverageChartProp
                     </p>
                     {gap.closest_iab_size && (
                       <p className="text-xs text-gray-500">
-                        Near: {gap.closest_iab_size.replace(/\s*\([^)]*\)/, "")}
+                        {t.wasteAnalysis.nearPrefix}: {gap.closest_iab_size.replace(/\s*\([^)]*\)/, "")}
                       </p>
                     )}
                   </div>
@@ -258,7 +267,13 @@ export function SizeCoverageChart({ sizeGaps, isLoading }: SizeCoverageChartProp
                       <p className="text-sm text-gray-700">{gap.recommendation_detail}</p>
                       {gap.potential_savings_usd && (
                         <p className="mt-2 text-sm text-gray-500">
-                          Potential savings: <span className="font-medium text-green-600">${gap.potential_savings_usd.toFixed(2)}/month</span>
+                          {t.wasteAnalysis.wasteReportPotentialSavings}:{" "}
+                          <span className="font-medium text-green-600">
+                            {t.wasteAnalysis.wasteReportPotentialSavingsPerMonth.replace(
+                              "{amount}",
+                              gap.potential_savings_usd.toFixed(2)
+                            )}
+                          </span>
                         </p>
                       )}
                     </div>
@@ -273,9 +288,13 @@ export function SizeCoverageChart({ sizeGaps, isLoading }: SizeCoverageChartProp
       {/* Summary Footer */}
       <div className="px-4 py-3 bg-gray-50 border-t border-gray-200">
         <div className="flex items-center justify-between text-sm text-gray-600">
-          <span>{sizeGaps.length} size gap{sizeGaps.length !== 1 ? "s" : ""} detected</span>
           <span>
-            Total waste: {formatNumber(sizeGaps.reduce((sum, g) => sum + g.request_count, 0))} requests
+            {t.wasteAnalysis.sizeGapsDetectedCount
+              .replace("{count}", String(sizeGaps.length))}
+          </span>
+          <span>
+            {t.wasteAnalysis.totalWasteRequests
+              .replace("{count}", formatNumber(sizeGaps.reduce((sum, g) => sum + g.request_count, 0)))}
           </span>
         </div>
       </div>
