@@ -101,6 +101,7 @@
     - [x] QPS geo waste panel labels/summary/table/action badges converted (`dashboard/src/components/qps/geo-waste-panel.tsx`)
     - [x] Waste report summary cards/empty-state/recommendations summary copy converted (`dashboard/src/components/waste-report.tsx`)
     - [x] Generic recommendations card/panel severity/type/impact/actions/empty-state copy converted (`dashboard/src/components/recommendations/recommendation-card.tsx`, `dashboard/src/components/recommendations/recommendations-panel.tsx`)
+    - [x] Import result card success/failure labels/stats/actions copy converted (`dashboard/src/components/import/ImportResultCard.tsx`)
     - [ ] Remaining settings/admin/shared hotspots (`/settings/accounts/components/GmailReportsTab.tsx` remaining deep copy and deeper RTB/settings helper components)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
