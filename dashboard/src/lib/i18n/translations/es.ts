@@ -884,6 +884,267 @@ export const es: PartialTranslations = {
     bidsInAuction: 'Bids in auction',
   },
 
+  settings: {
+    title: 'Ajustes',
+    systemConfiguration: 'Configuración y estado del sistema',
+    apiStatus: 'Estado API',
+    status: 'Estado',
+    version: 'Versión',
+    configured: 'Configurado',
+    yes: 'Sí',
+    no: 'No',
+    systemStatus: 'Estado del sistema',
+    python: 'Python',
+    nodejs: 'Node.js',
+    ffmpeg: 'ffmpeg',
+    installed: 'Instalado',
+    notFound: 'No encontrado',
+    notInstalled: 'No instalado',
+    diskSpace: 'Espacio en disco',
+    gbFree: 'GB libres',
+    mb: 'MB',
+    databaseSize: 'Tamaño de la base de datos',
+    thumbnailsGenerated: 'Miniaturas generadas',
+    database: 'Base de datos',
+    path: 'Ruta',
+    creatives: 'Creatividades',
+    campaigns: 'Clusters Creativos',
+    clusters: 'Clusters',
+    videoThumbnails: 'Miniaturas de video',
+    totalVideos: 'Total de videos',
+    withThumbnails: 'Con miniaturas',
+    pending: 'Pendiente',
+    failed: 'Falló',
+    coverage: 'Cobertura',
+    ffmpegAvailable: 'ffmpeg disponible',
+    batchSize: 'Tamaño de lote:',
+    retryFailed: 'Reintentar fallidos',
+    generating: 'Generando...',
+    generateThumbnails: 'Generar miniaturas',
+    processedVideos: '{count} videos procesados',
+    succeededFailed: '{success} exitosos, {failed} fallidos',
+    allThumbnailsGenerated:
+      'Todas las miniaturas de video han sido generadas.',
+    noThumbnailData: 'No hay datos de miniaturas disponibles',
+    configuration: 'Configuración',
+    googleCredentials: 'Credenciales de Google',
+    manageConnection: 'Gestiona tu conexión de Authorized Buyers',
+    connectAccount: 'Conecta tu cuenta de Authorized Buyers',
+    connected: 'Conectado',
+    notConnected: 'No conectado',
+    manage: 'Administrar',
+    buyerSeats: 'Buyer Seats',
+    manageSeatDisplayNames:
+      'Administrar nombres visibles de seats y ver conteos de creatividades',
+    dataRetention: 'Retención de datos',
+    configureRetention:
+      'Configurar períodos de retención y cronogramas de limpieza',
+    ffmpegNotInstalled:
+      'ffmpeg no está instalado. Las miniaturas de video requieren ffmpeg:',
+    ffmpegNotFoundInstall:
+      'ffmpeg no encontrado. Instala ffmpeg para generar miniaturas de video:',
+    systemStatusUnavailable: 'Estado del sistema no disponible',
+    failedToCheckApiStatus: 'No se pudo verificar el estado del API',
+    notAvailable: 'N/D',
+    seats: 'Seats',
+    seatsManagement: 'Gestión de seats',
+    connectNewSeat: 'Conectar nuevo seat',
+    retentionSettings: 'Ajustes de retención',
+    daysRetention: 'días',
+    videos: 'videos',
+  },
+
+  retentionPage: {
+    title: 'Ajustes de Retención de Datos',
+    subtitle: 'Configura cuánto tiempo se retienen los datos de rendimiento.',
+    saveSuccess: 'Ajustes de retención guardados correctamente.',
+    saveFailed: 'No se pudieron guardar los ajustes de retención.',
+    runCompleted:
+      'Trabajo de retención completado: {aggregatedRows} filas agregadas, {deletedRawRows} filas raw eliminadas.',
+    runFailed: 'No se pudo ejecutar el trabajo de retención.',
+    currentStorage: 'Almacenamiento actual',
+    rawPerformanceRows: 'Filas raw de rendimiento',
+    dailySummaryRows: 'Filas de resumen diario',
+    dateRangeSpan: '{start} a {end}',
+    keepDetailedDataFor: 'Mantener datos detallados durante:',
+    keepDailySummariesFor: 'Mantener resúmenes diarios durante:',
+    autoAggregateAfter: 'Autoagregar después de:',
+    option7Days: '7 días',
+    option14Days: '14 días',
+    option30Days: '30 días',
+    option30DaysRecommended: '30 días (recomendado)',
+    option60Days: '60 días',
+    option90DaysRecommended: '90 días (recomendado)',
+    option180Days: '180 días',
+    option1Year: '1 año',
+    option6Months: '6 meses',
+    option1YearRecommended: '1 año (recomendado)',
+    option2Years: '2 años',
+    optionForever: 'Siempre',
+    detailedDataHelp:
+      'Los datos detallados muestran rendimiento por app, país y creative. Después de este período, se agregan en resúmenes diarios.',
+    summaryDataHelp:
+      'Los resúmenes muestran totales diarios por creative. Son útiles para análisis de tendencias.',
+    autoAggregateHelp:
+      'Crea resúmenes para datos anteriores a este límite antes de eliminarlos.',
+    warningIrreversible:
+      'Reducir la retención eliminará datos antiguos permanentemente. Esto no se puede deshacer.',
+    howItWorks: 'Cómo funciona:',
+    howItWorksItem1:
+      'Las filas detalladas se agregan en resúmenes diarios',
+    howItWorksItem2:
+      'Los resúmenes conservan métricas totales por creative/día',
+    howItWorksItem3:
+      'Después de agregar, se eliminan las filas detalladas',
+    howItWorksItem4:
+      'Esto reduce significativamente los requisitos de almacenamiento',
+    saving: 'Guardando...',
+    saveSettings: 'Guardar ajustes',
+    running: 'Ejecutando...',
+    runRetentionJobNow: 'Ejecutar trabajo de retención ahora',
+  },
+
+  history: {
+    title: 'Historial de Cambios',
+    changeHistory: 'Historial de Cambios',
+    trackAndRollback:
+      'Rastrea y revierte cambios en la configuración de pretargeting',
+    noChanges: 'No se registraron cambios',
+    noChangesFound: 'No se encontraron cambios',
+    tryAdjustingFilters: 'Prueba ajustando tus filtros.',
+    changesWillAppear: 'Los cambios de configuración aparecerán aquí.',
+    change: 'Cambio',
+    user: 'Usuario',
+    timestamp: 'Marca de tiempo',
+    export: 'Exportar',
+    filters: 'Filtros:',
+    period: 'Período:',
+    lastDays: 'Últimos {count} días',
+    config: 'Config:',
+    allConfigs: 'Todas las configs',
+    type: 'Tipo:',
+    allTypes: 'Todos los tipos',
+    clearFilters: 'Limpiar filtros',
+    showingChanges:
+      'Mostrando {count} cambio de los últimos {days} días',
+    showingChangesPlural:
+      'Mostrando {count} cambios de los últimos {days} días',
+    rollback: 'Rollback',
+    rollbackChange: 'Revertir cambio',
+    aboutToRollback: 'Estás a punto de revertir:',
+    field: 'Campo:',
+    current: 'Actual:',
+    restoreTo: 'Restaurar a:',
+    empty: '(vacío)',
+    rollbackWarning:
+      'Esto restaurará el ajuste anterior. Tendrás que aplicar el cambio manualmente en Google Authorized Buyers.',
+    noSnapshotAvailableForChange:
+      'No hay snapshot disponible para este cambio. El rollback requiere un auto-snapshot creado antes del push. Los cambios antiguos pueden no tener snapshots.',
+    previewingRollback: 'Previsualizando rollback...',
+    failedToPreviewRollback: 'No se pudo previsualizar el rollback',
+    noDifferencesFoundBetweenCurrentAndSnapshot:
+      'No se encontraron diferencias entre la config actual y el snapshot. La config pudo haberse modificado desde entonces.',
+    changesWillBeReversedOnGoogle:
+      'Estos cambios se revertirán en Google:',
+    rollbackPushesToGoogleImmediately:
+      'Esto hace push a Google inmediatamente. Se registrará una nueva entrada “ROLLBACK” en el historial.',
+    reasonForRollback: 'Motivo del rollback',
+    whyRollingBack: '¿Por qué estás revirtiendo este cambio?',
+    cancel: 'Cancelar',
+    rollbackNow: 'Revertir ahora',
+    on: 'en',
+    value: 'Valor:',
+    manual: 'manual',
+    daysAgo: 'd atrás',
+    hoursAgo: 'h atrás',
+    minutesAgo: 'm atrás',
+    justNow: 'ahora',
+    rollbackFailed: 'Falló el rollback',
+  },
+
+  connect: {
+    title: 'Conectar',
+    connectAccount: 'Conectar cuenta',
+    serviceAccount: 'Service Account',
+    instructions:
+      'Sigue las instrucciones para conectar tu cuenta',
+    setupComplete: '¡Configuración completada!',
+    setUpCatScan: 'Configurar Cat-Scan',
+    accountConnectedReady:
+      'Tu cuenta está conectada y lista para analizar',
+    stepOf: 'Paso {current} de {total}: {title}',
+    uploadCredentials: 'Subir credenciales',
+    syncCreatives: 'Sincronizar creatividades',
+    readyToGo: 'Listo para empezar',
+    optionalInstallFfmpeg: 'Opcional: Instalar ffmpeg',
+    ffmpegRequired:
+      'ffmpeg es obligatorio para generar miniaturas de video. Sin él, las creatividades de video mostrarán iconos placeholder en lugar de frames de vista previa.',
+    googleCredentials: 'Credenciales de Google',
+    connected: 'Conectado',
+    serviceAccountConfigured: 'Service account configurado',
+    change: 'Cambiar',
+    uploading: 'Subiendo...',
+    dropFileHere: 'Suelta el archivo aquí',
+    uploadServiceAccountJson: 'Subir JSON de Service Account',
+    dragAndDropOrClick: 'Arrastra y suelta o haz clic para explorar',
+    howToGetServiceAccountKey:
+      'Cómo obtener una clave de service account',
+    goToGcpServiceAccounts:
+      'Ve a la página de Service Accounts de GCP',
+    selectYourProject:
+      'Selecciona tu proyecto (o crea uno)',
+    clickCreateServiceAccount:
+      'Haz clic en + Create Service Account',
+    nameIt:
+      'Ponle nombre (por ejemplo, "catscan-service-account")',
+    clickCreateContinue:
+      'Haz clic en Create and Continue, omite roles y haz clic en Done',
+    clickOnServiceAccountEmail:
+      'Haz clic en el correo del nuevo service account',
+    goToKeysTab:
+      'Ve a la pestaña Keys -> Add Key -> Create new key',
+    selectJsonClick: 'Selecciona JSON y haz clic en Create',
+    uploadDownloadedFile:
+      'Sube el archivo descargado arriba',
+    importantAddServiceAccount:
+      'Importante: también debes agregar el correo del service account como usuario en tu cuenta de Authorized Buyers con acceso RTB.',
+    noBuyerSeatsFound: 'No se encontraron buyer seats',
+    makeSureServiceAccountHasAccess:
+      'Asegúrate de que el service account tenga acceso a tu cuenta de Authorized Buyers',
+    completeStep1:
+      'Completa el paso 1 para sincronizar tus creatividades',
+    creatives: 'creatividades',
+    lastSynced: 'Última sincronización',
+    syncing: 'Sincronizando...',
+    syncNow: 'Sincronizar ahora',
+    readyToAnalyze: 'Listo para analizar',
+    accountSetUpCreativesSynced:
+      'Tu cuenta está configurada y las creatividades están sincronizadas. Ahora puedes:',
+    viewCreativeStatus:
+      'Ver estado y aprobaciones de creatividades',
+    importRtbPerformance:
+      'Importar datos de rendimiento RTB',
+    analyzeQpsWaste:
+      'Analizar desperdicio de QPS y oportunidades de optimización',
+    goToDashboard: 'Ir al Dashboard',
+    completeSteps1And2:
+      'Completa los pasos 1 y 2 para continuar',
+    discoveredSeats: 'Se descubrieron {count} buyer seat(s)',
+    failedToDiscoverSeats: 'No se pudieron descubrir seats',
+    connectedAs: 'Conectado como {email}',
+    uploadFailed: 'Falló la subida',
+    syncedCreatives: 'Se sincronizaron {count} creatividades',
+    syncFailed: 'Falló la sincronización',
+    pleaseSelectJsonFile: 'Selecciona un archivo JSON',
+    invalidJsonFile:
+      'Archivo JSON inválido. Sube una clave de service account válida.',
+    invalidServiceAccountFormat:
+      'Formato de service account inválido. Faltan campos requeridos.',
+    invalidCredentialType:
+      'Tipo de credencial inválido: "{type}". Se esperaba "service_account".',
+    account: 'Cuenta',
+  },
+
   aiControl: {
     aiModeLabel: 'Modo IA:',
     title: 'Ajustes de Control de IA',
