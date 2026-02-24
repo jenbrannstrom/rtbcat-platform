@@ -19,8 +19,8 @@ export default function ConnectedAccountsPage() {
   const { t } = useTranslation();
 
   const TABS: { id: SetupTab; label: string; icon: React.ElementType; description: string }[] = [
-    { id: "api", label: t.setup?.connectApi || "Connect API", icon: Link2, description: t.setup?.googleAuthorizedBuyers || "Google Authorized Buyers" },
-    { id: "system", label: t.setup?.system || "System", icon: Settings, description: t.setup?.statusAndSettings || "Status & settings" },
+    { id: "api", label: t.setup.connectApi, icon: Link2, description: t.setup.googleAuthorizedBuyers },
+    { id: "system", label: t.setup.system, icon: Settings, description: t.setup.statusAndSettings },
   ];
   const [activeTab, setActiveTab] = useState<SetupTab>("api");
 
@@ -44,7 +44,7 @@ export default function ConnectedAccountsPage() {
         message={
           healthError instanceof Error
             ? healthError.message
-            : "Failed to check API status"
+            : t.settings.failedToCheckApiStatus
         }
         onRetry={() => refetchHealth()}
       />
@@ -57,9 +57,9 @@ export default function ConnectedAccountsPage() {
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{t.setup?.title || "Connected Accounts"}</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t.settingsNav.connectedAccounts}</h1>
         <p className="text-gray-600 mt-1">
-          {t.setup?.configureDataSources || "Configure your data sources and integrations"}
+          {t.setup.configureDataSources}
         </p>
       </div>
 
@@ -73,7 +73,7 @@ export default function ConnectedAccountsPage() {
                 apiConnected ? "bg-green-500" : "bg-red-500"
               )} />
               <span className="text-sm text-gray-600">
-                API: {apiConnected ? (t.setup?.connected || "Connected") : (t.setup?.notConnected || "Not connected")}
+                {t.setup.apiStatusLabel}: {apiConnected ? t.setup.connected : t.setup.notConnected}
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -82,7 +82,7 @@ export default function ConnectedAccountsPage() {
                 isConfigured ? "bg-green-500" : "bg-yellow-500"
               )} />
               <span className="text-sm text-gray-600">
-                Accounts: {isConfigured ? "Configured" : "Not configured"}
+                {t.setup.accountsStatusLabel}: {isConfigured ? t.settings.configured : t.setup.notConfigured}
               </span>
             </div>
           </div>
@@ -92,7 +92,7 @@ export default function ConnectedAccountsPage() {
 
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
-        <nav className="flex gap-1" aria-label="Setup tabs">
+        <nav className="flex gap-1" aria-label={t.setup.tabsNavLabel}>
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;

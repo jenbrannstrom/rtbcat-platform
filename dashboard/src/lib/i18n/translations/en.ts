@@ -810,6 +810,7 @@ export const en: Translations = {
     ffmpegNotFoundInstall: 'ffmpeg not found. Install ffmpeg to generate video thumbnails:',
     systemStatusUnavailable: 'System status unavailable',
     failedToCheckApiStatus: 'Failed to check API status',
+    notAvailable: 'N/A',
     seats: 'Seats',
     seatsManagement: 'Seats Management',
     connectNewSeat: 'Connect New Seat',
@@ -1015,6 +1016,9 @@ export const en: Translations = {
     googleAuthorizedBuyers: 'Google Authorized Buyers',
     autoFetchReports: 'Auto-fetch scheduled reports',
     statusAndSettings: 'Status & settings',
+    apiStatusLabel: 'API',
+    accountsStatusLabel: 'Accounts',
+    tabsNavLabel: 'Setup tabs',
     // API Connection Tab
     howToConnect: 'How to Connect Your Account',
     createServiceAccount: 'Create Service Account',
