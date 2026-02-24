@@ -151,6 +151,23 @@ export interface Translations {
     loadingSeatAccess: string;
     noActiveBuyerSeatsSyncSettings: string;
     selectSeatToLoadHomeAnalytics: string;
+    failedToLoadQpsSummary: string;
+    qpsSummarySizeCoverage: string;
+    qpsSummaryGaps: string;
+    qpsSummarySizesCovered: string;
+    qpsSummaryGeoEfficiency: string;
+    qpsSummaryGeosUnit: string;
+    qpsSummaryGeosToExclude: string;
+    qpsSummaryAllPerformingWell: string;
+    qpsSummaryWastedSpend: string;
+    qpsSummaryPeriodDays: string;
+    qpsSummaryWastePctOfTotal: string;
+    qpsSummaryActionItems: string;
+    qpsSummaryExcludeGeos: string;
+    qpsSummaryBlockSizes: string;
+    qpsSummaryConsiderSizes: string;
+    qpsSummaryNoImmediateActions: string;
+    qpsSummarySaveMonthly: string;
   };
 
   publishers: {

@@ -5,12 +5,14 @@ import { AlertTriangle, CheckCircle, Globe, LayoutGrid, DollarSign } from 'lucid
 import { getQPSSummary } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useAccount } from '@/contexts/account-context';
+import { useTranslation } from '@/contexts/i18n-context';
 
 interface QPSSummaryCardProps {
   days?: number;
 }
 
 export function QPSSummaryCard({ days = 7 }: QPSSummaryCardProps) {
+  const { t } = useTranslation();
   const { selectedBuyerId } = useAccount();
   const { data, isLoading, error } = useQuery({
     queryKey: ['qps-summary', days, selectedBuyerId],
@@ -32,7 +34,7 @@ export function QPSSummaryCard({ days = 7 }: QPSSummaryCardProps) {
       <div className="bg-red-50 border border-red-200 rounded-lg p-4">
         <div className="flex items-center gap-2 text-red-700">
           <AlertTriangle className="h-5 w-5" />
-          <span>Failed to load QPS summary</span>
+          <span>{t.dashboard.failedToLoadQpsSummary}</span>
         </div>
       </div>
     );
@@ -47,7 +49,7 @@ export function QPSSummaryCard({ days = 7 }: QPSSummaryCardProps) {
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <div className="flex items-center gap-2 mb-2">
           <LayoutGrid className="h-5 w-5 text-blue-600" />
-          <span className="text-sm font-medium text-gray-600">Size Coverage</span>
+          <span className="text-sm font-medium text-gray-600">{t.dashboard.qpsSummarySizeCoverage}</span>
         </div>
         <div className="flex items-baseline gap-2">
           <span className="text-3xl font-bold text-gray-900">
@@ -55,12 +57,12 @@ export function QPSSummaryCard({ days = 7 }: QPSSummaryCardProps) {
           </span>
           {data.size_coverage.sizes_missing > 0 && (
             <span className="text-sm text-orange-600">
-              {data.size_coverage.sizes_missing} gaps
+              {t.dashboard.qpsSummaryGaps.replace('{count}', String(data.size_coverage.sizes_missing))}
             </span>
           )}
         </div>
         <div className="mt-1 text-sm text-gray-500">
-          {data.size_coverage.sizes_covered} sizes covered
+          {t.dashboard.qpsSummarySizesCovered.replace('{count}', String(data.size_coverage.sizes_covered))}
         </div>
       </div>
 
@@ -68,22 +70,22 @@ export function QPSSummaryCard({ days = 7 }: QPSSummaryCardProps) {
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <div className="flex items-center gap-2 mb-2">
           <Globe className="h-5 w-5 text-green-600" />
-          <span className="text-sm font-medium text-gray-600">Geo Efficiency</span>
+          <span className="text-sm font-medium text-gray-600">{t.dashboard.qpsSummaryGeoEfficiency}</span>
         </div>
         <div className="flex items-baseline gap-2">
           <span className="text-3xl font-bold text-gray-900">
             {data.geo_efficiency.geos_analyzed}
           </span>
-          <span className="text-sm text-gray-500">geos</span>
+          <span className="text-sm text-gray-500">{t.dashboard.qpsSummaryGeosUnit}</span>
         </div>
         <div className="mt-1 text-sm">
           {data.geo_efficiency.geos_to_exclude > 0 ? (
             <span className="text-red-600">
-              {data.geo_efficiency.geos_to_exclude} to exclude
+              {t.dashboard.qpsSummaryGeosToExclude.replace('{count}', String(data.geo_efficiency.geos_to_exclude))}
             </span>
           ) : (
             <span className="text-green-600 flex items-center gap-1">
-              <CheckCircle className="h-3 w-3" /> All performing well
+              <CheckCircle className="h-3 w-3" /> {t.dashboard.qpsSummaryAllPerformingWell}
             </span>
           )}
         </div>
@@ -93,16 +95,18 @@ export function QPSSummaryCard({ days = 7 }: QPSSummaryCardProps) {
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <div className="flex items-center gap-2 mb-2">
           <DollarSign className="h-5 w-5 text-orange-600" />
-          <span className="text-sm font-medium text-gray-600">Wasted Spend</span>
+          <span className="text-sm font-medium text-gray-600">{t.dashboard.qpsSummaryWastedSpend}</span>
         </div>
         <div className="flex items-baseline gap-2">
           <span className="text-3xl font-bold text-gray-900">
             ${data.geo_efficiency.wasted_spend_usd.toFixed(0)}
           </span>
-          <span className="text-sm text-gray-500">/ {days} days</span>
+          <span className="text-sm text-gray-500">
+            {t.dashboard.qpsSummaryPeriodDays.replace('{days}', String(days))}
+          </span>
         </div>
         <div className="mt-1 text-sm text-gray-500">
-          {data.geo_efficiency.waste_pct}% of total
+          {t.dashboard.qpsSummaryWastePctOfTotal.replace('{pct}', String(data.geo_efficiency.waste_pct))}
         </div>
       </div>
 
@@ -117,34 +121,37 @@ export function QPSSummaryCard({ days = 7 }: QPSSummaryCardProps) {
           ) : (
             <CheckCircle className="h-5 w-5 text-green-600" />
           )}
-          <span className="text-sm font-medium text-gray-600">Action Items</span>
+          <span className="text-sm font-medium text-gray-600">{t.dashboard.qpsSummaryActionItems}</span>
         </div>
         {hasIssues ? (
           <div className="space-y-1">
             {data.action_items.geos_to_exclude > 0 && (
               <div className="text-sm text-amber-800">
-                Exclude {data.action_items.geos_to_exclude} geos
+                {t.dashboard.qpsSummaryExcludeGeos.replace('{count}', String(data.action_items.geos_to_exclude))}
               </div>
             )}
             {data.action_items.sizes_to_block > 0 && (
               <div className="text-sm text-amber-800">
-                Block {data.action_items.sizes_to_block} sizes
+                {t.dashboard.qpsSummaryBlockSizes.replace('{count}', String(data.action_items.sizes_to_block))}
               </div>
             )}
             {data.action_items.sizes_to_consider > 0 && (
               <div className="text-sm text-amber-800">
-                Consider {data.action_items.sizes_to_consider} sizes
+                {t.dashboard.qpsSummaryConsiderSizes.replace('{count}', String(data.action_items.sizes_to_consider))}
               </div>
             )}
           </div>
         ) : (
           <div className="text-sm text-green-800">
-            No immediate actions needed
+            {t.dashboard.qpsSummaryNoImmediateActions}
           </div>
         )}
         {data.estimated_savings.geo_waste_monthly_usd > 0 && (
           <div className="mt-2 text-sm font-medium text-green-700">
-            Save ~${data.estimated_savings.geo_waste_monthly_usd.toFixed(0)}/mo
+            {t.dashboard.qpsSummarySaveMonthly.replace(
+              '{amount}',
+              data.estimated_savings.geo_waste_monthly_usd.toFixed(0)
+            )}
           </div>
         )}
       </div>
