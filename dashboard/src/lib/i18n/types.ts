@@ -469,6 +469,28 @@ export interface Translations {
     exportGuideExampleLabel: string;
     exportGuideTipLabel: string;
     exportGuideTipBody: string;
+    importCoverageMatrix: string;
+    importCoverageMatrixDesc: string;
+    importCoverageAccounts: string;
+    loadingMatrix: string;
+    noImportCoverageDataYet: string;
+    importCoverageColumnAccount: string;
+    importCoverageColumnCsvType: string;
+    importCoverageColumnStatus: string;
+    importCoverageColumnSource: string;
+    importCoverageColumnLastImport: string;
+    importCoverageColumnError: string;
+    matrixStatusPass: string;
+    matrixStatusFail: string;
+    matrixStatusNotImported: string;
+    matrixCsvTypeQuality: string;
+    matrixCsvTypeBidsInAuction: string;
+    matrixCsvTypePipelineGeo: string;
+    matrixCsvTypePipelinePublisher: string;
+    matrixCsvTypeBidFiltering: string;
+    matrixSourceManualUpload: string;
+    matrixSourceGmailAuto: string;
+    matrixSourceGmailManual: string;
   };
 
   campaigns: {

@@ -79,6 +79,7 @@
     - [x] `PreviewModal` language analysis/editor section copy converted (`dashboard/src/components/preview-modal/LanguageSection.tsx`)
     - [x] `PreviewModal` renderers/shared copy button strings converted (`dashboard/src/components/preview-modal/PreviewRenderers.tsx`, `dashboard/src/components/preview-modal/SharedComponents.tsx`)
     - [x] `PreviewModal` country targeting / geo mismatch section copy converted (`dashboard/src/components/preview-modal/CountrySection.tsx`)
+    - [x] Import coverage matrix headings/status/source labels converted (`dashboard/src/components/import/ImportTrackingMatrixSection.tsx`)
     - [ ] Remaining settings/admin/shared hotspots (`/settings/accounts/components/GmailReportsTab.tsx` remaining deep copy, preview subcomponents, and other shared UI components)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
