@@ -747,6 +747,8 @@ export const en: Translations = {
     uploaded: 'Uploaded',
     totalSize: 'Total Size',
     chunksSent: 'Chunks Sent',
+    fileSizeKilobytesShort: '{count} KB',
+    fileSizeMegabytesShort: '{count} MB',
     partiallyImportedRowsBeforeError: 'Partially imported: {count} rows before error',
     requiredColumnsIntro: 'Cat-Scan auto-detects report type from columns. Here are the required columns for each:',
     reportName: 'Report Name',

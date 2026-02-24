@@ -748,6 +748,8 @@ export interface Translations {
     uploaded: string;
     totalSize: string;
     chunksSent: string;
+    fileSizeKilobytesShort: string;
+    fileSizeMegabytesShort: string;
     partiallyImportedRowsBeforeError: string;
     requiredColumnsIntro: string;
     reportName: string;
