@@ -405,6 +405,10 @@ export interface Translations {
     defaultLanguageHelp: string;
     seatAccess: string;
     seatAccessHelp: string;
+    noSeatsConfigured: string;
+    seatAccessManageHelp: string;
+    legacyServiceAccountAccess: string;
+    legacyServiceAccountAccessHelp: string;
     oauthInviteNote: string;
     confirmPassword: string;
     confirmPasswordHelp: string;

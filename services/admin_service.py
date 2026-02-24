@@ -261,6 +261,77 @@ class AdminService:
     async def get_user_permissions(self, user_id: str):
         return await self._auth.get_user_permissions(user_id)
 
+    async def get_user_buyer_seat_permissions(self, user_id: str):
+        return await self._auth.get_user_buyer_seat_permissions(user_id)
+
+    async def grant_buyer_seat_permission(
+        self,
+        admin: User,
+        user_id: str,
+        buyer_id: str,
+        access_level: str,
+        client_ip: Optional[str],
+    ):
+        if access_level not in ("read", "admin"):
+            raise HTTPException(
+                status_code=400,
+                detail="Seat access level must be 'read' or 'admin'",
+            )
+
+        permission_id = str(uuid.uuid4())
+        permission = await self._auth.grant_user_buyer_seat_permission(
+            permission_id=permission_id,
+            user_id=user_id,
+            buyer_id=buyer_id,
+            access_level=access_level,
+            granted_by=admin.id,
+        )
+
+        await self._auth.log_audit(
+            audit_id=str(uuid.uuid4()),
+            action="grant_buyer_seat_permission",
+            user_id=admin.id,
+            resource_type="buyer_seat_permission",
+            resource_id=permission_id,
+            details=json.dumps(
+                {
+                    "target_user": user_id,
+                    "buyer_id": buyer_id,
+                    "access_level": access_level,
+                }
+            ),
+            ip_address=client_ip,
+        )
+
+        return permission
+
+    async def revoke_buyer_seat_permission(
+        self,
+        admin: User,
+        user_id: str,
+        buyer_id: str,
+        client_ip: Optional[str],
+    ) -> bool:
+        revoked = await self._auth.revoke_user_buyer_seat_permission(user_id, buyer_id)
+        if not revoked:
+            raise HTTPException(status_code=404, detail="Seat permission not found")
+
+        await self._auth.log_audit(
+            audit_id=str(uuid.uuid4()),
+            action="revoke_buyer_seat_permission",
+            user_id=admin.id,
+            resource_type="buyer_seat_permission",
+            details=json.dumps(
+                {
+                    "target_user": user_id,
+                    "buyer_id": buyer_id,
+                }
+            ),
+            ip_address=client_ip,
+        )
+
+        return True
+
     async def grant_permission(
         self,
         admin: User,

@@ -45,6 +45,18 @@ export interface UserPermission {
   granted_at: string | null;
 }
 
+export interface UserSeatPermission {
+  id: string;
+  user_id: string;
+  buyer_id: string;
+  access_level: "read" | "admin" | string;
+  granted_by: string | null;
+  granted_at: string | null;
+  buyer_display_name?: string | null;
+  bidder_id?: string | null;
+  active?: boolean | null;
+}
+
 export interface AuditLogEntry {
   id: string;
   user_id: string | null;
@@ -127,6 +139,36 @@ export async function deactivateUser(userId: string): Promise<{ status: string; 
 
 export async function getUserPermissions(userId: string): Promise<UserPermission[]> {
   return fetchApi<UserPermission[]>(`/admin/users/${encodeURIComponent(userId)}/permissions`);
+}
+
+export async function getUserSeatPermissions(userId: string): Promise<UserSeatPermission[]> {
+  return fetchApi<UserSeatPermission[]>(
+    `/admin/users/${encodeURIComponent(userId)}/seat-permissions`
+  );
+}
+
+export async function grantUserSeatPermission(
+  userId: string,
+  buyerId: string,
+  accessLevel: "read" | "admin" | string
+): Promise<UserSeatPermission> {
+  return fetchApi<UserSeatPermission>(`/admin/users/${encodeURIComponent(userId)}/seat-permissions`, {
+    method: "POST",
+    body: JSON.stringify({
+      buyer_id: buyerId,
+      access_level: accessLevel,
+    }),
+  });
+}
+
+export async function revokeUserSeatPermission(
+  userId: string,
+  buyerId: string
+): Promise<{ status: string; message: string }> {
+  return fetchApi<{ status: string; message: string }>(
+    `/admin/users/${encodeURIComponent(userId)}/seat-permissions/${encodeURIComponent(buyerId)}`,
+    { method: "DELETE" }
+  );
 }
 
 export async function grantPermission(

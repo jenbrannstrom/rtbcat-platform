@@ -88,6 +88,25 @@ class PermissionResponse(BaseModel):
     granted_at: Optional[str]
 
 
+class BuyerSeatPermissionRequest(BaseModel):
+    """Request to grant/update explicit buyer seat access."""
+    buyer_id: str
+    access_level: str = Field("read", description="Seat access level (read, admin)")
+
+
+class BuyerSeatPermissionResponse(BaseModel):
+    """Explicit buyer seat permission details response."""
+    id: str
+    user_id: str
+    buyer_id: str
+    access_level: str
+    granted_by: Optional[str]
+    granted_at: Optional[str]
+    buyer_display_name: Optional[str] = None
+    bidder_id: Optional[str] = None
+    active: Optional[bool] = None
+
+
 class AuditLogResponse(BaseModel):
     """Audit log entry response."""
     id: str
@@ -261,6 +280,102 @@ async def deactivate_user(
 
 
 # ==================== Permission Management Endpoints ====================
+
+@router.get("/users/{user_id}/seat-permissions", response_model=List[BuyerSeatPermissionResponse])
+async def get_user_buyer_seat_permissions(
+    user_id: str,
+    admin: User = Depends(require_admin),
+):
+    """Get a user's explicit buyer seat permissions.
+
+    Requires admin role.
+    """
+    admin_svc = get_admin_service()
+    user = await admin_svc.get_user(user_id)
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    permissions = await admin_svc.get_user_buyer_seat_permissions(user_id)
+
+    return [
+        BuyerSeatPermissionResponse(
+            id=p.id,
+            user_id=p.user_id,
+            buyer_id=p.buyer_id,
+            access_level=p.access_level,
+            granted_by=p.granted_by,
+            granted_at=p.granted_at,
+            buyer_display_name=getattr(p, "buyer_display_name", None),
+            bidder_id=getattr(p, "bidder_id", None),
+            active=getattr(p, "active", None),
+        )
+        for p in permissions
+    ]
+
+
+@router.post("/users/{user_id}/seat-permissions", response_model=BuyerSeatPermissionResponse)
+async def grant_buyer_seat_permission(
+    request: Request,
+    user_id: str,
+    perm_request: BuyerSeatPermissionRequest,
+    admin: User = Depends(require_admin),
+):
+    """Grant a user explicit access to a buyer seat.
+
+    Requires admin role. If permission already exists, it will be updated.
+    """
+    admin_svc = get_admin_service()
+    user = await admin_svc.get_user(user_id)
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    permission = await admin_svc.grant_buyer_seat_permission(
+        admin=admin,
+        user_id=user_id,
+        buyer_id=perm_request.buyer_id,
+        access_level=perm_request.access_level,
+        client_ip=_get_client_ip(request),
+    )
+
+    return BuyerSeatPermissionResponse(
+        id=permission.id,
+        user_id=permission.user_id,
+        buyer_id=permission.buyer_id,
+        access_level=permission.access_level,
+        granted_by=permission.granted_by,
+        granted_at=permission.granted_at,
+        buyer_display_name=getattr(permission, "buyer_display_name", None),
+        bidder_id=getattr(permission, "bidder_id", None),
+        active=getattr(permission, "active", None),
+    )
+
+
+@router.delete("/users/{user_id}/seat-permissions/{buyer_id}")
+async def revoke_buyer_seat_permission(
+    request: Request,
+    user_id: str,
+    buyer_id: str,
+    admin: User = Depends(require_admin),
+):
+    """Revoke a user's explicit access to a buyer seat.
+
+    Requires admin role.
+    """
+    admin_svc = get_admin_service()
+    user = await admin_svc.get_user(user_id)
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await admin_svc.revoke_buyer_seat_permission(
+        admin=admin,
+        user_id=user_id,
+        buyer_id=buyer_id,
+        client_ip=_get_client_ip(request),
+    )
+    return {"status": "success", "message": "Seat permission revoked"}
 
 @router.get("/users/{user_id}/permissions", response_model=List[PermissionResponse])
 async def get_user_permissions(
