@@ -103,6 +103,7 @@
     - [x] Generic recommendations card/panel severity/type/impact/actions/empty-state copy converted (`dashboard/src/components/recommendations/recommendation-card.tsx`, `dashboard/src/components/recommendations/recommendations-panel.tsx`)
     - [x] Import result card success/failure labels/stats/actions copy converted (`dashboard/src/components/import/ImportResultCard.tsx`)
     - [x] Import column mapping/freshness/history widgets copy converted (`dashboard/src/components/import/ColumnMappingCard.tsx`, `dashboard/src/components/import/DataFreshnessGrid.tsx`, `dashboard/src/components/import/ImportHistorySection.tsx`)
+    - [x] AI control mode settings labels/descriptions/hints converted (`dashboard/src/components/rtb/ai-control-settings.tsx`)
     - [ ] Remaining settings/admin/shared hotspots (`/settings/accounts/components/GmailReportsTab.tsx` remaining deep copy and deeper RTB/settings helper components)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.

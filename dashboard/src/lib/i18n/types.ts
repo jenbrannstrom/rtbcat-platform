@@ -1399,6 +1399,22 @@ export interface Translations {
     noIssuesDetectedDesc: string;
   };
 
+  aiControl: {
+    aiModeLabel: string;
+    title: string;
+    manualOnly: string;
+    manualShort: string;
+    manualDescription: string;
+    aiProposes: string;
+    aiShort: string;
+    assistedDescription: string;
+    autoOptimize: string;
+    autoShort: string;
+    autonomousDescription: string;
+    comingSoon: string;
+    assistedHint: string;
+  };
+
   wasteAnalysis: {
     title: string;
     subtitle: string;
