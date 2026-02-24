@@ -4,6 +4,7 @@ import Link from "next/link";
 import { BarChart3, Upload, ArrowRight, Trophy, AlertCircle, TrendingUp, Ban } from "lucide-react";
 import type { PublisherPerformance } from "@/lib/api";
 import { useAccount } from "@/contexts/account-context";
+import { useTranslation } from "@/contexts/i18n-context";
 import { toBuyerScopedPath } from "@/lib/buyer-routes";
 import { formatNumber } from "./FunnelCard";
 
@@ -18,6 +19,7 @@ interface PublisherPerformanceSectionProps {
  */
 export function PublisherPerformanceSection({ publishers, seatName }: PublisherPerformanceSectionProps) {
   const { selectedBuyerId } = useAccount();
+  const { t } = useTranslation();
   const importHref = toBuyerScopedPath("/import", selectedBuyerId);
   const hasPublisherData = publishers && publishers.length > 0;
 
@@ -28,10 +30,10 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
           <div>
             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <BarChart3 className="h-5 w-5 text-blue-600" />
-              Publisher Performance
+              {t.wasteAnalysis.publisherPerformance}
             </h3>
             <p className="text-sm text-gray-500 mt-1">
-              Where are you winning vs losing?
+              {t.wasteAnalysis.publisherPerformanceSubtitle}
             </p>
           </div>
         </div>
@@ -40,33 +42,33 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
           <div className="flex items-start gap-4">
             <Upload className="h-8 w-8 text-gray-400 flex-shrink-0" />
             <div>
-              <h4 className="font-medium text-gray-700 mb-2">Publisher Data Not Available</h4>
+              <h4 className="font-medium text-gray-700 mb-2">{t.wasteAnalysis.publisherDataNotAvailable}</h4>
               <p className="text-sm text-gray-600 mb-4">
-                Import a publisher performance report to see which publishers you're winning on.
+                {t.wasteAnalysis.importPublisherPerformanceReportPrompt}
               </p>
               <div className="p-3 bg-gray-50 rounded border border-gray-200 text-xs">
-                <p className="font-semibold text-gray-700 mb-2">Report: &quot;catscan-publisher-perf&quot;</p>
+                <p className="font-semibold text-gray-700 mb-2">{t.wasteAnalysis.publisherPerfReportName}</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="font-semibold text-gray-500 mb-1">Dimensions:</p>
+                    <p className="font-semibold text-gray-500 mb-1">{t.wasteAnalysis.dimensions}</p>
                     <ul className="text-gray-600">
-                      <li>1. Publisher ID</li>
-                      <li>2. Publisher name</li>
+                      <li>{t.wasteAnalysis.publisherPerfDimensionPublisherId}</li>
+                      <li>{t.wasteAnalysis.publisherPerfDimensionPublisherName}</li>
                     </ul>
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-500 mb-1">Metrics:</p>
+                    <p className="font-semibold text-gray-500 mb-1">{t.wasteAnalysis.metrics}</p>
                     <ul className="text-gray-600">
-                      <li>✓ Bid requests</li>
-                      <li>✓ Reached queries</li>
-                      <li>✓ Impressions</li>
+                      <li>{t.wasteAnalysis.metricBidRequests}</li>
+                      <li>{t.wasteAnalysis.metricReachedQueries}</li>
+                      <li>{t.wasteAnalysis.metricImpressions}</li>
                     </ul>
                   </div>
                 </div>
-                <p className="mt-2 text-gray-500">Schedule: <strong>Daily</strong></p>
+                <p className="mt-2 text-gray-500">{t.wasteAnalysis.schedule} <strong>{t.wasteAnalysis.daily}</strong></p>
               </div>
               <Link href={importHref} className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
-                Go to Import → <ArrowRight className="h-3 w-3" />
+                {t.wasteAnalysis.goToImport} <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
           </div>
@@ -90,18 +92,20 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
         <div>
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-blue-600" />
-            Publisher Performance
+            {t.wasteAnalysis.publisherPerformance}
             <span className="text-xs font-normal bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-              {seatName ? `Overall for ${seatName}` : "Seat overall"}
+              {seatName
+                ? t.wasteAnalysis.overallForSeat.replace("{seatName}", seatName)
+                : t.wasteAnalysis.seatOverall}
             </span>
           </h3>
           <p className="text-sm text-gray-500 mt-1">
-            Win/loss analysis across all pretargeting configs for this seat
+            {t.wasteAnalysis.publisherPerformanceSeatSummary}
           </p>
         </div>
         <div className="text-right">
           <div className="text-2xl font-bold text-gray-900">{publishers.length}</div>
-          <div className="text-sm text-gray-500">publishers</div>
+          <div className="text-sm text-gray-500">{t.wasteAnalysis.publishers}</div>
         </div>
       </div>
 
@@ -111,7 +115,7 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
           <div>
             <div className="flex items-center gap-2 text-sm font-medium text-green-700 mb-2">
               <Trophy className="h-4 w-4" />
-              High Win Rate (&gt;40%) - {highWinRate.length} publishers
+              {t.wasteAnalysis.highWinRateBucket.replace("{count}", String(highWinRate.length))}
             </div>
             <div className="bg-green-50 rounded-lg p-3">
               <div className="space-y-2">
@@ -121,8 +125,8 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
                       {pub.publisher_name}
                     </span>
                     <div className="flex items-center gap-4">
-                      <span className="text-green-600">{formatNumber(pub.impressions)} impr</span>
-                      <span className="font-medium text-green-700">{pub.win_rate.toFixed(1)}% win</span>
+                      <span className="text-green-600">{formatNumber(pub.impressions)} {t.wasteAnalysis.imprShort}</span>
+                      <span className="font-medium text-green-700">{pub.win_rate.toFixed(1)}% {t.wasteAnalysis.winShort}</span>
                     </div>
                   </div>
                 ))}
@@ -136,7 +140,7 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
           <div>
             <div className="flex items-center gap-2 text-sm font-medium text-yellow-700 mb-2">
               <AlertCircle className="h-4 w-4" />
-              Moderate Win Rate (20-40%) - {moderateWinRate.length} publishers
+              {t.wasteAnalysis.moderateWinRateBucket.replace("{count}", String(moderateWinRate.length))}
             </div>
             <div className="bg-yellow-50 rounded-lg p-3">
               <div className="space-y-2">
@@ -146,8 +150,8 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
                       {pub.publisher_name}
                     </span>
                     <div className="flex items-center gap-4">
-                      <span className="text-yellow-600">{formatNumber(pub.impressions)} impr</span>
-                      <span className="font-medium text-yellow-700">{pub.win_rate.toFixed(1)}% win</span>
+                      <span className="text-yellow-600">{formatNumber(pub.impressions)} {t.wasteAnalysis.imprShort}</span>
+                      <span className="font-medium text-yellow-700">{pub.win_rate.toFixed(1)}% {t.wasteAnalysis.winShort}</span>
                     </div>
                   </div>
                 ))}
@@ -161,7 +165,7 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
           <div>
             <div className="flex items-center gap-2 text-sm font-medium text-orange-700 mb-2">
               <TrendingUp className="h-4 w-4" />
-              Low Win Rate (&lt;20%) - {lowWinRate.length} publishers
+              {t.wasteAnalysis.lowWinRateBucket.replace("{count}", String(lowWinRate.length))}
             </div>
             <div className="bg-orange-50 rounded-lg p-3">
               <div className="space-y-2">
@@ -171,8 +175,8 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
                       {pub.publisher_name}
                     </span>
                     <div className="flex items-center gap-4">
-                      <span className="text-orange-600">{formatNumber(pub.impressions)} impr</span>
-                      <span className="font-medium text-orange-700">{pub.win_rate.toFixed(1)}% win</span>
+                      <span className="text-orange-600">{formatNumber(pub.impressions)} {t.wasteAnalysis.imprShort}</span>
+                      <span className="font-medium text-orange-700">{pub.win_rate.toFixed(1)}% {t.wasteAnalysis.winShort}</span>
                     </div>
                   </div>
                 ))}
@@ -186,7 +190,9 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
           <div>
             <div className="flex items-center gap-2 text-sm font-medium text-red-700 mb-2">
               <Ban className="h-4 w-4" />
-              Potentially blocked by pretargeting (0 reached, &gt;{formatNumber(blockedTrafficThreshold)} bids) - {blocked.length} publishers
+              {t.wasteAnalysis.potentiallyBlockedBucket
+                .replace("{threshold}", formatNumber(blockedTrafficThreshold))
+                .replace("{count}", String(blocked.length))}
             </div>
             <div className="bg-red-50 rounded-lg p-3">
               <div className="flex flex-wrap gap-2">
@@ -194,21 +200,21 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
                   <span
                     key={pub.publisher_id}
                     className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs"
-                    title={`${formatNumber(pub.bid_requests ?? 0)} bid requests`}
+                    title={t.wasteAnalysis.bidRequestsTitle.replace("{count}", formatNumber(pub.bid_requests ?? 0))}
                   >
                     {pub.publisher_name.length > 25 ? pub.publisher_name.slice(0, 25) + '...' : pub.publisher_name}
                   </span>
                 ))}
               </div>
               <p className="text-xs text-red-600 mt-2">
-                These publishers have bid requests but zero reached queries. This may be intentional; review against current pretargeting goals.
+                {t.wasteAnalysis.blockedPublishersHint}
               </p>
             </div>
           </div>
         )}
         {blocked.length === 0 && (
           <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">
-            No high-volume blocked publishers detected in this seat snapshot.
+            {t.wasteAnalysis.noHighVolumeBlockedPublishers}
           </div>
         )}
       </div>

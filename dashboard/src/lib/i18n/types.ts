@@ -1098,6 +1098,28 @@ export interface Translations {
     schedule: string;
     dailyYesterday: string;
     goToImport: string;
+    publisherPerformance: string;
+    publisherPerformanceSubtitle: string;
+    publisherDataNotAvailable: string;
+    importPublisherPerformanceReportPrompt: string;
+    publisherPerfReportName: string;
+    dimensions: string;
+    publisherPerfDimensionPublisherId: string;
+    publisherPerfDimensionPublisherName: string;
+    metricBidRequests: string;
+    daily: string;
+    overallForSeat: string;
+    seatOverall: string;
+    publisherPerformanceSeatSummary: string;
+    publishers: string;
+    highWinRateBucket: string;
+    moderateWinRateBucket: string;
+    lowWinRateBucket: string;
+    imprShort: string;
+    potentiallyBlockedBucket: string;
+    bidRequestsTitle: string;
+    blockedPublishersHint: string;
+    noHighVolumeBlockedPublishers: string;
   };
 
   setup: {
