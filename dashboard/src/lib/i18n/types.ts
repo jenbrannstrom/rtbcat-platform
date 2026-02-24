@@ -859,6 +859,8 @@ export interface Translations {
     campaignNamePlaceholder: string;
     descriptionOptionalPlaceholder: string;
     aiGenerated: string;
+    aiBadgeShort: string;
+    aiConfidenceTooltip: string;
     periodYesterday: string;
     periodLast7Days: string;
     periodLast30Days: string;
@@ -870,6 +872,9 @@ export interface Translations {
     noCreativesInCampaign: string;
     browseCreatives: string;
     notAvailable: string;
+    noPerformanceDataForPeriod: string;
+    clustering: string;
+    autoClusterWithAi: string;
   };
 
   creatives: {

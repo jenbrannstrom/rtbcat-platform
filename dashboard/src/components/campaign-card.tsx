@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useAccount } from "@/contexts/account-context";
+import { useTranslation } from "@/contexts/i18n-context";
 import { toBuyerScopedPath } from "@/lib/buyer-routes";
 
 interface CampaignPerformance {
@@ -50,6 +51,7 @@ function formatCurrency(amount: number): string {
 
 export function CampaignCard({ campaign, period }: CampaignCardProps) {
   const { selectedBuyerId } = useAccount();
+  const { t } = useTranslation();
   const perf = campaign.performance;
   const campaignHref = toBuyerScopedPath(`/campaigns/${campaign.id}`, selectedBuyerId);
 
@@ -64,9 +66,12 @@ export function CampaignCard({ campaign, period }: CampaignCardProps) {
             {campaign.ai_generated && campaign.ai_confidence && (
               <span
                 className="text-xs px-2 py-1 rounded bg-purple-100 text-purple-700"
-                title={`AI confidence: ${Math.round(campaign.ai_confidence * 100)}%`}
+                title={t.campaigns.aiConfidenceTooltip.replace(
+                  "{pct}",
+                  String(Math.round(campaign.ai_confidence * 100))
+                )}
               >
-                AI
+                {t.campaigns.aiBadgeShort}
               </span>
             )}
             {campaign.status !== "active" && (
@@ -78,7 +83,9 @@ export function CampaignCard({ campaign, period }: CampaignCardProps) {
         </div>
 
         <p className="text-sm text-gray-500 mb-4">
-          {campaign.creative_count} creative{campaign.creative_count !== 1 ? "s" : ""}
+          {campaign.creative_count !== 1
+            ? t.campaigns.creativeCountPlural.replace("{count}", String(campaign.creative_count))
+            : t.campaigns.creativeCount.replace("{count}", String(campaign.creative_count))}
           {campaign.clustering_method && (
             <span className="text-gray-400 ml-2">
               ({campaign.clustering_method})
@@ -89,20 +96,20 @@ export function CampaignCard({ campaign, period }: CampaignCardProps) {
         {perf && (
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
-              <span className="text-gray-500 block">Spend</span>
+              <span className="text-gray-500 block">{t.campaigns.spend}</span>
               <p className="font-medium text-gray-900">
                 {formatCurrency(perf.spend)}
               </p>
             </div>
             <div>
-              <span className="text-gray-500 block">Impressions</span>
+              <span className="text-gray-500 block">{t.campaigns.impressions}</span>
               <p className="font-medium text-gray-900">
                 {formatNumber(perf.impressions)}
               </p>
             </div>
             {perf.win_rate !== null && (
               <div>
-                <span className="text-gray-500 block">Win Rate</span>
+                <span className="text-gray-500 block">{t.dashboard.winRate}</span>
                 <p className="font-medium text-gray-900">
                   {perf.win_rate.toFixed(2)}%
                 </p>
@@ -110,7 +117,7 @@ export function CampaignCard({ campaign, period }: CampaignCardProps) {
             )}
             {perf.ctr !== null && (
               <div>
-                <span className="text-gray-500 block">CTR</span>
+                <span className="text-gray-500 block">{t.creatives.ctr}</span>
                 <p className="font-medium text-gray-900">
                   {perf.ctr.toFixed(2)}%
                 </p>
@@ -121,7 +128,7 @@ export function CampaignCard({ campaign, period }: CampaignCardProps) {
 
         {!perf && (
           <div className="text-sm text-gray-400 italic">
-            No performance data for {period}
+            {t.campaigns.noPerformanceDataForPeriod.replace("{period}", period)}
           </div>
         )}
       </div>
@@ -140,6 +147,7 @@ export function AutoClusterButton({
   loading = false,
   disabled = false,
 }: AutoClusterButtonProps) {
+  const { t } = useTranslation();
   return (
     <button
       onClick={onClick}
@@ -149,12 +157,12 @@ export function AutoClusterButton({
       {loading ? (
         <>
           <span className="animate-spin">&#9696;</span>
-          Clustering...
+          {t.campaigns.clustering}
         </>
       ) : (
         <>
           <span>&#128300;</span>
-          Auto-Cluster with AI
+          {t.campaigns.autoClusterWithAi}
         </>
       )}
     </button>

@@ -858,6 +858,8 @@ export const en: Translations = {
     campaignNamePlaceholder: 'Campaign name',
     descriptionOptionalPlaceholder: 'Description (optional)',
     aiGenerated: 'AI Generated',
+    aiBadgeShort: 'AI',
+    aiConfidenceTooltip: 'AI confidence: {pct}%',
     periodYesterday: 'Yesterday',
     periodLast7Days: 'Last 7 days',
     periodLast30Days: 'Last 30 days',
@@ -869,6 +871,9 @@ export const en: Translations = {
     noCreativesInCampaign: 'No creatives in this campaign',
     browseCreatives: 'Browse Creatives',
     notAvailable: 'N/A',
+    noPerformanceDataForPeriod: 'No performance data for {period}',
+    clustering: 'Clustering...',
+    autoClusterWithAi: 'Auto-Cluster with AI',
   },
 
   creatives: {
