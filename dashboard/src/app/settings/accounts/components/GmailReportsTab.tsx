@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { getGmailStatus, triggerGmailImport } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/contexts/i18n-context";
 
 // Import progress phases
 const IMPORT_PHASES = [
@@ -34,6 +35,7 @@ type ImportPhase = typeof IMPORT_PHASES[number]['id'] | 'idle' | 'complete';
  */
 export function GmailReportsTab() {
   const queryClient = useQueryClient();
+  const { t, language } = useTranslation();
   const [importMessage, setImportMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [importPhase, setImportPhase] = useState<ImportPhase>('idle');
   const phaseTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -81,17 +83,31 @@ export function GmailReportsTab() {
     onSuccess: (data) => {
       setImportPhase('complete');
       if (data.queued) {
-        setImportMessage({ type: "success", text: data.message || "Import started in the background" });
+        setImportMessage({
+          type: "success",
+          text: data.message || t.setup.gmailImportStartedInBackground,
+        });
       } else if (data.success) {
         if (data.files_imported > 0) {
-          setImportMessage({ type: "success", text: `Imported ${data.files_imported} file(s) from ${data.emails_processed} email(s)` });
+          setImportMessage({
+            type: "success",
+            text: t.setup.gmailImportedFilesFromEmails
+              .replace("{files}", String(data.files_imported))
+              .replace("{emails}", String(data.emails_processed)),
+          });
         } else if (data.emails_processed === 0) {
-          setImportMessage({ type: "success", text: "No new report emails found" });
+          setImportMessage({ type: "success", text: t.setup.noNewFiles });
         } else {
-          setImportMessage({ type: "success", text: `Processed ${data.emails_processed} email(s), no new files to import` });
+          setImportMessage({
+            type: "success",
+            text: t.setup.gmailProcessedEmailsNoNewFiles.replace(
+              "{emails}",
+              String(data.emails_processed)
+            ),
+          });
         }
       } else {
-        setImportMessage({ type: "error", text: data.errors?.[0] || "Import failed" });
+        setImportMessage({ type: "error", text: data.errors?.[0] || t.setup.gmailImportFailed });
       }
       refetchStatus();
       queryClient.invalidateQueries({ queryKey: ["stats"] });
@@ -102,14 +118,17 @@ export function GmailReportsTab() {
     },
     onError: (error) => {
       setImportPhase('idle');
-      setImportMessage({ type: "error", text: error instanceof Error ? error.message : "Import failed" });
+      setImportMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : t.setup.gmailImportFailed,
+      });
       setPollStatus(false);
       setTimeout(() => setImportMessage(null), 8000);
     },
   });
 
   const formatRelativeTime = (isoString: string | null) => {
-    if (!isoString) return "Never";
+    if (!isoString) return t.common.never;
     const date = new Date(isoString);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -117,11 +136,11 @@ export function GmailReportsTab() {
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins} minute${diffMins === 1 ? "" : "s"} ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
-    if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
-    return date.toLocaleDateString();
+    if (diffMins < 1) return t.setup.gmailJustNow;
+    if (diffMins < 60) return t.setup.gmailMinutesAgo.replace("{count}", String(diffMins));
+    if (diffHours < 24) return t.setup.gmailHoursAgo.replace("{count}", String(diffHours));
+    if (diffDays < 7) return t.setup.gmailDaysAgo.replace("{count}", String(diffDays));
+    return date.toLocaleDateString(language);
   };
 
   const isConfigured = gmailStatus?.configured === true;
@@ -171,10 +190,9 @@ export function GmailReportsTab() {
             <Mail className="h-6 w-6 text-blue-600" />
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-medium text-gray-900">Auto-fetch Reports from Gmail</h3>
+            <h3 className="text-lg font-medium text-gray-900">{t.setup.autoFetchFromGmail}</h3>
             <p className="text-sm text-gray-600 mt-1">
-              Google Authorized Buyers can email scheduled reports directly to you.
-              Configure Gmail access to automatically import these reports.
+              {t.setup.autoFetchFromGmailDesc}
             </p>
           </div>
         </div>
@@ -182,34 +200,28 @@ export function GmailReportsTab() {
 
       {/* How it works */}
       <div className="card p-6">
-        <h4 className="font-medium text-gray-900 mb-4">How it works</h4>
+        <h4 className="font-medium text-gray-900 mb-4">{t.setup.howItWorks}</h4>
         <div className="grid md:grid-cols-3 gap-4">
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="flex items-center gap-2 mb-2">
               <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</span>
-              <span className="font-medium text-gray-900">Schedule Reports</span>
+              <span className="font-medium text-gray-900">{t.setup.scheduleReports}</span>
             </div>
-            <p className="text-sm text-gray-600">
-              In Authorized Buyers, create scheduled reports with email delivery to your Gmail.
-            </p>
+            <p className="text-sm text-gray-600">{t.setup.scheduleReportsDesc}</p>
           </div>
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="flex items-center gap-2 mb-2">
               <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">2</span>
-              <span className="font-medium text-gray-900">Connect Gmail</span>
+              <span className="font-medium text-gray-900">{t.setup.connectGmail}</span>
             </div>
-            <p className="text-sm text-gray-600">
-              Grant Cat-Scan read-only access to your Gmail to fetch report attachments.
-            </p>
+            <p className="text-sm text-gray-600">{t.setup.connectGmailDesc}</p>
           </div>
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="flex items-center gap-2 mb-2">
               <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">3</span>
-              <span className="font-medium text-gray-900">Auto Import</span>
+              <span className="font-medium text-gray-900">{t.setup.autoImport}</span>
             </div>
-            <p className="text-sm text-gray-600">
-              Cat-Scan checks your inbox daily and imports new CSV attachments automatically.
-            </p>
+            <p className="text-sm text-gray-600">{t.setup.autoImportDesc}</p>
           </div>
         </div>
       </div>
@@ -217,7 +229,7 @@ export function GmailReportsTab() {
       {/* Gmail Connection Status */}
       <div className="card p-6">
         <div className="flex items-center justify-between mb-4">
-          <h4 className="font-medium text-gray-900">Gmail Connection</h4>
+          <h4 className="font-medium text-gray-900">{t.setup.gmailConnection}</h4>
           {statusLoading ? (
             <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
           ) : (
@@ -227,7 +239,7 @@ export function GmailReportsTab() {
               isConfigured ? "bg-yellow-100 text-yellow-800" :
               "bg-gray-100 text-gray-600"
             )}>
-              {isConnected ? "Connected" : isConfigured ? "Not authorized" : "Not configured"}
+              {isConnected ? t.setup.connected : isConfigured ? t.setup.notAuthorized : t.setup.notConfigured}
             </span>
           )}
         </div>
@@ -237,21 +249,21 @@ export function GmailReportsTab() {
             {/* Status display */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="text-xs text-gray-500 mb-1">Last Import</p>
+                <p className="text-xs text-gray-500 mb-1">{t.setup.lastImport}</p>
                 <p className="font-medium text-gray-900">
-                  {isImportRunning ? "Import in progress" : formatRelativeTime(gmailStatus?.last_run || null)}
+                  {isImportRunning ? t.setup.gmailImportInProgress : formatRelativeTime(gmailStatus?.last_run || null)}
                 </p>
               </div>
               <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="text-xs text-gray-500 mb-1">Last Success</p>
+                <p className="text-xs text-gray-500 mb-1">{t.setup.lastSuccess}</p>
                 <p className="font-medium text-green-600">{formatRelativeTime(gmailStatus?.last_success || null)}</p>
               </div>
               <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="text-xs text-gray-500 mb-1">Total Imports</p>
+                <p className="text-xs text-gray-500 mb-1">{t.setup.totalImports}</p>
                 <p className="font-bold text-xl text-gray-900">{gmailStatus?.total_imports || 0}</p>
               </div>
               <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="text-xs text-gray-500 mb-1">Unread Reports</p>
+                <p className="text-xs text-gray-500 mb-1">{t.setup.gmailUnreadReports}</p>
                 <p
                   className={cn(
                     "font-bold text-xl",
@@ -262,8 +274,8 @@ export function GmailReportsTab() {
                 </p>
               </div>
               <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="text-xs text-gray-500 mb-1">Schedule</p>
-                <p className="font-medium text-gray-900">Daily (cron)</p>
+                <p className="text-xs text-gray-500 mb-1">{t.setup.schedule}</p>
+                <p className="font-medium text-gray-900">{t.setup.dailyCron}</p>
               </div>
             </div>
 
@@ -272,8 +284,9 @@ export function GmailReportsTab() {
                 <div className="flex items-start gap-2">
                   <Inbox className="h-4 w-4 text-amber-600 mt-0.5" />
                   <div className="text-sm text-amber-900">
-                    Last scan detected {gmailStatus?.last_unread_report_emails} unread report email(s).
-                    Use <strong>Import Now</strong> to process them immediately.
+                    {t.setup.gmailUnreadReportsDetected
+                      .replace("{count}", String(gmailStatus?.last_unread_report_emails || 0))}{" "}
+                    {t.setup.gmailUseImportNowToProcess}
                   </div>
                 </div>
               </div>
@@ -285,7 +298,7 @@ export function GmailReportsTab() {
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5" />
                   <div className="text-sm text-red-800">
-                    <strong>Last error:</strong> {gmailStatus.last_error}
+                    <strong>{t.setup.lastError}</strong> {gmailStatus.last_error}
                   </div>
                 </div>
               </div>
@@ -305,23 +318,23 @@ export function GmailReportsTab() {
                   {importMutation.isPending ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Importing...
+                      {t.setup.checkingGmail}
                     </>
                   ) : isImportRunning ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Import in progress...
+                      {t.setup.gmailImportInProgress}...
                     </>
                   ) : (
                     <>
                       <RefreshCw className="h-4 w-4" />
-                      Import Now
+                      {t.setup.importNow}
                     </>
                   )}
                 </button>
                 {!importMutation.isPending && !isImportRunning && (
                   <p className="text-sm text-gray-500">
-                    Check for new report emails and import them immediately
+                    {t.setup.checkForNewEmails}
                   </p>
                 )}
               </div>
@@ -331,7 +344,7 @@ export function GmailReportsTab() {
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <div className="flex items-center gap-3 mb-3">
                     <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
-                    <span className="font-medium text-blue-900">Import in progress...</span>
+                    <span className="font-medium text-blue-900">{t.setup.gmailImportInProgress}...</span>
                   </div>
 
                   {/* Phase steps */}
@@ -372,7 +385,7 @@ export function GmailReportsTab() {
                   </div>
 
                   <p className="text-xs text-blue-600 mt-3">
-                    This may take a minute depending on the number of report emails.
+                    {t.setup.gmailImportMayTakeMinute}
                   </p>
                 </div>
               )}
@@ -383,15 +396,15 @@ export function GmailReportsTab() {
           <div className="p-6 border-2 border-dashed border-gray-200 rounded-lg text-center">
             <Inbox className="h-10 w-10 text-gray-300 mx-auto mb-3" />
             <h5 className="font-medium text-gray-700 mb-2">
-              {isConfigured ? "Gmail Authorization Required" : "Gmail Not Configured"}
+              {isConfigured ? t.setup.gmailAuthorizationRequired : t.setup.gmailNotConfiguredTitle}
             </h5>
             <p className="text-sm text-gray-500 mb-4 max-w-md mx-auto">
               {isConfigured ? (
-                <>Run the import script manually first to complete OAuth authorization:<br />
+                <>{t.setup.gmailRunImportScriptToAuthorize}<br />
                 <code className="bg-gray-100 px-2 py-1 rounded text-xs">python scripts/gmail_import.py</code></>
               ) : (
-                <>Follow the INSTALL.md guide to set up Gmail API credentials.<br />
-                Upload <code className="bg-gray-100 px-1 rounded">gmail-oauth-client.json</code> to <code className="bg-gray-100 px-1 rounded">~/.catscan/credentials/</code></>
+                <>{t.setup.gmailFollowInstallGuide}<br />
+                {t.setup.gmailUploadOauthClientPrefix} <code className="bg-gray-100 px-1 rounded">gmail-oauth-client.json</code> {t.setup.gmailUploadOauthClientSuffix} <code className="bg-gray-100 px-1 rounded">~/.catscan/credentials/</code></>
               )}
             </p>
             <a
@@ -400,7 +413,7 @@ export function GmailReportsTab() {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
             >
-              View Setup Guide
+              {t.setup.viewSetupGuide}
               <ExternalLink className="h-3 w-3" />
             </a>
           </div>
