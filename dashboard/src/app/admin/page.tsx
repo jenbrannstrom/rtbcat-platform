@@ -66,7 +66,7 @@ function AdminDashboard() {
       ? t.admin.adminRole
       : user?.role === "user"
         ? t.admin.userRole
-        : (user?.role ?? "-");
+        : (user?.role ?? t.common.none);
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -93,7 +93,7 @@ function AdminDashboard() {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">{stat.name}</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {isLoading ? "..." : stat.value}
+                  {isLoading ? t.common.loading : stat.value}
                 </p>
               </div>
             </div>
@@ -113,7 +113,7 @@ function AdminDashboard() {
           )}
         </p>
         {isLoading ? (
-          <p className="text-sm text-gray-500">...</p>
+          <p className="text-sm text-gray-500">{t.common.loading}</p>
         ) : reportAlerts.length === 0 ? (
           <p className="text-sm text-green-700">{t.admin.reportHealthNoAlerts}</p>
         ) : (
@@ -132,13 +132,13 @@ function AdminDashboard() {
                   <tr key={seat.buyer_id} className="border-t border-gray-100">
                     <td className="py-2 pr-4 text-gray-900">{seat.buyer_id}</td>
                     <td className="py-2 pr-4 text-gray-600">
-                      {seat.latest_date ?? "-"}
+                      {seat.latest_date ?? t.common.none}
                     </td>
                     <td className="py-2 pr-4 text-amber-700">
-                      {seat.missing.join(", ") || "-"}
+                      {seat.missing.join(", ") || t.common.none}
                     </td>
                     <td className="py-2 pr-4 text-red-700">
-                      {seat.failed.join(", ") || "-"}
+                      {seat.failed.join(", ") || t.common.none}
                     </td>
                   </tr>
                 ))}
@@ -258,7 +258,7 @@ function AdminDashboard() {
           <div>
             <p className="text-sm text-gray-500">{t.admin.displayName}</p>
             <p className="font-medium text-gray-900">
-              {user?.display_name || "-"}
+              {user?.display_name || t.common.none}
             </p>
           </div>
           <div>
