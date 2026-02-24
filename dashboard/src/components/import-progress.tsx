@@ -1,10 +1,14 @@
+"use client";
+
 import { Cloud, Loader2 } from "lucide-react";
+import { useTranslation } from "@/contexts/i18n-context";
 
 interface ImportProgressProps {
   progress: number; // 0-100
 }
 
 export function ImportProgress({ progress }: ImportProgressProps) {
+  const { t } = useTranslation();
   return (
     <div className="bg-white border rounded-lg p-8">
       <div className="text-center mb-6">
@@ -16,10 +20,10 @@ export function ImportProgress({ progress }: ImportProgressProps) {
           )}
         </div>
         <h3 className="text-lg font-semibold text-gray-900 mb-2">
-          Importing Data...
+          {t.import.importingData}
         </h3>
         <p className="text-sm text-gray-600">
-          Please wait while we process your file
+          {t.import.pleaseWaitProcessingFile}
         </p>
       </div>
 

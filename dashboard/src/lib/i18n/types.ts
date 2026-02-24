@@ -806,6 +806,15 @@ export interface Translations {
     matrixSourceManualUpload: string;
     matrixSourceGmailAuto: string;
     matrixSourceGmailManual: string;
+    dropFileToUpload: string;
+    orClickToBrowse: string;
+    maxFileSizeMb: string;
+    pleaseUploadCsvFile: string;
+    fileSizeExceedsLimit: string;
+    noDataToPreview: string;
+    previewFirstRowsCount: string;
+    importingData: string;
+    pleaseWaitProcessingFile: string;
   };
 
   campaigns: {

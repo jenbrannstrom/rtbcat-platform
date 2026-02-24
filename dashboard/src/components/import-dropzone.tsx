@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { Upload } from "lucide-react";
+import { useTranslation } from "@/contexts/i18n-context";
 
 interface ImportDropzoneProps {
   onFileSelect: (file: File) => void;
@@ -12,17 +13,18 @@ export function ImportDropzone({
   onFileSelect,
   maxSizeMB = 500,
 }: ImportDropzoneProps) {
+  const { t } = useTranslation();
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const validateFile = (file: File): string | null => {
     if (!file.name.endsWith(".csv")) {
-      return "Please upload a .csv file";
+      return t.import.pleaseUploadCsvFile;
     }
 
     const maxBytes = maxSizeMB * 1024 * 1024;
     if (file.size > maxBytes) {
-      return `File size exceeds ${maxSizeMB}MB limit`;
+      return t.import.fileSizeExceedsLimit.replace("{size}", String(maxSizeMB));
     }
 
     return null;
@@ -96,15 +98,17 @@ export function ImportDropzone({
           />
         </div>
         <p className="text-lg font-medium text-gray-900 mb-2">
-          {isDragging ? "Drop file to upload" : "Drag & drop CSV file here"}
+          {isDragging ? t.import.dropFileToUpload : t.import.dragAndDrop}
         </p>
-        <p className="text-sm text-gray-600">or click to browse</p>
-        <p className="text-xs text-gray-500 mt-2">Max file size: {maxSizeMB}MB</p>
+        <p className="text-sm text-gray-600">{t.import.orClickToBrowse}</p>
+        <p className="text-xs text-gray-500 mt-2">
+          {t.import.maxFileSizeMb.replace("{size}", String(maxSizeMB))}
+        </p>
       </div>
 
       {error && (
         <div className="mt-3 text-sm text-red-600 flex items-center gap-1">
-          <span>Error:</span> {error}
+          <span>{t.common.error}:</span> {error}
         </div>
       )}
     </div>

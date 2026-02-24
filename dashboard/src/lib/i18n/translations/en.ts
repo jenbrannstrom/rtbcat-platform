@@ -805,6 +805,15 @@ export const en: Translations = {
     matrixSourceManualUpload: 'Manual Upload',
     matrixSourceGmailAuto: 'Gmail Auto',
     matrixSourceGmailManual: 'Gmail Manual',
+    dropFileToUpload: 'Drop file to upload',
+    orClickToBrowse: 'or click to browse',
+    maxFileSizeMb: 'Max file size: {size}MB',
+    pleaseUploadCsvFile: 'Please upload a .csv file',
+    fileSizeExceedsLimit: 'File size exceeds {size}MB limit',
+    noDataToPreview: 'No data to preview',
+    previewFirstRowsCount: 'Preview (first {count} rows)',
+    importingData: 'Importing Data...',
+    pleaseWaitProcessingFile: 'Please wait while we process your file',
   },
 
   campaigns: {
