@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { AlertTriangle, Save, Info } from "lucide-react";
+import { useTranslation } from "@/contexts/i18n-context";
 
 interface RetentionConfig {
   raw_retention_days: number;
@@ -19,6 +20,7 @@ interface StorageStats {
 }
 
 export default function RetentionSettingsPage() {
+  const { t } = useTranslation();
   const [rawDays, setRawDays] = useState(90);
   const [summaryDays, setSummaryDays] = useState(365);
   const [autoAggregateDays, setAutoAggregateDays] = useState(30);
@@ -73,12 +75,12 @@ export default function RetentionSettingsPage() {
       });
 
       if (response.ok) {
-        setMessage({ type: "success", text: "Retention settings saved successfully." });
+        setMessage({ type: "success", text: t.retentionPage.saveSuccess });
       } else {
-        throw new Error("Failed to save settings");
+        throw new Error(t.retentionPage.saveFailed);
       }
     } catch (error) {
-      setMessage({ type: "error", text: "Failed to save retention settings." });
+      setMessage({ type: "error", text: t.retentionPage.saveFailed });
     } finally {
       setSaving(false);
     }
@@ -97,7 +99,10 @@ export default function RetentionSettingsPage() {
         const result = await response.json();
         setMessage({
           type: "success",
-          text: `Retention job completed: ${result.aggregated_rows} rows aggregated, ${result.deleted_raw_rows} raw rows deleted.`,
+          text: t.retentionPage.runCompleted.replace(
+            "{aggregatedRows}",
+            String(result.aggregated_rows)
+          ).replace("{deletedRawRows}", String(result.deleted_raw_rows)),
         });
         // Reload stats
         const statsResponse = await fetch("/api/retention/stats");
@@ -105,10 +110,10 @@ export default function RetentionSettingsPage() {
           setStats(await statsResponse.json());
         }
       } else {
-        throw new Error("Failed to run retention job");
+        throw new Error(t.retentionPage.runFailed);
       }
     } catch (error) {
-      setMessage({ type: "error", text: "Failed to run retention job." });
+      setMessage({ type: "error", text: t.retentionPage.runFailed });
     } finally {
       setSaving(false);
     }
@@ -128,35 +133,39 @@ export default function RetentionSettingsPage() {
 
   return (
     <div className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-2">Data Retention Settings</h1>
+      <h1 className="text-2xl font-bold mb-2">{t.retentionPage.title}</h1>
       <p className="text-gray-600 mb-6">
-        Configure how long performance data is retained.
+        {t.retentionPage.subtitle}
       </p>
 
       {/* Storage Stats */}
       {stats && (
         <div className="bg-gray-50 rounded-lg p-4 mb-6">
-          <h2 className="font-semibold text-gray-900 mb-3">Current Storage</h2>
+          <h2 className="font-semibold text-gray-900 mb-3">{t.retentionPage.currentStorage}</h2>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <p className="text-gray-600">Raw Performance Rows</p>
+              <p className="text-gray-600">{t.retentionPage.rawPerformanceRows}</p>
               <p className="font-medium text-gray-900">
                 {stats.raw_rows?.toLocaleString() || 0}
               </p>
               {stats.raw_earliest_date && stats.raw_latest_date && (
                 <p className="text-xs text-gray-500">
-                  {stats.raw_earliest_date} to {stats.raw_latest_date}
+                  {t.retentionPage.dateRangeSpan
+                    .replace("{start}", stats.raw_earliest_date)
+                    .replace("{end}", stats.raw_latest_date)}
                 </p>
               )}
             </div>
             <div>
-              <p className="text-gray-600">Daily Summary Rows</p>
+              <p className="text-gray-600">{t.retentionPage.dailySummaryRows}</p>
               <p className="font-medium text-gray-900">
                 {stats.summary_rows?.toLocaleString() || 0}
               </p>
               {stats.summary_earliest_date && stats.summary_latest_date && (
                 <p className="text-xs text-gray-500">
-                  {stats.summary_earliest_date} to {stats.summary_latest_date}
+                  {t.retentionPage.dateRangeSpan
+                    .replace("{start}", stats.summary_earliest_date)
+                    .replace("{end}", stats.summary_latest_date)}
                 </p>
               )}
             </div>
@@ -181,62 +190,61 @@ export default function RetentionSettingsPage() {
         {/* Raw Data Retention */}
         <div>
           <label className="block text-sm font-medium mb-2">
-            Keep detailed data for:
+            {t.retentionPage.keepDetailedDataFor}
           </label>
           <select
             value={rawDays}
             onChange={(e) => setRawDays(Number(e.target.value))}
             className="border rounded px-3 py-2 w-full"
           >
-            <option value={30}>30 days</option>
-            <option value={60}>60 days</option>
-            <option value={90}>90 days (recommended)</option>
-            <option value={180}>180 days</option>
-            <option value={365}>1 year</option>
+            <option value={30}>{t.retentionPage.option30Days}</option>
+            <option value={60}>{t.retentionPage.option60Days}</option>
+            <option value={90}>{t.retentionPage.option90DaysRecommended}</option>
+            <option value={180}>{t.retentionPage.option180Days}</option>
+            <option value={365}>{t.retentionPage.option1Year}</option>
           </select>
           <p className="text-sm text-gray-500 mt-1">
-            Detailed data shows performance by app, country, and creative.
-            After this period, data is aggregated into daily summaries.
+            {t.retentionPage.detailedDataHelp}
           </p>
         </div>
 
         {/* Summary Retention */}
         <div>
           <label className="block text-sm font-medium mb-2">
-            Keep daily summaries for:
+            {t.retentionPage.keepDailySummariesFor}
           </label>
           <select
             value={summaryDays}
             onChange={(e) => setSummaryDays(Number(e.target.value))}
             className="border rounded px-3 py-2 w-full"
           >
-            <option value={180}>6 months</option>
-            <option value={365}>1 year (recommended)</option>
-            <option value={730}>2 years</option>
-            <option value={-1}>Forever</option>
+            <option value={180}>{t.retentionPage.option6Months}</option>
+            <option value={365}>{t.retentionPage.option1YearRecommended}</option>
+            <option value={730}>{t.retentionPage.option2Years}</option>
+            <option value={-1}>{t.retentionPage.optionForever}</option>
           </select>
           <p className="text-sm text-gray-500 mt-1">
-            Summaries show daily totals per creative. Good for trend analysis.
+            {t.retentionPage.summaryDataHelp}
           </p>
         </div>
 
         {/* Auto-Aggregation */}
         <div>
           <label className="block text-sm font-medium mb-2">
-            Auto-aggregate after:
+            {t.retentionPage.autoAggregateAfter}
           </label>
           <select
             value={autoAggregateDays}
             onChange={(e) => setAutoAggregateDays(Number(e.target.value))}
             className="border rounded px-3 py-2 w-full"
           >
-            <option value={7}>7 days</option>
-            <option value={14}>14 days</option>
-            <option value={30}>30 days (recommended)</option>
-            <option value={60}>60 days</option>
+            <option value={7}>{t.retentionPage.option7Days}</option>
+            <option value={14}>{t.retentionPage.option14Days}</option>
+            <option value={30}>{t.retentionPage.option30DaysRecommended}</option>
+            <option value={60}>{t.retentionPage.option60Days}</option>
           </select>
           <p className="text-sm text-gray-500 mt-1">
-            Create summaries for data older than this before deletion.
+            {t.retentionPage.autoAggregateHelp}
           </p>
         </div>
 
@@ -245,8 +253,7 @@ export default function RetentionSettingsPage() {
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
             <p className="text-sm text-yellow-800">
-              Reducing retention will delete old data permanently.
-              This cannot be undone.
+              {t.retentionPage.warningIrreversible}
             </p>
           </div>
         </div>
@@ -256,12 +263,12 @@ export default function RetentionSettingsPage() {
           <div className="flex items-start gap-2">
             <Info className="h-5 w-5 text-blue-600 mt-0.5" />
             <div className="text-sm text-blue-800">
-              <p className="font-medium mb-1">How it works:</p>
+              <p className="font-medium mb-1">{t.retentionPage.howItWorks}</p>
               <ul className="list-disc list-inside space-y-1 text-blue-700">
-                <li>Detailed rows are aggregated into daily summaries</li>
-                <li>Summaries preserve total metrics per creative/day</li>
-                <li>After aggregation, detailed rows are deleted</li>
-                <li>This significantly reduces storage requirements</li>
+                <li>{t.retentionPage.howItWorksItem1}</li>
+                <li>{t.retentionPage.howItWorksItem2}</li>
+                <li>{t.retentionPage.howItWorksItem3}</li>
+                <li>{t.retentionPage.howItWorksItem4}</li>
               </ul>
             </div>
           </div>
@@ -275,14 +282,14 @@ export default function RetentionSettingsPage() {
             className="btn-primary disabled:opacity-50 flex items-center gap-2"
           >
             <Save className="h-4 w-4" />
-            {saving ? "Saving..." : "Save Settings"}
+            {saving ? t.retentionPage.saving : t.retentionPage.saveSettings}
           </button>
           <button
             onClick={runRetentionJob}
             disabled={saving}
             className="btn-secondary disabled:opacity-50"
           >
-            {saving ? "Running..." : "Run Retention Job Now"}
+            {saving ? t.retentionPage.running : t.retentionPage.runRetentionJobNow}
           </button>
         </div>
       </div>

@@ -819,6 +819,47 @@ export interface Translations {
     videos: string;
   };
 
+  retentionPage: {
+    title: string;
+    subtitle: string;
+    saveSuccess: string;
+    saveFailed: string;
+    runCompleted: string;
+    runFailed: string;
+    currentStorage: string;
+    rawPerformanceRows: string;
+    dailySummaryRows: string;
+    dateRangeSpan: string;
+    keepDetailedDataFor: string;
+    keepDailySummariesFor: string;
+    autoAggregateAfter: string;
+    option7Days: string;
+    option14Days: string;
+    option30Days: string;
+    option30DaysRecommended: string;
+    option60Days: string;
+    option90DaysRecommended: string;
+    option180Days: string;
+    option1Year: string;
+    option6Months: string;
+    option1YearRecommended: string;
+    option2Years: string;
+    optionForever: string;
+    detailedDataHelp: string;
+    summaryDataHelp: string;
+    autoAggregateHelp: string;
+    warningIrreversible: string;
+    howItWorks: string;
+    howItWorksItem1: string;
+    howItWorksItem2: string;
+    howItWorksItem3: string;
+    howItWorksItem4: string;
+    saving: string;
+    saveSettings: string;
+    running: string;
+    runRetentionJobNow: string;
+  };
+
   errors: {
     somethingWentWrong: string;
     pageNotFound: string;
