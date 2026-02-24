@@ -108,6 +108,24 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
   const staleHours = creative.data_source?.stale_age_hours;
   const staleThreshold = creative.data_source?.stale_threshold_hours;
 
+  const formatApprovalStatus = (status?: string | null): string => {
+    if (!status) return t.common.none;
+    switch (status.toLowerCase()) {
+      case "approved":
+        return t.previewModal.approvalApproved;
+      case "disapproved":
+        return t.previewModal.approvalDisapproved;
+      case "pending_review":
+        return t.previewModal.approvalPendingReview;
+      case "under_review":
+        return t.previewModal.approvalUnderReview;
+      case "not_reviewed":
+        return t.previewModal.approvalNotReviewed;
+      default:
+        return status.replace(/_/g, " ");
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
@@ -305,7 +323,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                   <div className="flex justify-between">
                     <span className="text-gray-500">{t.previewModal.status}</span>
                     <span className={cn("badge", getStatusColor(creative.approval_status || ""))}>
-                      {creative.approval_status?.replace(/_/g, " ") || "-"}
+                      {formatApprovalStatus(creative.approval_status)}
                     </span>
                   </div>
                   <div className="flex justify-between">

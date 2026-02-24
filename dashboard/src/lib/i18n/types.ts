@@ -1843,6 +1843,11 @@ export interface Translations {
     noUrlsFound: string;
     trackingParameters: string;
     noTrackingParams: string;
+    approvalApproved: string;
+    approvalDisapproved: string;
+    approvalPendingReview: string;
+    approvalUnderReview: string;
+    approvalNotReviewed: string;
     failedToAnalyzeLanguage: string;
     failedToUpdateLanguage: string;
     editLanguage: string;
