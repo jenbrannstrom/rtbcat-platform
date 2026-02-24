@@ -505,6 +505,22 @@ export interface Translations {
     publisherActionTitleBlockRemoveAllowlist: string;
     publisherActionTitleUnblockRemoveDenylist: string;
     publisherActionTitleBlockAddDenylist: string;
+    cardGeosLabel: string;
+    cardPlatformsLabel: string;
+    cardSizesLabel: string;
+    cardQpsLabel: string;
+    cardPretargetingConfigIdTitle: string;
+    cardPretargetingConfigIdAria: string;
+    cardFromGoogleTag: string;
+    cardPausedBadge: string;
+    cardWinSuffix: string;
+    cardNoData: string;
+    cardFormatBanner: string;
+    cardFormatAudioVideo: string;
+    cardFormatNative: string;
+    cardQpsUnsetPlaceholder: string;
+    cardQpsSetAction: string;
+    cardPendingLabel: string;
   };
 
   import: {

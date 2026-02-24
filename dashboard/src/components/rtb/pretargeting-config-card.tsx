@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { SnapshotComparisonPanel } from './snapshot-comparison-panel';
 import { useAccount } from '@/contexts/account-context';
 import { toBuyerScopedPath } from '@/lib/buyer-routes';
+import { useTranslation } from '@/contexts/i18n-context';
 
 export interface PretargetingConfig {
   billing_id: string;
@@ -43,6 +44,7 @@ function formatNumber(n: number): string {
 
 // Geo display component that fetches names from the database
 function GeoSettingPill({ geoIds, max = 5 }: { geoIds: string[]; max?: number }) {
+  const { t } = useTranslation();
   const { data: geoNames } = useQuery({
     queryKey: ['geo-names', geoIds.join(',')],
     queryFn: () => lookupGeoNames(geoIds),
@@ -65,7 +67,7 @@ function GeoSettingPill({ geoIds, max = 5 }: { geoIds: string[]; max?: number })
 
   return (
     <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
-      <span className="text-gray-400">Geos:</span>
+      <span className="text-gray-400">{t.pretargeting.cardGeosLabel}:</span>
       <span>{displayNames.join(', ')}</span>
       {remaining > 0 && <span className="text-gray-400">+{remaining}</span>}
     </div>
@@ -113,6 +115,7 @@ function WasteMiniBar({ pct }: { pct: number }) {
 }
 
 export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: PretargetingConfigCardProps) {
+  const { t } = useTranslation();
   const { selectedBuyerId } = useAccount();
   // Support both controlled and uncontrolled expansion
   const [internalExpanded, setInternalExpanded] = useState(false);
@@ -345,8 +348,8 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
           href={configDetailHref}
           onClick={(e: MouseEvent<HTMLAnchorElement>) => e.stopPropagation()}
           className="font-mono text-xs text-gray-500 hover:text-primary-600 hover:underline w-24 shrink-0"
-          title="Pretargeting config ID"
-          aria-label={`Pretargeting config ID ${config.billing_id}`}
+          title={t.pretargeting.cardPretargetingConfigIdTitle}
+          aria-label={t.pretargeting.cardPretargetingConfigIdAria.replace('{id}', config.billing_id)}
         >
           {config.billing_id}
         </Link>
@@ -386,7 +389,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                 {config.name}
               </span>
               {isGoogleName && (
-                <span className="text-xs text-gray-400">(from Google)</span>
+                <span className="text-xs text-gray-400">{t.pretargeting.cardFromGoogleTag}</span>
               )}
               <button
                 onClick={handleStartEdit}
@@ -401,7 +404,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
         {/* State badge */}
         {config.state === 'SUSPENDED' && (
           <span className="px-2 py-0.5 bg-gray-200 text-gray-600 text-xs rounded">
-            Paused
+            {t.pretargeting.cardPausedBadge}
           </span>
         )}
 
@@ -420,7 +423,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                   config.win_rate < 30 && 'text-red-600'
                 )}
               >
-                {config.win_rate.toFixed(1)}% win
+                {config.win_rate.toFixed(1)}% {t.pretargeting.cardWinSuffix}
               </span>
               <span
                 className={cn(
@@ -438,7 +441,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
           ) : (
             <>
               <span className="w-14 text-right text-gray-400">--</span>
-              <span className="w-14 text-right text-gray-400">No data</span>
+              <span className="w-14 text-right text-gray-400">{t.pretargeting.cardNoData}</span>
               <div className="w-16 h-1.5 bg-gray-200 rounded-full" />
             </>
           )}
@@ -452,17 +455,17 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
           <div className="sticky top-0 z-10 bg-gray-50 border-b px-4 py-2 flex items-center justify-between gap-3">
             <div className="flex flex-wrap gap-1.5">
               <GeoSettingPill geoIds={config.included_geos} max={5} />
-              <SettingPill label="Platforms" values={config.platforms} />
-              <SettingPill label="Sizes" values={config.sizes} max={4} />
+              <SettingPill label={t.pretargeting.cardPlatformsLabel} values={config.platforms} />
+              <SettingPill label={t.pretargeting.cardSizesLabel} values={config.sizes} max={4} />
             </div>
             <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
               {/* Format checkboxes inline */}
               <div className="flex items-center gap-2 text-xs text-slate-700">
-                <span className="text-[11px] text-gray-500 font-medium">Formats</span>
+                <span className="text-[11px] text-gray-500 font-medium">{t.pretargeting.formats}</span>
                 {[
-                  { label: 'Banner', value: 'HTML' },
-                  { label: 'Audio and Video', value: 'VIDEO' },
-                  { label: 'Native', value: 'NATIVE' },
+                  { label: t.pretargeting.cardFormatBanner, value: 'HTML' },
+                  { label: t.pretargeting.cardFormatAudioVideo, value: 'VIDEO' },
+                  { label: t.pretargeting.cardFormatNative, value: 'NATIVE' },
                 ].map((formatOption) => (
                   <label key={formatOption.value} className="inline-flex items-center gap-1">
                     <input
@@ -479,7 +482,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
               <div className="w-px h-5 bg-gray-300" />
               {/* QPS control inline */}
               <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-gray-500 font-medium">QPS</span>
+                <span className="text-[11px] text-gray-500 font-medium">{t.pretargeting.cardQpsLabel}</span>
                 <input
                   type="number"
                   min={0}
@@ -488,18 +491,18 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                   onChange={(e) => setQpsInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') applyQpsChange(); }}
                   className="w-20 rounded border border-gray-300 bg-white px-1.5 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                  placeholder="unset"
+                  placeholder={t.pretargeting.cardQpsUnsetPlaceholder}
                 />
                 <button
                   onClick={applyQpsChange}
                   disabled={qpsMutationPending}
                   className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                 >
-                  Set
+                  {t.pretargeting.cardQpsSetAction}
                 </button>
                 {latestPendingQpsChange && (
                   <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">
-                    Pending: {latestPendingQpsChange.value}
+                    {t.pretargeting.cardPendingLabel}: {latestPendingQpsChange.value}
                   </span>
                 )}
               </div>
@@ -512,7 +515,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                   className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200 disabled:opacity-50"
                 >
                   {suspendMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Pause className="h-3 w-3" />}
-                  Pause
+                  {t.pretargeting.suspendAction}
                 </button>
               ) : (
                 <button
@@ -521,7 +524,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                   className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
                 >
                   {activateMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
-                  Activate
+                  {t.pretargeting.activateAction}
                 </button>
               )}
               {/* History toggle */}
@@ -535,7 +538,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                 )}
               >
                 <History className="h-3 w-3" />
-                History
+                {t.pretargeting.historyShort}
               </button>
             </div>
           </div>
