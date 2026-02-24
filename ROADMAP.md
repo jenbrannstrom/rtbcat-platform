@@ -111,6 +111,7 @@
     - [x] Creatives page fallback load-error message converted (`dashboard/src/app/creatives/page.tsx`)
     - [x] Shared error components + import validation error list copy converted (`dashboard/src/components/error.tsx`, `dashboard/src/components/validation-errors.tsx`)
     - [x] Campaign detail page core UX copy converted (errors/confirms/back navigation/edit form/period selector/empty state + basic metric labels) (`dashboard/src/app/campaigns/[id]/page.tsx`)
+    - [x] Campaign detail page status badge labels + daily trend tooltip/date labels converted (`dashboard/src/app/campaigns/[id]/page.tsx`)
     - [x] Campaign card + auto-cluster button labels/tooltips/no-performance copy converted (`dashboard/src/components/campaign-card.tsx`)
     - [x] Campaign list-view cluster components labels/tooltips/empty states converted (`dashboard/src/components/campaigns/list-cluster.tsx`, `dashboard/src/components/campaigns/list-item.tsx`, `dashboard/src/components/campaigns/unassigned-pool.tsx`)
     - [x] Campaign grid-view cluster card + draggable creative tooltip/badge/sort/zoom/stats copy converted (`dashboard/src/components/campaigns/cluster-card.tsx`, `dashboard/src/components/campaigns/draggable-creative.tsx`)

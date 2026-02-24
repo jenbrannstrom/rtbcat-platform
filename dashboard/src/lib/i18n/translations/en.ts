@@ -900,6 +900,11 @@ export const en: Translations = {
     filteredCreativesCount: '{shown} of {total} creatives',
     disapprovedCreativeTitle: '{count} disapproved creative',
     disapprovedCreativeTitlePlural: '{count} disapproved creatives',
+    statusDraft: 'Draft',
+    statusPaused: 'Paused',
+    statusInactive: 'Inactive',
+    statusArchived: 'Archived',
+    dailyTrendTooltip: '{date}: ${spend} | {impressions} {impsLabel}',
   },
 
   creatives: {
