@@ -158,6 +158,7 @@
       - [x] Added first Spanish (`es`) `pretargeting` core chunk (page shell, tabs, breakdown states, history badges, push/suspend dialogs) (`dashboard/src/lib/i18n/translations/es.ts`)
     - [x] Refactored English (`en`) translations into split namespace modules and added Chinese (`zh`) split dictionary scaffold (`dashboard/src/lib/i18n/translations/en/*`, `dashboard/src/lib/i18n/translations/zh/*`)
     - [x] Added first real Chinese (`zh`) split translations for core shell/auth/home namespaces (`common`, `relativeTime`, `navigation`, `qpsNav`, `settingsNav`, `adminNav`, `sidebar`, `auth`, `dashboard`, `errors`, `language`) (`dashboard/src/lib/i18n/translations/zh/*`)
+    - [x] Added Chinese (`zh`) import core-flow translations (upload/preview/import states, import results, unified history table, freshness/matrix labels, troubleshooting shell copy) (`dashboard/src/lib/i18n/translations/zh/import.ts`)
     - [ ] Add real dictionaries for remaining locales (`pl`, `ru`, `uk`, `da`, `fr`, `he`, `ar`) and expand `zh`/`es` remaining namespaces
 
 ---
