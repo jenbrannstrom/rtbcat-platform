@@ -91,8 +91,8 @@ export default function LoginPage() {
       <div className="max-w-md w-full mx-4">
         {/* Logo and Title */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4">
-            <img src="/cat-scanning-stats.webp" alt="Cat-Scan" className="w-16 h-16 rounded-2xl" />
+          <div className="inline-flex items-center justify-center w-64 h-64 rounded-2xl mb-4">
+            <img src="/cat-scanning-stats.webp" alt="Cat-Scan" className="w-64 h-64 rounded-2xl" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">{t.auth.catScan}</h1>
           <p className="text-gray-600 mt-1">{t.auth.qpsManagerForGoogleAuthBuyers}</p>
