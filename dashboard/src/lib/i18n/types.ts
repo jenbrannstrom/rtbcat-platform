@@ -707,6 +707,9 @@ export interface Translations {
     importMoreData: string;
     tryAgain: string;
     recentImports: string;
+    historyColumnDate: string;
+    historyColumnRows: string;
+    historyColumnResult: string;
     loading: string;
     noImportsYet: string;
     justNow: string;
