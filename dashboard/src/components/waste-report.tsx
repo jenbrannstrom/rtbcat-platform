@@ -3,6 +3,7 @@
 import { AlertTriangle, TrendingDown, Calendar, Clock, Ban, Plus, Maximize, Eye } from "lucide-react";
 import type { WasteReport } from "@/types/api";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/contexts/i18n-context";
 
 interface WasteReportProps {
   report: WasteReport;
@@ -19,9 +20,9 @@ function formatNumber(num: number): string {
   return num.toLocaleString();
 }
 
-function formatDate(dateString: string): string {
+function formatDate(dateString: string, locale?: string): string {
   const date = new Date(dateString);
-  return date.toLocaleDateString("en-US", {
+  return date.toLocaleDateString(locale || "en", {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -55,19 +56,20 @@ export function WasteReportSkeleton() {
 }
 
 export function WasteReportEmpty() {
+  const { t } = useTranslation();
   return (
     <div className="text-center py-12 px-4">
       <AlertTriangle className="mx-auto h-12 w-12 text-gray-400" />
-      <h3 className="mt-4 text-lg font-medium text-gray-900">No Traffic Data</h3>
+      <h3 className="mt-4 text-lg font-medium text-gray-900">{t.wasteAnalysis.wasteReportNoTrafficData}</h3>
       <p className="mt-2 text-sm text-gray-500 max-w-md mx-auto">
-        There&apos;s no RTB traffic data to analyze yet. Generate mock traffic data or import real
-        traffic data to see waste analysis.
+        {t.wasteAnalysis.wasteReportNoTrafficDataDesc}
       </p>
     </div>
   );
 }
 
 export function WasteReportCard({ report, isLoading }: WasteReportProps) {
+  const { t, language } = useTranslation();
   if (isLoading) {
     return <WasteReportSkeleton />;
   }
@@ -77,7 +79,7 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
   }
 
   const summary = report.recommendations_summary;
-  const qpsLabel = report.qps_basis === "avg_daily" ? "Avg QPS" : "QPS";
+  const qpsLabel = report.qps_basis === "avg_daily" ? t.wasteAnalysis.wasteReportAvgQps : t.wasteAnalysis.qps;
 
   return (
     <div className="space-y-6">
@@ -92,12 +94,14 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
         >
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Waste Rate</p>
+              <p className="text-sm font-medium text-gray-600">{t.wasteAnalysis.wasteReportWasteRate}</p>
               <p className={cn("text-4xl font-bold mt-1", getWasteColor(report.waste_percentage))}>
                 {report.waste_percentage.toFixed(1)}%
               </p>
               <p className="text-xs text-gray-500 mt-2">
-                {formatNumber(report.total_waste_requests)} of {formatNumber(report.total_requests)} requests
+                {t.wasteAnalysis.wasteReportWasteRequestsOfTotal
+                  .replace('{waste}', formatNumber(report.total_waste_requests))
+                  .replace('{total}', formatNumber(report.total_requests))}
               </p>
             </div>
             <AlertTriangle className={cn("h-8 w-8", getWasteColor(report.waste_percentage))} />
@@ -108,16 +112,19 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Potential Savings</p>
+              <p className="text-sm font-medium text-gray-600">{t.wasteAnalysis.wasteReportPotentialSavings}</p>
               <p className="text-3xl font-bold text-gray-900 mt-1">
                 {report.potential_savings_qps.toFixed(1)} <span className="text-lg font-normal text-gray-500">{qpsLabel}</span>
               </p>
               {report.potential_savings_usd && (
                 <p className="text-xs text-gray-500 mt-2">
-                  ~${report.potential_savings_usd.toFixed(2)}/month
+                  {t.wasteAnalysis.wasteReportPotentialSavingsPerMonth.replace(
+                    '{amount}',
+                    report.potential_savings_usd.toFixed(2)
+                  )}
                 </p>
               )}
-              <p className="text-xs text-gray-500 mt-1">Based on daily average request volume</p>
+              <p className="text-xs text-gray-500 mt-1">{t.wasteAnalysis.wasteReportDailyAverageBasis}</p>
             </div>
             <TrendingDown className="h-8 w-8 text-blue-500" />
           </div>
@@ -127,10 +134,10 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Size Gaps</p>
+              <p className="text-sm font-medium text-gray-600">{t.wasteAnalysis.wasteReportSizeGaps}</p>
               <p className="text-3xl font-bold text-gray-900 mt-1">{report.size_gaps.length}</p>
               <p className="text-xs text-gray-500 mt-2">
-                Sizes with no creatives
+                {t.wasteAnalysis.wasteReportSizesWithNoCreatives}
               </p>
             </div>
             <div className="h-8 w-8 rounded-full bg-orange-100 flex items-center justify-center">
@@ -143,13 +150,13 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Analysis Period</p>
+              <p className="text-sm font-medium text-gray-600">{t.wasteAnalysis.wasteReportAnalysisPeriod}</p>
               <p className="text-3xl font-bold text-gray-900 mt-1">
-                {report.analysis_period_days} <span className="text-lg font-normal text-gray-500">days</span>
+                {report.analysis_period_days} <span className="text-lg font-normal text-gray-500">{t.dashboard.days}</span>
               </p>
               <p className="text-xs text-gray-500 mt-2">
                 <Clock className="inline h-3 w-3 mr-1" />
-                {formatDate(report.generated_at)}
+                {formatDate(report.generated_at, language)}
               </p>
             </div>
             <Calendar className="h-8 w-8 text-gray-400" />
@@ -160,14 +167,14 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
       {/* Recommendations Summary */}
       {(summary.block > 0 || summary.add_creative > 0 || summary.use_flexible > 0 || summary.monitor > 0) && (
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Recommendations Summary</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">{t.wasteAnalysis.wasteReportRecommendationsSummary}</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {summary.block > 0 && (
               <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg">
                 <Ban className="h-5 w-5 text-red-600" />
                 <div>
                   <p className="text-2xl font-bold text-red-700">{summary.block}</p>
-                  <p className="text-xs text-red-600">Block</p>
+                  <p className="text-xs text-red-600">{t.pretargeting.block}</p>
                 </div>
               </div>
             )}
@@ -176,7 +183,7 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
                 <Plus className="h-5 w-5 text-blue-600" />
                 <div>
                   <p className="text-2xl font-bold text-blue-700">{summary.add_creative}</p>
-                  <p className="text-xs text-blue-600">Add Creative</p>
+                  <p className="text-xs text-blue-600">{t.wasteAnalysis.wasteReportAddCreative}</p>
                 </div>
               </div>
             )}
@@ -185,7 +192,7 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
                 <Maximize className="h-5 w-5 text-purple-600" />
                 <div>
                   <p className="text-2xl font-bold text-purple-700">{summary.use_flexible}</p>
-                  <p className="text-xs text-purple-600">Use Flexible</p>
+                  <p className="text-xs text-purple-600">{t.wasteAnalysis.wasteReportUseFlexible}</p>
                 </div>
               </div>
             )}
@@ -194,7 +201,7 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
                 <Eye className="h-5 w-5 text-gray-600" />
                 <div>
                   <p className="text-2xl font-bold text-gray-700">{summary.monitor}</p>
-                  <p className="text-xs text-gray-600">Monitor</p>
+                  <p className="text-xs text-gray-600">{t.geo.geoWasteActionMonitor}</p>
                 </div>
               </div>
             )}
@@ -203,9 +210,12 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
           {summary.top_savings_size && (
             <div className="mt-4 pt-4 border-t border-gray-100">
               <p className="text-sm text-gray-600">
-                <span className="font-medium">Top savings opportunity:</span>{" "}
+                <span className="font-medium">{t.wasteAnalysis.wasteReportTopSavingsOpportunityPrefix}</span>{" "}
                 <span className="text-gray-900">{summary.top_savings_size}</span>{" "}
-                <span className="text-blue-600">({summary.top_savings_qps.toFixed(1)} Avg QPS)</span>
+                <span className="text-blue-600">
+                  {t.wasteAnalysis.wasteReportTopSavingsAvgQps
+                    .replace('{qps}', summary.top_savings_qps.toFixed(1))}
+                </span>
               </p>
             </div>
           )}

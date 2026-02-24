@@ -99,6 +99,7 @@
     - [x] QPS summary card labels/error/action summaries converted (`dashboard/src/components/qps/qps-summary-card.tsx`)
     - [x] QPS pretargeting panel card/details/error/empty-state copy converted (`dashboard/src/components/qps/pretargeting-panel.tsx`)
     - [x] QPS geo waste panel labels/summary/table/action badges converted (`dashboard/src/components/qps/geo-waste-panel.tsx`)
+    - [x] Waste report summary cards/empty-state/recommendations summary copy converted (`dashboard/src/components/waste-report.tsx`)
     - [ ] Remaining settings/admin/shared hotspots (`/settings/accounts/components/GmailReportsTab.tsx` remaining deep copy and deeper RTB/settings helper components)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
