@@ -87,6 +87,7 @@ export interface Translations {
   sidebar: {
     noSeatsConnected: string;
     goToSettingsToConnect: string;
+    unableToLoadSeats: string;
     allSeats: string;
     creatives: string;
     syncCreatives: string;
