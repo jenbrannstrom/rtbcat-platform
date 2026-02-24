@@ -891,6 +891,7 @@ export const en: Translations = {
     creativePreviewUnavailable: 'Creative preview unavailable',
     drilldownAnalysis: 'Performance drill-down analysis',
     loadingAnalysis: 'Loading analysis...',
+    failedToLoadCreatives: 'Failed to load creatives',
     failedToLoadDrilldownData: 'Failed to load drill-down data',
     noDrilldownDataFor: 'No drill-down data for "{appName}"',
     noDrilldownDataDefaultMessage: 'Per-publisher performance data requires CSV imports that include app-level breakdown columns.',
