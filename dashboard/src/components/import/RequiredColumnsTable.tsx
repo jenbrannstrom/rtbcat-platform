@@ -6,6 +6,43 @@ import { useTranslation } from "@/contexts/i18n-context";
 
 export function RequiredColumnsTable() {
   const { t } = useTranslation();
+  const rows = [
+    {
+      reportName: t.import.requiredTableReportBidsInAuction,
+      targetTable: t.import.targetTableRtbDaily,
+      columns: t.import.requiredTableColumnsBidsInAuction,
+      rowClassName: "",
+      reportClassName: "text-blue-700",
+    },
+    {
+      reportName: t.import.requiredTableReportQuality,
+      targetTable: t.import.targetTableRtbDaily,
+      columns: t.import.requiredTableColumnsQuality,
+      rowClassName: "bg-gray-50",
+      reportClassName: "text-purple-700",
+    },
+    {
+      reportName: t.import.requiredTableReportPipelineGeo,
+      targetTable: t.import.targetTableRtbBidstream,
+      columns: t.import.requiredTableColumnsPipelineGeo,
+      rowClassName: "",
+      reportClassName: "text-green-700",
+    },
+    {
+      reportName: t.import.requiredTableReportPipeline,
+      targetTable: t.import.targetTableRtbBidstream,
+      columns: t.import.requiredTableColumnsPipeline,
+      rowClassName: "bg-gray-50",
+      reportClassName: "text-orange-700",
+    },
+    {
+      reportName: t.import.requiredTableReportBidFiltering,
+      targetTable: t.import.targetTableRtbBidFiltering,
+      columns: t.import.requiredTableColumnsBidFiltering,
+      rowClassName: "",
+      reportClassName: "text-red-700",
+    },
+  ];
 
   return (
     <div className="space-y-4 text-sm">
@@ -23,31 +60,13 @@ export function RequiredColumnsTable() {
             </tr>
           </thead>
           <tbody className="text-xs">
-            <tr>
-              <td className="p-2 border font-medium text-blue-700">catscan-bidsinauction</td>
-              <td className="p-2 border">rtb_daily</td>
-              <td className="p-2 border">Day, Country, Creative ID, Buyer account ID, Bids in auction, Auctions won, Bids, Impressions</td>
-            </tr>
-            <tr className="bg-gray-50">
-              <td className="p-2 border font-medium text-purple-700">catscan-quality</td>
-              <td className="p-2 border">rtb_daily</td>
-              <td className="p-2 border">Day, Pretargeting config (Billing ID), Creative ID, Creative size, Reached queries, Impressions, Active view viewable</td>
-            </tr>
-            <tr>
-              <td className="p-2 border font-medium text-green-700">catscan-pipeline-geo</td>
-              <td className="p-2 border">rtb_bidstream</td>
-              <td className="p-2 border">Day, Country, Hour, Bid requests, Bids, Impressions</td>
-            </tr>
-            <tr className="bg-gray-50">
-              <td className="p-2 border font-medium text-orange-700">catscan-pipeline</td>
-              <td className="p-2 border">rtb_bidstream</td>
-              <td className="p-2 border">Day, Country, Publisher ID, Publisher name, Bid requests, Bids, Impressions</td>
-            </tr>
-            <tr>
-              <td className="p-2 border font-medium text-red-700">catscan-bid-filtering</td>
-              <td className="p-2 border">rtb_bid_filtering</td>
-              <td className="p-2 border">Day, Country, Creative ID, Bid filtering reason, Bids</td>
-            </tr>
+            {rows.map((row) => (
+              <tr key={row.reportName} className={row.rowClassName}>
+                <td className={`p-2 border font-medium ${row.reportClassName}`}>{row.reportName}</td>
+                <td className="p-2 border">{row.targetTable}</td>
+                <td className="p-2 border">{row.columns}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -57,11 +76,11 @@ export function RequiredColumnsTable() {
           <strong>{t.import.autoDetectionLogic}</strong>
         </p>
         <ul className="text-gray-600 mt-1 space-y-1 text-xs">
-          <li>• Has <code className="bg-gray-200 px-1 rounded">Bid filtering reason</code>? → bid-filtering</li>
-          <li>• Has <code className="bg-gray-200 px-1 rounded">Creative ID</code> + <code className="bg-gray-200 px-1 rounded">Bids in auction</code>? → bidsinauction</li>
-          <li>• Has <code className="bg-gray-200 px-1 rounded">Creative ID</code> + <code className="bg-gray-200 px-1 rounded">Active view</code>? → quality</li>
-          <li>• Has <code className="bg-gray-200 px-1 rounded">Bid requests</code> + <code className="bg-gray-200 px-1 rounded">Publisher ID</code>? → pipeline</li>
-          <li>• Has <code className="bg-gray-200 px-1 rounded">Bid requests</code> only? → pipeline-geo</li>
+          <li>• {t.import.autoDetectionRuleBidFiltering}</li>
+          <li>• {t.import.autoDetectionRuleBidsInAuction}</li>
+          <li>• {t.import.autoDetectionRuleQuality}</li>
+          <li>• {t.import.autoDetectionRulePipeline}</li>
+          <li>• {t.import.autoDetectionRulePipelineGeo}</li>
         </ul>
       </div>
     </div>
