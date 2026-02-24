@@ -377,6 +377,8 @@ export interface Translations {
     pendingChangeBlockSize: string;
     pendingChangeAddGeo: string;
     pendingChangeRemoveGeo: string;
+    pendingChangeAddExcludedGeo: string;
+    pendingChangeRemoveExcludedGeo: string;
     pendingChangeEnableFormat: string;
     pendingChangeDisableFormat: string;
     pendingChangeSetQpsLimit: string;
@@ -384,7 +386,19 @@ export interface Translations {
     pendingChangeBlockPublisher: string;
     pendingChangeUnblockPublisher: string;
     pendingChangePublisherMode: string;
+    pendingChangePublisherModeDetailed: string;
     pendingChangeFallback: string;
+    remove: string;
+    applied: string;
+    markAsAppliedInGoogle: string;
+    cancelChange: string;
+    valuesCount: string;
+    addSizePlaceholder: string;
+    addGeoPlaceholder: string;
+    addFormatPlaceholder: string;
+    bulkLabel: string;
+    removeAll: string;
+    noValuesConfigured: string;
     publisherActionTitleAllowAddAllowlist: string;
     publisherActionTitleBlockRemoveAllowlist: string;
     publisherActionTitleUnblockRemoveDenylist: string;
