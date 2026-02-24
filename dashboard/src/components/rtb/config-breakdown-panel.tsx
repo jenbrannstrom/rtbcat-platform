@@ -29,6 +29,7 @@ import { COMMONLY_BLOCKED, type BlockSuggestion } from '@/lib/commonly-blocked-p
 import { Loader2, AlertCircle, AlertTriangle, ArrowUpDown, ChevronRight, ChevronDown, Info, Image, X, Check, Clock, Upload, Search, ExternalLink, Ban, ShieldAlert, RotateCcw, History } from 'lucide-react';
 import { AppDrilldownModal } from './app-drilldown-modal';
 import { useAccount } from '@/contexts/account-context';
+import { useTranslation } from '@/contexts/i18n-context';
 import { PreviewModal } from '@/components/preview-modal';
 import type { Creative } from '@/types/api';
 
@@ -38,12 +39,7 @@ interface ConfigBreakdownPanelProps {
   isExpanded: boolean;
 }
 
-const TABS: { id: ConfigBreakdownType; label: string }[] = [
-  { id: 'creative', label: 'By Creative' },
-  { id: 'size', label: 'By Size' },
-  { id: 'geo', label: 'By Geo' },
-  { id: 'publisher', label: 'By Publisher' },
-];
+const TABS: ConfigBreakdownType[] = ['creative', 'size', 'geo', 'publisher'];
 
 // Format large numbers with K/M suffix
 function formatNumber(n: number): string {
@@ -92,6 +88,7 @@ function describePendingChange(change: PendingChange, publisherMode: string): st
 }
 
 export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBreakdownPanelProps) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<ConfigBreakdownType>('creative');
   const [sortKey, setSortKey] = useState<'name' | 'spend' | 'reached' | 'impressions' | 'win_rate'>('reached');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -128,6 +125,21 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
   const [isGeoSearchLoading, setIsGeoSearchLoading] = useState(false);
   const selectAllSizesRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
+
+  const getTabLabel = (tab: ConfigBreakdownType): string => {
+    switch (tab) {
+      case 'creative':
+        return t.pretargeting.tabByCreative;
+      case 'size':
+        return t.pretargeting.tabBySize;
+      case 'geo':
+        return t.pretargeting.tabByGeo;
+      case 'publisher':
+        return t.pretargeting.tabByPublisher;
+      default:
+        return tab;
+    }
+  };
 
   // Query for breakdown data
   const { data, isLoading, error } = useQuery({
@@ -855,16 +867,16 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
         <div className="flex gap-1 mb-2">
           {TABS.map((tab) => (
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              key={tab}
+              onClick={() => setActiveTab(tab)}
               className={cn(
                 'px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
-                activeTab === tab.id
+                activeTab === tab
                   ? 'bg-white text-gray-900 shadow-sm border'
                   : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
               )}
             >
-              {tab.label}
+              {getTabLabel(tab)}
             </button>
           ))}
         </div>
@@ -873,13 +885,13 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
         {isLoading && (
           <div className="flex items-center justify-center py-8 text-gray-400">
             <Loader2 className="h-5 w-5 animate-spin mr-2" />
-            <span className="text-sm">Loading breakdown...</span>
+            <span className="text-sm">{t.pretargeting.loadingBreakdown}</span>
           </div>
         )}
 
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-600 text-sm">
-            Failed to load breakdown data
+            {t.pretargeting.failedToLoadBreakdownData}
           </div>
         )}
 
@@ -890,17 +902,17 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                 <AlertCircle className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="font-medium text-gray-700">
-                    No publisher breakdown available for this config
+                    {t.pretargeting.noPublisherBreakdownForConfig}
                   </p>
                   <p className="text-gray-500 text-xs mt-1">
-                    {data?.no_data_reason || 'Billing-level CSV missing or the precompute job has not yet processed publisher-level data for this config.'}
+                    {data?.no_data_reason || t.pretargeting.publisherBreakdownMissingCsvOrPrecompute}
                   </p>
                   <a
                     href="/import"
                     className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-blue-600 hover:text-blue-800"
                   >
                     <Upload className="h-3 w-3" />
-                    Go to Import
+                    {t.import.goToImport}
                   </a>
                 </div>
               </div>
@@ -909,17 +921,17 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                 <AlertCircle className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="font-medium text-gray-700">
-                    No {activeTab} data for this config
+                    {t.pretargeting.noTabDataForConfig.replace('{tab}', activeTab)}
                   </p>
                   <p className="text-gray-500 text-xs mt-1">
                     {data?.no_data_reason || (
                       activeTab === 'geo'
-                        ? 'Geographic breakdown is not available. This config may not have geographic targeting data, or the precompute job has not yet processed this config.'
+                        ? t.pretargeting.noGeoBreakdownAvailable
                         : activeTab === 'size'
-                        ? 'Size breakdown is not available. This config may not have had bid activity in the selected period, or the precompute job has not yet processed this config.'
+                        ? t.pretargeting.noSizeBreakdownAvailable
                         : activeTab === 'creative'
-                        ? 'Creative breakdown is not available. This config may not have active creatives with bid activity, or the precompute job has not yet processed this config.'
-                        : `To see ${activeTab} breakdown, import both catscan-quality (includes pretargeting config / billing_id) and catscan-bidsinauction CSV reports.`
+                        ? t.pretargeting.noCreativeBreakdownAvailable
+                        : t.pretargeting.importQualityAndBidsCsvForBreakdown.replace('{tab}', activeTab)
                     )}
                   </p>
                 </div>
@@ -932,15 +944,15 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
           <>
             <div className="mb-3 flex items-center gap-2">
               <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-600">
-                Window: {data?.requested_days ?? days}d
+                {t.pretargeting.windowLabel}: {data?.requested_days ?? days}d
                 {data?.fallback_applied && data?.effective_days != null && (
-                  <> (effective: {data.effective_days}d)</>
+                  <> ({t.pretargeting.effectiveLabel}: {data.effective_days}d)</>
                 )}
               </span>
               {data?.fallback_applied && (
                 <span className="flex items-center gap-1 rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[11px] text-amber-700">
                   <AlertTriangle className="h-3 w-3 text-amber-500" />
-                  Fallback applied — no data in requested window
+                  {t.pretargeting.fallbackAppliedNoDataRequestedWindow}
                 </span>
               )}
             </div>
@@ -949,10 +961,10 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                 <div className="flex items-center gap-2 px-2 py-1.5 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
                   <Info className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
                   <span className="flex-1">
-                    Mode: <span className="font-semibold">{publisherModeLabel}</span>.
+                    {t.pretargeting.modeLabel}: <span className="font-semibold">{publisherModeLabel}</span>.
                     {effectivePublisherMode === 'INCLUSIVE'
-                      ? ' Block removes from allowlist; Allow adds back.'
-                      : ' Block adds to denylist; Unblock removes.'}
+                      ? ` ${t.pretargeting.publisherModeInclusiveHelp}`
+                      : ` ${t.pretargeting.publisherModeExclusiveHelp}`}
                   </span>
                   <button
                     onClick={() => setShowPublisherHistory(!showPublisherHistory)}
@@ -964,13 +976,13 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                     )}
                   >
                     <History className="h-3 w-3" />
-                    History
+                    {t.pretargeting.historyShort}
                   </button>
                   <a
                     href={`/bill_id/${encodeURIComponent(billing_id)}?tab=publishers`}
                     className="inline-flex items-center gap-1 text-amber-800 hover:text-amber-900 font-medium whitespace-nowrap"
                   >
-                    Full Editor
+                    {t.pretargeting.fullEditor}
                     <ExternalLink className="h-3 w-3" />
                   </a>
                 </div>
@@ -980,14 +992,14 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                     type="text"
                     value={publisherFilter}
                     onChange={(e) => setPublisherFilter(e.target.value)}
-                    placeholder="Filter publishers..."
+                    placeholder={t.pretargeting.filterPublishersPlaceholder}
                     className="flex-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-300"
                   />
                   {publisherFilter && (
                     <button
                       onClick={() => setPublisherFilter('')}
                       className="text-gray-400 hover:text-gray-600"
-                      title="Clear filter"
+                      title={t.campaigns.clearFilter}
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -996,7 +1008,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                 {/* Last pushed indicator */}
                 {lastPushEntry && (
                   <div className="px-2 text-[10px] text-gray-500">
-                    Last pushed:{' '}
+                    {t.pretargeting.lastPushed}{' '}
                     {new Date(lastPushEntry.changed_at).toLocaleDateString('en-US', {
                       month: 'short',
                       day: 'numeric',
@@ -1014,14 +1026,14 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                 <div className="flex items-center justify-between px-3 py-2 border-b border-blue-200">
                   <span className="flex items-center gap-1.5 text-xs font-medium text-blue-900">
                     <History className="h-3.5 w-3.5" />
-                    Publisher History
+                    {t.pretargeting.publisherHistory}
                   </span>
                   <div className="flex items-center gap-2">
                     <a
                       href={`/history?billing_id=${encodeURIComponent(billing_id)}`}
                       className="text-[10px] text-blue-600 hover:text-blue-800 font-medium"
                     >
-                      View all &rarr;
+                      {t.pretargeting.viewAllArrow}
                     </a>
                     <button
                       onClick={() => setShowPublisherHistory(false)}
