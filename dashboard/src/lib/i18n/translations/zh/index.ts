@@ -5,9 +5,11 @@ import ns_admin from './admin';
 import ns_auth from './auth';
 import ns_campaigns from './campaigns';
 import ns_common from './common';
+import ns_connect from './connect';
 import ns_creatives from './creatives';
 import ns_dashboard from './dashboard';
 import ns_errors from './errors';
+import ns_history from './history';
 import ns_import from './import';
 import ns_language from './language';
 import ns_navigation from './navigation';
@@ -15,6 +17,8 @@ import ns_pretargeting from './pretargeting';
 import ns_previewModal from './previewModal';
 import ns_qpsNav from './qpsNav';
 import ns_relativeTime from './relativeTime';
+import ns_retentionPage from './retentionPage';
+import ns_settings from './settings';
 import ns_settingsNav from './settingsNav';
 import ns_setup from './setup';
 import ns_sidebar from './sidebar';
@@ -23,6 +27,7 @@ import ns_sidebar from './sidebar';
 export const zh: PartialTranslations = {
   common: ns_common,
   campaigns: ns_campaigns,
+  connect: ns_connect,
   creatives: ns_creatives,
   relativeTime: ns_relativeTime,
   navigation: ns_navigation,
@@ -37,6 +42,9 @@ export const zh: PartialTranslations = {
   auth: ns_auth,
   dashboard: ns_dashboard,
   errors: ns_errors,
+  history: ns_history,
   import: ns_import,
   language: ns_language,
+  retentionPage: ns_retentionPage,
+  settings: ns_settings,
 };

@@ -1,0 +1,70 @@
+import type { PartialTranslations } from '../../types';
+
+const value: PartialTranslations['connect'] = {
+  title: '连接',
+  connectAccount: '连接账号',
+  serviceAccount: '服务账号',
+  instructions: '按照说明连接你的账号',
+  setupComplete: '设置完成！',
+  setUpCatScan: '设置 Cat-Scan',
+  accountConnectedReady: '你的账号已连接并可开始分析',
+  stepOf: '步骤 {current}/{total}：{title}',
+  uploadCredentials: '上传凭据',
+  syncCreatives: '同步创意',
+  readyToGo: '准备就绪',
+  optionalInstallFfmpeg: '可选：安装 ffmpeg',
+  ffmpegRequired:
+    '生成视频缩略图需要 ffmpeg。没有它时，视频创意将显示占位图标，而不是预览帧。',
+  googleCredentials: 'Google 凭据',
+  connected: '已连接',
+  serviceAccountConfigured: '服务账号已配置',
+  change: '更改',
+  uploading: '上传中...',
+  dropFileHere: '将文件拖到这里',
+  uploadServiceAccountJson: '上传服务账号 JSON',
+  dragAndDropOrClick: '拖放或点击浏览',
+  howToGetServiceAccountKey: '如何获取服务账号密钥',
+  goToGcpServiceAccounts: '前往 GCP 服务账号页面',
+  selectYourProject: '选择你的项目（或新建项目）',
+  clickCreateServiceAccount: '点击 + Create Service Account',
+  nameIt: '为其命名（例如 “catscan-service-account”）',
+  clickCreateContinue: '点击 Create and Continue，跳过角色，点击 Done',
+  clickOnServiceAccountEmail: '点击新建服务账号的邮箱',
+  goToKeysTab: '进入 Keys 标签 → Add Key → Create new key',
+  selectJsonClick: '选择 JSON 并点击 Create',
+  uploadDownloadedFile: '在上方上传下载的文件',
+  importantAddServiceAccount:
+    '重要：你还需要将该服务账号邮箱添加为 Authorized Buyers 账号中的用户，并授予 RTB 访问权限。',
+  noBuyerSeatsFound: '未发现买方席位',
+  makeSureServiceAccountHasAccess:
+    '请确认服务账号对你的 Authorized Buyers 账号有访问权限',
+  completeStep1: '完成第 1 步以同步创意',
+  creatives: '创意',
+  lastSynced: '上次同步',
+  syncing: '同步中...',
+  syncNow: '立即同步',
+  readyToAnalyze: '可开始分析',
+  accountSetUpCreativesSynced:
+    '你的账号已完成设置并同步创意。现在你可以：',
+  viewCreativeStatus: '查看创意状态与审核情况',
+  importRtbPerformance: '导入 RTB 性能数据',
+  analyzeQpsWaste: '分析 QPS 浪费和优化机会',
+  goToDashboard: '前往仪表盘',
+  completeSteps1And2: '完成第 1 和第 2 步以继续',
+  discoveredSeats: '已发现 {count} 个买方席位',
+  failedToDiscoverSeats: '发现席位失败',
+  connectedAs: '已连接为 {email}',
+  uploadFailed: '上传失败',
+  syncedCreatives: '已同步 {count} 个创意',
+  syncFailed: '同步失败',
+  pleaseSelectJsonFile: '请选择 JSON 文件',
+  invalidJsonFile: 'JSON 文件无效。请上传有效的服务账号密钥。',
+  invalidServiceAccountFormat:
+    '服务账号格式无效。缺少必需字段。',
+  invalidCredentialType:
+    '凭据类型无效：“{type}”。应为 “service_account”。',
+  account: '账号',
+};
+
+export default value;
+
