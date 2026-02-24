@@ -91,7 +91,7 @@ function describePendingChange(change: PendingChange, publisherMode: string, t: 
 }
 
 export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBreakdownPanelProps) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [activeTab, setActiveTab] = useState<ConfigBreakdownType>('creative');
   const [sortKey, setSortKey] = useState<'name' | 'spend' | 'reached' | 'impressions' | 'win_rate'>('reached');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -1032,7 +1032,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                 {lastPushEntry && (
                   <div className="px-2 text-[10px] text-gray-500">
                     {t.pretargeting.lastPushed}{' '}
-                    {new Date(lastPushEntry.changed_at).toLocaleDateString('en-US', {
+                    {new Date(lastPushEntry.changed_at).toLocaleDateString(language, {
                       month: 'short',
                       day: 'numeric',
                       hour: '2-digit',
@@ -1089,7 +1089,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                       );
                       const otherCount = group.entries.length - publisherEntries.length;
                       const ts = new Date(group.timestamp);
-                      const dateStr = ts.toLocaleDateString('en-US', {
+                      const dateStr = ts.toLocaleDateString(language, {
                         month: 'short',
                         day: 'numeric',
                         hour: '2-digit',
