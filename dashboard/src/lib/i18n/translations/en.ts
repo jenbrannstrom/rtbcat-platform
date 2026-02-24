@@ -40,6 +40,7 @@ export const en: Translations = {
     never: 'Never',
     version: '0.9.2',
     done: 'Done',
+    redirectingTo: 'Redirecting to {destination}...',
   },
 
   relativeTime: {
@@ -235,6 +236,8 @@ export const en: Translations = {
 
   pretargeting: {
     configs: 'Pretargeting Configs',
+    missingConfigId: 'Missing pretargeting config ID (billing_id).',
+    backToConfigs: 'Back to configs',
     active: 'active',
     syncFromGoogle: 'Sync from Google',
     noPretargetingConfigs: 'No Pretargeting Configs',

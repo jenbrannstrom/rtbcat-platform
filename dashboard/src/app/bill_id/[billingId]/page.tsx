@@ -5,12 +5,14 @@ import { useParams, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { PretargetingSettingsEditor } from "@/components/rtb/pretargeting-settings-editor";
 import { useAccount } from "@/contexts/account-context";
+import { useTranslation } from "@/contexts/i18n-context";
 import { toBuyerScopedPath } from "@/lib/buyer-routes";
 
 export default function PretargetingBillingDetailPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const { selectedBuyerId } = useAccount();
+  const { t } = useTranslation();
 
   const billingId = typeof params?.billingId === "string" ? params.billingId : "";
   const buyerIdFromParams = typeof params?.buyerId === "string" ? params.buyerId : null;
@@ -23,7 +25,7 @@ export default function PretargetingBillingDetailPage() {
     return (
       <div className="p-6">
         <div className="rounded border bg-white p-6 text-sm text-gray-500">
-          Missing pretargeting config ID (billing_id).
+          {t.pretargeting.missingConfigId}
         </div>
       </div>
     );
@@ -37,7 +39,7 @@ export default function PretargetingBillingDetailPage() {
           className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to configs
+          {t.pretargeting.backToConfigs}
         </Link>
         <span className="text-xs text-gray-500 font-mono">{billingId}</span>
       </div>
