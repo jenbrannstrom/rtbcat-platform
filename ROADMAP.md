@@ -56,6 +56,10 @@
   - Full inventory CSV: `docs/I18N_PHASE1_HARDCODED_STRING_INVENTORY_2026-02-23.csv`
 - [ ] **Phase 2: convert hardcoded strings to dynamic `t.*` lookups**
   - Start with highest-impact hotspots from the Phase 1 report (login/auth, app shell/status/errors, import flows, RTB config panels, settings tabs).
+  - Progress (2026-02-24):
+    - [x] Login/auth page primary UI strings + error messages converted (`dashboard/src/app/login/page.tsx`)
+    - [x] Home dashboard seat/status/error banners + pretargeting fallback messages converted (`dashboard/src/app/page.tsx`)
+    - [ ] Import flows and RTB config panels (remaining hotspot groups)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
 

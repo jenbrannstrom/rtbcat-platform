@@ -14,6 +14,7 @@ export interface Translations {
     search: string;
     filter: string;
     refresh: string;
+    retry: string;
     sync: string;
     syncAll: string;
     syncing: string;
@@ -105,6 +106,18 @@ export interface Translations {
     loginFailed: string;
     cannotConnectToServer: string;
     contactAdministrator: string;
+    qpsManagerForGoogleAuthBuyers: string;
+    signInToContinue: string;
+    signInWithAuthing: string;
+    signInWithGoogle: string;
+    signInWithEmail: string;
+    orSeparator: string;
+    backToOptions: string;
+    emailPlaceholder: string;
+    serverUnavailableTryAgainSoon: string;
+    loginServiceTemporarilyUnavailable: string;
+    cannotReachServerCheckConnection: string;
+    protectedByCatScanAuthentication: string;
   };
 
   dashboard: {
@@ -127,6 +140,16 @@ export interface Translations {
     needRtbReport: string;
     period: string;
     days: string;
+    dataAsOf: string;
+    dataFreshnessPending: string;
+    homeLabel: string;
+    bidstreamLabel: string;
+    configCpm: string;
+    avgCpm: string;
+    unableToLoadBuyerSeatsRetry: string;
+    loadingSeatAccess: string;
+    noActiveBuyerSeatsSyncSettings: string;
+    selectSeatToLoadHomeAnalytics: string;
   };
 
   publishers: {
@@ -185,6 +208,11 @@ export interface Translations {
     useSyncAllToFetch: string;
     waste: string;
     suspended: string;
+    configPerformanceFailedNoValues: string;
+    configPerformanceDelayedNoValues: string;
+    showingLast: string;
+    becauseNoRowsFoundInRequested: string;
+    dayWindow: string;
   };
 
   import: {
