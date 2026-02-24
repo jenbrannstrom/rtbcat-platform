@@ -134,6 +134,7 @@
     - [x] Added partial-locale deep fallback to English (`dashboard/src/lib/i18n/index.ts`) so translations can ship incrementally per language
     - [x] Added initial Dutch (`nl`) dictionary priority slice (shared shell copy + core `pretargeting` UI labels/messages) (`dashboard/src/lib/i18n/translations/nl.ts`)
     - [x] Expanded Dutch (`nl`) coverage for `previewModal` (source/cache states, URL labels/tooltips, approval/language/geo mismatch UI, media preview labels) (`dashboard/src/lib/i18n/translations/nl.ts`)
+    - [x] Expanded Dutch (`nl`) coverage for `campaigns` + `creatives` namespaces (clustering, campaign-detail, creatives page filters/status/errors/drilldown copy) (`dashboard/src/lib/i18n/translations/nl.ts`)
     - [x] Added initial Spanish (`es`) dictionary for core shell/auth/navigation/sidebar + dashboard home summary copy (`dashboard/src/lib/i18n/translations/es.ts`)
     - [x] Updated language picker native names/flags for supported locales (`dashboard/src/lib/i18n/index.ts`, `dashboard/src/components/language-selector.tsx`)
     - [x] Expanded Spanish (`es`) coverage for core `import` flows (upload/preview/result/history/freshness/matrix/export guide) and `setup` tabs (API/Gmail/System primary UI/status copy) (`dashboard/src/lib/i18n/translations/es.ts`)
