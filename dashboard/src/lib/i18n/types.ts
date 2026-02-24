@@ -818,6 +818,24 @@ export interface Translations {
     previewFirstRowsCount: string;
     importingData: string;
     pleaseWaitProcessingFile: string;
+    requiredTableReportBidsInAuction: string;
+    requiredTableReportQuality: string;
+    requiredTableReportPipelineGeo: string;
+    requiredTableReportPipeline: string;
+    requiredTableReportBidFiltering: string;
+    targetTableRtbDaily: string;
+    targetTableRtbBidstream: string;
+    targetTableRtbBidFiltering: string;
+    requiredTableColumnsBidsInAuction: string;
+    requiredTableColumnsQuality: string;
+    requiredTableColumnsPipelineGeo: string;
+    requiredTableColumnsPipeline: string;
+    requiredTableColumnsBidFiltering: string;
+    autoDetectionRuleBidFiltering: string;
+    autoDetectionRuleBidsInAuction: string;
+    autoDetectionRuleQuality: string;
+    autoDetectionRulePipeline: string;
+    autoDetectionRulePipelineGeo: string;
   };
 
   campaigns: {

@@ -106,6 +106,7 @@
     - [x] Import result card success/failure labels/stats/actions copy converted (`dashboard/src/components/import/ImportResultCard.tsx`)
     - [x] Import column mapping/freshness/history widgets copy converted (`dashboard/src/components/import/ColumnMappingCard.tsx`, `dashboard/src/components/import/DataFreshnessGrid.tsx`, `dashboard/src/components/import/ImportHistorySection.tsx`)
     - [x] Import dropzone/preview/progress widget copy converted (`dashboard/src/components/import-dropzone.tsx`, `dashboard/src/components/import-preview.tsx`, `dashboard/src/components/import-progress.tsx`)
+    - [x] Required columns reference table row/bullet copy converted (`dashboard/src/components/import/RequiredColumnsTable.tsx`)
     - [x] Shared language selector fallback labels/titles converted (`dashboard/src/components/language-selector.tsx`)
     - [x] Shared first-run loading guard + format chart fallback/tooltip labels converted (`dashboard/src/components/first-run-check.tsx`, `dashboard/src/components/format-chart.tsx`)
     - [x] Route redirect wrappers + pretargeting billing route fallback/back-label copy converted (`dashboard/src/app/uploads/page.tsx`, `dashboard/src/app/setup/page.tsx`, `dashboard/src/app/connect/page.tsx`, `dashboard/src/app/bill_id/[billingId]/page.tsx`)
