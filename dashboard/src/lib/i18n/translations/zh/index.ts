@@ -1,6 +1,7 @@
 import type { PartialTranslations } from '../../types';
 
 import ns_adminNav from './adminNav';
+import ns_admin from './admin';
 import ns_auth from './auth';
 import ns_common from './common';
 import ns_dashboard from './dashboard';
@@ -23,6 +24,7 @@ export const zh: PartialTranslations = {
   qpsNav: ns_qpsNav,
   settingsNav: ns_settingsNav,
   adminNav: ns_adminNav,
+  admin: ns_admin,
   sidebar: ns_sidebar,
   auth: ns_auth,
   dashboard: ns_dashboard,
