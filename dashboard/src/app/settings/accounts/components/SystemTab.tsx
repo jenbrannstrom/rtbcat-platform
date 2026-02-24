@@ -19,6 +19,7 @@ import {
   getSystemStatus,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/contexts/i18n-context";
 
 /**
  * System status and configuration tab.
@@ -26,6 +27,7 @@ import { cn } from "@/lib/utils";
  */
 export function SystemTab() {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const [batchLimit, setBatchLimit] = useState(50);
   const [forceRetry, setForceRetry] = useState(false);
 
@@ -51,23 +53,23 @@ export function SystemTab() {
       <div className="card p-6">
         <div className="flex items-center mb-4">
           <Server className="h-5 w-5 text-gray-400 mr-2" />
-          <h3 className="text-lg font-medium text-gray-900">API Status</h3>
+          <h3 className="text-lg font-medium text-gray-900">{t.settings.apiStatus}</h3>
         </div>
         <div className="grid grid-cols-3 gap-4">
           <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-500">Status</p>
+            <p className="text-sm text-gray-500">{t.settings.status}</p>
             <p className="font-medium text-green-600 flex items-center gap-1">
               <CheckCircle className="h-4 w-4" /> {health?.status}
             </p>
           </div>
           <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-500">Version</p>
+            <p className="text-sm text-gray-500">{t.settings.version}</p>
             <p className="font-medium text-gray-900">{health?.version}</p>
           </div>
           <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-500">Configured</p>
+            <p className="text-sm text-gray-500">{t.settings.configured}</p>
             <p className={cn("font-medium", health?.configured ? "text-green-600" : "text-red-600")}>
-              {health?.configured ? "Yes" : "No"}
+              {health?.configured ? t.settings.yes : t.settings.no}
             </p>
           </div>
         </div>
@@ -77,7 +79,7 @@ export function SystemTab() {
       <div className="card p-6">
         <div className="flex items-center mb-4">
           <Cpu className="h-5 w-5 text-gray-400 mr-2" />
-          <h3 className="text-lg font-medium text-gray-900">System Status</h3>
+          <h3 className="text-lg font-medium text-gray-900">{t.settings.systemStatus}</h3>
         </div>
         {systemStatusLoading ? (
           <div className="flex items-center justify-center py-4">
@@ -86,21 +88,21 @@ export function SystemTab() {
         ) : systemStatus ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-500">Python</p>
+              <p className="text-sm text-gray-500">{t.settings.python}</p>
               <p className="font-medium text-gray-900">{systemStatus.python_version}</p>
             </div>
             <div className="p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-500">ffmpeg</p>
+              <p className="text-sm text-gray-500">{t.settings.ffmpeg}</p>
               <p className={cn("font-medium", systemStatus.ffmpeg_available ? "text-green-600" : "text-yellow-600")}>
-                {systemStatus.ffmpeg_available ? "Installed" : "Not installed"}
+                {systemStatus.ffmpeg_available ? t.settings.installed : t.settings.notInstalled}
               </p>
             </div>
             <div className="p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-500">Disk Space</p>
-              <p className="font-medium text-gray-900">{systemStatus.disk_space_gb} GB free</p>
+              <p className="text-sm text-gray-500">{t.settings.diskSpace}</p>
+              <p className="font-medium text-gray-900">{systemStatus.disk_space_gb} {t.settings.gbFree}</p>
             </div>
             <div className="p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-500">Database</p>
+              <p className="text-sm text-gray-500">{t.settings.database}</p>
               <p className="font-medium text-gray-900">{systemStatus.database_size_mb} MB</p>
             </div>
           </div>
@@ -111,24 +113,24 @@ export function SystemTab() {
       <div className="card p-6">
         <div className="flex items-center mb-4">
           <Database className="h-5 w-5 text-gray-400 mr-2" />
-          <h3 className="text-lg font-medium text-gray-900">Database</h3>
+          <h3 className="text-lg font-medium text-gray-900">{t.settings.database}</h3>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-500">Creatives</p>
+            <p className="text-sm text-gray-500">{t.settings.creatives}</p>
             <p className="font-bold text-xl text-gray-900">{stats?.creative_count ?? 0}</p>
           </div>
           <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-500">Creative Clusters</p>
+            <p className="text-sm text-gray-500">{t.settings.campaigns}</p>
             <p className="font-bold text-xl text-gray-900">{stats?.campaign_count ?? 0}</p>
           </div>
           <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-500">Clusters</p>
+            <p className="text-sm text-gray-500">{t.settings.clusters}</p>
             <p className="font-bold text-xl text-gray-900">{stats?.cluster_count ?? 0}</p>
           </div>
           <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-500">Path</p>
-            <p className="text-xs font-mono text-gray-600 truncate" title={stats?.db_path}>{stats?.db_path || "N/A"}</p>
+            <p className="text-sm text-gray-500">{t.settings.path}</p>
+            <p className="text-xs font-mono text-gray-600 truncate" title={stats?.db_path}>{stats?.db_path || t.settings.notAvailable}</p>
           </div>
         </div>
       </div>
@@ -137,7 +139,7 @@ export function SystemTab() {
       <div className="card p-6">
         <div className="flex items-center mb-4">
           <Video className="h-5 w-5 text-gray-400 mr-2" />
-          <h3 className="text-lg font-medium text-gray-900">Video Thumbnails</h3>
+          <h3 className="text-lg font-medium text-gray-900">{t.settings.videoThumbnails}</h3>
         </div>
         {thumbnailStatusLoading ? (
           <div className="flex items-center justify-center py-4">
@@ -148,25 +150,25 @@ export function SystemTab() {
             <div className="grid grid-cols-4 gap-4">
               <div className="text-center p-3 bg-gray-50 rounded-lg">
                 <div className="text-xl font-bold text-gray-900">{thumbnailStatus.total_videos}</div>
-                <div className="text-xs text-gray-500">Total Videos</div>
+                <div className="text-xs text-gray-500">{t.settings.totalVideos}</div>
               </div>
               <div className="text-center p-3 bg-green-50 rounded-lg">
                 <div className="text-xl font-bold text-green-600">{thumbnailStatus.with_thumbnails}</div>
-                <div className="text-xs text-gray-500">With Thumbnails</div>
+                <div className="text-xs text-gray-500">{t.settings.withThumbnails}</div>
               </div>
               <div className="text-center p-3 bg-yellow-50 rounded-lg">
                 <div className="text-xl font-bold text-yellow-600">{thumbnailStatus.pending}</div>
-                <div className="text-xs text-gray-500">Pending</div>
+                <div className="text-xs text-gray-500">{t.settings.pending}</div>
               </div>
               <div className="text-center p-3 bg-red-50 rounded-lg">
                 <div className="text-xl font-bold text-red-600">{thumbnailStatus.failed}</div>
-                <div className="text-xs text-gray-500">Failed</div>
+                <div className="text-xs text-gray-500">{t.settings.failed}</div>
               </div>
             </div>
 
             <div>
               <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-600">Coverage</span>
+                <span className="text-gray-600">{t.settings.coverage}</span>
                 <span className="font-medium">{thumbnailStatus.coverage_percent}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
@@ -178,7 +180,7 @@ export function SystemTab() {
               <div className="pt-4 border-t border-gray-100">
                 <div className="flex items-center gap-4 mb-3">
                   <label className="text-sm text-gray-600">
-                    Batch size:
+                    {t.settings.batchSize}
                     <select
                       value={batchLimit}
                       onChange={(e) => setBatchLimit(Number(e.target.value))}
@@ -199,7 +201,7 @@ export function SystemTab() {
                       className="mr-2"
                       disabled={generateMutation.isPending}
                     />
-                    Retry failed
+                    {t.settings.retryFailed}
                   </label>
                 </div>
                 <button
@@ -208,9 +210,9 @@ export function SystemTab() {
                   className={cn("btn-primary w-full", generateMutation.isPending && "opacity-50")}
                 >
                   {generateMutation.isPending ? (
-                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generating...</>
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{t.settings.generating}</>
                   ) : (
-                    <><Image className="h-4 w-4 mr-2" />Generate Thumbnails</>
+                    <><Image className="h-4 w-4 mr-2" />{t.settings.generateThumbnails}</>
                   )}
                 </button>
               </div>
@@ -218,7 +220,7 @@ export function SystemTab() {
 
             {!thumbnailStatus.ffmpeg_available && (
               <div className="p-3 bg-yellow-50 rounded-lg text-sm text-yellow-800">
-                <strong>ffmpeg not found.</strong> Install to generate video thumbnails:
+                <strong>{t.setup.ffmpegNotFound}</strong> {t.setup.installToGenerate}
                 <code className="block mt-1 bg-yellow-100 p-2 rounded font-mono text-xs">sudo apt install ffmpeg</code>
               </div>
             )}
