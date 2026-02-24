@@ -773,6 +773,7 @@ export const en: Translations = {
     notInstalled: 'Not installed',
     diskSpace: 'Disk Space',
     gbFree: 'GB free',
+    mb: 'MB',
     databaseSize: 'Database Size',
     thumbnailsGenerated: 'Thumbnails Generated',
     database: 'Database',
