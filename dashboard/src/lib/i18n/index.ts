@@ -1,9 +1,11 @@
 export type { Language, Translations, TranslationKey, PartialTranslations } from './types';
 export { en } from './translations/en';
 export { es } from './translations/es';
+export { nl } from './translations/nl';
 
 import { en } from './translations/en';
 import { es } from './translations/es';
+import { nl } from './translations/nl';
 import type { Language, PartialTranslations, Translations } from './types';
 
 type PlainObject = Record<string, unknown>;
@@ -50,7 +52,7 @@ export const translations: Record<Language, Translations> = {
   uk: en,
   da: en,
   fr: en,
-  nl: en,
+  nl: withEnglishFallback(nl),
   he: en,
   ar: en,
 };
