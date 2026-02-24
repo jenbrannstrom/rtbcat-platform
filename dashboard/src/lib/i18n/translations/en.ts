@@ -1398,6 +1398,22 @@ export const en: Translations = {
     noIssuesDetectedDesc: 'Your RTB configuration looks efficient. Check back after more data is collected.',
   },
 
+  aiControl: {
+    aiModeLabel: 'AI Mode:',
+    title: 'AI Control Settings',
+    manualOnly: 'Manual only',
+    manualShort: 'Manual',
+    manualDescription: "I'll make all changes myself",
+    aiProposes: 'AI proposes',
+    aiShort: 'AI',
+    assistedDescription: 'AI suggests, I approve',
+    autoOptimize: 'Auto-optimize',
+    autoShort: 'Auto',
+    autonomousDescription: 'AI optimizes within limits',
+    comingSoon: 'Coming Soon',
+    assistedHint: "AI will analyze your data and suggest optimizations. You review and approve each change before it's applied.",
+  },
+
   wasteAnalysis: {
     title: 'Waste Analysis',
     subtitle: 'Analyze and optimize your QPS waste',

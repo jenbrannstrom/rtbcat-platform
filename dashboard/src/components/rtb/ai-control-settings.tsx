@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Bot, Settings, Zap, Shield, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/contexts/i18n-context';
 
 export type AIControlMode = 'manual' | 'assisted' | 'autonomous';
 
@@ -12,40 +13,44 @@ interface AIControlSettingsProps {
   compact?: boolean;
 }
 
-const MODE_OPTIONS: {
-  value: AIControlMode;
-  label: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  badge?: string;
-}[] = [
-  {
-    value: 'manual',
-    label: 'Manual only',
-    description: "I'll make all changes myself",
-    icon: Settings,
-  },
-  {
-    value: 'assisted',
-    label: 'AI proposes',
-    description: 'AI suggests, I approve',
-    icon: Bot,
-  },
-  {
-    value: 'autonomous',
-    label: 'Auto-optimize',
-    description: 'AI optimizes within limits',
-    icon: Zap,
-    badge: 'Coming Soon',
-  },
-];
-
 export function AIControlSettings({
   initialMode = 'assisted',
   onModeChange,
   compact = false,
 }: AIControlSettingsProps) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<AIControlMode>(initialMode);
+  const modeOptions: {
+    value: AIControlMode;
+    label: string;
+    compactLabel: string;
+    description: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: string;
+  }[] = [
+    {
+      value: 'manual',
+      label: t.aiControl.manualOnly,
+      compactLabel: t.aiControl.manualShort,
+      description: t.aiControl.manualDescription,
+      icon: Settings,
+    },
+    {
+      value: 'assisted',
+      label: t.aiControl.aiProposes,
+      compactLabel: t.aiControl.aiShort,
+      description: t.aiControl.assistedDescription,
+      icon: Bot,
+    },
+    {
+      value: 'autonomous',
+      label: t.aiControl.autoOptimize,
+      compactLabel: t.aiControl.autoShort,
+      description: t.aiControl.autonomousDescription,
+      icon: Zap,
+      badge: t.aiControl.comingSoon,
+    },
+  ];
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -65,9 +70,9 @@ export function AIControlSettings({
   if (compact) {
     return (
       <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-500">AI Mode:</span>
+        <span className="text-xs text-gray-500">{t.aiControl.aiModeLabel}</span>
         <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-          {MODE_OPTIONS.map((option) => {
+          {modeOptions.map((option) => {
             const Icon = option.icon;
             const isDisabled = option.value === 'autonomous';
             return (
@@ -86,7 +91,7 @@ export function AIControlSettings({
                 title={option.description}
               >
                 <Icon className="h-3 w-3" />
-                {option.label.split(' ')[0]}
+                {option.compactLabel}
               </button>
             );
           })}
@@ -99,11 +104,11 @@ export function AIControlSettings({
     <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
       <div className="flex items-center gap-2 mb-3">
         <Shield className="h-4 w-4 text-blue-600" />
-        <span className="font-medium text-gray-900">AI Control Settings</span>
+        <span className="font-medium text-gray-900">{t.aiControl.title}</span>
       </div>
 
       <div className="space-y-2">
-        {MODE_OPTIONS.map((option) => {
+        {modeOptions.map((option) => {
           const Icon = option.icon;
           const isDisabled = option.value === 'autonomous';
           const isSelected = mode === option.value;
@@ -162,8 +167,7 @@ export function AIControlSettings({
         <div className="mt-3 p-2 bg-blue-50 rounded border border-blue-200 text-xs text-blue-700 flex items-start gap-2">
           <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
           <span>
-            AI will analyze your data and suggest optimizations. You review and approve
-            each change before it's applied.
+            {t.aiControl.assistedHint}
           </span>
         </div>
       )}
