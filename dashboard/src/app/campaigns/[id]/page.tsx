@@ -46,7 +46,7 @@ export default function CampaignDetailPage() {
   const router = useRouter();
   const params = useParams();
   const { selectedBuyerId } = useAccount();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const campaignId = parseInt(params.id as string);
   const campaignsHref = toBuyerScopedPath("/campaigns", selectedBuyerId);
   const clustersHref = toBuyerScopedPath("/clusters", selectedBuyerId);
@@ -63,6 +63,27 @@ export default function CampaignDetailPage() {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
+
+  const formatTrendDate = (value: string | undefined): string => {
+    if (!value) return "";
+    const parsed = new Date(`${value}T00:00:00`);
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString(language);
+  };
+
+  const formatCampaignStatus = (status: string): string => {
+    switch (status.toLowerCase()) {
+      case "draft":
+        return t.campaigns.statusDraft;
+      case "paused":
+        return t.campaigns.statusPaused;
+      case "inactive":
+        return t.campaigns.statusInactive;
+      case "archived":
+        return t.campaigns.statusArchived;
+      default:
+        return status;
+    }
+  };
 
   async function fetchCampaignData() {
     setLoading(true);
@@ -256,7 +277,7 @@ export default function CampaignDetailPage() {
                   )}
                   {campaign.status !== "active" && (
                     <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600">
-                      {campaign.status}
+                      {formatCampaignStatus(campaign.status)}
                     </span>
                   )}
                 </div>
@@ -373,14 +394,18 @@ export default function CampaignDetailPage() {
                   key={day.date}
                   className="flex-1 bg-primary-100 hover:bg-primary-200 rounded-t transition-colors"
                   style={{ height: `${Math.max(height, 2)}%` }}
-                  title={`${day.date}: $${day.spend.toFixed(2)} | ${formatNumber(day.impressions)} ${t.creatives.impsShort}`}
+                  title={t.campaigns.dailyTrendTooltip
+                    .replace("{date}", formatTrendDate(day.date))
+                    .replace("{spend}", day.spend.toFixed(2))
+                    .replace("{impressions}", formatNumber(day.impressions))
+                    .replace("{impsLabel}", t.creatives.impsShort)}
                 />
               );
             })}
           </div>
           <div className="flex justify-between text-xs text-gray-400 mt-1">
-            <span>{dailyTrend[Math.max(0, dailyTrend.length - 14)]?.date}</span>
-            <span>{dailyTrend[dailyTrend.length - 1]?.date}</span>
+            <span>{formatTrendDate(dailyTrend[Math.max(0, dailyTrend.length - 14)]?.date)}</span>
+            <span>{formatTrendDate(dailyTrend[dailyTrend.length - 1]?.date)}</span>
           </div>
         </div>
       )}

@@ -901,6 +901,11 @@ export interface Translations {
     filteredCreativesCount: string;
     disapprovedCreativeTitle: string;
     disapprovedCreativeTitlePlural: string;
+    statusDraft: string;
+    statusPaused: string;
+    statusInactive: string;
+    statusArchived: string;
+    dailyTrendTooltip: string;
   };
 
   creatives: {
