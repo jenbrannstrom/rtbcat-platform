@@ -70,6 +70,7 @@
     - [x] Retention settings page UI copy + local success/error/job status messages converted (`dashboard/src/app/settings/retention/page.tsx`)
     - [x] Settings Accounts top-level wrapper/status bar copy + Settings System DB-path fallback converted (`dashboard/src/app/settings/accounts/page.tsx`, `dashboard/src/app/settings/system/page.tsx`)
     - [x] `ApiConnectionTab` runtime messages + setup/instruction/account/seat section copy + seat-row status labels/tooltips converted (`dashboard/src/app/settings/accounts/components/ApiConnectionTab.tsx`)
+    - [x] `ApiConnectionTab` remaining Google product/role labels moved to `t.setup.*` keys (`dashboard/src/app/settings/accounts/components/ApiConnectionTab.tsx`)
     - [x] `SystemTab` (under `/settings/accounts/components`) main status/database/thumbnail controls copy converted (`dashboard/src/app/settings/accounts/components/SystemTab.tsx`)
     - [x] `GeminiApiKeySection` UI copy + local validation/fallback error messages converted (`dashboard/src/app/settings/accounts/components/GeminiApiKeySection.tsx`)
     - [x] `GmailReportsTab` top-level/status/import runtime/disconnected-state copy + import-phase labels converted (partial; remaining deep copy pending) (`dashboard/src/app/settings/accounts/components/GmailReportsTab.tsx`)
