@@ -69,16 +69,6 @@ function formatDate(dateStr: string): string {
   });
 }
 
-const PUBLISHER_MODE_LABELS: Record<string, string> = {
-  EXCLUSIVE: 'Blacklist',
-  INCLUSIVE: 'Whitelist',
-};
-
-function formatPublisherMode(mode: string | null | undefined): string {
-  if (!mode) return 'No publisher targeting';
-  return PUBLISHER_MODE_LABELS[mode] || mode;
-}
-
 function normalizePublisherId(value: string): string {
   return value.trim();
 }
@@ -1052,7 +1042,7 @@ export function PretargetingSettingsEditor({
       change_type: 'remove_size',
       field_name: 'included_sizes',
       value,
-      reason: 'Blocking size to reduce QPS waste',
+      reason: t.pretargeting.reasonBlockSizeReduceQpsWaste,
     });
   };
 
@@ -1132,7 +1122,7 @@ export function PretargetingSettingsEditor({
           change_type: 'remove_size',
           field_name: 'included_sizes',
           value: size,
-          reason: 'Bulk removal to reduce QPS waste',
+          reason: t.pretargeting.reasonBulkRemovalReduceQpsWaste,
         });
       });
   };
@@ -1157,7 +1147,7 @@ export function PretargetingSettingsEditor({
           change_type: 'remove_size',
           field_name: 'included_sizes',
           value: size,
-          reason: 'Bulk removal to reduce QPS waste',
+          reason: t.pretargeting.reasonBulkRemovalReduceQpsWaste,
         });
       }
     });

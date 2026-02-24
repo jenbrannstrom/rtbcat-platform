@@ -374,6 +374,8 @@ export interface Translations {
     importPublishersCount: string;
     historyOnField: string;
     historyMetaSeparator: string;
+    reasonBlockSizeReduceQpsWaste: string;
+    reasonBulkRemovalReduceQpsWaste: string;
     commonlyBlockedPublishers: string;
     suggestionsCount: string;
     allCommonlyBlockedAlreadyHandled: string;
