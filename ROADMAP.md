@@ -141,6 +141,7 @@
     - [x] Expanded Dutch (`nl`) coverage for `admin` (admin dashboard, users/local-password + seat-access UI, admin settings, audit log copy) (`dashboard/src/lib/i18n/translations/nl.ts`)
     - [x] Expanded Dutch (`nl`) coverage for waste/QPS analysis namespaces (`publishers`, `sizes`, `geo`, `aiControl`, `configPerformance`, `wasteAnalysis`) (`dashboard/src/lib/i18n/translations/nl.ts`)
     - [x] Expanded Dutch (`nl`) coverage for core shell/login/home states (`relativeTime`, `auth`, `dashboard`, `errors`) (`dashboard/src/lib/i18n/translations/nl.ts`)
+    - [x] Expanded Dutch (`nl`) coverage for ops/support namespaces (`settings`, `retentionPage`, `reports`, `history`, `connect`) (`dashboard/src/lib/i18n/translations/nl.ts`)
     - [x] Added initial Spanish (`es`) dictionary for core shell/auth/navigation/sidebar + dashboard home summary copy (`dashboard/src/lib/i18n/translations/es.ts`)
     - [x] Updated language picker native names/flags for supported locales (`dashboard/src/lib/i18n/index.ts`, `dashboard/src/components/language-selector.tsx`)
     - [x] Expanded Spanish (`es`) coverage for core `import` flows (upload/preview/result/history/freshness/matrix/export guide) and `setup` tabs (API/Gmail/System primary UI/status copy) (`dashboard/src/lib/i18n/translations/es.ts`)
