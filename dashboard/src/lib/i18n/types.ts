@@ -42,6 +42,7 @@ export interface Translations {
     never: string;
     version: string;
     done: string;
+    redirectingTo: string;
   };
 
   relativeTime: {
@@ -236,6 +237,8 @@ export interface Translations {
 
   pretargeting: {
     configs: string;
+    missingConfigId: string;
+    backToConfigs: string;
     active: string;
     syncFromGoogle: string;
     noPretargetingConfigs: string;
