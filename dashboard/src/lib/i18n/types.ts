@@ -342,6 +342,10 @@ export interface Translations {
     snapshotPanelComparisonsTitle: string;
     snapshotPanelLoadingComparisons: string;
     snapshotPanelNoComparisons: string;
+    snapshotPanelRestoreSnapshotTitle: string;
+    snapshotPanelRestoreChangesWillBeApplied: string;
+    snapshotPanelRestoreReasonLabel: string;
+    snapshotPanelRestoreReasonPlaceholder: string;
     noSnapshotsAvailable: string;
     rollbackToSnapshotPrompt: string;
     rollingBack: string;
