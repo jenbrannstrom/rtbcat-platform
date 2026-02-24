@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Globe, Upload, ArrowRight, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
 import type { GeoPerformance } from "@/lib/api";
 import { useAccount } from "@/contexts/account-context";
+import { useTranslation } from "@/contexts/i18n-context";
 import { toBuyerScopedPath } from "@/lib/buyer-routes";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "./FunnelCard";
@@ -20,6 +21,7 @@ interface GeoAnalysisSectionProps {
  */
 export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) {
   const { selectedBuyerId } = useAccount();
+  const { t } = useTranslation();
   const importHref = toBuyerScopedPath("/import", selectedBuyerId);
   type SortColumn = "country" | "reached" | "bids" | "wins" | "win_rate";
   type SortDirection = "asc" | "desc";
@@ -35,10 +37,10 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
           <div>
             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <Globe className="h-5 w-5 text-green-600" />
-              Geographic Performance
+              {t.wasteAnalysis.geographicPerformance}
             </h3>
             <p className="text-sm text-gray-500 mt-1">
-              Which geos have highest win rates?
+              {t.wasteAnalysis.geographicPerformanceSubtitle}
             </p>
           </div>
         </div>
@@ -46,34 +48,34 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
           <div className="flex items-start gap-4">
             <Upload className="h-8 w-8 text-gray-400 flex-shrink-0" />
             <div>
-              <h4 className="font-medium text-gray-700 mb-2">Geographic Data Not Available</h4>
+              <h4 className="font-medium text-gray-700 mb-2">{t.wasteAnalysis.geographicDataNotAvailable}</h4>
               <p className="text-sm text-gray-600 mb-4">
-                Import a creative bidding activity report to see geographic win rates.
+                {t.wasteAnalysis.importCreativeBiddingGeoReportPrompt}
               </p>
               <div className="p-3 bg-gray-50 rounded border border-gray-200 text-xs">
-                <p className="font-semibold text-gray-700 mb-2">Report: &quot;catscan-creative-bids&quot;</p>
+                <p className="font-semibold text-gray-700 mb-2">{t.wasteAnalysis.creativeBidsReportName}</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="font-semibold text-gray-500 mb-1">Dimensions:</p>
+                    <p className="font-semibold text-gray-500 mb-1">{t.wasteAnalysis.dimensions}</p>
                     <ul className="text-gray-600">
-                      <li>1. Day</li>
-                      <li>2. Creative ID</li>
-                      <li>3. Country</li>
+                      <li>{t.wasteAnalysis.dimensionDayIndex}</li>
+                      <li>{t.wasteAnalysis.dimensionCreativeIdIndex}</li>
+                      <li>{t.wasteAnalysis.dimensionCountryIndex}</li>
                     </ul>
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-500 mb-1">Metrics:</p>
+                    <p className="font-semibold text-gray-500 mb-1">{t.wasteAnalysis.metrics}</p>
                     <ul className="text-gray-600">
-                      <li>✓ Bids</li>
-                      <li>✓ Bids in auction</li>
-                      <li>✓ Reached queries</li>
+                      <li>{t.wasteAnalysis.metricBids}</li>
+                      <li>{t.wasteAnalysis.metricBidsInAuction}</li>
+                      <li>{t.wasteAnalysis.metricReachedQueries}</li>
                     </ul>
                   </div>
                 </div>
-                <p className="mt-2 text-gray-500">Schedule: <strong>Daily</strong></p>
+                <p className="mt-2 text-gray-500">{t.wasteAnalysis.schedule} <strong>{t.wasteAnalysis.daily}</strong></p>
               </div>
               <Link href={importHref} className="inline-flex items-center gap-1 mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm">
-                Go to Import → <ArrowRight className="h-3 w-3" />
+                {t.wasteAnalysis.goToImport} <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
           </div>
@@ -148,21 +150,24 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
         <div>
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <Globe className="h-5 w-5 text-green-600" />
-            Geographic Performance — overall for {seatName || "seat"}
+            {t.wasteAnalysis.geographicPerformanceOverallFor.replace(
+              "{seatName}",
+              seatName || t.wasteAnalysis.seat
+            )}
           </h3>
           <p className="text-sm text-gray-500 mt-1">
-            Win rates by country (all pretargeting configs combined)
+            {t.wasteAnalysis.geographicPerformanceTableSubtitle}
           </p>
         </div>
         <div className="flex items-center gap-3 text-sm text-gray-600">
           <div className="px-3 py-1 bg-gray-50 rounded border">
-            Reached <span className="ml-1 font-semibold text-gray-900">{formatNumber(totalReached)}</span>
+            {t.wasteAnalysis.reached} <span className="ml-1 font-semibold text-gray-900">{formatNumber(totalReached)}</span>
           </div>
           <div className="px-3 py-1 bg-gray-50 rounded border">
-            Wins <span className="ml-1 font-semibold text-gray-900">{formatNumber(totalWins)}</span>
+            {t.wasteAnalysis.wins} <span className="ml-1 font-semibold text-gray-900">{formatNumber(totalWins)}</span>
           </div>
           <div className="px-3 py-1 bg-gray-50 rounded border">
-            Win Rate <span className="ml-1 font-semibold text-gray-900">{overallWinRate.toFixed(1)}%</span>
+            {t.wasteAnalysis.winRate} <span className="ml-1 font-semibold text-gray-900">{overallWinRate.toFixed(1)}%</span>
           </div>
         </div>
       </div>
@@ -174,27 +179,27 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
             <tr className="border-b border-gray-200">
               <th className="text-left py-2 font-medium text-gray-600">
                 <button onClick={() => handleSort("country")} className="inline-flex items-center gap-1 hover:text-gray-900">
-                  Country {getSortIcon("country")}
+                  {t.wasteAnalysis.country} {getSortIcon("country")}
                 </button>
               </th>
               <th className="text-right py-2 font-medium text-gray-600">
                 <button onClick={() => handleSort("reached")} className="inline-flex items-center gap-1 hover:text-gray-900">
-                  Reached {getSortIcon("reached")}
+                  {t.wasteAnalysis.reached} {getSortIcon("reached")}
                 </button>
               </th>
               <th className="text-right py-2 font-medium text-gray-600">
                 <button onClick={() => handleSort("bids")} className="inline-flex items-center gap-1 hover:text-gray-900">
-                  Bids {getSortIcon("bids")}
+                  {t.wasteAnalysis.bids} {getSortIcon("bids")}
                 </button>
               </th>
               <th className="text-right py-2 font-medium text-gray-600">
                 <button onClick={() => handleSort("wins")} className="inline-flex items-center gap-1 hover:text-gray-900">
-                  Wins {getSortIcon("wins")}
+                  {t.wasteAnalysis.wins} {getSortIcon("wins")}
                 </button>
               </th>
               <th className="text-right py-2 font-medium text-gray-600">
                 <button onClick={() => handleSort("win_rate")} className="inline-flex items-center gap-1 hover:text-gray-900">
-                  Win Rate {getSortIcon("win_rate")}
+                  {t.wasteAnalysis.winRate} {getSortIcon("win_rate")}
                 </button>
               </th>
             </tr>

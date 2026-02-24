@@ -84,6 +84,7 @@
     - [x] Pretargeting settings editor shell copy converted (header/tabs/status/history/confirm dialogs; deeper helper sections still pending) (`dashboard/src/components/rtb/pretargeting-settings-editor.tsx`)
     - [x] Waste analyzer RTB funnel card copy + import instructions converted (`dashboard/src/components/waste-analyzer/FunnelCard.tsx`)
     - [x] Waste analyzer publisher performance section copy + empty-state report instructions converted (`dashboard/src/components/waste-analyzer/PublisherPerformanceSection.tsx`)
+    - [x] Waste analyzer geographic analysis section copy + sortable table labels converted (`dashboard/src/components/waste-analyzer/GeoAnalysisSection.tsx`)
     - [ ] Remaining settings/admin/shared hotspots (`/settings/accounts/components/GmailReportsTab.tsx` remaining deep copy and deeper RTB/settings helper components)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
