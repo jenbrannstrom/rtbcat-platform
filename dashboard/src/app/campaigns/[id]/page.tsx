@@ -346,7 +346,9 @@ export default function CampaignDetailPage() {
               {t.dashboard.winRate}
             </div>
             <p className="text-2xl font-bold text-gray-900">
-              {performance.win_rate !== null ? `${performance.win_rate.toFixed(2)}%` : "N/A"}
+              {performance.win_rate !== null
+                ? `${performance.win_rate.toFixed(2)}%`
+                : t.campaigns.notAvailable}
             </p>
             {performance.cpm !== null && (
               <p className="text-xs text-gray-500">${performance.cpm.toFixed(2)} {t.creatives.cpm}</p>

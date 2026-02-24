@@ -868,6 +868,7 @@ export const en: Translations = {
     removeFromCampaign: 'Remove from Campaign',
     noCreativesInCampaign: 'No creatives in this campaign',
     browseCreatives: 'Browse Creatives',
+    notAvailable: 'N/A',
   },
 
   creatives: {
