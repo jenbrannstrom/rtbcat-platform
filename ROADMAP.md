@@ -107,6 +107,7 @@
     - [x] Import column mapping/freshness/history widgets copy converted (`dashboard/src/components/import/ColumnMappingCard.tsx`, `dashboard/src/components/import/DataFreshnessGrid.tsx`, `dashboard/src/components/import/ImportHistorySection.tsx`)
     - [x] Import dropzone/preview/progress widget copy converted (`dashboard/src/components/import-dropzone.tsx`, `dashboard/src/components/import-preview.tsx`, `dashboard/src/components/import-progress.tsx`)
     - [x] Shared language selector fallback labels/titles converted (`dashboard/src/components/language-selector.tsx`)
+    - [x] Shared first-run loading guard + format chart fallback/tooltip labels converted (`dashboard/src/components/first-run-check.tsx`, `dashboard/src/components/format-chart.tsx`)
     - [x] AI control mode settings labels/descriptions/hints converted (`dashboard/src/components/rtb/ai-control-settings.tsx`)
     - [x] `GmailReportsTab` residual deep-copy audit completed; remaining literals are command/path examples kept intentionally (`dashboard/src/app/settings/accounts/components/GmailReportsTab.tsx`)
     - [x] RTB config performance panel labels/error/empty-state/table/settings-chip copy converted (`dashboard/src/components/rtb/config-performance.tsx`)
