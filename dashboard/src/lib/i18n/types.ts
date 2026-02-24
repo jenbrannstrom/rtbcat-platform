@@ -869,6 +869,7 @@ export interface Translations {
     removeFromCampaign: string;
     noCreativesInCampaign: string;
     browseCreatives: string;
+    notAvailable: string;
   };
 
   creatives: {
