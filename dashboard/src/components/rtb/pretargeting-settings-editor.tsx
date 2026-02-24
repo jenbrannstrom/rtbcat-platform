@@ -427,7 +427,11 @@ function PublisherTargetingSection({
   );
 
   const isWhitelist = effectiveMode === 'INCLUSIVE';
-  const modeLabel = formatPublisherMode(effectiveMode);
+  const modeLabel = effectiveMode === 'INCLUSIVE'
+    ? t.pretargeting.publisherModeWhitelist
+    : effectiveMode === 'EXCLUSIVE'
+      ? t.pretargeting.publisherModeBlacklist
+      : t.pretargeting.noPublisherTargeting;
   const statusLabel = isWhitelist ? t.pretargeting.statusAllowed : t.pretargeting.statusBlocked;
   const actionLabel = isWhitelist ? t.pretargeting.allow : t.pretargeting.block;
 
@@ -503,6 +507,11 @@ function PublisherTargetingSection({
   const summaryLabel = publishers.length === 0 && !pendingMode
     ? t.pretargeting.noPublisherTargeting
     : `${modeLabel}: ${activeCount} ${isWhitelist ? t.pretargeting.allowedLower : t.pretargeting.blockedLower}`;
+  const nextModeLabel = nextMode === 'INCLUSIVE'
+    ? t.pretargeting.publisherModeWhitelist
+    : nextMode === 'EXCLUSIVE'
+      ? t.pretargeting.publisherModeBlacklist
+      : nextMode;
 
   const renderStatusLabel = (status: string) => {
     if (status === 'pending_add' || status === 'pending_remove') {
@@ -711,7 +720,7 @@ function PublisherTargetingSection({
                   onClick={onApplyPending}
                   className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
-                  Push to Google
+                  {t.pretargeting.pushToGoogle}
                 </button>
                 <span className="text-xs text-yellow-600">
                   {t.pretargeting.changesApplyImmediatelyOnGoogle}
@@ -724,23 +733,23 @@ function PublisherTargetingSection({
         {showModeConfirm && (
           <div className="border rounded-lg bg-yellow-50 border-yellow-200 p-3 text-sm">
             <p className="font-medium text-yellow-900 mb-2">
-              Switch to {formatPublisherMode(nextMode)} mode?
+              {t.pretargeting.switchToModePrompt.replace('{mode}', nextModeLabel)}
             </p>
             <p className="text-yellow-700 text-xs mb-3">
-              This will clear your current publisher list when applied.
+              {t.pretargeting.switchModeClearsPublisherListWarning}
             </p>
             <div className="flex gap-2">
               <button
                 onClick={confirmModeChange}
                 className="px-3 py-1.5 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700"
               >
-                Switch to {formatPublisherMode(nextMode)}
+                {t.pretargeting.switchToModeAction.replace('{mode}', nextModeLabel)}
               </button>
               <button
                 onClick={() => setShowModeConfirm(false)}
                 className="px-3 py-1.5 bg-white text-gray-700 text-xs rounded border hover:bg-gray-50"
               >
-                Cancel
+                {t.common.cancel}
               </button>
             </div>
           </div>
@@ -749,7 +758,7 @@ function PublisherTargetingSection({
         {showBulkImport && (
           <div className="border rounded-lg p-3 bg-white shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-medium text-gray-900">Bulk Import Publishers</h4>
+              <h4 className="text-sm font-medium text-gray-900">{t.pretargeting.bulkImportPublishersTitle}</h4>
               <button
                 onClick={() => {
                   setShowBulkImport(false);
@@ -768,7 +777,7 @@ function PublisherTargetingSection({
                   onChange={(e) => setBulkInput(e.target.value)}
                   rows={5}
                   className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="One publisher per line or comma-separated"
+                  placeholder={t.pretargeting.bulkImportTextareaPlaceholder}
                 />
                 <div className="flex justify-end gap-2 mt-3">
                   <button
@@ -778,14 +787,14 @@ function PublisherTargetingSection({
                     }}
                     className="px-3 py-1.5 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
                   >
-                    Cancel
+                    {t.common.cancel}
                   </button>
                   <button
                     onClick={parseBulkInput}
                     disabled={!bulkInput.trim()}
                     className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                   >
-                    Preview Import
+                    {t.pretargeting.previewImport}
                   </button>
                 </div>
               </>
@@ -793,7 +802,7 @@ function PublisherTargetingSection({
               <>
                 <div className="text-xs text-gray-600 space-y-2">
                   <div>
-                    <span className="font-medium text-green-700">Valid:</span>{' '}
+                    <span className="font-medium text-green-700">{t.pretargeting.bulkValidLabel}:</span>{' '}
                     {bulkPreview.valid.length}
                   </div>
                   {bulkPreview.valid.length > 0 && (
@@ -803,13 +812,13 @@ function PublisherTargetingSection({
                   )}
                   {bulkPreview.duplicates.length > 0 && (
                     <div>
-                      <span className="font-medium text-yellow-700">Duplicates:</span>{' '}
+                      <span className="font-medium text-yellow-700">{t.pretargeting.bulkDuplicatesLabel}:</span>{' '}
                       {bulkPreview.duplicates.join(', ')}
                     </div>
                   )}
                   {bulkPreview.invalid.length > 0 && (
                     <div>
-                      <span className="font-medium text-red-700">Invalid:</span>{' '}
+                      <span className="font-medium text-red-700">{t.pretargeting.bulkInvalidLabel}:</span>{' '}
                       {bulkPreview.invalid.join(', ')}
                     </div>
                   )}
@@ -819,14 +828,14 @@ function PublisherTargetingSection({
                     onClick={() => setBulkPreview(null)}
                     className="px-3 py-1.5 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
                   >
-                    Back
+                    {t.common.back}
                   </button>
                   <button
                     onClick={handleBulkImport}
                     disabled={bulkPreview.valid.length === 0}
                     className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                   >
-                    Import {bulkPreview.valid.length} Publishers
+                    {t.pretargeting.importPublishersCount.replace('{count}', String(bulkPreview.valid.length))}
                   </button>
                 </div>
               </>
@@ -840,6 +849,7 @@ function PublisherTargetingSection({
 
 // History entry component
 function HistoryEntry({ entry }: { entry: PretargetingHistoryItem }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-start gap-3 py-2 border-b last:border-0">
       <Clock className="h-4 w-4 text-gray-400 mt-0.5" />
@@ -847,14 +857,14 @@ function HistoryEntry({ entry }: { entry: PretargetingHistoryItem }) {
         <div className="flex items-center gap-2 text-sm">
           <span className="font-medium text-gray-900">{entry.change_type}</span>
           {entry.field_changed && (
-            <span className="text-gray-500">on {entry.field_changed}</span>
+            <span className="text-gray-500">{t.pretargeting.historyOnField.replace('{field}', entry.field_changed)}</span>
           )}
         </div>
         {entry.new_value && (
           <p className="text-xs text-gray-600 mt-0.5 truncate">{entry.new_value}</p>
         )}
         <p className="text-xs text-gray-400 mt-1">
-          {formatDate(entry.changed_at)} - {entry.change_source}
+          {formatDate(entry.changed_at)} {t.pretargeting.historyMetaSeparator} {entry.change_source}
         </p>
       </div>
     </div>
