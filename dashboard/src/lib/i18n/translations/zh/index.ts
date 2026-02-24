@@ -13,6 +13,7 @@ import ns_pretargeting from './pretargeting';
 import ns_qpsNav from './qpsNav';
 import ns_relativeTime from './relativeTime';
 import ns_settingsNav from './settingsNav';
+import ns_setup from './setup';
 import ns_sidebar from './sidebar';
 
 // Chinese locale scaffold. Missing keys intentionally fall back to English via deep merge.
@@ -23,6 +24,7 @@ export const zh: PartialTranslations = {
   pretargeting: ns_pretargeting,
   qpsNav: ns_qpsNav,
   settingsNav: ns_settingsNav,
+  setup: ns_setup,
   adminNav: ns_adminNav,
   admin: ns_admin,
   sidebar: ns_sidebar,
