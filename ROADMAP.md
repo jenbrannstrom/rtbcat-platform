@@ -97,6 +97,7 @@
     - [x] RTB account endpoints header empty/error/sync/table/tooltip copy converted (`dashboard/src/components/rtb/account-endpoints-header.tsx`)
     - [x] Recommended optimizations panel/card/manual-mode/generated recommendation copy converted (`dashboard/src/components/rtb/recommended-optimizations-panel.tsx`)
     - [x] QPS summary card labels/error/action summaries converted (`dashboard/src/components/qps/qps-summary-card.tsx`)
+    - [x] QPS pretargeting panel card/details/error/empty-state copy converted (`dashboard/src/components/qps/pretargeting-panel.tsx`)
     - [ ] Remaining settings/admin/shared hotspots (`/settings/accounts/components/GmailReportsTab.tsx` remaining deep copy and deeper RTB/settings helper components)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.

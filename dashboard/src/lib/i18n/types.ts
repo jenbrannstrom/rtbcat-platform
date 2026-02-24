@@ -610,6 +610,24 @@ export interface Translations {
     recommendationsOpportunityTitle: string;
     recommendationsOpportunityDescription: string;
     recommendationsOpportunityReasoning: string;
+    pretargetingPanelWasteReductionBadge: string;
+    pretargetingPanelImpressionsShort: string;
+    pretargetingPanelSizesCount: string;
+    pretargetingPanelGeosIncludedCount: string;
+    pretargetingPanelExcludedCount: string;
+    pretargetingPanelHideDetails: string;
+    pretargetingPanelShowTargetingDetails: string;
+    pretargetingPanelIncludedSizes: string;
+    pretargetingPanelMoreCount: string;
+    pretargetingPanelIncludedGeos: string;
+    pretargetingPanelExcludedGeos: string;
+    pretargetingPanelCopyGeoConfigJson: string;
+    pretargetingPanelFailedToLoad: string;
+    pretargetingPanelTitle: string;
+    pretargetingPanelConfigsCount: string;
+    pretargetingPanelTotalWasteReduction: string;
+    pretargetingPanelNoRecommendations: string;
+    pretargetingPanelNeedMoreTrafficData: string;
   };
 
   import: {
