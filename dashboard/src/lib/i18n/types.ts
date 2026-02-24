@@ -1095,6 +1095,10 @@ export interface Translations {
     gmailImportedFilesFromEmails: string;
     gmailProcessedEmailsNoNewFiles: string;
     gmailImportFailed: string;
+    gmailPhaseConnecting: string;
+    gmailPhaseSearching: string;
+    gmailPhaseDownloading: string;
+    gmailPhaseImporting: string;
     gmailJustNow: string;
     gmailMinutesAgo: string;
     gmailHoursAgo: string;

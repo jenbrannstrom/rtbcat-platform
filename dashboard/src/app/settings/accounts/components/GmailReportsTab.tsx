@@ -21,10 +21,10 @@ import { useTranslation } from "@/contexts/i18n-context";
 
 // Import progress phases
 const IMPORT_PHASES = [
-  { id: 'connecting', label: 'Connecting to Gmail', icon: Mail, duration: 2000 },
-  { id: 'searching', label: 'Searching for report emails', icon: Search, duration: 3000 },
-  { id: 'downloading', label: 'Downloading attachments', icon: Download, duration: 8000 },
-  { id: 'importing', label: 'Importing CSV data', icon: Database, duration: 5000 },
+  { id: 'connecting', icon: Mail, duration: 2000 },
+  { id: 'searching', icon: Search, duration: 3000 },
+  { id: 'downloading', icon: Download, duration: 8000 },
+  { id: 'importing', icon: Database, duration: 5000 },
 ] as const;
 
 type ImportPhase = typeof IMPORT_PHASES[number]['id'] | 'idle' | 'complete';
@@ -36,6 +36,12 @@ type ImportPhase = typeof IMPORT_PHASES[number]['id'] | 'idle' | 'complete';
 export function GmailReportsTab() {
   const queryClient = useQueryClient();
   const { t, language } = useTranslation();
+  const importPhaseLabels: Record<Exclude<ImportPhase, "idle" | "complete">, string> = {
+    connecting: t.setup.gmailPhaseConnecting,
+    searching: t.setup.gmailPhaseSearching,
+    downloading: t.setup.gmailPhaseDownloading,
+    importing: t.setup.gmailPhaseImporting,
+  };
   const [importMessage, setImportMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [importPhase, setImportPhase] = useState<ImportPhase>('idle');
   const phaseTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -376,7 +382,7 @@ export function GmailReportsTab() {
                           <span className={cn(
                             isCurrent && "font-medium text-blue-800"
                           )}>
-                            {phase.label}
+                            {importPhaseLabels[phase.id]}
                             {isCurrent && "..."}
                           </span>
                         </div>
