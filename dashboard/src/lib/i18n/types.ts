@@ -1611,6 +1611,16 @@ export interface Translations {
     wasteReportUseFlexible: string;
     wasteReportTopSavingsOpportunityPrefix: string;
     wasteReportTopSavingsAvgQps: string;
+    sizeCoverageNoSizeGaps: string;
+    sizeCoverageNoSizeGapsDesc: string;
+    wastePercent: string;
+    recommendation: string;
+    highVolume: string;
+    mediumVolume: string;
+    lowVolume: string;
+    nearPrefix: string;
+    sizeGapsDetectedCount: string;
+    totalWasteRequests: string;
     importCsvCreativeSizePromptPrefix: string;
     importCsvCreativeSizePromptSuffix: string;
     creativeSize: string;
