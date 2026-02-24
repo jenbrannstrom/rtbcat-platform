@@ -133,6 +133,7 @@
   - Progress (2026-02-24):
     - [x] Added partial-locale deep fallback to English (`dashboard/src/lib/i18n/index.ts`) so translations can ship incrementally per language
     - [x] Added initial Spanish (`es`) dictionary for core shell/auth/navigation/sidebar + dashboard home summary copy (`dashboard/src/lib/i18n/translations/es.ts`)
+    - [x] Updated language picker native names/flags for supported locales (`dashboard/src/lib/i18n/index.ts`, `dashboard/src/components/language-selector.tsx`)
     - [ ] Expand Spanish coverage across remaining namespaces (`import`, `setup`, `campaigns`, `creatives`, `pretargeting`, admin/settings tabs)
     - [ ] Add real dictionaries for remaining locales (`pl`, `zh`, `ru`, `uk`, `da`, `fr`, `nl`, `he`, `ar`)
 

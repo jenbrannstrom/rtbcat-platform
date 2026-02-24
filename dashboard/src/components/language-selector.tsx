@@ -15,13 +15,14 @@ interface LanguageSelectorProps {
 const languageFlags: Record<string, string> = {
   en: "🇬🇧",
   es: "🇪🇸",
-  de: "🇩🇪",
   fr: "🇫🇷",
-  pt: "🇧🇷",
-  ja: "🇯🇵",
+  pl: "🇵🇱",
   zh: "🇨🇳",
-  ko: "🇰🇷",
   ru: "🇷🇺",
+  uk: "🇺🇦",
+  da: "🇩🇰",
+  nl: "🇳🇱",
+  he: "🇮🇱",
   ar: "🇸🇦",
 };
 

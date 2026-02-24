@@ -61,16 +61,16 @@ export const defaultLanguage: Language = 'en';
 // Available languages for the selector
 export const availableLanguages: { code: Language; name: string; nativeName: string }[] = [
   { code: 'en', name: 'English', nativeName: 'English' },
-  { code: 'pl', name: 'Polish', nativeName: 'Polish' },
-  { code: 'zh', name: 'Chinese', nativeName: 'Chinese' },
-  { code: 'ru', name: 'Russian', nativeName: 'Russian' },
-  { code: 'uk', name: 'Ukrainian', nativeName: 'Ukrainian' },
-  { code: 'es', name: 'Spanish', nativeName: 'Spanish' },
-  { code: 'da', name: 'Danish', nativeName: 'Danish' },
-  { code: 'fr', name: 'French', nativeName: 'French' },
-  { code: 'nl', name: 'Dutch', nativeName: 'Dutch' },
-  { code: 'he', name: 'Hebrew', nativeName: 'Hebrew' },
-  { code: 'ar', name: 'Arabic', nativeName: 'Arabic' },
+  { code: 'pl', name: 'Polish', nativeName: 'Polski' },
+  { code: 'zh', name: 'Chinese', nativeName: '中文' },
+  { code: 'ru', name: 'Russian', nativeName: 'Русский' },
+  { code: 'uk', name: 'Ukrainian', nativeName: 'Українська' },
+  { code: 'es', name: 'Spanish', nativeName: 'Español' },
+  { code: 'da', name: 'Danish', nativeName: 'Dansk' },
+  { code: 'fr', name: 'French', nativeName: 'Français' },
+  { code: 'nl', name: 'Dutch', nativeName: 'Nederlands' },
+  { code: 'he', name: 'Hebrew', nativeName: 'עברית' },
+  { code: 'ar', name: 'Arabic', nativeName: 'العربية' },
 ];
 
 const rtlLanguages = new Set<Language>(["he", "ar"]);
