@@ -875,6 +875,19 @@ export interface Translations {
     noPerformanceDataForPeriod: string;
     clustering: string;
     autoClusterWithAi: string;
+    unclusteredTitle: string;
+    unassignedPoolEmpty: string;
+    country: string;
+    added: string;
+    idLabel: string;
+    unknownCountry: string;
+    noCreativesMatchFilter: string;
+    allCreativesAreClustered: string;
+    dragCreativesHere: string;
+    destination: string;
+    noUrl: string;
+    impSuffix: string;
+    clicksSuffix: string;
   };
 
   creatives: {

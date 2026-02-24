@@ -112,6 +112,7 @@
     - [x] Shared error components + import validation error list copy converted (`dashboard/src/components/error.tsx`, `dashboard/src/components/validation-errors.tsx`)
     - [x] Campaign detail page core UX copy converted (errors/confirms/back navigation/edit form/period selector/empty state + basic metric labels) (`dashboard/src/app/campaigns/[id]/page.tsx`)
     - [x] Campaign card + auto-cluster button labels/tooltips/no-performance copy converted (`dashboard/src/components/campaign-card.tsx`)
+    - [x] Campaign list-view cluster components labels/tooltips/empty states converted (`dashboard/src/components/campaigns/list-cluster.tsx`, `dashboard/src/components/campaigns/list-item.tsx`, `dashboard/src/components/campaigns/unassigned-pool.tsx`)
     - [ ] Remaining settings/admin/shared hotspots (deeper RTB/settings helper components)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.

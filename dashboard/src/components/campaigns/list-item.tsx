@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { useTranslation } from '@/contexts/i18n-context';
 import { cn, getFormatLabel } from '@/lib/utils';
 
 interface Creative {
@@ -59,8 +60,8 @@ function formatNumber(num?: number): string {
   return num.toLocaleString();
 }
 
-function getHostname(url?: string): string {
-  if (!url) return 'No URL';
+function getHostname(url: string | undefined, noUrlLabel: string): string {
+  if (!url) return noUrlLabel;
   try {
     return new URL(url).hostname;
   } catch {
@@ -77,6 +78,7 @@ export function ListItem({
   onOpenPreview,
   sortField = 'spend',
 }: ListItemProps) {
+  const { t, language } = useTranslation();
   const wasDraggingRef = useRef(false);
   const [isHovered, setIsHovered] = useState(false);
 
@@ -134,6 +136,7 @@ export function ListItem({
   const impressions = perf?.total_impressions || 0;
   const clicks = perf?.total_clicks || 0;
   const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+  const hostLabel = getHostname(creative.final_url, t.campaigns.noUrl);
 
   const showTooltip = isHovered && !isDragging && !isDragOverlay;
 
@@ -150,26 +153,26 @@ export function ListItem({
 
           <div className="space-y-1 text-gray-300">
             <div className="flex justify-between">
-              <span>Spend:</span>
+              <span>{t.campaigns.spend}:</span>
               <span className="text-white font-medium">{formatSpend(spend)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Impressions:</span>
+              <span>{t.campaigns.impressions}:</span>
               <span className="text-white">{impressions.toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
-              <span>Clicks:</span>
+              <span>{t.campaigns.clicks}:</span>
               <span className="text-white">{clicks.toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
-              <span>CTR:</span>
+              <span>{t.creatives.ctr}:</span>
               <span className="text-white">{ctr.toFixed(2)}%</span>
             </div>
           </div>
 
           {creative.final_url && (
             <div className="mt-2 pt-2 border-t border-gray-700">
-              <div className="text-gray-400 text-[10px] mb-0.5">Destination:</div>
+              <div className="text-gray-400 text-[10px] mb-0.5">{t.campaigns.destination}:</div>
               <div className="text-blue-300 truncate text-[11px]">{creative.final_url}</div>
             </div>
           )}
@@ -221,7 +224,7 @@ export function ListItem({
             <div className="text-xs text-gray-500 truncate">
               {sortField === 'country' && creative.country
                 ? creative.country
-                : getHostname(creative.final_url)}
+                : hostLabel}
             </div>
           </div>
 
@@ -234,17 +237,17 @@ export function ListItem({
             {/* Show sorted metric if different from spend */}
             {sortField === 'impressions' && (
               <div className="text-xs text-gray-500">
-                {formatNumber(impressions)} imp
+                {formatNumber(impressions)} {t.campaigns.impSuffix}
               </div>
             )}
             {sortField === 'clicks' && (
               <div className="text-xs text-gray-500">
-                {formatNumber(clicks)} clicks
+                {formatNumber(clicks)} {t.campaigns.clicksSuffix}
               </div>
             )}
             {sortField === 'date_added' && creative.created_at && (
               <div className="text-xs text-gray-500">
-                {new Date(creative.created_at).toLocaleDateString()}
+                {new Date(creative.created_at).toLocaleDateString(language)}
               </div>
             )}
           </div>

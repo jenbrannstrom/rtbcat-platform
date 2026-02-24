@@ -3,8 +3,9 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { Pencil, Trash2, ArrowDown, ArrowUp, X, ChevronDown, Check } from 'lucide-react';
+import { Pencil, Trash2, ArrowDown, ArrowUp, ChevronDown, Check } from 'lucide-react';
 import { ListItem } from './list-item';
+import { useTranslation } from '@/contexts/i18n-context';
 import { cn } from '@/lib/utils';
 
 type SortField = 'spend' | 'impressions' | 'clicks' | 'country' | 'id' | 'date_added';
@@ -58,6 +59,7 @@ export function ListCluster({
   onOpenPreview,
   pageSortField,
 }: ListClusterProps) {
+  const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id });
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(name);
@@ -67,6 +69,7 @@ export function ListCluster({
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
+  const unknownCountryLabel = t.campaigns.unknownCountry;
 
   // Update local name when prop changes
   useEffect(() => {
@@ -96,14 +99,14 @@ export function ListCluster({
   const countryBreakdown = useMemo(() => {
     const breakdown: Record<string, { count: number }> = {};
     creatives.forEach(c => {
-      const country = c.country || 'Unknown';
+      const country = c.country || unknownCountryLabel;
       if (!breakdown[country]) {
         breakdown[country] = { count: 0 };
       }
       breakdown[country].count++;
     });
     return breakdown;
-  }, [creatives]);
+  }, [creatives, unknownCountryLabel]);
 
   const uniqueCountries = useMemo(() => {
     return Object.keys(countryBreakdown).sort();
@@ -126,7 +129,7 @@ export function ListCluster({
     // Apply country exclusion filter first
     const filtered = excludedCountries.size === 0
       ? creatives
-      : creatives.filter(c => !excludedCountries.has(c.country || 'Unknown'));
+      : creatives.filter(c => !excludedCountries.has(c.country || unknownCountryLabel));
 
     // Then sort
     const sorted = [...filtered].sort((a, b) => {
@@ -168,7 +171,7 @@ export function ListCluster({
       return sortDirection === 'desc' ? bVal - aVal : aVal - bVal;
     });
     return sorted;
-  }, [creatives, sortField, sortDirection, excludedCountries]);
+  }, [creatives, sortField, sortDirection, excludedCountries, unknownCountryLabel]);
 
   // Calculate total spend
   const totalSpend = creatives.reduce(
@@ -186,12 +189,12 @@ export function ListCluster({
   };
 
   const sortOptions: { field: SortField; label: string }[] = [
-    { field: 'spend', label: 'Spend' },
-    { field: 'impressions', label: 'Impressions' },
-    { field: 'clicks', label: 'Clicks' },
-    { field: 'country', label: 'Country' },
-    { field: 'date_added', label: 'Added' },
-    { field: 'id', label: 'ID' },
+    { field: 'spend', label: t.campaigns.spend },
+    { field: 'impressions', label: t.campaigns.impressions },
+    { field: 'clicks', label: t.campaigns.clicks },
+    { field: 'country', label: t.campaigns.country },
+    { field: 'date_added', label: t.campaigns.added },
+    { field: 'id', label: t.campaigns.idLabel },
   ];
 
   // Map page sort field to local sort field for ListItem
@@ -248,7 +251,7 @@ export function ListCluster({
             <button
               onClick={() => onDelete(id)}
               className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-              title="Delete campaign"
+              title={t.campaigns.deleteCampaign}
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -261,7 +264,10 @@ export function ListCluster({
             {excludedCountries.size > 0
               ? `${sortedCreatives.length}/${creatives.length}`
               : creatives.length
-            } creative{creatives.length !== 1 ? 's' : ''}
+            }{' '}
+            {creatives.length !== 1
+              ? t.campaigns.creativeCountPlural.replace('{count}', '')
+              : t.campaigns.creativeCount.replace('{count}', '')}
           </span>
           {totalSpend > 0 && (
             <>
@@ -365,10 +371,10 @@ export function ListCluster({
         {sortedCreatives.length === 0 && (
           <div className="text-gray-400 text-sm py-8 text-center">
             {excludedCountries.size > 0
-              ? 'No creatives match filter'
+              ? t.campaigns.noCreativesMatchFilter
               : isUnclustered
-                ? 'All creatives are clustered'
-                : 'Drag creatives here'
+                ? t.campaigns.allCreativesAreClustered
+                : t.campaigns.dragCreativesHere
             }
           </div>
         )}

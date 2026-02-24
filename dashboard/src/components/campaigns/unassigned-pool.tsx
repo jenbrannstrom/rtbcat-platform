@@ -5,6 +5,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
 import { ChevronDown } from 'lucide-react';
 import { DraggableCreative } from './draggable-creative';
+import { useTranslation } from '@/contexts/i18n-context';
 import { cn } from '@/lib/utils';
 
 interface Creative {
@@ -29,6 +30,7 @@ export function UnassignedPool({
   onCreativeSelect,
   onOpenPreview,
 }: UnassignedPoolProps) {
+  const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(true);
   const [openPopupId, setOpenPopupId] = useState<string | null>(null);
 
@@ -58,9 +60,13 @@ export function UnassignedPool({
         className="w-full flex items-center justify-between text-left"
       >
         <h3 className="text-lg font-semibold">
-          Unclustered
+          {t.campaigns.unclusteredTitle}
           <span className="text-gray-400 font-normal ml-2">
-            ({creativeIds.length} creatives)
+            (
+            {creativeIds.length !== 1
+              ? t.campaigns.creativeCountPlural.replace('{count}', String(creativeIds.length))
+              : t.campaigns.creativeCount.replace('{count}', String(creativeIds.length))}
+            )
           </span>
         </h3>
         <ChevronDown
@@ -91,7 +97,7 @@ export function UnassignedPool({
 
             {unassignedCreatives.length === 0 && (
               <div className="text-gray-400 text-sm py-4 w-full text-center">
-                All creatives are clustered. Drag here to unassign.
+                {t.campaigns.unassignedPoolEmpty}
               </div>
             )}
           </div>
