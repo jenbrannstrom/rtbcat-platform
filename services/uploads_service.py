@@ -48,6 +48,7 @@ class ImportHistoryEntry:
     columns_missing: Optional[list[str]]
     date_gaps: Optional[list[str]]
     date_gap_warning: Optional[str]
+    import_trigger: Optional[str] = None
 
 
 @dataclass
@@ -216,6 +217,7 @@ class UploadsService:
                 columns_missing=columns_missing,
                 date_gaps=date_gaps,
                 date_gap_warning=row.get("date_gap_warning"),
+                import_trigger=row.get("import_trigger"),
             ))
 
         return results

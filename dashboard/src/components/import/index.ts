@@ -19,3 +19,4 @@ export { ImportResultCard } from "./ImportResultCard";
 export { ImportHistorySection } from "./ImportHistorySection";
 export { ImportTrackingMatrixSection } from "./ImportTrackingMatrixSection";
 export { DataFreshnessGrid } from "./DataFreshnessGrid";
+export { ImportHistoryTable } from "./ImportHistoryTable";
