@@ -95,6 +95,7 @@
     - [x] Pretargeting config card labels/badges/tooltips/inline controls copy converted (`dashboard/src/components/rtb/pretargeting-config-card.tsx`)
     - [x] Endpoint efficiency panel labels/tooltips/badges/funnel copy converted (`dashboard/src/components/rtb/endpoint-efficiency-panel.tsx`)
     - [x] RTB account endpoints header empty/error/sync/table/tooltip copy converted (`dashboard/src/components/rtb/account-endpoints-header.tsx`)
+    - [x] Recommended optimizations panel/card/manual-mode/generated recommendation copy converted (`dashboard/src/components/rtb/recommended-optimizations-panel.tsx`)
     - [ ] Remaining settings/admin/shared hotspots (`/settings/accounts/components/GmailReportsTab.tsx` remaining deep copy and deeper RTB/settings helper components)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.

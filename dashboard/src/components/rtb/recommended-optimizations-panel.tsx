@@ -18,6 +18,7 @@ import {
 import { cn } from '@/lib/utils';
 import { AIControlSettings, useAIControlMode } from './ai-control-settings';
 import { useAccount } from '@/contexts/account-context';
+import { useTranslation } from '@/contexts/i18n-context';
 import {
   getPretargetingConfigs,
   getQPSSizeCoverage,
@@ -53,6 +54,7 @@ function RecommendationCard({
   onDismiss: () => void;
   isApplying: boolean;
 }) {
+  const { t } = useTranslation();
   const [showDetails, setShowDetails] = useState(false);
   const [selectedConfig, setSelectedConfig] = useState<string>('');
   const [showConfigDropdown, setShowConfigDropdown] = useState(false);
@@ -67,7 +69,7 @@ function RecommendationCard({
           color: 'text-red-600',
           bgColor: 'bg-red-50',
           borderColor: 'border-red-200',
-          label: 'HIGH IMPACT',
+          label: t.pretargeting.recommendationsLabelHighImpact,
         };
       case 'config_underperforming':
         return {
@@ -75,7 +77,7 @@ function RecommendationCard({
           color: 'text-orange-600',
           bgColor: 'bg-orange-50',
           borderColor: 'border-orange-200',
-          label: 'INVESTIGATE',
+          label: t.pretargeting.recommendationsLabelInvestigate,
         };
       case 'opportunity':
         return {
@@ -83,7 +85,7 @@ function RecommendationCard({
           color: 'text-blue-600',
           bgColor: 'bg-blue-50',
           borderColor: 'border-blue-200',
-          label: 'OPPORTUNITY',
+          label: t.pretargeting.recommendationsLabelOpportunity,
         };
       default:
         return {
@@ -91,7 +93,7 @@ function RecommendationCard({
           color: 'text-gray-600',
           bgColor: 'bg-gray-50',
           borderColor: 'border-gray-200',
-          label: 'SUGGESTION',
+          label: t.pretargeting.recommendationsLabelSuggestion,
         };
     }
   };
@@ -132,9 +134,17 @@ function RecommendationCard({
 
               {recommendation.estimated_savings && (
                 <div className="mt-2 inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
-                  Save {formatNumber(recommendation.estimated_savings.qps_per_day)} QPS/day
+                  {t.pretargeting.recommendationsSaveQpsPerDay.replace(
+                    '{count}',
+                    formatNumber(recommendation.estimated_savings.qps_per_day)
+                  )}
                   {recommendation.estimated_savings.usd_per_month && (
-                    <span>(${recommendation.estimated_savings.usd_per_month}/mo)</span>
+                    <span>
+                      {t.pretargeting.recommendationsPerMonthSuffix.replace(
+                        '{amount}',
+                        String(recommendation.estimated_savings.usd_per_month)
+                      )}
+                    </span>
                   )}
                 </div>
               )}
@@ -147,7 +157,7 @@ function RecommendationCard({
               onClick={() => setShowDetails(!showDetails)}
               className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-white/50 rounded transition-colors"
             >
-              {showDetails ? 'Hide' : 'Details'}
+              {showDetails ? t.pretargeting.recommendationsHideDetails : t.pretargeting.recommendationsShowDetails}
             </button>
 
             {recommendation.type === 'size_mismatch' && (
@@ -156,13 +166,13 @@ function RecommendationCard({
                   onClick={() => setShowConfigDropdown(!showConfigDropdown)}
                   className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium bg-white border border-gray-300 rounded hover:bg-gray-50"
                 >
-                  Apply to
+                  {t.pretargeting.recommendationsApplyTo}
                   <ChevronDown className="h-3 w-3" />
                 </button>
                 {showConfigDropdown && (
                   <div className="absolute right-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
                     <div className="p-2 border-b text-xs text-gray-500">
-                      Select config to apply size filter
+                      {t.pretargeting.recommendationsSelectConfigToApplySizeFilter}
                     </div>
                     <div className="max-h-48 overflow-y-auto">
                       {configs.map((config) => (
@@ -204,13 +214,13 @@ function RecommendationCard({
               ) : (
                 <Check className="h-4 w-4" />
               )}
-              Approve
+              {t.pretargeting.recommendationsApprove}
             </button>
 
             <button
               onClick={onDismiss}
               className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white/50 rounded transition-colors"
-              title="Dismiss"
+              title={t.pretargeting.recommendationsDismiss}
             >
               <X className="h-4 w-4" />
             </button>
@@ -224,14 +234,17 @@ function RecommendationCard({
               <div className="mb-3">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-gray-700">
-                    Sizes to block ({recommendation.data.sizes.length})
+                    {t.pretargeting.recommendationsSizesToBlockCount.replace(
+                      '{count}',
+                      String(recommendation.data.sizes.length)
+                    )}
                   </span>
                   <button
                     onClick={handleCopy}
                     className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
                   >
                     {copied ? <CheckCircle className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                    {copied ? 'Copied!' : 'Copy'}
+                    {copied ? t.common.copied : t.common.copy}
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-1">
@@ -249,22 +262,22 @@ function RecommendationCard({
 
             {recommendation.reasoning && (
               <div className="text-sm text-gray-600">
-                <span className="font-medium">Why: </span>
+                <span className="font-medium">{t.pretargeting.recommendationsWhyPrefix} </span>
                 {recommendation.reasoning}
               </div>
             )}
 
             {recommendation.type === 'size_mismatch' && (
               <div className="mt-3 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
-                <strong>Note:</strong> Size filtering is INCLUDE-only. Adding sizes to a config
-                will exclude all unlisted sizes.{' '}
+                <strong>{t.pretargeting.recommendationsNoteLabel}</strong>{' '}
+                {t.pretargeting.recommendationsSizeFilteringIncludeOnlyNote}{' '}
                 <a
                   href="https://developers.google.com/authorized-buyers/apis/guides/rtb-api/pretargeting-configs"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-0.5 text-amber-700 underline"
                 >
-                  Learn more <ExternalLink className="h-3 w-3" />
+                  {t.pretargeting.recommendationsLearnMore} <ExternalLink className="h-3 w-3" />
                 </a>
               </div>
             )}
@@ -279,6 +292,7 @@ export function RecommendedOptimizationsPanel({
   days = 7,
   onConfigSelect,
 }: RecommendedOptimizationsPanelProps) {
+  const { t } = useTranslation();
   const enabled = process.env.NEXT_PUBLIC_ENABLE_RECOMMENDED_OPTIMIZATIONS === 'true';
   const aiMode = useAIControlMode();
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
@@ -317,10 +331,10 @@ export function RecommendedOptimizationsPanel({
       recommendations.push({
         id: 'size-mismatch-1',
         type: 'size_mismatch',
-        title: `Block ${highPriorityGaps.length} sizes without creatives`,
-        description: `You're receiving traffic for ${highPriorityGaps.length} sizes you can't serve.`,
+        title: t.pretargeting.recommendationsSizeMismatchTitle.replace('{count}', String(highPriorityGaps.length)),
+        description: t.pretargeting.recommendationsSizeMismatchDescription.replace('{count}', String(highPriorityGaps.length)),
         reasoning:
-          'These sizes have high daily traffic but no approved creatives. Blocking them in pretargeting will reduce wasted QPS.',
+          t.pretargeting.recommendationsSizeMismatchReasoning,
         estimated_savings: {
           qps_per_day: totalQps,
           usd_per_month: Math.round(totalQps * 0.002 * 30), // Rough estimate
@@ -344,10 +358,15 @@ export function RecommendedOptimizationsPanel({
       recommendations.push({
         id: `config-underperforming-${config.billing_id}`,
         type: 'config_underperforming',
-        title: `${config.name || config.billing_id} performing below threshold`,
-        description: `Win rate ${config.win_rate_pct?.toFixed(1)}% vs account avg ${avgWinRate.toFixed(1)}%`,
+        title: t.pretargeting.recommendationsUnderperformingTitle.replace(
+          '{name}',
+          config.name || config.billing_id
+        ),
+        description: t.pretargeting.recommendationsUnderperformingDescription
+          .replace('{winRate}', String(config.win_rate_pct?.toFixed(1) ?? 0))
+          .replace('{avgWinRate}', String(avgWinRate.toFixed(1))),
         reasoning:
-          'This config has significantly lower win rate. Consider narrowing geo targeting or reviewing size coverage.',
+          t.pretargeting.recommendationsUnderperformingReasoning,
         data: {
           billing_id: config.billing_id,
           config_name: config.name ?? undefined,
@@ -370,9 +389,11 @@ export function RecommendedOptimizationsPanel({
       recommendations.push({
         id: 'opportunity-size-1',
         type: 'opportunity',
-        title: `${topOpp.size} has ${formatNumber(dailyQps)} QPS/day`,
-        description: 'Create creative for this size to capture additional traffic.',
-        reasoning: `This size has significant daily traffic. Adding a creative would allow you to bid on this inventory.`,
+        title: t.pretargeting.recommendationsOpportunityTitle
+          .replace('{size}', topOpp.size)
+          .replace('{qps}', formatNumber(dailyQps)),
+        description: t.pretargeting.recommendationsOpportunityDescription,
+        reasoning: t.pretargeting.recommendationsOpportunityReasoning,
         data: {
           sizes: [topOpp.size],
         },
@@ -438,13 +459,13 @@ export function RecommendedOptimizationsPanel({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Target className="h-5 w-5 text-gray-400" />
-            <h3 className="font-semibold text-gray-900">Recommended Optimizations</h3>
+            <h3 className="font-semibold text-gray-900">{t.pretargeting.recommendationsPanelTitle}</h3>
           </div>
           <AIControlSettings compact />
         </div>
         <div className="text-center py-8 text-gray-500">
-          <p>AI recommendations are disabled in manual mode.</p>
-          <p className="text-sm mt-1">Switch to "AI proposes" to see optimization suggestions.</p>
+          <p>{t.pretargeting.recommendationsManualModeDisabled}</p>
+          <p className="text-sm mt-1">{t.pretargeting.recommendationsManualModeHint}</p>
         </div>
       </div>
     );
@@ -452,7 +473,7 @@ export function RecommendedOptimizationsPanel({
 
   const configOptions = (configs || []).map((c) => ({
     billing_id: c.billing_id || c.config_id,
-    name: c.user_name || c.display_name || `Config ${c.billing_id || c.config_id}`,
+    name: c.user_name || c.display_name || t.pretargeting.recommendationsConfigFallbackName.replace('{id}', String(c.billing_id || c.config_id)),
   }));
 
   // Hide panel entirely when no recommendations and not loading
@@ -465,10 +486,10 @@ export function RecommendedOptimizationsPanel({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Target className="h-5 w-5 text-blue-600" />
-          <h3 className="font-semibold text-gray-900">Recommended Optimizations</h3>
+          <h3 className="font-semibold text-gray-900">{t.pretargeting.recommendationsPanelTitle}</h3>
           {visibleRecs.length > 0 && (
             <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
-              {visibleRecs.length} action{visibleRecs.length !== 1 ? 's' : ''}
+              {t.pretargeting.recommendationsActionsCount.replace('{count}', String(visibleRecs.length))}
             </span>
           )}
         </div>
@@ -484,7 +505,7 @@ export function RecommendedOptimizationsPanel({
       ) : (
         <div className="space-y-3">
           <p className="text-sm text-gray-600 mb-4">
-            Based on {days}-day analysis, here's where to cut waste:
+            {t.pretargeting.recommendationsIntroByDays.replace('{days}', String(days))}
           </p>
           {visibleRecs.map((rec, index) => (
             <RecommendationCard

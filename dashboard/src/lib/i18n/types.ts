@@ -561,6 +561,38 @@ export interface Translations {
     endpointsHeaderTotalQpsCap: string;
     endpointsHeaderQpsInfoAria: string;
     endpointsHeaderQpsInfoTooltip: string;
+    recommendationsPanelTitle: string;
+    recommendationsManualModeDisabled: string;
+    recommendationsManualModeHint: string;
+    recommendationsConfigFallbackName: string;
+    recommendationsActionsCount: string;
+    recommendationsIntroByDays: string;
+    recommendationsLabelHighImpact: string;
+    recommendationsLabelInvestigate: string;
+    recommendationsLabelOpportunity: string;
+    recommendationsLabelSuggestion: string;
+    recommendationsSaveQpsPerDay: string;
+    recommendationsPerMonthSuffix: string;
+    recommendationsHideDetails: string;
+    recommendationsShowDetails: string;
+    recommendationsApplyTo: string;
+    recommendationsSelectConfigToApplySizeFilter: string;
+    recommendationsApprove: string;
+    recommendationsDismiss: string;
+    recommendationsSizesToBlockCount: string;
+    recommendationsWhyPrefix: string;
+    recommendationsNoteLabel: string;
+    recommendationsSizeFilteringIncludeOnlyNote: string;
+    recommendationsLearnMore: string;
+    recommendationsSizeMismatchTitle: string;
+    recommendationsSizeMismatchDescription: string;
+    recommendationsSizeMismatchReasoning: string;
+    recommendationsUnderperformingTitle: string;
+    recommendationsUnderperformingDescription: string;
+    recommendationsUnderperformingReasoning: string;
+    recommendationsOpportunityTitle: string;
+    recommendationsOpportunityDescription: string;
+    recommendationsOpportunityReasoning: string;
   };
 
   import: {
