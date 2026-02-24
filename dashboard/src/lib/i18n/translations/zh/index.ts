@@ -8,6 +8,7 @@ import ns_errors from './errors';
 import ns_import from './import';
 import ns_language from './language';
 import ns_navigation from './navigation';
+import ns_pretargeting from './pretargeting';
 import ns_qpsNav from './qpsNav';
 import ns_relativeTime from './relativeTime';
 import ns_settingsNav from './settingsNav';
@@ -18,6 +19,7 @@ export const zh: PartialTranslations = {
   common: ns_common,
   relativeTime: ns_relativeTime,
   navigation: ns_navigation,
+  pretargeting: ns_pretargeting,
   qpsNav: ns_qpsNav,
   settingsNav: ns_settingsNav,
   adminNav: ns_adminNav,
