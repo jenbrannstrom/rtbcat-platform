@@ -14,6 +14,7 @@ import {
 } from '@/lib/api';
 import { useAccount } from '@/contexts/account-context';
 import { RecommendationCard } from './recommendation-card';
+import { useTranslation } from '@/contexts/i18n-context';
 
 interface RecommendationsPanelProps {
   days?: number;
@@ -120,6 +121,7 @@ export function RecommendationsPanel({
   days = 7,
   minSeverity = 'low'
 }: RecommendationsPanelProps) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { selectedBuyerId } = useAccount();
   const [applyFeedback, setApplyFeedback] = useState<Record<string, { message: string; error: boolean }>>({});
@@ -164,7 +166,7 @@ export function RecommendationsPanel({
     }) => {
       const mappings = getActionablePendingChanges(recommendation);
       if (mappings.length === 0) {
-        throw new Error('No compatible pretargeting actions found for this recommendation.');
+        throw new Error(t.recommendations.noCompatiblePretargetingActions);
       }
 
       for (const mapped of mappings) {
@@ -182,7 +184,9 @@ export function RecommendationsPanel({
       setApplyFeedback((prev) => ({
         ...prev,
         [variables.recommendation.id]: {
-          message: `Staged ${staged} pending change${staged === 1 ? '' : 's'} for ${variables.billingId}. Review and push in Settings.`,
+          message: t.recommendations.stagedPendingChangesForBilling
+            .replace('{count}', String(staged))
+            .replace('{billingId}', variables.billingId),
           error: false,
         },
       }));
@@ -194,7 +198,7 @@ export function RecommendationsPanel({
       setApplyFeedback((prev) => ({
         ...prev,
         [variables.recommendation.id]: {
-          message: error instanceof Error ? error.message : 'Failed to stage pending changes.',
+          message: error instanceof Error ? error.message : t.recommendations.failedToStagePendingChanges,
           error: true,
         },
       }));
@@ -216,13 +220,13 @@ export function RecommendationsPanel({
       <div className="bg-red-50 border border-red-200 rounded-lg p-4">
         <div className="flex items-center gap-2 text-red-700">
           <AlertTriangle className="h-5 w-5" />
-          <span>Failed to load recommendations</span>
+          <span>{t.recommendations.failedToLoadRecommendations}</span>
         </div>
         <button
           onClick={() => refetch()}
           className="mt-2 text-sm text-red-600 underline"
         >
-          Try again
+          {t.common.retry}
         </button>
       </div>
     );
@@ -233,7 +237,10 @@ export function RecommendationsPanel({
   const configOptions = pretargetingConfigs
     .map((config) => ({
       billing_id: config.billing_id || config.config_id,
-      name: config.user_name || config.display_name || `Config ${config.billing_id || config.config_id}`,
+      name: config.user_name || config.display_name || t.recommendations.configFallbackName.replace(
+        '{id}',
+        String(config.billing_id || config.config_id)
+      ),
     }))
     .filter((config) => !!config.billing_id);
 
@@ -247,35 +254,35 @@ export function RecommendationsPanel({
               <div className="text-2xl font-bold text-gray-900">
                 {recs.length}
               </div>
-              <div className="text-sm text-gray-500">recommendations</div>
+              <div className="text-sm text-gray-500">{t.recommendations.recommendationsCountLabel}</div>
             </div>
 
             <div className="flex gap-3">
               {counts.critical > 0 && (
                 <span className="px-2 py-1 bg-red-100 text-red-800 text-sm font-medium rounded-full">
-                  {counts.critical} critical
+                  {t.recommendations.severityCountCritical.replace('{count}', String(counts.critical))}
                 </span>
               )}
               {counts.high > 0 && (
                 <span className="px-2 py-1 bg-orange-100 text-orange-800 text-sm font-medium rounded-full">
-                  {counts.high} high
+                  {t.recommendations.severityCountHigh.replace('{count}', String(counts.high))}
                 </span>
               )}
               {counts.medium > 0 && (
                 <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-sm font-medium rounded-full">
-                  {counts.medium} medium
+                  {t.recommendations.severityCountMedium.replace('{count}', String(counts.medium))}
                 </span>
               )}
               {counts.low > 0 && (
                 <span className="px-2 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">
-                  {counts.low} low
+                  {t.recommendations.severityCountLow.replace('{count}', String(counts.low))}
                 </span>
               )}
             </div>
 
             {summary && summary.total_spend_usd > 0 && (
               <div className="text-sm text-gray-600">
-                <strong>${summary.total_spend_usd.toFixed(2)}</strong> total spend analyzed
+                <strong>${summary.total_spend_usd.toFixed(2)}</strong> {t.recommendations.totalSpendAnalyzed}
               </div>
             )}
           </div>
@@ -285,7 +292,7 @@ export function RecommendationsPanel({
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             <RefreshCw className="h-4 w-4" />
-            Re-analyze
+            {t.recommendations.reanalyze}
           </button>
         </div>
       </div>
@@ -294,9 +301,9 @@ export function RecommendationsPanel({
       {recs.length === 0 ? (
         <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
           <Sparkles className="h-12 w-12 text-green-500 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900">No issues detected!</h3>
+          <h3 className="text-lg font-medium text-gray-900">{t.recommendations.noIssuesDetectedTitle}</h3>
           <p className="text-sm text-gray-500 mt-1">
-            Your RTB configuration looks efficient. Check back after more data is collected.
+            {t.recommendations.noIssuesDetectedDesc}
           </p>
         </div>
       ) : (

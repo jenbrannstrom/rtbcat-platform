@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Recommendation } from '@/lib/api';
+import { useTranslation } from '@/contexts/i18n-context';
+import type { Translations } from '@/lib/i18n/types';
 
 const severityConfig = {
   critical: {
@@ -59,6 +61,78 @@ const typeIcons: Record<string, typeof Globe> = {
   fraud_alert: Shield,
 };
 
+function getSeverityLabel(severity: string, t: Translations): string {
+  switch (severity.toLowerCase()) {
+    case 'critical':
+      return t.recommendations.severityCritical;
+    case 'high':
+      return t.recommendations.severityHigh;
+    case 'medium':
+      return t.recommendations.severityMedium;
+    case 'low':
+      return t.recommendations.severityLow;
+    default:
+      return severity.toUpperCase();
+  }
+}
+
+function getRecommendationTypeLabel(type: string, t: Translations): string {
+  switch (type) {
+    case 'size_mismatch':
+      return t.recommendations.typeSizeMismatch;
+    case 'geo_exclusion':
+      return t.recommendations.typeGeoExclusion;
+    case 'publisher_block':
+      return t.recommendations.typePublisherBlock;
+    case 'config_inefficiency':
+      return t.recommendations.typeConfigInefficiency;
+    case 'creative_pause':
+      return t.recommendations.typeCreativePause;
+    case 'creative_review':
+      return t.recommendations.typeCreativeReview;
+    case 'fraud_alert':
+      return t.recommendations.typeFraudAlert;
+    default:
+      return type.replace(/_/g, ' ');
+  }
+}
+
+function getActionTypeLabel(actionType: string, t: Translations): string {
+  switch (actionType.toLowerCase()) {
+    case 'block':
+      return t.recommendations.actionTypeBlock;
+    case 'exclude':
+      return t.recommendations.actionTypeExclude;
+    case 'add':
+      return t.recommendations.actionTypeAdd;
+    case 'remove':
+      return t.recommendations.actionTypeRemove;
+    case 'monitor':
+      return t.recommendations.actionTypeMonitor;
+    case 'review':
+      return t.recommendations.actionTypeReview;
+    default:
+      return actionType;
+  }
+}
+
+function getTargetTypeLabel(targetType: string, t: Translations): string {
+  switch (targetType.toLowerCase()) {
+    case 'size':
+      return t.recommendations.targetTypeSize;
+    case 'geo':
+      return t.recommendations.targetTypeGeo;
+    case 'publisher':
+      return t.recommendations.targetTypePublisher;
+    case 'config':
+      return t.recommendations.targetTypeConfig;
+    case 'app':
+      return t.recommendations.targetTypeApp;
+    default:
+      return targetType;
+  }
+}
+
 interface RecommendationCardProps {
   recommendation: Recommendation;
   onResolve?: (id: string) => void;
@@ -78,6 +152,7 @@ export function RecommendationCard({
   isApplying = false,
   canApply,
 }: RecommendationCardProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [showConfigDropdown, setShowConfigDropdown] = useState(false);
   const [selectedConfig, setSelectedConfig] = useState<string>("");
@@ -113,11 +188,11 @@ export function RecommendationCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full", config.badge)}>
-              {recommendation.severity.toUpperCase()}
+              {getSeverityLabel(recommendation.severity, t)}
             </span>
             <span className="text-xs text-gray-500 flex items-center gap-1">
               <TypeIcon className="h-3 w-3" />
-              {recommendation.type.replace(/_/g, ' ')}
+              {getRecommendationTypeLabel(recommendation.type, t)}
             </span>
           </div>
 
@@ -138,7 +213,7 @@ export function RecommendationCard({
                 ${impact.wasted_spend_usd.toFixed(2)}
               </div>
               <div className="text-xs text-gray-500">
-                wasted
+                {t.recommendations.impactWastedLabel}
               </div>
             </>
           ) : impact.wasted_qps > 0 ? (
@@ -147,7 +222,7 @@ export function RecommendationCard({
                 {impact.wasted_qps.toFixed(1)} QPS
               </div>
               <div className="text-xs text-gray-500">
-                wasted
+                {t.recommendations.impactWastedLabel}
               </div>
             </>
           ) : (
@@ -156,7 +231,7 @@ export function RecommendationCard({
                 ${impact.potential_savings_monthly.toFixed(0)}
               </div>
               <div className="text-xs text-gray-500">
-                potential savings
+                {t.recommendations.impactPotentialSavings}
               </div>
             </>
           )}
@@ -171,12 +246,12 @@ export function RecommendationCard({
         {expanded ? (
           <>
             <ChevronUp className="h-4 w-4" />
-            Hide details
+            {t.recommendations.hideDetails}
           </>
         ) : (
           <>
             <ChevronDown className="h-4 w-4" />
-            Show details & actions
+            {t.recommendations.showDetailsAndActions}
           </>
         )}
       </button>
@@ -186,23 +261,23 @@ export function RecommendationCard({
         <div className="mt-4 pt-4 border-t border-gray-200 space-y-4">
           {/* Impact Details */}
           <div>
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Impact</h4>
+            <h4 className="text-sm font-medium text-gray-700 mb-2">{t.recommendations.impactSectionTitle}</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="bg-white rounded p-2 text-center">
                 <div className="text-lg font-semibold">{impact.wasted_queries_daily.toLocaleString()}</div>
-                <div className="text-xs text-gray-500">queries/day</div>
+                <div className="text-xs text-gray-500">{t.recommendations.queriesPerDay}</div>
               </div>
               <div className="bg-white rounded p-2 text-center">
                 <div className="text-lg font-semibold">${impact.wasted_spend_usd.toFixed(2)}</div>
-                <div className="text-xs text-gray-500">wasted spend</div>
+                <div className="text-xs text-gray-500">{t.recommendations.wastedSpend}</div>
               </div>
               <div className="bg-white rounded p-2 text-center">
                 <div className="text-lg font-semibold">{impact.percent_of_total_waste.toFixed(1)}%</div>
-                <div className="text-xs text-gray-500">of total waste</div>
+                <div className="text-xs text-gray-500">{t.recommendations.ofTotalWaste}</div>
               </div>
               <div className="bg-white rounded p-2 text-center">
                 <div className="text-lg font-semibold">${impact.potential_savings_monthly.toFixed(0)}</div>
-                <div className="text-xs text-gray-500">savings/month</div>
+                <div className="text-xs text-gray-500">{t.recommendations.savingsPerMonth}</div>
               </div>
             </div>
           </div>
@@ -210,14 +285,14 @@ export function RecommendationCard({
           {/* Evidence */}
           {recommendation.evidence.length > 0 && (
             <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-2">Evidence</h4>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">{t.recommendations.evidenceSectionTitle}</h4>
               <ul className="space-y-1">
                 {recommendation.evidence.map((e, i) => (
                   <li key={i} className="text-sm text-gray-600 flex items-center gap-2">
                     <CheckCircle2 className="h-3 w-3 text-green-500" />
                     <span>
                       {e.metric_name}: <strong>{e.metric_value.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong>
-                      {' '}({e.comparison} threshold of {e.threshold.toLocaleString(undefined, { maximumFractionDigits: 2 })})
+                      {' '}({e.comparison} {t.recommendations.thresholdOf} {e.threshold.toLocaleString(undefined, { maximumFractionDigits: 2 })})
                     </span>
                   </li>
                 ))}
@@ -228,17 +303,17 @@ export function RecommendationCard({
           {/* Actions */}
           {recommendation.actions.length > 0 && (
             <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-2">Recommended Actions</h4>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">{t.recommendations.recommendedActionsSectionTitle}</h4>
               <div className="space-y-2">
                 {recommendation.actions.map((action, i) => (
                   <div key={i} className="bg-white rounded p-3 border border-gray-200">
                     <div className="flex items-center justify-between">
                       <div>
                         <span className="text-sm font-medium capitalize">
-                          {action.action_type}
+                          {getActionTypeLabel(action.action_type, t)}
                         </span>
                         <span className="text-sm text-gray-600">
-                          {' '}{action.target_type}: <strong>{action.target_name}</strong>
+                          {' '}{getTargetTypeLabel(action.target_type, t)}: <strong>{action.target_name}</strong>
                         </span>
                       </div>
                       {action.pretargeting_field && (
@@ -267,7 +342,7 @@ export function RecommendationCard({
                     onClick={() => setShowConfigDropdown((prev) => !prev)}
                     className="px-3 py-2 bg-white text-gray-700 text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50"
                   >
-                    {selectedConfig ? "Config selected" : "Select Config"}
+                    {selectedConfig ? t.recommendations.configSelected : t.recommendations.selectConfig}
                   </button>
                   {showConfigDropdown && (
                     <div className="absolute z-10 mt-1 right-0 w-64 max-h-56 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg">
@@ -300,7 +375,7 @@ export function RecommendationCard({
                       : "bg-gray-200 text-gray-500 cursor-not-allowed"
                   )}
                 >
-                  {isApplying ? "Staging..." : "Stage Change"}
+                  {isApplying ? t.recommendations.staging : t.recommendations.stageChange}
                 </button>
               </>
             )}
@@ -308,13 +383,13 @@ export function RecommendationCard({
               onClick={() => onResolve?.(recommendation.id)}
               className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700"
             >
-              Mark Resolved
+              {t.recommendations.markResolved}
             </button>
             <button
               onClick={() => onDismiss?.(recommendation.id)}
               className="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-300"
             >
-              Dismiss
+              {t.recommendations.dismiss}
             </button>
           </div>
         </div>
