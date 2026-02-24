@@ -320,16 +320,16 @@ function WasteAnalysisContent() {
           <div className="text-xs text-gray-600">
             {seatReady && dataAsOf && (
               <span>
-                Data as of <strong>{dataAsOf}</strong>
+                {t.dashboard.dataAsOf} <strong>{dataAsOf}</strong>
                 {hasDataDateDrift && (
                   <span className="ml-2 text-amber-700">
-                    (home: {homeSeatDataAsOf}, bidstream: {bidstreamDataAsOf})
+                    ({t.dashboard.homeLabel}: {homeSeatDataAsOf}, {t.dashboard.bidstreamLabel}: {bidstreamDataAsOf})
                   </span>
                 )}
               </span>
             )}
             {seatReady && !dataAsOf && (
-              <span className="text-gray-500">Data freshness pending…</span>
+              <span className="text-gray-500">{t.dashboard.dataFreshnessPending}</span>
             )}
           </div>
           <div className="flex items-center justify-end gap-2">
@@ -345,7 +345,7 @@ function WasteAnalysisContent() {
                 "uppercase tracking-wide",
                 expandedConfigId ? "text-blue-600" : "text-green-600"
               )}>
-                {expandedConfigId ? 'Config CPM' : 'Avg CPM'}
+                {expandedConfigId ? t.dashboard.configCpm : t.dashboard.avgCpm}
               </span>
               <span className={cn(
                 "ml-1 font-bold",
@@ -395,12 +395,12 @@ function WasteAnalysisContent() {
       <div className="p-6 space-y-4">
       {seatsError && (
         <div className="flex items-center justify-between gap-3 text-red-800 bg-red-50 border border-red-200 rounded px-3 py-2">
-          <span>Unable to load buyer seats. Retry to continue.</span>
+          <span>{t.dashboard.unableToLoadBuyerSeatsRetry}</span>
           <button
             onClick={() => refetchSeats()}
             className="px-2 py-1 text-xs font-medium rounded bg-red-100 hover:bg-red-200"
           >
-            Retry
+            {t.common.retry}
           </button>
         </div>
       )}
@@ -409,17 +409,17 @@ function WasteAnalysisContent() {
           {seatsLoading && (
             <div className="flex items-center gap-2 text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Loading seat access...</span>
+              <span>{t.dashboard.loadingSeatAccess}</span>
             </div>
           )}
           {!seatsLoading && seats && seats.length === 0 && (
             <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-              No active buyer seats found. Sync seats in Settings to load home analytics.
+              {t.dashboard.noActiveBuyerSeatsSyncSettings}
             </div>
           )}
           {!seatsLoading && seats && seats.length > 0 && (
             <div className="text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2">
-              Select a seat to load home analytics.
+              {t.dashboard.selectSeatToLoadHomeAnalytics}
             </div>
           )}
         </div>
@@ -460,7 +460,7 @@ function WasteAnalysisContent() {
             <AlertTriangle className="h-8 w-8 text-yellow-500 mx-auto mb-3" />
             <h3 className="font-medium text-yellow-800 mb-2">{t.pretargeting.noPretargetingConfigs}</h3>
             <p className="text-sm text-yellow-700 mb-4">
-              {t.pretargeting.useSyncAllToFetch || "Use \"Sync All\" in the sidebar to fetch pretargeting configs."}
+              {t.pretargeting.useSyncAllToFetch}
             </p>
           </div>
         ) : (
@@ -472,8 +472,8 @@ function WasteAnalysisContent() {
                 )}
                 <span>
                   {configPerformanceError
-                    ? "Config performance metrics failed to load; showing config list without performance values."
-                    : "Config performance metrics are delayed; showing config list without performance values."}
+                    ? t.pretargeting.configPerformanceFailedNoValues
+                    : t.pretargeting.configPerformanceDelayedNoValues}
                   </span>
               </div>
             )}
@@ -481,9 +481,9 @@ function WasteAnalysisContent() {
               <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 flex items-center gap-2">
                 <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
                 <span>
-                  Showing last <span className="font-semibold">{configEffectiveDays} days</span>
-                  {" "}because no rows were found in the requested
-                  {" "}<span className="font-semibold">{configRequestedDays} day</span> window.
+                  {t.pretargeting.showingLast} <span className="font-semibold">{configEffectiveDays} {t.dashboard.days}</span>
+                  {" "}{t.pretargeting.becauseNoRowsFoundInRequested}
+                  {" "}<span className="font-semibold">{configRequestedDays} {t.pretargeting.dayWindow}</span>
                 </span>
               </div>
             )}

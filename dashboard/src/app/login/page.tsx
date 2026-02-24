@@ -10,12 +10,14 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Mail, Lock, AlertCircle, Loader2 } from "lucide-react";
+import { useTranslation } from "@/contexts/i18n-context";
 
 type AuthMethod = "select" | "password" | "authing" | "google";
 
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useTranslation();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
   const error = searchParams.get("error");
   const enableAuthingLogin = process.env.NEXT_PUBLIC_ENABLE_AUTHING_LOGIN === "true";
@@ -51,11 +53,11 @@ export default function LoginPage() {
 
       if (!response.ok) {
         if ([502, 503, 504].includes(response.status)) {
-          setErrorMessage("Server unavailable. Please try again in a moment.");
+          setErrorMessage(t.auth.serverUnavailableTryAgainSoon);
         } else if (response.status >= 500) {
-          setErrorMessage("Login service is temporarily unavailable.");
+          setErrorMessage(t.auth.loginServiceTemporarilyUnavailable);
         } else {
-          setErrorMessage(data?.detail || "Login failed");
+          setErrorMessage(data?.detail || t.auth.loginFailed);
         }
         return;
       }
@@ -64,7 +66,7 @@ export default function LoginPage() {
       router.push(callbackUrl);
     } catch (err) {
       // True network failure -- fetch itself could not connect
-      setErrorMessage("Cannot reach server. Please check your connection and try again.");
+      setErrorMessage(t.auth.cannotReachServerCheckConnection);
     } finally {
       setIsLoading(false);
     }
@@ -92,8 +94,8 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4">
             <img src="/favicon.svg" alt="Cat-Scan" className="w-16 h-16" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Cat-Scan</h1>
-          <p className="text-gray-600 mt-1">QPS manager for Google Auth Buyers</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t.auth.catScan}</h1>
+          <p className="text-gray-600 mt-1">{t.auth.qpsManagerForGoogleAuthBuyers}</p>
         </div>
 
         {/* Login Card */}
@@ -109,7 +111,7 @@ export default function LoginPage() {
           {authMethod === "select" && (
             <div className="space-y-4">
               <h2 className="text-lg font-semibold text-gray-900 text-center mb-6">
-                Sign in to continue
+                {t.auth.signInToContinue}
               </h2>
 
               {showExternalLogins && (
@@ -127,7 +129,7 @@ export default function LoginPage() {
                           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
                         </svg>
                       )}
-                      Sign in with Authing
+                      {t.auth.signInWithAuthing}
                     </button>
                   )}
 
@@ -159,7 +161,7 @@ export default function LoginPage() {
                           />
                         </svg>
                       )}
-                      Sign in with Google
+                      {t.auth.signInWithGoogle}
                     </button>
                   )}
 
@@ -168,7 +170,7 @@ export default function LoginPage() {
                       <div className="w-full border-t border-gray-200" />
                     </div>
                     <div className="relative flex justify-center text-sm">
-                      <span className="px-2 bg-white text-gray-500">or</span>
+                      <span className="px-2 bg-white text-gray-500">{t.auth.orSeparator}</span>
                     </div>
                   </div>
                 </>
@@ -181,7 +183,7 @@ export default function LoginPage() {
                 className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
               >
                 <Mail className="w-5 h-5" />
-                Sign in with Email
+                {t.auth.signInWithEmail}
               </button>
             </div>
           )}
@@ -194,18 +196,18 @@ export default function LoginPage() {
                   onClick={() => setAuthMethod("select")}
                   className="text-sm text-gray-500 hover:text-gray-700 mb-4"
                 >
-                  &larr; Back to options
+                  &larr; {t.auth.backToOptions}
                 </button>
               )}
 
               <h2 className="text-lg font-semibold text-gray-900 text-center mb-6">
-                Sign in with Email
+                {t.auth.signInWithEmail}
               </h2>
 
               {/* Email Field */}
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                  Email
+                  {t.auth.email}
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -216,7 +218,7 @@ export default function LoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="you@example.com"
+                    placeholder={t.auth.emailPlaceholder}
                   />
                 </div>
               </div>
@@ -224,7 +226,7 @@ export default function LoginPage() {
               {/* Password Field */}
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                  Password
+                  {t.auth.password}
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -235,7 +237,7 @@ export default function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="Enter your password"
+                    placeholder={t.auth.enterYourPassword}
                   />
                 </div>
               </div>
@@ -249,10 +251,10 @@ export default function LoginPage() {
                 {isLoading ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Signing in...
+                    {t.auth.signingIn}
                   </>
                 ) : (
-                  "Sign in"
+                  t.auth.signIn
                 )}
               </button>
             </form>
@@ -261,7 +263,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-sm text-gray-500 mt-6">
-          Protected by Cat-Scan authentication
+          {t.auth.protectedByCatScanAuthentication}
         </p>
       </div>
     </div>
