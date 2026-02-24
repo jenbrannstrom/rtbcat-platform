@@ -59,9 +59,9 @@ interface PretargetingSettingsEditorProps {
   hideTabs?: boolean;
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string, locale?: string): string {
   const date = new Date(dateStr);
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(locale || 'en', {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -71,6 +71,104 @@ function formatDate(dateStr: string): string {
 
 function normalizePublisherId(value: string): string {
   return value.trim();
+}
+
+function formatCodeLabel(value: string): string {
+  return value
+    .replace(/[_-]+/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatHistoryFieldLabel(field: string, t: Translations): string {
+  switch (field) {
+    case 'publisher_targeting':
+      return t.pretargeting.historyFieldPublisherTargeting;
+    case 'publisher_targeting_mode':
+      return t.pretargeting.historyFieldPublisherTargetingMode;
+    case 'included_sizes':
+      return t.pretargeting.historyFieldIncludedSizes;
+    case 'included_geos':
+      return t.pretargeting.historyFieldIncludedGeos;
+    case 'included_formats':
+      return t.pretargeting.historyFieldIncludedFormats;
+    case 'excluded_geos':
+      return t.pretargeting.historyFieldExcludedGeos;
+    case 'state':
+      return t.pretargeting.historyFieldState;
+    default:
+      return formatCodeLabel(field);
+  }
+}
+
+function formatHistorySourceLabel(source: string, t: Translations): string {
+  switch (source.toLowerCase()) {
+    case 'ui':
+      return t.pretargeting.historySourceUi;
+    case 'google_sync':
+    case 'sync':
+      return t.pretargeting.historySourceGoogleSync;
+    case 'rollback':
+      return t.pretargeting.historySourceRollback;
+    case 'system':
+      return t.pretargeting.historySourceSystem;
+    case 'api':
+      return t.pretargeting.historySourceApi;
+    default:
+      return formatCodeLabel(source);
+  }
+}
+
+function formatSnapshotTypeLabel(snapshotType: string | null | undefined, t: Translations): string {
+  const value = (snapshotType || '').toLowerCase();
+  switch (value) {
+    case '':
+    case 'manual':
+      return t.pretargeting.snapshotTypeManual;
+    case 'auto':
+    case 'automatic':
+      return t.pretargeting.snapshotTypeAuto;
+    case 'pre_push':
+    case 'before_push':
+    case 'auto_before_push':
+      return t.pretargeting.snapshotTypePrePush;
+    case 'rollback':
+    case 'pre_rollback':
+    case 'before_rollback':
+      return t.pretargeting.snapshotTypeRollback;
+    case 'sync':
+    case 'google_sync':
+      return t.pretargeting.snapshotTypeSync;
+    default:
+      return formatCodeLabel(value);
+  }
+}
+
+function formatConfigStateLabel(state: string | null | undefined, t: Translations): string {
+  const value = (state || '').toUpperCase();
+  switch (value) {
+    case 'ACTIVE':
+      return t.pretargeting.configStateActive;
+    case 'SUSPENDED':
+      return t.pretargeting.configStateSuspended;
+    default:
+      return state || '';
+  }
+}
+
+function formatHistoryChangeTypeLabel(changeType: string, t: Translations): string {
+  const keyMap: Record<string, string> = {
+    add_size: t.pretargeting.historyChangeTypeAddSize,
+    remove_size: t.pretargeting.historyChangeTypeRemoveSize,
+    add_geo: t.pretargeting.historyChangeTypeAddGeo,
+    remove_geo: t.pretargeting.historyChangeTypeRemoveGeo,
+    add_format: t.pretargeting.historyChangeTypeAddFormat,
+    remove_format: t.pretargeting.historyChangeTypeRemoveFormat,
+    add_publisher: t.pretargeting.historyChangeTypeAddPublisher,
+    remove_publisher: t.pretargeting.historyChangeTypeRemovePublisher,
+    set_publisher_mode: t.pretargeting.historyChangeTypeSetPublisherMode,
+  };
+  return keyMap[changeType] || formatCodeLabel(changeType);
 }
 
 // isValidPublisherId and detectPublisherType imported from @/lib/publisher-validation
@@ -839,22 +937,24 @@ function PublisherTargetingSection({
 
 // History entry component
 function HistoryEntry({ entry }: { entry: PretargetingHistoryItem }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   return (
     <div className="flex items-start gap-3 py-2 border-b last:border-0">
       <Clock className="h-4 w-4 text-gray-400 mt-0.5" />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 text-sm">
-          <span className="font-medium text-gray-900">{entry.change_type}</span>
+          <span className="font-medium text-gray-900">{formatHistoryChangeTypeLabel(entry.change_type, t)}</span>
           {entry.field_changed && (
-            <span className="text-gray-500">{t.pretargeting.historyOnField.replace('{field}', entry.field_changed)}</span>
+            <span className="text-gray-500">
+              {t.pretargeting.historyOnField.replace('{field}', formatHistoryFieldLabel(entry.field_changed, t))}
+            </span>
           )}
         </div>
         {entry.new_value && (
           <p className="text-xs text-gray-600 mt-0.5 truncate">{entry.new_value}</p>
         )}
         <p className="text-xs text-gray-400 mt-1">
-          {formatDate(entry.changed_at)} {t.pretargeting.historyMetaSeparator} {entry.change_source}
+          {formatDate(entry.changed_at, language)} {t.pretargeting.historyMetaSeparator} {formatHistorySourceLabel(entry.change_source, t)}
         </p>
       </div>
     </div>
@@ -868,7 +968,7 @@ export function PretargetingSettingsEditor({
   initialTab = 'settings',
   hideTabs = false,
 }: PretargetingSettingsEditorProps) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [showHistory, setShowHistory] = useState(false);
   const [historyView, setHistoryView] = useState<'audit' | 'snapshots'>('audit');
   const [activeTab, setActiveTab] = useState<'publishers' | 'settings'>(initialTab);
@@ -1330,7 +1430,7 @@ export function PretargetingSettingsEditor({
               "px-2 py-0.5 text-xs font-medium rounded",
               configDetail.state === 'ACTIVE' ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
             )}>
-              {configDetail.state}
+              {formatConfigStateLabel(configDetail.state, t)}
             </span>
             <span className="text-xs text-gray-500">
               {t.pretargeting.configLabel}: {configDetail.config_id}
@@ -1597,7 +1697,7 @@ export function PretargetingSettingsEditor({
             {/* Last sync info */}
             {configDetail.synced_at && (
               <p className="text-xs text-gray-400 text-center">
-                {t.pretargeting.lastSyncedFromGoogle}: {formatDate(configDetail.synced_at)}
+                {t.pretargeting.lastSyncedFromGoogle}: {formatDate(configDetail.synced_at, language)}
               </p>
             )}
           </>
@@ -1676,7 +1776,7 @@ export function PretargetingSettingsEditor({
                             {snapshot.snapshot_name || t.pretargeting.snapshotLabel}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {snapshot.snapshot_type || t.pretargeting.snapshotTypeManual} • {formatDate(snapshot.created_at)}
+                            {formatSnapshotTypeLabel(snapshot.snapshot_type, t)} • {formatDate(snapshot.created_at, language)}
                           </p>
                         </div>
                         <button
