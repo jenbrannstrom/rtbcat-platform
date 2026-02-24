@@ -8,6 +8,7 @@ import {
   Legend,
   Tooltip,
 } from "recharts";
+import { useTranslation } from "@/contexts/i18n-context";
 
 interface FormatChartProps {
   data: Record<string, number>;
@@ -22,6 +23,7 @@ const COLORS = {
 };
 
 export function FormatChart({ data }: FormatChartProps) {
+  const { t } = useTranslation();
   const chartData = Object.entries(data).map(([name, value]) => ({
     name,
     value,
@@ -30,7 +32,7 @@ export function FormatChart({ data }: FormatChartProps) {
   if (chartData.length === 0) {
     return (
       <div className="flex items-center justify-center h-[300px] text-gray-500">
-        No data available
+        {t.creatives.noData}
       </div>
     );
   }
@@ -58,7 +60,7 @@ export function FormatChart({ data }: FormatChartProps) {
           ))}
         </Pie>
         <Tooltip
-          formatter={(value: number) => [value, "Creatives"]}
+          formatter={(value: number) => [value, t.creatives.title]}
         />
         <Legend />
       </PieChart>

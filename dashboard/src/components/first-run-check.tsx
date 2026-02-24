@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { useTranslation } from '@/contexts/i18n-context';
 
 /**
  * First run check for OAuth2 Proxy setup.
@@ -17,6 +18,7 @@ const SETUP_PATHS = ['/connect', '/setup', '/settings'];
 export function FirstRunCheck({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { t } = useTranslation();
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
@@ -53,7 +55,7 @@ export function FirstRunCheck({ children }: { children: React.ReactNode }) {
   if (!checked) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-gray-500">Loading...</div>
+        <div className="text-gray-500">{t.common.loading}</div>
       </div>
     );
   }
