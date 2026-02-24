@@ -23,6 +23,7 @@ from api.dependencies import (
     get_store,
     get_config,
     get_current_user,
+    get_allowed_buyer_ids,
     get_allowed_service_account_ids,
     require_buyer_access,
 )
@@ -211,21 +212,18 @@ async def list_seats(
     bidder_id: Optional[str] = Query(None, description="Filter by bidder ID"),
     active_only: bool = Query(True, description="Only return active seats"),
     seats_service: SeatsService = Depends(get_seats_service),
+    store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """List all known buyer seats.
 
     Returns buyer seats that have been discovered via the /seats/discover endpoint.
     """
-    if user.role == "admin":
-        seats = await seats_service.get_buyer_seats(bidder_id=bidder_id, active_only=active_only)
-    else:
-        service_account_ids = await get_allowed_service_account_ids(user=user)
-        seats = await seats_service.get_buyer_seats_for_service_accounts(
-            service_account_ids=service_account_ids,
-            bidder_id=bidder_id,
-            active_only=active_only,
-        )
+    allowed_buyer_ids = await get_allowed_buyer_ids(store=store, user=user)
+    seats = await seats_service.get_buyer_seats(bidder_id=bidder_id, active_only=active_only)
+    if allowed_buyer_ids is not None:
+        allowed_set = set(allowed_buyer_ids)
+        seats = [s for s in seats if s.buyer_id in allowed_set]
     return [BuyerSeatResponse(**s.to_response_dict()) for s in seats]
 
 

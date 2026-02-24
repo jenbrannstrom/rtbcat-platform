@@ -376,19 +376,22 @@ function UsersPage() {
       {/* Create User Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              {t.admin.createNewUser}
-            </h2>
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] flex flex-col">
+            <div className="flex-shrink-0 px-6 pt-6 pb-4">
+              <h2 className="text-xl font-semibold text-gray-900">
+                {t.admin.createNewUser}
+              </h2>
+            </div>
 
             {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+              <div className="mx-6 mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
                 <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-red-700">{error}</p>
               </div>
             )}
 
-            <form onSubmit={handleCreateUser} className="space-y-4">
+            <form onSubmit={handleCreateUser} className="flex flex-col flex-1 min-h-0">
+              <div className="overflow-y-auto flex-1 px-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {t.admin.emailAddress}
@@ -541,7 +544,8 @@ function UsersPage() {
                   ? t.admin.localPasswordHelp
                   : t.admin.oauthInviteNote}
               </p>
-              <div className="flex gap-3 pt-2">
+              </div>
+              <div className="flex-shrink-0 px-6 pb-6 pt-4 border-t flex gap-3">
                 <button
                   type="button"
                   onClick={resetCreateModalState}
@@ -565,8 +569,8 @@ function UsersPage() {
       {/* Permissions Modal */}
       {permissionsUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 p-6">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
+            <div className="flex-shrink-0 px-6 pt-6 pb-4 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">
                   {t.admin.permissionsFor.replace("{email}", permissionsUser.email)}
@@ -581,7 +585,7 @@ function UsersPage() {
               </button>
             </div>
 
-            <div className="space-y-3 max-h-[420px] overflow-y-auto">
+            <div className="overflow-y-auto flex-1 px-6 space-y-3">
               <div className="flex items-center justify-between border border-gray-200 rounded-lg p-3">
                 <div>
                   <p className="text-sm font-medium text-gray-900">{t.admin.defaultLanguage}</p>
@@ -718,7 +722,7 @@ function UsersPage() {
               </div>
             </div>
 
-            <div className="pt-4 flex justify-end">
+            <div className="flex-shrink-0 px-6 pb-6 pt-4 border-t flex justify-end">
               <button
                 onClick={() => setPermissionsUser(null)}
                 className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
