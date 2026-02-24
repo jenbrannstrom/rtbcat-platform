@@ -1272,6 +1272,12 @@ export interface Translations {
     restoreTo: string;
     empty: string;
     rollbackWarning: string;
+    noSnapshotAvailableForChange: string;
+    previewingRollback: string;
+    failedToPreviewRollback: string;
+    noDifferencesFoundBetweenCurrentAndSnapshot: string;
+    changesWillBeReversedOnGoogle: string;
+    rollbackPushesToGoogleImmediately: string;
     reasonForRollback: string;
     whyRollingBack: string;
     cancel: string;
@@ -1283,6 +1289,7 @@ export interface Translations {
     hoursAgo: string;
     minutesAgo: string;
     justNow: string;
+    rollbackFailed: string;
   };
 
   connect: {

@@ -1271,6 +1271,12 @@ export const en: Translations = {
     restoreTo: 'Restore to:',
     empty: '(empty)',
     rollbackWarning: 'This will restore the previous setting. You\'ll need to apply the change manually in Google Authorized Buyers.',
+    noSnapshotAvailableForChange: 'No snapshot available for this change. Rollback requires an auto-snapshot that was created before the push. Older changes may not have snapshots.',
+    previewingRollback: 'Previewing rollback…',
+    failedToPreviewRollback: 'Failed to preview rollback',
+    noDifferencesFoundBetweenCurrentAndSnapshot: 'No differences found between current config and snapshot. Config may have already been modified since then.',
+    changesWillBeReversedOnGoogle: 'These changes will be reversed on Google:',
+    rollbackPushesToGoogleImmediately: 'This pushes to Google immediately. A new “ROLLBACK” entry will be recorded in history.',
     reasonForRollback: 'Reason for rollback',
     whyRollingBack: 'Why are you rolling back this change?',
     cancel: 'Cancel',
@@ -1282,6 +1288,7 @@ export const en: Translations = {
     hoursAgo: 'h ago',
     minutesAgo: 'm ago',
     justNow: 'just now',
+    rollbackFailed: 'Rollback failed',
   },
 
   connect: {
