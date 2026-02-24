@@ -1,0 +1,37 @@
+import type { Translations } from '../../types';
+
+const value: Translations['geo'] = {
+    title: 'Geographic Performance',
+    subtitle: 'Which geos have highest win rates?',
+    winRatesByCountry: 'Win rates by country',
+    avgWinRate: 'avg win rate',
+    countries: 'Countries',
+    reached: 'Reached',
+    bids: 'Bids',
+    wins: 'Wins',
+    highWinRate: 'High Win Rate (>80%)',
+    lowerWinRate: 'Lower Win Rate (<50%)',
+    optimizeThese: 'Optimize these',
+    geoDataNotAvailable: 'Geographic Data Not Available',
+    importCreativeBiddingReport: 'Import a creative bidding activity report to see geographic win rates.',
+    country: 'Country',
+    geoWasteActionExclude: 'Exclude',
+    geoWasteActionMonitor: 'Monitor',
+    geoWasteActionOk: 'OK',
+    geoWasteActionExpand: 'Expand',
+    geoWasteFailedToLoad: 'Failed to load geo waste analysis',
+    geoWasteTitle: 'Geographic Analysis',
+    geoWasteSubtitle: 'Identify geos with poor performance to exclude from pretargeting',
+    geoWasteGeosAnalyzed: 'geos analyzed',
+    geoWastePerformingWell: 'Performing Well',
+    geoWasteWastedLabel: 'Wasted',
+    geoWasteExcludeFromPretargetingCount: 'Exclude from Pretargeting ({count})',
+    geoWasteGeoBadgeTooltip: 'CTR: {ctr}%, Spend: ${spend}',
+    geoWasteClicks: 'Clicks',
+    geoWasteCtr: 'CTR',
+    geoWasteSpend: 'Spend',
+    geoWasteCpm: 'CPM',
+    geoWasteActionHeader: 'Action',
+  };
+
+export default value;
