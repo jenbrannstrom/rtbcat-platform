@@ -373,6 +373,8 @@ export const en: Translations = {
     importPublishersCount: 'Import {count} Publishers',
     historyOnField: 'on {field}',
     historyMetaSeparator: '-',
+    reasonBlockSizeReduceQpsWaste: 'Blocking size to reduce QPS waste',
+    reasonBulkRemovalReduceQpsWaste: 'Bulk removal to reduce QPS waste',
     commonlyBlockedPublishers: 'Commonly blocked publishers',
     suggestionsCount: '{count} suggestions',
     allCommonlyBlockedAlreadyHandled: 'All commonly blocked publishers are already blocked or pending.',
