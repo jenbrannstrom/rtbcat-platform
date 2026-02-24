@@ -46,6 +46,7 @@ import {
   Loader2,
   RefreshCw,
 } from 'lucide-react';
+import { useTranslation } from '@/contexts/i18n-context';
 import { cn } from '@/lib/utils';
 import { isValidPublisherId, detectPublisherType } from '@/lib/publisher-validation';
 
@@ -829,6 +830,7 @@ export function PretargetingSettingsEditor({
   initialTab = 'settings',
   hideTabs = false,
 }: PretargetingSettingsEditorProps) {
+  const { t } = useTranslation();
   const [showHistory, setShowHistory] = useState(false);
   const [historyView, setHistoryView] = useState<'audit' | 'snapshots'>('audit');
   const [activeTab, setActiveTab] = useState<'publishers' | 'settings'>(initialTab);
@@ -1137,7 +1139,7 @@ export function PretargetingSettingsEditor({
       });
       setRollbackPreview({ snapshot, changes: preview.changes_made });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to preview rollback';
+      const message = error instanceof Error ? error.message : t.pretargeting.failedToPreviewRollback;
       setPushResult({ success: false, message });
     }
   };
@@ -1159,7 +1161,7 @@ export function PretargetingSettingsEditor({
     return (
       <div className="p-4 text-center text-gray-500">
         <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-yellow-500" />
-        <p>Failed to load config details</p>
+        <p>{t.pretargeting.failedToLoadConfigDetails}</p>
       </div>
     );
   }
@@ -1178,8 +1180,8 @@ export function PretargetingSettingsEditor({
     || configDetail?.display_name
     || billing_id;
   const headerTitle = activeTab === 'publishers'
-    ? `Publisher List — ${resolvedConfigName}`
-    : 'Pretargeting Settings';
+    ? t.pretargeting.publisherListHeader.replace('{name}', resolvedConfigName)
+    : t.pretargeting.pretargetingSettingsTitle;
 
   return (
     <div className="border-t bg-white">
@@ -1189,7 +1191,8 @@ export function PretargetingSettingsEditor({
           <span className="font-medium text-gray-900">{headerTitle}</span>
           {hasPendingChanges && (
             <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full">
-              Changes pending{pendingChanges.length ? ` (${pendingChanges.length})` : ''}
+              {t.pretargeting.changesPending}
+              {pendingChanges.length ? ` (${pendingChanges.length})` : ''}
             </span>
           )}
         </div>
@@ -1204,7 +1207,7 @@ export function PretargetingSettingsEditor({
               className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
             >
               <RefreshCw className="h-3 w-3" />
-              Sync with Google
+              {t.pretargeting.syncFromGoogle}
             </button>
           )}
           <button
@@ -1218,7 +1221,7 @@ export function PretargetingSettingsEditor({
             )}
           >
             <History className="h-3 w-3" />
-            History
+            {t.pretargeting.historyShort}
           </button>
           {onClose && (
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
@@ -1240,7 +1243,7 @@ export function PretargetingSettingsEditor({
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             )}
           >
-            Publisher List
+            {t.pretargeting.publisherListTab}
           </button>
           <button
             onClick={() => setActiveTab('settings')}
@@ -1251,7 +1254,7 @@ export function PretargetingSettingsEditor({
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             )}
           >
-            Config Settings
+            {t.pretargeting.configSettingsTab}
           </button>
         </div>
       )}
@@ -1292,7 +1295,7 @@ export function PretargetingSettingsEditor({
               {configDetail.state}
             </span>
             <span className="text-xs text-gray-500">
-              Config: {configDetail.config_id}
+              {t.pretargeting.configLabel}: {configDetail.config_id}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -1303,7 +1306,7 @@ export function PretargetingSettingsEditor({
                 className="flex items-center gap-1 px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 disabled:opacity-50"
               >
                 <Pause className="h-3 w-3" />
-                Suspend
+                {t.pretargeting.suspendAction}
               </button>
             ) : (
               <button
@@ -1316,13 +1319,13 @@ export function PretargetingSettingsEditor({
                 ) : (
                   <Play className="h-3 w-3" />
                 )}
-                Activate
+                {t.pretargeting.activateAction}
               </button>
             )}
             <button
               onClick={() => refetchDetail()}
               className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
-              title="Refresh from Google"
+              title={t.pretargeting.refreshFromGoogle}
             >
               <RefreshCw className="h-3 w-3" />
             </button>
@@ -1337,10 +1340,10 @@ export function PretargetingSettingsEditor({
             <AlertTriangle className="h-5 w-5 text-blue-600 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-medium text-blue-900">
-                Push {pendingChanges.length} change(s) to Google?
+                {t.pretargeting.pushPendingChangesToGoogleConfirm.replace('{count}', String(pendingChanges.length))}
               </p>
               <p className="text-xs text-blue-700 mt-1">
-                This will modify your live pretargeting configuration. Changes take effect immediately.
+                {t.pretargeting.pushConfirmLiveChangeWarning}
               </p>
               <div className="mt-3 space-y-1">
                 {pendingChanges.map((change) => (
@@ -1350,7 +1353,7 @@ export function PretargetingSettingsEditor({
                 ))}
               </div>
               <div className="mt-2 text-xs text-blue-700">
-                A snapshot will be created automatically so you can roll back if needed.
+                {t.pretargeting.pushConfirmSnapshotCreated}
               </div>
               <div className="flex gap-2 mt-3">
                 <button
@@ -1363,14 +1366,14 @@ export function PretargetingSettingsEditor({
                   ) : (
                     <Upload className="h-4 w-4" />
                   )}
-                  Yes, Push to Google
+                  {t.pretargeting.yesPushToGoogle}
                 </button>
                 <button
                   onClick={() => setShowConfirmPush(false)}
                   disabled={applyAllMutation.isPending}
                   className="px-3 py-1.5 bg-white text-gray-700 text-sm rounded border hover:bg-gray-50 disabled:opacity-50"
                 >
-                  Cancel
+                  {t.common.cancel}
                 </button>
               </div>
             </div>
@@ -1384,10 +1387,10 @@ export function PretargetingSettingsEditor({
             <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-medium text-yellow-900">
-                Suspend this pretargeting config?
+                {t.pretargeting.suspendConfigConfirmTitle}
               </p>
               <p className="text-xs text-yellow-700 mt-1">
-                This will immediately stop QPS consumption. A snapshot will be saved for easy rollback.
+                {t.pretargeting.suspendConfigConfirmDesc}
               </p>
               <div className="flex gap-2 mt-3">
                 <button
@@ -1400,14 +1403,14 @@ export function PretargetingSettingsEditor({
                   ) : (
                     <Pause className="h-4 w-4" />
                   )}
-                  Yes, Suspend
+                  {t.pretargeting.yesSuspend}
                 </button>
                 <button
                   onClick={() => setShowConfirmSuspend(false)}
                   disabled={suspendMutation.isPending}
                   className="px-3 py-1.5 bg-white text-gray-700 text-sm rounded border hover:bg-gray-50 disabled:opacity-50"
                 >
-                  Cancel
+                  {t.common.cancel}
                 </button>
               </div>
             </div>
@@ -1421,10 +1424,10 @@ export function PretargetingSettingsEditor({
         {activeTab === 'settings' && hasPendingChanges && (
           <div className="space-y-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
             <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium text-yellow-800 flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                Pending Changes ({pendingChanges.length})
-              </h4>
+                <h4 className="text-sm font-medium text-yellow-800 flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  {t.pretargeting.pendingChangesTitle.replace('{count}', String(pendingChanges.length))}
+                </h4>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setShowConfirmPush(true)}
@@ -1432,7 +1435,7 @@ export function PretargetingSettingsEditor({
                   className="flex items-center gap-1 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 font-medium"
                 >
                   <Upload className="h-3 w-3" />
-                  Push to Google
+                  {t.pretargeting.pushToGoogle}
                 </button>
                 <button
                   onClick={() => {
@@ -1441,7 +1444,7 @@ export function PretargetingSettingsEditor({
                   }}
                   className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
                 >
-                  Clear All
+                  {t.pretargeting.clearAll}
                 </button>
               </div>
             </div>
@@ -1457,7 +1460,7 @@ export function PretargetingSettingsEditor({
               ))}
             </div>
             <p className="text-xs text-yellow-700 mt-2">
-              Click "Push to Google" to apply these changes to your live pretargeting configuration.
+              {t.pretargeting.clickPushToGoogleHint}
             </p>
           </div>
         )}
@@ -1498,7 +1501,7 @@ export function PretargetingSettingsEditor({
         ) : (
           <>
             <TargetingSection
-              title="Ad Sizes"
+              title={t.pretargeting.adSizes}
               icon={LayoutGrid}
               values={configDetail.included_sizes}
               pendingAdds={getPendingByType('add_size')}
@@ -1512,7 +1515,7 @@ export function PretargetingSettingsEditor({
             />
 
             <TargetingSection
-              title="Geographic Targeting"
+              title={t.pretargeting.geographicTargeting}
               icon={Globe}
               values={configDetail.included_geos}
               pendingAdds={getPendingByType('add_geo')}
@@ -1523,7 +1526,7 @@ export function PretargetingSettingsEditor({
             />
 
             <TargetingSection
-              title="Formats"
+              title={t.pretargeting.formats}
               icon={FileType}
               values={configDetail.included_formats}
               pendingAdds={getPendingByType('add_format')}
@@ -1538,7 +1541,7 @@ export function PretargetingSettingsEditor({
               <div className="border rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Ban className="h-4 w-4 text-red-500" />
-                  <span className="font-medium text-gray-900">Excluded Geos</span>
+                  <span className="font-medium text-gray-900">{t.pretargeting.excludedGeos}</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {configDetail.excluded_geos.map((geo) => (
@@ -1556,7 +1559,7 @@ export function PretargetingSettingsEditor({
             {/* Last sync info */}
             {configDetail.synced_at && (
               <p className="text-xs text-gray-400 text-center">
-                Last synced from Google: {formatDate(configDetail.synced_at)}
+                {t.pretargeting.lastSyncedFromGoogle}: {formatDate(configDetail.synced_at)}
               </p>
             )}
           </>
@@ -1569,7 +1572,7 @@ export function PretargetingSettingsEditor({
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
               <History className="h-4 w-4" />
-              History
+              {t.pretargeting.historyShort}
             </h4>
             <div className="flex items-center gap-1">
               <button
@@ -1581,7 +1584,7 @@ export function PretargetingSettingsEditor({
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 )}
               >
-                Audit Log
+                {t.admin.auditLog}
               </button>
               <button
                 onClick={() => setHistoryView('snapshots')}
@@ -1592,7 +1595,7 @@ export function PretargetingSettingsEditor({
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 )}
               >
-                Rollback
+                {t.pretargeting.rollback}
               </button>
             </div>
           </div>
@@ -1612,7 +1615,7 @@ export function PretargetingSettingsEditor({
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-gray-500 italic">No history available</p>
+                <p className="text-sm text-gray-500 italic">{t.pretargeting.noHistoryAvailable}</p>
               )}
             </>
           )}
@@ -1632,17 +1635,17 @@ export function PretargetingSettingsEditor({
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium text-gray-900">
-                            {snapshot.snapshot_name || 'Snapshot'}
+                            {snapshot.snapshot_name || t.pretargeting.snapshotLabel}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {snapshot.snapshot_type || 'manual'} • {formatDate(snapshot.created_at)}
+                            {snapshot.snapshot_type || t.pretargeting.snapshotTypeManual} • {formatDate(snapshot.created_at)}
                           </p>
                         </div>
                         <button
                           onClick={() => handleRollbackPreview(snapshot)}
                           className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
                         >
-                          Rollback
+                          {t.pretargeting.rollback}
                         </button>
                       </div>
                       {snapshot.notes && (
@@ -1652,7 +1655,7 @@ export function PretargetingSettingsEditor({
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-gray-500 italic">No snapshots available</p>
+                <p className="text-sm text-gray-500 italic">{t.pretargeting.noSnapshotsAvailable}</p>
               )}
             </>
           )}
@@ -1660,7 +1663,7 @@ export function PretargetingSettingsEditor({
           {rollbackPreview && (
             <div className="mt-4 border rounded-lg p-3 bg-yellow-50 border-yellow-200">
               <p className="text-sm font-medium text-yellow-900">
-                Roll back to {rollbackPreview.snapshot.snapshot_name || 'snapshot'}?
+                {t.pretargeting.rollbackToSnapshotPrompt.replace('{snapshot}', rollbackPreview.snapshot.snapshot_name || t.pretargeting.snapshotLabel.toLowerCase())}
               </p>
               <ul className="text-xs text-yellow-800 mt-2 space-y-1">
                 {rollbackPreview.changes.map((change) => (
@@ -1673,13 +1676,13 @@ export function PretargetingSettingsEditor({
                   disabled={rollbackMutation.isPending}
                   className="px-3 py-1.5 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700 disabled:opacity-50"
                 >
-                  {rollbackMutation.isPending ? 'Rolling back...' : 'Rollback Now'}
+                  {rollbackMutation.isPending ? t.pretargeting.rollingBack : t.pretargeting.rollbackNow}
                 </button>
                 <button
                   onClick={() => setRollbackPreview(null)}
                   className="px-3 py-1.5 bg-white text-gray-700 text-xs rounded border hover:bg-gray-50"
                 >
-                  Cancel
+                  {t.common.cancel}
                 </button>
               </div>
             </div>
