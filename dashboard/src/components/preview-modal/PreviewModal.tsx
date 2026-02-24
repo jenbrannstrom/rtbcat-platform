@@ -9,6 +9,7 @@ import {
   parseDestinationUrls,
   getGoogleAuthBuyersUrl,
   extractBuyerIdFromName,
+  type UrlLabelLocalizer,
 } from "@/lib/url-utils";
 import { useTranslation } from "@/contexts/i18n-context";
 
@@ -100,7 +101,31 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
   // Parse URLs and tracking params
   const htmlSnippet = creative.html?.snippet || "";
   const allRawUrls = [creative.final_url, ...(declaredUrls || []), htmlSnippet].filter(Boolean).join(" ");
-  const parsedUrls = parseDestinationUrls(allRawUrls);
+  const urlLabelLocalizer: UrlLabelLocalizer = {
+    labels: {
+      play_store: t.previewModal.urlLabelGooglePlayStore,
+      app_store: t.previewModal.urlLabelAppleAppStore,
+      appsflyer: t.previewModal.urlLabelAppsFlyer,
+      adjust: t.previewModal.urlLabelAdjust,
+      branch: t.previewModal.urlLabelBranch,
+      kochava: t.previewModal.urlLabelKochava,
+      doubleclick: t.previewModal.urlLabelDoubleClickTracker,
+      tracking_pixel: t.previewModal.urlLabelTrackingPixel,
+      landing_page: t.previewModal.urlLabelLandingPage,
+    },
+    tooltips: {
+      play_store: t.previewModal.urlTooltipStoreInstallDestination,
+      app_store: t.previewModal.urlTooltipStoreInstallDestination,
+      appsflyer: t.previewModal.urlTooltipAttributionPlatform,
+      adjust: t.previewModal.urlTooltipAttributionPlatform,
+      branch: t.previewModal.urlTooltipAttributionPlatform,
+      kochava: t.previewModal.urlTooltipAttributionPlatform,
+      doubleclick: t.previewModal.urlTooltipDoubleClickTracker,
+      tracking_pixel: t.previewModal.urlTooltipTrackingPixel,
+      landing_page: t.previewModal.urlTooltipLandingPage,
+    },
+  };
+  const parsedUrls = parseDestinationUrls(allRawUrls, urlLabelLocalizer);
   const trackingParams = extractTrackingParams(creative.final_url);
   const hasTrackingParams = Object.keys(trackingParams).length > 0;
   const effectiveSource = (creative.data_source?.source || previewSource || "cache") as "live" | "cache";

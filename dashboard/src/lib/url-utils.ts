@@ -26,59 +26,80 @@ export type UrlType =
   | "landing_page"
   | "unknown";
 
+export interface UrlLabelLocalizer {
+  labels?: Partial<Record<UrlType, string>>;
+  tooltips?: Partial<Record<UrlType, string>>;
+}
+
+const DEFAULT_URL_LABELS: Record<UrlType, string> = {
+  play_store: "Google Play Store",
+  app_store: "Apple App Store",
+  appsflyer: "AppsFlyer Link",
+  adjust: "Adjust Link",
+  branch: "Branch Link",
+  kochava: "Kochava Link",
+  attribution: "Attribution Link",
+  doubleclick: "DoubleClick Tracker",
+  tracking_pixel: "Tracking Pixel",
+  landing_page: "Landing Page",
+  unknown: "URL",
+};
+
+const DEFAULT_URL_TOOLTIPS: Partial<Record<UrlType, string>> = {
+  play_store: "Final destination where user installs the app.",
+  app_store: "Final destination where user installs the app.",
+  appsflyer: "Mobile attribution platform. Tracks which ad drove the install and provides deep linking.",
+  adjust: "Mobile attribution platform. Tracks which ad drove the install and provides deep linking.",
+  branch: "Mobile attribution platform. Tracks which ad drove the install and provides deep linking.",
+  kochava: "Mobile attribution platform. Tracks which ad drove the install and provides deep linking.",
+  doubleclick: "Google's ad click tracker for billing and reporting purposes.",
+  tracking_pixel: "Impression or click tracking pixel for analytics.",
+  landing_page: "Website where user is directed after clicking the ad.",
+};
+
+function getUrlLabel(type: UrlType, localizer?: UrlLabelLocalizer): string {
+  return localizer?.labels?.[type] || DEFAULT_URL_LABELS[type];
+}
+
+function getUrlTooltip(type: UrlType, localizer?: UrlLabelLocalizer): string | undefined {
+  return localizer?.tooltips?.[type] || DEFAULT_URL_TOOLTIPS[type];
+}
+
 const URL_PATTERNS: Array<{
   pattern: RegExp;
   type: UrlType;
-  label: string;
-  tooltip: string;
 }> = [
   {
     pattern: /play\.google\.com\/store\/apps/i,
     type: "play_store",
-    label: "Google Play Store",
-    tooltip: "Final destination where user installs the app.",
   },
   {
     pattern: /apps\.apple\.com/i,
     type: "app_store",
-    label: "Apple App Store",
-    tooltip: "Final destination where user installs the app.",
   },
   {
     pattern: /app\.appsflyer\.com/i,
     type: "appsflyer",
-    label: "AppsFlyer Link",
-    tooltip: "Mobile attribution platform. Tracks which ad drove the install and provides deep linking.",
   },
   {
     pattern: /app\.adjust\.com/i,
     type: "adjust",
-    label: "Adjust Link",
-    tooltip: "Mobile attribution platform. Tracks which ad drove the install and provides deep linking.",
   },
   {
     pattern: /app\.branch\.io/i,
     type: "branch",
-    label: "Branch Link",
-    tooltip: "Mobile attribution platform. Tracks which ad drove the install and provides deep linking.",
   },
   {
     pattern: /app\.kochava\.com|control\.kochava\.com/i,
     type: "kochava",
-    label: "Kochava Link",
-    tooltip: "Mobile attribution platform. Tracks which ad drove the install and provides deep linking.",
   },
   {
     pattern: /googleads\.g\.doubleclick\.net|pagead\/aclk/i,
     type: "doubleclick",
-    label: "DoubleClick Tracker",
-    tooltip: "Google's ad click tracker for billing and reporting purposes.",
   },
   {
     pattern: /1x1\.gif|pixel|\.gif\?|track\..*\/pixel|impression|beacon/i,
     type: "tracking_pixel",
-    label: "Tracking Pixel",
-    tooltip: "Impression or click tracking pixel for analytics.",
   },
 ];
 
@@ -226,17 +247,17 @@ export function getPlayStoreUrl(packageId: string): string {
 /**
  * Categorize a single URL
  */
-export function categorizeUrl(url: string): Omit<ParsedUrl, "isPrimary"> {
+export function categorizeUrl(url: string, localizer?: UrlLabelLocalizer): Omit<ParsedUrl, "isPrimary"> {
   const domain = extractDomain(url);
 
-  for (const { pattern, type, label, tooltip } of URL_PATTERNS) {
+  for (const { pattern, type } of URL_PATTERNS) {
     if (pattern.test(url)) {
       const result: Omit<ParsedUrl, "isPrimary"> = {
         url,
         type,
-        label,
+        label: getUrlLabel(type, localizer),
         domain,
-        tooltip,
+        tooltip: getUrlTooltip(type, localizer),
       };
 
       // Extract package ID for app stores
@@ -257,9 +278,9 @@ export function categorizeUrl(url: string): Omit<ParsedUrl, "isPrimary"> {
   return {
     url,
     type: "landing_page",
-    label: "Landing Page",
+    label: getUrlLabel("landing_page", localizer),
     domain,
-    tooltip: "Website where user is directed after clicking the ad.",
+    tooltip: getUrlTooltip("landing_page", localizer),
   };
 }
 
@@ -306,14 +327,14 @@ function numberDuplicateLabels(urls: ParsedUrl[]): ParsedUrl[] {
 /**
  * Main function: Parse and categorize destination URLs
  */
-export function parseDestinationUrls(rawUrl: string | null | undefined): ParsedUrl[] {
+export function parseDestinationUrls(rawUrl: string | null | undefined, localizer?: UrlLabelLocalizer): ParsedUrl[] {
   if (!rawUrl) return [];
 
   const extractedUrls = extractUrlsFromChain(rawUrl);
   if (extractedUrls.length === 0) return [];
 
   // Categorize each URL
-  const categorized = extractedUrls.map((url) => categorizeUrl(url));
+  const categorized = extractedUrls.map((url) => categorizeUrl(url, localizer));
 
   // Filter out tracking pixels and simple domain landing pages if we have better URLs
   let displayUrls = categorized.filter((u) => u.type !== "tracking_pixel");
@@ -330,10 +351,10 @@ export function parseDestinationUrls(rawUrl: string | null | undefined): ParsedU
       displayUrls.unshift({
         url: playStoreUrl,
         type: "play_store",
-        label: "Google Play Store",
+        label: getUrlLabel("play_store", localizer),
         domain: "play.google.com",
         packageId: appsFlyerWithPackage.packageId,
-        tooltip: "Final destination where user installs the app.",
+        tooltip: getUrlTooltip("play_store", localizer),
       });
     }
   }
