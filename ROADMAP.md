@@ -77,6 +77,7 @@
     - [x] Sidebar remaining brand/seat-error/retry strings converted (`dashboard/src/components/sidebar.tsx`)
     - [x] `PreviewModal` header/source/HTML/performance/detail/URL-tracking UI copy converted (partial; additional preview subcomponents still pending) (`dashboard/src/components/preview-modal/PreviewModal.tsx`)
     - [x] `PreviewModal` approval status badge enum labels localized (`dashboard/src/components/preview-modal/PreviewModal.tsx`)
+    - [x] URL label/tooltip strings moved out of `url-utils` hardcoded defaults via translated localizer wiring in `PreviewModal` (`dashboard/src/lib/url-utils.ts`, `dashboard/src/components/preview-modal/PreviewModal.tsx`)
     - [x] `PreviewModal` language analysis/editor section copy converted (`dashboard/src/components/preview-modal/LanguageSection.tsx`)
     - [x] `PreviewModal` renderers/shared copy button strings converted (`dashboard/src/components/preview-modal/PreviewRenderers.tsx`, `dashboard/src/components/preview-modal/SharedComponents.tsx`)
     - [x] `PreviewModal` country targeting / geo mismatch section copy converted (`dashboard/src/components/preview-modal/CountrySection.tsx`)
