@@ -19,6 +19,7 @@ import {
   deleteGeminiKey,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/contexts/i18n-context";
 
 /**
  * Gemini API Key management section.
@@ -26,6 +27,7 @@ import { cn } from "@/lib/utils";
  */
 export function GeminiApiKeySection() {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const [showKey, setShowKey] = useState(false);
   const [newKey, setNewKey] = useState("");
   const [isEditing, setIsEditing] = useState(false);
@@ -46,7 +48,10 @@ export function GeminiApiKeySection() {
       setTimeout(() => setMessage(null), 5000);
     },
     onError: (error) => {
-      setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to save API key" });
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : t.setup.geminiFailedToSaveApiKey,
+      });
       setTimeout(() => setMessage(null), 5000);
     },
   });
@@ -59,14 +64,17 @@ export function GeminiApiKeySection() {
       setTimeout(() => setMessage(null), 5000);
     },
     onError: (error) => {
-      setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to remove API key" });
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : t.setup.geminiFailedToRemoveApiKey,
+      });
       setTimeout(() => setMessage(null), 5000);
     },
   });
 
   const handleSave = () => {
     if (!newKey.trim()) {
-      setMessage({ type: "error", text: "Please enter an API key" });
+      setMessage({ type: "error", text: t.setup.geminiEnterApiKey });
       return;
     }
     updateMutation.mutate(newKey.trim());
@@ -83,8 +91,8 @@ export function GeminiApiKeySection() {
             {keyStatus?.configured ? <CheckCircle className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
           </div>
           <div>
-            <h3 className="text-lg font-medium text-gray-900">AI Language Detection</h3>
-            <p className="text-sm text-gray-500">Gemini API for creative language analysis</p>
+            <h3 className="text-lg font-medium text-gray-900">{t.setup.geminiLanguageDetection}</h3>
+            <p className="text-sm text-gray-500">{t.setup.geminiLanguageDetectionDesc}</p>
           </div>
         </div>
       </div>
@@ -124,7 +132,7 @@ export function GeminiApiKeySection() {
             <div className="flex items-center gap-3">
               <Key className="h-5 w-5 text-green-600" />
               <div>
-                <p className="font-medium text-green-900">API Key Configured</p>
+                <p className="font-medium text-green-900">{t.setup.geminiApiKeyConfigured}</p>
                 <p className="text-sm text-green-700 font-mono">
                   {showKey ? keyStatus.masked_key : "••••••••••••"}
                 </p>
@@ -134,7 +142,7 @@ export function GeminiApiKeySection() {
               <button
                 onClick={() => setShowKey(!showKey)}
                 className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
-                title={showKey ? "Hide key" : "Show key"}
+                title={showKey ? t.setup.geminiHideKey : t.setup.geminiShowKey}
               >
                 {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -142,13 +150,13 @@ export function GeminiApiKeySection() {
                 onClick={() => setIsEditing(true)}
                 className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded font-medium"
               >
-                Change
+                {t.connect.change}
               </button>
               <button
                 onClick={() => deleteMutation.mutate()}
                 disabled={deleteMutation.isPending}
                 className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
-                title="Remove API key"
+                title={t.setup.geminiRemoveApiKey}
               >
                 {deleteMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -159,14 +167,14 @@ export function GeminiApiKeySection() {
             </div>
           </div>
           <p className="text-sm text-gray-500">
-            Language detection is enabled. Creatives will be analyzed automatically during sync.
+            {t.setup.geminiEnabledHelp}
           </p>
         </div>
       ) : (
         <div className="space-y-4">
           <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Gemini API Key
+              {t.setup.geminiApiKeyLabel}
             </label>
             <div className="flex gap-2">
               <input
@@ -191,7 +199,7 @@ export function GeminiApiKeySection() {
                 {updateMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  "Save"
+                  t.common.save
                 )}
               </button>
               {isEditing && (
@@ -202,19 +210,19 @@ export function GeminiApiKeySection() {
                   }}
                   className="px-3 py-2 text-gray-600 hover:bg-gray-100 rounded"
                 >
-                  Cancel
+                  {t.common.cancel}
                 </button>
               )}
             </div>
             <p className="mt-2 text-xs text-gray-500">
-              Get your API key from{" "}
+              {t.setup.geminiGetApiKeyFrom}{" "}
               <a
                 href="https://aistudio.google.com/app/apikey"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-600 hover:underline"
               >
-                Google AI Studio
+                {t.setup.geminiGoogleAiStudio}
               </a>
             </p>
           </div>
@@ -223,7 +231,7 @@ export function GeminiApiKeySection() {
               <div className="flex items-start gap-2">
                 <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
                 <p className="text-sm text-amber-800">
-                  Without a Gemini API key, language detection is disabled. You won't see language mismatch alerts for creatives targeting countries with different languages.
+                  {t.setup.geminiMissingWarning}
                 </p>
               </div>
             </div>

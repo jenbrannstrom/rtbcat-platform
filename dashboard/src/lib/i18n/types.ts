@@ -1125,6 +1125,20 @@ export interface Translations {
     manageSeatDisplayNames: string;
     dataRetention: string;
     configureCleanupSchedules: string;
+    geminiLanguageDetection: string;
+    geminiLanguageDetectionDesc: string;
+    geminiFailedToSaveApiKey: string;
+    geminiFailedToRemoveApiKey: string;
+    geminiEnterApiKey: string;
+    geminiApiKeyConfigured: string;
+    geminiHideKey: string;
+    geminiShowKey: string;
+    geminiRemoveApiKey: string;
+    geminiEnabledHelp: string;
+    geminiApiKeyLabel: string;
+    geminiGetApiKeyFrom: string;
+    geminiGoogleAiStudio: string;
+    geminiMissingWarning: string;
   };
 
   language: {
