@@ -651,7 +651,9 @@ export interface Translations {
     deactivate: string;
     managePermissions: string;
     emailAddress: string;
+    emailPlaceholder: string;
     displayNameOptional: string;
+    displayNamePlaceholder: string;
     userRole: string;
     adminRole: string;
     authMethod: string;
@@ -665,6 +667,8 @@ export interface Translations {
     seatAccessHelp: string;
     noSeatsConfigured: string;
     seatAccessManageHelp: string;
+    buyerIdLabel: string;
+    bidderLabel: string;
     legacyServiceAccountAccess: string;
     legacyServiceAccountAccessHelp: string;
     oauthInviteNote: string;
@@ -680,6 +684,7 @@ export interface Translations {
     passwordOnlyShownOnce: string;
     permissionsFor: string;
     permissionsHelp: string;
+    createUserFailed: string;
     noAccess: string;
     readAccess: string;
     writeAccess: string;
@@ -705,6 +710,7 @@ export interface Translations {
     sessionSettings: string;
     sessionSettingsDesc: string;
     sessionDuration: string;
+    sessionDurationValue: string;
     authProvider: string;
     authProviderValue: string;
     loginAttempts: string;
@@ -727,6 +733,19 @@ export interface Translations {
     last90Days: string;
     actionType: string;
     allActions: string;
+    auditActionLogin: string;
+    auditActionLogout: string;
+    auditActionLoginFailed: string;
+    auditActionLoginBlocked: string;
+    auditActionCreateUser: string;
+    auditActionUpdateUser: string;
+    auditActionDeactivateUser: string;
+    auditActionResetPassword: string;
+    auditActionChangePassword: string;
+    auditActionGrantPermission: string;
+    auditActionRevokePermission: string;
+    auditActionUpdateSetting: string;
+    auditActionCreateInitialAdmin: string;
     loadingAuditLogs: string;
     noAuditLogs: string;
     timestamp: string;
@@ -734,6 +753,7 @@ export interface Translations {
     resource: string;
     details: string;
     ipAddress: string;
+    redirectingToConfiguration: string;
   };
 
   settings: {

@@ -25,7 +25,7 @@ const ACTION_COLORS: Record<string, string> = {
 };
 
 function AuditLogPage() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [days, setDays] = useState(7);
   const [actionFilter, setActionFilter] = useState<string | undefined>();
   const [showFilters, setShowFilters] = useState(false);
@@ -43,13 +43,32 @@ function AuditLogPage() {
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "-";
     const date = new Date(dateStr);
-    return date.toLocaleString("en-US", {
+    return date.toLocaleString(language, {
       year: "numeric",
       month: "short",
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
     });
+  };
+
+  const formatActionLabel = (action: string) => {
+    const labels: Record<string, string> = {
+      login: t.admin.auditActionLogin,
+      logout: t.admin.auditActionLogout,
+      login_failed: t.admin.auditActionLoginFailed,
+      login_blocked: t.admin.auditActionLoginBlocked,
+      create_user: t.admin.auditActionCreateUser,
+      update_user: t.admin.auditActionUpdateUser,
+      deactivate_user: t.admin.auditActionDeactivateUser,
+      reset_password: t.admin.auditActionResetPassword,
+      change_password: t.admin.auditActionChangePassword,
+      grant_permission: t.admin.auditActionGrantPermission,
+      revoke_permission: t.admin.auditActionRevokePermission,
+      update_setting: t.admin.auditActionUpdateSetting,
+      create_initial_admin: t.admin.auditActionCreateInitialAdmin,
+    };
+    return labels[action] || action.replace(/_/g, " ");
   };
 
   const parseDetails = (details: string | null) => {
@@ -127,7 +146,7 @@ function AuditLogPage() {
                 <option value="">{t.admin.allActions}</option>
                 {uniqueActions.map((action) => (
                   <option key={action} value={action}>
-                    {action.replace(/_/g, " ")}
+                    {formatActionLabel(action)}
                   </option>
                 ))}
               </select>
@@ -186,7 +205,7 @@ function AuditLogPage() {
                               "bg-gray-100 text-gray-800"
                           )}
                         >
-                          {log.action.replace(/_/g, " ")}
+                          {formatActionLabel(log.action)}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

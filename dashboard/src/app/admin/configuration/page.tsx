@@ -179,7 +179,7 @@ function SettingsPage() {
               <p className="text-sm font-medium text-gray-500">
                 {t.admin.sessionDuration}
               </p>
-              <p className="text-lg font-semibold text-gray-900">30 days</p>
+              <p className="text-lg font-semibold text-gray-900">{t.admin.sessionDurationValue}</p>
             </div>
             <div className="p-3 bg-gray-50 rounded-lg">
               <p className="text-sm font-medium text-gray-500">
