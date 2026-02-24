@@ -397,6 +397,7 @@ function PublisherTargetingSection({
   onExportCsv: (values: string[]) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
   const [filter, setFilter] = useState('');
   const [newPublisher, setNewPublisher] = useState('');
@@ -427,20 +428,20 @@ function PublisherTargetingSection({
 
   const isWhitelist = effectiveMode === 'INCLUSIVE';
   const modeLabel = formatPublisherMode(effectiveMode);
-  const statusLabel = isWhitelist ? 'Allowed' : 'Blocked';
-  const actionLabel = isWhitelist ? 'Add' : 'Block';
+  const statusLabel = isWhitelist ? t.pretargeting.statusAllowed : t.pretargeting.statusBlocked;
+  const actionLabel = isWhitelist ? t.pretargeting.allow : t.pretargeting.block;
 
   const handleAdd = () => {
     const normalized = normalizePublisherId(newPublisher);
     if (!normalized) return;
     if (!isValidPublisherId(normalized)) {
-      setInputError('Invalid publisher ID format. Use bundle ID (com.example.app) or domain (example.com).');
+      setInputError(t.pretargeting.invalidPublisherIdFormatLong);
       return;
     }
     // Check if already exists
     const existingPublisher = publishers.find(p => p.publisher_id === normalized);
     if (existingPublisher && existingPublisher.status !== 'pending_remove') {
-      setInputError('Publisher already in list.');
+      setInputError(t.pretargeting.publisherAlreadyInList);
       return;
     }
     setInputError(null);
@@ -500,12 +501,12 @@ function PublisherTargetingSection({
   };
 
   const summaryLabel = publishers.length === 0 && !pendingMode
-    ? 'No publisher targeting'
-    : `${modeLabel}: ${activeCount} ${isWhitelist ? 'allowed' : 'blocked'}`;
+    ? t.pretargeting.noPublisherTargeting
+    : `${modeLabel}: ${activeCount} ${isWhitelist ? t.pretargeting.allowedLower : t.pretargeting.blockedLower}`;
 
   const renderStatusLabel = (status: string) => {
     if (status === 'pending_add' || status === 'pending_remove') {
-      return '⏳ Pending';
+      return `⏳ ${t.pretargeting.statusPending}`;
     }
     return statusLabel;
   };
@@ -515,11 +516,11 @@ function PublisherTargetingSection({
       <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Shield className="h-4 w-4 text-gray-500" />
-          <span className="font-medium text-gray-900">Publishers</span>
+          <span className="font-medium text-gray-900">{t.pretargeting.publishersSectionTitle}</span>
           <span className="text-sm text-gray-500">{summaryLabel}</span>
         </div>
         <div className="flex items-center gap-3 text-sm font-medium text-gray-700">
-          <span>Mode:</span>
+          <span>{t.pretargeting.modeLabel}:</span>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="radio"
@@ -535,7 +536,7 @@ function PublisherTargetingSection({
                 effectiveMode === 'EXCLUSIVE' ? "bg-gray-900 border-gray-900" : "bg-white border-gray-300"
               )}
             />
-            Blacklist
+            {t.pretargeting.publisherModeBlacklist}
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -552,7 +553,7 @@ function PublisherTargetingSection({
                 effectiveMode === 'INCLUSIVE' ? "bg-gray-900 border-gray-900" : "bg-white border-gray-300"
               )}
             />
-            Whitelist
+            {t.pretargeting.publisherModeWhitelist}
           </label>
         </div>
       </div>
@@ -564,23 +565,23 @@ function PublisherTargetingSection({
             type="text"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter publishers..."
+            placeholder={t.pretargeting.filterPublishersPlaceholder}
             className="flex-1 px-3 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
         <div className="overflow-hidden rounded border">
           <div className="grid grid-cols-[1fr_80px_100px_100px] gap-2 px-3 py-2 bg-gray-50 text-xs font-medium text-gray-500">
-            <span>Publisher ID</span>
-            <span>Type</span>
-            <span>Status</span>
-            <span className="text-right">Action</span>
+            <span>{t.pretargeting.publisherIdHeader}</span>
+            <span>{t.pretargeting.typeHeader}</span>
+            <span>{t.pretargeting.columnStatus}</span>
+            <span className="text-right">{t.pretargeting.columnAction}</span>
           </div>
           {filteredPublishers.length === 0 ? (
             <div className="px-3 py-6 text-sm text-gray-500 text-center">
               {publishers.length === 0
-                ? `No publishers ${isWhitelist ? 'allowed' : 'blocked'} yet.`
-                : 'No publishers match the current filter.'}
+                ? (isWhitelist ? t.pretargeting.noPublishersAllowedYet : t.pretargeting.noPublishersBlockedYet)
+                : t.pretargeting.noPublishersMatchCurrentFilter}
             </div>
           ) : (
             <div className="divide-y max-h-80 overflow-y-auto">
@@ -609,7 +610,7 @@ function PublisherTargetingSection({
                           className="px-2 py-1 text-xs rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
                           disabled={disabled}
                         >
-                          Undo
+                          {t.pretargeting.undo}
                         </button>
                       ) : (
                         <button
@@ -617,7 +618,7 @@ function PublisherTargetingSection({
                           className="px-2 py-1 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
                           disabled={disabled}
                         >
-                          Remove
+                          {t.pretargeting.remove}
                         </button>
                       )}
                     </div>
@@ -630,7 +631,7 @@ function PublisherTargetingSection({
 
         <div className="space-y-1">
           <label className="text-xs text-gray-500">
-            {isWhitelist ? 'Add publisher to allow:' : 'Add publisher to block:'}
+            {isWhitelist ? t.pretargeting.addPublisherToAllow : t.pretargeting.addPublisherToBlock}
           </label>
           <div className="flex gap-2">
             <input
@@ -641,7 +642,7 @@ function PublisherTargetingSection({
                 setInputError(null);
               }}
               onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-              placeholder="com.example.app or publisher.com"
+              placeholder={t.pretargeting.publisherInputPlaceholder}
               className="flex-1 px-3 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
@@ -663,21 +664,21 @@ function PublisherTargetingSection({
             className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
           >
             <Upload className="h-3 w-3" />
-            Bulk Import
+            {t.pretargeting.bulkImport}
           </button>
           <button
             onClick={handleExport}
             className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
           >
             <Download className="h-3 w-3" />
-            Export CSV
+            {t.pretargeting.exportCsv}
           </button>
           <button
             onClick={onShowHistory}
             className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
           >
             <History className="h-3 w-3" />
-            View History
+            {t.pretargeting.viewHistory}
           </button>
         </div>
 
@@ -688,15 +689,21 @@ function PublisherTargetingSection({
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-yellow-600" />
                 <span className="text-sm font-medium text-yellow-800">
-                  {totalPendingCount} pending publisher change{totalPendingCount !== 1 ? 's' : ''}
+                  {t.pretargeting.pendingPublisherChangesSummary.replace('{count}', String(totalPendingCount))}
                 </span>
               </div>
               <div className="mt-2 text-xs text-yellow-700 space-y-1">
                 {pendingAddCount > 0 && (
-                  <div>• {pendingAddCount} publisher{pendingAddCount !== 1 ? 's' : ''} to {isWhitelist ? 'add' : 'block'}</div>
+                  <div>
+                    • {(isWhitelist ? t.pretargeting.pendingPublishersToAdd : t.pretargeting.pendingPublishersToBlock)
+                      .replace('{count}', String(pendingAddCount))}
+                  </div>
                 )}
                 {pendingRemoveCount > 0 && (
-                  <div>• {pendingRemoveCount} publisher{pendingRemoveCount !== 1 ? 's' : ''} to {isWhitelist ? 'remove' : 'unblock'}</div>
+                  <div>
+                    • {(isWhitelist ? t.pretargeting.pendingPublishersToRemove : t.pretargeting.pendingPublishersToUnblock)
+                      .replace('{count}', String(pendingRemoveCount))}
+                  </div>
                 )}
               </div>
               <div className="mt-3 flex items-center gap-2">
@@ -707,7 +714,7 @@ function PublisherTargetingSection({
                   Push to Google
                 </button>
                 <span className="text-xs text-yellow-600">
-                  Changes apply immediately on Google.
+                  {t.pretargeting.changesApplyImmediatelyOnGoogle}
                 </span>
               </div>
             </div>
