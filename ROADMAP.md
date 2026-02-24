@@ -87,6 +87,7 @@
     - [x] Waste analyzer geographic analysis section copy + sortable table labels converted (`dashboard/src/components/waste-analyzer/GeoAnalysisSection.tsx`)
     - [x] Waste analyzer size analysis section copy + no-creative gap panel converted (`dashboard/src/components/waste-analyzer/SizeAnalysisSection.tsx`)
     - [x] Pretargeting settings editor helper controls copy converted (`ValuePill`, `PendingChangeCard`, `TargetingSection`, pending-change descriptions) (`dashboard/src/components/rtb/pretargeting-settings-editor.tsx`)
+    - [x] Pretargeting publisher section shell copy converted (mode/filter/table headers/row actions/pending bar; bulk import modal/history entry copy still pending) (`dashboard/src/components/rtb/pretargeting-settings-editor.tsx`)
     - [ ] Remaining settings/admin/shared hotspots (`/settings/accounts/components/GmailReportsTab.tsx` remaining deep copy and deeper RTB/settings helper components)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
