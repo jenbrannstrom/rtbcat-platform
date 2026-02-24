@@ -1229,6 +1229,13 @@ export interface Translations {
     confidence: string;
     source: string;
     checkingGeoCompatibility: string;
+    noVideoUrlAvailable: string;
+    clickToOpenDestination: string;
+    creativeIframeTitle: string;
+    scaledToPercent: string;
+    noNativeContentAvailable: string;
+    nativeAdAlt: string;
+    logoAlt: string;
   };
 
   language: {

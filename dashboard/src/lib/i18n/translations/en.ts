@@ -1228,6 +1228,13 @@ export const en: Translations = {
     confidence: 'confidence',
     source: 'Source',
     checkingGeoCompatibility: 'Checking geo compatibility...',
+    noVideoUrlAvailable: 'No video URL available',
+    clickToOpenDestination: 'Click to open destination',
+    creativeIframeTitle: 'Creative {id}',
+    scaledToPercent: 'scaled to {percent}%',
+    noNativeContentAvailable: 'No native content available',
+    nativeAdAlt: 'Native ad',
+    logoAlt: 'Logo',
   },
 
   language: {

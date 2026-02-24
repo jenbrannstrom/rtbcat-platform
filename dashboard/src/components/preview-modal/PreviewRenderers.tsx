@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Play } from "lucide-react";
+import { useTranslation } from "@/contexts/i18n-context";
 import type { Creative } from "@/types/api";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,7 @@ function extractVideoUrlFromVast(vastXml: string): string | null {
  * Video preview player component.
  */
 export function VideoPreviewPlayer({ creative }: { creative: Creative }) {
+  const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
 
   let videoUrl = creative.video?.video_url;
@@ -41,7 +43,7 @@ export function VideoPreviewPlayer({ creative }: { creative: Creative }) {
     return (
       <div className="flex flex-col items-center justify-center h-48 bg-gray-900 text-gray-400">
         <Play className="h-10 w-10 mx-auto mb-2 opacity-50" />
-        <p>No video URL available</p>
+        <p>{t.previewModal.noVideoUrlAvailable}</p>
       </div>
     );
   }
@@ -70,6 +72,7 @@ export function VideoPreviewPlayer({ creative }: { creative: Creative }) {
  * HTML preview iframe component.
  */
 export function HtmlPreviewFrame({ creative, destinationUrl }: { creative: Creative; destinationUrl?: string }) {
+  const { t } = useTranslation();
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const creativeWidth = creative.html?.width || creative.width || 300;
@@ -116,7 +119,7 @@ export function HtmlPreviewFrame({ creative, destinationUrl }: { creative: Creat
   if (!creative.html?.snippet) {
     return (
       <div className="flex items-center justify-center h-48 bg-gray-100 text-gray-400">
-        No HTML snippet available
+        {t.previewModal.noHtmlSnippetAvailable}
       </div>
     );
   }
@@ -142,11 +145,11 @@ export function HtmlPreviewFrame({ creative, destinationUrl }: { creative: Creat
         )}
         style={{ width: displayWidth, height: displayHeight }}
         onClick={handleClick}
-        title={destinationUrl ? "Click to open destination" : undefined}
+        title={destinationUrl ? t.previewModal.clickToOpenDestination : undefined}
       >
         <iframe
           ref={iframeRef}
-          title={`Creative ${creative.id}`}
+          title={t.previewModal.creativeIframeTitle.replace("{id}", creative.id)}
           width={creativeWidth}
           height={creativeHeight}
           className="border-0 pointer-events-none"
@@ -159,14 +162,14 @@ export function HtmlPreviewFrame({ creative, destinationUrl }: { creative: Creat
         {destinationUrl && (
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
             <span className="opacity-0 group-hover:opacity-100 bg-white/90 text-gray-700 text-xs px-2 py-1 rounded shadow transition-opacity">
-              Click to open destination
+              {t.previewModal.clickToOpenDestination}
             </span>
           </div>
         )}
       </div>
       <div className="mt-2 text-xs text-gray-500">
         {creativeWidth} × {creativeHeight}
-        {scale < 1 && ` (scaled to ${Math.round(scale * 100)}%)`}
+        {scale < 1 && ` (${t.previewModal.scaledToPercent.replace("{percent}", String(Math.round(scale * 100)))})`}
       </div>
     </div>
   );
@@ -176,12 +179,13 @@ export function HtmlPreviewFrame({ creative, destinationUrl }: { creative: Creat
  * Native ad preview card component.
  */
 export function NativePreviewCard({ creative }: { creative: Creative }) {
+  const { t } = useTranslation();
   const native = creative.native;
 
   if (!native) {
     return (
       <div className="flex items-center justify-center h-48 bg-gray-100 text-gray-400">
-        No native content available
+        {t.previewModal.noNativeContentAvailable}
       </div>
     );
   }
@@ -191,7 +195,7 @@ export function NativePreviewCard({ creative }: { creative: Creative }) {
       {native.image?.url && (
         <img
           src={native.image.url}
-          alt={native.headline || "Native ad"}
+          alt={native.headline || t.previewModal.nativeAdAlt}
           className="w-full h-40 object-cover"
           onError={(e) => {
             (e.target as HTMLImageElement).style.display = "none";
@@ -203,7 +207,7 @@ export function NativePreviewCard({ creative }: { creative: Creative }) {
           {native.logo?.url && (
             <img
               src={native.logo.url}
-              alt="Logo"
+              alt={t.previewModal.logoAlt}
               className="w-8 h-8 rounded object-cover flex-shrink-0"
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = "none";

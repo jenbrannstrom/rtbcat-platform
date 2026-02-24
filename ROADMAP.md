@@ -77,6 +77,7 @@
     - [x] Sidebar remaining brand/seat-error/retry strings converted (`dashboard/src/components/sidebar.tsx`)
     - [x] `PreviewModal` header/source/HTML/performance/detail/URL-tracking UI copy converted (partial; additional preview subcomponents still pending) (`dashboard/src/components/preview-modal/PreviewModal.tsx`)
     - [x] `PreviewModal` language analysis/editor section copy converted (`dashboard/src/components/preview-modal/LanguageSection.tsx`)
+    - [x] `PreviewModal` renderers/shared copy button strings converted (`dashboard/src/components/preview-modal/PreviewRenderers.tsx`, `dashboard/src/components/preview-modal/SharedComponents.tsx`)
     - [ ] Remaining settings/admin/shared hotspots (`/settings/accounts/components/GmailReportsTab.tsx` remaining deep copy, preview subcomponents, and other shared UI components)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
