@@ -303,7 +303,7 @@ function ComparisonCard({ comparison }: { comparison: SnapshotComparison }) {
 }
 
 export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComparisonPanelProps) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [showDialog, setShowDialog] = useState(false);
   const [showCreateSnapshot, setShowCreateSnapshot] = useState(false);
   const [snapshotName, setSnapshotName] = useState('');
@@ -536,7 +536,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
             <div className="flex items-center justify-between mb-3">
               <h3 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
                 <RotateCcw className="h-4 w-4 text-orange-600" />
-                Restore Snapshot?
+                {t.pretargeting.snapshotPanelRestoreSnapshotTitle}
               </h3>
               <button onClick={() => setRestoreSnapshot(null)} className="text-gray-400 hover:text-gray-600">
                 <X className="h-4 w-4" />
@@ -546,7 +546,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
             {restoreDryRunLoading ? (
               <div className="flex items-center justify-center py-8 gap-2 text-gray-500 text-xs">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Previewing restore&hellip;
+                {t.pretargeting.previewingRollback}
               </div>
             ) : restoreDryRunError ? (
               <div className="rounded bg-red-50 border border-red-200 p-3 text-xs text-red-700">
@@ -555,23 +555,23 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
             ) : restoreDryRunResult && restoreDryRunResult.changes_made.length === 0 ? (
               <div className="rounded bg-blue-50 border border-blue-200 p-3 flex items-start gap-2 text-xs text-blue-700">
                 <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
-                No differences found between current config and this snapshot. Config already matches.
+                {t.pretargeting.noDifferencesFromSnapshot}
               </div>
             ) : (
               <>
                 <div className="text-xs text-gray-600 mb-2">
-                  Config: <span className="font-medium text-gray-900">{billing_id}</span>
+                  {t.pretargeting.configLabel}: <span className="font-medium text-gray-900">{billing_id}</span>
                   {' '}&middot;{' '}
-                  Restoring to: <span className="font-medium text-gray-900">
-                    {restoreSnapshot.snapshot_name || `Snapshot #${restoreSnapshot.id}`}
+                  {t.pretargeting.restoringToLabel}: <span className="font-medium text-gray-900">
+                    {restoreSnapshot.snapshot_name || t.pretargeting.snapshotNumber.replace('{id}', String(restoreSnapshot.id))}
                   </span>
                   {' '}&middot;{' '}
-                  <span className="text-gray-500">{formatDate(restoreSnapshot.created_at)}</span>
+                  <span className="text-gray-500">{formatDate(restoreSnapshot.created_at, language)}</span>
                 </div>
                 {restoreDryRunResult && restoreDryRunResult.changes_made.length > 0 && (
                   <div className="mb-3">
                     <p className="text-xs font-medium text-gray-700 mb-1">
-                      {restoreDryRunResult.changes_made.length} change{restoreDryRunResult.changes_made.length !== 1 ? 's' : ''} will be applied to Google:
+                      {t.pretargeting.snapshotPanelRestoreChangesWillBeApplied.replace('{count}', String(restoreDryRunResult.changes_made.length))}
                     </p>
                     <div className="max-h-32 overflow-y-auto rounded border bg-gray-50 p-2 space-y-0.5">
                       {restoreDryRunResult.changes_made.map((desc, i) => (
@@ -582,27 +582,27 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
                 )}
                 <div className="mb-3 rounded bg-amber-50 border border-amber-200 p-2 flex items-start gap-2 text-xs text-amber-800">
                   <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
-                  <span>This pushes to Google immediately. A &ldquo;ROLLBACK&rdquo; entry will be recorded in history.</span>
+                  <span>{t.pretargeting.rollbackImmediateWarning}</span>
                 </div>
                 <div className="mb-3">
                   <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Why are you restoring this snapshot?
+                    {t.pretargeting.snapshotPanelRestoreReasonLabel}
                   </label>
                   <input
                     type="text"
                     value={restoreReason}
                     onChange={(e) => setRestoreReason(e.target.value)}
-                    placeholder="e.g. Rolling back bad config change"
+                    placeholder={t.pretargeting.snapshotPanelRestoreReasonPlaceholder}
                     className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-300"
                   />
-                  <span className="text-[10px] text-gray-400">(required)</span>
+                  <span className="text-[10px] text-gray-400">{t.pretargeting.requiredLabel}</span>
                 </div>
               </>
             )}
 
             {restoreExecuteMutation.isError && (
               <div className="mb-3 rounded bg-red-50 border border-red-200 p-2 text-xs text-red-700">
-                {(restoreExecuteMutation.error as Error)?.message || 'Restore failed'}
+                {(restoreExecuteMutation.error as Error)?.message || t.pretargeting.rollbackFailed}
               </div>
             )}
 
@@ -612,7 +612,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
                 disabled={restoreExecuteMutation.isPending}
                 className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
-                {(!restoreDryRunResult || restoreDryRunResult.changes_made.length === 0) && !restoreDryRunLoading ? 'Close' : 'Cancel'}
+                {(!restoreDryRunResult || restoreDryRunResult.changes_made.length === 0) && !restoreDryRunLoading ? t.common.close : t.common.cancel}
               </button>
               {restoreDryRunResult && restoreDryRunResult.changes_made.length > 0 && (
                 <button
@@ -625,7 +625,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
                   ) : (
                     <RotateCcw className="h-3 w-3" />
                   )}
-                  Restore Snapshot
+                  {t.pretargeting.snapshotPanelRestoreAction}
                 </button>
               )}
             </div>
