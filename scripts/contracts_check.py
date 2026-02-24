@@ -284,7 +284,7 @@ async def check_pre_003(
         cpd = await pg_query(
             "SELECT COUNT(*) AS cnt FROM pretarg_publisher_daily "
             "WHERE buyer_account_id = %s "
-            "AND metric_date >= (CURRENT_DATE - %s)::text",
+            "AND metric_date::text >= (CURRENT_DATE - %s)::text",
             (bid, days),
         )
         if (cpd[0]["cnt"] if cpd else 0) > 0:
@@ -382,7 +382,7 @@ async def check_web_001(days: int) -> CheckResult:
     rows = await pg_query(
         "SELECT COUNT(*) AS cnt FROM web_domain_daily "
         "WHERE inventory_type NOT IN ('web', 'app', 'unknown') "
-        f"AND metric_date >= (CURRENT_DATE - {days}){buyer_filter}"
+        f"AND metric_date::text >= (CURRENT_DATE - {days})::text{buyer_filter}"
     )
     bad = rows[0]["cnt"] if rows else 0
 
@@ -413,7 +413,7 @@ async def check_web_002(days: int, buyers: list[dict]) -> CheckResult:
         "SELECT metric_date, buyer_account_id, billing_id, "
         "COUNT(DISTINCT publisher_domain) AS domain_count "
         "FROM web_domain_daily "
-        f"WHERE metric_date >= (CURRENT_DATE - {days}){buyer_filter} "
+        f"WHERE metric_date::text >= (CURRENT_DATE - {days})::text{buyer_filter} "
         "GROUP BY metric_date, buyer_account_id, billing_id "
         f"HAVING COUNT(DISTINCT publisher_domain) > {top_n + 1}"
     )
