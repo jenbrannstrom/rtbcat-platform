@@ -73,10 +73,14 @@ export function SortFilterControls({
             ? "bg-red-100 text-red-700 font-medium"
             : "hover:bg-gray-200 text-gray-600"
         )}
-        title={showIssuesOnly ? "Showing campaigns with issues" : "Filter to campaigns with disapproved creatives"}
+        title={
+          showIssuesOnly
+            ? t.campaigns.issuesFilterActiveTitle
+            : t.campaigns.issuesFilterInactiveTitle
+        }
       >
         <AlertTriangle className="h-3 w-3" />
-        Issues
+        {t.campaigns.issues}
       </button>
 
       {/* Country filter */}

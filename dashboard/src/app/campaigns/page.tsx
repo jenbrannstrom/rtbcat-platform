@@ -788,7 +788,7 @@ export default function CampaignsPage() {
             {/* Unclustered column */}
             <ListCluster
               id="unassigned"
-              name="Unclustered"
+              name={t.campaigns.unclustered}
               creatives={(unclustered?.creative_ids || [])
                 .map(id => creativesMap.get(String(id)))
                 .filter((c): c is Creative => c !== undefined)

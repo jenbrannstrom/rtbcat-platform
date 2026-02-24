@@ -838,6 +838,9 @@ export interface Translations {
     impressions: string;
     clicks: string;
     name: string;
+    issues: string;
+    issuesFilterActiveTitle: string;
+    issuesFilterInactiveTitle: string;
     allCountries: string;
     clearFilter: string;
   };
