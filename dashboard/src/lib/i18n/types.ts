@@ -521,6 +521,27 @@ export interface Translations {
     cardQpsUnsetPlaceholder: string;
     cardQpsSetAction: string;
     cardPendingLabel: string;
+    endpointEfficiencyTitle: string;
+    endpointEfficiencyDeliveryCoverage: string;
+    endpointEfficiencyAuctionCoverage: string;
+    endpointEfficiencyObservedQps: string;
+    endpointEfficiencyObservedQpsHelp: string;
+    endpointEfficiencyFeedMissing: string;
+    endpointEfficiencyUtilization: string;
+    endpointEfficiencyUtilizationHelp: string;
+    endpointEfficiencyOvershoot: string;
+    endpointEfficiencyOvershootHelp: string;
+    endpointEfficiencyDeliveryWin: string;
+    endpointEfficiencyAuctionWin: string;
+    endpointEfficiencyFiltered: string;
+    endpointEfficiencyPtgtLoss: string;
+    endpointEfficiencyCapLabel: string;
+    endpointEfficiencyFunnelLabel: string;
+    endpointEfficiencyAvailLabel: string;
+    endpointEfficiencyMatchedLabel: string;
+    endpointEfficiencyFilteredLabel: string;
+    endpointEfficiencySourceLabel: string;
+    endpointEfficiencyNa: string;
   };
 
   import: {
