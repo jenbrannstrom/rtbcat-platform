@@ -91,6 +91,7 @@
     - [x] Pretargeting publisher bulk-import modal + history entry labels converted (`dashboard/src/components/rtb/pretargeting-settings-editor.tsx`)
     - [x] Pretargeting size-blocking reason strings converted (`dashboard/src/components/rtb/pretargeting-settings-editor.tsx`)
     - [x] Pretargeting history/state/snapshot enum labels + locale-aware date formatting converted (`dashboard/src/components/rtb/pretargeting-settings-editor.tsx`)
+    - [x] Snapshot comparison panel cards + history dialog shell copy converted (restore confirmation modal still pending) (`dashboard/src/components/rtb/snapshot-comparison-panel.tsx`)
     - [ ] Remaining settings/admin/shared hotspots (`/settings/accounts/components/GmailReportsTab.tsx` remaining deep copy and deeper RTB/settings helper components)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.

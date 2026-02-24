@@ -29,6 +29,7 @@ import {
   Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/contexts/i18n-context';
 
 interface SnapshotComparisonPanelProps {
   billing_id: string;
@@ -46,9 +47,9 @@ function formatCurrency(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string, locale?: string): string {
   const date = new Date(dateStr);
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(locale || 'en', {
     month: 'short',
     day: 'numeric',
     year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
@@ -91,12 +92,14 @@ function parseSnapshotList(value: string | null): string[] {
 }
 
 /** Summarize a list with "item1, item2 + N more" format. */
-function summarizeList(items: string[], max: number = 3): string {
-  if (items.length === 0) return 'None';
+function summarizeList(items: string[], t: ReturnType<typeof useTranslation>['t'], max: number = 3): string {
+  if (items.length === 0) return t.common.none;
   const shown = items.slice(0, max);
   const remainder = items.length - max;
   return remainder > 0
-    ? `${shown.join(', ')} + ${remainder} more`
+    ? t.pretargeting.snapshotPanelListPlusMore
+      .replace('{items}', shown.join(', '))
+      .replace('{count}', String(remainder))
     : shown.join(', ');
 }
 
@@ -107,6 +110,7 @@ function SnapshotCard({
   snapshot: PretargetingSnapshot;
   onRestore: (snapshot: PretargetingSnapshot) => void;
 }) {
+  const { t, language } = useTranslation();
   const [showPreview, setShowPreview] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewResult, setPreviewResult] = useState<{ changes_made: string[]; message: string } | null>(null);
@@ -127,7 +131,7 @@ function SnapshotCard({
     setPreviewResult(null);
     rollbackSnapshot({ billing_id: snapshot.billing_id, snapshot_id: snapshot.id, dry_run: true })
       .then((result) => setPreviewResult(result))
-      .catch((err) => setPreviewError(err?.message || 'Failed to preview restore'))
+      .catch((err) => setPreviewError(err?.message || t.pretargeting.failedToPreviewRollback))
       .finally(() => setPreviewLoading(false));
   };
 
@@ -136,13 +140,13 @@ function SnapshotCard({
       <div className="flex justify-between items-start mb-2">
         <div>
           <div className="font-medium text-gray-900">
-            {snapshot.snapshot_name || `Snapshot #${snapshot.id}`}
+            {snapshot.snapshot_name || t.pretargeting.snapshotNumber.replace('{id}', String(snapshot.id))}
           </div>
           <div className="text-xs text-gray-500 flex items-center gap-1">
             <Clock className="h-3 w-3" />
-            {formatDate(snapshot.created_at)}
+            {formatDate(snapshot.created_at, language)}
             {snapshot.snapshot_type === 'before_change' && (
-              <span className="ml-1 rounded bg-blue-100 px-1 py-0.5 text-[10px] text-blue-700">auto</span>
+              <span className="ml-1 rounded bg-blue-100 px-1 py-0.5 text-[10px] text-blue-700">{t.pretargeting.snapshotPanelAutoTag}</span>
             )}
           </div>
         </div>
@@ -152,21 +156,21 @@ function SnapshotCard({
             snapshot.state === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
           )}
         >
-          {snapshot.state || 'Unknown'}
+          {snapshot.state || t.pretargeting.snapshotPanelStateUnknown}
         </span>
       </div>
 
       <div className="grid grid-cols-3 gap-3 text-center">
         <div>
-          <div className="text-xs text-gray-500">Impressions</div>
+          <div className="text-xs text-gray-500">{t.pretargeting.snapshotPanelImpressions}</div>
           <div className="font-semibold">{formatNumber(snapshot.total_impressions)}</div>
         </div>
         <div>
-          <div className="text-xs text-gray-500">Spend</div>
+          <div className="text-xs text-gray-500">{t.pretargeting.snapshotPanelSpend}</div>
           <div className="font-semibold">{formatCurrency(snapshot.total_spend_usd)}</div>
         </div>
         <div>
-          <div className="text-xs text-gray-500">CTR</div>
+          <div className="text-xs text-gray-500">{t.pretargeting.snapshotPanelCtr}</div>
           <div className="font-semibold">{snapshot.ctr_pct?.toFixed(2) || '0'}%</div>
         </div>
       </div>
@@ -175,13 +179,13 @@ function SnapshotCard({
       {(sizes.length > 0 || geos.length > 0 || formats.length > 0) && (
         <div className="mt-2 space-y-0.5 text-xs text-gray-600 border-t pt-2">
           {sizes.length > 0 && (
-            <div>Sizes: <span className="font-mono text-gray-700">{summarizeList(sizes)}</span></div>
+            <div>{t.pretargeting.snapshotPanelSizesLabel}: <span className="font-mono text-gray-700">{summarizeList(sizes, t)}</span></div>
           )}
           {geos.length > 0 && (
-            <div>Geos: <span className="font-mono text-gray-700">{summarizeList(geos)}</span></div>
+            <div>{t.pretargeting.snapshotPanelGeosLabel}: <span className="font-mono text-gray-700">{summarizeList(geos, t)}</span></div>
           )}
           {formats.length > 0 && (
-            <div>Formats: <span className="font-mono text-gray-700">{summarizeList(formats, 4)}</span></div>
+            <div>{t.pretargeting.snapshotPanelFormatsLabel}: <span className="font-mono text-gray-700">{summarizeList(formats, t, 4)}</span></div>
           )}
         </div>
       )}
@@ -198,19 +202,19 @@ function SnapshotCard({
           {previewLoading ? (
             <div className="flex items-center gap-1.5 py-2 text-xs text-gray-500 justify-center">
               <Loader2 className="h-3 w-3 animate-spin" />
-              Previewing restore&hellip;
+              {t.pretargeting.previewingRollback}
             </div>
           ) : previewError ? (
             <div className="text-xs text-red-600">{previewError}</div>
           ) : previewResult && previewResult.changes_made.length === 0 ? (
             <div className="flex items-start gap-1.5 text-xs text-blue-700">
               <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
-              No differences found. Current config matches this snapshot.
+              {t.pretargeting.snapshotPanelNoDifferencesCurrentMatches}
             </div>
           ) : previewResult ? (
             <div className="space-y-1">
               <div className="text-xs font-medium text-orange-800">
-                {previewResult.changes_made.length} change{previewResult.changes_made.length !== 1 ? 's' : ''} to restore:
+                {t.pretargeting.snapshotPanelRestoreChangesCount.replace('{count}', String(previewResult.changes_made.length))}
               </div>
               <div className="max-h-28 overflow-y-auto space-y-0.5">
                 {previewResult.changes_made.map((desc, i) => (
@@ -234,14 +238,14 @@ function SnapshotCard({
           )}
         >
           <Eye className="h-3 w-3" />
-          {showPreview ? 'Hide Preview' : 'Preview Restore'}
+          {showPreview ? t.pretargeting.snapshotPanelHidePreview : t.pretargeting.snapshotPanelPreviewRestore}
         </button>
         <button
           onClick={() => onRestore(snapshot)}
           className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
         >
           <RotateCcw className="h-3 w-3" />
-          Restore
+          {t.pretargeting.snapshotPanelRestoreAction}
         </button>
       </div>
     </div>
@@ -249,6 +253,7 @@ function SnapshotCard({
 }
 
 function ComparisonCard({ comparison }: { comparison: SnapshotComparison }) {
+  const { t, language } = useTranslation();
   const isComplete = comparison.status === 'completed';
 
   return (
@@ -257,7 +262,7 @@ function ComparisonCard({ comparison }: { comparison: SnapshotComparison }) {
         <div>
           <div className="font-medium text-gray-900">{comparison.comparison_name}</div>
           <div className="text-xs text-gray-500">
-            {formatDate(comparison.before_start_date)} - {formatDate(comparison.before_end_date)}
+            {formatDate(comparison.before_start_date, language)} - {formatDate(comparison.before_end_date, language)}
           </div>
         </div>
         <span
@@ -267,22 +272,22 @@ function ComparisonCard({ comparison }: { comparison: SnapshotComparison }) {
           )}
         >
           {isComplete ? <CheckCircle className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
-          {isComplete ? 'Completed' : 'In Progress'}
+          {isComplete ? t.pretargeting.snapshotPanelComparisonCompleted : t.pretargeting.snapshotPanelComparisonInProgress}
         </span>
       </div>
 
       {isComplete && (
         <div className="grid grid-cols-3 gap-3 text-center mt-3 pt-3 border-t">
           <div>
-            <div className="text-xs text-gray-500">Impressions</div>
+            <div className="text-xs text-gray-500">{t.pretargeting.snapshotPanelImpressions}</div>
             <DeltaIndicator value={comparison.impressions_delta_pct} suffix="%" />
           </div>
           <div>
-            <div className="text-xs text-gray-500">Spend</div>
+            <div className="text-xs text-gray-500">{t.pretargeting.snapshotPanelSpend}</div>
             <DeltaIndicator value={comparison.spend_delta_pct} suffix="%" />
           </div>
           <div>
-            <div className="text-xs text-gray-500">CTR</div>
+            <div className="text-xs text-gray-500">{t.pretargeting.snapshotPanelCtr}</div>
             <DeltaIndicator value={comparison.ctr_delta_pct} suffix="%" />
           </div>
         </div>
@@ -298,6 +303,7 @@ function ComparisonCard({ comparison }: { comparison: SnapshotComparison }) {
 }
 
 export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComparisonPanelProps) {
+  const { t } = useTranslation();
   const [showDialog, setShowDialog] = useState(false);
   const [showCreateSnapshot, setShowCreateSnapshot] = useState(false);
   const [snapshotName, setSnapshotName] = useState('');
@@ -334,7 +340,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
 
   const restoreExecuteMutation = useMutation({
     mutationFn: async () => {
-      if (!restoreSnapshot) throw new Error('No snapshot selected');
+      if (!restoreSnapshot) throw new Error(t.pretargeting.snapshotPanelNoSnapshotSelected);
       return rollbackSnapshot({ billing_id, snapshot_id: restoreSnapshot.id, dry_run: false });
     },
     onSuccess: (result) => {
@@ -343,9 +349,13 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
       queryClient.invalidateQueries({ queryKey: ['pretargeting-snapshots'] });
       queryClient.invalidateQueries({ queryKey: ['config-breakdown'] });
       queryClient.invalidateQueries({ queryKey: ['config-detail'] });
-      const name = restoreSnapshot?.snapshot_name || `Snapshot #${restoreSnapshot?.id}`;
+      const name = restoreSnapshot?.snapshot_name || t.pretargeting.snapshotNumber.replace('{id}', String(restoreSnapshot?.id));
       setRestoreSnapshot(null);
-      setRestoreSuccess(`Config restored to "${name}". ${result.changes_made.length} change${result.changes_made.length !== 1 ? 's' : ''} applied to Google.`);
+      setRestoreSuccess(
+        t.pretargeting.snapshotPanelRestoreSuccess
+          .replace('{name}', name)
+          .replace('{count}', String(result.changes_made.length))
+      );
     },
   });
 
@@ -357,7 +367,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
     setRestoreDryRunLoading(true);
     rollbackSnapshot({ billing_id, snapshot_id: snapshot.id, dry_run: true })
       .then((result) => setRestoreDryRunResult(result))
-      .catch((err) => setRestoreDryRunError(err?.message || 'Failed to preview restore'))
+      .catch((err) => setRestoreDryRunError(err?.message || t.pretargeting.failedToPreviewRollback))
       .finally(() => setRestoreDryRunLoading(false));
   };
 
@@ -385,14 +395,14 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
       >
         <span className="flex items-center gap-2">
           <History className="h-4 w-4" />
-          History
+          {t.pretargeting.historyShort}
           {snapshots && snapshots.length > 0 && (
             <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-xs">
-              {snapshots.length} snapshot{snapshots.length !== 1 && 's'}
+              {t.pretargeting.snapshotPanelSnapshotsCount.replace('{count}', String(snapshots.length))}
             </span>
           )}
         </span>
-        <span className="text-xs text-gray-400">Open</span>
+        <span className="text-xs text-gray-400">{t.pretargeting.snapshotPanelOpen}</span>
       </button>
 
       {showDialog && (
@@ -404,12 +414,12 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
           <div className="relative mx-4 max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg border bg-white p-4 shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b pb-2">
               <h3 className="text-sm font-semibold text-gray-900">
-                History - {configName}
+                {t.pretargeting.snapshotPanelHistoryDialogTitle.replace('{name}', configName)}
               </h3>
               <button
                 onClick={closeDialog}
                 className="rounded p-1 text-gray-500 hover:bg-gray-100"
-                aria-label="Close history dialog"
+                aria-label={t.pretargeting.snapshotPanelCloseHistoryDialogAria}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -419,13 +429,13 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
             <div className="flex items-center justify-between mb-2">
               <div className="text-sm font-medium text-blue-900 flex items-center gap-2">
                 <Camera className="h-4 w-4" />
-                Take Snapshot
+                {t.pretargeting.snapshotPanelTakeSnapshot}
               </div>
               <button
                 onClick={() => setShowCreateSnapshot(!showCreateSnapshot)}
                 className="text-xs text-blue-600 hover:text-blue-800"
               >
-                {showCreateSnapshot ? 'Cancel' : 'New Snapshot'}
+                {showCreateSnapshot ? t.common.cancel : t.pretargeting.snapshotPanelNewSnapshot}
               </button>
             </div>
 
@@ -433,13 +443,13 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
               <div className="space-y-2">
                 <input
                   type="text"
-                  placeholder="Snapshot name (e.g., Before geo expansion)"
+                  placeholder={t.pretargeting.snapshotPanelSnapshotNamePlaceholder}
                   value={snapshotName}
                   onChange={(e) => setSnapshotName(e.target.value)}
                   className="w-full px-3 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <textarea
-                  placeholder="Notes about this snapshot..."
+                  placeholder={t.pretargeting.snapshotPanelSnapshotNotesPlaceholder}
                   value={snapshotNotes}
                   onChange={(e) => setSnapshotNotes(e.target.value)}
                   rows={2}
@@ -450,13 +460,12 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
                   disabled={createSnapshotMutation.isPending}
                   className="w-full py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {createSnapshotMutation.isPending ? 'Creating...' : 'Create Snapshot'}
+                  {createSnapshotMutation.isPending ? t.pretargeting.snapshotPanelCreatingSnapshot : t.pretargeting.snapshotPanelCreateSnapshot}
                 </button>
               </div>
             ) : (
               <p className="text-xs text-blue-700">
-                Take a snapshot before making changes to track the "before" state.
-                Compare results after changes to measure impact.
+                {t.pretargeting.snapshotPanelTakeSnapshotHint}
               </p>
             )}
           </div>
@@ -465,10 +474,10 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
           <div>
             <div className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
               <Camera className="h-4 w-4" />
-              Snapshots
+              {t.pretargeting.snapshotPanelSnapshotsTitle}
             </div>
             {snapshotsLoading ? (
-              <div className="text-sm text-gray-500">Loading snapshots...</div>
+              <div className="text-sm text-gray-500">{t.pretargeting.snapshotPanelLoadingSnapshots}</div>
             ) : snapshots && snapshots.length > 0 ? (
               <div className="space-y-2">
                 {snapshots.map((snapshot) => (
@@ -477,7 +486,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
               </div>
             ) : (
               <div className="text-sm text-gray-500 bg-gray-50 rounded p-3">
-                No snapshots yet. Create one before making changes to track impact.
+                {t.pretargeting.snapshotPanelNoSnapshots}
               </div>
             )}
           </div>
@@ -486,10 +495,10 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
           <div>
             <div className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
               <GitCompare className="h-4 w-4" />
-              Comparisons
+              {t.pretargeting.snapshotPanelComparisonsTitle}
             </div>
             {comparisonsLoading ? (
-              <div className="text-sm text-gray-500">Loading comparisons...</div>
+              <div className="text-sm text-gray-500">{t.pretargeting.snapshotPanelLoadingComparisons}</div>
             ) : comparisons && comparisons.length > 0 ? (
               <div className="space-y-2">
                 {comparisons.map((comparison) => (
@@ -498,7 +507,7 @@ export function SnapshotComparisonPanel({ billing_id, configName }: SnapshotComp
               </div>
             ) : (
               <div className="text-sm text-gray-500 bg-gray-50 rounded p-3">
-                No comparisons yet. After taking snapshots, you can compare before/after results.
+                {t.pretargeting.snapshotPanelNoComparisons}
               </div>
             )}
           </div>
