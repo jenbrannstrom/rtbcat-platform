@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Globe, ChevronDown, Check } from "lucide-react";
-import { useLanguage } from "@/contexts/i18n-context";
+import { useLanguage, useTranslation } from "@/contexts/i18n-context";
 import { availableLanguages, type Language } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +27,7 @@ const languageFlags: Record<string, string> = {
 
 export function LanguageSelector({ collapsed = false, compact = false }: LanguageSelectorProps) {
   const { language, setLanguage } = useLanguage();
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -60,7 +61,7 @@ export function LanguageSelector({ collapsed = false, compact = false }: Languag
             "flex items-center justify-center p-1.5 rounded-md",
             "text-gray-600 hover:bg-gray-100 transition-colors"
           )}
-          title={currentLanguage?.nativeName || "Language"}
+          title={currentLanguage?.nativeName || t.language.title}
         >
           <span className="text-base leading-none">{currentFlag}</span>
         </button>
@@ -99,7 +100,7 @@ export function LanguageSelector({ collapsed = false, compact = false }: Languag
             "flex items-center justify-center w-full p-2 rounded-md",
             "text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
           )}
-          title="Language"
+          title={t.language.title}
         >
           <Globe className="h-5 w-5" />
         </button>
@@ -137,7 +138,7 @@ export function LanguageSelector({ collapsed = false, compact = false }: Languag
         )}
       >
         <Globe className="mr-3 h-5 w-5 text-gray-400" />
-        <span className="flex-1 text-left">{currentLanguage?.nativeName || "English"}</span>
+        <span className="flex-1 text-left">{currentLanguage?.nativeName || t.language.english}</span>
         <ChevronDown
           className={cn(
             "h-4 w-4 text-gray-400 transition-transform",
