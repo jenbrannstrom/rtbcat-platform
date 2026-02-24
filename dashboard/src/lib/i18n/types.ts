@@ -888,6 +888,19 @@ export interface Translations {
     noUrl: string;
     impSuffix: string;
     clicksSuffix: string;
+    app: string;
+    countries: string;
+    disapproved: string;
+    restricted: string;
+    impressionsShort: string;
+    geoShort: string;
+    sortByFieldDirection: string;
+    zoomIn: string;
+    zoomOut: string;
+    showMoreCount: string;
+    filteredCreativesCount: string;
+    disapprovedCreativeTitle: string;
+    disapprovedCreativeTitlePlural: string;
   };
 
   creatives: {

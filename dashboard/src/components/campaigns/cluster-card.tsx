@@ -5,6 +5,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
 import { Pencil, Trash2, ArrowDown, ArrowUp, ZoomIn, ZoomOut, Check, AlertTriangle } from 'lucide-react';
 import { DraggableCreative } from './draggable-creative';
+import { useTranslation } from '@/contexts/i18n-context';
 import { cn } from '@/lib/utils';
 
 type SortField = 'spend' | 'impressions' | 'id' | 'country' | 'date_added';
@@ -55,6 +56,7 @@ interface ClusterCardProps {
 const MAX_VISIBLE = 16;  // Show max 16 creatives before "show more"
 
 export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedIds, onCreativeSelect, onOpenPreview }: ClusterCardProps) {
+  const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(campaign.name);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -64,6 +66,7 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
   const [zoomLevel, setZoomLevel] = useState(1); // Index into ZOOM_LEVELS
   const [excludedCountries, setExcludedCountries] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
+  const unknownCountryLabel = t.campaigns.unknownCountry;
 
   const { setNodeRef, isOver } = useDroppable({
     id: campaign.id,
@@ -97,13 +100,13 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
   const countryBreakdown = useMemo(() => {
     const breakdown: Record<string, { count: number; spend: number }> = {};
     creatives.forEach(c => {
-      const country = c.country || 'Unknown';
+      const country = c.country || unknownCountryLabel;
       if (!breakdown[country]) breakdown[country] = { count: 0, spend: 0 };
       breakdown[country].count++;
       breakdown[country].spend += c.performance?.total_spend_micros || 0;
     });
     return breakdown;
-  }, [creatives]);
+  }, [creatives, unknownCountryLabel]);
 
   // Extract unique countries from creatives
   const uniqueCountries = useMemo(() => {
@@ -127,7 +130,7 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
     // Apply country exclusion filter first
     const filtered = excludedCountries.size === 0
       ? creatives
-      : creatives.filter(c => !excludedCountries.has(c.country || 'Unknown'));
+      : creatives.filter(c => !excludedCountries.has(c.country || unknownCountryLabel));
 
     // Then sort
     const sorted = [...filtered].sort((a, b) => {
@@ -165,7 +168,7 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
       return sortDirection === 'desc' ? bVal - aVal : aVal - bVal;
     });
     return sorted;
-  }, [creatives, sortField, sortDirection, excludedCountries]);
+  }, [creatives, sortField, sortDirection, excludedCountries, unknownCountryLabel]);
 
   const cycleSort = () => {
     const fields: SortField[] = ['spend', 'impressions', 'country', 'date_added', 'id'];
@@ -183,11 +186,11 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
 
   const getSortLabel = () => {
     const fieldLabels: Record<SortField, string> = {
-      spend: 'Spend',
-      impressions: 'Imp',
-      id: 'ID',
-      country: 'Geo',
-      date_added: 'Added',
+      spend: t.campaigns.spend,
+      impressions: t.campaigns.impressionsShort,
+      id: t.campaigns.idLabel,
+      country: t.campaigns.geoShort,
+      date_added: t.campaigns.added,
     };
     return fieldLabels[sortField];
   };
@@ -255,7 +258,11 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
           {campaign.has_disapproved && campaign.disapproved_count && campaign.disapproved_count > 0 && (
             <div
               className="flex items-center gap-1 bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full flex-shrink-0"
-              title={`${campaign.disapproved_count} disapproved creative${campaign.disapproved_count !== 1 ? 's' : ''}`}
+              title={
+                campaign.disapproved_count === 1
+                  ? t.campaigns.disapprovedCreativeTitle.replace('{count}', String(campaign.disapproved_count))
+                  : t.campaigns.disapprovedCreativeTitlePlural.replace('{count}', String(campaign.disapproved_count))
+              }
             >
               <AlertTriangle className="h-3 w-3" />
               <span>{campaign.disapproved_count}</span>
@@ -268,7 +275,9 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
           <button
             onClick={cycleSort}
             className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:bg-gray-200 rounded transition-colors"
-            title={`Sort by ${getSortLabel()} ${sortDirection === 'desc' ? '↓' : '↑'}`}
+            title={t.campaigns.sortByFieldDirection
+              .replace('{field}', getSortLabel())
+              .replace('{direction}', sortDirection === 'desc' ? '↓' : '↑')}
           >
             <SortIcon className="h-3 w-3" />
             <span>{getSortLabel()}</span>
@@ -279,7 +288,7 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
             onClick={() => setZoomLevel(Math.max(0, zoomLevel - 1))}
             disabled={zoomLevel === 0}
             className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            title="Zoom out"
+            title={t.campaigns.zoomOut}
           >
             <ZoomOut className="h-4 w-4" />
           </button>
@@ -287,7 +296,7 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
             onClick={() => setZoomLevel(Math.min(ZOOM_LEVELS.length - 1, zoomLevel + 1))}
             disabled={zoomLevel === ZOOM_LEVELS.length - 1}
             className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            title="Zoom in"
+            title={t.campaigns.zoomIn}
           >
             <ZoomIn className="h-4 w-4" />
           </button>
@@ -334,8 +343,8 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
           className="mt-2 text-sm text-blue-600 hover:text-blue-800"
         >
           {isExpanded
-            ? 'Show less'
-            : `Show ${sortedCreatives.length - MAX_VISIBLE} more`}
+            ? t.campaigns.showLess
+            : t.campaigns.showMoreCount.replace('{count}', String(sortedCreatives.length - MAX_VISIBLE))}
         </button>
       )}
 
@@ -370,9 +379,15 @@ export function ClusterCard({ campaign, creatives, onRename, onDelete, selectedI
       <div className="mt-2 text-sm text-gray-600 flex items-center gap-3">
         <span>
           {excludedCountries.size > 0 ? (
-            <>{sortedCreatives.length} of {creatives.length} creative{creatives.length !== 1 ? 's' : ''}</>
+            <>{t.campaigns.filteredCreativesCount
+              .replace('{shown}', String(sortedCreatives.length))
+              .replace('{total}', String(creatives.length))}</>
           ) : (
-            <>{creatives.length} creative{creatives.length !== 1 ? 's' : ''}</>
+            <>
+              {creatives.length !== 1
+                ? t.campaigns.creativeCountPlural.replace('{count}', String(creatives.length))
+                : t.campaigns.creativeCount.replace('{count}', String(creatives.length))}
+            </>
           )}
         </span>
         {totalSpend > 0 && (

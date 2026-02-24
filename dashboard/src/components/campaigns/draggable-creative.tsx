@@ -4,6 +4,7 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { AlertTriangle, Copy, Check, XCircle } from 'lucide-react';
+import { useTranslation } from '@/contexts/i18n-context';
 import { cn, getFormatLabel } from '@/lib/utils';
 
 /**
@@ -129,6 +130,7 @@ export function DraggableCreative({
   onTogglePopup,
   onOpenPreview,
 }: DraggableCreativeProps) {
+  const { t } = useTranslation();
   const wasDraggingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -273,7 +275,7 @@ export function DraggableCreative({
             <button
               onClick={handleCopyId}
               className="p-1 hover:bg-gray-700 rounded transition-colors"
-              title="Copy ID"
+              title={t.creatives.copyId}
             >
               {copied ? (
                 <Check className="h-3.5 w-3.5 text-green-400" />
@@ -287,7 +289,7 @@ export function DraggableCreative({
           {appInfo && (
             <div className="mb-2 pb-2 border-b border-gray-700">
               <div className="flex justify-between items-start">
-                <span className="text-gray-400">App:</span>
+                <span className="text-gray-400">{t.campaigns.app}:</span>
                 <div className="text-right flex-1 ml-2 min-w-0">
                   <div className="text-white font-medium">{appInfo.appName}</div>
                   <div className="text-gray-400 text-[10px] font-mono truncate select-all">{appInfo.appId}</div>
@@ -298,24 +300,24 @@ export function DraggableCreative({
 
           <div className="space-y-1 text-gray-300">
             <div className="flex justify-between">
-              <span>Spend:</span>
+              <span>{t.campaigns.spend}:</span>
               <span className="text-white font-medium">{formatSpend(spend)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Impressions:</span>
+              <span>{t.campaigns.impressions}:</span>
               <span className="text-white">{impressions.toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
-              <span>Clicks:</span>
+              <span>{t.campaigns.clicks}:</span>
               <span className="text-white">{clicks.toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
-              <span>CTR:</span>
+              <span>{t.creatives.ctr}:</span>
               <span className="text-white">{ctr.toFixed(2)}%</span>
             </div>
             {countries.length > 0 && (
               <div className="flex justify-between">
-                <span>Countries:</span>
+                <span>{t.campaigns.countries}:</span>
                 <span className="text-white">{countries.join(', ')}</span>
               </div>
             )}
@@ -323,7 +325,7 @@ export function DraggableCreative({
 
           {creative.final_url && (
             <div className="mt-2 pt-2 border-t border-gray-700">
-              <div className="text-gray-400 text-[10px] mb-0.5">Destination:</div>
+              <div className="text-gray-400 text-[10px] mb-0.5">{t.campaigns.destination}:</div>
               <div className="text-blue-300 text-[11px] select-all break-all">{creative.final_url}</div>
             </div>
           )}
@@ -333,7 +335,7 @@ export function DraggableCreative({
             <div className="mt-2 pt-2 border-t border-red-700 bg-red-900/20 -mx-3 px-3 pb-1 rounded-b-lg">
               <div className="flex items-center gap-1 text-red-400 font-medium text-[11px]">
                 <XCircle className="h-3 w-3" />
-                <span>Disapproved</span>
+                <span>{t.campaigns.disapproved}</span>
               </div>
               {disapprovalReasons.length > 0 && (
                 <div className="text-red-300 text-[10px] mt-1">
@@ -344,7 +346,7 @@ export function DraggableCreative({
               )}
               {creative.serving_restrictions && creative.serving_restrictions.length > 0 && (
                 <div className="text-red-300 text-[10px] mt-1">
-                  Restricted: {creative.serving_restrictions.map(r => r.restriction).join(', ')}
+                  {t.campaigns.restricted}: {creative.serving_restrictions.map(r => r.restriction).join(', ')}
                 </div>
               )}
             </div>
@@ -396,7 +398,7 @@ export function DraggableCreative({
 
         {/* Phase 29: Disapproval badge */}
         {isDisapproved && (
-          <div className="absolute top-0.5 left-0.5 bg-red-500 text-white rounded-full p-0.5" title="Disapproved">
+          <div className="absolute top-0.5 left-0.5 bg-red-500 text-white rounded-full p-0.5" title={t.campaigns.disapproved}>
             <XCircle className="h-2.5 w-2.5" />
           </div>
         )}
