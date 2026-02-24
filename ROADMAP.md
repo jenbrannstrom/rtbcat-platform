@@ -104,7 +104,9 @@
     - [x] Import result card success/failure labels/stats/actions copy converted (`dashboard/src/components/import/ImportResultCard.tsx`)
     - [x] Import column mapping/freshness/history widgets copy converted (`dashboard/src/components/import/ColumnMappingCard.tsx`, `dashboard/src/components/import/DataFreshnessGrid.tsx`, `dashboard/src/components/import/ImportHistorySection.tsx`)
     - [x] AI control mode settings labels/descriptions/hints converted (`dashboard/src/components/rtb/ai-control-settings.tsx`)
-    - [ ] Remaining settings/admin/shared hotspots (`/settings/accounts/components/GmailReportsTab.tsx` remaining deep copy and deeper RTB/settings helper components)
+    - [x] `GmailReportsTab` residual deep-copy audit completed; remaining literals are command/path examples kept intentionally (`dashboard/src/app/settings/accounts/components/GmailReportsTab.tsx`)
+    - [x] RTB config performance panel labels/error/empty-state/table/settings-chip copy converted (`dashboard/src/components/rtb/config-performance.tsx`)
+    - [ ] Remaining settings/admin/shared hotspots (deeper RTB/settings helper components)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
 
