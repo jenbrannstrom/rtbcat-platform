@@ -241,6 +241,136 @@ export const es: PartialTranslations = {
     geoWasteActionHeader: 'Acción',
   },
 
+  pretargeting: {
+    configs: 'Configs de Pretargeting',
+    missingConfigId:
+      'Falta el ID de config de pretargeting (billing_id).',
+    backToConfigs: 'Volver a configs',
+    active: 'activo',
+    syncFromGoogle: 'Sincronizar desde Google',
+    noPretargetingConfigs: 'No hay configs de pretargeting',
+    clickSyncToFetch:
+      'Haz clic en "Sincronizar desde Google" para obtener tus configuraciones de pretargeting desde la API de Authorized Buyers.',
+    useSyncAllToFetch:
+      'Usa "Sync All" en la barra lateral para obtener configuraciones de pretargeting.',
+    waste: 'Desperdicio',
+    suspended: 'PAUSADO',
+    configPerformanceFailedNoValues:
+      'No se pudieron cargar las métricas de rendimiento de configs; se muestra la lista sin valores de rendimiento.',
+    configPerformanceDelayedNoValues:
+      'Las métricas de rendimiento de configs están retrasadas; se muestra la lista sin valores de rendimiento.',
+    showingLast: 'Mostrando los últimos',
+    becauseNoRowsFoundInRequested:
+      'porque no se encontraron filas en la ventana solicitada de',
+    dayWindow: 'días.',
+    tabByCreative: 'Por Creative',
+    tabBySize: 'Por Tamaño',
+    tabByGeo: 'Por Geo',
+    tabByPublisher: 'Por Publisher',
+    loadingBreakdown: 'Cargando desglose...',
+    failedToLoadBreakdownData:
+      'No se pudieron cargar los datos de desglose',
+    noPublisherBreakdownForConfig:
+      'No hay desglose por publisher para esta config',
+    publisherBreakdownMissingCsvOrPrecompute:
+      'Falta el CSV a nivel billing o el trabajo de precompute aún no procesó datos a nivel publisher para esta config.',
+    noTabDataForConfig:
+      'No hay datos de {tab} para esta config',
+    noGeoBreakdownAvailable:
+      'El desglose geográfico no está disponible. Esta config puede no tener datos de targeting geográfico, o el trabajo de precompute aún no la ha procesado.',
+    noSizeBreakdownAvailable:
+      'El desglose por tamaño no está disponible. Esta config puede no haber tenido actividad de puja en el período seleccionado, o el trabajo de precompute aún no la ha procesado.',
+    noCreativeBreakdownAvailable:
+      'El desglose por creative no está disponible. Esta config puede no tener creatives activas con actividad de puja, o el trabajo de precompute aún no la ha procesado.',
+    importQualityAndBidsCsvForBreakdown:
+      'Para ver el desglose de {tab}, importa tanto reportes CSV catscan-quality (incluye pretargeting config / billing_id) como catscan-bidsinauction.',
+    windowLabel: 'Ventana',
+    effectiveLabel: 'efectiva',
+    fallbackAppliedNoDataRequestedWindow:
+      'Fallback aplicado — no hay datos en la ventana solicitada',
+    modeLabel: 'Modo',
+    publisherModeInclusiveHelp:
+      'Bloquear elimina de la allowlist; Permitir vuelve a agregar.',
+    publisherModeExclusiveHelp:
+      'Bloquear agrega a la denylist; Desbloquear elimina.',
+    historyShort: 'Historial',
+    fullEditor: 'Editor completo',
+    filterPublishersPlaceholder:
+      'Filtrar publishers...',
+    lastPushed: 'Último push:',
+    publisherHistory: 'Historial de publisher',
+    viewAllArrow: 'Ver todo ->',
+    publisherModeWhitelist: 'Whitelist',
+    publisherModeBlacklist: 'Blacklist',
+    loadingHistory: 'Cargando historial...',
+    noPublisherChangesRecorded:
+      'No se registraron cambios de publisher para esta config.',
+    changesAppearAfterFirstPush:
+      'Los cambios aparecerán aquí después de tu primer push.',
+    historyBadgePush: 'PUSH',
+    historyBadgeSync: 'SYNC',
+    historyBadgeRollback: 'ROLLBACK',
+    historyBadgeState: 'STATE',
+    historyEntryBlock: 'BLOCK',
+    historyEntryUnblock: 'UNBLOCK',
+    historyOtherChangesSummary:
+      '+ {count} cambio(s) más (ver en Historial Completo)',
+    configSyncedNoRollback:
+      'Config sincronizada desde Google. No hay rollback para syncs.',
+    restoredToSnapshot: 'Restaurado al snapshot',
+    rollbackEntriesCannotUndoHere:
+      'Las entradas de rollback no se pueden deshacer desde aquí.',
+    configStateChanged: 'Estado de config cambiado',
+    snapshotLabel: 'Snapshot',
+    undoPush: 'Deshacer Push',
+    noSnapshotUndoUnavailable:
+      'No hay snapshot disponible (Deshacer no disponible)',
+    selectAll: 'Seleccionar todo',
+    invertSelection: 'Invertir',
+    clearCount: 'Limpiar ({count})',
+    blockSelected: 'Bloquear seleccionados',
+    allowSelected: 'Permitir seleccionados',
+    lowVolumeOnly1kImp: 'solo >=1k imp',
+    lowVolumeCount: '+{count} bajo vol.',
+    pendingCount: '{count} pendiente(s)',
+    searchGeoPlaceholder: 'Buscar geo...',
+    geoSearchTypeAll: 'Todo',
+    geoSearchTypeCountry: 'País',
+    geoSearchTypeCity: 'Ciudad',
+    searchingEllipsis: 'Buscando...',
+    typeTwoChars: 'Escribe 2+ caracteres',
+    addGeo: 'Agregar Geo',
+    pushedToGoogle: 'Publicado en Google.',
+    pushFailed: 'Falló el push.',
+    snapshotSavedUndoHint:
+      'Snapshot guardado. Usa Historial para deshacer si es necesario.',
+    failedToPreviewRollback:
+      'No se pudo previsualizar el rollback',
+    failedToLoadConfigDetails:
+      'No se pudieron cargar los detalles de la config',
+    publisherListHeader: 'Lista de Publishers — {name}',
+    pretargetingSettingsTitle:
+      'Ajustes de Pretargeting',
+    changesPending: 'Cambios pendientes',
+    publisherListTab: 'Lista de Publishers',
+    configSettingsTab: 'Ajustes de Config',
+    suspendAction: 'Pausar',
+    activateAction: 'Activar',
+    refreshFromGoogle: 'Actualizar desde Google',
+    pushPendingChangesToGoogleConfirm:
+      '¿Publicar {count} cambio(s) en Google?',
+    pushConfirmLiveChangeWarning:
+      'Esto modificará tu configuración de pretargeting en vivo. Los cambios se aplican inmediatamente.',
+    pushConfirmSnapshotCreated:
+      'Se creará automáticamente un snapshot para que puedas revertir si es necesario.',
+    yesPushToGoogle: 'Sí, publicar en Google',
+    suspendConfigConfirmTitle:
+      '¿Pausar esta config de pretargeting?',
+    suspendConfigConfirmDesc:
+      'Esto detendrá inmediatamente el consumo de QPS. Se guardará un snapshot para un rollback fácil.',
+    yesSuspend: 'Sí, pausar',
+  },
+
   import: {
     title: 'Importar',
     importReports: 'Importar reportes',

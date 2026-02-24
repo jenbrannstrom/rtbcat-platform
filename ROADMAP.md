@@ -155,6 +155,7 @@
     - [x] Expanded Spanish (`es`) coverage for `previewModal` (cache/live state, URL labels/tooltips, approval/language/geo mismatch UI, media preview copy) (`dashboard/src/lib/i18n/translations/es.ts`)
     - [x] Expanded Spanish (`es`) coverage for `admin` (admin dashboard, users/local-password + seat-access UI, admin settings, audit log copy) (`dashboard/src/lib/i18n/translations/es.ts`)
     - [ ] Expand Spanish coverage across remaining namespaces (`pretargeting`)
+      - [x] Added first Spanish (`es`) `pretargeting` core chunk (page shell, tabs, breakdown states, history badges, push/suspend dialogs) (`dashboard/src/lib/i18n/translations/es.ts`)
     - [ ] Add real dictionaries for remaining locales (`pl`, `zh`, `ru`, `uk`, `da`, `fr`, `nl`, `he`, `ar`)
 
 ---
