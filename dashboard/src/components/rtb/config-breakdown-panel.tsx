@@ -383,22 +383,25 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
     }
     return isPublisherListed(publisherValue);
   };
-  const publisherModeLabel = effectivePublisherMode === 'INCLUSIVE' ? 'Whitelist' : 'Blacklist';
+  const publisherModeLabel =
+    effectivePublisherMode === 'INCLUSIVE'
+      ? t.pretargeting.publisherModeWhitelist
+      : t.pretargeting.publisherModeBlacklist;
   const publisherActionLabel = (publisherBlocked: boolean): string => {
     if (effectivePublisherMode === 'INCLUSIVE') {
-      return publisherBlocked ? 'Allow' : 'Block';
+      return publisherBlocked ? t.pretargeting.allow : t.pretargeting.block;
     }
-    return publisherBlocked ? 'Unblock' : 'Block';
+    return publisherBlocked ? t.pretargeting.unblock : t.pretargeting.block;
   };
   const publisherActionTitle = (publisherBlocked: boolean): string => {
     if (effectivePublisherMode === 'INCLUSIVE') {
       return publisherBlocked
-        ? 'Allow publisher (add to allowlist)'
-        : 'Block publisher (remove from allowlist)';
+        ? `${t.pretargeting.allow} publisher (add to allowlist)`
+        : `${t.pretargeting.block} publisher (remove from allowlist)`;
     }
     return publisherBlocked
-      ? 'Unblock publisher (remove from denylist)'
-      : 'Block publisher (add to denylist)';
+      ? `${t.pretargeting.unblock} publisher (remove from denylist)`
+      : `${t.pretargeting.block} publisher (add to denylist)`;
   };
 
   const filteredPublisherBreakdown = activeTab === 'publisher' && publisherFilter
@@ -638,7 +641,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
     const value = publisherBlockInput.trim().toLowerCase();
     if (!value) return;
     if (!isValidPublisherId(value)) {
-      setPublisherBlockError('Invalid ID. Use com.example.app or publisher.com');
+      setPublisherBlockError(t.pretargeting.invalidPublisherIdError);
       return;
     }
     // Check already blocked / already pending
@@ -648,11 +651,11 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
     if (effectivePublisherMode === 'EXCLUSIVE') {
       // Blacklist: "block" means add to list
       if (alreadyListed && !pendingRemove) {
-        setPublisherBlockError('Already in block list for this config');
+        setPublisherBlockError(t.pretargeting.alreadyInBlockListForConfig);
         return;
       }
       if (pendingAdd) {
-        setPublisherBlockError('Already in pending changes');
+        setPublisherBlockError(t.pretargeting.alreadyInPendingChanges);
         return;
       }
       if (pendingRemove) {
@@ -670,11 +673,11 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
     } else {
       // Whitelist (INCLUSIVE): "block" means remove from list
       if (!alreadyListed && !pendingAdd) {
-        setPublisherBlockError('Not in allow list — already blocked');
+        setPublisherBlockError(t.pretargeting.notInAllowListAlreadyBlocked);
         return;
       }
       if (pendingRemove) {
-        setPublisherBlockError('Already in pending changes');
+        setPublisherBlockError(t.pretargeting.alreadyInPendingChanges);
         return;
       }
       if (pendingAdd) {
@@ -750,6 +753,23 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
 
   const handleBlockSuggestion = (s: BlockSuggestion) => {
     blockOneSuggestion(s);
+  };
+
+  const translateStatusLabel = (status: string): string => {
+    switch (status) {
+      case 'Allowed':
+        return t.pretargeting.statusAllowed;
+      case 'Blocked':
+        return t.pretargeting.statusBlocked;
+      case 'Pending allow':
+        return t.pretargeting.statusPendingAllow;
+      case 'Pending block':
+        return t.pretargeting.statusPendingBlock;
+      case 'Pending unblock':
+        return t.pretargeting.statusPendingUnblock;
+      default:
+        return status;
+    }
   };
 
   // ── Publisher history & rollback ───────────────────────────────
@@ -1047,13 +1067,13 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   {!publisherHistory ? (
                     <div className="flex items-center justify-center py-4 gap-1.5 text-xs text-blue-500">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Loading history&hellip;
+                      {t.pretargeting.loadingHistory}
                     </div>
                   ) : groupedHistory.length === 0 ? (
                     <div className="py-4 text-center text-xs text-blue-600">
-                      No publisher changes recorded for this config.
+                      {t.pretargeting.noPublisherChangesRecorded}
                       <br />
-                      Changes will appear here after your first push.
+                      {t.pretargeting.changesAppearAfterFirstPush}
                     </div>
                   ) : (
                     groupedHistory.map((group) => {
@@ -1095,7 +1115,13 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                                 isStateChange && 'bg-gray-200 text-gray-600'
                               )}
                             >
-                              {isPush ? 'PUSH' : isSync ? 'SYNC' : isRollback ? 'ROLLBACK' : 'STATE'}
+                              {isPush
+                                ? t.pretargeting.historyBadgePush
+                                : isSync
+                                ? t.pretargeting.historyBadgeSync
+                                : isRollback
+                                ? t.pretargeting.historyBadgeRollback
+                                : t.pretargeting.historyBadgeState}
                             </span>
                           </div>
                           {isPush && publisherEntries.length > 0 && (
@@ -1110,45 +1136,47 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                                         : 'bg-green-100 text-green-700'
                                     )}
                                   >
-                                    {e.change_type.includes('add') ? 'BLOCK' : 'UNBLOCK'}
+                                    {e.change_type.includes('add')
+                                      ? t.pretargeting.historyEntryBlock
+                                      : t.pretargeting.historyEntryUnblock}
                                   </span>
                                   <span className="text-gray-700 truncate">{e.new_value || e.old_value}</span>
                                 </div>
                               ))}
                               {otherCount > 0 && (
                                 <div className="text-[10px] text-gray-500 pl-1">
-                                  + {otherCount} other change{otherCount > 1 ? 's' : ''} (view in Full History)
+                                  {t.pretargeting.historyOtherChangesSummary.replace('{count}', String(otherCount))}
                                 </div>
                               )}
                             </div>
                           )}
                           {isSync && (
                             <div className="text-gray-600 mb-1">
-                              Config synced from Google. No rollback for syncs.
+                              {t.pretargeting.configSyncedNoRollback}
                             </div>
                           )}
                           {isRollback && (
                             <div className="space-y-0.5 mb-1.5">
                               {group.entries.map((e) => (
                                 <div key={e.id} className="text-orange-700">
-                                  {e.new_value || e.field_changed || 'Restored to snapshot'}
+                                  {e.new_value || e.field_changed || t.pretargeting.restoredToSnapshot}
                                 </div>
                               ))}
                               <div className="text-[10px] text-orange-600 italic mt-1">
-                                Rollback entries cannot be undone from here.
+                                {t.pretargeting.rollbackEntriesCannotUndoHere}
                               </div>
                             </div>
                           )}
                           {isStateChange && (
                             <div className="text-gray-600 mb-1">
-                              Config {group.entries[0]?.new_value || 'state changed'}
+                              Config {group.entries[0]?.new_value || t.pretargeting.configStateChanged}
                             </div>
                           )}
                           {/* Snapshot info + Undo Push button */}
                           {isPush && group.snapshot && (
                             <div className="flex items-center justify-between pt-1.5 border-t border-gray-100">
                               <span className="text-[10px] text-gray-500 truncate">
-                                Snapshot: {group.snapshot.snapshot_name || `#${group.snapshot.id}`}
+                                {t.pretargeting.snapshotLabel}: {group.snapshot.snapshot_name || `#${group.snapshot.id}`}
                               </span>
                               <button
                                 onClick={() => handleUndoPush(group.snapshot!)}
@@ -1156,14 +1184,14 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                                 className="inline-flex items-center gap-0.5 rounded border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-medium text-orange-700 hover:bg-orange-100 disabled:opacity-50"
                               >
                                 <RotateCcw className="h-3 w-3" />
-                                Undo Push
+                                {t.pretargeting.undoPush}
                               </button>
                             </div>
                           )}
                           {isPush && !group.snapshot && (
                             <div className="pt-1.5 border-t border-gray-100">
                               <span className="text-[10px] text-gray-400">
-                                No snapshot available (Undo unavailable)
+                                {t.pretargeting.noSnapshotUndoUnavailable}
                               </span>
                             </div>
                           )}
@@ -1184,35 +1212,35 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                       disabled={changeActionBusy || visibleSizeRows.length === 0}
                       className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                     >
-                      Select all
+                      {t.pretargeting.selectAll}
                     </button>
                     <button
                       onClick={invertVisibleSizeSelection}
                       disabled={changeActionBusy || visibleSizeRows.length === 0}
                       className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                     >
-                      Invert
+                      {t.pretargeting.invertSelection}
                     </button>
                     <button
                       onClick={clearSelectedSizes}
                       disabled={changeActionBusy || selectedSizes.size === 0}
                       className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                     >
-                      Clear ({selectedSizes.size})
+                      {t.pretargeting.clearCount.replace('{count}', String(selectedSizes.size))}
                     </button>
                     <button
                       onClick={() => applySelectionState(false)}
                       disabled={changeActionBusy || selectedSizes.size === 0}
                       className="rounded border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
                     >
-                      Block selected
+                      {t.pretargeting.blockSelected}
                     </button>
                     <button
                       onClick={() => applySelectionState(true)}
                       disabled={changeActionBusy || selectedSizes.size === 0}
                       className="rounded border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-50"
                     >
-                      Allow selected
+                      {t.pretargeting.allowSelected}
                     </button>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -1222,13 +1250,13 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                         className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
                       >
                         {showLowVolumeSizes
-                          ? '>=1k imp only'
-                          : `+${hiddenLowVolumeSizeCount} low-vol`}
+                          ? t.pretargeting.lowVolumeOnly1kImp
+                          : t.pretargeting.lowVolumeCount.replace('{count}', String(hiddenLowVolumeSizeCount))}
                       </button>
                     )}
                     {pendingSizeChanges.length > 0 && (
                       <span className="font-medium text-amber-700">
-                        {pendingSizeChanges.length} pending
+                        {t.pretargeting.pendingCount.replace('{count}', String(pendingSizeChanges.length))}
                       </span>
                     )}
                   </div>
@@ -1242,7 +1270,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   type="text"
                   value={geoSearchQuery}
                   onChange={(event) => setGeoSearchQuery(event.target.value)}
-                  placeholder="Search geo..."
+                  placeholder={t.pretargeting.searchGeoPlaceholder}
                   className="w-44 rounded border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-teal-300"
                 />
                 <select
@@ -1250,9 +1278,9 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   onChange={(event) => setGeoSearchType(event.target.value as 'all' | 'country' | 'city')}
                   className="rounded border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700"
                 >
-                  <option value="all">All</option>
-                  <option value="country">Country</option>
-                  <option value="city">City</option>
+                  <option value="all">{t.pretargeting.geoSearchTypeAll}</option>
+                  <option value="country">{t.pretargeting.geoSearchTypeCountry}</option>
+                  <option value="city">{t.pretargeting.geoSearchTypeCity}</option>
                 </select>
                 <select
                   value={selectedGeoId}
@@ -1260,9 +1288,9 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   className="min-w-[14rem] rounded border border-teal-300 bg-white px-2 py-1 text-xs text-gray-700"
                   disabled={isGeoSearchLoading || geoSearchResults.length === 0}
                 >
-                  {isGeoSearchLoading && <option value="">Searching…</option>}
+                  {isGeoSearchLoading && <option value="">{t.pretargeting.searchingEllipsis}</option>}
                   {!isGeoSearchLoading && geoSearchResults.length === 0 && (
-                    <option value="">Type 2+ chars</option>
+                    <option value="">{t.pretargeting.typeTwoChars}</option>
                   )}
                   {!isGeoSearchLoading && geoSearchResults.map((result) => (
                     <option key={result.geo_id} value={result.geo_id}>
@@ -1275,7 +1303,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   disabled={changeActionBusy || !selectedGeoId}
                   className="rounded border border-teal-300 bg-teal-100 px-2 py-1 text-[11px] font-medium text-teal-800 hover:bg-teal-200 disabled:opacity-50"
                 >
-                  Add Geo
+                  {t.pretargeting.addGeo}
                 </button>
               </div>
             )}
@@ -1287,10 +1315,12 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   : "bg-red-50 border-red-200 text-red-800"
               )}>
                 <div>
-                  <span className="font-medium">{pushResult.success ? 'Pushed to Google.' : 'Push failed.'}</span>
+                  <span className="font-medium">
+                    {pushResult.success ? t.pretargeting.pushedToGoogle : t.pretargeting.pushFailed}
+                  </span>
                   {' '}{pushResult.message}
                   {pushResult.success && (
-                    <span className="block mt-0.5 text-green-600">Snapshot saved. Use History to undo if needed.</span>
+                    <span className="block mt-0.5 text-green-600">{t.pretargeting.snapshotSavedUndoHint}</span>
                   )}
                 </div>
                 <button
@@ -1299,7 +1329,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                     "ml-2 flex-shrink-0",
                     pushResult.success ? "text-green-600 hover:text-green-800" : "text-red-600 hover:text-red-800"
                   )}
-                  title="Dismiss"
+                  title={t.campaigns.dismiss}
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -1338,7 +1368,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                     }}
                     disabled={changeActionBusy || visibleSizeRows.length === 0}
                     className="h-3.5 w-3.5 rounded border-gray-300"
-                    title="Select visible sizes"
+                    title={t.pretargeting.selectVisibleSizes}
                   />
                 </div>
               )}
@@ -1351,7 +1381,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   sortKey === "name" && "text-gray-700"
                 )}
               >
-                Name
+                {t.common.name}
                 <ArrowUpDown className="h-3 w-3" />
               </button>
               <button
@@ -1362,7 +1392,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   sortKey === "spend" && "text-gray-700"
                 )}
               >
-                Spend
+                {t.campaigns.spend}
                 <ArrowUpDown className="h-3 w-3" />
               </button>
               <button
@@ -1373,7 +1403,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   sortKey === "reached" && "text-gray-700"
                 )}
               >
-                Reached
+                {t.dashboard.reached}
                 <ArrowUpDown className="h-3 w-3" />
               </button>
               <button
@@ -1384,7 +1414,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   sortKey === "impressions" && "text-gray-700"
                 )}
               >
-                Imp
+                {t.pretargeting.columnImpShort}
                 <ArrowUpDown className="h-3 w-3" />
               </button>
               <button
@@ -1395,25 +1425,25 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   sortKey === "win_rate" && "text-gray-700"
                 )}
               >
-                Win Rate
+                {t.dashboard.winRate}
                 <ArrowUpDown className="h-3 w-3" />
               </button>
               {activeTab === "creative" && (
                 <>
-                  <div className="col-span-1">Country Targeted</div>
-                  <div className="col-span-1">Creative Lang</div>
+                  <div className="col-span-1">{t.pretargeting.columnCountryTargeted}</div>
+                  <div className="col-span-1">{t.pretargeting.columnCreativeLang}</div>
                 </>
               )}
               {activeTab === "size" && (
                 <>
-                  <div className="col-span-1 text-right">Status</div>
-                  <div className="col-span-1 text-right">Action</div>
+                  <div className="col-span-1 text-right">{t.pretargeting.columnStatus}</div>
+                  <div className="col-span-1 text-right">{t.pretargeting.columnAction}</div>
                 </>
               )}
               {activeTab === "publisher" && (
                 <>
-                  <div className="col-span-1 text-right">Status</div>
-                  <div className="col-span-1 text-right">Action</div>
+                  <div className="col-span-1 text-right">{t.pretargeting.columnStatus}</div>
+                  <div className="col-span-1 text-right">{t.pretargeting.columnAction}</div>
                 </>
               )}
             </div>
@@ -1486,7 +1516,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                             onChange={() => toggleSizeSelection(item.name)}
                             disabled={changeActionBusy}
                             className="h-3.5 w-3.5 rounded border-gray-300"
-                            title={`Select ${item.name}`}
+                            title={`${t.common.select} ${item.name}`}
                           />
                         </div>
                       )}
@@ -1520,7 +1550,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                               setSizeCreativesMessage(null);
                             }}
                             className="p-1 text-gray-400 hover:text-gray-600"
-                            title="View creatives for this size"
+                            title={t.pretargeting.viewCreativesForSize}
                           >
                             <ChevronRight className="h-3 w-3" />
                           </button>
@@ -1532,7 +1562,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                               setSelectedCreative({ id: item.name });
                             }}
                             className="p-1 text-gray-400 hover:text-gray-600"
-                            title="View creative"
+                            title={t.creatives.viewCreative}
                           >
                             <Image className="h-3 w-3" />
                           </button>
@@ -1563,7 +1593,10 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                             {item.language_mismatch && (
                               <span
                                 className="inline-flex"
-                                title={`Language mismatch: ${item.mismatched_countries?.join(", ") || "check geo targets"}`}
+                                title={t.pretargeting.languageMismatchTitle.replace(
+                                  '{countries}',
+                                  item.mismatched_countries?.join(", ") || t.pretargeting.checkGeoTargets
+                                )}
                               >
                                 <AlertTriangle className="h-3 w-3 text-orange-500" />
                               </span>
@@ -1583,7 +1616,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                                 sizeStatus === 'Pending block' && 'bg-amber-100 text-amber-800'
                               )}
                             >
-                              {sizeStatus}
+                              {translateStatusLabel(sizeStatus)}
                             </span>
                           </div>
                           <div className="col-span-1 flex justify-end">
@@ -1599,10 +1632,10 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                                 ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
                                 : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
                             )}
-                            title={includedInConfig ? 'Block size (remove from targeting)' : 'Allow size (add to targeting)'}
+                            title={includedInConfig ? t.pretargeting.blockSizeRemoveTargeting : t.pretargeting.allowSizeAddTargeting}
                           >
                             {includedInConfig ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}
-                            {includedInConfig ? 'Block' : 'Allow'}
+                            {includedInConfig ? t.pretargeting.block : t.pretargeting.allow}
                           </button>
                         </div>
 	                        </>
@@ -1618,7 +1651,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
 	                                publisherStatus.startsWith('Pending') && 'bg-amber-100 text-amber-800'
 	                              )}
 	                            >
-	                              {publisherStatus}
+	                              {translateStatusLabel(publisherStatus)}
 	                            </span>
 	                          </div>
 	                          <div className="col-span-1 flex justify-end">
@@ -1646,19 +1679,19 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                     {activeTab === 'size' && selectedSize === item.name && (
                       <div className="border-t bg-gray-50 px-3 py-2">
                         <div className="grid grid-cols-6 gap-2 text-xs font-medium text-gray-500 border-b pb-1">
-                          <div className="col-span-3">Creative</div>
-                          <div className="col-span-2">Country (if available)</div>
-                          <div className="col-span-1 text-right">Preview</div>
+                          <div className="col-span-3">{t.pretargeting.sizeCreativesColumnCreative}</div>
+                          <div className="col-span-2">{t.pretargeting.sizeCreativesColumnCountryIfAvailable}</div>
+                          <div className="col-span-1 text-right">{t.pretargeting.sizeCreativesColumnPreview}</div>
                         </div>
                         <div className="py-1 text-[11px] text-gray-500">
-                          Country is optional and may be unavailable in some imported CSV slices.
+                          {t.pretargeting.countryOptionalUnavailableHint}
                         </div>
                         {sizeCreativesLoading && (
-                          <div className="py-2 text-sm text-gray-500">Loading creatives...</div>
+                          <div className="py-2 text-sm text-gray-500">{t.pretargeting.loadingCreatives}</div>
                         )}
                         {!sizeCreativesLoading && sizeCreatives.length === 0 && (
                           <div className="py-2 text-sm text-gray-400">
-                            {sizeCreativesMessage || `No creatives found for "${selectedSize}".`}
+                            {sizeCreativesMessage || t.pretargeting.noCreativesFoundForSize.replace('{size}', selectedSize || '')}
                           </div>
                         )}
                         {!sizeCreativesLoading && sizeCreatives.length > 0 && (
@@ -1687,7 +1720,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                                   <button
                                     onClick={() => setSelectedCreative({ id: creative.id })}
                                     className="p-1 text-gray-400 hover:text-gray-600"
-                                    title="View creative"
+                                    title={t.creatives.viewCreative}
                                   >
                                     <Image className="h-3 w-3" />
                                   </button>
@@ -1708,13 +1741,13 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
               })}
               {activeTab === 'size' && visibleSizeRows.length === 0 && sortedBreakdown.length > 0 && (
                 <div className="px-3 py-4 text-sm text-gray-500">
-                  No sizes meet the default threshold of <span className="font-medium">1,000 impressions</span>.
+                  {t.pretargeting.noSizesMeetDefaultThreshold.replace('{threshold}', '1,000 impressions')}
                   {hiddenLowVolumeSizeCount > 0 && (
                     <button
                       onClick={() => setShowLowVolumeSizes(true)}
                       className="ml-2 text-blue-600 hover:text-blue-800"
                     >
-                      Show all sizes
+                      {t.pretargeting.showAllSizes}
                     </button>
                   )}
                 </div>
@@ -1727,7 +1760,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
               <div className="flex items-center gap-2">
                 <label className="text-xs font-medium text-gray-600 whitespace-nowrap">
                   <Ban className="inline h-3 w-3 mr-1" />
-                  {effectivePublisherMode === 'INCLUSIVE' ? 'Deny:' : 'Block:'}
+                  {effectivePublisherMode === 'INCLUSIVE' ? t.pretargeting.denyLabel : t.pretargeting.blockLabel}
                 </label>
                 <input
                   type="text"
@@ -1742,7 +1775,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                       handleBlockPublisher();
                     }
                   }}
-                  placeholder="com.example.app or publisher.com"
+                  placeholder={t.pretargeting.publisherInputPlaceholder}
                   className="flex-1 rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-red-300 focus:border-red-300"
                   disabled={changeActionBusy}
                 />
@@ -1752,7 +1785,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   className="inline-flex items-center gap-1 rounded border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
                 >
                   <X className="h-3 w-3" />
-                  Block
+                  {t.pretargeting.block}
                 </button>
               </div>
               {publisherBlockError && (
@@ -1770,10 +1803,10 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
               >
                 <span className="flex items-center gap-1.5">
                   <ShieldAlert className="h-3.5 w-3.5" />
-                  Commonly blocked publishers
+                  {t.pretargeting.commonlyBlockedPublishers}
                   {availableSuggestions.length > 0 && (
                     <span className="rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
-                      {availableSuggestions.length} suggestions
+                      {t.pretargeting.suggestionsCount.replace('{count}', String(availableSuggestions.length))}
                     </span>
                   )}
                 </span>
@@ -1789,13 +1822,13 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                   {availableSuggestions.length === 0 ? (
                     <div className="flex items-center gap-1.5 py-2 text-xs text-amber-700">
                       <Check className="h-3.5 w-3.5 text-green-600" />
-                      All commonly blocked publishers are already blocked or pending.
+                      {t.pretargeting.allCommonlyBlockedAlreadyHandled}
                     </div>
                   ) : (
                     <>
                       <div className="mb-2 flex items-center justify-between">
                         <span className="text-[10px] text-amber-700">
-                          Publishers frequently blocked by other media buyers
+                          {t.pretargeting.publishersFrequentlyBlockedByBuyers}
                         </span>
                         <button
                           onClick={handleBlockAllSuggestions}
@@ -1803,17 +1836,17 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                           className="inline-flex items-center gap-1 rounded border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
                         >
                           <Ban className="h-3 w-3" />
-                          Block all ({availableSuggestions.length})
+                          {t.pretargeting.blockAllSuggestions.replace('{count}', String(availableSuggestions.length))}
                         </button>
                       </div>
                       <div className="max-h-48 overflow-y-auto">
                         <table className="w-full text-xs">
                           <thead>
                             <tr className="border-b border-amber-200 text-left text-[10px] uppercase text-amber-600">
-                              <th className="pb-1 pr-2">Publisher</th>
-                              <th className="pb-1 pr-2">Category</th>
-                              <th className="pb-1 pr-2 text-right">Buyers blocking</th>
-                              <th className="pb-1 text-right">Action</th>
+                              <th className="pb-1 pr-2">{t.pretargeting.suggestionsTablePublisher}</th>
+                              <th className="pb-1 pr-2">{t.pretargeting.suggestionsTableCategory}</th>
+                              <th className="pb-1 pr-2 text-right">{t.pretargeting.suggestionsTableBuyersBlocking}</th>
+                              <th className="pb-1 text-right">{t.pretargeting.suggestionsTableAction}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-amber-100">
@@ -1831,11 +1864,11 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                                   <td className="py-1.5 text-right">
                                     {status === 'blocked' ? (
                                       <span className="inline-flex items-center gap-0.5 text-[10px] text-gray-400">
-                                        <Check className="h-3 w-3" /> Blocked
+                                        <Check className="h-3 w-3" /> {t.pretargeting.statusBlocked}
                                       </span>
                                     ) : status === 'pending' ? (
                                       <span className="inline-flex items-center gap-0.5 text-[10px] text-yellow-600">
-                                        <Clock className="h-3 w-3" /> Pending
+                                        <Clock className="h-3 w-3" /> {t.pretargeting.statusPending}
                                       </span>
                                     ) : (
                                       <button
@@ -1843,7 +1876,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                                         disabled={changeActionBusy}
                                         className="inline-flex items-center gap-0.5 rounded border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
                                       >
-                                        <X className="h-3 w-3" /> Block
+                                        <X className="h-3 w-3" /> {t.pretargeting.block}
                                       </button>
                                     )}
                                   </td>
@@ -1865,7 +1898,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
               <div className="w-full max-w-md rounded-lg border border-yellow-300 bg-yellow-50 p-3 shadow-sm">
                 <div className="flex items-center gap-2 text-sm font-medium text-yellow-900">
                   <Clock className="h-4 w-4" />
-                  Pending Changes ({pendingChanges.length})
+                  {t.pretargeting.pendingChangesTitle.replace('{count}', String(pendingChanges.length))}
                 </div>
                 <div className="mt-2 max-h-24 overflow-y-auto space-y-1 text-xs text-yellow-800">
                   {pendingChanges.map((change) => (
@@ -1875,9 +1908,9 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                         onClick={() => cancelChangeMutation.mutate(change.id)}
                         disabled={changeActionBusy}
                         className="text-yellow-700 hover:text-yellow-900"
-                        title="Undo change"
+                        title={t.pretargeting.undoChange}
                       >
-                        Undo
+                        {t.pretargeting.undo}
                       </button>
                     </div>
                   ))}
@@ -1888,7 +1921,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                     disabled={changeActionBusy}
                     className="text-xs text-yellow-700 hover:text-yellow-900 disabled:opacity-50"
                   >
-                    Discard All
+                    {t.pretargeting.discardAll}
                   </button>
                   <button
                     onClick={() => setShowConfirmPush(true)}
@@ -1896,7 +1929,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                     className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                   >
                     <Upload className="h-3 w-3" />
-                    Review & Push to Google
+                    {t.pretargeting.reviewAndPushToGoogle}
                   </button>
                 </div>
               </div>
