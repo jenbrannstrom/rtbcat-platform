@@ -71,10 +71,10 @@ function RollbackModal({
         setDryRunResult(result);
       })
       .catch((err) => {
-        setDryRunError(err?.message || 'Failed to preview rollback');
+        setDryRunError(err?.message || t.history.failedToPreviewRollback);
       })
       .finally(() => setDryRunLoading(false));
-  }, [snapshot, change.config_id]);
+  }, [snapshot, change.config_id, t.history.failedToPreviewRollback]);
 
   const executeMutation = useMutation({
     mutationFn: async () => {
@@ -113,14 +113,13 @@ function RollbackModal({
             <div className="bg-gray-50 rounded-lg p-4 flex items-start gap-2">
               <AlertTriangle className="h-4 w-4 text-gray-500 mt-0.5 flex-shrink-0" />
               <p className="text-sm text-gray-600">
-                No snapshot available for this change. Rollback requires an auto-snapshot
-                that was created before the push. Older changes may not have snapshots.
+                {t.history.noSnapshotAvailableForChange}
               </p>
             </div>
           ) : dryRunLoading ? (
             <div className="flex items-center justify-center py-8 gap-2 text-gray-500 text-sm">
               <div className="h-4 w-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-              Previewing rollback&hellip;
+              {t.history.previewingRollback}
             </div>
           ) : dryRunError ? (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-2">
@@ -131,8 +130,7 @@ function RollbackModal({
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-2">
               <Check className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
               <p className="text-sm text-blue-700">
-                No differences found between current config and snapshot.
-                Config may have already been modified since then.
+                {t.history.noDifferencesFoundBetweenCurrentAndSnapshot}
               </p>
             </div>
           ) : (
@@ -143,7 +141,7 @@ function RollbackModal({
                   <span className="font-medium text-gray-900">{change.config_id}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Restoring to</span>
+                  <span className="text-gray-500">{t.history.restoreTo}</span>
                   <span className="font-medium text-gray-900">
                     {snapshot?.snapshot_name || `Snapshot #${snapshot?.id}`}
                   </span>
@@ -152,7 +150,9 @@ function RollbackModal({
 
               {dryRunResult && dryRunResult.changes_made.length > 0 && (
                 <div className="space-y-1.5">
-                  <p className="text-sm font-medium text-gray-700">These changes will be reversed on Google:</p>
+                  <p className="text-sm font-medium text-gray-700">
+                    {t.history.changesWillBeReversedOnGoogle}
+                  </p>
                   <div className="bg-gray-50 rounded-lg p-3 max-h-40 overflow-y-auto space-y-1">
                     {dryRunResult.changes_made.map((desc, i) => (
                       <div key={i} className="text-xs font-mono text-gray-700">{desc}</div>
@@ -164,7 +164,7 @@ function RollbackModal({
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
                 <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
                 <p className="text-sm text-amber-800">
-                  This pushes to Google immediately. A new &ldquo;ROLLBACK&rdquo; entry will be recorded in history.
+                  {t.history.rollbackPushesToGoogleImmediately}
                 </p>
               </div>
 
@@ -187,7 +187,7 @@ function RollbackModal({
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
               <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
               <p className="text-sm text-red-700">
-                {(executeMutation.error as Error)?.message || 'Rollback failed'}
+                {(executeMutation.error as Error)?.message || t.history.rollbackFailed}
               </p>
             </div>
           )}
@@ -199,7 +199,7 @@ function RollbackModal({
             disabled={executeMutation.isPending}
             className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            {noSnapshot || noChanges ? 'Close' : t.history.cancel}
+            {noSnapshot || noChanges ? t.common.close : t.history.cancel}
           </button>
           {!noSnapshot && !noChanges && dryRunResult && (
             <button
@@ -225,9 +225,9 @@ function RollbackModal({
 }
 
 // Format date nicely
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string, language: string): string {
   const date = new Date(dateStr);
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(language, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -237,7 +237,10 @@ function formatDate(dateStr: string): string {
 }
 
 // Time ago helper
-function timeAgo(dateStr: string): string {
+function timeAgo(
+  dateStr: string,
+  t: ReturnType<typeof useTranslation>["t"]
+): string {
   const date = new Date(dateStr);
   const now = new Date();
   const diff = now.getTime() - date.getTime();
@@ -245,10 +248,10 @@ function timeAgo(dateStr: string): string {
   const hours = Math.floor(diff / (1000 * 60 * 60));
   const minutes = Math.floor(diff / (1000 * 60));
 
-  if (days > 0) return `${days}d ago`;
-  if (hours > 0) return `${hours}h ago`;
-  if (minutes > 0) return `${minutes}m ago`;
-  return 'just now';
+  if (days > 0) return `${days}${t.history.daysAgo}`;
+  if (hours > 0) return `${hours}${t.history.hoursAgo}`;
+  if (minutes > 0) return `${minutes}${t.history.minutesAgo}`;
+  return t.history.justNow;
 }
 
 // Single history entry
@@ -259,7 +262,7 @@ function HistoryCard({
   entry: PretargetingHistoryItem;
   onRollback: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const isAI = entry.change_source?.includes('ai') || entry.changed_by?.includes('ai');
   const isRollback = entry.change_type === 'rollback';
   const isAdd = entry.change_type.includes('add');
@@ -318,9 +321,9 @@ function HistoryCard({
             )}
 
             <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
-              <span title={formatDate(entry.changed_at)}>
+              <span title={formatDate(entry.changed_at, language)}>
                 <Clock className="h-3 w-3 inline mr-1" />
-                {timeAgo(entry.changed_at)}
+                {timeAgo(entry.changed_at, t)}
               </span>
               <span className="flex items-center gap-1">
                 {isAI ? <Bot className="h-3 w-3" /> : <User className="h-3 w-3" />}
