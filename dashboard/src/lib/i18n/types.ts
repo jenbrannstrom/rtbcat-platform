@@ -725,6 +725,11 @@ export interface Translations {
     csvTypeGeo: string;
     csvTypePublisher: string;
     csvTypeFiltering: string;
+    validationError: string;
+    validationErrors: string;
+    rowLabel: string;
+    gotValue: string;
+    andMoreValidationErrors: string;
     howToExport: string;
     requiredColumns: string;
     troubleshootingLargeFiles: string;

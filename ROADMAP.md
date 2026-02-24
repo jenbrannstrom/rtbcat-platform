@@ -109,6 +109,7 @@
     - [x] Campaign sort/issues filter control labels/tooltips + list-view unclustered label converted (`dashboard/src/components/campaigns/SortFilterControls.tsx`, `dashboard/src/app/campaigns/page.tsx`)
     - [x] History rollback modal residual copy + locale-aware history timestamps/relative time labels converted (`dashboard/src/app/history/page.tsx`)
     - [x] Creatives page fallback load-error message converted (`dashboard/src/app/creatives/page.tsx`)
+    - [x] Shared error components + import validation error list copy converted (`dashboard/src/components/error.tsx`, `dashboard/src/components/validation-errors.tsx`)
     - [ ] Remaining settings/admin/shared hotspots (deeper RTB/settings helper components)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
