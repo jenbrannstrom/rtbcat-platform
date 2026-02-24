@@ -1,17 +1,53 @@
-export type { Language, Translations, TranslationKey } from './types';
+export type { Language, Translations, TranslationKey, PartialTranslations } from './types';
 export { en } from './translations/en';
+export { es } from './translations/es';
 
 import { en } from './translations/en';
-import type { Language, Translations } from './types';
+import { es } from './translations/es';
+import type { Language, PartialTranslations, Translations } from './types';
+
+type PlainObject = Record<string, unknown>;
+
+function isPlainObject(value: unknown): value is PlainObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function deepMergeTranslations<T extends PlainObject>(
+  base: T,
+  override?: PartialTranslations | PlainObject
+): T {
+  if (!override || !isPlainObject(override)) {
+    return { ...base } as T;
+  }
+
+  const result: PlainObject = { ...base };
+
+  for (const [key, value] of Object.entries(override)) {
+    if (value === undefined) continue;
+    const baseValue = result[key];
+    if (isPlainObject(baseValue) && isPlainObject(value)) {
+      result[key] = deepMergeTranslations(baseValue, value);
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return result as T;
+}
+
+function withEnglishFallback(override?: PartialTranslations): Translations {
+  if (!override) return en;
+  return deepMergeTranslations(en as unknown as PlainObject, override as unknown as PlainObject) as unknown as Translations;
+}
 
 // Map of all available translations
 export const translations: Record<Language, Translations> = {
   en,
+  es: withEnglishFallback(es),
   pl: en,
   zh: en,
   ru: en,
   uk: en,
-  es: en,
   da: en,
   fr: en,
   nl: en,

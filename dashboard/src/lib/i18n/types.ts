@@ -1,6 +1,10 @@
 // Supported languages
 export type Language = 'en' | 'pl' | 'zh' | 'ru' | 'uk' | 'es' | 'da' | 'fr' | 'nl' | 'he' | 'ar';
 
+export type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K];
+};
+
 // Translation structure - all strings organized by namespace
 export interface Translations {
   common: {
@@ -1970,6 +1974,8 @@ export interface Translations {
     english: string;
   };
 }
+
+export type PartialTranslations = DeepPartial<Translations>;
 
 // Helper type for nested key access
 export type TranslationKey = keyof Translations;
