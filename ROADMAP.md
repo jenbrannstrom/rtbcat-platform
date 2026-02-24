@@ -69,7 +69,7 @@
     - [x] Admin Audit Log action labels/date formatting + Admin Settings redirect copy + Admin Configuration session-duration literal converted (`dashboard/src/app/admin/audit-log/page.tsx`, `dashboard/src/app/admin/settings/page.tsx`, `dashboard/src/app/admin/configuration/page.tsx`)
     - [x] Retention settings page UI copy + local success/error/job status messages converted (`dashboard/src/app/settings/retention/page.tsx`)
     - [x] Settings Accounts top-level wrapper/status bar copy + Settings System DB-path fallback converted (`dashboard/src/app/settings/accounts/page.tsx`, `dashboard/src/app/settings/system/page.tsx`)
-    - [x] `ApiConnectionTab` runtime status/error messages + setup/instruction/account/seat section headings/buttons copy converted (partial; seat row details still pending) (`dashboard/src/app/settings/accounts/components/ApiConnectionTab.tsx`)
+    - [x] `ApiConnectionTab` runtime messages + setup/instruction/account/seat section copy + seat-row status labels/tooltips converted (`dashboard/src/app/settings/accounts/components/ApiConnectionTab.tsx`)
     - [ ] Remaining settings/admin hotspot groups (`/settings/accounts/components` seat-row/deep copy, additional `/settings/system` literals, and remaining settings/admin component literals)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.

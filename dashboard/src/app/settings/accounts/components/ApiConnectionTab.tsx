@@ -39,7 +39,7 @@ import { GeminiApiKeySection } from "./GeminiApiKeySection";
  */
 export function ApiConnectionTab() {
   const queryClient = useQueryClient();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -619,22 +619,24 @@ export function ApiConnectionTab() {
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <p className="font-medium text-gray-900">{seat.display_name || `Buyer ${seat.buyer_id}`}</p>
+                          <p className="font-medium text-gray-900">
+                            {seat.display_name || t.setup.buyerSeatNameFallback.replace("{buyerId}", seat.buyer_id)}
+                          </p>
                           <button
                             onClick={() => handleStartEdit(seat)}
                             className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                            title="Edit name"
+                            title={t.setup.editSeatName}
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       )}
                       <p className="text-sm text-gray-500">
-                        {seat.creative_count} creatives
+                        {t.setup.creativesCount.replace("{count}", String(seat.creative_count))}
                         {syncingId === seat.buyer_id
-                          ? " · Sync in progress"
+                          ? ` · ${t.setup.syncInProgress}`
                           : seat.last_synced
-                            ? ` · Last synced ${new Date(seat.last_synced).toLocaleDateString()}`
+                            ? ` · ${t.setup.lastSyncedShort.replace("{date}", new Date(seat.last_synced).toLocaleDateString(language))}`
                             : ""}
                       </p>
                     </div>
@@ -648,7 +650,7 @@ export function ApiConnectionTab() {
                         )}
                       >
                         <RefreshCw className={cn("h-4 w-4", syncingId === seat.buyer_id && "animate-spin")} />
-                        {syncingId === seat.buyer_id ? "Syncing..." : "Sync Now"}
+                        {syncingId === seat.buyer_id ? t.setup.syncing : t.setup.syncNow}
                       </button>
                     )}
                   </div>
@@ -661,13 +663,14 @@ export function ApiConnectionTab() {
                   <div>
                     <p className="font-medium text-yellow-800">{t.setup.noBuyerSeatsFound}</p>
                     <p className="text-sm text-yellow-700 mt-1">
-                      If discovery returns no seats, verify that you've added the service account email
-                      to your <a href="https://authorizedbuyers.google.com" target="_blank" rel="noopener noreferrer" className="underline">Authorized Buyers</a> account
-                      with <strong>Account Manager</strong> or <strong>RTB Troubleshooter</strong> role.
+                      {t.setup.noBuyerSeatsVerifyAccessPrefix}{" "}
+                      <a href="https://authorizedbuyers.google.com" target="_blank" rel="noopener noreferrer" className="underline">Authorized Buyers</a>{" "}
+                      {t.setup.noBuyerSeatsVerifyAccessSuffix} <strong>Account Manager</strong> {t.setup.orLabel}{" "}
+                      <strong>RTB Troubleshooter</strong> {t.setup.roleLabel}.
                     </p>
                     {serviceAccounts[0]?.client_email && (
                       <p className="text-sm text-yellow-700 mt-2">
-                        Service account to add: <code className="bg-yellow-100 px-1 rounded text-xs">{serviceAccounts[0].client_email}</code>
+                        {t.setup.serviceAccountToAddLabel}: <code className="bg-yellow-100 px-1 rounded text-xs">{serviceAccounts[0].client_email}</code>
                       </p>
                     )}
                   </div>

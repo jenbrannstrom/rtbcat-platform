@@ -1031,6 +1031,16 @@ export interface Translations {
     discoverSeats: string;
     seatDataPopulating: string;
     seatDataPopulatingHelp: string;
+    buyerSeatNameFallback: string;
+    editSeatName: string;
+    creativesCount: string;
+    syncInProgress: string;
+    lastSyncedShort: string;
+    noBuyerSeatsVerifyAccessPrefix: string;
+    noBuyerSeatsVerifyAccessSuffix: string;
+    serviceAccountToAddLabel: string;
+    orLabel: string;
+    roleLabel: string;
     // API Connection Tab
     howToConnect: string;
     createServiceAccount: string;
