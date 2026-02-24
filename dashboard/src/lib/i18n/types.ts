@@ -542,6 +542,25 @@ export interface Translations {
     endpointEfficiencyFilteredLabel: string;
     endpointEfficiencySourceLabel: string;
     endpointEfficiencyNa: string;
+    endpointsHeaderLocationUnknown: string;
+    endpointsHeaderLocationUsWest: string;
+    endpointsHeaderLocationUsEast: string;
+    endpointsHeaderLocationEurope: string;
+    endpointsHeaderLocationAsia: string;
+    endpointsHeaderLocationUnspecified: string;
+    endpointsHeaderUnlimited: string;
+    endpointsHeaderSelectSeat: string;
+    endpointsHeaderCannotConnectApi: string;
+    endpointsHeaderFailedToLoad: string;
+    endpointsHeaderSyncing: string;
+    endpointsHeaderFailedToSync: string;
+    endpointsHeaderNoEndpoints: string;
+    endpointsHeaderTitle: string;
+    endpointsHeaderAllocated: string;
+    endpointsHeaderObserved: string;
+    endpointsHeaderTotalQpsCap: string;
+    endpointsHeaderQpsInfoAria: string;
+    endpointsHeaderQpsInfoTooltip: string;
   };
 
   import: {

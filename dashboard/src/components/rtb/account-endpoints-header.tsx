@@ -5,21 +5,23 @@ import { getRTBEndpoints, syncRTBEndpoints } from '@/lib/api';
 import { Server, AlertTriangle, Globe, Info, Loader2 } from 'lucide-react';
 import { useAccount } from '@/contexts/account-context';
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from '@/contexts/i18n-context';
+import type { Translations } from '@/lib/i18n/types';
 
-function formatLocation(location: string | null): string {
-  if (!location) return 'Unknown';
+function formatLocation(location: string | null, t: Translations): string {
+  if (!location) return t.pretargeting.endpointsHeaderLocationUnknown;
   const map: Record<string, string> = {
-    'US_WEST': 'US West',
-    'US_EAST': 'US East',
-    'EUROPE': 'Europe',
-    'ASIA': 'Asia',
-    'TRADING_LOCATION_UNSPECIFIED': 'Unspecified',
+    'US_WEST': t.pretargeting.endpointsHeaderLocationUsWest,
+    'US_EAST': t.pretargeting.endpointsHeaderLocationUsEast,
+    'EUROPE': t.pretargeting.endpointsHeaderLocationEurope,
+    'ASIA': t.pretargeting.endpointsHeaderLocationAsia,
+    'TRADING_LOCATION_UNSPECIFIED': t.pretargeting.endpointsHeaderLocationUnspecified,
   };
   return map[location] || location;
 }
 
-function formatQPS(qps: number | null): string {
-  if (qps === null) return 'Unlimited';
+function formatQPS(qps: number | null, t: Translations): string {
+  if (qps === null) return t.pretargeting.endpointsHeaderUnlimited;
   return qps.toLocaleString();
 }
 
@@ -28,6 +30,7 @@ interface AccountEndpointsHeaderProps {
 }
 
 export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpointsHeaderProps) {
+  const { t, language } = useTranslation();
   const { selectedBuyerId, selectedServiceAccountId } = useAccount();
   const [showQpsInfo, setShowQpsInfo] = useState(false);
   const queryClient = useQueryClient();
@@ -57,7 +60,7 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
   if (!selectedBuyerId) {
     return (
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
-        Select a seat to load RTB endpoints.
+        {t.pretargeting.endpointsHeaderSelectSeat}
       </div>
     );
   }
@@ -82,7 +85,7 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
         <div className="flex items-center gap-2">
           <Server className="h-4 w-4 text-gray-400" />
           <span className="text-sm text-gray-600">
-            {isConnectionError ? "Cannot connect to API." : "Failed to load endpoints."}
+            {isConnectionError ? t.pretargeting.endpointsHeaderCannotConnectApi : t.pretargeting.endpointsHeaderFailedToLoad}
           </span>
         </div>
       </div>
@@ -94,7 +97,7 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
       return (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
           <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
-          <span className="text-sm text-blue-800">Syncing RTB Endpoints...</span>
+          <span className="text-sm text-blue-800">{t.pretargeting.endpointsHeaderSyncing}</span>
         </div>
       );
     }
@@ -103,7 +106,7 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 text-red-600" />
           <span className="text-sm text-red-800">
-            {syncMutation.error instanceof Error ? syncMutation.error.message : 'Failed to sync endpoints.'}
+            {syncMutation.error instanceof Error ? syncMutation.error.message : t.pretargeting.endpointsHeaderFailedToSync}
           </span>
         </div>
       );
@@ -111,7 +114,7 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
     return (
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center gap-2">
         <Server className="h-4 w-4 text-gray-400" />
-        <span className="text-sm text-gray-600">No RTB Endpoints. Sync a service account to load.</span>
+        <span className="text-sm text-gray-600">{t.pretargeting.endpointsHeaderNoEndpoints}</span>
       </div>
     );
   }
@@ -120,7 +123,7 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
     <div className="bg-white rounded-lg border p-3">
       <div className="flex items-center gap-2 mb-2">
         <Server className="h-3.5 w-3.5 text-gray-400" />
-        <h3 className="text-sm font-semibold text-gray-900">RTB Endpoints</h3>
+        <h3 className="text-sm font-semibold text-gray-900">{t.pretargeting.endpointsHeaderTitle}</h3>
         {data.bidder_id && (
           <span className="text-xs text-gray-400">· {data.account_name || data.bidder_id}</span>
         )}
@@ -131,8 +134,8 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
 
       <div className="space-y-0.5">
         <div className="flex items-center justify-end gap-4 px-2 text-[10px] uppercase tracking-wide text-gray-400">
-          <span className="w-20 text-right">Allocated</span>
-          <span className="w-20 text-right">Observed</span>
+          <span className="w-20 text-right">{t.pretargeting.endpointsHeaderAllocated}</span>
+          <span className="w-20 text-right">{t.pretargeting.endpointsHeaderObserved}</span>
         </div>
         {data.endpoints.map((endpoint) => (
           <div
@@ -142,7 +145,7 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
             <div className="flex items-center gap-2 min-w-0 flex-1">
               <Globe className="h-3 w-3 text-gray-400 flex-shrink-0" />
               <span className="font-medium text-gray-700 w-14 flex-shrink-0">
-                {formatLocation(endpoint.trading_location)}
+                {formatLocation(endpoint.trading_location, t)}
               </span>
               <span className="text-[11px] text-gray-400 font-mono truncate" title={endpoint.url}>
                 {endpoint.url.replace(/^https?:\/\//, '')}
@@ -153,7 +156,7 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
             </div>
             <div className="flex items-center gap-4 flex-shrink-0">
               <span className="font-medium text-gray-800 w-20 text-right">
-                {formatQPS(endpoint.maximum_qps)}
+                {formatQPS(endpoint.maximum_qps, t)}
               </span>
               <span className="font-medium text-slate-600 w-20 text-right">
                 {observedQpsByEndpointId?.[endpoint.endpoint_id] != null
@@ -167,30 +170,30 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
         {/* Total row */}
         <div className="flex items-center justify-between px-2 py-1.5 mt-1 bg-blue-50 border border-blue-200 rounded">
           <div className="flex items-center gap-1.5">
-            <span className="text-xs font-semibold text-blue-800">Total QPS Cap</span>
+            <span className="text-xs font-semibold text-blue-800">{t.pretargeting.endpointsHeaderTotalQpsCap}</span>
             <div className="relative">
               <button
                 onMouseEnter={() => setShowQpsInfo(true)}
                 onMouseLeave={() => setShowQpsInfo(false)}
                 className="p-0.5 hover:bg-blue-100 rounded-full"
-                aria-label="QPS info"
+                aria-label={t.pretargeting.endpointsHeaderQpsInfoAria}
               >
                 <Info className="h-3 w-3 text-blue-400" />
               </button>
               {showQpsInfo && (
                 <div className="absolute left-0 top-5 w-64 p-2 bg-white border border-gray-200 rounded shadow-lg z-10 text-[11px] text-gray-600">
-                  Configured capacity (invited), not guaranteed traffic. Actual delivery is spend-constrained.
+                  {t.pretargeting.endpointsHeaderQpsInfoTooltip}
                 </div>
               )}
             </div>
             {data.synced_at && (
               <span className="text-[10px] text-blue-400">
-                · {new Date(data.synced_at).toLocaleString()}
+                · {new Date(data.synced_at).toLocaleString(language)}
               </span>
             )}
           </div>
           <span className="text-sm font-bold text-blue-900">
-            {formatQPS(data.total_qps_allocated)}
+            {formatQPS(data.total_qps_allocated, t)}
           </span>
         </div>
       </div>
