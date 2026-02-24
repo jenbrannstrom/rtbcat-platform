@@ -44,6 +44,13 @@ export const nl: PartialTranslations = {
     redirectingTo: 'Doorsturen naar {destination}...',
   },
 
+  relativeTime: {
+    justNow: 'Zojuist',
+    minutesAgo: 'm geleden',
+    hoursAgo: 'u geleden',
+    daysAgo: 'd geleden',
+  },
+
   navigation: {
     wasteOptimizer: 'QPS Optimizer',
     creatives: 'Creatives',
@@ -86,6 +93,89 @@ export const nl: PartialTranslations = {
     creatives: 'creatives',
     syncCreatives: 'Creatives synchroniseren',
     buyer: 'Buyer',
+  },
+
+  auth: {
+    catScan: 'Cat-Scan',
+    creativeIntelligenceDashboard: 'Creative Intelligence Dashboard',
+    signInToYourAccount: 'Log in op je account',
+    email: 'E-mail',
+    emailAddress: 'E-mailadres',
+    password: 'Wachtwoord',
+    enterYourPassword: 'Voer je wachtwoord in',
+    signIn: 'Inloggen',
+    signingIn: 'Bezig met inloggen...',
+    loginFailed: 'Inloggen mislukt. Controleer je gegevens.',
+    cannotConnectToServer: 'Kan geen verbinding maken met de server. Probeer opnieuw.',
+    contactAdministrator: 'Neem contact op met je beheerder als je toegang nodig hebt.',
+    qpsManagerForGoogleAuthBuyers: 'QPS-manager voor Google Auth Buyers',
+    signInToContinue: 'Log in om door te gaan',
+    signInWithAuthing: 'Inloggen met Authing',
+    signInWithGoogle: 'Inloggen met Google',
+    signInWithEmail: 'Inloggen met e-mail',
+    orSeparator: 'of',
+    backToOptions: 'Terug naar opties',
+    emailPlaceholder: 'jij@example.com',
+    serverUnavailableTryAgainSoon:
+      'Server niet beschikbaar. Probeer het over een moment opnieuw.',
+    loginServiceTemporarilyUnavailable:
+      'De inlogservice is tijdelijk niet beschikbaar.',
+    cannotReachServerCheckConnection:
+      'Kan de server niet bereiken. Controleer je verbinding en probeer opnieuw.',
+    protectedByCatScanAuthentication: 'Beveiligd door Cat-Scan-authenticatie',
+  },
+
+  dashboard: {
+    title: 'Waste Optimizer',
+    subtitle: 'Begrijp je RTB-funnel en optimaliseer QPS-verspilling',
+    rtbFunnel: 'De RTB-funnel',
+    rtbFunnelDescription:
+      'Verkeer dat je bidder bereikt en converteert naar wins',
+    reachedYourBidder: 'Bereikte je bidder',
+    winRate: 'Winrate',
+    impressionsWon: 'Gewonnen impressies',
+    yourEfficiency: 'Je efficientie:',
+    thisIsHealthy: 'Dit is gezond!',
+    roomToImprove: 'Er kan ruimte zijn voor verbetering.',
+    ofReachedTraffic: 'van bereikt verkeer',
+    qps: 'QPS',
+    ips: 'IPS',
+    reached: 'Bereikt',
+    impressions: 'Impressies',
+    win: 'win',
+    needRtbReport: 'RTB-rapport nodig',
+    period: 'Periode:',
+    days: 'dagen',
+    dataAsOf: 'Data per',
+    dataFreshnessPending: 'Dataversheid in behandeling...',
+    homeLabel: 'home',
+    bidstreamLabel: 'bidstream',
+    configCpm: 'Config CPM',
+    avgCpm: 'Gem. CPM',
+    unableToLoadBuyerSeatsRetry:
+      'Buyer seats laden mislukt. Probeer opnieuw om door te gaan.',
+    loadingSeatAccess: 'Seat-toegang laden...',
+    noActiveBuyerSeatsSyncSettings:
+      'Geen actieve buyer seats gevonden. Synchroniseer seats in Instellingen om home-analytics te laden.',
+    selectSeatToLoadHomeAnalytics:
+      'Selecteer een seat om home-analytics te laden.',
+    failedToLoadQpsSummary: 'QPS-samenvatting laden mislukt',
+    qpsSummarySizeCoverage: 'Formaatdekking',
+    qpsSummaryGaps: '{count} gaps',
+    qpsSummarySizesCovered: '{count} formaten gedekt',
+    qpsSummaryGeoEfficiency: 'Geo-efficientie',
+    qpsSummaryGeosUnit: 'geos',
+    qpsSummaryGeosToExclude: '{count} uit te sluiten',
+    qpsSummaryAllPerformingWell: 'Alles presteert goed',
+    qpsSummaryWastedSpend: 'Verspilde spend',
+    qpsSummaryPeriodDays: '/ {days} dagen',
+    qpsSummaryWastePctOfTotal: '{pct}% van totaal',
+    qpsSummaryActionItems: 'Actiepunten',
+    qpsSummaryExcludeGeos: '{count} geos uitsluiten',
+    qpsSummaryBlockSizes: '{count} formaten blokkeren',
+    qpsSummaryConsiderSizes: '{count} formaten overwegen',
+    qpsSummaryNoImmediateActions: 'Geen directe acties nodig',
+    qpsSummarySaveMonthly: 'Bespaar ~${amount}/mnd',
   },
 
   publishers: {
@@ -1151,6 +1241,18 @@ export const nl: PartialTranslations = {
     details: 'Details',
     ipAddress: 'IP-adres',
     redirectingToConfiguration: 'Doorsturen naar Configuratie...',
+  },
+
+  errors: {
+    somethingWentWrong: 'Er is iets misgegaan',
+    pageNotFound: 'Pagina niet gevonden',
+    unauthorized: 'Niet geautoriseerd',
+    forbidden: 'Verboden',
+    serverError: 'Serverfout',
+    networkError: 'Netwerkfout',
+    tryAgain: 'Opnieuw proberen',
+    goBack: 'Ga terug',
+    goHome: 'Ga naar home',
   },
 
   recommendations: {
