@@ -1236,6 +1236,22 @@ export interface Translations {
     noNativeContentAvailable: string;
     nativeAdAlt: string;
     logoAlt: string;
+    failedToLoadCountryData: string;
+    targetingGeo: string;
+    targetingGeoWithCount: string;
+    servingCountriesFromPerformanceCsvImports: string;
+    noCountryDataAvailable: string;
+    noPerformanceDataByCountry: string;
+    creativeLanguageLabel: string;
+    match: string;
+    mismatch: string;
+    geoMismatchLabel: string;
+    geoMismatchServingCountries: string;
+    moreItemsSuffix: string;
+    dismissThisAlert: string;
+    languageMismatch: string;
+    languageMatch: string;
+    showAllCountries: string;
   };
 
   language: {

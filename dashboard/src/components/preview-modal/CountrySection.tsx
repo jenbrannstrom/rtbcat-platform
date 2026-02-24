@@ -5,6 +5,7 @@ import { Loader2, AlertTriangle, CheckCircle, X } from "lucide-react";
 import type { CreativeCountryBreakdown } from "@/types/api";
 import { getCreativeCountries } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/contexts/i18n-context";
 import { checkLanguageCountryMatch } from "./utils";
 
 interface CountrySectionProps {
@@ -17,6 +18,7 @@ interface CountrySectionProps {
  * Country targeting section with language match detection.
  */
 export function CountrySection({ creativeId, detectedLanguage, detectedLanguageCode }: CountrySectionProps) {
+  const { t } = useTranslation();
   const [countryData, setCountryData] = useState<CreativeCountryBreakdown | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,22 +29,22 @@ export function CountrySection({ creativeId, detectedLanguage, detectedLanguageC
     setError(null);
     getCreativeCountries(creativeId, 7)
       .then((data) => setCountryData(data))
-      .catch((err) => setError(err.message || "Failed to load country data"))
+      .catch((err) => setError(err.message || t.previewModal.failedToLoadCountryData))
       .finally(() => setIsLoading(false));
-  }, [creativeId]);
+  }, [creativeId, t.previewModal.failedToLoadCountryData]);
 
   if (isLoading) {
     return (
       <div className="bg-gray-50 rounded-lg p-3">
         <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-          Targeting / GEO
+          {t.previewModal.targetingGeo}
         </h4>
         <p className="text-[11px] text-gray-400 mb-2">
-          Serving countries from performance CSV imports
+          {t.previewModal.servingCountriesFromPerformanceCsvImports}
         </p>
         <div className="flex items-center gap-2 text-sm text-gray-400">
           <Loader2 className="h-3 w-3 animate-spin" />
-          Loading...
+          {t.common.loading}
         </div>
       </div>
     );
@@ -52,12 +54,12 @@ export function CountrySection({ creativeId, detectedLanguage, detectedLanguageC
     return (
       <div className="bg-gray-50 rounded-lg p-3">
         <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-          Targeting / GEO
+          {t.previewModal.targetingGeo}
         </h4>
         <p className="text-[11px] text-gray-400 mb-2">
-          Serving countries from performance CSV imports
+          {t.previewModal.servingCountriesFromPerformanceCsvImports}
         </p>
-        <p className="text-sm text-gray-400 italic">No country data available</p>
+        <p className="text-sm text-gray-400 italic">{t.previewModal.noCountryDataAvailable}</p>
       </div>
     );
   }
@@ -66,12 +68,12 @@ export function CountrySection({ creativeId, detectedLanguage, detectedLanguageC
     return (
       <div className="bg-gray-50 rounded-lg p-3">
         <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-          Targeting / GEO
+          {t.previewModal.targetingGeo}
         </h4>
         <p className="text-[11px] text-gray-400 mb-2">
-          Serving countries from performance CSV imports
+          {t.previewModal.servingCountriesFromPerformanceCsvImports}
         </p>
-        <p className="text-sm text-gray-400 italic">No performance data by country</p>
+        <p className="text-sm text-gray-400 italic">{t.previewModal.noPerformanceDataByCountry}</p>
       </div>
     );
   }
@@ -94,10 +96,10 @@ export function CountrySection({ creativeId, detectedLanguage, detectedLanguageC
   return (
     <div className="bg-gray-50 rounded-lg p-3">
       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-        Targeting / GEO ({countryData.total_countries})
+        {t.previewModal.targetingGeoWithCount.replace("{count}", String(countryData.total_countries))}
       </h4>
       <p className="text-[11px] text-gray-400 mb-2">
-        Serving countries from performance CSV imports
+        {t.previewModal.servingCountriesFromPerformanceCsvImports}
       </p>
 
       {/* Language Match Status */}
@@ -106,7 +108,7 @@ export function CountrySection({ creativeId, detectedLanguage, detectedLanguageC
           "flex items-center justify-between text-xs mb-2 pb-2 border-b border-gray-200",
         )}>
           <div className="flex items-center gap-1.5">
-            <span className="text-gray-500">Creative Language:</span>
+            <span className="text-gray-500">{t.previewModal.creativeLanguageLabel}</span>
             <span className="font-medium text-gray-700">{detectedLanguage}</span>
             {detectedLanguageCode && (
               <span className="text-gray-400 font-mono">({detectedLanguageCode})</span>
@@ -115,12 +117,12 @@ export function CountrySection({ creativeId, detectedLanguage, detectedLanguageC
           {langMatch.isMatch ? (
             <div className="flex items-center gap-1 text-green-600">
               <CheckCircle className="h-3.5 w-3.5" />
-              <span>Match</span>
+              <span>{t.previewModal.match}</span>
             </div>
           ) : (
             <div className="flex items-center gap-1 text-amber-600">
               <AlertTriangle className="h-3.5 w-3.5" />
-              <span>Mismatch</span>
+              <span>{t.previewModal.mismatch}</span>
             </div>
           )}
         </div>
@@ -133,15 +135,17 @@ export function CountrySection({ creativeId, detectedLanguage, detectedLanguageC
             <div className="flex items-start gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
               <div className="text-amber-800">
-                <span className="font-medium">Geo Mismatch:</span>{" "}
-                Creative in {detectedLanguage} serving in {langMatch.mismatchedCountries.slice(0, 3).join(", ")}
-                {langMatch.mismatchedCountries.length > 3 && ` +${langMatch.mismatchedCountries.length - 3} more`}
+                <span className="font-medium">{t.previewModal.geoMismatchLabel}</span>{" "}
+                {t.previewModal.geoMismatchServingCountries
+                  .replace("{language}", String(detectedLanguage))
+                  .replace("{countries}", langMatch.mismatchedCountries.slice(0, 3).join(", "))}
+                {langMatch.mismatchedCountries.length > 3 && ` ${t.previewModal.moreItemsSuffix.replace("{count}", String(langMatch.mismatchedCountries.length - 3))}`}
               </div>
             </div>
             <button
               onClick={handleDismissMismatch}
               className="text-amber-600 hover:text-amber-800 p-0.5"
-              title="Dismiss this alert"
+              title={t.previewModal.dismissThisAlert}
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -159,17 +163,17 @@ export function CountrySection({ creativeId, detectedLanguage, detectedLanguageC
               <span>{country.country_name}</span>
               <span className="text-gray-400 font-mono">{country.country_iso3 || country.country_code}</span>
               {detectedLanguageCode && langMatch.mismatchedCountries.includes(country.country_code) && (
-                <span className="text-amber-500" title="Language mismatch">⚠</span>
+                <span className="text-amber-500" title={t.previewModal.languageMismatch}>⚠</span>
               )}
               {detectedLanguageCode && langMatch.matchingCountries.includes(country.country_code) && (
-                <span className="text-green-500" title="Language match">✓</span>
+                <span className="text-green-500" title={t.previewModal.languageMatch}>✓</span>
               )}
             </span>
           ))}
         </div>
         {countryData.countries.length > 8 && (
           <details className="text-xs text-gray-500">
-            <summary className="cursor-pointer select-none text-gray-500">Show all countries</summary>
+            <summary className="cursor-pointer select-none text-gray-500">{t.previewModal.showAllCountries}</summary>
             <div className="mt-2 flex flex-wrap gap-2">
               {countryData.countries.map((country) => (
                 <span
