@@ -362,6 +362,18 @@ export interface Translations {
     pendingPublishersToRemove: string;
     pendingPublishersToUnblock: string;
     changesApplyImmediatelyOnGoogle: string;
+    switchToModePrompt: string;
+    switchModeClearsPublisherListWarning: string;
+    switchToModeAction: string;
+    bulkImportPublishersTitle: string;
+    bulkImportTextareaPlaceholder: string;
+    previewImport: string;
+    bulkValidLabel: string;
+    bulkDuplicatesLabel: string;
+    bulkInvalidLabel: string;
+    importPublishersCount: string;
+    historyOnField: string;
+    historyMetaSeparator: string;
     commonlyBlockedPublishers: string;
     suggestionsCount: string;
     allCommonlyBlockedAlreadyHandled: string;
