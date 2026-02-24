@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Settings, ChevronDown, ChevronUp, Copy, Check, Globe, LayoutGrid, Video, Image, FileText } from 'lucide-react';
 import { getPretargetingRecommendations, type PretargetingConfig } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/contexts/i18n-context';
 
 interface PretargetingPanelProps {
   days?: number;
@@ -17,6 +18,7 @@ const formatIcons: Record<string, typeof Video> = {
 };
 
 function ConfigCard({ config, index }: { config: PretargetingConfig; index: number }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -52,11 +54,17 @@ function ConfigCard({ config, index }: { config: PretargetingConfig; index: numb
         <div className="text-right">
           {config.estimated_impact.waste_reduction_pct > 0 && (
             <div className="text-green-600 font-semibold">
-              -{config.estimated_impact.waste_reduction_pct}% waste
+              {t.pretargeting.pretargetingPanelWasteReductionBadge.replace(
+                '{pct}',
+                String(config.estimated_impact.waste_reduction_pct)
+              )}
             </div>
           )}
           <div className="text-sm text-gray-500">
-            {config.estimated_impact.impressions.toLocaleString()} imps
+            {t.pretargeting.pretargetingPanelImpressionsShort.replace(
+              '{count}',
+              config.estimated_impact.impressions.toLocaleString()
+            )}
           </div>
         </div>
       </div>
@@ -78,20 +86,26 @@ function ConfigCard({ config, index }: { config: PretargetingConfig; index: numb
         {config.targeting.sizes.total_count > 0 && (
           <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
             <LayoutGrid className="h-3 w-3" />
-            {config.targeting.sizes.total_count} sizes
+            {t.pretargeting.pretargetingPanelSizesCount.replace('{count}', String(config.targeting.sizes.total_count))}
           </span>
         )}
 
         {/* Geos */}
         <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
           <Globe className="h-3 w-3" />
-          {config.targeting.geos.included_count} geos included
+          {t.pretargeting.pretargetingPanelGeosIncludedCount.replace(
+            '{count}',
+            String(config.targeting.geos.included_count)
+          )}
         </span>
 
         {config.targeting.geos.excluded.length > 0 && (
           <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium">
             <Globe className="h-3 w-3" />
-            {config.targeting.geos.excluded.length} excluded
+            {t.pretargeting.pretargetingPanelExcludedCount.replace(
+              '{count}',
+              String(config.targeting.geos.excluded.length)
+            )}
           </span>
         )}
       </div>
@@ -104,12 +118,12 @@ function ConfigCard({ config, index }: { config: PretargetingConfig; index: numb
         {expanded ? (
           <>
             <ChevronUp className="h-4 w-4" />
-            Hide details
+            {t.pretargeting.pretargetingPanelHideDetails}
           </>
         ) : (
           <>
             <ChevronDown className="h-4 w-4" />
-            Show targeting details
+            {t.pretargeting.pretargetingPanelShowTargetingDetails}
           </>
         )}
       </button>
@@ -120,7 +134,7 @@ function ConfigCard({ config, index }: { config: PretargetingConfig; index: numb
           {/* Included Sizes */}
           {config.targeting.sizes.included.length > 0 && (
             <div>
-              <h5 className="text-sm font-medium text-gray-700 mb-2">Included Sizes</h5>
+              <h5 className="text-sm font-medium text-gray-700 mb-2">{t.pretargeting.pretargetingPanelIncludedSizes}</h5>
               <div className="flex flex-wrap gap-1">
                 {config.targeting.sizes.included.map(size => (
                   <span key={size} className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-mono">
@@ -129,7 +143,10 @@ function ConfigCard({ config, index }: { config: PretargetingConfig; index: numb
                 ))}
                 {config.targeting.sizes.total_count > config.targeting.sizes.included.length && (
                   <span className="px-2 py-0.5 text-gray-500 text-xs">
-                    +{config.targeting.sizes.total_count - config.targeting.sizes.included.length} more
+                    {t.pretargeting.pretargetingPanelMoreCount.replace(
+                      '{count}',
+                      String(config.targeting.sizes.total_count - config.targeting.sizes.included.length)
+                    )}
                   </span>
                 )}
               </div>
@@ -138,7 +155,7 @@ function ConfigCard({ config, index }: { config: PretargetingConfig; index: numb
 
           {/* Included Geos */}
           <div>
-            <h5 className="text-sm font-medium text-gray-700 mb-2">Included Geos</h5>
+            <h5 className="text-sm font-medium text-gray-700 mb-2">{t.pretargeting.pretargetingPanelIncludedGeos}</h5>
             <div className="flex flex-wrap gap-1">
               {config.targeting.geos.included.map(geo => (
                 <span key={geo} className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
@@ -151,7 +168,7 @@ function ConfigCard({ config, index }: { config: PretargetingConfig; index: numb
           {/* Excluded Geos */}
           {config.targeting.geos.excluded.length > 0 && (
             <div>
-              <h5 className="text-sm font-medium text-gray-700 mb-2">Excluded Geos</h5>
+              <h5 className="text-sm font-medium text-gray-700 mb-2">{t.pretargeting.pretargetingPanelExcludedGeos}</h5>
               <div className="flex flex-wrap gap-1">
                 {config.targeting.geos.excluded.map(geo => (
                   <span key={geo} className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">
@@ -170,12 +187,12 @@ function ConfigCard({ config, index }: { config: PretargetingConfig; index: numb
             {copied ? (
               <>
                 <Check className="h-4 w-4 text-green-600" />
-                Copied!
+                {t.common.copied}
               </>
             ) : (
               <>
                 <Copy className="h-4 w-4" />
-                Copy geo config as JSON
+                {t.pretargeting.pretargetingPanelCopyGeoConfigJson}
               </>
             )}
           </button>
@@ -186,6 +203,7 @@ function ConfigCard({ config, index }: { config: PretargetingConfig; index: numb
 }
 
 export function PretargetingPanel({ days = 7 }: PretargetingPanelProps) {
+  const { t } = useTranslation();
   const { data, isLoading, error } = useQuery({
     queryKey: ['pretargeting-recommendations', days],
     queryFn: () => getPretargetingRecommendations(days),
@@ -211,7 +229,7 @@ export function PretargetingPanel({ days = 7 }: PretargetingPanelProps) {
       <div className="bg-red-50 border border-red-200 rounded-lg p-4">
         <div className="flex items-center gap-2 text-red-700">
           <AlertTriangle className="h-5 w-5" />
-          <span>Failed to load pretargeting recommendations</span>
+          <span>{t.pretargeting.pretargetingPanelFailedToLoad}</span>
         </div>
       </div>
     );
@@ -223,7 +241,7 @@ export function PretargetingPanel({ days = 7 }: PretargetingPanelProps) {
         <div>
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <Settings className="h-5 w-5 text-purple-600" />
-            Pretargeting Configurations
+            {t.pretargeting.pretargetingPanelTitle}
           </h3>
           <p className="text-sm text-gray-500 mt-1">
             {data.summary}
@@ -231,11 +249,16 @@ export function PretargetingPanel({ days = 7 }: PretargetingPanelProps) {
         </div>
         <div className="text-right">
           <div className="text-sm text-gray-500">
-            {data.configs.length} / {data.config_limit} configs
+            {t.pretargeting.pretargetingPanelConfigsCount
+              .replace('{count}', String(data.configs.length))
+              .replace('{limit}', String(data.config_limit))}
           </div>
           {data.total_waste_reduction_pct > 0 && (
             <div className="text-green-600 font-semibold">
-              -{data.total_waste_reduction_pct}% total waste reduction
+              {t.pretargeting.pretargetingPanelTotalWasteReduction.replace(
+                '{pct}',
+                String(data.total_waste_reduction_pct)
+              )}
             </div>
           )}
         </div>
@@ -250,9 +273,9 @@ export function PretargetingPanel({ days = 7 }: PretargetingPanelProps) {
 
       {data.configs.length === 0 && (
         <div className="text-center py-8 text-gray-500">
-          No pretargeting recommendations available.
+          {t.pretargeting.pretargetingPanelNoRecommendations}
           <br />
-          <span className="text-sm">Need more traffic data to analyze.</span>
+          <span className="text-sm">{t.pretargeting.pretargetingPanelNeedMoreTrafficData}</span>
         </div>
       )}
     </div>
