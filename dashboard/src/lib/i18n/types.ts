@@ -892,6 +892,7 @@ export interface Translations {
     creativePreviewUnavailable: string;
     drilldownAnalysis: string;
     loadingAnalysis: string;
+    failedToLoadCreatives: string;
     failedToLoadDrilldownData: string;
     noDrilldownDataFor: string;
     noDrilldownDataDefaultMessage: string;

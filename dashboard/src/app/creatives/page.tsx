@@ -510,7 +510,7 @@ function CreativesContent() {
     return (
       <ErrorPage
         message={
-          error instanceof Error ? error.message : "Failed to load creatives"
+          error instanceof Error ? error.message : t.creatives.failedToLoadCreatives
         }
         onRetry={() => refetch()}
       />
