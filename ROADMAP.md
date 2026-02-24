@@ -162,6 +162,7 @@
     - [ ] Expand Chinese (`zh`) coverage across remaining namespaces (`pretargeting`, `admin`, `setup`, `campaigns`, `creatives`, `previewModal`, etc.)
       - [x] Added first Chinese (`zh`) `pretargeting` core chunk (page shell, tabs, breakdown states, history badges, push/suspend dialogs) (`dashboard/src/lib/i18n/translations/zh/pretargeting.ts`)
       - [x] Added second Chinese (`zh`) `pretargeting` chunk (snapshots/rollback, size+publisher editor, pending-change/history labels, config card + endpoint efficiency/header labels) (`dashboard/src/lib/i18n/translations/zh/pretargeting.ts`)
+      - [x] Added Chinese (`zh`) `admin` translations (admin dashboard, users/local-password + seat-access UI, admin settings, audit log labels) (`dashboard/src/lib/i18n/translations/zh/admin.ts`)
     - [ ] Add real dictionaries for remaining locales (`pl`, `ru`, `uk`, `da`, `fr`, `he`, `ar`) and expand `zh`/`es` remaining namespaces
 
 ---
