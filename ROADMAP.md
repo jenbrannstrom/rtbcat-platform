@@ -106,6 +106,7 @@
     - [x] Generic recommendations card/panel severity/type/impact/actions/empty-state copy converted (`dashboard/src/components/recommendations/recommendation-card.tsx`, `dashboard/src/components/recommendations/recommendations-panel.tsx`)
     - [x] Import result card success/failure labels/stats/actions copy converted (`dashboard/src/components/import/ImportResultCard.tsx`)
     - [x] Import column mapping/freshness/history widgets copy converted (`dashboard/src/components/import/ColumnMappingCard.tsx`, `dashboard/src/components/import/DataFreshnessGrid.tsx`, `dashboard/src/components/import/ImportHistorySection.tsx`)
+    - [x] Import history report-type names now use localized CSV labels and file-size unit strings are placeholder-based for translation (`dashboard/src/components/import/ImportHistorySection.tsx`, `dashboard/src/components/import/DataFreshnessGrid.tsx`)
     - [x] Import dropzone/preview/progress widget copy converted (`dashboard/src/components/import-dropzone.tsx`, `dashboard/src/components/import-preview.tsx`, `dashboard/src/components/import-progress.tsx`)
     - [x] Required columns reference table row/bullet copy converted (`dashboard/src/components/import/RequiredColumnsTable.tsx`)
     - [x] Shared language selector fallback labels/titles converted (`dashboard/src/components/language-selector.tsx`)
@@ -123,6 +124,7 @@
     - [x] Campaign card + auto-cluster button labels/tooltips/no-performance copy converted (`dashboard/src/components/campaign-card.tsx`)
     - [x] Campaign list-view cluster components labels/tooltips/empty states converted (`dashboard/src/components/campaigns/list-cluster.tsx`, `dashboard/src/components/campaigns/list-item.tsx`, `dashboard/src/components/campaigns/unassigned-pool.tsx`)
     - [x] Campaign grid-view cluster card + draggable creative tooltip/badge/sort/zoom/stats copy converted (`dashboard/src/components/campaigns/cluster-card.tsx`, `dashboard/src/components/campaigns/draggable-creative.tsx`)
+    - [x] Campaign suggestions panel creative-count noun rendering fixed (translation-safe singular/plural noun keys) (`dashboard/src/components/campaigns/SuggestionsPanel.tsx`)
     - [x] Size coverage chart table/empty-state/severity/footer labels converted (`dashboard/src/components/size-coverage-chart.tsx`)
     - [ ] Remaining settings/admin/shared hotspots (deeper RTB/settings helper components)
 - [ ] **Phase 3: generate/author non-English translations**
