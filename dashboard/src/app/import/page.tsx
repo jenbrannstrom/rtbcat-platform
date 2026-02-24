@@ -46,6 +46,7 @@ import {
   getMissingRequiredColumns,
 } from "@/lib/report-metadata";
 import { useAccount } from "@/contexts/account-context";
+import { useTranslation } from "@/contexts/i18n-context";
 import { toBuyerScopedPath } from "@/lib/buyer-routes";
 
 type ImportStep = "upload" | "preview" | "importing" | "success" | "error";
@@ -56,6 +57,7 @@ const CHUNKED_UPLOAD_THRESHOLD = 5 * 1024 * 1024;
 export default function ImportPage() {
   const router = useRouter();
   const { selectedBuyerId } = useAccount();
+  const { t } = useTranslation();
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const [step, setStep] = useState<ImportStep>("upload");
@@ -154,17 +156,22 @@ export default function ImportPage() {
 
       const errors =
         reportType === "unknown"
-          ? [{
-              row: 0,
-              field: "columns",
-              error: `Could not identify report type. Found columns: ${preview.headers.join(", ") || "none"}`,
-              value: null,
-            }]
+          ? (() => {
+              const foundColumns = preview.headers.join(", ") || t.import.noColumnsFound;
+              return [{
+                row: 0,
+                field: "columns",
+                error: t.import.couldNotIdentifyReportTypeFoundColumns.replace("{columns}", foundColumns),
+                value: null,
+              }];
+            })()
           : missingRequired.length > 0
             ? [{
                 row: 0,
                 field: "columns",
-                error: `Missing required columns: ${missingRequired.join(", ")}. Found columns: ${preview.headers.join(", ") || "none"}`,
+                error: t.import.missingRequiredColumnsFoundColumns
+                  .replace("{missing}", missingRequired.join(", "))
+                  .replace("{columns}", preview.headers.join(", ") || t.import.noColumnsFound),
                 value: null,
               }]
             : [];
@@ -188,7 +195,7 @@ export default function ImportPage() {
           {
             row: 0,
             field: "file",
-            error: "Failed to parse CSV file. Please check the file format.",
+            error: t.import.failedToParseCsvCheckFormat,
             value: null,
           },
         ],
@@ -244,7 +251,7 @@ export default function ImportPage() {
       }
     } catch (error) {
       console.error("Import error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Import failed";
+      const errorMessage = error instanceof Error ? error.message : t.import.importFailed;
 
       if (errorMessage === "Upload cancelled") {
         setStep("upload");
@@ -295,7 +302,7 @@ export default function ImportPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">
-          Import Reports
+          {t.import.importReports}
         </h1>
       </div>
 
@@ -318,7 +325,7 @@ export default function ImportPage() {
           {/* Collapsible Required Columns */}
           <details className="bg-white rounded-lg border border-gray-200">
             <summary className="p-4 cursor-pointer hover:bg-gray-50 font-medium text-gray-900 flex items-center justify-between">
-              <span>Reference: Required columns by report type</span>
+              <span>{t.import.referenceRequiredColumnsByReportType}</span>
               <ChevronDown className="h-5 w-5 text-gray-500" />
             </summary>
             <div className="p-4 pt-0 border-t border-gray-200">
@@ -329,7 +336,7 @@ export default function ImportPage() {
           {/* Collapsible Troubleshooting */}
           <details className="bg-white rounded-lg border border-gray-200">
             <summary className="p-4 cursor-pointer hover:bg-gray-50 font-medium text-gray-900 flex items-center justify-between">
-              <span>Help: Large files and download links</span>
+              <span>{t.import.helpLargeFilesAndDownloadLinks}</span>
               <ChevronDown className="h-5 w-5 text-gray-500" />
             </summary>
             <div className="p-4 pt-0 border-t border-gray-200">
@@ -363,13 +370,15 @@ export default function ImportPage() {
                 <p className="text-sm text-gray-600">
                   {formatFileSize(file?.size || 0)} ·{" "}
                   {isLargeFile ? (
-                    <span>~{validationResult.rowCount.toLocaleString()} rows (estimated)</span>
+                    <span>~{validationResult.rowCount.toLocaleString()} {t.import.rowsEstimated}</span>
                   ) : (
-                    <span>{validationResult.rowCount.toLocaleString()} rows</span>
+                    <span>{validationResult.rowCount.toLocaleString()} {t.import.rows}</span>
                   )}
                   {validationResult.aggregatedFromRows && (
                     <span className="text-blue-600">
-                      {" "}(aggregated from {validationResult.aggregatedFromRows} hourly rows)
+                      {" "}(
+                      {t.import.aggregatedFrom.replace("{count}", String(validationResult.aggregatedFromRows))}
+                      )
                     </span>
                   )}
                 </p>
@@ -378,7 +387,7 @@ export default function ImportPage() {
                 onClick={resetForm}
                 className="text-sm text-gray-600 hover:text-gray-800"
               >
-                Remove
+                {t.import.remove}
               </button>
             </div>
           </div>
@@ -389,7 +398,7 @@ export default function ImportPage() {
               <div className="flex items-start gap-2">
                 <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
                 <div>
-                  <p className="font-medium text-green-900">Seat detected</p>
+                  <p className="font-medium text-green-900">{t.import.seatDetected}</p>
                   <p className="text-sm text-green-800 mt-1">
                     {formatSeatInfo(seatInfo)}
                   </p>
@@ -404,10 +413,9 @@ export default function ImportPage() {
               <div className="flex items-start gap-2">
                 <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
                 <div>
-                  <p className="font-medium text-yellow-900">Large file detected</p>
+                  <p className="font-medium text-yellow-900">{t.import.largeFileDetected}</p>
                   <p className="text-sm text-yellow-800 mt-1">
-                    This file will be uploaded using streaming mode to avoid browser memory issues.
-                    Progress will be shown during upload.
+                    {t.import.largeFileWarning}
                   </p>
                 </div>
               </div>
@@ -428,7 +436,7 @@ export default function ImportPage() {
               />
               {previewData.rows.length > 10 && (
                 <p className="text-sm text-gray-600 text-center">
-                  Showing first 10 of {previewData.rows.length} rows
+                  {t.import.showingFirstOf.replace("{count}", String(previewData.rows.length))}
                 </p>
               )}
             </div>
@@ -437,14 +445,14 @@ export default function ImportPage() {
           {/* Actions */}
           <div className="flex gap-3 justify-end">
             <button onClick={resetForm} className="btn-secondary">
-              Cancel
+              {t.import.cancel}
             </button>
             <button
               onClick={handleImport}
               disabled={!validationResult.valid}
               className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Import {validationResult.rowCount.toLocaleString()} Rows
+              {t.import.importRows.replace("{count}", validationResult.rowCount.toLocaleString())}
               <ArrowRight className="ml-1 h-4 w-4" />
             </button>
           </div>
@@ -464,25 +472,25 @@ export default function ImportPage() {
                   <p className="text-2xl font-bold text-gray-900">
                     {formatFileSize(chunkedProgress.bytesSent)}
                   </p>
-                  <p className="text-sm text-gray-600">Uploaded</p>
+                  <p className="text-sm text-gray-600">{t.import.uploaded}</p>
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-green-600">
                     {formatFileSize(chunkedProgress.totalBytes)}
                   </p>
-                  <p className="text-sm text-gray-600">Total Size</p>
+                  <p className="text-sm text-gray-600">{t.import.totalSize}</p>
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-gray-500">
                     {chunkedProgress.chunksSent}/{chunkedProgress.totalChunks}
                   </p>
-                  <p className="text-sm text-gray-600">Chunks Sent</p>
+                  <p className="text-sm text-gray-600">{t.import.chunksSent}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-700">
                     {chunkedProgress.currentPhase}
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">Current Phase</p>
+                  <p className="text-xs text-gray-500 mt-1">{t.import.currentPhase}</p>
                 </div>
               </div>
             </div>
@@ -495,7 +503,7 @@ export default function ImportPage() {
                 onClick={handleCancel}
                 className="btn-secondary text-red-600 hover:text-red-700"
               >
-                Cancel Import
+                {t.import.cancelImport}
               </button>
             </div>
           )}
@@ -518,7 +526,7 @@ export default function ImportPage() {
             <XCircle className="h-6 w-6 text-red-600 mt-0.5" />
             <div className="flex-1">
               <h3 className="font-semibold text-red-900 text-lg mb-2">
-                Import {importResult.imported && importResult.imported > 0 ? "Partially " : ""}Failed
+                {importResult.imported && importResult.imported > 0 ? t.import.importPartiallyFailed : t.import.importFailed}
               </h3>
               {importResult.error && (
                 <p className="text-red-800">{importResult.error}</p>
@@ -526,7 +534,10 @@ export default function ImportPage() {
 
               {importResult.imported && importResult.imported > 0 && (
                 <p className="text-red-700 mt-2">
-                  Partially imported: {importResult.imported.toLocaleString()} rows before error
+                  {t.import.partiallyImportedRowsBeforeError.replace(
+                    "{count}",
+                    importResult.imported.toLocaleString()
+                  )}
                 </p>
               )}
 
@@ -539,7 +550,7 @@ export default function ImportPage() {
 
               <div className="mt-4">
                 <button onClick={resetForm} className="btn-primary">
-                  Try Again
+                  {t.import.tryAgain}
                 </button>
               </div>
             </div>

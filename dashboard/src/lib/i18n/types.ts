@@ -217,6 +217,7 @@ export interface Translations {
 
   import: {
     title: string;
+    importReports: string;
     importPerformanceData: string;
     uploadCsvExports: string;
     upload: string;
@@ -275,6 +276,32 @@ export interface Translations {
     unknownApp: string;
     anomalies: string;
     andMore: string;
+    referenceRequiredColumnsByReportType: string;
+    helpLargeFilesAndDownloadLinks: string;
+    failedToParseCsvCheckFormat: string;
+    couldNotIdentifyReportTypeFoundColumns: string;
+    missingRequiredColumnsFoundColumns: string;
+    noColumnsFound: string;
+    uploaded: string;
+    totalSize: string;
+    chunksSent: string;
+    partiallyImportedRowsBeforeError: string;
+    requiredColumnsIntro: string;
+    reportName: string;
+    targetTable: string;
+    requiredColumnsHeader: string;
+    autoDetectionLogic: string;
+    troubleshootingIfCsvTooLarge: string;
+    splitByDateKeepAllData: string;
+    splitByDateKeepAllDataDesc: string;
+    reportAExample: string;
+    reportBExample: string;
+    reportEtc: string;
+    uploadEachFileSeparatelyMergeByCreativeId: string;
+    doNotSplitByMetrics: string;
+    doNotSplitByMetricsDesc: string;
+    streamingUpload: string;
+    streamingUploadDesc: string;
   };
 
   campaigns: {
