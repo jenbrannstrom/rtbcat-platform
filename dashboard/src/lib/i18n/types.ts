@@ -302,6 +302,28 @@ export interface Translations {
     doNotSplitByMetricsDesc: string;
     streamingUpload: string;
     streamingUploadDesc: string;
+    exportGuideWhyFiveReports: string;
+    exportGuideFieldIncompatibilities: string;
+    exportGuideLoseBidRequestsForCreativeMetrics: string;
+    exportGuideLoseCreativeDetailForBidRequests: string;
+    exportGuidePretargetingCannotCombine: string;
+    exportGuideCreateFiveScheduledReports: string;
+    exportGuideStepOpen: string;
+    exportGuideAuthorizedBuyersLabel: string;
+    exportGuideStepReportingScheduledNewReport: string;
+    exportGuideStepCreateDailyYesterdayCsv: string;
+    exportGuideDimensions: string;
+    exportGuideMetrics: string;
+    exportGuideReport1Desc: string;
+    exportGuideReport2Desc: string;
+    exportGuideReport3Desc: string;
+    exportGuideReport4Desc: string;
+    exportGuideReport5Desc: string;
+    exportGuideReportNaming: string;
+    exportGuideNameYourReports: string;
+    exportGuideExampleLabel: string;
+    exportGuideTipLabel: string;
+    exportGuideTipBody: string;
   };
 
   campaigns: {
