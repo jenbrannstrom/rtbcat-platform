@@ -411,30 +411,40 @@ def finish_scheduler_ingestion_run(
     """Finalize the scheduler ingestion_runs row."""
     if not run_id:
         return
-    conn = _get_sync_connection()
-    if conn is None:
-        return
     status = "success" if success else "failed"
     summary = error
     if not summary and reason == "no_new_mail":
         summary = "no_new_mail"
-    try:
-        with conn:
-            conn.execute(
-                """
-                UPDATE ingestion_runs
-                SET status = %s,
-                    row_count = %s,
-                    error_summary = %s,
-                    finished_at = CURRENT_TIMESTAMP
-                WHERE run_id = %s AND finished_at IS NULL
-                """,
-                (status, rows_imported, summary, run_id),
-            )
-    except Exception as exc:
-        print(f"  Warning: failed to finish scheduler ingestion run: {exc}")
-    finally:
-        conn.close()
+
+    import time
+
+    for attempt in range(2):
+        conn = _get_sync_connection()
+        if conn is None:
+            print(f"  Warning: no DB connection for ingestion run finalization (attempt {attempt + 1})")
+            if attempt == 0:
+                time.sleep(1)
+            continue
+        try:
+            with conn:
+                conn.execute(
+                    """
+                    UPDATE ingestion_runs
+                    SET status = %s,
+                        row_count = %s,
+                        error_summary = %s,
+                        finished_at = CURRENT_TIMESTAMP
+                    WHERE run_id = %s AND finished_at IS NULL
+                    """,
+                    (status, rows_imported, summary, run_id),
+                )
+            return
+        except Exception as exc:
+            print(f"  Warning: failed to finish scheduler ingestion run (attempt {attempt + 1}): {exc}")
+            if attempt == 0:
+                time.sleep(1)
+        finally:
+            conn.close()
 
 
 def record_import_run(
@@ -1171,6 +1181,8 @@ def run_import(
     scheduler_run_id = start_scheduler_ingestion_run(job_id, import_trigger)
     update_status(False, running=True, current_job_id=job_id, reason="running")
 
+    _finalized = False
+
     def finalize(
         *,
         success: bool,
@@ -1179,6 +1191,10 @@ def run_import(
         reason: Optional[str] = None,
         no_new_mail: bool = False,
     ) -> None:
+        nonlocal _finalized
+        if _finalized:
+            return
+        _finalized = True
         snapshot = get_runtime_freshness_snapshot()
         result["runtime_path_verified"] = bool(snapshot.get("runtime_path_verified"))
         result["latest_metric_date"] = snapshot.get("latest_metric_date")
@@ -1365,6 +1381,13 @@ def run_import(
         )
         return result
     finally:
+        if not _finalized:
+            finalize(
+                success=False,
+                files_imported=result.get("files_imported", 0),
+                error="Run ended without finalization (unexpected code path)",
+                reason="unfinalised_safety_net",
+            )
         release_lock()
 
 
