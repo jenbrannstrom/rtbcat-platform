@@ -5,6 +5,7 @@ import { X, Loader2, AlertTriangle, TrendingDown, Globe, Layers, Image, Info, He
 import { getAppDrilldown, type AppDrilldownResponse } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
+import { useTranslation } from '@/contexts/i18n-context';
 
 interface AppDrilldownModalProps {
   appName: string;
@@ -60,6 +61,7 @@ function formatCurrency(n: number): string {
 }
 
 export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownModalProps) {
+  const { t } = useTranslation();
   const { data, isLoading, error } = useQuery({
     queryKey: ['app-drilldown', appName, billingId],
     queryFn: () => getAppDrilldown(appName, billingId),
@@ -79,7 +81,7 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
         <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">{appName}</h2>
-            <p className="text-sm text-gray-500">Performance drill-down analysis</p>
+            <p className="text-sm text-gray-500">{t.creatives.drilldownAnalysis}</p>
           </div>
           <button
             onClick={onClose}
@@ -94,13 +96,13 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
           {isLoading && (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-              <span className="ml-3 text-gray-500">Loading analysis...</span>
+              <span className="ml-3 text-gray-500">{t.creatives.loadingAnalysis}</span>
             </div>
           )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-              Failed to load drill-down data
+              {t.creatives.failedToLoadDrilldownData}
             </div>
           )}
 
@@ -110,30 +112,30 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
                 <AlertTriangle className="h-10 w-10 text-amber-500" />
                 <div>
                   <h3 className="font-semibold text-amber-800 mb-2">
-                    No drill-down data for "{appName}"
+                    {t.creatives.noDrilldownDataFor.replace('{appName}', appName)}
                   </h3>
                   <p className="text-sm text-amber-700 max-w-md mx-auto">
-                    {data.message || "Per-publisher performance data requires CSV imports that include app-level breakdown columns."}
+                    {data.message || t.creatives.noDrilldownDataDefaultMessage}
                   </p>
                 </div>
                 <div className="bg-white/60 rounded-lg p-4 max-w-lg text-left">
-                  <h4 className="text-xs font-semibold text-amber-800 mb-2">Why might this happen?</h4>
+                  <h4 className="text-xs font-semibold text-amber-800 mb-2">{t.creatives.whyMightThisHappen}</h4>
                   <ul className="text-xs text-amber-700 space-y-1">
                     <li className="flex items-start gap-2">
                       <span className="text-amber-500">•</span>
-                      <span><strong>No CSV data imported</strong> for this time period</span>
+                      <span>{t.creatives.noCsvDataImportedForPeriod}</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-amber-500">•</span>
-                      <span><strong>App name mismatch</strong> between different report types</span>
+                      <span>{t.creatives.appNameMismatchBetweenReportTypes}</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-amber-500">•</span>
-                      <span><strong>Time range issue</strong> - try adjusting the date filter</span>
+                      <span>{t.creatives.timeRangeIssueTryAdjustingDateFilter}</span>
                     </li>
                   </ul>
                   <p className="text-xs text-amber-600 mt-3 italic">
-                    Tip: Import a Performance Detail CSV from Google Authorized Buyers for detailed app-level data.
+                    {t.creatives.importPerformanceDetailCsvTip}
                   </p>
                 </div>
               </div>
@@ -147,25 +149,25 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
                 <div className="bg-blue-50 rounded-lg p-3 text-center">
                   <div className="text-xl font-bold text-blue-700">{formatNumber(data.summary.total_reached)}</div>
                   <div className="text-xs text-blue-600">
-                    Reached
-                    <InfoTooltip text="Bid requests that reached your bidder. This is NOT 'people reached' like in Facebook Ads - it's the number of auction opportunities where your bidder was eligible to bid." />
+                    {t.dashboard.reached}
+                    <InfoTooltip text={t.creatives.reachedTooltip} />
                   </div>
                 </div>
                 <div className="bg-green-50 rounded-lg p-3 text-center">
                   <div className="text-xl font-bold text-green-700">{formatNumber(data.summary.total_impressions)}</div>
-                  <div className="text-xs text-green-600">Impressions</div>
+                  <div className="text-xs text-green-600">{t.dashboard.impressions}</div>
                 </div>
                 <div className="bg-purple-50 rounded-lg p-3 text-center">
                   <div className="text-xl font-bold text-purple-700">{data.summary.win_rate}%</div>
-                  <div className="text-xs text-purple-600">Win Rate</div>
+                  <div className="text-xs text-purple-600">{t.dashboard.winRate}</div>
                 </div>
                 <div className="bg-cyan-50 rounded-lg p-3 text-center">
                   <div className="text-xl font-bold text-cyan-700">{formatNumber(data.summary.total_clicks)}</div>
-                  <div className="text-xs text-cyan-600">Clicks</div>
+                  <div className="text-xs text-cyan-600">{t.campaigns.clicks}</div>
                 </div>
                 <div className="bg-amber-50 rounded-lg p-3 text-center">
                   <div className="text-xl font-bold text-amber-700">{formatCurrency(data.summary.total_spend_usd)}</div>
-                  <div className="text-xs text-amber-600">Spend</div>
+                  <div className="text-xs text-amber-600">{t.campaigns.spend}</div>
                 </div>
               </div>
 
@@ -175,10 +177,10 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <h4 className="font-medium text-red-800">Waste Source Identified</h4>
+                      <h4 className="font-medium text-red-800">{t.creatives.wasteSourceIdentified}</h4>
                       <p className="text-sm text-red-700 mt-1">{data.waste_insight.message}</p>
                       <p className="text-xs text-red-500 mt-1">
-                        ~{formatNumber(data.waste_insight.wasted_queries)} bid requests without wins
+                        ~{t.creatives.bidRequestsWithoutWins.replace('{count}', formatNumber(data.waste_insight.wasted_queries))}
                       </p>
 
                       {/* Show actual bid filtering reasons if available, otherwise show generic hints */}
@@ -186,7 +188,7 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
                         <div className="mt-3 pt-3 border-t border-red-200">
                           <h5 className="text-xs font-semibold text-red-800 flex items-center gap-1">
                             <Filter className="h-3 w-3" />
-                            Bid Filtering Reasons (from Google)
+                            {t.creatives.bidFilteringReasonsFromGoogle}
                           </h5>
                           <div className="mt-2 space-y-1">
                             {data.bid_filtering.slice(0, 5).map((item, idx) => (
@@ -206,24 +208,24 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
                         <div className="mt-3 pt-3 border-t border-red-200">
                           <h5 className="text-xs font-semibold text-red-800 flex items-center gap-1">
                             <HelpCircle className="h-3 w-3" />
-                            Why are we losing these auctions?
+                            {t.creatives.whyAreWeLosingAuctions}
                           </h5>
                           <ul className="mt-2 text-xs text-red-700 space-y-1">
                             <li className="flex items-start gap-2">
                               <span className="text-red-400">•</span>
-                              <span><strong>Bid floor:</strong> Publisher minimum bid may be higher than your bid price for this format</span>
+                              <span>{t.creatives.bidFloorHint}</span>
                             </li>
                             <li className="flex items-start gap-2">
                               <span className="text-red-400">•</span>
-                              <span><strong>Competition:</strong> Other bidders may be bidding higher for {data.waste_insight.value} inventory</span>
+                              <span>{t.creatives.competitionHint.replace('{value}', data.waste_insight.value)}</span>
                             </li>
                             <li className="flex items-start gap-2">
                               <span className="text-red-400">•</span>
-                              <span><strong>Creative fit:</strong> Your creative may not match the exact placement requirements</span>
+                              <span>{t.creatives.creativeFitHint}</span>
                             </li>
                           </ul>
                           <p className="mt-2 text-xs text-red-500 italic">
-                            Upload a "Bid Filtering" CSV report for exact reasons from Google.
+                            {t.creatives.uploadBidFilteringCsvTip}
                           </p>
                         </div>
                       )}
@@ -243,17 +245,17 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
                 <div>
                   <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
                     <Filter className="h-4 w-4" />
-                    Why Bids Are Filtered
-                    <InfoTooltip text="Data from Google's Bid Filtering report. Shows WHY bids didn't enter the auction - bid floor, publisher controls, creative policies, etc." />
+                    {t.creatives.whyBidsAreFiltered}
+                    <InfoTooltip text={t.creatives.bidFilteringReportTooltip} />
                   </h3>
                   <div className="bg-white border rounded-lg overflow-hidden">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 border-b">
                         <tr>
-                          <th className="text-left px-3 py-2 font-medium text-gray-600">Filtering Reason</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Bids Filtered</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">% of Total</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Lost Spend</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-600">{t.creatives.filteringReason}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.creatives.bidsFiltered}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.creatives.percentOfTotal}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.creatives.lostSpend}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
@@ -297,20 +299,20 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
                 <div>
                   <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
                     <Layers className="h-4 w-4" />
-                    By Size/Format
+                    {t.creatives.bySizeFormat}
                   </h3>
                   <div className="bg-white border rounded-lg overflow-hidden overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 border-b">
                         <tr>
-                          <th className="text-left px-3 py-2 font-medium text-gray-600">Size</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Reached</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Imps</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Win %</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Clicks</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Spend</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">CPM</th>
-                          <th className="px-3 py-2 font-medium text-gray-600 w-20">Waste</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-600">{t.creatives.size}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.dashboard.reached}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.creatives.impsShort}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.dashboard.winRate}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.campaigns.clicks}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.campaigns.spend}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.creatives.cpm}</th>
+                          <th className="px-3 py-2 font-medium text-gray-600 w-20">{t.pretargeting.waste}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
@@ -377,19 +379,19 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
                 <div>
                   <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
                     <Globe className="h-4 w-4" />
-                    By Country
+                    {t.creatives.byCountry}
                   </h3>
                   <div className="bg-white border rounded-lg overflow-hidden overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 border-b">
                         <tr>
-                          <th className="text-left px-3 py-2 font-medium text-gray-600">Country</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Reached</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Imps</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Win %</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Clicks</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Spend</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">% Traffic</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-600">{t.geo.country}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.dashboard.reached}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.creatives.impsShort}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.dashboard.winRate}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.campaigns.clicks}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.campaigns.spend}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.creatives.percentTraffic}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
@@ -432,20 +434,20 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
                 <div>
                   <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
                     <Image className="h-4 w-4" />
-                    By Creative (Top 10)
+                    {t.creatives.byCreativeTop10}
                   </h3>
                   <div className="bg-white border rounded-lg overflow-hidden overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 border-b">
                         <tr>
-                          <th className="text-left px-3 py-2 font-medium text-gray-600">Creative ID</th>
-                          <th className="text-left px-3 py-2 font-medium text-gray-600">Size</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Reached</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Imps</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Win %</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Clicks</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">CTR</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Spend</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-600">{t.creatives.creativeId}</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-600">{t.creatives.size}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.dashboard.reached}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.creatives.impsShort}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.dashboard.winRate}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.campaigns.clicks}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.creatives.ctr}</th>
+                          <th className="text-right px-3 py-2 font-medium text-gray-600">{t.campaigns.spend}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
@@ -500,7 +502,7 @@ export function AppDrilldownModal({ appName, billingId, onClose }: AppDrilldownM
             onClick={onClose}
             className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors"
           >
-            Close
+            {t.common.close}
           </button>
         </div>
       </div>
