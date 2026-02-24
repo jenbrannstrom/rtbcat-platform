@@ -164,6 +164,7 @@
       - [x] Added second Chinese (`zh`) `pretargeting` chunk (snapshots/rollback, size+publisher editor, pending-change/history labels, config card + endpoint efficiency/header labels) (`dashboard/src/lib/i18n/translations/zh/pretargeting.ts`)
       - [x] Added Chinese (`zh`) `admin` translations (admin dashboard, users/local-password + seat-access UI, admin settings, audit log labels) (`dashboard/src/lib/i18n/translations/zh/admin.ts`)
       - [x] Added Chinese (`zh`) `setup` translations (API connection, Gmail reports, system tab, onboarding/setup guidance) (`dashboard/src/lib/i18n/translations/zh/setup.ts`)
+      - [x] Added Chinese (`zh`) `previewModal` translations (live/cached state, URL labels/tooltips, approval/language-geo mismatch UI, media preview labels) (`dashboard/src/lib/i18n/translations/zh/previewModal.ts`)
     - [ ] Add real dictionaries for remaining locales (`pl`, `ru`, `uk`, `da`, `fr`, `he`, `ar`) and expand `zh`/`es` remaining namespaces
 
 ---
