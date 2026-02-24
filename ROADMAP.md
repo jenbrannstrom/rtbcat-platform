@@ -1,6 +1,6 @@
 # Cat-Scan Roadmap
 
-**Last Updated:** February 23, 2026
+**Last Updated:** February 24, 2026
 
 ---
 
@@ -26,6 +26,18 @@
 - [x] **Import tracking coverage matrix requirement**
   - Status: implemented and live (`082ce0b`, `75b6a54`).
   - `/import` now shows account x CSV type with `pass/fail/not imported` and source (`gmail-auto`, `gmail-manual`, `manual`).
+
+## Deploy / Contracts Follow-up (2026-02-24)
+
+- [x] **GitHub deploy workflow defaults corrected for SG production**
+  - Fixed `deploy.yml` defaults to match current production target (`catscan-production-sg`, `asia-southeast1-b`, SG Artifact Registry).
+  - Related commits on `unified-platform`: `a61c998`, `5546ac5`.
+- [x] **Deploy unblocked with temporary contract-gate bypass**
+  - `scripts/contracts_check.py` fixed missing `::text` casts on `metric_date` comparisons (`5546ac5`) to resolve `date >= text` SQL errors.
+  - Deployment proceeded with `ALLOW_CONTRACT_FAILURE=true` due pre-existing `C-EPT-001` failure (stale endpoints), unrelated to seat-access changes.
+- [ ] **Remove `ALLOW_CONTRACT_FAILURE` bypass after C-EPT-001 RCA**
+  - Investigate and fix stale endpoint freshness contract (`C-EPT-001: 11/11 stale endpoints`).
+  - Re-enable strict contract gate in deploy path and verify clean deploy without bypass.
 
 ---
 
