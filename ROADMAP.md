@@ -75,7 +75,8 @@
     - [x] `GmailReportsTab` top-level/status/import runtime/disconnected-state copy + import-phase labels converted (partial; remaining deep copy pending) (`dashboard/src/app/settings/accounts/components/GmailReportsTab.tsx`)
     - [x] Admin dashboard role display + system pages `MB` unit literals converted (`dashboard/src/app/admin/page.tsx`, `dashboard/src/app/settings/system/page.tsx`, `dashboard/src/app/settings/accounts/components/SystemTab.tsx`)
     - [x] Sidebar remaining brand/seat-error/retry strings converted (`dashboard/src/components/sidebar.tsx`)
-    - [ ] Remaining settings/admin hotspot groups (`/settings/accounts/components/GmailReportsTab.tsx` remaining deep copy, and remaining settings/admin/shared component literals)
+    - [x] `PreviewModal` header/source/HTML/performance/detail/URL-tracking UI copy converted (partial; additional preview subcomponents still pending) (`dashboard/src/components/preview-modal/PreviewModal.tsx`)
+    - [ ] Remaining settings/admin/shared hotspots (`/settings/accounts/components/GmailReportsTab.tsx` remaining deep copy, preview subcomponents, and other shared UI components)
 - [ ] **Phase 3: generate/author non-English translations**
   - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
 

@@ -1166,6 +1166,53 @@ export interface Translations {
     geminiMissingWarning: string;
   };
 
+  previewModal: {
+    liveFetchUnavailableShowingCached: string;
+    liveRefetchFailedShowingCached: string;
+    liveBadge: string;
+    cachedBadge: string;
+    viewInGoogleConsole: string;
+    loadingHtmlPreview: string;
+    previewNotAvailableForFormat: string;
+    sourceLiveApi: string;
+    sourceCachedSnapshot: string;
+    cacheIsStale: string;
+    hoursAbbrev: string;
+    oldLabel: string;
+    thresholdLabel: string;
+    refetching: string;
+    refetchLive: string;
+    htmlSnippet: string;
+    hideHtml: string;
+    showHtml: string;
+    noHtmlSnippetAvailable: string;
+    spend: string;
+    imps: string;
+    clicks: string;
+    ctr: string;
+    cpm: string;
+    cpc: string;
+    noPerformanceDataImportedYet: string;
+    creativeDetails: string;
+    status: string;
+    format: string;
+    rejection: string;
+    disapprovalReasons: string;
+    readMore: string;
+    advertiser: string;
+    appName: string;
+    accountInfo: string;
+    buyerId: string;
+    buyerName: string;
+    bundleId: string;
+    destination: string;
+    primary: string;
+    moreUrls: string;
+    noUrlsFound: string;
+    trackingParameters: string;
+    noTrackingParams: string;
+  };
+
   language: {
     title: string;
     select: string;
