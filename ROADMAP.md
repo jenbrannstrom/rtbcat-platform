@@ -171,6 +171,7 @@
       - [x] Added Chinese (`zh`) remaining top-level namespace translations (`aiControl`, `configPerformance`, `geo`, `publishers`, `recommendations`, `reports`, `sizes`, `wasteAnalysis`) (`dashboard/src/lib/i18n/translations/zh/*.ts`)
       - [x] Removed hardcoded English date formatting (`en-US`) in shared/RTB UI date displays; now uses locale-aware formatting (`dashboard/src/lib/utils.ts`, `dashboard/src/components/rtb/config-breakdown-panel.tsx`)
       - [x] Added explicit CJK-capable font fallback stack for Chinese rendering consistency (kept `Inter` for Latin; added `PingFang SC` / `Microsoft YaHei` / `Noto Sans CJK SC` fallbacks) (`dashboard/src/app/layout.tsx`, `dashboard/src/app/globals.css`)
+      - [x] Patched additional high-visibility number/date formatting to use selected app locale (Import History, RTB endpoints header, waste-analysis cards, pretargeting/snapshot date helpers) (`dashboard/src/components/import/ImportHistoryTable.tsx`, `dashboard/src/components/rtb/account-endpoints-header.tsx`, `dashboard/src/components/waste-analyzer/FunnelCard.tsx`, `dashboard/src/components/waste-report.tsx`, `dashboard/src/components/rtb/pretargeting-settings-editor.tsx`, `dashboard/src/components/rtb/snapshot-comparison-panel.tsx`)
     - [ ] Add real dictionaries for remaining locales (`pl`, `ru`, `uk`, `da`, `fr`, `he`, `ar`) and expand `es` remaining namespaces
 
 ---

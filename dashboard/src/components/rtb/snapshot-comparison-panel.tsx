@@ -49,7 +49,7 @@ function formatCurrency(n: number): string {
 
 function formatDate(dateStr: string, locale?: string): string {
   const date = new Date(dateStr);
-  return date.toLocaleDateString(locale || 'en', {
+  return date.toLocaleDateString(locale, {
     month: 'short',
     day: 'numeric',
     year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,

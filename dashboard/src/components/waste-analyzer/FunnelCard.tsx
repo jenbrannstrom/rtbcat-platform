@@ -9,11 +9,11 @@ import { toBuyerScopedPath } from "@/lib/buyer-routes";
 /**
  * Utility to format large numbers with K/M/B suffixes.
  */
-export function formatNumber(num: number): string {
+export function formatNumber(num: number, locale?: string): string {
   if (num >= 1000000000) return `${(num / 1000000000).toFixed(1)}B`;
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-  return num.toLocaleString();
+  return num.toLocaleString(locale);
 }
 
 interface FunnelCardProps {
@@ -34,7 +34,7 @@ export function FunnelCard({
   days,
 }: FunnelCardProps) {
   const { selectedBuyerId } = useAccount();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const importHref = toBuyerScopedPath("/import", selectedBuyerId);
   // Only require reached to show funnel (bid_requests is optional)
   const hasFunnelData = reached !== null && reached > 0;
@@ -59,8 +59,8 @@ export function FunnelCard({
             {/* Reached - Primary focus */}
             <div className="text-center p-5 bg-blue-50 rounded-xl border-2 border-blue-200">
               <div className="text-xs text-blue-600 uppercase tracking-wide mb-1">{t.wasteAnalysis.reachedYourBidder}</div>
-              <div className="text-3xl font-bold text-blue-700">{formatNumber(reached!)}</div>
-              <div className="text-lg font-semibold text-blue-500 mt-1">{reachedQps?.toLocaleString()} {t.wasteAnalysis.qps}</div>
+              <div className="text-3xl font-bold text-blue-700">{formatNumber(reached!, language)}</div>
+              <div className="text-lg font-semibold text-blue-500 mt-1">{reachedQps?.toLocaleString(language)} {t.wasteAnalysis.qps}</div>
             </div>
 
             {/* Win Rate - Key efficiency metric */}
@@ -73,18 +73,18 @@ export function FunnelCard({
             {/* Impressions Won */}
             <div className="text-center p-5 bg-green-50 rounded-xl border-2 border-green-200">
               <div className="text-xs text-green-600 uppercase tracking-wide mb-1">{t.wasteAnalysis.impressionsWon}</div>
-              <div className="text-3xl font-bold text-green-700">{formatNumber(impressions)}</div>
+              <div className="text-3xl font-bold text-green-700">{formatNumber(impressions, language)}</div>
               <div className="text-sm text-green-500 mt-1">{ips.toFixed(0)} {t.wasteAnalysis.ips}</div>
             </div>
           </div>
 
           {/* Flow visualization */}
           <div className="flex items-center justify-center gap-2 mb-4 text-sm text-gray-500">
-            <span className="text-blue-600 font-medium">{formatNumber(reached!)}</span>
+            <span className="text-blue-600 font-medium">{formatNumber(reached!, language)}</span>
             <ArrowRight className="h-4 w-4" />
             <span className="text-purple-600 font-medium">{winRate?.toFixed(1)}% {t.wasteAnalysis.winShort}</span>
             <ArrowRight className="h-4 w-4" />
-            <span className="text-green-600 font-medium">{formatNumber(impressions)}</span>
+            <span className="text-green-600 font-medium">{formatNumber(impressions, language)}</span>
           </div>
 
           {/* Insight */}
@@ -116,7 +116,7 @@ export function FunnelCard({
 
             <div className="text-center p-5 bg-green-50 rounded-xl border-2 border-green-200">
               <div className="text-xs text-green-600 uppercase tracking-wide mb-1">{t.wasteAnalysis.impressions}</div>
-              <div className="text-2xl font-bold text-green-700">{formatNumber(impressions)}</div>
+              <div className="text-2xl font-bold text-green-700">{formatNumber(impressions, language)}</div>
               <div className="text-xs text-green-500">{ips.toFixed(0)} {t.wasteAnalysis.ips}</div>
             </div>
           </div>

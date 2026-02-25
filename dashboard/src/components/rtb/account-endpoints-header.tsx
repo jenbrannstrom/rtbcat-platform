@@ -20,9 +20,9 @@ function formatLocation(location: string | null, t: Translations): string {
   return map[location] || location;
 }
 
-function formatQPS(qps: number | null, t: Translations): string {
+function formatQPS(qps: number | null, t: Translations, locale: string): string {
   if (qps === null) return t.pretargeting.endpointsHeaderUnlimited;
-  return qps.toLocaleString();
+  return qps.toLocaleString(locale);
 }
 
 interface AccountEndpointsHeaderProps {
@@ -156,11 +156,11 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
             </div>
             <div className="flex items-center gap-4 flex-shrink-0">
               <span className="font-medium text-gray-800 w-20 text-right">
-                {formatQPS(endpoint.maximum_qps, t)}
+                {formatQPS(endpoint.maximum_qps, t, language)}
               </span>
               <span className="font-medium text-slate-600 w-20 text-right">
                 {observedQpsByEndpointId?.[endpoint.endpoint_id] != null
-                  ? Number(observedQpsByEndpointId[endpoint.endpoint_id]).toLocaleString(undefined, { maximumFractionDigits: 1 })
+                  ? Number(observedQpsByEndpointId[endpoint.endpoint_id]).toLocaleString(language, { maximumFractionDigits: 1 })
                   : '—'}
               </span>
             </div>
@@ -193,7 +193,7 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
             )}
           </div>
           <span className="text-sm font-bold text-blue-900">
-            {formatQPS(data.total_qps_allocated, t)}
+            {formatQPS(data.total_qps_allocated, t, language)}
           </span>
         </div>
       </div>
