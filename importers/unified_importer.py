@@ -565,17 +565,27 @@ def import_to_rtb_daily(
                         "measurable_impressions": parse_int(get_value(row, mapping, "measurable_impressions", "0")),
                     }
 
-                    if not bidder_id:
+                    effective_bidder_id = bidder_id
+                    if not effective_bidder_id:
                         try:
-                            from importers.account_mapper import get_bidder_id_for_billing_id
-                            bidder_id = get_bidder_id_for_billing_id(row_data["billing_id"])
+                            from importers.account_mapper import (
+                                get_bidder_id_for_billing_id,
+                                get_bidder_id_for_buyer_id,
+                            )
+                            effective_bidder_id = get_bidder_id_for_billing_id(
+                                row_data["billing_id"]
+                            )
+                            if not effective_bidder_id and row_data["buyer_account_id"]:
+                                effective_bidder_id = get_bidder_id_for_buyer_id(
+                                    row_data["buyer_account_id"]
+                                )
                         except Exception:
-                            bidder_id = None
-                    row_data["bidder_id"] = bidder_id
+                            effective_bidder_id = None
+                    row_data["bidder_id"] = effective_bidder_id
 
                     # If buyer_account_id missing from CSV, use bidder_id from filename
-                    if not row_data["buyer_account_id"] and bidder_id:
-                        row_data["buyer_account_id"] = bidder_id
+                    if not row_data["buyer_account_id"] and effective_bidder_id:
+                        row_data["buyer_account_id"] = effective_bidder_id
                     if not row_data["buyer_account_id"]:
                         raise ValueError("buyer_account_id missing and no seat ID detected in filename")
 
@@ -717,10 +727,20 @@ def import_to_rtb_bidstream(
                     }
 
                     # If buyer_account_id missing from CSV, use bidder_id from filename
-                    if not row_data["buyer_account_id"] and bidder_id:
-                        row_data["buyer_account_id"] = bidder_id
+                    effective_bidder_id = bidder_id
+                    if not row_data["buyer_account_id"] and effective_bidder_id:
+                        row_data["buyer_account_id"] = effective_bidder_id
 
-                    row_data["bidder_id"] = bidder_id
+                    if not effective_bidder_id and row_data["buyer_account_id"]:
+                        try:
+                            from importers.account_mapper import get_bidder_id_for_buyer_id
+
+                            effective_bidder_id = get_bidder_id_for_buyer_id(
+                                row_data["buyer_account_id"]
+                            )
+                        except Exception:
+                            effective_bidder_id = None
+                    row_data["bidder_id"] = effective_bidder_id
 
                     row_hash = compute_row_hash(row_data, hash_keys)
 
@@ -779,6 +799,7 @@ def import_to_rtb_bid_filtering(
     conn = get_postgres_connection()
     cursor = conn.cursor()
     ensure_table_exists(cursor, "rtb_bid_filtering")
+    ensure_columns_exist(cursor, "rtb_bid_filtering", [("bidder_id", "TEXT")])
     conn.commit()
 
     hash_keys = ["metric_date", "country", "filtering_reason", "creative_id", "bidder_id"]
@@ -838,10 +859,20 @@ def import_to_rtb_bid_filtering(
                     }
 
                     # If buyer_account_id missing from CSV, use bidder_id from filename
-                    if not row_data["buyer_account_id"] and bidder_id:
-                        row_data["buyer_account_id"] = bidder_id
+                    effective_bidder_id = bidder_id
+                    if not row_data["buyer_account_id"] and effective_bidder_id:
+                        row_data["buyer_account_id"] = effective_bidder_id
 
-                    row_data["bidder_id"] = bidder_id
+                    if not effective_bidder_id and row_data["buyer_account_id"]:
+                        try:
+                            from importers.account_mapper import get_bidder_id_for_buyer_id
+
+                            effective_bidder_id = get_bidder_id_for_buyer_id(
+                                row_data["buyer_account_id"]
+                            )
+                        except Exception:
+                            effective_bidder_id = None
+                    row_data["bidder_id"] = effective_bidder_id
 
                     # Parse opportunity cost
                     opp_cost = parse_float(get_value(row, mapping, "opportunity_cost", "0"))
@@ -864,7 +895,7 @@ def import_to_rtb_bid_filtering(
                         row_data["metric_date"], row_data["country"], row_data["buyer_account_id"],
                         row_data["filtering_reason"], row_data["creative_id"],
                         row_data["bids"], row_data["bids_in_auction"], row_data["opportunity_cost_micros"],
-                        bidder_id, row_hash, batch_id
+                        row_data["bidder_id"], row_hash, batch_id
                     ))
                     if len(rows_to_insert) >= IMPORT_BATCH_SIZE:
                         flush_rows()

@@ -70,12 +70,13 @@ async def backfill_rtb_bidstream(dry_run: bool) -> None:
     count_sql = """
         SELECT 1
         FROM rtb_bidstream rb
-        WHERE rb.bidder_id IS NULL
+        WHERE (rb.bidder_id IS NULL OR BTRIM(rb.bidder_id) = '')
           AND rb.import_batch_id IS NOT NULL
           AND EXISTS (
               SELECT 1 FROM import_history ih
               WHERE ih.batch_id = rb.import_batch_id
                 AND ih.bidder_id IS NOT NULL
+                AND BTRIM(ih.bidder_id) <> ''
           )
     """
 
@@ -87,7 +88,7 @@ async def backfill_rtb_bidstream(dry_run: bool) -> None:
         missing_batch = await count_rows(
             """
             SELECT 1 FROM rtb_bidstream
-            WHERE bidder_id IS NULL AND import_batch_id IS NULL
+            WHERE (bidder_id IS NULL OR BTRIM(bidder_id) = '') AND import_batch_id IS NULL
             """
         )
         if missing_batch > 0:
@@ -99,7 +100,8 @@ async def backfill_rtb_bidstream(dry_run: bool) -> None:
             FROM import_history ih
             WHERE rb.import_batch_id = ih.batch_id
               AND ih.bidder_id IS NOT NULL
-              AND rb.bidder_id IS NULL
+              AND BTRIM(ih.bidder_id) <> ''
+              AND (rb.bidder_id IS NULL OR BTRIM(rb.bidder_id) = '')
             """
         )
         print(f"rtb_bidstream: backfilled bidder_id via import_history for {updated:,} rows")
@@ -117,12 +119,13 @@ async def backfill_rtb_bid_filtering(dry_run: bool) -> None:
     count_sql = """
         SELECT 1
         FROM rtb_bid_filtering rbf
-        WHERE rbf.bidder_id IS NULL
+        WHERE (rbf.bidder_id IS NULL OR BTRIM(rbf.bidder_id) = '')
           AND rbf.import_batch_id IS NOT NULL
           AND EXISTS (
               SELECT 1 FROM import_history ih
               WHERE ih.batch_id = rbf.import_batch_id
                 AND ih.bidder_id IS NOT NULL
+                AND BTRIM(ih.bidder_id) <> ''
           )
     """
 
@@ -133,7 +136,7 @@ async def backfill_rtb_bid_filtering(dry_run: bool) -> None:
         missing_batch = await count_rows(
             """
             SELECT 1 FROM rtb_bid_filtering
-            WHERE bidder_id IS NULL AND import_batch_id IS NULL
+            WHERE (bidder_id IS NULL OR BTRIM(bidder_id) = '') AND import_batch_id IS NULL
             """
         )
         if missing_batch > 0:
@@ -145,7 +148,8 @@ async def backfill_rtb_bid_filtering(dry_run: bool) -> None:
             FROM import_history ih
             WHERE rbf.import_batch_id = ih.batch_id
               AND ih.bidder_id IS NOT NULL
-              AND rbf.bidder_id IS NULL
+              AND BTRIM(ih.bidder_id) <> ''
+              AND (rbf.bidder_id IS NULL OR BTRIM(rbf.bidder_id) = '')
             """
         )
         print(f"rtb_bid_filtering: backfilled bidder_id via import_history for {updated:,} rows")
@@ -163,12 +167,13 @@ async def backfill_rtb_quality(dry_run: bool) -> None:
     count_sql = """
         SELECT 1
         FROM rtb_quality rq
-        WHERE rq.bidder_id IS NULL
+        WHERE (rq.bidder_id IS NULL OR BTRIM(rq.bidder_id) = '')
           AND rq.import_batch_id IS NOT NULL
           AND EXISTS (
               SELECT 1 FROM import_history ih
               WHERE ih.batch_id = rq.import_batch_id
                 AND ih.bidder_id IS NOT NULL
+                AND BTRIM(ih.bidder_id) <> ''
           )
     """
 
@@ -179,7 +184,7 @@ async def backfill_rtb_quality(dry_run: bool) -> None:
         missing_batch = await count_rows(
             """
             SELECT 1 FROM rtb_quality
-            WHERE bidder_id IS NULL AND import_batch_id IS NULL
+            WHERE (bidder_id IS NULL OR BTRIM(bidder_id) = '') AND import_batch_id IS NULL
             """
         )
         if missing_batch > 0:
@@ -191,7 +196,8 @@ async def backfill_rtb_quality(dry_run: bool) -> None:
             FROM import_history ih
             WHERE rq.import_batch_id = ih.batch_id
               AND ih.bidder_id IS NOT NULL
-              AND rq.bidder_id IS NULL
+              AND BTRIM(ih.bidder_id) <> ''
+              AND (rq.bidder_id IS NULL OR BTRIM(rq.bidder_id) = '')
             """
         )
         print(f"rtb_quality: backfilled bidder_id via import_history for {updated:,} rows")
@@ -210,12 +216,13 @@ async def backfill_rtb_daily(dry_run: bool) -> None:
     count_history_sql = """
         SELECT 1
         FROM rtb_daily rd
-        WHERE rd.bidder_id IS NULL
+        WHERE (rd.bidder_id IS NULL OR BTRIM(rd.bidder_id) = '')
           AND rd.import_batch_id IS NOT NULL
           AND EXISTS (
               SELECT 1 FROM import_history ih
               WHERE ih.batch_id = rd.import_batch_id
                 AND ih.bidder_id IS NOT NULL
+                AND BTRIM(ih.bidder_id) <> ''
           )
     """
 
@@ -235,7 +242,7 @@ async def backfill_rtb_daily(dry_run: bool) -> None:
         )
         SELECT 1
         FROM rtb_daily rd
-        WHERE rd.bidder_id IS NULL
+        WHERE (rd.bidder_id IS NULL OR BTRIM(rd.bidder_id) = '')
           AND rd.billing_id IS NOT NULL
           AND EXISTS (
               SELECT 1 FROM unique_mapping um
@@ -252,7 +259,7 @@ async def backfill_rtb_daily(dry_run: bool) -> None:
         missing_batch = await count_rows(
             """
             SELECT 1 FROM rtb_daily
-            WHERE bidder_id IS NULL AND import_batch_id IS NULL
+            WHERE (bidder_id IS NULL OR BTRIM(bidder_id) = '') AND import_batch_id IS NULL
             """
         )
         if missing_batch > 0:
@@ -265,7 +272,8 @@ async def backfill_rtb_daily(dry_run: bool) -> None:
             FROM import_history ih
             WHERE rd.import_batch_id = ih.batch_id
               AND ih.bidder_id IS NOT NULL
-              AND rd.bidder_id IS NULL
+              AND BTRIM(ih.bidder_id) <> ''
+              AND (rd.bidder_id IS NULL OR BTRIM(rd.bidder_id) = '')
             """
         )
         print(f"rtb_daily: backfilled bidder_id via import_history for {updated_history:,} rows")
@@ -289,7 +297,7 @@ async def backfill_rtb_daily(dry_run: bool) -> None:
             SET bidder_id = um.bidder_id
             FROM unique_mapping um
             WHERE TRIM(rd.billing_id) = um.billing_id
-              AND rd.bidder_id IS NULL
+              AND (rd.bidder_id IS NULL OR BTRIM(rd.bidder_id) = '')
             """
         )
         print(f"rtb_daily: backfilled bidder_id via billing_id mapping for {updated_billing:,} rows")

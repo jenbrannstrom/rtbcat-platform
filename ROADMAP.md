@@ -465,6 +465,9 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [x] **Postgres schema alignment** - Raw fact tables + BIGINT upgrades + pretargeting_publishers table
 - [x] **Backfill raw fact tables** - Load `rtb_daily`, `rtb_bidstream`, `rtb_bid_filtering`, `rtb_quality` into Postgres (through 2026-01-25)
 - [ ] **Persist seat identity** - Ensure `bidder_id` stored for all imports (`rtb_daily`, `rtb_bidstream`, `rtb_bid_filtering`)
+  - 2026-02-25 code hardening: `importers/unified_importer.py` now backfills `bidder_id` from `buyer_account_id` via `buyer_seats` lookup when filename parsing is missing (covers `rtb_bidstream` and `rtb_bid_filtering`, plus fallback path in `rtb_daily`), and uses per-row resolved bidder IDs to avoid cross-row leakage.
+  - 2026-02-25 tooling hardening: `scripts/audit_seat_identity.py` and `scripts/backfill_bidder_ids_pg.py` now treat blank/whitespace `bidder_id` as missing (not just NULL); `uploads_repo` unassigned count matches that definition.
+  - Remaining step: run production seat-identity audit + bidder backfill (`scripts/audit_seat_identity.py`, `scripts/backfill_bidder_ids_pg.py`) and capture post-run coverage in a review note before marking complete.
 - [x] **Billing ID guarantees** - Enforce `billing_id` for per-config reports; exclude rows missing it from config breakdowns
   - 2026-02-25 hardening: config-level aggregations now exclude blank/NULL `billing_id` rows in `storage/postgres_repositories/home_repo.py` (`pretarg_daily`) and `storage/postgres_repositories/rtb_bidstream_repo.py` (`pretarg_size_daily`, config geo source reads when no valid-ID allowlist is provided).
   - Billing ID lookup helpers now drop blank values from `pretargeting_configs` in `storage/postgres_repositories/analytics_repo.py` and `storage/postgres_repositories/rtb_bidstream_repo.py`.
