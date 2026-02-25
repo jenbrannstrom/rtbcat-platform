@@ -170,6 +170,7 @@
       - [x] Added Chinese (`zh`) ops/support namespace translations (`settings`, `retentionPage`, `history`, `connect`) (`dashboard/src/lib/i18n/translations/zh/*.ts`)
       - [x] Added Chinese (`zh`) remaining top-level namespace translations (`aiControl`, `configPerformance`, `geo`, `publishers`, `recommendations`, `reports`, `sizes`, `wasteAnalysis`) (`dashboard/src/lib/i18n/translations/zh/*.ts`)
       - [x] Removed hardcoded English date formatting (`en-US`) in shared/RTB UI date displays; now uses locale-aware formatting (`dashboard/src/lib/utils.ts`, `dashboard/src/components/rtb/config-breakdown-panel.tsx`)
+      - [x] Added explicit CJK-capable font fallback stack for Chinese rendering consistency (kept `Inter` for Latin; added `PingFang SC` / `Microsoft YaHei` / `Noto Sans CJK SC` fallbacks) (`dashboard/src/app/layout.tsx`, `dashboard/src/app/globals.css`)
     - [ ] Add real dictionaries for remaining locales (`pl`, `ru`, `uk`, `da`, `fr`, `he`, `ar`) and expand `es` remaining namespaces
 
 ---
