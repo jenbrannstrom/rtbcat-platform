@@ -15,6 +15,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Home Analytics"])
 
 
+def _require_home_buyer_id(buyer_id: Optional[str]) -> str:
+    """Home analytics is seat-scoped: require an explicit resolved buyer_id."""
+    if not buyer_id:
+        raise HTTPException(
+            status_code=400,
+            detail="buyer_id is required for Home analytics endpoints.",
+        )
+    return buyer_id
+
+
 @router.get("/analytics/home/funnel", tags=["Home Analytics"])
 async def get_home_funnel(
     days: int = Query(7, ge=1, le=90),
@@ -25,13 +35,17 @@ async def get_home_funnel(
 ):
     """Get Home funnel summary + publishers/geos from precomputed tables."""
     try:
-        buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+        buyer_id = _require_home_buyer_id(
+            await resolve_buyer_id(buyer_id, store=store, user=user)
+        )
         service = HomeAnalyticsService()
         return await service.get_funnel_payload(
             days=days,
             buyer_id=buyer_id,
             limit=limit,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get home funnel data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -46,9 +60,13 @@ async def get_home_config_performance(
 ):
     """Get per-config performance from precomputed data."""
     try:
-        buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+        buyer_id = _require_home_buyer_id(
+            await resolve_buyer_id(buyer_id, store=store, user=user)
+        )
         service = HomeAnalyticsService()
         return await service.get_config_payload(days=days, buyer_id=buyer_id)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get home config performance: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -63,9 +81,13 @@ async def get_home_endpoint_efficiency(
 ):
     """Get allocated-vs-observed endpoint efficiency and reconciliation."""
     try:
-        buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+        buyer_id = _require_home_buyer_id(
+            await resolve_buyer_id(buyer_id, store=store, user=user)
+        )
         service = HomeAnalyticsService()
         return await service.get_endpoint_efficiency_payload(days=days, buyer_id=buyer_id)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get endpoint efficiency data: {e}")
         raise HTTPException(status_code=500, detail=str(e))

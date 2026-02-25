@@ -453,7 +453,10 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 
 ### Phase 0 — Audit & Baseline
 - [ ] **Data source audit** - For each Home section, list data tables used and % of rows missing `bidder_id`/`billing_id`
-- [ ] **Seat scope verification** - Confirm all Home endpoints enforce `buyer_id` and user permissions
+- [x] **Seat scope verification** - Confirm all Home endpoints enforce `buyer_id` and user permissions
+  - Verified route auth + buyer resolution in `api/routers/analytics/home.py` and `api/dependencies.py`, service/repo buyer propagation in `services/home_analytics_service.py` + `storage/postgres_repositories/home_repo.py`, and frontend Home/QPS callers passing selected seat IDs.
+  - Hardening fix (2026-02-25): Home GET endpoints now require explicit resolved `buyer_id` (seat-scoped) and preserve `HTTPException` status codes instead of converting permission/access errors into generic 500s.
+  - Audit note: `docs/review/2026-02-25/HOME_SEAT_SCOPE_VERIFICATION_AUDIT.md`
 
 ### Phase 1 — Import & Data Model Fixes
 - [x] **Postgres schema alignment** - Raw fact tables + BIGINT upgrades + pretargeting_publishers table
