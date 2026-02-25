@@ -1,6 +1,6 @@
 # Cat-Scan Roadmap
 
-**Last Updated:** February 24, 2026
+**Last Updated:** February 25, 2026
 
 ---
 
@@ -35,9 +35,10 @@
 - [x] **Deploy unblocked with temporary contract-gate bypass**
   - `scripts/contracts_check.py` fixed missing `::text` casts on `metric_date` comparisons (`5546ac5`) to resolve `date >= text` SQL errors.
   - Deployment proceeded with `ALLOW_CONTRACT_FAILURE=true` due pre-existing `C-EPT-001` failure (stale endpoints), unrelated to seat-access changes.
-- [ ] **Remove `ALLOW_CONTRACT_FAILURE` bypass after C-EPT-001 RCA**
-  - Investigate and fix stale endpoint freshness contract (`C-EPT-001: 11/11 stale endpoints`).
-  - Re-enable strict contract gate in deploy path and verify clean deploy without bypass.
+- [x] **Remove `ALLOW_CONTRACT_FAILURE` bypass after C-EPT-001 RCA**
+  - RCA (2026-02-25): active scheduled refresh paths (`scripts/refresh_home_cache.py` via `catscan-home-refresh` and `/api/precompute/refresh/scheduled`) refreshed precompute tables but did not refresh `rtb_endpoints_current`, so `C-EPT-001` went stale (>24h) even when other refreshes ran.
+  - Fix deployed in `cabab81`: scheduled refresh paths now call `EndpointsService.refresh_endpoints_current()` and log/return refreshed endpoint observation row count.
+  - Verification on February 25, 2026: triggered refresh populated `rtb_endpoints_current` for all 11 endpoints across 4 bidders; contracts check passed (`5 PASS`, `0 FAIL`) including `C-EPT-001`; `ALLOW_CONTRACT_FAILURE=true` removed and deploy gate enforced with clean deploy.
 
 ---
 
