@@ -226,11 +226,10 @@ Return a structured summary with these sections:
 - What remains unproven after this audit
 
 Documentation
-- Create a review note in `docs/review/2026-02-25/`, e.g.:
+- Create a review note in `docs/review/2026-02-25/audit/`, e.g.:
   `TUKY_IMPORT_PIPELINE_RCA.md`
 - Put the raw command list + summarized outputs there.
 
 Do not make code changes yet unless you find a one-line obvious safety fix and call it out separately.
 This pass is primarily RCA + evidence collection.
 ```
-
