@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from services.secrets_manager import get_secrets_manager
 from services.config_precompute import refresh_config_breakdowns
+from services.endpoints_service import EndpointsService
 from services.home_precompute import refresh_home_summaries
 from services.precompute_service import PrecomputeService
 from services.precompute_utils import normalize_refresh_dates, refresh_window
@@ -31,6 +32,7 @@ class PrecomputeRefreshResponse(BaseModel):
     home_summaries: dict
     config_breakdowns: dict
     rtb_summaries: dict
+    endpoints_current_rows: int
     validation: dict
 
 
@@ -69,7 +71,14 @@ async def refresh_precompute_scheduled(request: Request):
     home_result = await refresh_home_summaries(dates=date_list)
     config_result = await refresh_config_breakdowns(dates=date_list)
     rtb_result = await refresh_rtb_summaries(refresh_start, refresh_end)
+    endpoint_svc = EndpointsService()
+    endpoints_refreshed = await endpoint_svc.refresh_endpoints_current()
     validation = await run_precompute_validation(refresh_start, refresh_end)
+
+    logger.info(
+        "Scheduled precompute refresh completed endpoint observations: endpoints_current_rows=%s",
+        endpoints_refreshed,
+    )
 
     return PrecomputeRefreshResponse(
         success=True,
@@ -79,6 +88,7 @@ async def refresh_precompute_scheduled(request: Request):
         home_summaries=home_result,
         config_breakdowns=config_result,
         rtb_summaries=rtb_result,
+        endpoints_current_rows=endpoints_refreshed,
         validation=validation,
     )
 
