@@ -10,19 +10,19 @@ interface WasteReportProps {
   isLoading?: boolean;
 }
 
-function formatNumber(num: number): string {
+function formatNumber(num: number, locale?: string): string {
   if (num >= 1000000) {
     return `${(num / 1000000).toFixed(1)}M`;
   }
   if (num >= 1000) {
     return `${(num / 1000).toFixed(1)}K`;
   }
-  return num.toLocaleString();
+  return num.toLocaleString(locale);
 }
 
 function formatDate(dateString: string, locale?: string): string {
   const date = new Date(dateString);
-  return date.toLocaleDateString(locale || "en", {
+  return date.toLocaleDateString(locale, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -100,8 +100,8 @@ export function WasteReportCard({ report, isLoading }: WasteReportProps) {
               </p>
               <p className="text-xs text-gray-500 mt-2">
                 {t.wasteAnalysis.wasteReportWasteRequestsOfTotal
-                  .replace('{waste}', formatNumber(report.total_waste_requests))
-                  .replace('{total}', formatNumber(report.total_requests))}
+                  .replace('{waste}', formatNumber(report.total_waste_requests, language))
+                  .replace('{total}', formatNumber(report.total_requests, language))}
               </p>
             </div>
             <AlertTriangle className={cn("h-8 w-8", getWasteColor(report.waste_percentage))} />

@@ -141,7 +141,7 @@ export function ImportHistoryTable({
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-gray-700 tabular-nums">
-                      {item.rows_imported.toLocaleString()}
+                      {item.rows_imported.toLocaleString(language)}
                     </td>
                     <td className="px-4 py-2.5">
                       <span
