@@ -660,7 +660,7 @@ async def refresh_config_breakdowns(
                 (metric_date, buyer_account_id, billing_id, publisher_id,
                  publisher_name, reached_queries, impressions, spend_micros)
             SELECT
-                metric_date::text,
+                metric_date,
                 buyer_account_id,
                 billing_id,
                 publisher_id,
