@@ -61,7 +61,9 @@ async def audit_missing_identity() -> dict:
                 f"""
                 SELECT
                     COUNT(*) as total_rows,
-                    COUNT(*) FILTER (WHERE bidder_id IS NULL) as missing_bidder_id,
+                    COUNT(*) FILTER (
+                        WHERE bidder_id IS NULL OR BTRIM(bidder_id) = ''
+                    ) as missing_bidder_id,
                     COUNT(*) FILTER (WHERE import_batch_id IS NULL) as missing_import_batch_id,
                     MIN(metric_date) as min_date,
                     MAX(metric_date) as max_date

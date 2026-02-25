@@ -231,7 +231,11 @@ class UploadsRepository:
     async def get_unassigned_uploads_count(self) -> int:
         """Get count of imports without bidder_id."""
         row = await pg_query_one(
-            "SELECT COUNT(*) as cnt FROM import_history WHERE bidder_id IS NULL"
+            """
+            SELECT COUNT(*) as cnt
+            FROM import_history
+            WHERE bidder_id IS NULL OR BTRIM(bidder_id) = ''
+            """
         )
         return row["cnt"] if row else 0
 

@@ -37,6 +37,7 @@ class AccountMapper:
 
     def __init__(self):
         self._cache: dict[str, Optional[str]] = {}
+        self._buyer_cache: dict[str, Optional[str]] = {}
         self._load_mappings()
 
     def _load_mappings(self) -> None:
@@ -124,6 +125,52 @@ class AccountMapper:
         # Ambiguous or not found
         return None
 
+    def get_bidder_id_for_buyer_id(self, buyer_id: str) -> Optional[str]:
+        """Get bidder_id for a buyer seat ID from buyer_seats.
+
+        Args:
+            buyer_id: Buyer seat ID (`buyer_account_id`)
+
+        Returns:
+            Parent bidder/account ID if a unique mapping exists, else None.
+        """
+        if not buyer_id:
+            return None
+
+        normalized_buyer_id = str(buyer_id).strip()
+        if not normalized_buyer_id:
+            return None
+
+        if normalized_buyer_id in self._buyer_cache:
+            return self._buyer_cache[normalized_buyer_id]
+
+        try:
+            conn = _get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT bidder_id
+                FROM buyer_seats
+                WHERE buyer_id = %s
+                  AND bidder_id IS NOT NULL
+                LIMIT 1
+                """,
+                (normalized_buyer_id,),
+            )
+            row = cursor.fetchone()
+            conn.close()
+
+            bidder_id = row["bidder_id"] if row else None
+            self._buyer_cache[normalized_buyer_id] = bidder_id
+            return bidder_id
+        except Exception as e:
+            logger.warning(
+                "Failed to lookup bidder_id for buyer_id %s: %s",
+                normalized_buyer_id,
+                e,
+            )
+            return None
+
     def get_all_billing_ids_for_bidder(self, bidder_id: str) -> list[str]:
         """Get all billing_ids that belong to a bidder.
 
@@ -171,6 +218,7 @@ class AccountMapper:
     def refresh_cache(self) -> None:
         """Refresh the billing_id -> bidder_id cache from database."""
         self._cache.clear()
+        self._buyer_cache.clear()
         self._load_mappings()
 
 
@@ -200,3 +248,8 @@ def get_bidder_id_for_billing_id(billing_id: str) -> Optional[str]:
         The bidder_id, or None if not found
     """
     return get_account_mapper().get_bidder_id(billing_id)
+
+
+def get_bidder_id_for_buyer_id(buyer_id: str) -> Optional[str]:
+    """Convenience function to get bidder_id for a buyer seat ID."""
+    return get_account_mapper().get_bidder_id_for_buyer_id(buyer_id)
