@@ -7,7 +7,7 @@ import { Sidebar } from "@/components/sidebar";
 import { FirstRunCheck } from "@/components/first-run-check";
 import { AuthenticatedLayout } from "@/components/authenticated-layout";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
   title: "Cat-Scan Dashboard",
@@ -41,7 +41,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={inter.variable}>
         <Providers>
           <AuthenticatedLayout sidebarFallback={<SidebarFallback />}>
             {children}
