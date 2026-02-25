@@ -452,7 +452,10 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [x] Ensure audit logging + rollback support
 
 ### Phase 0 — Audit & Baseline
-- [ ] **Data source audit** - For each Home section, list data tables used and % of rows missing `bidder_id`/`billing_id`
+- [x] **Data source audit** - For each Home section, list data tables used and % of rows missing `bidder_id`/`billing_id`
+  - Audit snapshot captured from production on 2026-02-25 (fact tables: last 30 days by `metric_date`; dimension/current tables: all rows).
+  - Result: all Home source tables had `0.0%` missing on the relevant ID columns (`bidder_id` / `billing_id`), and `seat_*` precompute tables are keyed by `buyer_account_id` (no `bidder_id`/`billing_id` columns by design).
+  - Audit note: `docs/review/2026-02-25/HOME_DATA_SOURCE_AUDIT.md`
 - [x] **Seat scope verification** - Confirm all Home endpoints enforce `buyer_id` and user permissions
   - Verified route auth + buyer resolution in `api/routers/analytics/home.py` and `api/dependencies.py`, service/repo buyer propagation in `services/home_analytics_service.py` + `storage/postgres_repositories/home_repo.py`, and frontend Home/QPS callers passing selected seat IDs.
   - Hardening fix (2026-02-25): Home GET endpoints now require explicit resolved `buyer_id` (seat-scoped) and preserve `HTTPException` status codes instead of converting permission/access errors into generic 500s.
