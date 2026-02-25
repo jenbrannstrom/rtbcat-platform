@@ -474,7 +474,11 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
   - Fallback buyer-level geo/publisher fact paths in `services/config_precompute.py` also scope correlated `NOT EXISTS` checks by `buyer_account_id`, preventing cross-seat suppression.
   - Added an inline code guard comment at the BigQuery config publisher join to preserve the seat-identity predicate during future edits.
   - Audit note: `docs/review/2026-02-25/HOME_JOIN_SAFE_KEYS_AUDIT.md`
-- [ ] **Identifier integrity** - Never substitute `seat_id/buyer_id` for `billing_id`. Billing IDs scope pretargeting configs; seat IDs scope buyer seats. Keep them distinct in queries and APIs.
+- [x] **Identifier integrity** - Never substitute `seat_id/buyer_id` for `billing_id`. Billing IDs scope pretargeting configs; seat IDs scope buyer seats. Keep them distinct in queries and APIs.
+  - 2026-02-25 audit: Home/RTB analytics routes, services, and frontend config breakdown callers keep `billing_id` and `buyer_id` as separate parameters (no direct `buyer_id -> billing_id` substitution found).
+  - Added API boundary guard `validate_identifier_integrity(...)` in `api/routers/analytics/common.py` and wired it into analytics routes that accept both IDs (`/analytics/rtb-funnel/configs/{billing_id}/breakdown`, `/analytics/rtb-funnel/configs/{billing_id}/creatives`, `/analytics/size-coverage`).
+  - Guard returns `400` for obvious misuse (`buyer_id == billing_id`) and route handlers now preserve `HTTPException` status codes in these paths.
+  - Audit note: `docs/review/2026-02-25/HOME_IDENTIFIER_INTEGRITY_AUDIT.md`
 
 ### Gmail Import & Pipeline (Operational)
 - [ ] **Backlog ingestion** - Run `scripts/gmail_import_batch.py` with checkpointing; track progress in `~/.catscan/gmail_batch_checkpoint.json`.

@@ -6,6 +6,7 @@ Contains helper functions and Pydantic models used by multiple analytics endpoin
 import logging
 from typing import Literal, Optional
 
+from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
 from services.analytics_service import AnalyticsService
@@ -93,6 +94,28 @@ def _group_signals_by_type(signals) -> dict[str, int]:
     for s in signals:
         counts[s.signal_type] = counts.get(s.signal_type, 0) + 1
     return counts
+
+
+def validate_identifier_integrity(
+    *,
+    buyer_id: Optional[str] = None,
+    billing_id: Optional[str] = None,
+) -> None:
+    """Reject obvious buyer/billing identifier mixups at the API boundary.
+
+    Buyer seat IDs (`buyer_id`) and pretargeting config IDs (`billing_id`) are
+    distinct namespaces and must not be substituted for each other.
+    """
+    normalized_buyer = (buyer_id or "").strip()
+    normalized_billing = (billing_id or "").strip()
+    if normalized_buyer and normalized_billing and normalized_buyer == normalized_billing:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "buyer_id and billing_id are different identifier types; "
+                "do not pass a buyer/seat ID as billing_id."
+            ),
+        )
 
 
 # =============================================================================
