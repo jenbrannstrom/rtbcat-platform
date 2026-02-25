@@ -393,7 +393,7 @@ const value: PartialTranslations['pretargeting'] = {
   endpointsHeaderSyncing: '正在同步 RTB 端点...',
   endpointsHeaderFailedToSync: '同步端点失败。',
   endpointsHeaderNoEndpoints:
-    '没有 RTB 端点。请同步服务账号以加载。',
+    '当前席位未找到 RTB 端点。',
   endpointsHeaderTitle: 'RTB 端点',
   endpointsHeaderAllocated: '分配',
   endpointsHeaderObserved: '观测',
@@ -411,7 +411,7 @@ const value: PartialTranslations['pretargeting'] = {
   endpointsSuccess: '所有 QPS 更改已成功应用。',
   endpointsCurrentTotal: '当前',
   endpointsAfterTotal: '变更后',
-  endpointsChangesPending: '{count} 项 QPS 更改待处理',
+  endpointsChangesPending: '待处理 QPS 更改：{count}',
   endpointsConfirm: '确认',
   endpointsCancel: '取消',
   endpointsRefresh: '刷新',
