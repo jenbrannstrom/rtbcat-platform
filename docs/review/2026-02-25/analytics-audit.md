@@ -59,7 +59,7 @@
 | `GET /analytics/rtb-funnel/configs` | Already had | `resolve_buyer_id` | **Added** | N/A |
 | `GET /analytics/rtb-funnel/configs/{billing_id}/breakdown` | Already had | `resolve_buyer_id` | Already had | **Added** |
 | `GET /analytics/rtb-funnel/configs/{billing_id}/creatives` | Already had | `resolve_buyer_id` | Already had | **Added** |
-| `GET /analytics/rtb-funnel/creatives` | **Added** | auth-only | **Added** | N/A |
+| `GET /analytics/rtb-funnel/creatives` | **Added** | `resolve_buyer_id` | **Added** | N/A |
 | `GET /analytics/app-drilldown` | **Added** | `resolve_buyer_id` + billing ownership when `billing_id` provided | **Added** | **Added** |
 
 ### spend.py (1 route) -- auth fix, passthrough fix, ownership fix
@@ -99,16 +99,14 @@ Applied to 5 routes:
 
 ---
 
-## Residual Scope Gaps (Follow-up Required)
+## Residual Scope Gaps (Status)
 
-Post-sweep follow-up hardening added query-level buyer scope to `publishers`, `geos`,
-`app-drilldown`, and `spend-stats`. The remaining gap is the legacy creative-win analyzer route:
+Follow-up hardening added query-level buyer scope to `publishers`, `geos`,
+`app-drilldown`, `spend-stats`, and `rtb-funnel/creatives` (creative-win route now uses a
+buyer-scoped DB/precompute path instead of the legacy CSV analyzer).
 
-| Service method | Missing scope param | Routes affected |
-|----------------|--------------------|----|
-| `RTBFunnelAnalyzer.get_creative_win_performance(limit)` | `buyer_id` | `GET /analytics/rtb-funnel/creatives` |
-
-**Recommendation:** Replace or refactor the legacy CSV-backed `RTBFunnelAnalyzer` creative-win path to a buyer-scoped DB/precompute-backed implementation. Until then, the route is auth-gated but not query-scoped for multi-tenant deployments.
+No remaining route-level analytics scope gaps are tracked in this audit note. Future work is
+focused on broader data correctness programs (seat identity persistence, fresh-only serving).
 
 ---
 

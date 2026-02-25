@@ -12,7 +12,6 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from api.dependencies import get_store, get_current_user, resolve_buyer_id
 from services.auth_service import User
 from services.rtb_bidstream_service import RtbBidstreamService
-from analytics.rtb_bidstream_analyzer import RTBFunnelAnalyzer
 from .common import validate_identifier_integrity, validate_billing_id_ownership
 
 logger = logging.getLogger(__name__)
@@ -202,6 +201,8 @@ async def get_config_creatives(
 async def get_creative_win_performance(
     days: int = Query(7, ge=1, le=30),
     limit: int = Query(50, ge=1, le=200),
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """
@@ -216,10 +217,13 @@ async def get_creative_win_performance(
     - review: <20% win rate
     """
     try:
-        analyzer = RTBFunnelAnalyzer()
-        result = analyzer.get_creative_win_performance(limit=limit)
-        result["period_days"] = days
-        return result
+        resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+        svc = get_rtb_bidstream_service()
+        return await svc.get_creative_win_performance(
+            days=days,
+            limit=limit,
+            buyer_id=resolved_buyer_id,
+        )
     except HTTPException:
         raise
     except Exception as e:
