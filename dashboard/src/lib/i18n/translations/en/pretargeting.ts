@@ -359,7 +359,7 @@ const value: Translations['pretargeting'] = {
     endpointsHeaderNoEndpoints: 'No RTB endpoints found for this seat.',
     endpointsHeaderTitle: 'RTB Endpoints',
     endpointsHeaderAllocated: 'Allocated',
-    endpointsHeaderObserved: 'Observed',
+    endpointsHeaderObserved: 'Observed QPS',
     endpointsHeaderTotalQpsCap: 'Total QPS Cap',
     endpointsHeaderQpsInfoAria: 'QPS info',
     endpointsHeaderQpsInfoTooltip: 'Configured capacity (invited), not guaranteed traffic. Actual delivery is spend-constrained.',

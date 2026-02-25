@@ -277,7 +277,7 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
         {/* Column headers */}
         <div className="flex items-center justify-end gap-4 px-2 text-[10px] uppercase tracking-wide text-gray-400">
           <span className="w-24 text-right">{t.pretargeting.endpointsHeaderAllocated}</span>
-          <span className="w-20 text-right">{t.pretargeting.endpointsHeaderObserved}</span>
+          <span className="w-24 text-right">{t.pretargeting.endpointsHeaderObserved}</span>
         </div>
 
         {/* Endpoint rows */}
@@ -364,7 +364,7 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
                 </div>
 
                 {/* Observed QPS — read-only */}
-                <span className="font-medium text-slate-600 w-20 text-right">
+                <span className="font-medium text-slate-600 w-24 text-right">
                   {observedQpsByEndpointId?.[endpoint.endpoint_id] != null
                     ? Number(observedQpsByEndpointId[endpoint.endpoint_id]).toLocaleString(language, { maximumFractionDigits: 1 })
                     : '\u2014'}
