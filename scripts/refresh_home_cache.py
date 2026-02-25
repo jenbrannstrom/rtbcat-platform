@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Refresh Home precompute tables for a date range."""
+"""Refresh Home precompute tables for a date range.
+
+Also refreshes RTB endpoint observed QPS so endpoint-efficiency and contracts
+stay fresh when this script is the scheduled refresh path.
+"""
 
 import argparse
 import asyncio
 
+from services.endpoints_service import EndpointsService
 from services.home_precompute import refresh_home_summaries
 
 
@@ -26,7 +31,11 @@ async def main() -> None:
         refresh_kwargs["days"] = max(args.days, 1)
 
     result = await refresh_home_summaries(**refresh_kwargs)
-    print(f"Refreshed home cache: {result}")
+    endpoints_refreshed = await EndpointsService().refresh_endpoints_current()
+    print(
+        "Refreshed home cache",
+        {"home": result, "endpoints_current_rows": endpoints_refreshed},
+    )
 
 
 if __name__ == "__main__":
