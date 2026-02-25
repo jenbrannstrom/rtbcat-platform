@@ -1,9 +1,8 @@
 'use client';
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { getRTBEndpoints, updateEndpointQps } from '@/lib/api';
-import type { RTBEndpointItem } from '@/lib/api';
-import { Server, AlertTriangle, Globe, Info, Loader2, RefreshCw, X, Pencil, Undo2 } from 'lucide-react';
+import { Server, Globe, Info, Loader2, RefreshCw, X, Pencil, Undo2 } from 'lucide-react';
 import { useAccount } from '@/contexts/account-context';
 import { useState, useRef, useCallback } from 'react';
 import { useTranslation } from '@/contexts/i18n-context';
@@ -34,7 +33,6 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
   const { t, language } = useTranslation();
   const { selectedBuyerId, selectedServiceAccountId } = useAccount();
   const [showQpsInfo, setShowQpsInfo] = useState(false);
-  const queryClient = useQueryClient();
 
   // Pending QPS edits (endpoint_id -> new value)
   const [pendingQpsEdits, setPendingQpsEdits] = useState<Record<string, number>>({});
@@ -68,6 +66,7 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
     setIsRefreshing(true);
     setPendingQpsEdits({});
     setEditingEndpointId(null);
+    setShowCommitConfirm(false);
     setCommitResult(null);
     try {
       await refetch();
@@ -115,11 +114,15 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
   const handleDiscardAll = useCallback(() => {
     setPendingQpsEdits({});
     setEditingEndpointId(null);
+    setShowCommitConfirm(false);
     setCommitResult(null);
   }, []);
 
   const handleCommit = useCallback(async () => {
-    if (!data?.endpoints) return;
+    if (!data?.endpoints || Object.keys(pendingQpsEdits).length === 0) {
+      setShowCommitConfirm(false);
+      return;
+    }
     setIsCommitting(true);
     setCommitResult(null);
 
@@ -137,6 +140,7 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
 
     let applied = 0;
     let failed = false;
+    let failedErrorMessage: string | null = null;
 
     for (const edit of edits) {
       try {
@@ -146,39 +150,46 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
         });
         applied++;
       } catch (err) {
+        failedErrorMessage = err instanceof Error ? err.message : null;
         failed = true;
         break;
       }
     }
 
-    // Live-refetch to get server truth
-    await refetch();
+    try {
+      // Live-refetch to get server truth
+      await refetch();
 
-    if (failed) {
-      // Reconcile: remove successfully applied edits from pending
-      const appliedIds = new Set(edits.slice(0, applied).map(e => e.endpointId));
-      setPendingQpsEdits(prev => {
-        const next: Record<string, number> = {};
-        for (const [id, val] of Object.entries(prev)) {
-          if (!appliedIds.has(id)) {
-            next[id] = val;
+      if (failed) {
+        // Reconcile: remove successfully applied edits from pending
+        const appliedIds = new Set(edits.slice(0, applied).map(e => e.endpointId));
+        setPendingQpsEdits(prev => {
+          const next: Record<string, number> = {};
+          for (const [id, val] of Object.entries(prev)) {
+            if (!appliedIds.has(id)) {
+              next[id] = val;
+            }
           }
-        }
-        return next;
-      });
-      setCommitResult({
-        type: 'partial',
-        message: t.pretargeting.endpointsPartialFailure
+          return next;
+        });
+        const partialMessage = t.pretargeting.endpointsPartialFailure
           .replace('{applied}', String(applied))
-          .replace('{total}', String(edits.length)),
-      });
-    } else {
-      setPendingQpsEdits({});
-      setCommitResult({ type: 'success', message: t.pretargeting.endpointsSuccess });
-    }
+          .replace('{total}', String(edits.length));
+        setCommitResult({
+          type: applied > 0 ? 'partial' : 'error',
+          message: failedErrorMessage
+            ? (applied > 0 ? `${partialMessage} ${failedErrorMessage}` : failedErrorMessage)
+            : partialMessage,
+        });
+      } else {
+        setPendingQpsEdits({});
+        setCommitResult({ type: 'success', message: t.pretargeting.endpointsSuccess });
+      }
 
-    setShowCommitConfirm(false);
-    setIsCommitting(false);
+      setShowCommitConfirm(false);
+    } finally {
+      setIsCommitting(false);
+    }
   }, [data, pendingQpsEdits, selectedBuyerId, selectedServiceAccountId, refetch, t]);
 
   if (!selectedBuyerId) {
@@ -279,7 +290,7 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
           return (
             <div
               key={endpoint.endpoint_id}
-              className={`flex items-center justify-between px-2 py-1 rounded text-xs ${
+              className={`group flex items-center justify-between px-2 py-1 rounded text-xs ${
                 isPending ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50'
               }`}
             >
