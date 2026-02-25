@@ -455,11 +455,11 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [x] **Data source audit** - For each Home section, list data tables used and % of rows missing `bidder_id`/`billing_id`
   - Audit snapshot captured from production on 2026-02-25 (fact tables: last 30 days by `metric_date`; dimension/current tables: all rows).
   - Result: all Home source tables had `0.0%` missing on the relevant ID columns (`bidder_id` / `billing_id`), and `seat_*` precompute tables are keyed by `buyer_account_id` (no `bidder_id`/`billing_id` columns by design).
-  - Audit note: `docs/review/2026-02-25/HOME_DATA_SOURCE_AUDIT.md`
+  - Audit note: `docs/review/2026-02-25/audit/HOME_DATA_SOURCE_AUDIT.md`
 - [x] **Seat scope verification** - Confirm all Home endpoints enforce `buyer_id` and user permissions
   - Verified route auth + buyer resolution in `api/routers/analytics/home.py` and `api/dependencies.py`, service/repo buyer propagation in `services/home_analytics_service.py` + `storage/postgres_repositories/home_repo.py`, and frontend Home/QPS callers passing selected seat IDs.
   - Hardening fix (2026-02-25): Home GET endpoints now require explicit resolved `buyer_id` (seat-scoped) and preserve `HTTPException` status codes instead of converting permission/access errors into generic 500s.
-  - Audit note: `docs/review/2026-02-25/HOME_SEAT_SCOPE_VERIFICATION_AUDIT.md`
+  - Audit note: `docs/review/2026-02-25/audit/HOME_SEAT_SCOPE_VERIFICATION_AUDIT.md`
 
 ### Phase 1 — Import & Data Model Fixes
 - [x] **Postgres schema alignment** - Raw fact tables + BIGINT upgrades + pretargeting_publishers table
@@ -468,26 +468,26 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
   - 2026-02-25 code hardening: `importers/unified_importer.py` now backfills `bidder_id` from `buyer_account_id` via `buyer_seats` lookup when filename parsing is missing (covers `rtb_bidstream` and `rtb_bid_filtering`, plus fallback path in `rtb_daily`), and uses per-row resolved bidder IDs to avoid cross-row leakage.
   - 2026-02-25 tooling hardening: `scripts/audit_seat_identity.py` and `scripts/backfill_bidder_ids_pg.py` now treat blank/whitespace `bidder_id` as missing (not just NULL); `uploads_repo` unassigned count matches that definition.
   - 2026-02-25 production verification: dry-run backfill found 0 rows needing update; 90-day coverage snapshot confirmed 0 missing `bidder_id` across 84.7M+ ingested rows (`rtb_daily` 67.6M, `rtb_bidstream` 17.0M, `rtb_bid_filtering` 152K; `rtb_quality` had no rows in window). Note: this verifies ingested-row coverage only, not Gmail ingestion backlog completeness.
-  - Verification note: `docs/review/2026-02-25/HOME_SEAT_IDENTITY_PERSISTENCE_VERIFICATION.md`
+  - Verification note: `docs/review/2026-02-25/audit/HOME_SEAT_IDENTITY_PERSISTENCE_VERIFICATION.md`
 - [x] **Billing ID guarantees** - Enforce `billing_id` for per-config reports; exclude rows missing it from config breakdowns
   - 2026-02-25 hardening: config-level aggregations now exclude blank/NULL `billing_id` rows in `storage/postgres_repositories/home_repo.py` (`pretarg_daily`) and `storage/postgres_repositories/rtb_bidstream_repo.py` (`pretarg_size_daily`, config geo source reads when no valid-ID allowlist is provided).
   - Billing ID lookup helpers now drop blank values from `pretargeting_configs` in `storage/postgres_repositories/analytics_repo.py` and `storage/postgres_repositories/rtb_bidstream_repo.py`.
-  - Production audit snapshot (`docs/review/2026-02-25/HOME_DATA_SOURCE_AUDIT.md`) also confirmed `pretarg_daily` had `0.0%` missing `billing_id` in the last 30 days.
+  - Production audit snapshot (`docs/review/2026-02-25/audit/HOME_DATA_SOURCE_AUDIT.md`) also confirmed `pretarg_daily` had `0.0%` missing `billing_id` in the last 30 days.
 - [x] **Join-safe keys** - Geo/publisher joins must include seat identity (`bidder_id` or `buyer_account_id`)
   - 2026-02-25 audit: no unsafe geo/publisher SQL joins found in Home/RTB serving repos; the critical config publisher attribution join in `services/config_precompute.py` joins `q` and `b` rows on `buyer_account_id` (seat identity) in addition to time/creative/country keys.
   - Fallback buyer-level geo/publisher fact paths in `services/config_precompute.py` also scope correlated `NOT EXISTS` checks by `buyer_account_id`, preventing cross-seat suppression.
   - Added an inline code guard comment at the BigQuery config publisher join to preserve the seat-identity predicate during future edits.
-  - Audit note: `docs/review/2026-02-25/HOME_JOIN_SAFE_KEYS_AUDIT.md`
+  - Audit note: `docs/review/2026-02-25/audit/HOME_JOIN_SAFE_KEYS_AUDIT.md`
 - [x] **Identifier integrity** - Never substitute `seat_id/buyer_id` for `billing_id`. Billing IDs scope pretargeting configs; seat IDs scope buyer seats. Keep them distinct in queries and APIs.
   - 2026-02-25 audit: Home/RTB analytics routes, services, and frontend config breakdown callers keep `billing_id` and `buyer_id` as separate parameters (no direct `buyer_id -> billing_id` substitution found).
   - Added API boundary guard `validate_identifier_integrity(...)` in `api/routers/analytics/common.py` and wired it into analytics routes that accept both IDs (`/analytics/rtb-funnel/configs/{billing_id}/breakdown`, `/analytics/rtb-funnel/configs/{billing_id}/creatives`, `/analytics/size-coverage`).
   - Guard returns `400` for obvious misuse (`buyer_id == billing_id`) and route handlers now preserve `HTTPException` status codes in these paths.
-  - Audit note: `docs/review/2026-02-25/HOME_IDENTIFIER_INTEGRITY_AUDIT.md`
+  - Audit note: `docs/review/2026-02-25/audit/HOME_IDENTIFIER_INTEGRITY_AUDIT.md`
 
 ### Gmail Import & Pipeline (Operational)
 - [ ] **Backlog ingestion** - Run `scripts/gmail_import_batch.py` with checkpointing; track progress in `~/.catscan/gmail_batch_checkpoint.json`.
   - 2026-02-25 progress: batch run processed all 15 visible Gmail emails (13 imported ~3M rows, 2 had no CSV). Scheduled importer also ran, advancing `latest_metric_date` to 2026-02-24 and `total_imports` to 700. Unread count dropped 33 → 30. Backlog reduced but not verifiably cleared — remaining 30 unread emails not yet characterized. Known bug: deployed batch script has `CatscanImportResult` unpack mismatch (imports succeed, but per-file tracking/counters broken).
-  - Progress note: `docs/review/2026-02-25/GMAIL_BACKLOG_INGESTION_PROGRESS.md`
+  - Progress note: `docs/review/2026-02-25/audit/GMAIL_BACKLOG_INGESTION_PROGRESS.md`
 - [ ] **Cloud Scheduler** - Configure `/api/gmail/import/scheduled` with `GMAIL_IMPORT_SECRET`. See `docs/gmail-autodownload-fix-plan.md`.
   - Ensure nginx has a dedicated unauthenticated `location = /api/gmail/import/scheduled` route (secret header still enforced by API).
 - [ ] **Token health monitoring** - Alert on `invalid_grant` in logs and on `/gmail/status` when `authorized=false` or `last_error` contains `invalid_grant`. See `docs/gmail-autodownload-fix-plan.md`.
@@ -619,7 +619,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [ ] API keys logged in plaintext - Mask sensitive data in logs
 
 ### Code Quality
-- [x] **Analytics auth/scope sweep (2026-02-25)** — 14 unauthenticated analytics routes gated (`get_current_user`, `resolve_bidder_id`, or `require_admin`); 5 routes gained billing_id ownership validation via strict repo calls; 20 generic `except Exception` blocks now re-raise `HTTPException`; spend endpoint silent-fallback removed. Audit: `docs/review/2026-02-25/analytics-audit.md`. Residual: 5 service methods still lack buyer/bidder scope filtering (auth-gated but unscoped at query level).
+- [x] **Analytics auth/scope sweep (2026-02-25)** — 14 unauthenticated analytics routes gated (`get_current_user`, `resolve_bidder_id`, or `require_admin`); 5 routes gained billing_id ownership validation via strict repo calls; 20 generic `except Exception` blocks now re-raise `HTTPException`; spend endpoint silent-fallback removed. Audit: `docs/review/2026-02-25/audit/analytics-audit.md`. Residual: 5 service methods still lack buyer/bidder scope filtering (auth-gated but unscoped at query level).
 - [x] **Analytics service query-scope hardening (2026-02-25)** — Added query-level `buyer_id` scoping to `rtb-funnel/publishers`, `rtb-funnel/geos`, `app-drilldown`, and `spend-stats` across route/service/repo layers (including app bid-filtering and spend precompute status filters). Residual: legacy `GET /analytics/rtb-funnel/creatives` (`RTBFunnelAnalyzer`) remains auth-gated but not buyer-scoped.
 - [x] **Analytics creative-win route scope replacement (2026-02-25)** — Replaced legacy CSV-backed `GET /analytics/rtb-funnel/creatives` analyzer path with buyer-scoped DB/precompute-backed service/repo queries (plus optional `rtb_bid_filtering` bids aggregation).
 - [ ] Overly broad exception handling (`except Exception`) - Use specific exceptions
