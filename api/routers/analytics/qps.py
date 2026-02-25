@@ -13,10 +13,10 @@ from analytics.size_coverage_analyzer import SizeCoverageAnalyzer
 from analytics.geo_waste_analyzer import GeoWasteAnalyzer
 from analytics.pretargeting_recommender import PretargetingRecommender
 from analytics.qps_optimizer import QPSOptimizer
-from api.dependencies import get_store, get_current_user, resolve_buyer_id, get_allowed_buyer_ids
+from api.dependencies import get_store, get_current_user, resolve_buyer_id, get_allowed_buyer_ids, resolve_bidder_id
 from services.auth_service import User
 
-from .common import get_valid_billing_ids_for_buyer, validate_identifier_integrity
+from .common import get_valid_billing_ids_for_buyer, validate_identifier_integrity, validate_billing_id_ownership
 
 logger = logging.getLogger(__name__)
 
@@ -47,16 +47,30 @@ async def get_size_coverage(
         import os
         resolved_buyer_id = None
         billing_ids = None
-        if buyer_id:
+
+        if billing_id:
+            # Explicit billing_id: resolve buyer for ownership validation.
+            # resolve_buyer_id raises 400 for multi-seat users without buyer_id,
+            # which is intentional — they must specify which seat owns billing_id.
             resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
-            billing_ids = await get_valid_billing_ids_for_buyer(resolved_buyer_id)
+            validate_identifier_integrity(buyer_id=resolved_buyer_id, billing_id=billing_id)
+            await validate_billing_id_ownership(billing_id, resolved_buyer_id)
+            # billing_ids stays None so the analyzer uses the single billing_id
+            # filter instead of the broad IN-list that would shadow it.
         else:
-            allowed = await get_allowed_buyer_ids(store=store, user=user)
-            if allowed:
-                billing_ids = []
-                for allowed_buyer in allowed:
-                    billing_ids.extend(await get_valid_billing_ids_for_buyer(allowed_buyer))
-        validate_identifier_integrity(buyer_id=resolved_buyer_id, billing_id=billing_id)
+            # No explicit billing_id: derive the billing_ids scope from buyer.
+            if buyer_id:
+                resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+                billing_ids = await get_valid_billing_ids_for_buyer(resolved_buyer_id)
+            else:
+                allowed = await get_allowed_buyer_ids(store=store, user=user)
+                if allowed:
+                    if len(allowed) == 1:
+                        resolved_buyer_id = allowed[0]
+                    billing_ids = []
+                    for allowed_buyer in allowed:
+                        billing_ids.extend(await get_valid_billing_ids_for_buyer(allowed_buyer))
+
         analyzer = SizeCoverageAnalyzer(os.getenv("POSTGRES_SERVING_DSN", ""))
         summary = analyzer.analyze(
             days,
@@ -158,6 +172,8 @@ async def get_geo_waste(
                 for g in summary.geo_breakdown
             ],
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to analyze geo waste: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -167,6 +183,7 @@ async def get_geo_waste(
 async def get_pretargeting_recommendations(
     days: int = Query(7, ge=1, le=90),
     max_configs: int = Query(10, ge=1, le=10),
+    user: User = Depends(get_current_user),
 ):
     """
     Generate optimal pretargeting configurations.
@@ -187,6 +204,8 @@ async def get_pretargeting_recommendations(
                 for config in recommendation.configs
             ],
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to generate pretargeting recommendations: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -256,13 +275,18 @@ async def get_qps_summary(
                 "geo_waste_monthly_usd": round(geo_summary.wasted_spend_usd * 30 / max(days, 1), 2),
             },
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get QPS summary: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/analytics/geo-pretargeting-config", tags=["QPS Analytics"])
-async def get_geo_pretargeting_config(days: int = Query(7, ge=1, le=90)):
+async def get_geo_pretargeting_config(
+    days: int = Query(7, ge=1, le=90),
+    user: User = Depends(get_current_user),
+):
     """
     Get ready-to-use geo configuration for pretargeting.
 
@@ -278,6 +302,8 @@ async def get_geo_pretargeting_config(days: int = Query(7, ge=1, le=90)):
             "exclude_geos": config["exclude"],
             "estimated_monthly_savings_usd": round(config["estimated_savings_usd"] * 30 / max(days, 1), 2),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get geo pretargeting config: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -287,6 +313,8 @@ async def get_geo_pretargeting_config(days: int = Query(7, ge=1, le=90)):
 async def get_qps_optimization_report(
     days: int = Query(7, ge=1, le=30),
     bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """
     Get comprehensive QPS optimization report with actionable recommendations.
@@ -310,9 +338,12 @@ async def get_qps_optimization_report(
     This is the main endpoint for AI-driven QPS optimization.
     """
     try:
+        bidder_id = await resolve_bidder_id(bidder_id, store=store, user=user)
         optimizer = QPSOptimizer()
         report = await optimizer.get_full_optimization_report(days, bidder_id)
         return report
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to generate QPS optimization report: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -323,6 +354,8 @@ async def get_publisher_waste(
     days: int = Query(7, ge=1, le=30),
     limit: int = Query(50, ge=1, le=100),
     bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """
     Get publishers ranked by QPS waste.
@@ -336,6 +369,7 @@ async def get_publisher_waste(
     Use this to identify publishers to block in pretargeting.
     """
     try:
+        bidder_id = await resolve_bidder_id(bidder_id, store=store, user=user)
         optimizer = QPSOptimizer()
         result = await optimizer.get_publisher_waste_ranking(days, limit, bidder_id)
         return {
@@ -343,6 +377,8 @@ async def get_publisher_waste(
             "publishers": result,
             "count": len(result),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get publisher waste ranking: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -352,6 +388,8 @@ async def get_publisher_waste(
 async def get_bid_filtering_analysis(
     days: int = Query(7, ge=1, le=30),
     bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """
     Analyze why bids are being filtered.
@@ -363,6 +401,7 @@ async def get_bid_filtering_analysis(
     Use this to identify and fix creative policy issues.
     """
     try:
+        bidder_id = await resolve_bidder_id(bidder_id, store=store, user=user)
         optimizer = QPSOptimizer()
         result = await optimizer.get_bid_filtering_analysis(days, bidder_id)
         return {
@@ -370,6 +409,8 @@ async def get_bid_filtering_analysis(
             "filtering_reasons": result,
             "count": len(result),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get bid filtering analysis: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -379,6 +420,8 @@ async def get_bid_filtering_analysis(
 async def get_platform_efficiency(
     days: int = Query(7, ge=1, le=30),
     bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """
     Analyze efficiency by platform (Desktop/Mobile/Tablet).
@@ -386,10 +429,13 @@ async def get_platform_efficiency(
     Returns win rates and spend by device type for bid adjustments.
     """
     try:
+        bidder_id = await resolve_bidder_id(bidder_id, store=store, user=user)
         optimizer = QPSOptimizer()
         result = await optimizer.get_platform_efficiency(days, bidder_id)
         result["period_days"] = days
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get platform efficiency: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -399,6 +445,8 @@ async def get_platform_efficiency(
 async def get_hourly_patterns(
     days: int = Query(7, ge=1, le=30),
     bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """
     Analyze hourly bidding patterns for QPS throttling.
@@ -406,12 +454,15 @@ async def get_hourly_patterns(
     Returns bid requests, win rate, and efficiency by hour of day.
     """
     try:
+        bidder_id = await resolve_bidder_id(bidder_id, store=store, user=user)
         optimizer = QPSOptimizer()
         result = await optimizer.get_hourly_patterns(days, bidder_id)
         return {
             "period_days": days,
             "hourly_patterns": result,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get hourly patterns: {e}")
         raise HTTPException(status_code=500, detail=str(e))

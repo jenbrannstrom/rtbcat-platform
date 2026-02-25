@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
 from services.analytics_service import AnalyticsService
+from storage.postgres_repositories.analytics_repo import AnalyticsRepository
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,35 @@ def validate_identifier_integrity(
                 "buyer_id and billing_id are different identifier types; "
                 "do not pass a buyer/seat ID as billing_id."
             ),
+        )
+
+
+async def validate_billing_id_ownership(
+    billing_id: Optional[str],
+    buyer_id: Optional[str],
+) -> None:
+    """Reject billing_id that doesn't belong to the resolved buyer.
+
+    Only validates when BOTH billing_id and buyer_id are provided.
+    When buyer_id is None (admin with no filter), skip check.
+
+    Uses direct repo calls that propagate DB errors (unlike
+    get_valid_billing_ids_for_buyer which swallows exceptions).
+    """
+    if not billing_id or not buyer_id:
+        return
+    repo = AnalyticsRepository()
+    bidder_id = await repo.get_bidder_id_for_buyer(buyer_id)
+    if not bidder_id:
+        raise HTTPException(
+            status_code=404,
+            detail="Pretargeting config not found.",
+        )
+    valid_ids = await repo.get_billing_ids_for_bidder(bidder_id)
+    if billing_id.strip() not in valid_ids:
+        raise HTTPException(
+            status_code=404,
+            detail="Pretargeting config not found.",
         )
 
 

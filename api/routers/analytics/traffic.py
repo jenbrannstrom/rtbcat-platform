@@ -157,6 +157,8 @@ async def generate_mock_traffic_endpoint(
             message=f"Generated and imported {count} mock traffic records for {days} days.",
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Mock traffic generation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Mock traffic generation failed: {str(e)}")
