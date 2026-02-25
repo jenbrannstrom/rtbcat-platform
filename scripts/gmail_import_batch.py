@@ -188,26 +188,32 @@ def run_batch_import(
                     archive_to_s3(filepath, verbose=False)
 
                     # Import to database
-                    success, report_type, rows_imported, rows_dup, error = import_to_catscan(filepath)
-                    report_kind = detect_report_kind(filepath.name)
+                    imp = import_to_catscan(filepath)
+                    report_kind = imp.report_type if imp.report_type else detect_report_kind(filepath.name)
 
                     record_import_run(
                         seat_id=seat_id,
                         report_kind=report_kind,
                         filename=filepath.name,
-                        success=success,
-                        rows_imported=rows_imported,
-                        rows_duplicate=rows_dup,
-                        error=error,
+                        success=imp.success,
+                        rows_imported=imp.rows_imported,
+                        rows_duplicate=imp.rows_duplicate,
+                        rows_read=imp.rows_read,
+                        file_size_bytes=imp.file_size_bytes,
+                        batch_id=imp.batch_id,
+                        date_range_start=imp.date_range_start,
+                        date_range_end=imp.date_range_end,
+                        columns_found=imp.columns_found,
+                        error=imp.error,
                     )
 
-                    if success:
-                        log(f"  Imported: {rows_imported} rows ({report_type})")
+                    if imp.success:
+                        log(f"  Imported: {imp.rows_imported} rows ({report_kind})")
                         session_imported += 1
                         # Run pipeline
                         run_pipeline_for_file(filepath, seat_id, verbose=False)
                     else:
-                        log(f"  Import failed: {error}")
+                        log(f"  Import failed: {imp.error}")
                         session_errors += 1
 
                 mark_as_read(service, message_id)

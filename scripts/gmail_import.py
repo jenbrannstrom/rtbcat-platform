@@ -1315,7 +1315,7 @@ def run_import(
                     archive_to_s3(filepath, verbose=verbose)
 
                     imp = import_to_catscan(filepath)
-                    report_kind = detect_report_kind(filepath.name)
+                    report_kind = imp.report_type if imp.report_type else detect_report_kind(filepath.name)
                     record_import_run(
                         seat_id=seat_id,
                         report_kind=report_kind,
