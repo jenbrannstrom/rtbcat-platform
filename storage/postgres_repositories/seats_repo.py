@@ -233,8 +233,8 @@ class SeatsRepository:
         return row["bidder_id"] if row else None
 
     async def get_buyer_seat_with_bidder(self, buyer_id: str) -> Optional[dict[str, Any]]:
-        """Get buyer seat info including bidder_id and display_name."""
+        """Get buyer seat info including bidder_id, display_name, and service_account_id."""
         return await pg_query_one(
-            "SELECT bidder_id, display_name FROM buyer_seats WHERE buyer_id = %s",
+            "SELECT bidder_id, display_name, service_account_id FROM buyer_seats WHERE buyer_id = %s",
             (buyer_id,)
         )
