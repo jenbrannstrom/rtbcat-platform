@@ -415,7 +415,9 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
               })}
             </div>
             <div className="text-[11px] text-blue-700">
-              {t.pretargeting.endpointsHeaderTotalQpsCap}: {data.total_qps_allocated.toLocaleString(language)} &rarr; {effectiveTotal.toLocaleString(language)}
+              {t.pretargeting.endpointsHeaderTotalQpsCap}: {t.pretargeting.endpointsCurrentTotal}{' '}
+              {data.total_qps_allocated.toLocaleString(language)} &rarr; {t.pretargeting.endpointsAfterTotal}{' '}
+              {effectiveTotal.toLocaleString(language)}
             </div>
             <div className="flex items-center justify-end gap-2 pt-1">
               <button
@@ -476,7 +478,7 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
                 </span>
                 <span className="text-[10px] text-blue-500">&rarr;</span>
                 <span className="text-sm font-bold text-amber-700">
-                  {effectiveTotal.toLocaleString(language)}
+                  {t.pretargeting.endpointsAfterTotal}: {effectiveTotal.toLocaleString(language)}
                 </span>
               </>
             )}
