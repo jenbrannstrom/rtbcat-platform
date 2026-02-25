@@ -1082,7 +1082,7 @@ export const nl: PartialTranslations = {
       'Geen RTB-endpoints. Synchroniseer een service-account om te laden.',
     endpointsHeaderTitle: 'RTB-endpoints',
     endpointsHeaderAllocated: 'Toegewezen',
-    endpointsHeaderObserved: 'Geobserveerd',
+    endpointsHeaderObserved: 'Geobserveerde QPS',
     endpointsHeaderTotalQpsCap: 'Totale QPS-cap',
     endpointsHeaderQpsInfoAria: 'QPS-info',
     endpointsHeaderQpsInfoTooltip:

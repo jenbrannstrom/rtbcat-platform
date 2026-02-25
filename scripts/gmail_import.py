@@ -303,6 +303,47 @@ def detect_report_kind(filename: str) -> str:
     return "unknown"
 
 
+def canonical_report_kind_for_tracking(
+    filename: str,
+    *,
+    parsed_report_type: Optional[str] = None,
+    columns_found: Optional[str] = None,
+) -> str:
+    """Return a canonical report kind for import tracking records.
+
+    GCS-downloaded files are often renamed locally (e.g. ``catscan-report-<seat>-...``),
+    so filename-based detection can lose the original report kind. When that happens,
+    fall back to the unified importer parsed report type plus light column heuristics.
+    """
+    by_filename = detect_report_kind(filename)
+    if by_filename != "unknown":
+        return by_filename
+
+    report_type = (parsed_report_type or "").strip().lower()
+    cols = {
+        c.strip().lower()
+        for c in (columns_found or "").split(",")
+        if c and c.strip()
+    }
+
+    if report_type == "rtb_bidstream_geo":
+        return "catscan-pipeline-geo"
+    if report_type == "rtb_bidstream_publisher":
+        return "catscan-pipeline"
+    if report_type == "bid_filtering":
+        return "catscan-bid-filtering"
+    if report_type == "quality_signals":
+        return "quality_signals"
+    if report_type == "performance_detail":
+        if any("billing id" in c for c in cols) or any("active view" in c for c in cols):
+            return "catscan-quality"
+        if any(c in cols for c in ("bids in auction", "auctions won", "bids")):
+            return "catscan-bidsinauction"
+        return "performance_detail"
+
+    return report_type or "unknown"
+
+
 def extract_report_date(filename: str) -> Optional[str]:
     """Extract report date as YYYY-MM-DD from filename."""
     match = re.search(r"(20\\d{6})", filename)
@@ -1308,6 +1349,8 @@ def run_import(
 
                 result["emails_processed"] += 1
 
+                message_fully_processed = True
+
                 for filepath in downloaded_files:
                     result["files"].append(str(filepath))
 
@@ -1315,7 +1358,11 @@ def run_import(
                     archive_to_s3(filepath, verbose=verbose)
 
                     imp = import_to_catscan(filepath)
-                    report_kind = imp.report_type if imp.report_type else detect_report_kind(filepath.name)
+                    report_kind = canonical_report_kind_for_tracking(
+                        filepath.name,
+                        parsed_report_type=imp.report_type,
+                        columns_found=imp.columns_found,
+                    )
                     record_import_run(
                         seat_id=seat_id,
                         report_kind=report_kind,
@@ -1335,11 +1382,23 @@ def run_import(
                     if imp.success:
                         total_imported += 1
                         # Run pipeline for BigQuery/Postgres
-                        run_pipeline_for_file(filepath, seat_id, verbose=verbose)
+                        pipeline_ok = run_pipeline_for_file(filepath, seat_id, verbose=verbose)
+                        if not pipeline_ok:
+                            message_fully_processed = False
+                            result["errors"].append(
+                                f"Pipeline failed for {filepath.name} (message {message_id})"
+                            )
+                            if verbose:
+                                print(f"  Pipeline failed: {filepath.name}")
+                    else:
+                        message_fully_processed = False
 
-                mark_as_read(service, message_id)
-                if verbose:
-                    print("  Marked as read")
+                if message_fully_processed:
+                    mark_as_read(service, message_id)
+                    if verbose:
+                        print("  Marked as read")
+                elif verbose:
+                    print("  Not marking as read (import/pipeline failure)")
 
             except Exception as e:
                 error_msg = f"Error processing {message_id}: {e}"

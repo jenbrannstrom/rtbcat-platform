@@ -40,7 +40,7 @@ from scripts.gmail_import import (
     mark_as_read,
     import_to_catscan,
     archive_to_s3,
-    detect_report_kind,
+    canonical_report_kind_for_tracking,
     record_import_run,
     run_pipeline_for_file,
     SEAT_ID_ALLOWLIST,
@@ -86,8 +86,11 @@ def save_checkpoint(checkpoint: Dict[str, Any]):
 
 
 def get_processed_ids(checkpoint: Dict[str, Any]) -> Set[str]:
-    """Get set of already processed message IDs."""
-    return set(checkpoint.get("processed_ids", []) + checkpoint.get("failed_ids", []))
+    """Get set of successfully processed message IDs.
+
+    Failed messages remain retryable in future runs (unless the operator resets/clears them).
+    """
+    return set(checkpoint.get("processed_ids", []))
 
 
 def run_batch_import(
@@ -183,13 +186,18 @@ def run_batch_import(
                 session_processed += 1
 
             else:
+                message_fully_processed = True
                 for filepath in downloaded_files:
                     # Archive to S3
                     archive_to_s3(filepath, verbose=False)
 
                     # Import to database
                     imp = import_to_catscan(filepath)
-                    report_kind = imp.report_type if imp.report_type else detect_report_kind(filepath.name)
+                    report_kind = canonical_report_kind_for_tracking(
+                        filepath.name,
+                        parsed_report_type=imp.report_type,
+                        columns_found=imp.columns_found,
+                    )
 
                     record_import_run(
                         seat_id=seat_id,
@@ -211,18 +219,29 @@ def run_batch_import(
                         log(f"  Imported: {imp.rows_imported} rows ({report_kind})")
                         session_imported += 1
                         # Run pipeline
-                        run_pipeline_for_file(filepath, seat_id, verbose=False)
+                        pipeline_ok = run_pipeline_for_file(filepath, seat_id, verbose=False)
+                        if not pipeline_ok:
+                            log(f"  Pipeline failed: {filepath.name}")
+                            session_errors += 1
+                            message_fully_processed = False
                     else:
                         log(f"  Import failed: {imp.error}")
                         session_errors += 1
+                        message_fully_processed = False
 
-                mark_as_read(service, message_id)
-                checkpoint["processed_ids"].append(message_id)
-                session_processed += 1
+                if message_fully_processed:
+                    mark_as_read(service, message_id)
+                    checkpoint["processed_ids"].append(message_id)
+                    session_processed += 1
+                else:
+                    if message_id not in checkpoint["failed_ids"]:
+                        checkpoint["failed_ids"].append(message_id)
+                    log("  Message left unread / retryable due to import or pipeline failure")
 
         except Exception as e:
             log(f"  ERROR: {e}")
-            checkpoint["failed_ids"].append(message_id)
+            if message_id not in checkpoint["failed_ids"]:
+                checkpoint["failed_ids"].append(message_id)
             session_errors += 1
 
         # Update checkpoint every batch

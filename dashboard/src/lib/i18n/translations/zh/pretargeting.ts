@@ -396,7 +396,7 @@ const value: PartialTranslations['pretargeting'] = {
     '当前席位未找到 RTB 端点。',
   endpointsHeaderTitle: 'RTB 端点',
   endpointsHeaderAllocated: '分配',
-  endpointsHeaderObserved: '观测',
+  endpointsHeaderObserved: '观测 QPS',
   endpointsHeaderTotalQpsCap: 'QPS 总上限',
   endpointsHeaderQpsInfoAria: 'QPS 信息',
   endpointsHeaderQpsInfoTooltip:
