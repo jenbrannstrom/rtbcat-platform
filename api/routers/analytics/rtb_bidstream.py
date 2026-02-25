@@ -13,7 +13,7 @@ from api.dependencies import get_store, get_current_user, resolve_buyer_id
 from services.auth_service import User
 from services.rtb_bidstream_service import RtbBidstreamService
 from analytics.rtb_bidstream_analyzer import RTBFunnelAnalyzer
-from .common import validate_identifier_integrity
+from .common import validate_identifier_integrity, validate_billing_id_ownership
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,8 @@ async def get_rtb_bidstream(
         resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         svc = get_rtb_bidstream_service()
         return await svc.get_rtb_funnel(days, resolved_buyer_id)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get RTB funnel data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -62,7 +64,8 @@ async def get_rtb_bidstream(
 @router.get("/analytics/rtb-funnel/publishers", tags=["RTB Analytics"])
 async def get_rtb_publishers(
     limit: int = Query(30, ge=1, le=100),
-    days: int = Query(7, ge=1, le=90)
+    days: int = Query(7, ge=1, le=90),
+    user: User = Depends(get_current_user),
 ):
     """
     Get publisher performance breakdown from database.
@@ -72,6 +75,8 @@ async def get_rtb_publishers(
     try:
         svc = get_rtb_bidstream_service()
         return await svc.get_publishers(days, limit)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get publisher performance: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -80,7 +85,8 @@ async def get_rtb_publishers(
 @router.get("/analytics/rtb-funnel/geos", tags=["RTB Analytics"])
 async def get_rtb_geos(
     limit: int = Query(30, ge=1, le=100),
-    days: int = Query(7, ge=1, le=90)
+    days: int = Query(7, ge=1, le=90),
+    user: User = Depends(get_current_user),
 ):
     """
     Get geographic performance breakdown from database.
@@ -90,6 +96,8 @@ async def get_rtb_geos(
     try:
         svc = get_rtb_bidstream_service()
         return await svc.get_geos(days, limit)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get geo performance: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -123,6 +131,8 @@ async def get_config_performance(
         resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         svc = get_rtb_bidstream_service()
         return await svc.get_config_performance(days, resolved_buyer_id)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get config performance: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -149,6 +159,7 @@ async def get_config_breakdown(
     try:
         resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         validate_identifier_integrity(buyer_id=resolved_buyer_id, billing_id=billing_id)
+        await validate_billing_id_ownership(billing_id, resolved_buyer_id)
         svc = get_rtb_bidstream_service()
         return await svc.get_config_breakdown(billing_id, by, days, resolved_buyer_id)
     except HTTPException:
@@ -171,6 +182,7 @@ async def get_config_creatives(
     try:
         resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         validate_identifier_integrity(buyer_id=resolved_buyer_id, billing_id=billing_id)
+        await validate_billing_id_ownership(billing_id, resolved_buyer_id)
         svc = get_rtb_bidstream_service()
         return await svc.get_config_creatives(billing_id, days, resolved_buyer_id, size)
     except HTTPException:
@@ -183,7 +195,8 @@ async def get_config_creatives(
 @router.get("/analytics/rtb-funnel/creatives", tags=["RTB Analytics"])
 async def get_creative_win_performance(
     days: int = Query(7, ge=1, le=30),
-    limit: int = Query(50, ge=1, le=200)
+    limit: int = Query(50, ge=1, le=200),
+    user: User = Depends(get_current_user),
 ):
     """
     Get creative performance using WIN RATE metrics.
@@ -201,6 +214,8 @@ async def get_creative_win_performance(
         result = analyzer.get_creative_win_performance(limit=limit)
         result["period_days"] = days
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get creative win performance: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -211,6 +226,12 @@ async def get_app_drilldown(
     app_name: str = Query(..., description="App name to analyze"),
     billing_id: Optional[str] = Query(None, description="Filter by pretargeting config"),
     days: int = Query(7, ge=1, le=90),
+    buyer_id: Optional[str] = Query(
+        None,
+        description="Used for billing_id ownership validation only (not passed to service)",
+    ),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """
     Get detailed breakdown for a specific app/publisher.
@@ -220,10 +241,20 @@ async def get_app_drilldown(
     - Breakdown by creative size/format (identifies wasteful formats)
     - Breakdown by country
     - Breakdown by creative ID (with links to creative details)
+
+    `buyer_id` is used solely for billing_id ownership validation when both are
+    provided. The service receives only `billing_id`.
     """
     try:
+        # Only resolve buyer_id when billing_id is present (ownership check path).
+        if billing_id:
+            resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+            validate_identifier_integrity(buyer_id=resolved_buyer_id, billing_id=billing_id)
+            await validate_billing_id_ownership(billing_id, resolved_buyer_id)
         svc = get_rtb_bidstream_service()
         return await svc.get_app_drilldown(app_name, days, billing_id)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get app drilldown: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -18,6 +18,7 @@ from api.dependencies import (
     resolve_buyer_id,
     require_buyer_access,
     resolve_bidder_id,
+    require_admin,
 )
 from services.auth_service import User
 from .common import (
@@ -96,6 +97,8 @@ async def get_waste_report(
             recommendations_summary=report.recommendations_summary,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Waste analysis failed: {e}")
         raise HTTPException(status_code=500, detail=f"Waste analysis failed: {str(e)}")
@@ -167,6 +170,7 @@ async def detect_problem_formats(
 async def run_waste_analysis(
     days: int = Query(7, ge=1, le=90, description="Timeframe for analysis"),
     save_to_db: bool = Query(True, description="Save signals to database"),
+    user: User = Depends(require_admin),
 ):
     """Run waste analysis on all creatives with recent activity.
 
@@ -187,6 +191,7 @@ async def run_waste_analysis(
 async def resolve_waste_signal(
     signal_id: int,
     notes: Optional[str] = Query(None, description="Resolution notes"),
+    user: User = Depends(require_admin),
 ):
     """Mark a waste signal as resolved.
 
@@ -225,6 +230,8 @@ async def get_viewability_waste(
             "viewability_issues": result,
             "count": len(result),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get viewability waste: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -254,6 +261,8 @@ async def get_fraud_risk_publishers(
             "fraud_risk_publishers": result,
             "count": len(result),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get fraud risk publishers: {e}")
         raise HTTPException(status_code=500, detail=str(e))

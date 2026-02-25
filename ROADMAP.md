@@ -613,6 +613,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [ ] API keys logged in plaintext - Mask sensitive data in logs
 
 ### Code Quality
+- [x] **Analytics auth/scope sweep (2026-02-25)** — 14 unauthenticated analytics routes gated (`get_current_user`, `resolve_bidder_id`, or `require_admin`); 5 routes gained billing_id ownership validation via strict repo calls; 20 generic `except Exception` blocks now re-raise `HTTPException`; spend endpoint silent-fallback removed. Audit: `docs/review/2026-02-25/analytics-audit.md`. Residual: 5 service methods still lack buyer/bidder scope filtering (auth-gated but unscoped at query level).
 - [ ] Overly broad exception handling (`except Exception`) - Use specific exceptions
 - [ ] Missing type annotations in several Python files
 - [ ] Code duplication in frontend API response handling

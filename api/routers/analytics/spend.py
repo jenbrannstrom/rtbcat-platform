@@ -6,9 +6,12 @@ Handles spend statistics endpoint.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from api.dependencies import get_store, get_current_user, resolve_buyer_id
 from services.analytics_service import AnalyticsService
+from services.auth_service import User
+from .common import validate_identifier_integrity, validate_billing_id_ownership
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +24,13 @@ async def get_spend_stats(
     billing_id: Optional[str] = Query(
         None,
         description="Filter by specific pretargeting config ID (billing_id)",
-    )
+    ),
+    buyer_id: Optional[str] = Query(
+        None,
+        description="Used for billing_id ownership validation only (not passed to service)",
+    ),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
 ):
     """
     Get overall spend statistics for the selected period.
@@ -29,8 +38,18 @@ async def get_spend_stats(
     Returns total spend, impressions, and avg CPM from rtb_app_daily precompute table.
     Only includes data for pretargeting configs (`billing_id`) that belong to
     the current account. Optionally filter by a specific `billing_id`.
+
+    `buyer_id` is used solely for billing_id ownership validation when both are
+    provided. The service receives only `billing_id`.
     """
     try:
+        # Only resolve buyer_id when billing_id is present (ownership check path).
+        # Without billing_id there is nothing to validate ownership of.
+        resolved_buyer_id = None
+        if billing_id:
+            resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+            validate_identifier_integrity(buyer_id=resolved_buyer_id, billing_id=billing_id)
+            await validate_billing_id_ownership(billing_id, resolved_buyer_id)
         service = AnalyticsService()
         stats = await service.get_spend_stats(days, billing_id)
 
@@ -46,14 +65,8 @@ async def get_spend_stats(
             response["message"] = stats.message
         return response
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get spend stats: {e}")
-        return {
-            "period_days": days,
-            "total_impressions": 0,
-            "total_spend_usd": 0,
-            "avg_cpm_usd": None,
-            "has_spend_data": False,
-            "message": "No precompute available for requested date range.",
-            "precompute_status": {"rtb_app_daily": {"table": "rtb_app_daily", "exists": False, "has_rows": False, "row_count": 0}},
-        }
+        raise HTTPException(status_code=500, detail=str(e))
