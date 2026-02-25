@@ -13,6 +13,7 @@ from api.dependencies import get_store, get_current_user, resolve_buyer_id
 from services.auth_service import User
 from services.rtb_bidstream_service import RtbBidstreamService
 from analytics.rtb_bidstream_analyzer import RTBFunnelAnalyzer
+from .common import validate_identifier_integrity
 
 logger = logging.getLogger(__name__)
 
@@ -147,8 +148,11 @@ async def get_config_breakdown(
     """
     try:
         resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+        validate_identifier_integrity(buyer_id=resolved_buyer_id, billing_id=billing_id)
         svc = get_rtb_bidstream_service()
         return await svc.get_config_breakdown(billing_id, by, days, resolved_buyer_id)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get config breakdown: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -166,8 +170,11 @@ async def get_config_creatives(
     """List creatives for a config (optionally filtered by size)."""
     try:
         resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+        validate_identifier_integrity(buyer_id=resolved_buyer_id, billing_id=billing_id)
         svc = get_rtb_bidstream_service()
         return await svc.get_config_creatives(billing_id, days, resolved_buyer_id, size)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get creatives for config {billing_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -16,7 +16,7 @@ from analytics.qps_optimizer import QPSOptimizer
 from api.dependencies import get_store, get_current_user, resolve_buyer_id, get_allowed_buyer_ids
 from services.auth_service import User
 
-from .common import get_valid_billing_ids_for_buyer
+from .common import get_valid_billing_ids_for_buyer, validate_identifier_integrity
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,7 @@ async def get_size_coverage(
                 billing_ids = []
                 for allowed_buyer in allowed:
                     billing_ids.extend(await get_valid_billing_ids_for_buyer(allowed_buyer))
+        validate_identifier_integrity(buyer_id=resolved_buyer_id, billing_id=billing_id)
         analyzer = SizeCoverageAnalyzer(os.getenv("POSTGRES_SERVING_DSN", ""))
         summary = analyzer.analyze(
             days,
@@ -97,6 +98,8 @@ async def get_size_coverage(
                 for s in summary.covered_sizes[:20]
             ],
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to analyze size coverage: {e}")
         raise HTTPException(status_code=500, detail=str(e))
