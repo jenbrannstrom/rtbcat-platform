@@ -38,11 +38,19 @@ def parse_endpoint_response(endpoint_data: dict) -> EndpointDict:
     parts = name.split("/")
     endpoint_id = parts[-1] if len(parts) >= 4 else ""
 
+    # Google API returns maximumQps as string (int64 format); normalise to int|None
+    raw_qps = endpoint_data.get("maximumQps")
+    if raw_qps is not None:
+        try:
+            raw_qps = int(raw_qps)
+        except (TypeError, ValueError):
+            raw_qps = None
+
     return EndpointDict(
         endpointId=endpoint_id,
         name=name,
         url=endpoint_data.get("url", ""),
-        maximumQps=endpoint_data.get("maximumQps"),
+        maximumQps=raw_qps,
         tradingLocation=endpoint_data.get("tradingLocation", "TRADING_LOCATION_UNSPECIFIED"),
         bidProtocol=endpoint_data.get("bidProtocol", "BID_PROTOCOL_UNSPECIFIED"),
         collectedAt=datetime.now(timezone.utc).isoformat(),
@@ -97,6 +105,39 @@ class EndpointsClient(BaseAuthorizedBuyersClient):
         except HttpError as ex:
             logger.error(
                 f"Failed to list RTB endpoints: {ex.resp.status} - {ex.reason}"
+            )
+            raise
+
+    async def patch_endpoint(self, endpoint_id: str, maximum_qps: int) -> EndpointDict:
+        """Update the maximum QPS for an RTB endpoint.
+
+        Args:
+            endpoint_id: The endpoint ID to update.
+            maximum_qps: New QPS limit (>= 0).
+
+        Returns:
+            Updated EndpointDict.
+
+        Raises:
+            HttpError: If the API request fails.
+        """
+        service = self._get_service()
+        name = f"{self.parent}/endpoints/{endpoint_id}"
+
+        try:
+            response = await self._execute_with_retry(
+                lambda: service.bidders().endpoints().patch(
+                    name=name,
+                    body={"maximumQps": str(maximum_qps)},
+                    updateMask="maximumQps",
+                )
+            )
+            return parse_endpoint_response(response)
+
+        except HttpError as ex:
+            logger.error(
+                f"Failed to patch endpoint {endpoint_id} QPS to {maximum_qps}: "
+                f"{ex.resp.status} - {ex.reason}"
             )
             raise
 

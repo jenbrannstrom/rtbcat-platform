@@ -36,6 +36,13 @@ class SyncEndpointsResponse(BaseModel):
     bidder_id: str
 
 
+class UpdateEndpointQpsRequest(BaseModel):
+    """Request to update allocated QPS for a single endpoint."""
+    maximum_qps: int = Field(..., ge=0, description="New QPS limit")
+    buyer_id: Optional[str] = Field(None, description="Buyer/seat ID to resolve bidder")
+    service_account_id: Optional[str] = Field(None, description="Service account ID (fallback)")
+
+
 # =============================================================================
 # Pretargeting Config Models
 # =============================================================================
