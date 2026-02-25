@@ -94,13 +94,47 @@ def parse_columns(columns_found: Optional[str]) -> set[str]:
     }
 
 
+def normalize_col_token(col: str) -> str:
+    """Normalize header tokens so `billing_id` and `billing id` compare equal."""
+    normalized = col.strip().lower().replace("_", " ").replace("#", " ")
+    return " ".join(normalized.split())
+
+
+def classify_from_columns(columns_found: Optional[str]) -> str:
+    cols = parse_columns(columns_found)
+    if not cols:
+        return "unknown"
+
+    normalized = {normalize_col_token(c) for c in cols}
+
+    # Bid filtering reports are distinct and include filtering reason dimensions.
+    if any("filter" in c and "reason" in c for c in normalized):
+        return "catscan-bid-filtering"
+
+    # Mirror importer detection order for the 5-file UI:
+    # RTB funnel reports are identified by "Bid requests", then split by Publisher ID presence.
+    if "bid requests" in normalized:
+        if "publisher id" in normalized:
+            return "catscan-pipeline"
+        return "catscan-pipeline-geo"
+
+    # Quality/performance exports include billing_id and often Active View metrics.
+    if "billing id" in normalized or any("active view" in c for c in normalized):
+        return "catscan-quality"
+
+    # Bids-in-auction performance summaries lack bid-requests but include auction metrics.
+    if any(c in normalized for c in ("bids in auction", "auctions won")):
+        return "catscan-bidsinauction"
+
+    return "unknown"
+
+
 def classify_from_parser_type(
     parser_type: Optional[str],
     *,
     columns_found: Optional[str] = None,
 ) -> str:
     rt = (parser_type or "").strip().lower()
-    cols = parse_columns(columns_found)
 
     if rt == "rtb_bidstream_geo":
         return "catscan-pipeline-geo"
@@ -109,16 +143,14 @@ def classify_from_parser_type(
     if rt == "bid_filtering":
         return "catscan-bid-filtering"
     if rt == "performance_detail":
-        # catscan-quality carries billing_id / Active View metrics.
-        if any("billing id" in c for c in cols) or any("active view" in c for c in cols):
-            return "catscan-quality"
-        # catscan-bidsinauction carries bid-pipeline metrics.
-        if any(c in cols for c in ("bids in auction", "auctions won", "bids")):
-            return "catscan-bidsinauction"
+        by_cols = classify_from_columns(columns_found)
+        if by_cols != "unknown":
+            return by_cols
         # If columns are missing, leave unresolved rather than guessing.
         return "unknown"
-    # Preserve anything else by default (script only updates canonical targets).
-    return "unknown"
+
+    # Fallback for unknown/unrecognized parser types (e.g. generic GCS filenames + unknown parser tag).
+    return classify_from_columns(columns_found)
 
 
 def canonicalize_report_type(
@@ -191,8 +223,8 @@ def build_candidate_query(limit: Optional[int]) -> str:
             OR ir.report_type = 'unknown'
             OR ir.report_type = ANY(%(parser_types)s)
           )
-      AND (%(buyer_id)s IS NULL OR COALESCE(NULLIF(ir.buyer_id, ''), NULLIF(ir.bidder_id, '')) = %(buyer_id)s)
-      AND (%(since)s IS NULL OR COALESCE(ir.finished_at, ir.started_at) >= %(since)s::timestamptz)
+      AND (%(buyer_id)s::text IS NULL OR COALESCE(NULLIF(ir.buyer_id, ''), NULLIF(ir.bidder_id, '')) = %(buyer_id)s)
+      AND (%(since)s::text IS NULL OR COALESCE(ir.finished_at, ir.started_at) >= %(since)s::timestamptz)
     ORDER BY COALESCE(ir.finished_at, ir.started_at) DESC
     {limit_sql}
     """
@@ -304,4 +336,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
