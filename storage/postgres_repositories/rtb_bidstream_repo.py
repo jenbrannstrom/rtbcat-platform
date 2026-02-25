@@ -251,6 +251,9 @@ class RtbBidstreamRepository:
         if valid_billing_ids:
             where.append("billing_id = ANY(%s)")
             params.append(valid_billing_ids)
+        else:
+            where.append("billing_id IS NOT NULL")
+            where.append("BTRIM(billing_id) <> ''")
 
         return await pg_query(
             f"""
@@ -287,6 +290,9 @@ class RtbBidstreamRepository:
         if valid_billing_ids:
             where.append("billing_id = ANY(%s)")
             params.append(valid_billing_ids)
+        else:
+            where.append("billing_id IS NOT NULL")
+            where.append("BTRIM(billing_id) <> ''")
         where.append("country != ''")
         where.append("data_scope = 'billing'")
 
@@ -586,7 +592,9 @@ class RtbBidstreamRepository:
                 """
                 SELECT DISTINCT TRIM(billing_id) as billing_id
                 FROM pretargeting_configs
-                WHERE billing_id IS NOT NULL AND bidder_id = %s
+                WHERE billing_id IS NOT NULL
+                  AND BTRIM(billing_id) <> ''
+                  AND bidder_id = %s
                 """,
                 (bidder_id,),
             )
@@ -596,6 +604,7 @@ class RtbBidstreamRepository:
                 SELECT DISTINCT TRIM(billing_id) as billing_id
                 FROM pretargeting_configs
                 WHERE billing_id IS NOT NULL
+                  AND BTRIM(billing_id) <> ''
                 """
             )
         return [row["billing_id"] for row in rows]

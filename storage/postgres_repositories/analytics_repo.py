@@ -84,7 +84,9 @@ class AnalyticsRepository:
             """
             SELECT DISTINCT TRIM(billing_id) as billing_id
             FROM pretargeting_configs
-            WHERE billing_id IS NOT NULL AND bidder_id = %s
+            WHERE billing_id IS NOT NULL
+              AND BTRIM(billing_id) <> ''
+              AND bidder_id = %s
             """,
             (bidder_id,),
         )
@@ -97,6 +99,7 @@ class AnalyticsRepository:
             SELECT DISTINCT TRIM(billing_id) as billing_id
             FROM pretargeting_configs
             WHERE billing_id IS NOT NULL
+              AND BTRIM(billing_id) <> ''
             """
         )
         return [row["billing_id"] for row in rows]
