@@ -171,21 +171,29 @@ class AnalyticsService:
         self,
         days: int,
         billing_id: Optional[str] = None,
+        buyer_id: Optional[str] = None,
     ) -> SpendStats:
         """Get overall spend statistics for the selected period.
 
         Args:
             days: Number of days to analyze.
             billing_id: Optional specific billing account ID to filter by.
+            buyer_id: Optional buyer seat ID to scope queries.
 
         Returns:
             SpendStats with totals and CPM calculation.
         """
         # Check precompute status first
-        filters = ["billing_id = %s"] if billing_id else None
-        params = [billing_id] if billing_id else None
+        filters = []
+        params = []
+        if buyer_id:
+            filters.append("buyer_account_id = %s")
+            params.append(buyer_id)
+        if billing_id:
+            filters.append("billing_id = %s")
+            params.append(billing_id)
         precompute_status = await self.get_precompute_status(
-            "rtb_app_daily", days, filters, params
+            "rtb_app_daily", days, filters or None, params or None
         )
 
         if not precompute_status.has_rows:
@@ -208,7 +216,9 @@ class AnalyticsService:
 
         # Fetch spend stats based on filters
         if billing_id:
-            row = await self._repo.get_spend_stats_by_billing_id(days, billing_id)
+            row = await self._repo.get_spend_stats_by_billing_id(days, billing_id, buyer_id)
+        elif buyer_id:
+            row = await self._repo.get_spend_stats_by_buyer(days, buyer_id)
         else:
             valid_billing_ids = await self.get_valid_billing_ids()
             if valid_billing_ids:

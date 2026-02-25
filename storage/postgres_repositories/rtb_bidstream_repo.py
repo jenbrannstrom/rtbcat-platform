@@ -631,6 +631,7 @@ class RtbBidstreamRepository:
         app_name: str,
         days: int,
         billing_id: Optional[str] = None,
+        buyer_id: Optional[str] = None,
     ) -> Optional[dict[str, Any]]:
         """Get app summary from rtb_app_daily."""
         where = [
@@ -639,6 +640,9 @@ class RtbBidstreamRepository:
         ]
         params: list = [app_name, days]
 
+        if buyer_id:
+            where.append("buyer_account_id = %s")
+            params.append(buyer_id)
         if billing_id:
             where.append("billing_id = %s")
             params.append(billing_id)
@@ -665,6 +669,7 @@ class RtbBidstreamRepository:
         app_name: str,
         days: int,
         billing_id: Optional[str] = None,
+        buyer_id: Optional[str] = None,
     ) -> int:
         """Get distinct creative count for an app."""
         where = [
@@ -673,6 +678,9 @@ class RtbBidstreamRepository:
         ]
         params: list = [app_name, days]
 
+        if buyer_id:
+            where.append("buyer_account_id = %s")
+            params.append(buyer_id)
         if billing_id:
             where.append("billing_id = %s")
             params.append(billing_id)
@@ -692,6 +700,7 @@ class RtbBidstreamRepository:
         app_name: str,
         days: int,
         billing_id: Optional[str] = None,
+        buyer_id: Optional[str] = None,
     ) -> int:
         """Get distinct country count for an app."""
         where = [
@@ -700,6 +709,9 @@ class RtbBidstreamRepository:
         ]
         params: list = [app_name, days]
 
+        if buyer_id:
+            where.append("buyer_account_id = %s")
+            params.append(buyer_id)
         if billing_id:
             where.append("billing_id = %s")
             params.append(billing_id)
@@ -719,6 +731,7 @@ class RtbBidstreamRepository:
         app_name: str,
         days: int,
         billing_id: Optional[str] = None,
+        buyer_id: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         """Get size breakdown for an app."""
         where = [
@@ -727,6 +740,9 @@ class RtbBidstreamRepository:
         ]
         params: list = [app_name, days]
 
+        if buyer_id:
+            where.append("buyer_account_id = %s")
+            params.append(buyer_id)
         if billing_id:
             where.append("billing_id = %s")
             params.append(billing_id)
@@ -753,6 +769,7 @@ class RtbBidstreamRepository:
         app_name: str,
         days: int,
         billing_id: Optional[str] = None,
+        buyer_id: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         """Get country breakdown for an app."""
         where = [
@@ -761,6 +778,9 @@ class RtbBidstreamRepository:
         ]
         params: list = [app_name, days]
 
+        if buyer_id:
+            where.append("buyer_account_id = %s")
+            params.append(buyer_id)
         if billing_id:
             where.append("billing_id = %s")
             params.append(billing_id)
@@ -786,6 +806,7 @@ class RtbBidstreamRepository:
         app_name: str,
         days: int,
         billing_id: Optional[str] = None,
+        buyer_id: Optional[str] = None,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
         """Get creative breakdown for an app."""
@@ -795,6 +816,9 @@ class RtbBidstreamRepository:
         ]
         params: list = [app_name, days]
 
+        if buyer_id:
+            where.append("buyer_account_id = %s")
+            params.append(buyer_id)
         if billing_id:
             where.append("billing_id = %s")
             params.append(billing_id)
@@ -824,25 +848,35 @@ class RtbBidstreamRepository:
         self,
         creative_ids: list[str],
         days: int,
+        buyer_id: Optional[str] = None,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
         """Get bid filtering data for creatives."""
         if not creative_ids:
             return []
 
+        where = [
+            "creative_id = ANY(%s)",
+            "metric_date::date >= (CURRENT_DATE - %s * INTERVAL '1 day')",
+        ]
+        params: list = [creative_ids, days]
+        if buyer_id:
+            where.append("buyer_account_id = %s")
+            params.append(buyer_id)
+        params.append(limit)
+
         return await pg_query(
-            """
+            f"""
             SELECT
                 filtering_reason,
                 SUM(bids) as total_bids,
                 SUM(bids_in_auction) as bids_passed,
                 SUM(opportunity_cost_micros) as opportunity_cost_micros
             FROM rtb_bid_filtering
-            WHERE creative_id = ANY(%s)
-              AND metric_date::date >= (CURRENT_DATE - %s * INTERVAL '1 day')
+            WHERE {" AND ".join(where)}
             GROUP BY filtering_reason
             ORDER BY SUM(bids) DESC
             LIMIT %s
             """,
-            (creative_ids, days, limit),
+            tuple(params),
         )

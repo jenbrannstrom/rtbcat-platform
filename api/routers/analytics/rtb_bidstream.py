@@ -65,6 +65,8 @@ async def get_rtb_bidstream(
 async def get_rtb_publishers(
     limit: int = Query(30, ge=1, le=100),
     days: int = Query(7, ge=1, le=90),
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """
@@ -73,8 +75,9 @@ async def get_rtb_publishers(
     Shows win rates and pretargeting filter rates by publisher.
     """
     try:
+        resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         svc = get_rtb_bidstream_service()
-        return await svc.get_publishers(days, limit)
+        return await svc.get_publishers(days=days, limit=limit, buyer_id=resolved_buyer_id)
     except HTTPException:
         raise
     except Exception as e:
@@ -86,6 +89,8 @@ async def get_rtb_publishers(
 async def get_rtb_geos(
     limit: int = Query(30, ge=1, le=100),
     days: int = Query(7, ge=1, le=90),
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """
@@ -94,8 +99,9 @@ async def get_rtb_geos(
     Shows win rates and auction participation by country.
     """
     try:
+        resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         svc = get_rtb_bidstream_service()
-        return await svc.get_geos(days, limit)
+        return await svc.get_geos(days=days, limit=limit, buyer_id=resolved_buyer_id)
     except HTTPException:
         raise
     except Exception as e:
@@ -228,7 +234,7 @@ async def get_app_drilldown(
     days: int = Query(7, ge=1, le=90),
     buyer_id: Optional[str] = Query(
         None,
-        description="Used for billing_id ownership validation only (not passed to service)",
+        description="Filter by buyer seat ID",
     ),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
@@ -242,17 +248,18 @@ async def get_app_drilldown(
     - Breakdown by country
     - Breakdown by creative ID (with links to creative details)
 
-    `buyer_id` is used solely for billing_id ownership validation when both are
-    provided. The service receives only `billing_id`.
+    `buyer_id` scopes the app precompute queries. When `billing_id` is also provided,
+    it is additionally used for ownership validation.
     """
     try:
-        # Only resolve buyer_id when billing_id is present (ownership check path).
+        resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         if billing_id:
-            resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
             validate_identifier_integrity(buyer_id=resolved_buyer_id, billing_id=billing_id)
             await validate_billing_id_ownership(billing_id, resolved_buyer_id)
         svc = get_rtb_bidstream_service()
-        return await svc.get_app_drilldown(app_name, days, billing_id)
+        return await svc.get_app_drilldown(
+            app_name, days, billing_id, resolved_buyer_id
+        )
     except HTTPException:
         raise
     except Exception as e:

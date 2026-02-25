@@ -614,6 +614,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 
 ### Code Quality
 - [x] **Analytics auth/scope sweep (2026-02-25)** — 14 unauthenticated analytics routes gated (`get_current_user`, `resolve_bidder_id`, or `require_admin`); 5 routes gained billing_id ownership validation via strict repo calls; 20 generic `except Exception` blocks now re-raise `HTTPException`; spend endpoint silent-fallback removed. Audit: `docs/review/2026-02-25/analytics-audit.md`. Residual: 5 service methods still lack buyer/bidder scope filtering (auth-gated but unscoped at query level).
+- [x] **Analytics service query-scope hardening (2026-02-25)** — Added query-level `buyer_id` scoping to `rtb-funnel/publishers`, `rtb-funnel/geos`, `app-drilldown`, and `spend-stats` across route/service/repo layers (including app bid-filtering and spend precompute status filters). Residual: legacy `GET /analytics/rtb-funnel/creatives` (`RTBFunnelAnalyzer`) remains auth-gated but not buyer-scoped.
 - [ ] Overly broad exception handling (`except Exception`) - Use specific exceptions
 - [ ] Missing type annotations in several Python files
 - [ ] Code duplication in frontend API response handling
