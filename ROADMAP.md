@@ -486,6 +486,8 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 
 ### Gmail Import & Pipeline (Operational)
 - [ ] **Backlog ingestion** - Run `scripts/gmail_import_batch.py` with checkpointing; track progress in `~/.catscan/gmail_batch_checkpoint.json`.
+  - 2026-02-25 progress: batch run processed all 15 visible Gmail emails (13 imported ~3M rows, 2 had no CSV). Scheduled importer also ran, advancing `latest_metric_date` to 2026-02-24 and `total_imports` to 700. Unread count dropped 33 → 30. Backlog reduced but not verifiably cleared — remaining 30 unread emails not yet characterized. Known bug: deployed batch script has `CatscanImportResult` unpack mismatch (imports succeed, but per-file tracking/counters broken).
+  - Progress note: `docs/review/2026-02-25/GMAIL_BACKLOG_INGESTION_PROGRESS.md`
 - [ ] **Cloud Scheduler** - Configure `/api/gmail/import/scheduled` with `GMAIL_IMPORT_SECRET`. See `docs/gmail-autodownload-fix-plan.md`.
   - Ensure nginx has a dedicated unauthenticated `location = /api/gmail/import/scheduled` route (secret header still enforced by API).
 - [ ] **Token health monitoring** - Alert on `invalid_grant` in logs and on `/gmail/status` when `authorized=false` or `last_error` contains `invalid_grant`. See `docs/gmail-autodownload-fix-plan.md`.
