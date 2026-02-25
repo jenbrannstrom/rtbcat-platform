@@ -62,6 +62,16 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
     return sum + (qps ?? 0);
   }, 0) ?? 0;
 
+  const observedTotal = data?.endpoints?.reduce((sum, ep) => {
+    const observed = observedQpsByEndpointId?.[ep.endpoint_id];
+    return typeof observed === 'number' ? sum + observed : sum;
+  }, 0) ?? 0;
+
+  const observedTotalCount = data?.endpoints?.reduce((count, ep) => {
+    const observed = observedQpsByEndpointId?.[ep.endpoint_id];
+    return typeof observed === 'number' ? count + 1 : count;
+  }, 0) ?? 0;
+
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     setPendingQpsEdits({});
@@ -471,22 +481,30 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
             )}
           </div>
           <div className="flex items-center gap-2">
-            {hasPendingEdits && (
-              <>
-                <span className="text-[10px] text-blue-500">
-                  {t.pretargeting.endpointsCurrentTotal}: {formatQPS(data.total_qps_allocated, t, language)}
+            <div className="w-24 text-right leading-tight">
+              {hasPendingEdits ? (
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] text-blue-500 line-through">
+                    {formatQPS(data.total_qps_allocated, t, language)}
+                  </span>
+                  <span className="text-sm font-bold text-amber-700">
+                    {effectiveTotal.toLocaleString(language)}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-sm font-bold text-blue-900">
+                  {formatQPS(data.total_qps_allocated, t, language)}
                 </span>
-                <span className="text-[10px] text-blue-500">&rarr;</span>
-                <span className="text-sm font-bold text-amber-700">
-                  {t.pretargeting.endpointsAfterTotal}: {effectiveTotal.toLocaleString(language)}
-                </span>
-              </>
-            )}
-            {!hasPendingEdits && (
-              <span className="text-sm font-bold text-blue-900">
-                {formatQPS(data.total_qps_allocated, t, language)}
+              )}
+            </div>
+
+            <div className="w-24 text-right">
+              <span className="text-sm font-bold text-slate-700">
+                {observedTotalCount > 0
+                  ? observedTotal.toLocaleString(language, { maximumFractionDigits: 1 })
+                  : '\u2014'}
               </span>
-            )}
+            </div>
           </div>
         </div>
       </div>
