@@ -9,7 +9,7 @@ from googleapiclient.errors import HttpError
 
 from collectors import EndpointsClient
 from services.endpoints_service import EndpointsService
-from services.seats_service import SeatsService
+from services.seats_service import SeatsService, is_gcp_mode
 
 from .models import (
     RTBEndpointItem,
@@ -36,13 +36,13 @@ async def _resolve_bidder_context(
     seats_service: SeatsService,
     buyer_id: Optional[str] = None,
     service_account_id: Optional[str] = None,
-) -> tuple[str, Optional[str], str]:
+) -> tuple[str, Optional[str], Optional[str]]:
     """Resolve bidder_id, account_name, and credentials_path.
 
     Priority: buyer_id → service_account_id → first active service account.
 
     Returns:
-        (bidder_id, account_name, credentials_path)
+        (bidder_id, account_name, credentials_path_or_none_for_adc)
 
     Raises:
         HTTPException on resolution failure.
@@ -75,31 +75,21 @@ async def _resolve_bidder_context(
     if not service_account:
         accounts = await seats_service.get_service_accounts(active_only=True)
         if not accounts:
-            raise HTTPException(
-                status_code=400,
-                detail="No service account configured. Upload credentials via /setup.",
-            )
-        service_account = accounts[0]
-        if not account_name:
-            account_name = service_account.display_name
-
-    # Validate credentials
-    if not service_account.credentials_path:
-        raise HTTPException(
-            status_code=400,
-            detail="Service account credentials path not configured.",
-        )
-
-    creds_path = Path(service_account.credentials_path).expanduser()
-    if not creds_path.exists():
-        raise HTTPException(
-            status_code=400,
-            detail="Service account credentials file not found. Re-upload via /setup.",
-        )
+            # GCP mode (ADC) can proceed without a stored service account record.
+            if not is_gcp_mode():
+                raise HTTPException(
+                    status_code=400,
+                    detail="No service account configured. Upload credentials via /setup.",
+                )
+        else:
+            service_account = accounts[0]
+            if not account_name:
+                account_name = service_account.display_name
 
     # Resolve bidder_id if not yet known
     if not bidder_id:
-        bidder_id = await seats_service.get_bidder_id_for_service_account(service_account.id) or ""
+        if service_account:
+            bidder_id = await seats_service.get_bidder_id_for_service_account(service_account.id) or ""
     if not bidder_id:
         bidder_id = await seats_service.get_first_bidder_id() or ""
     if not bidder_id:
@@ -108,7 +98,36 @@ async def _resolve_bidder_context(
             detail="No buyer seats discovered. Use /seats/discover first.",
         )
 
-    return bidder_id, account_name, str(creds_path)
+    # Credentials: explicit service-account JSON when available, otherwise ADC in GCP mode.
+    if service_account and service_account.credentials_path:
+        creds_path = Path(service_account.credentials_path).expanduser()
+        if creds_path.exists():
+            return bidder_id, account_name, str(creds_path)
+        if not is_gcp_mode():
+            raise HTTPException(
+                status_code=400,
+                detail="Service account credentials file not found. Re-upload via /setup.",
+            )
+        logger.info(
+            "Service account credentials file missing; falling back to ADC for bidder_id=%s",
+            bidder_id,
+        )
+        return bidder_id, account_name, None
+
+    if service_account and not service_account.credentials_path and not is_gcp_mode():
+        raise HTTPException(
+            status_code=400,
+            detail="Service account credentials path not configured.",
+        )
+
+    if is_gcp_mode():
+        logger.info("Using ADC for RTB endpoints bidder_id=%s", bidder_id)
+        return bidder_id, account_name, None
+
+    raise HTTPException(
+        status_code=400,
+        detail="Service account credentials path not configured.",
+    )
 
 
 # ---------------------------------------------------------------------------
