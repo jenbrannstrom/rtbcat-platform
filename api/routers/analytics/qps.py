@@ -64,6 +64,8 @@ async def get_size_coverage(
                 billing_ids = await get_valid_billing_ids_for_buyer(resolved_buyer_id)
             else:
                 allowed = await get_allowed_buyer_ids(store=store, user=user)
+                if allowed is not None and not allowed:
+                    raise HTTPException(status_code=403, detail="No buyer accounts assigned.")
                 if allowed:
                     if len(allowed) == 1:
                         resolved_buyer_id = allowed[0]
@@ -140,6 +142,8 @@ async def get_geo_waste(
             billing_ids = await get_valid_billing_ids_for_buyer(resolved_buyer_id)
         else:
             allowed = await get_allowed_buyer_ids(store=store, user=user)
+            if allowed is not None and not allowed:
+                raise HTTPException(status_code=403, detail="No buyer accounts assigned.")
             if allowed:
                 billing_ids = []
                 for allowed_buyer in allowed:
@@ -232,6 +236,8 @@ async def get_qps_summary(
             billing_ids = await get_valid_billing_ids_for_buyer(resolved_buyer_id)
         else:
             allowed = await get_allowed_buyer_ids(store=store, user=user)
+            if allowed is not None and not allowed:
+                raise HTTPException(status_code=403, detail="No buyer accounts assigned.")
             if allowed:
                 billing_ids = []
                 for allowed_buyer in allowed:
