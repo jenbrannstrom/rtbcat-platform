@@ -269,16 +269,16 @@ A correctly-operating CatScan instance satisfies all of the following simultaneo
 | **Contract ID** | C-EPT-001 |
 | **Rule** | `rtb_endpoints_current` must have ≥1 row per endpoint in `rtb_endpoints`, with `observed_at` within the last 24 hours. |
 | **Scope** | All bidders with endpoints |
-| **Why it matters** | FACT: This table is currently 0 rows across ALL bidders. The endpoint-efficiency panel cannot show observed QPS, utilization, or overshoot without this data. The field `observed_query_rate_qps` is permanently null. |
+| **Why it matters** | `rtb_endpoints_current` is the source of truth for observed endpoint QPS in endpoint-efficiency and related UI/API fields. If rows are missing or stale, observed QPS/utilization/overshoot become unavailable or misleadingly stale. |
 | **Detection method** | SQL: `SELECT e.bidder_id, e.endpoint_id, ec.observed_at FROM rtb_endpoints e LEFT JOIN rtb_endpoints_current ec ON e.bidder_id = ec.bidder_id AND e.endpoint_id = ec.endpoint_id WHERE ec.id IS NULL OR ec.observed_at < NOW() - INTERVAL '24 hours'` |
 | **Check frequency** | Every 1 hour |
 | **Alert condition** | Any endpoint missing from rtb_endpoints_current or observed_at > 24h → severity HIGH |
 | **Failure behavior** | API sets `endpoint_delivery_state: "missing"` and emits alert `ENDPOINT_DELIVERY_MISSING`. UI must show "Feed missing" in red. |
-| **Remediation runbook** | 1. **This requires NEW CODE**: a QPS observation job that queries Google Authorized Buyers API for current endpoint QPS and writes to rtb_endpoints_current. 2. No such job exists in the codebase currently. 3. Until implemented, endpoint-efficiency observed_query_rate_qps will always be null. |
+| **Remediation runbook** | 1. Trigger a refresh path that updates endpoint observations (for example `python scripts/refresh_precompute.py --days 7` or the scheduled precompute refresh endpoint). 2. Verify `rtb_endpoints_current` row count/freshness against `rtb_endpoints`. 3. If stale recurs, inspect active schedulers (`catscan-home-refresh` timer and/or `/api/precompute/refresh/scheduled`) and confirm endpoint observation refresh is included (fix shipped in `cabab81`, deployed 2026-02-25). |
 | **Pass criteria** | Every endpoint in rtb_endpoints has a corresponding rtb_endpoints_current row with observed_at < 24h ago |
 | **Owner** | Pipeline team |
 | **Confidence** | 0.95 |
-| **Caveats** | FACT: No writer for this table exists. This is the highest-priority gap. |
+| **Caveats** | Freshness depends on scheduled refresh cadence/execution; contract can fail if precompute/home refresh jobs run but endpoint observation refresh is omitted or not running. |
 
 #### C-EPT-002: Endpoint Config Sync
 
