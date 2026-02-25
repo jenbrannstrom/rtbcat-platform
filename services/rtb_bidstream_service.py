@@ -264,9 +264,14 @@ class RtbBidstreamService:
         self,
         days: int,
         limit: int = 30,
+        buyer_id: Optional[str] = None,
     ) -> dict[str, Any]:
         """Get publisher performance breakdown."""
-        status = await self.get_precompute_status("rtb_publisher_daily", days)
+        buyer_filters = ["buyer_account_id = %s"] if buyer_id else None
+        buyer_params = [buyer_id] if buyer_id else None
+        status = await self.get_precompute_status(
+            "rtb_publisher_daily", days, buyer_filters, buyer_params
+        )
         if not status.has_rows:
             return {
                 "publishers": [],
@@ -276,8 +281,8 @@ class RtbBidstreamService:
                 "precompute_status": {"rtb_publisher_daily": status.to_dict()},
             }
 
-        rows = await self._repo.get_publisher_breakdown(days, None, limit)
-        count = await self._repo.get_publisher_count(days, None)
+        rows = await self._repo.get_publisher_breakdown(days, buyer_id, limit)
+        count = await self._repo.get_publisher_count(days, buyer_id)
 
         publishers = []
         for row in rows:
@@ -317,9 +322,14 @@ class RtbBidstreamService:
         self,
         days: int,
         limit: int = 30,
+        buyer_id: Optional[str] = None,
     ) -> dict[str, Any]:
         """Get geographic performance breakdown."""
-        status = await self.get_precompute_status("rtb_geo_daily", days)
+        buyer_filters = ["buyer_account_id = %s"] if buyer_id else None
+        buyer_params = [buyer_id] if buyer_id else None
+        status = await self.get_precompute_status(
+            "rtb_geo_daily", days, buyer_filters, buyer_params
+        )
         if not status.has_rows:
             return {
                 "geos": [],
@@ -329,8 +339,8 @@ class RtbBidstreamService:
                 "precompute_status": {"rtb_geo_daily": status.to_dict()},
             }
 
-        rows = await self._repo.get_geo_breakdown(days, None, limit)
-        count = await self._repo.get_country_count(days, None)
+        rows = await self._repo.get_geo_breakdown(days, buyer_id, limit)
+        count = await self._repo.get_country_count(days, buyer_id)
 
         geos = []
         for row in rows:
@@ -717,11 +727,15 @@ class RtbBidstreamService:
         app_name: str,
         days: int,
         billing_id: Optional[str] = None,
+        buyer_id: Optional[str] = None,
     ) -> dict[str, Any]:
         """Get detailed breakdown for an app/publisher."""
         # Check precompute status
         filters = ["app_name = %s"]
         params = [app_name]
+        if buyer_id:
+            filters.append("buyer_account_id = %s")
+            params.append(buyer_id)
         if billing_id:
             filters.append("billing_id = %s")
             params.append(billing_id)
@@ -743,8 +757,13 @@ class RtbBidstreamService:
             fallback_message = "No precompute available for requested date range."
             if billing_id:
                 # Check if data exists for this app at all
+                total_filters = ["app_name = %s"]
+                total_params = [app_name]
+                if buyer_id:
+                    total_filters.append("buyer_account_id = %s")
+                    total_params.append(buyer_id)
                 total_status = await self.get_precompute_status(
-                    "rtb_app_daily", days, ["app_name = %s"], [app_name]
+                    "rtb_app_daily", days, total_filters, total_params
                 )
                 if total_status.has_rows:
                     fallback_message = (
@@ -766,23 +785,33 @@ class RtbBidstreamService:
             }
 
         # Get app summary
-        summary_row = await self._repo.get_app_summary(app_name, days, billing_id)
+        summary_row = await self._repo.get_app_summary(app_name, days, billing_id, buyer_id)
         total_reached = summary_row["total_reached"] or 0 if summary_row else 0
         total_impressions = summary_row["total_impressions"] or 0 if summary_row else 0
         win_rate = (total_impressions / total_reached * 100) if total_reached > 0 else 0
 
         # Get counts
-        creative_count = await self._repo.get_app_creative_count(app_name, days, billing_id)
-        country_count = await self._repo.get_app_country_count(app_name, days, billing_id)
+        creative_count = await self._repo.get_app_creative_count(
+            app_name, days, billing_id, buyer_id
+        )
+        country_count = await self._repo.get_app_country_count(
+            app_name, days, billing_id, buyer_id
+        )
 
         # Get breakdowns
-        sizes = await self._build_app_sizes(app_name, days, billing_id, total_reached, win_rate)
-        countries = await self._build_app_countries(app_name, days, billing_id, total_reached)
-        creatives = await self._build_app_creatives(app_name, days, billing_id, total_reached)
+        sizes = await self._build_app_sizes(
+            app_name, days, billing_id, buyer_id, total_reached, win_rate
+        )
+        countries = await self._build_app_countries(
+            app_name, days, billing_id, buyer_id, total_reached
+        )
+        creatives = await self._build_app_creatives(
+            app_name, days, billing_id, buyer_id, total_reached
+        )
 
         # Get bid filtering data
         creative_ids = [c["creative_id"] for c in creatives]
-        bid_filtering = await self._get_bid_filtering(creative_ids, days)
+        bid_filtering = await self._get_bid_filtering(creative_ids, days, buyer_id)
 
         # Identify wasteful sizes
         wasteful_sizes = [s for s in sizes if s.get("is_wasteful")]
@@ -834,11 +863,14 @@ class RtbBidstreamService:
         app_name: str,
         days: int,
         billing_id: Optional[str],
+        buyer_id: Optional[str],
         total_reached: int,
         overall_win_rate: float,
     ) -> list[dict[str, Any]]:
         """Build app size breakdown."""
-        rows = await self._repo.get_app_size_breakdown(app_name, days, billing_id)
+        rows = await self._repo.get_app_size_breakdown(
+            app_name, days, billing_id, buyer_id
+        )
         sizes = []
         for row in rows:
             reached = row["reached"] or 0
@@ -865,10 +897,13 @@ class RtbBidstreamService:
         app_name: str,
         days: int,
         billing_id: Optional[str],
+        buyer_id: Optional[str],
         total_reached: int,
     ) -> list[dict[str, Any]]:
         """Build app country breakdown."""
-        rows = await self._repo.get_app_country_breakdown(app_name, days, billing_id)
+        rows = await self._repo.get_app_country_breakdown(
+            app_name, days, billing_id, buyer_id
+        )
         countries = []
         for row in rows:
             reached = row["reached"] or 0
@@ -891,10 +926,13 @@ class RtbBidstreamService:
         app_name: str,
         days: int,
         billing_id: Optional[str],
+        buyer_id: Optional[str],
         total_reached: int,
     ) -> list[dict[str, Any]]:
         """Build app creative breakdown."""
-        rows = await self._repo.get_app_creative_breakdown(app_name, days, billing_id)
+        rows = await self._repo.get_app_creative_breakdown(
+            app_name, days, billing_id, buyer_id
+        )
         creatives = []
         for row in rows:
             reached = row["reached"] or 0
@@ -918,6 +956,7 @@ class RtbBidstreamService:
         self,
         creative_ids: list[str],
         days: int,
+        buyer_id: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         """Get bid filtering data for creatives."""
         if not creative_ids:
@@ -928,7 +967,9 @@ class RtbBidstreamService:
             if not await self._repo.table_exists("rtb_bid_filtering"):
                 return []
 
-            rows = await self._repo.get_bid_filtering_for_creatives(creative_ids, days)
+            rows = await self._repo.get_bid_filtering_for_creatives(
+                creative_ids, days, buyer_id=buyer_id
+            )
             if not rows:
                 return []
 

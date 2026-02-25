@@ -117,9 +117,34 @@ class AnalyticsRepository:
     # =========================================================================
 
     async def get_spend_stats_by_billing_id(
-        self, days: int, billing_id: str
+        self, days: int, billing_id: str, buyer_id: Optional[str] = None
     ) -> dict[str, Any]:
         """Get spend stats filtered by a specific billing_id."""
+        start_date, end_date = self._window_bounds(days)
+        where = [
+            "metric_date BETWEEN %s AND %s",
+            "billing_id = %s",
+        ]
+        params: list = [start_date, end_date, billing_id]
+        if buyer_id:
+            where.append("buyer_account_id = %s")
+            params.append(buyer_id)
+        row = await pg_query_one(
+            f"""
+            SELECT
+                COALESCE(SUM(impressions), 0) as total_impressions,
+                COALESCE(SUM(spend_micros), 0) as total_spend_micros
+            FROM rtb_app_daily
+            WHERE {" AND ".join(where)}
+            """,
+            tuple(params),
+        )
+        return dict(row) if row else {"total_impressions": 0, "total_spend_micros": 0}
+
+    async def get_spend_stats_by_buyer(
+        self, days: int, buyer_id: str
+    ) -> dict[str, Any]:
+        """Get spend stats filtered by buyer_account_id."""
         start_date, end_date = self._window_bounds(days)
         row = await pg_query_one(
             """
@@ -128,9 +153,9 @@ class AnalyticsRepository:
                 COALESCE(SUM(spend_micros), 0) as total_spend_micros
             FROM rtb_app_daily
             WHERE metric_date BETWEEN %s AND %s
-              AND billing_id = %s
+              AND buyer_account_id = %s
             """,
-            (start_date, end_date, billing_id),
+            (start_date, end_date, buyer_id),
         )
         return dict(row) if row else {"total_impressions": 0, "total_spend_micros": 0}
 

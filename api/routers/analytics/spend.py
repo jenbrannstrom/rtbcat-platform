@@ -27,7 +27,7 @@ async def get_spend_stats(
     ),
     buyer_id: Optional[str] = Query(
         None,
-        description="Used for billing_id ownership validation only (not passed to service)",
+        description="Filter by buyer seat ID",
     ),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
@@ -39,19 +39,16 @@ async def get_spend_stats(
     Only includes data for pretargeting configs (`billing_id`) that belong to
     the current account. Optionally filter by a specific `billing_id`.
 
-    `buyer_id` is used solely for billing_id ownership validation when both are
-    provided. The service receives only `billing_id`.
+    `buyer_id` scopes the spend query. When `billing_id` is also provided, it is
+    additionally used for ownership validation.
     """
     try:
-        # Only resolve buyer_id when billing_id is present (ownership check path).
-        # Without billing_id there is nothing to validate ownership of.
-        resolved_buyer_id = None
+        resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
         if billing_id:
-            resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
             validate_identifier_integrity(buyer_id=resolved_buyer_id, billing_id=billing_id)
             await validate_billing_id_ownership(billing_id, resolved_buyer_id)
         service = AnalyticsService()
-        stats = await service.get_spend_stats(days, billing_id)
+        stats = await service.get_spend_stats(days, billing_id, resolved_buyer_id)
 
         response = {
             "period_days": stats.period_days,

@@ -54,19 +54,19 @@
 | Route | Auth | Scope | HTTPException passthrough | Billing ownership |
 |-------|------|-------|--------------------------|-------------------|
 | `GET /analytics/rtb-funnel` | Already had | `resolve_buyer_id` | **Added** | N/A |
-| `GET /analytics/rtb-funnel/publishers` | **Added** | auth-only | **Added** | N/A |
-| `GET /analytics/rtb-funnel/geos` | **Added** | auth-only | **Added** | N/A |
+| `GET /analytics/rtb-funnel/publishers` | **Added** | `resolve_buyer_id` | **Added** | N/A |
+| `GET /analytics/rtb-funnel/geos` | **Added** | `resolve_buyer_id` | **Added** | N/A |
 | `GET /analytics/rtb-funnel/configs` | Already had | `resolve_buyer_id` | **Added** | N/A |
 | `GET /analytics/rtb-funnel/configs/{billing_id}/breakdown` | Already had | `resolve_buyer_id` | Already had | **Added** |
 | `GET /analytics/rtb-funnel/configs/{billing_id}/creatives` | Already had | `resolve_buyer_id` | Already had | **Added** |
 | `GET /analytics/rtb-funnel/creatives` | **Added** | auth-only | **Added** | N/A |
-| `GET /analytics/app-drilldown` | **Added** | auth-only + billing ownership when `billing_id` provided | **Added** | **Added** |
+| `GET /analytics/app-drilldown` | **Added** | `resolve_buyer_id` + billing ownership when `billing_id` provided | **Added** | **Added** |
 
 ### spend.py (1 route) -- auth fix, passthrough fix, ownership fix
 
 | Route | Auth | Scope | HTTPException passthrough | Billing ownership |
 |-------|------|-------|--------------------------|-------------------|
-| `GET /analytics/spend-stats` | **Added** | auth-only + billing ownership when `billing_id` provided | **Added** (was silently swallowing) | **Added** |
+| `GET /analytics/spend-stats` | **Added** | `resolve_buyer_id` + billing ownership when `billing_id` provided | **Added** (was silently swallowing) | **Added** |
 
 ### waste.py (7 routes) -- 2 auth fixes, 3 passthrough fixes
 
@@ -101,17 +101,14 @@ Applied to 5 routes:
 
 ## Residual Scope Gaps (Follow-up Required)
 
-These routes are now auth-gated but their underlying services do not accept a buyer/bidder scope filter, so they return unscoped data to any authenticated user:
+Post-sweep follow-up hardening added query-level buyer scope to `publishers`, `geos`,
+`app-drilldown`, and `spend-stats`. The remaining gap is the legacy creative-win analyzer route:
 
 | Service method | Missing scope param | Routes affected |
 |----------------|--------------------|----|
-| `RtbBidstreamService.get_publishers(days, limit)` | `buyer_id` | `GET /analytics/rtb-funnel/publishers` |
-| `RtbBidstreamService.get_geos(days, limit)` | `buyer_id` | `GET /analytics/rtb-funnel/geos` |
 | `RTBFunnelAnalyzer.get_creative_win_performance(limit)` | `buyer_id` | `GET /analytics/rtb-funnel/creatives` |
-| `AnalyticsService.get_spend_stats(days, billing_id)` | `buyer_id` (for billing_id resolution) | `GET /analytics/spend-stats` |
-| `RtbBidstreamService.get_app_drilldown(app_name, days, billing_id)` | `buyer_id` (for billing_id scope) | `GET /analytics/app-drilldown` |
 
-**Recommendation:** Add `buyer_id` / `bidder_id` parameters to these service methods and filter at the query level. Until then, these routes are safe from anonymous access but may return data across buyer boundaries for multi-tenant deployments.
+**Recommendation:** Replace or refactor the legacy CSV-backed `RTBFunnelAnalyzer` creative-win path to a buyer-scoped DB/precompute-backed implementation. Until then, the route is auth-gated but not query-scoped for multi-tenant deployments.
 
 ---
 
@@ -125,3 +122,7 @@ These routes are now auth-gated but their underlying services do not accept a bu
 | `api/routers/analytics/waste.py` | Admin-only on 2 POST routes, passthrough on 3 |
 | `api/routers/analytics/common.py` | Added `validate_billing_id_ownership()` using direct repo calls |
 | `api/routers/analytics/traffic.py` | HTTPException passthrough on 1 route |
+| `services/rtb_bidstream_service.py` | Buyer-scoped publishers/geos/app-drilldown queries and bid-filtering |
+| `services/analytics_service.py` | Buyer-scoped spend-stats query path and precompute status filters |
+| `storage/postgres_repositories/rtb_bidstream_repo.py` | Added `buyer_account_id` filters to app drilldown and bid-filtering queries |
+| `storage/postgres_repositories/analytics_repo.py` | Added buyer-scoped spend stats queries (`buyer_account_id`) |
