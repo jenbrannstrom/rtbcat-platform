@@ -151,6 +151,8 @@ class HomeAnalyticsRepository:
                 SUM(auctions_won) as total_auctions_won
             FROM pretarg_daily
             WHERE metric_date BETWEEN %s AND %s{buyer_filter}
+              AND billing_id IS NOT NULL
+              AND BTRIM(billing_id) <> ''
             GROUP BY billing_id
             ORDER BY total_reached DESC
             """,

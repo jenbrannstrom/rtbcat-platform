@@ -465,7 +465,10 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [x] **Postgres schema alignment** - Raw fact tables + BIGINT upgrades + pretargeting_publishers table
 - [x] **Backfill raw fact tables** - Load `rtb_daily`, `rtb_bidstream`, `rtb_bid_filtering`, `rtb_quality` into Postgres (through 2026-01-25)
 - [ ] **Persist seat identity** - Ensure `bidder_id` stored for all imports (`rtb_daily`, `rtb_bidstream`, `rtb_bid_filtering`)
-- [ ] **Billing ID guarantees** - Enforce `billing_id` for per-config reports; exclude rows missing it from config breakdowns
+- [x] **Billing ID guarantees** - Enforce `billing_id` for per-config reports; exclude rows missing it from config breakdowns
+  - 2026-02-25 hardening: config-level aggregations now exclude blank/NULL `billing_id` rows in `storage/postgres_repositories/home_repo.py` (`pretarg_daily`) and `storage/postgres_repositories/rtb_bidstream_repo.py` (`pretarg_size_daily`, config geo source reads when no valid-ID allowlist is provided).
+  - Billing ID lookup helpers now drop blank values from `pretargeting_configs` in `storage/postgres_repositories/analytics_repo.py` and `storage/postgres_repositories/rtb_bidstream_repo.py`.
+  - Production audit snapshot (`docs/review/2026-02-25/HOME_DATA_SOURCE_AUDIT.md`) also confirmed `pretarg_daily` had `0.0%` missing `billing_id` in the last 30 days.
 - [ ] **Join-safe keys** - Geo/publisher joins must include seat identity (`bidder_id` or `buyer_account_id`)
 - [ ] **Identifier integrity** - Never substitute `seat_id/buyer_id` for `billing_id`. Billing IDs scope pretargeting configs; seat IDs scope buyer seats. Keep them distinct in queries and APIs.
 
