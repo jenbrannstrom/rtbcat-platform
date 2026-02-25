@@ -368,6 +368,98 @@ class RtbBidstreamService:
         }
 
     # =========================================================================
+    # Creative Win Performance
+    # =========================================================================
+
+    async def get_creative_win_performance(
+        self,
+        days: int,
+        limit: int = 50,
+        buyer_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Get creative performance using win-rate metrics from DB precompute."""
+        buyer_filters = ["buyer_account_id = %s"] if buyer_id else None
+        buyer_params = [buyer_id] if buyer_id else None
+        status = await self.get_precompute_status(
+            "rtb_app_creative_daily", days, buyer_filters, buyer_params
+        )
+        if not status.has_rows:
+            return {
+                "period_days": days,
+                "creatives": [],
+                "summary": {
+                    "total_creatives": 0,
+                    "great_performers": 0,
+                    "ok_performers": 0,
+                    "underperformers": 0,
+                },
+                "message": "No precompute available for requested date range.",
+                "precompute_status": {"rtb_app_creative_daily": status.to_dict()},
+            }
+
+        rows = await self._repo.get_creative_win_breakdown(days, buyer_id, limit)
+        total_creatives = await self._repo.get_creative_count(days, buyer_id)
+
+        creative_ids = [row["creative_id"] for row in rows if row.get("creative_id")]
+        bids_by_creative: dict[str, int] = {}
+        try:
+            if creative_ids and await self._repo.table_exists("rtb_bid_filtering"):
+                bid_rows = await self._repo.get_creative_bid_totals(
+                    creative_ids, days, buyer_id
+                )
+                bids_by_creative = {
+                    row["creative_id"]: (row.get("total_bids") or 0)
+                    for row in bid_rows
+                    if row.get("creative_id")
+                }
+        except Exception as e:
+            logger.warning("Could not fetch creative bid totals for win route: %s", e)
+
+        creatives = []
+        great_count = 0
+        ok_count = 0
+        review_count = 0
+
+        for row in rows:
+            creative_id = row.get("creative_id")
+            reached = row.get("reached") or 0
+            impressions = row.get("impressions") or 0
+            win_rate = (impressions / reached * 100) if reached > 0 else 0.0
+            waste_pct = 100 - win_rate
+
+            if win_rate >= 50:
+                status_label = "great"
+                great_count += 1
+            elif win_rate >= 20:
+                status_label = "ok"
+                ok_count += 1
+            else:
+                status_label = "review"
+                review_count += 1
+
+            creatives.append({
+                "creative_id": creative_id,
+                "reached": reached,
+                "bids": bids_by_creative.get(creative_id, 0),
+                "impressions": impressions,
+                "win_rate_pct": round(win_rate, 1),
+                "waste_pct": round(waste_pct, 1),
+                "status": status_label,
+            })
+
+        return {
+            "period_days": days,
+            "creatives": creatives,
+            "summary": {
+                "total_creatives": total_creatives,
+                "great_performers": great_count,
+                "ok_performers": ok_count,
+                "underperformers": review_count,
+            },
+            "precompute_status": {"rtb_app_creative_daily": status.to_dict()},
+        }
+
+    # =========================================================================
     # Config Performance
     # =========================================================================
 

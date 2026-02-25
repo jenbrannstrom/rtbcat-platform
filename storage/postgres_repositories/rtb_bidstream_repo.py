@@ -231,6 +231,104 @@ class RtbBidstreamRepository:
         return row["cnt"] or 0 if row else 0
 
     # =========================================================================
+    # Creative Win Performance
+    # =========================================================================
+
+    async def get_creative_win_breakdown(
+        self,
+        days: int,
+        buyer_id: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Get creative win-rate breakdown from rtb_app_creative_daily."""
+        where = [
+            "metric_date::date >= (CURRENT_DATE - %s * INTERVAL '1 day')",
+            "creative_id != ''",
+        ]
+        params: list = [days]
+
+        if buyer_id:
+            where.append("buyer_account_id = %s")
+            params.append(buyer_id)
+
+        params.append(limit)
+
+        return await pg_query(
+            f"""
+            SELECT
+                creative_id,
+                SUM(reached_queries) as reached,
+                SUM(impressions) as impressions
+            FROM rtb_app_creative_daily
+            WHERE {" AND ".join(where)}
+            GROUP BY creative_id
+            ORDER BY SUM(reached_queries) DESC
+            LIMIT %s
+            """,
+            tuple(params),
+        )
+
+    async def get_creative_count(
+        self,
+        days: int,
+        buyer_id: Optional[str] = None,
+    ) -> int:
+        """Get distinct creative count from rtb_app_creative_daily."""
+        where = [
+            "metric_date::date >= (CURRENT_DATE - %s * INTERVAL '1 day')",
+            "creative_id != ''",
+        ]
+        params: list = [days]
+
+        if buyer_id:
+            where.append("buyer_account_id = %s")
+            params.append(buyer_id)
+
+        row = await pg_query_one(
+            f"""
+            SELECT COUNT(DISTINCT creative_id) as cnt
+            FROM rtb_app_creative_daily
+            WHERE {" AND ".join(where)}
+            """,
+            tuple(params),
+        )
+        return row["cnt"] or 0 if row else 0
+
+    async def get_creative_bid_totals(
+        self,
+        creative_ids: list[str],
+        days: int,
+        buyer_id: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """Get total bids by creative from rtb_bid_filtering."""
+        if not creative_ids:
+            return []
+
+        where = [
+            "creative_id = ANY(%s)",
+            "metric_date::date >= (CURRENT_DATE - %s * INTERVAL '1 day')",
+            "creative_id IS NOT NULL",
+            "creative_id != ''",
+        ]
+        params: list = [creative_ids, days]
+
+        if buyer_id:
+            where.append("buyer_account_id = %s")
+            params.append(buyer_id)
+
+        return await pg_query(
+            f"""
+            SELECT
+                creative_id,
+                SUM(bids) as total_bids
+            FROM rtb_bid_filtering
+            WHERE {" AND ".join(where)}
+            GROUP BY creative_id
+            """,
+            tuple(params),
+        )
+
+    # =========================================================================
     # Config Performance (by billing_id)
     # =========================================================================
 
