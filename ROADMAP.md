@@ -469,7 +469,11 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
   - 2026-02-25 hardening: config-level aggregations now exclude blank/NULL `billing_id` rows in `storage/postgres_repositories/home_repo.py` (`pretarg_daily`) and `storage/postgres_repositories/rtb_bidstream_repo.py` (`pretarg_size_daily`, config geo source reads when no valid-ID allowlist is provided).
   - Billing ID lookup helpers now drop blank values from `pretargeting_configs` in `storage/postgres_repositories/analytics_repo.py` and `storage/postgres_repositories/rtb_bidstream_repo.py`.
   - Production audit snapshot (`docs/review/2026-02-25/HOME_DATA_SOURCE_AUDIT.md`) also confirmed `pretarg_daily` had `0.0%` missing `billing_id` in the last 30 days.
-- [ ] **Join-safe keys** - Geo/publisher joins must include seat identity (`bidder_id` or `buyer_account_id`)
+- [x] **Join-safe keys** - Geo/publisher joins must include seat identity (`bidder_id` or `buyer_account_id`)
+  - 2026-02-25 audit: no unsafe geo/publisher SQL joins found in Home/RTB serving repos; the critical config publisher attribution join in `services/config_precompute.py` joins `q` and `b` rows on `buyer_account_id` (seat identity) in addition to time/creative/country keys.
+  - Fallback buyer-level geo/publisher fact paths in `services/config_precompute.py` also scope correlated `NOT EXISTS` checks by `buyer_account_id`, preventing cross-seat suppression.
+  - Added an inline code guard comment at the BigQuery config publisher join to preserve the seat-identity predicate during future edits.
+  - Audit note: `docs/review/2026-02-25/HOME_JOIN_SAFE_KEYS_AUDIT.md`
 - [ ] **Identifier integrity** - Never substitute `seat_id/buyer_id` for `billing_id`. Billing IDs scope pretargeting configs; seat IDs scope buyer seats. Keep them distinct in queries and APIs.
 
 ### Gmail Import & Pipeline (Operational)

@@ -506,6 +506,8 @@ async def refresh_config_breakdowns(
               ON q.metric_date = b.metric_date
              AND q.hour = b.hour
              AND q.creative_id = b.creative_id
+             -- Join safety: keep seat identity in the join so publisher attribution
+             -- never crosses buyer seats when dimension values overlap.
              AND q.buyer_account_id = b.buyer_account_id
              AND q.country = b.country
             WHERE q.metric_date IN UNNEST(@dates)
