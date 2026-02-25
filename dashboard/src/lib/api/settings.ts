@@ -117,14 +117,34 @@ export interface RollbackResponse {
 export async function getRTBEndpoints(params?: {
   buyer_id?: string;
   service_account_id?: string;
+  live?: boolean;
 }): Promise<RTBEndpointsResponse> {
   const searchParams = new URLSearchParams();
   if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
   if (params?.service_account_id) {
     searchParams.set("service_account_id", params.service_account_id);
   }
+  if (params?.live) searchParams.set("live", "true");
   const query = searchParams.toString();
   return fetchApi<RTBEndpointsResponse>(`/settings/endpoints${query ? `?${query}` : ""}`);
+}
+
+export async function updateEndpointQps(
+  endpointId: string,
+  maximumQps: number,
+  opts?: { buyer_id?: string; service_account_id?: string },
+): Promise<RTBEndpointItem> {
+  return fetchApi<RTBEndpointItem>(
+    `/settings/endpoints/${encodeURIComponent(endpointId)}/qps`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        maximum_qps: maximumQps,
+        buyer_id: opts?.buyer_id,
+        service_account_id: opts?.service_account_id,
+      }),
+    },
+  );
 }
 
 export async function syncRTBEndpoints(params?: {
