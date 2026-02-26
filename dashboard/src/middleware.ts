@@ -4,7 +4,7 @@ import {
 } from "@/lib/buyer-routes";
 import { normalizeRoutePath } from "@/lib/route-normalization";
 
-const SKIP_PREFIXES = ["/_next", "/api", "/thumbnails"];
+const SKIP_PREFIXES = ["/_next", "/api"];
 const SKIP_EXACT = new Set([
   "/favicon.ico",
   "/icon.svg",

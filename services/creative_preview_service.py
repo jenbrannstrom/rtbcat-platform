@@ -43,7 +43,7 @@ class CreativePreviewService:
                     video_url = self._extract_video_url_from_vast(vast_xml)
                 local_thumb_path = video_data.get("localThumbnailPath")
                 if local_thumb_path and os.path.exists(local_thumb_path):
-                    thumbnail_url = f"/thumbnails/{creative.id}.jpg"
+                    thumbnail_url = f"/api/thumbnails/{creative.id}.jpg"
                 else:
                     thumbnail_url = (
                         self._extract_thumbnail_from_vast(vast_xml) if vast_xml else None

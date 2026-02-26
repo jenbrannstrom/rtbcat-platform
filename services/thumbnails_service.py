@@ -193,7 +193,7 @@ class ThumbnailsService:
             return ThumbnailResult(
                 creative_id=creative_id,
                 status="success",
-                thumbnail_url=f"/thumbnails/{creative_id}.jpg",
+                thumbnail_url=f"/api/thumbnails/{creative_id}.jpg",
             )
         else:
             error_reason = result["error_reason"]
