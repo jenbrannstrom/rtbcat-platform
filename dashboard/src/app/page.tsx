@@ -140,7 +140,10 @@ function WasteAnalysisContent() {
     [updateUrl]
   );
 
-  const seatReady = !!selectedBuyerId;
+  // Only fire analytics queries once seats have loaded AND selectedBuyerId is
+  // confirmed valid.  This prevents 403 storms when the user's RBAC changed
+  // but localStorage still holds the old buyer_id.
+  const seatReady = !!selectedBuyerId && !!seats && seats.some((s) => s.buyer_id === selectedBuyerId);
 
   // Fetch QPS summary
   const {
