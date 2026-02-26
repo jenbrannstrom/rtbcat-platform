@@ -36,8 +36,19 @@ from api.schemas.performance import (
 )
 from importers.unified_importer import unified_import, parse_bidder_id_from_filename
 from storage import PerformanceMetric
+from storage.postgres_repositories.creative_performance_repo import CreativePerformanceRepository
 from services.home_precompute import refresh_home_summaries
 from services.performance_service import PerformanceService
+
+# Singleton repo instance for click-capable creative summaries
+_creative_perf_repo: Optional[CreativePerformanceRepository] = None
+
+
+def _get_creative_perf_repo() -> CreativePerformanceRepository:
+    global _creative_perf_repo
+    if _creative_perf_repo is None:
+        _creative_perf_repo = CreativePerformanceRepository()
+    return _creative_perf_repo
 from storage.postgres_repositories.uploads_repo import UploadsRepository
 from services.precompute_validation import run_precompute_validation
 from services.config_precompute import refresh_config_breakdowns
@@ -215,18 +226,46 @@ async def get_creative_performance(
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
-    """Get aggregated performance summary for a creative."""
+    """Get aggregated performance summary for a creative.
+
+    Uses rtb_daily as primary source (click-capable) with buyer scoping.
+    Falls back to pretarg_creative_daily when rtb_daily has no data.
+    """
     try:
         creative = await store.get_creative(creative_id)
         if not creative:
             raise HTTPException(status_code=404, detail="Creative not found")
-        if creative.buyer_id:
+
+        buyer_id = getattr(creative, "buyer_id", None)
+        if buyer_id:
             allowed = await get_allowed_buyer_ids(store=store, user=user)
-            if allowed is not None and creative.buyer_id not in allowed:
+            if allowed is not None and buyer_id not in allowed:
                 raise HTTPException(status_code=403, detail="You don't have access to this buyer account.")
 
-        summary = await store.get_creative_performance_summary(creative_id, days=days)
+        # Primary path: rtb_daily (click-capable, buyer-scoped)
+        repo = _get_creative_perf_repo()
+        summaries = await repo.get_creative_summaries(
+            [creative_id], days=days, buyer_id_filter=buyer_id,
+        )
 
+        if creative_id in summaries:
+            s = summaries[creative_id]
+            return PerformanceSummaryResponse(
+                total_impressions=s["total_impressions"],
+                total_clicks=s["total_clicks"],
+                total_spend_micros=s["total_spend_micros"],
+                avg_cpm_micros=s["avg_cpm_micros"],
+                avg_cpc_micros=s["avg_cpc_micros"],
+                ctr_percent=round(s["ctr_percent"], 2) if s.get("ctr_percent") else None,
+                days_with_data=s["days_with_data"],
+                earliest_date=s.get("earliest_date"),
+                latest_date=s.get("latest_date"),
+                metric_source="rtb_daily",
+                clicks_available=True,
+            )
+
+        # Fallback: legacy pretarg_creative_daily (no clicks)
+        summary = await store.get_creative_performance_summary(creative_id, days=days)
         return PerformanceSummaryResponse(
             total_impressions=summary.get("total_impressions"),
             total_clicks=summary.get("total_clicks"),
@@ -237,8 +276,12 @@ async def get_creative_performance(
             days_with_data=summary.get("days_with_data"),
             earliest_date=summary.get("earliest_date"),
             latest_date=summary.get("latest_date"),
+            metric_source="pretarg_creative_daily",
+            clicks_available=False,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Performance lookup failed for {creative_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Performance lookup failed: {str(e)}")
@@ -655,7 +698,11 @@ async def get_batch_performance(
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
-    """Get performance summaries for multiple creatives in a single request."""
+    """Get performance summaries for multiple creatives in a single request.
+
+    Uses rtb_daily (click-capable) in a single batch query, with buyer-scoped
+    fallback to pretarg_creative_daily for creatives not found in rtb_daily.
+    """
     try:
         period_days = {
             "yesterday": 1,
@@ -678,16 +725,41 @@ async def get_batch_performance(
                 if buyer_id and buyer_id not in allowed:
                     raise HTTPException(status_code=403, detail="You don't have access to this buyer account.")
 
+        # Batch query from rtb_daily (click-capable)
+        repo = _get_creative_perf_repo()
+        rtb_summaries = await repo.get_creative_summaries(
+            request.creative_ids, days=days,
+        )
+
         results: dict[str, CreativePerformanceSummary] = {}
 
-        for creative_id in request.creative_ids:
+        # IDs not found in rtb_daily need legacy fallback
+        missing_ids = [cid for cid in request.creative_ids if cid not in rtb_summaries]
+
+        # Build results from rtb_daily batch
+        for creative_id, s in rtb_summaries.items():
+            has_data = s["total_impressions"] > 0 or s["total_spend_micros"] > 0
+            results[creative_id] = CreativePerformanceSummary(
+                creative_id=creative_id,
+                total_impressions=s["total_impressions"],
+                total_clicks=s["total_clicks"],
+                total_spend_micros=s["total_spend_micros"],
+                avg_cpm_micros=s["avg_cpm_micros"],
+                avg_cpc_micros=s["avg_cpc_micros"],
+                ctr_percent=round(s["ctr_percent"], 2) if s.get("ctr_percent") else None,
+                days_with_data=s["days_with_data"],
+                has_data=has_data,
+                metric_source="rtb_daily",
+                clicks_available=True,
+            )
+
+        # Fallback for creatives not in rtb_daily
+        for creative_id in missing_ids:
             try:
                 summary = await store.get_creative_performance_summary(
                     creative_id, days=days
                 )
-
                 has_data = summary.get("total_impressions", 0) > 0 or summary.get("total_spend_micros", 0) > 0
-
                 results[creative_id] = CreativePerformanceSummary(
                     creative_id=creative_id,
                     total_impressions=summary.get("total_impressions") or 0,
@@ -698,12 +770,15 @@ async def get_batch_performance(
                     ctr_percent=round(summary.get("ctr_percent"), 2) if summary.get("ctr_percent") else None,
                     days_with_data=summary.get("days_with_data") or 0,
                     has_data=has_data,
+                    metric_source="pretarg_creative_daily",
+                    clicks_available=False,
                 )
             except Exception as e:
                 logger.warning(f"Failed to get performance for {creative_id}: {e}")
                 results[creative_id] = CreativePerformanceSummary(
                     creative_id=creative_id,
                     has_data=False,
+                    clicks_available=False,
                 )
 
         return BatchPerformanceResponse(
@@ -712,6 +787,8 @@ async def get_batch_performance(
             count=len(results),
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Batch performance lookup failed: {e}")
         raise HTTPException(status_code=500, detail=f"Batch lookup failed: {str(e)}")

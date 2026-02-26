@@ -32,8 +32,11 @@ class UserInfo(BaseModel):
     display_name: Optional[str]
     role: str
     is_admin: bool
-    permissions: list[str]  # List of service account IDs
+    permissions: list[str]  # List of service account IDs (legacy)
     default_language: Optional[str] = None
+    # RBAC v2 fields
+    global_role: Optional[str] = None  # "sudo" | "user"
+    seat_permissions: Optional[dict[str, str]] = None  # {buyer_id: "read"|"admin"}
 
 
 # ==================== Helper Functions ====================
@@ -106,14 +109,20 @@ async def get_current_user_info(request: Request):
         user = request.state.user
         auth_svc = get_auth_service()
         permissions = await auth_svc.get_user_service_account_ids(user.id)
+        # RBAC v2: build seat permissions map for non-sudo users
+        is_admin = user.role == "admin"
+        global_role = "sudo" if is_admin else "user"
+        seat_perms = {} if is_admin else await auth_svc.get_user_buyer_seat_access_map(user.id)
         return UserInfo(
             id=user.id,
             email=user.email,
             display_name=user.display_name,
             role=user.role,
-            is_admin=user.role == "admin",
+            is_admin=is_admin,
             permissions=permissions,
             default_language=getattr(user, "default_language", None),
+            global_role=global_role,
+            seat_permissions=seat_perms,
         )
 
     # No user means OAuth2 Proxy didn't authenticate them
@@ -134,6 +143,7 @@ async def check_auth_status(request: Request):
     """
     if hasattr(request.state, "user") and request.state.user:
         user = request.state.user
+        is_admin = user.role == "admin"
         return {
             "authenticated": True,
             "auth_method": "oauth2_proxy",
@@ -142,8 +152,9 @@ async def check_auth_status(request: Request):
                 "email": user.email,
                 "display_name": user.display_name,
                 "role": user.role,
-                "is_admin": user.role == "admin",
+                "is_admin": is_admin,
                 "default_language": getattr(user, "default_language", None),
+                "global_role": "sudo" if is_admin else "user",
             },
         }
 

@@ -33,16 +33,23 @@ interface User {
   role: string;
   is_admin: boolean;
   default_language?: string | null;
+  global_role?: string | null; // "sudo" | "user"
 }
 
 type AuthErrorKind = "service_unavailable" | "network_error" | null;
+
+/** buyer_id -> access_level ("read" | "admin") */
+type SeatPermissions = Record<string, string>;
 
 interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isSudo: boolean;
   permissions: string[];
+  seatPermissions: SeatPermissions;
+  isSeatAdmin: (buyerId: string) => boolean;
   authError: AuthErrorKind;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -104,6 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
+  const [seatPermissions, setSeatPermissions] = useState<SeatPermissions>({});
   const [isLoading, setIsLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
   const [authError, setAuthError] = useState<AuthErrorKind>(null);
@@ -115,8 +123,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAuth = useCallback(async () => {
     // DEV BYPASS: skip auth when backend is not running
     if (process.env.NODE_ENV === "development") {
-      setUser({ id: "dev", email: "dev@localhost", display_name: "Dev User", role: "admin", is_admin: true });
+      setUser({ id: "dev", email: "dev@localhost", display_name: "Dev User", role: "admin", is_admin: true, global_role: "sudo" });
       setPermissions(["admin", "read", "write"]);
+      setSeatPermissions({});
       setAuthError(null);
       resetRedirectCount();
       return;
@@ -131,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn("Auth service unavailable (503) — DB may be down");
         setUser(null);
         setPermissions([]);
+        setSeatPermissions({});
         setAuthError("service_unavailable");
         return;
       }
@@ -138,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!response.ok) {
         setUser(null);
         setPermissions([]);
+        setSeatPermissions({});
         setAuthError(null);
         return;
       }
@@ -155,16 +166,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (meResponse.ok) {
           const meData = await meResponse.json();
           setPermissions(meData.permissions || []);
+          setSeatPermissions(meData.seat_permissions || {});
         }
       } else {
         setUser(null);
         setPermissions([]);
+        setSeatPermissions({});
         setAuthError(null);
       }
     } catch (error) {
       console.error("Auth check failed:", error);
       setUser(null);
       setPermissions([]);
+      setSeatPermissions({});
       setAuthError("network_error");
     }
   }, []);
@@ -182,6 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setUser(null);
     setPermissions([]);
+    setSeatPermissions({});
     resetRedirectCount();
     // Redirect to login page
     window.location.href = "/login";
@@ -231,12 +246,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [initialized, isLoading, user, isPublicPage, router]);
 
+  const userIsSudo = user?.global_role === "sudo" || user?.is_admin === true;
+
+  const isSeatAdmin = useCallback(
+    (buyerId: string): boolean => {
+      if (userIsSudo) return true;
+      return seatPermissions[buyerId] === "admin";
+    },
+    [userIsSudo, seatPermissions],
+  );
+
   const value: AuthContextValue = {
     user,
     isLoading,
     isAuthenticated: !!user,
     isAdmin: user?.is_admin ?? false,
+    isSudo: userIsSudo,
     permissions,
+    seatPermissions,
+    isSeatAdmin,
     authError,
     logout,
     checkAuth,
@@ -322,14 +350,14 @@ export function withAdminAuth<P extends object>(
   Component: React.ComponentType<P>
 ) {
   return function AdminProtectedComponent(props: P) {
-    const { isAdmin, isLoading, isAuthenticated } = useAuth();
+    const { isSudo, isLoading, isAuthenticated } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
-      if (!isLoading && (!isAuthenticated || !isAdmin)) {
+      if (!isLoading && (!isAuthenticated || !isSudo)) {
         router.push("/");
       }
-    }, [isLoading, isAuthenticated, isAdmin, router]);
+    }, [isLoading, isAuthenticated, isSudo, router]);
 
     if (isLoading) {
       return (
@@ -339,7 +367,7 @@ export function withAdminAuth<P extends object>(
       );
     }
 
-    if (!isAdmin) {
+    if (!isSudo) {
       return null;
     }
 

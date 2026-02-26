@@ -215,6 +215,9 @@ export interface CreativePerformanceSummary {
   ctr_percent: number | null;
   days_with_data: number;
   has_data: boolean;
+  // Data provenance metadata
+  metric_source?: string | null; // "rtb_daily" | "pretarg_creative_daily"
+  clicks_available?: boolean; // true if source has real clicks data
 }
 
 export interface BatchPerformanceResponse {

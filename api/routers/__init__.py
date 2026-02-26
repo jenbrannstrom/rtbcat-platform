@@ -17,6 +17,7 @@ from .performance import router as performance_router
 from .troubleshooting import router as troubleshooting_router
 from .collect import router as collect_router
 from .admin import router as admin_router
+from .seat_admin import router as seat_admin_router
 
 # Analytics sub-routers (refactored from monolithic analytics.py)
 from .analytics import (
@@ -46,6 +47,7 @@ __all__ = [
     "troubleshooting_router",
     "collect_router",
     "admin_router",
+    "seat_admin_router",
     # Analytics sub-routers
     "waste_router",
     "rtb_bidstream_router",
