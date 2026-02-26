@@ -104,6 +104,9 @@ function ThumbnailGenerationBanner({ buyerId }: { buyerId?: string | null }) {
   });
 
   const [autoGenerate, setAutoGenerate] = useState(false);
+  const autoGenerateRef = useRef(false);
+  // Keep ref in sync so mutation callbacks always read the latest value
+  autoGenerateRef.current = autoGenerate;
 
   const generateMutation = useMutation({
     mutationFn: (params: { force?: boolean; limit?: number }) =>
@@ -113,16 +116,17 @@ function ThumbnailGenerationBanner({ buyerId }: { buyerId?: string | null }) {
       queryClient.invalidateQueries({ queryKey: ["thumbnailStatus"] });
       queryClient.invalidateQueries({ queryKey: ["creatives"] });
 
-      // Auto-continue if enabled and there are more pending
-      if (autoGenerate && data.total_processed > 0) {
-        // Small delay then trigger next batch
+      // Auto-continue if enabled and batch processed items
+      if (autoGenerateRef.current && data.total_processed > 0) {
         setTimeout(() => {
           generateMutation.mutate({ limit: 10 });
         }, 500);
+      } else {
+        // Batch returned 0 processed or user stopped — clear flag
+        setAutoGenerate(false);
       }
     },
     onError: () => {
-      // Stop auto-generate on error
       setAutoGenerate(false);
     },
   });
