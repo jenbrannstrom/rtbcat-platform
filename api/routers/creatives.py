@@ -39,7 +39,7 @@ async def list_creatives(
     cluster_id: Optional[str] = Query(None, description="Filter by cluster ID"),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     format: Optional[str] = Query(None, description="Filter by creative format"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum results"),
+    limit: int = Query(100, ge=1, le=5000, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Results offset"),
     slim: bool = Query(True, description="Exclude large fields (vast_xml, html snippets) for faster loading"),
     days: int = Query(7, ge=1, le=365, description="Timeframe for waste detection (default 7 days)"),

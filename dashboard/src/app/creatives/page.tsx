@@ -360,7 +360,7 @@ function CreativesContent() {
     refetch,
   } = useQuery({
     queryKey: ["creatives", selectedSeatId],
-    queryFn: () => getCreatives({ limit: 300, buyer_id: selectedSeatId ?? undefined, slim: true }),
+    queryFn: () => getCreatives({ limit: 5000, buyer_id: selectedSeatId ?? undefined, slim: true }),
   });
 
   const { data: availableSizes } = useQuery({
