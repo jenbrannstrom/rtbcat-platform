@@ -15,7 +15,7 @@ function InfoTip({ text }: { text: string }) {
   return (
     <span className="relative inline-flex items-center ml-0.5 group">
       <Info className="h-3 w-3 text-gray-400 hover:text-gray-600 cursor-help" />
-      <span className="pointer-events-none absolute right-full top-1/2 z-[9999] mr-1.5 hidden w-64 -translate-y-1/2 rounded border border-gray-200 bg-white p-2 text-[11px] font-normal normal-case leading-snug text-gray-700 shadow-lg group-hover:block">
+      <span className="pointer-events-none absolute left-1/2 top-full z-[9999] mt-1 hidden w-64 -translate-x-1/2 rounded border border-gray-200 bg-white p-2 text-[11px] font-normal normal-case leading-snug text-gray-700 shadow-lg group-hover:block">
         {text}
       </span>
     </span>
