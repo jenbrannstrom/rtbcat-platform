@@ -28,11 +28,12 @@ export function BuyerRouteSync() {
     setSelectedBuyerId(buyerIdInPath);
   }, [buyerIdInPath, isScoped, selectedBuyerId, setSelectedBuyerId]);
 
-  // context -> URL
+  // context -> URL  (also updates URL when context was corrected, e.g. by
+  // seats validation removing a buyer the user no longer has access to)
   useEffect(() => {
     if (!isScoped) return;
-    if (buyerIdInPath) return;
     if (!selectedBuyerId) return;
+    if (buyerIdInPath === selectedBuyerId) return;
 
     const targetPath = replaceBuyerInPath(pathname, selectedBuyerId);
     const targetUrl = queryString ? `${targetPath}?${queryString}` : targetPath;
