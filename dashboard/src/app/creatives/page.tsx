@@ -105,6 +105,7 @@ function ThumbnailGenerationBanner({ buyerId }: { buyerId?: string | null }) {
 
   const [autoGenerate, setAutoGenerate] = useState(false);
   const autoGenerateRef = useRef(false);
+  const emptyBatchCount = useRef(0);
   // Keep ref in sync so mutation callbacks always read the latest value
   autoGenerateRef.current = autoGenerate;
 
@@ -112,21 +113,34 @@ function ThumbnailGenerationBanner({ buyerId }: { buyerId?: string | null }) {
     mutationFn: (params: { force?: boolean; limit?: number }) =>
       generateThumbnailsBatch(params),
     onSuccess: (data) => {
-      // Refetch status after generation completes
+      // Only refresh the progress bar during auto-generation (not the heavy creatives query)
       queryClient.invalidateQueries({ queryKey: ["thumbnailStatus"] });
-      queryClient.invalidateQueries({ queryKey: ["creatives"] });
 
-      // Auto-continue if enabled and batch processed items
-      if (autoGenerateRef.current && data.total_processed > 0) {
+      if (!autoGenerateRef.current) return;
+
+      if (data.total_processed > 0) {
+        emptyBatchCount.current = 0;
         setTimeout(() => {
           generateMutation.mutate({ limit: 10 });
         }, 500);
       } else {
-        // Batch returned 0 processed or user stopped — clear flag
-        setAutoGenerate(false);
+        // A batch may return 0 temporarily (race with status reset, etc).
+        // Allow up to 3 consecutive empty batches before stopping.
+        emptyBatchCount.current += 1;
+        if (emptyBatchCount.current < 3) {
+          setTimeout(() => {
+            generateMutation.mutate({ limit: 10 });
+          }, 1000);
+        } else {
+          emptyBatchCount.current = 0;
+          setAutoGenerate(false);
+          // Refresh creatives now that generation is done
+          queryClient.invalidateQueries({ queryKey: ["creatives"] });
+        }
       }
     },
     onError: () => {
+      emptyBatchCount.current = 0;
       setAutoGenerate(false);
     },
   });
@@ -175,11 +189,14 @@ function ThumbnailGenerationBanner({ buyerId }: { buyerId?: string | null }) {
             <button
               onClick={() => {
                 if (isGenerating || autoGenerate) {
-                  // Stop
+                  // Stop — refresh creatives to show new thumbnails
                   setAutoGenerate(false);
+                  emptyBatchCount.current = 0;
+                  queryClient.invalidateQueries({ queryKey: ["creatives"] });
                 } else {
                   // Start auto-generate
                   setAutoGenerate(true);
+                  emptyBatchCount.current = 0;
                   generateMutation.mutate({ limit: 10 });
                 }
               }}
