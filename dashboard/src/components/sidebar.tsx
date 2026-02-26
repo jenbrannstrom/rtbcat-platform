@@ -35,6 +35,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { useTranslation } from "@/contexts/i18n-context";
 import { LanguageSelector } from "@/components/language-selector";
 import {
+  isBuyerScopedPath,
   replaceBuyerInPath,
   splitBuyerPath,
   toBuyerScopedPath,
@@ -118,6 +119,7 @@ export function Sidebar() {
   const isInSettings = pathWithoutBuyer.startsWith("/settings");
   const isInAdmin = pathWithoutBuyer.startsWith("/admin");
   const isInQps = pathWithoutBuyer.startsWith("/qps");
+  const isBuyerScopedRoute = isBuyerScopedPath(pathWithoutBuyer);
 
   const getSeatScopedHref = (href: string) => toBuyerScopedPath(href, currentBuyerId);
 
@@ -231,13 +233,21 @@ export function Sidebar() {
 
   const handleSeatSelect = (seatId: string | null) => {
     setSeatDropdownOpen(false);
-    // Update the context (persisted to localStorage)
-    setSelectedBuyerId(seatId);
 
     const currentPath = pathname || "/";
     const nextPath = replaceBuyerInPath(currentPath, seatId);
     const nextUrl = queryString ? `${nextPath}?${queryString}` : nextPath;
     const currentUrl = queryString ? `${currentPath}?${queryString}` : currentPath;
+
+    // On buyer-scoped pages, let the URL change drive the context update to avoid
+    // a race with BuyerRouteSync's URL->context effect that can snap the seat back.
+    const deferContextToRouteSync =
+      !!seatId && isBuyerScopedRoute && nextUrl !== currentUrl;
+    if (!deferContextToRouteSync) {
+      // Update the context (persisted to localStorage)
+      setSelectedBuyerId(seatId);
+    }
+
     if (nextUrl !== currentUrl) {
       router.push(nextUrl, { scroll: false });
     }
