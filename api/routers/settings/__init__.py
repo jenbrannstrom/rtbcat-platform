@@ -21,7 +21,7 @@ Migration plan:
 
 # Re-export models for easy importing
 from fastapi import APIRouter, Depends
-from api.dependencies import require_admin
+from api.dependencies import require_seat_admin_or_sudo
 
 # Re-export models for easy importing
 from .models import (
@@ -60,7 +60,7 @@ from .actions import router as actions_router
 
 router = APIRouter(
     tags=["RTB Settings"],
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_seat_admin_or_sudo)],
 )
 router.include_router(endpoints_router)
 router.include_router(pretargeting_router)

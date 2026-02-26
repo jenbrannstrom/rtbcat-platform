@@ -83,7 +83,7 @@ export function Sidebar() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { selectedBuyerId, setSelectedBuyerId } = useAccount();
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, isSudo, logout } = useAuth();
   const { t } = useTranslation();
 
   // Helper for relative time formatting with translations
@@ -591,8 +591,8 @@ export function Sidebar() {
           )}
         </div>
 
-        {/* Admin Section (only for admins) */}
-        {isAdmin && (
+        {/* Admin Section (only for sudo / global admins) */}
+        {isSudo && (
           <div className="pt-2">
             {!collapsed && (
               <div className="px-3 mb-1">

@@ -7,6 +7,9 @@ from storage.postgres_database import init_postgres_database
 from services.auth_service import AuthService, User
 from config import ConfigManager
 
+# Access level hierarchy for buyer seat permissions
+_BUYER_ACCESS_LEVELS = ["read", "admin"]
+
 StoreType = PostgresStore
 
 # Global instances - set by main.py lifespan
@@ -132,7 +135,10 @@ async def get_current_user_optional(request: Request) -> Optional[User]:
 
 
 async def require_admin(user: User = Depends(get_current_user)) -> User:
-    """Require the current user to have admin role.
+    """Require the current user to have admin role (sudo).
+
+    Use for global/system admin actions only. For seat-scoped admin
+    actions, use require_buyer_admin_access instead.
 
     Args:
         user: Current authenticated user.
@@ -149,6 +155,93 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
             detail="Admin access required.",
         )
     return user
+
+
+def is_sudo(user: User) -> bool:
+    """Check if user has sudo (global admin) role."""
+    return user.role == "admin"
+
+
+async def get_user_buyer_access_map(
+    user: User = Depends(get_current_user),
+) -> Optional[dict[str, str]]:
+    """Get buyer_id → access_level map for the current user.
+
+    Returns None for sudo users (means all buyers, all levels).
+    Returns dict mapping buyer_id to access_level ('read' or 'admin') for non-sudo.
+    """
+    if is_sudo(user):
+        return None
+
+    auth_svc = get_auth_service()
+    perms = await auth_svc.get_user_buyer_seat_permissions(user.id)
+    return {p.buyer_id: p.access_level for p in perms}
+
+
+async def require_buyer_access_level(
+    buyer_id: str,
+    min_level: str,
+    user: User,
+) -> None:
+    """Require user has at least min_level access to a specific buyer seat.
+
+    Args:
+        buyer_id: The buyer seat to check.
+        min_level: Minimum required access level ('read' or 'admin').
+        user: The current user.
+
+    Raises:
+        HTTPException: 403 if insufficient access.
+    """
+    if is_sudo(user):
+        return
+
+    min_index = _BUYER_ACCESS_LEVELS.index(min_level) if min_level in _BUYER_ACCESS_LEVELS else 0
+    auth_svc = get_auth_service()
+    perms = await auth_svc.get_user_buyer_seat_permissions(user.id)
+    for p in perms:
+        if p.buyer_id == buyer_id:
+            level_index = _BUYER_ACCESS_LEVELS.index(p.access_level) if p.access_level in _BUYER_ACCESS_LEVELS else -1
+            if level_index >= min_index:
+                return
+            break
+
+    raise HTTPException(
+        status_code=403,
+        detail=f"You need '{min_level}' access to this buyer seat.",
+    )
+
+
+async def require_buyer_admin_access(
+    buyer_id: str,
+    user: User = Depends(get_current_user),
+) -> None:
+    """Require admin access to a specific buyer seat.
+
+    Sudo users bypass this check. Non-sudo users must have
+    access_level='admin' for the specified buyer seat.
+    """
+    await require_buyer_access_level(buyer_id, "admin", user)
+
+
+async def require_seat_admin_or_sudo(
+    user: User = Depends(get_current_user),
+) -> User:
+    """Require sudo or admin access to at least one buyer seat.
+
+    Use for bidder-level / settings mutations where the operation
+    isn't scoped to a single buyer_id but requires admin privileges.
+    """
+    if is_sudo(user):
+        return user
+    auth_svc = get_auth_service()
+    admin_seats = await auth_svc.get_user_buyer_seat_ids(user.id, min_access_level="admin")
+    if admin_seats:
+        return user
+    raise HTTPException(
+        status_code=403,
+        detail="Admin access to at least one seat is required.",
+    )
 
 
 async def get_user_service_accounts(

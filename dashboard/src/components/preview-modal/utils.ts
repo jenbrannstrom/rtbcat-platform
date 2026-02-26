@@ -49,21 +49,25 @@ export function getDataNotes(creative: Creative, performance?: CreativePerforman
 
   const imps = performance.total_impressions || 0;
   const clicks = performance.total_clicks || 0;
+  const clicksAvailable = performance.clicks_available !== false;
 
-  // Clicks exceed impressions
-  if (clicks > imps && imps > 0) {
-    notes.push({
-      icon: "alert",
-      message: `Clicks (${clicks.toLocaleString()}) exceed impressions (${imps.toLocaleString()})`,
-    });
-  }
+  // Only show click-related notes when clicks data is actually available
+  if (clicksAvailable) {
+    // Clicks exceed impressions
+    if (clicks > imps && imps > 0) {
+      notes.push({
+        icon: "alert",
+        message: `Clicks (${clicks.toLocaleString()}) exceed impressions (${imps.toLocaleString()})`,
+      });
+    }
 
-  // Zero clicks with impressions
-  if (clicks === 0 && imps > 100) {
-    notes.push({
-      icon: "info",
-      message: `Zero clicks recorded across ${imps.toLocaleString()} impressions`,
-    });
+    // Zero clicks with impressions (legitimate data quality observation)
+    if (clicks === 0 && imps > 100) {
+      notes.push({
+        icon: "info",
+        message: `Zero clicks recorded across ${imps.toLocaleString()} impressions`,
+      });
+    }
   }
 
   // Video-specific note

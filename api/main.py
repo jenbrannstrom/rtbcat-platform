@@ -77,6 +77,7 @@ from api.routers import (
     troubleshooting_router,
     collect_router,
     admin_router,
+    seat_admin_router,
     # Analytics sub-routers (refactored from monolithic analytics.py)
     waste_router,
     rtb_bidstream_router,
@@ -256,3 +257,4 @@ app.include_router(troubleshooting_router)
 
 # Admin routes (user management, audit logs)
 app.include_router(admin_router)
+app.include_router(seat_admin_router)

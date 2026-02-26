@@ -44,6 +44,9 @@ class PerformanceSummaryResponse(BaseModel):
     days_with_data: Optional[int] = None
     earliest_date: Optional[str] = None
     latest_date: Optional[str] = None
+    # Data provenance metadata
+    metric_source: Optional[str] = None  # e.g. "rtb_daily"
+    clicks_available: Optional[bool] = None  # True if source has clicks data
 
 
 class ImportPerformanceRequest(BaseModel):
@@ -75,6 +78,9 @@ class CreativePerformanceSummary(BaseModel):
     ctr_percent: Optional[float] = None
     days_with_data: int = 0
     has_data: bool = False
+    # Data provenance metadata
+    metric_source: Optional[str] = None
+    clicks_available: bool = True
 
 
 class BatchPerformanceResponse(BaseModel):

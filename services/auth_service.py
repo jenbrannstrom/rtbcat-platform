@@ -290,6 +290,14 @@ class AuthService:
         """Get buyer IDs from explicit seat permissions."""
         return await self._perms.get_user_buyer_seat_ids(user_id, min_access_level=min_access_level)
 
+    async def get_user_buyer_seat_access_map(self, user_id: str) -> dict[str, str]:
+        """Get buyer_id -> access_level map for a user.
+
+        Returns a dict like {'299038253': 'admin', '123456': 'read'}.
+        """
+        perms = await self.get_user_buyer_seat_permissions(user_id)
+        return {p.buyer_id: p.access_level for p in perms}
+
     # ==================== Audit Log Methods ====================
 
     async def log_audit(

@@ -300,13 +300,19 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                 <div className="grid grid-cols-4 gap-2">
                   <MetricCard value={formatSpend(performance.total_spend_micros)} label={t.previewModal.spend} />
                   <MetricCard value={formatNumber(performance.total_impressions)} label={t.previewModal.imps} />
-                  <MetricCard value={formatNumber(performance.total_clicks)} label={t.previewModal.clicks} />
-                  <MetricCard value={formatCTR(performance.ctr_percent)} label={t.previewModal.ctr} />
+                  <MetricCard
+                    value={performance.clicks_available !== false ? formatNumber(performance.total_clicks) : "N/A"}
+                    label={t.previewModal.clicks}
+                  />
+                  <MetricCard
+                    value={performance.clicks_available !== false ? formatCTR(performance.ctr_percent) : "N/A"}
+                    label={t.previewModal.ctr}
+                  />
                 </div>
                 {/* CPM/CPC secondary */}
                 <div className="mt-2 text-xs text-gray-500 text-center">
                   {t.previewModal.cpm}: {formatCostMetric(performance.avg_cpm_micros)} · {t.previewModal.cpc}:{" "}
-                  {formatCostMetric(performance.avg_cpc_micros)}
+                  {performance.clicks_available !== false ? formatCostMetric(performance.avg_cpc_micros) : "N/A"}
                 </div>
               </>
             ) : (
