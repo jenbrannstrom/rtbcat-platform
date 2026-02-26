@@ -246,9 +246,10 @@ class ThumbnailsService:
                 "-y",  # Overwrite output
                 "-i", video_url,
                 "-ss", "00:00:01",  # Seek to 1 second
-                "-vframes", "1",  # Extract 1 frame
+                "-frames:v", "1",  # Extract 1 frame
                 "-q:v", "2",  # High quality
                 "-vf", "scale=320:-1",  # Scale to 320px width
+                "-update", "1",  # Required by ffmpeg 7.x for single-image output
                 str(output_path),
             ]
 
