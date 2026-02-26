@@ -11,6 +11,7 @@ import type {
   LanguageDetectionResponse,
   GeoMismatchResponse,
   ManualLanguageUpdate,
+  PaginatedCreativesResponse,
 } from "@/types/api";
 
 // =============================================================================
@@ -37,6 +38,28 @@ export async function getCreatives(params?: {
 
   const query = searchParams.toString();
   return fetchApi<Creative[]>(`/creatives${query ? `?${query}` : ""}`);
+}
+
+export async function getCreativesPaginated(params?: {
+  campaign_id?: string;
+  cluster_id?: string;
+  buyer_id?: string;
+  format?: string;
+  limit?: number;
+  offset?: number;
+  slim?: boolean;
+}): Promise<PaginatedCreativesResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.campaign_id) searchParams.set("campaign_id", params.campaign_id);
+  if (params?.cluster_id) searchParams.set("cluster_id", params.cluster_id);
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  if (params?.format) searchParams.set("format", params.format);
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  if (params?.offset) searchParams.set("offset", String(params.offset));
+  if (params?.slim !== undefined) searchParams.set("slim", String(params.slim));
+
+  const query = searchParams.toString();
+  return fetchApi<PaginatedCreativesResponse>(`/creatives/v2${query ? `?${query}` : ""}`);
 }
 
 export async function getCreative(id: string): Promise<Creative> {

@@ -103,6 +103,20 @@ export interface Health {
   configured: boolean;
 }
 
+export interface PaginationMeta {
+  timeframe_days?: number | null;
+  total: number;
+  returned: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+export interface PaginatedCreativesResponse {
+  data: Creative[];
+  meta: PaginationMeta;
+}
+
 export interface CollectRequest {
   account_id: string;
   filter_query?: string;

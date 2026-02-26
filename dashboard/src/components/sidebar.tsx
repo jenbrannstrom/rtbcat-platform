@@ -441,41 +441,65 @@ export function Sidebar() {
               </span>
             </div>
           )}
-          <button
-            onClick={() => {
-              toggleQpsExpanded();
-              if (pathWithoutBuyer !== "/") {
-                router.push(getSeatScopedHref("/"));
-              }
-            }}
-            className={cn(
-              "flex items-center w-full px-3 py-2 text-sm font-medium rounded-md transition-colors",
-              isInQps
-                ? "bg-primary-50 text-primary-700"
-                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
-              collapsed && "justify-center px-2"
-            )}
-            title={collapsed ? t.navigation.wasteOptimizer : undefined}
-          >
-            <TrendingDown
+          {collapsed ? (
+            <Link
+              href={getSeatScopedHref("/")}
               className={cn(
-                "h-5 w-5 flex-shrink-0",
-                isInQps ? "text-primary-600" : "text-gray-400",
-                !collapsed && "mr-3"
+                "flex items-center w-full px-2 py-2 text-sm font-medium rounded-md transition-colors justify-center",
+                (pathWithoutBuyer === "/" || isInQps)
+                  ? "bg-primary-50 text-primary-700"
+                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
               )}
-            />
-            {!collapsed && (
-              <>
-                <span className="flex-1 text-left">{t.navigation.wasteOptimizer}</span>
+              title={t.navigation.wasteOptimizer}
+            >
+              <TrendingDown
+                className={cn(
+                  "h-5 w-5 flex-shrink-0",
+                  (pathWithoutBuyer === "/" || isInQps) ? "text-primary-600" : "text-gray-400"
+                )}
+              />
+            </Link>
+          ) : (
+            <div
+              className={cn(
+                "flex items-center w-full rounded-md transition-colors",
+                (pathWithoutBuyer === "/" || isInQps)
+                  ? "bg-primary-50 text-primary-700"
+                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+              )}
+            >
+              <Link
+                href={getSeatScopedHref("/")}
+                className="flex min-w-0 flex-1 items-center px-3 py-2 text-sm font-medium"
+              >
+                <TrendingDown
+                  className={cn(
+                    "h-5 w-5 flex-shrink-0 mr-3",
+                    (pathWithoutBuyer === "/" || isInQps) ? "text-primary-600" : "text-gray-400"
+                  )}
+                />
+                <span className="flex-1 truncate text-left">{t.navigation.wasteOptimizer}</span>
+              </Link>
+              <button
+                type="button"
+                onClick={toggleQpsExpanded}
+                aria-label={qpsExpanded ? "Collapse QPS section" : "Expand QPS section"}
+                className={cn(
+                  "mr-1 p-1.5 rounded-md transition-colors",
+                  (pathWithoutBuyer === "/" || isInQps)
+                    ? "hover:bg-primary-100"
+                    : "hover:bg-gray-100"
+                )}
+              >
                 <ChevronDown
                   className={cn(
                     "h-4 w-4 transition-transform",
                     qpsExpanded && "rotate-180"
                   )}
                 />
-              </>
-            )}
-          </button>
+              </button>
+            </div>
+          )}
           {(!collapsed && qpsExpanded) && (
             <div className="ml-6 space-y-1">
               {qpsItems.map((item) => {
