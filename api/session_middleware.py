@@ -54,6 +54,7 @@ PUBLIC_PATHS = {
 PUBLIC_PREFIXES = [
     "/docs",
     "/redoc",
+    "/thumbnails/",  # Locally-generated video preview images
 ]
 
 
