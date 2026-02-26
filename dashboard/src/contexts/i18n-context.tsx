@@ -40,7 +40,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>(defaultLanguage);
   const [isHydrated, setIsHydrated] = useState(false);
 
-  // Load language from localStorage on mount
+  // Load language: use localStorage as an instant default, then always
+  // reconcile with the logged-in user's preference from /api/auth/me so
+  // that switching users (or re-logging) applies the correct language.
   useEffect(() => {
     const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
     const cookieMatch = document.cookie
@@ -50,12 +52,12 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     const preferred = stored || cookieValue;
     const allowed = availableLanguages.map((lang) => lang.code);
 
+    // Apply cached preference immediately to avoid flash
     if (preferred && allowed.includes(preferred as Language)) {
       setLanguageState(preferred as Language);
-      setIsHydrated(true);
-      return;
     }
 
+    // Always check the user's DB preference — it wins over stale localStorage
     fetch("/api/auth/me", { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
