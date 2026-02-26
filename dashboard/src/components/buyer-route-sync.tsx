@@ -46,6 +46,21 @@ export function BuyerRouteSync() {
     if (!selectedBuyerId) return;
     if (buyerIdInPath === selectedBuyerId) return;
 
+    // If the URL already has a buyer seat, prefer the URL as source-of-truth
+    // unless that buyer becomes invalid (e.g. RBAC revoked). This avoids a
+    // race where a seat switch navigation briefly lands on /<newBuyer>/... and
+    // the old context value immediately rewrites it back.
+    if (buyerIdInPath) {
+      if (!seats) return;
+      const buyerInPathIsValid = seats.some((s) => s.buyer_id === buyerIdInPath);
+      if (buyerInPathIsValid) return;
+
+      // If both URL buyer and selected buyer are invalid, wait for the pages
+      // that normalize selection to resolve a valid seat.
+      const selectedBuyerIsValid = seats.some((s) => s.buyer_id === selectedBuyerId);
+      if (!selectedBuyerIsValid) return;
+    }
+
     const targetPath = replaceBuyerInPath(pathname, selectedBuyerId);
     const targetUrl = queryString ? `${targetPath}?${queryString}` : targetPath;
     if (targetUrl !== currentUrl) {
@@ -59,6 +74,7 @@ export function BuyerRouteSync() {
     queryString,
     router,
     selectedBuyerId,
+    seats,
   ]);
 
   // Clean accidental buyer prefix on non-scoped pages

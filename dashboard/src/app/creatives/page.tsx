@@ -1,11 +1,17 @@
 "use client";
 
-import { useState, Suspense, useRef, useMemo } from "react";
+import { useState, Suspense, useRef, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Search, X, TrendingUp, Loader2, Play, Square, AlertTriangle } from "lucide-react";
-import { getCreatives, getSizes, getBatchPerformance, getThumbnailStatus, generateThumbnailsBatch } from "@/lib/api";
+import {
+  getCreativesPaginated,
+  getSizes,
+  getBatchPerformance,
+  getThumbnailStatus,
+  generateThumbnailsBatch,
+} from "@/lib/api";
 import { CreativeCard } from "@/components/creative-card";
 import { PreviewModal } from "@/components/preview-modal";
 import { LoadingPage } from "@/components/loading";
@@ -88,6 +94,7 @@ const FORMAT_FILTER_VALUES: { value: string; formats: string[] }[] = [
   { value: "NATIVE", formats: ["NATIVE"] },
 ];
 const COLUMNS = 4; // Fixed 4 columns for simplicity
+const CREATIVES_PAGE_SIZE = 120;
 
 // Thumbnail Generation Banner Component
 function ThumbnailGenerationBanner({ buyerId }: { buyerId?: string | null }) {
@@ -352,16 +359,27 @@ function CreativesContent() {
   const [sortBySpend, setSortBySpend] = useState(true);
   const [tierFilter, setTierFilter] = useState<PerformanceTier | "all">("all");
   const [approvalFilter, setApprovalFilter] = useState<"all" | "approved" | "not_approved">("all");
+  const [pageIndex, setPageIndex] = useState(0);
+  const creativesOffset = pageIndex * CREATIVES_PAGE_SIZE;
 
   const {
-    data: creatives,
+    data: creativesPage,
     isLoading,
     error,
     refetch,
   } = useQuery({
-    queryKey: ["creatives", selectedSeatId],
-    queryFn: () => getCreatives({ limit: 5000, buyer_id: selectedSeatId ?? undefined, slim: true }),
+    queryKey: ["creatives", selectedSeatId, CREATIVES_PAGE_SIZE, creativesOffset],
+    queryFn: () =>
+      getCreativesPaginated({
+        limit: CREATIVES_PAGE_SIZE,
+        offset: creativesOffset,
+        buyer_id: selectedSeatId ?? undefined,
+        slim: true,
+      }),
   });
+
+  const creatives = creativesPage?.data;
+  const creativesMeta = creativesPage?.meta;
 
   const { data: availableSizes } = useQuery({
     queryKey: ["sizes"],
@@ -442,6 +460,11 @@ function CreativesContent() {
     setApprovalFilter("all");
   };
 
+  // Keep pagination deterministic when scope or local filters change.
+  useEffect(() => {
+    setPageIndex(0);
+  }, [selectedSeatId, search, selectedFormats, selectedSizes, tierFilter, approvalFilter]);
+
   // Filter and sort creatives - MUST be before early returns (hooks order)
   const filteredCreatives = useMemo(() => {
     if (!creatives) return undefined;
@@ -521,6 +544,13 @@ function CreativesContent() {
     search ||
     tierFilter !== "all" ||
     approvalFilter !== "all";
+
+  const totalCreatives = creativesMeta?.total ?? creatives?.length ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCreatives / CREATIVES_PAGE_SIZE));
+  const pageStart = totalCreatives === 0 ? 0 : creativesOffset + 1;
+  const pageEnd = creativesOffset + (creatives?.length ?? 0);
+  const canGoPrevPage = pageIndex > 0;
+  const canGoNextPage = creativesMeta?.has_more ?? false;
 
   // Early returns AFTER all hooks
   if (isLoading) {
@@ -708,9 +738,41 @@ function CreativesContent() {
           </button>
         )}
 
-        {/* Count */}
-        <div className="ml-auto text-sm text-gray-500">
-          {t.creatives.countOf.replace('{count}', String(filteredCreatives?.length ?? 0)).replace('{total}', String(creatives?.length ?? 0))}
+        <div className="ml-auto flex items-center gap-3">
+          {/* Count */}
+          <div className="text-sm text-gray-500">
+            {t.creatives.countOf
+              .replace('{count}', String(filteredCreatives?.length ?? 0))
+              .replace('{total}', String(creatives?.length ?? 0))}
+          </div>
+
+          {/* Page summary + controls (server pagination) */}
+          {totalCreatives > CREATIVES_PAGE_SIZE && (
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>
+                {pageStart}-{pageEnd} / {totalCreatives}
+              </span>
+              <span>
+                Page {pageIndex + 1}/{totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPageIndex((prev) => Math.max(0, prev - 1))}
+                disabled={!canGoPrevPage}
+                className="px-2 py-1 rounded border border-gray-200 bg-white text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                Prev
+              </button>
+              <button
+                type="button"
+                onClick={() => setPageIndex((prev) => prev + 1)}
+                disabled={!canGoNextPage}
+                className="px-2 py-1 rounded border border-gray-200 bg-white text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                Next
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
