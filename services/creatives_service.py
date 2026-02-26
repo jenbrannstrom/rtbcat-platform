@@ -96,19 +96,27 @@ class CreativesService:
             status_data = statuses.get(cid)
             has_thumbnail = (self._thumbnails_dir / f"{cid}.jpg").exists()
 
+            # Prefer the local file URL when the thumbnail exists on disk,
+            # regardless of which DB table recorded the generation.
+            thumb_url = (
+                f"/thumbnails/{cid}.jpg"
+                if has_thumbnail
+                else (status_data.get("thumbnail_url") if status_data else None)
+            )
+
             if status_data:
                 result[cid] = ThumbnailStatus(
                     status=status_data["status"],
                     error_reason=status_data["error_reason"],
                     has_thumbnail=has_thumbnail,
-                    thumbnail_url=status_data.get("thumbnail_url"),
+                    thumbnail_url=thumb_url,
                 )
             else:
                 result[cid] = ThumbnailStatus(
                     status=None,
                     error_reason=None,
                     has_thumbnail=has_thumbnail,
-                    thumbnail_url=None,
+                    thumbnail_url=thumb_url,
                 )
 
         return result
