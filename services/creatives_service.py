@@ -98,8 +98,9 @@ class CreativesService:
 
             # Prefer the local file URL when the thumbnail exists on disk,
             # regardless of which DB table recorded the generation.
+            # Use /api/ prefix so nginx routes to the API container in production.
             thumb_url = (
-                f"/thumbnails/{cid}.jpg"
+                f"/api/thumbnails/{cid}.jpg"
                 if has_thumbnail
                 else (status_data.get("thumbnail_url") if status_data else None)
             )
