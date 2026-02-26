@@ -474,15 +474,14 @@ async def sync_all_data(
     pretargeting_synced = 0
     errors = []
 
-    # Get all active buyer seats
-    if user.role == "admin":
-        seats = await seats_service.get_buyer_seats(active_only=True)
+    # Get all active buyer seats, filtered by RBAC permissions
+    allowed_buyer_ids = await get_allowed_buyer_ids(store=store, user=user)
+    all_seats = await seats_service.get_buyer_seats(active_only=True)
+    if allowed_buyer_ids is not None:
+        allowed_set = set(allowed_buyer_ids)
+        seats = [s for s in all_seats if s.buyer_id in allowed_set]
     else:
-        service_account_ids = await get_allowed_service_account_ids(user=user)
-        seats = await seats_service.get_buyer_seats_for_service_accounts(
-            service_account_ids=service_account_ids,
-            active_only=True,
-        )
+        seats = all_seats
 
     if not seats:
         raise HTTPException(
