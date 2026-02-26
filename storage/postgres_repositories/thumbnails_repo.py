@@ -186,7 +186,7 @@ class ThumbnailsRepository:
             FROM creatives c
             LEFT JOIN thumbnail_status ts ON c.id = ts.creative_id
             WHERE c.format = 'VIDEO'
-            AND ts.status IS NULL
+            AND (ts.status IS NULL OR ts.status = 'pending')
             LIMIT %s
             """,
             (limit,),
