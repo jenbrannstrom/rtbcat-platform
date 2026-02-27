@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   title: "Cat-Scan Dashboard",
   description: "Creative Intelligence for Authorized Buyers",
   icons: {
-    icon: "/icon.svg",
+    icon: "/favicon.ico",
     apple: "/apple-icon.svg",
   },
 };
