@@ -574,9 +574,13 @@ export interface Translations {
     endpointEfficiencyOvershoot: string;
     endpointEfficiencyOvershootHelp: string;
     endpointEfficiencyDeliveryWin: string;
+    endpointEfficiencyDeliveryWinHelp: string;
     endpointEfficiencyAuctionWin: string;
+    endpointEfficiencyAuctionWinHelp: string;
     endpointEfficiencyFiltered: string;
+    endpointEfficiencyFilteredHelp: string;
     endpointEfficiencyPtgtLoss: string;
+    endpointEfficiencyPtgtLossHelp: string;
     endpointEfficiencyCapLabel: string;
     endpointEfficiencyFunnelLabel: string;
     endpointEfficiencyAvailLabel: string;
@@ -584,6 +588,10 @@ export interface Translations {
     endpointEfficiencyFilteredLabel: string;
     endpointEfficiencySourceLabel: string;
     endpointEfficiencyNa: string;
+    endpointEfficiencyAlertEndpointMappingMissing: string;
+    endpointEfficiencyAlertEndpointDeliveryMissing: string;
+    endpointEfficiencyAlertAllocatedVsObservedGap: string;
+    endpointEfficiencyAlertPretargetingLossHigh: string;
     endpointsHeaderLocationUnknown: string;
     endpointsHeaderLocationUsWest: string;
     endpointsHeaderLocationUsEast: string;
@@ -600,6 +608,10 @@ export interface Translations {
     endpointsHeaderTitle: string;
     endpointsHeaderAllocated: string;
     endpointsHeaderObserved: string;
+    endpointsHeaderAllocatedInfoAria: string;
+    endpointsHeaderAllocatedInfoTooltip: string;
+    endpointsHeaderObservedInfoAria: string;
+    endpointsHeaderObservedInfoTooltip: string;
     endpointsHeaderTotalQpsCap: string;
     endpointsHeaderQpsInfoAria: string;
     endpointsHeaderQpsInfoTooltip: string;

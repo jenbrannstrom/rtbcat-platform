@@ -362,18 +362,26 @@ const value: PartialTranslations['pretargeting'] = {
   endpointEfficiencyAuctionCoverage: '拍卖覆盖 {have}/{days}天',
   endpointEfficiencyObservedQps: '观测 QPS',
   endpointEfficiencyObservedQpsHelp:
-    '来自数据流的端点投放速率，不是配置值。',
-  endpointEfficiencyFeedMissing: '缺少数据源',
+    '本周期端点每秒实际收到的查询数。这是实际流量，不是你配置的上限。',
+  endpointEfficiencyFeedMissing: '无投放数据',
   endpointEfficiencyUtilization: '利用率',
   endpointEfficiencyUtilizationHelp:
-    '观测 QPS / 分配的 QPS 上限。',
+    '实际使用量占已分配 QPS 上限的比例。100% 表示已吃满，比例低表示大部分容量处于闲置。',
   endpointEfficiencyOvershoot: '超配',
   endpointEfficiencyOvershootHelp:
-    '相对于实际使用，预留了多少容量。',
+    '你预留容量与实际使用量的比值。1.0x 接近平衡；5.0x 表示预留了约 5 倍于实际使用量。',
   endpointEfficiencyDeliveryWin: '投放赢率',
+  endpointEfficiencyDeliveryWinHelp:
+    '到达 bidder 的查询中，最终变成展示的比例。',
   endpointEfficiencyAuctionWin: '拍卖赢率',
+  endpointEfficiencyAuctionWinHelp:
+    '你发出的所有出价中，最终赢标的比例。',
   endpointEfficiencyFiltered: '已过滤',
+  endpointEfficiencyFilteredHelp:
+    '你发出的所有出价中，在进入竞价前被过滤掉的比例。',
   endpointEfficiencyPtgtLoss: '预定向损失',
+  endpointEfficiencyPtgtLossHelp:
+    '所有可用流量机会中，被预定向拦截、未到达 bidder 的比例。越低越好。',
   endpointEfficiencyCapLabel: '上限',
   endpointEfficiencyFunnelLabel: '漏斗',
   endpointEfficiencyAvailLabel: '可用',
@@ -381,6 +389,14 @@ const value: PartialTranslations['pretargeting'] = {
   endpointEfficiencyFilteredLabel: '已过滤',
   endpointEfficiencySourceLabel: '来源',
   endpointEfficiencyNa: 'N/A',
+  endpointEfficiencyAlertEndpointMappingMissing:
+    '本周期有 {count} 个已配置端点没有投放数据。请检查端点映射和端点活跃状态。',
+  endpointEfficiencyAlertEndpointDeliveryMissing:
+    '当前没有端点投放数据，因此暂时无法计算观测 QPS。请先刷新/同步端点数据后再试。',
+  endpointEfficiencyAlertAllocatedVsObservedGap:
+    '本周期实际仅使用了已分配 QPS 的 {pct}%。大部分容量未被使用。',
+  endpointEfficiencyAlertPretargetingLossHigh:
+    '本周期预定向拦截了 {lossPct}% 的可用流量，仅有 {passPct}% 通过。',
   endpointsHeaderLocationUnknown: '未知',
   endpointsHeaderLocationUsWest: '美国西部',
   endpointsHeaderLocationUsEast: '美国东部',
@@ -398,6 +414,11 @@ const value: PartialTranslations['pretargeting'] = {
   endpointsHeaderTitle: 'RTB 端点',
   endpointsHeaderAllocated: '分配',
   endpointsHeaderObserved: '观测 QPS',
+  endpointsHeaderAllocatedInfoAria: '分配 QPS 信息',
+  endpointsHeaderAllocatedInfoTooltip: '这是你告诉 Google 要发送的 QPS。',
+  endpointsHeaderObservedInfoAria: '观测 QPS 信息',
+  endpointsHeaderObservedInfoTooltip:
+    '这是你每秒从 Google 实际收到的查询数。可通过减少浪费和提高效率来提升。',
   endpointsHeaderTotalQpsCap: 'QPS 总上限',
   endpointsHeaderQpsInfoAria: 'QPS 信息',
   endpointsHeaderQpsInfoTooltip:

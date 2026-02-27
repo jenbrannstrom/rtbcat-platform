@@ -37,6 +37,33 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
   const auctionsWon = summary.auctions_won ?? 0;
   const filteredBids = summary.filtered_bids ?? Math.max(bids - bidsInAuction, 0);
   const naLabel = t.pretargeting.endpointEfficiencyNa;
+  const missingEndpointCount = data.endpoint_reconciliation?.counts?.missing_in_google ?? 0;
+
+  const resolveAlertMessage = (alert: { code: string; message: string }): string => {
+    switch (alert.code) {
+      case "ENDPOINT_MAPPING_MISSING":
+        return t.pretargeting.endpointEfficiencyAlertEndpointMappingMissing
+          .replace("{count}", String(missingEndpointCount));
+      case "ENDPOINT_DELIVERY_MISSING":
+        return t.pretargeting.endpointEfficiencyAlertEndpointDeliveryMissing;
+      case "ALLOCATED_VS_OBSERVED_GAP":
+        return t.pretargeting.endpointEfficiencyAlertAllocatedVsObservedGap
+          .replace(
+            "{pct}",
+            summary.qps_utilization_pct != null ? summary.qps_utilization_pct.toFixed(2) : "0.00"
+          );
+      case "PRETARGETING_LOSS_HIGH": {
+        const lossPct = bridge.pretargeting_loss_pct != null ? bridge.pretargeting_loss_pct : 0;
+        const passPct = bridge.supply_capture_pct != null ? bridge.supply_capture_pct : Math.max(100 - lossPct, 0);
+        return t.pretargeting.endpointEfficiencyAlertPretargetingLossHigh
+          .replace("{lossPct}", lossPct.toFixed(1))
+          .replace("{passPct}", passPct.toFixed(1));
+      }
+      default:
+        return alert.message;
+    }
+  };
+
   return (
     <section className="bg-white rounded-lg border p-2.5 space-y-2 overflow-visible">
       {/* Header: title + coverage badges only (date range shown once in top bar) */}
@@ -66,7 +93,7 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
                   : "px-2 py-1.5 rounded border border-yellow-200 bg-yellow-50 text-yellow-800 text-xs"
               }
             >
-              {alert.message}
+              {resolveAlertMessage(alert)}
             </div>
           ))}
         </div>
@@ -104,13 +131,19 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
           </div>
         </div>
         <div className="rounded border bg-purple-50 border-purple-200 px-2 py-1">
-          <div className="text-[9px] uppercase text-purple-600 leading-tight">{t.pretargeting.endpointEfficiencyDeliveryWin}</div>
+          <div className="text-[9px] uppercase text-purple-600 leading-tight">
+            {t.pretargeting.endpointEfficiencyDeliveryWin}
+            <InfoTip text={t.pretargeting.endpointEfficiencyDeliveryWinHelp} />
+          </div>
           <div className="text-sm font-bold text-purple-900">
             {typeof deliveryWinRatePct === "number" ? `${deliveryWinRatePct.toFixed(2)}%` : naLabel}
           </div>
         </div>
         <div className="rounded border bg-cyan-50 border-cyan-100 px-2 py-1">
-          <div className="text-[9px] text-cyan-600 uppercase leading-tight">{t.pretargeting.endpointEfficiencyAuctionWin}</div>
+          <div className="text-[9px] text-cyan-600 uppercase leading-tight">
+            {t.pretargeting.endpointEfficiencyAuctionWin}
+            <InfoTip text={t.pretargeting.endpointEfficiencyAuctionWinHelp} />
+          </div>
           <div className="text-sm font-semibold">
             {summary.auction_win_rate_over_bids_pct != null
               ? `${summary.auction_win_rate_over_bids_pct.toFixed(2)}%`
@@ -119,7 +152,10 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
           <div className="text-[9px] text-gray-400">{formatNum(auctionsWon)}/{formatNum(bids)}</div>
         </div>
         <div className="rounded border bg-orange-50 border-orange-100 px-2 py-1">
-          <div className="text-[9px] text-orange-600 uppercase leading-tight">{t.pretargeting.endpointEfficiencyFiltered}</div>
+          <div className="text-[9px] text-orange-600 uppercase leading-tight">
+            {t.pretargeting.endpointEfficiencyFiltered}
+            <InfoTip text={t.pretargeting.endpointEfficiencyFilteredHelp} />
+          </div>
           <div className="text-sm font-semibold">
             {summary.filtered_bid_rate_pct != null
               ? `${summary.filtered_bid_rate_pct.toFixed(2)}%`
@@ -128,7 +164,10 @@ export function EndpointEfficiencyPanel({ data }: { data: EndpointEfficiencyResp
           <div className="text-[9px] text-gray-400">{formatNum(filteredBids)}</div>
         </div>
         <div className="rounded border bg-gray-50 border-gray-200 px-2 py-1">
-          <div className="text-[9px] text-gray-500 uppercase leading-tight">{t.pretargeting.endpointEfficiencyPtgtLoss}</div>
+          <div className="text-[9px] text-gray-500 uppercase leading-tight">
+            {t.pretargeting.endpointEfficiencyPtgtLoss}
+            <InfoTip text={t.pretargeting.endpointEfficiencyPtgtLossHelp} />
+          </div>
           <div className="text-sm font-semibold">
             {bridge.pretargeting_loss_pct !== null ? `${bridge.pretargeting_loss_pct.toFixed(1)}%` : naLabel}
           </div>
