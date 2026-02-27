@@ -1,6 +1,12 @@
 # Cat-Scan Roadmap
 
-**Last Updated:** February 25, 2026
+**Last Updated:** February 27, 2026
+
+## Priority Buckets (2026-02-27)
+
+- [ ] **Now** - Objective: clear production-facing regressions and runtime blockers; Current: language-persistence regression and seat-switch/operator verification issues remain; Acceptance: both are fixed and validated on production traffic.
+- [ ] **Next** - Objective: complete Universal Precompute Epics A/B plus Home correctness/performance gates; Current: scope is defined but rollout is incomplete; Acceptance: serving-table path and validation gates are green.
+- [ ] **Later** - Objective: deliver optimization engine and external integrations after core reliability; Current: backlog/design items exist; Acceptance: features ship only after stability targets hold.
 
 ---
 
@@ -129,8 +135,7 @@
     - [x] Campaign suggestions panel creative-count noun rendering fixed (translation-safe singular/plural noun keys) (`dashboard/src/components/campaigns/SuggestionsPanel.tsx`)
     - [x] Size coverage chart table/empty-state/severity/footer labels converted (`dashboard/src/components/size-coverage-chart.tsx`)
     - [x] Residual scan pass completed: remaining hardcoded UI-adjacent literals are intentional technical code examples/commands/filenames (e.g. `sudo apt install ffmpeg`, `python scripts/gmail_import.py`, sample CSV/report names) and product identifiers shown in `<code>` blocks
-- [ ] **Phase 3: generate/author non-English translations**
-  - Replace locale aliases (`pl`, `zh`, `ru`, `uk`, `es`, `da`, `fr`, `nl`, `he`, `ar`) with real dictionaries.
+- [ ] **Phase 3: generate/author non-English translations** - Objective: replace locale aliases with real dictionaries; Current: `nl` is broad, `es`/`zh` are substantial but incomplete; Acceptance: all supported locales resolve to non-alias dictionaries for required namespaces.
   - Progress (2026-02-24):
     - [x] Added partial-locale deep fallback to English (`dashboard/src/lib/i18n/index.ts`) so translations can ship incrementally per language
     - [x] Added initial Dutch (`nl`) dictionary priority slice (shared shell copy + core `pretargeting` UI labels/messages) (`dashboard/src/lib/i18n/translations/nl.ts`)
@@ -155,7 +160,7 @@
     - [x] Filled Spanish (`es`) nested `import` report-label and auto-detection rule gaps (`dashboard/src/lib/i18n/translations/es.ts`)
     - [x] Expanded Spanish (`es`) coverage for `previewModal` (cache/live state, URL labels/tooltips, approval/language/geo mismatch UI, media preview copy) (`dashboard/src/lib/i18n/translations/es.ts`)
     - [x] Expanded Spanish (`es`) coverage for `admin` (admin dashboard, users/local-password + seat-access UI, admin settings, audit log copy) (`dashboard/src/lib/i18n/translations/es.ts`)
-    - [ ] Expand Spanish coverage across remaining namespaces (`pretargeting`)
+    - [ ] Expand Spanish coverage across remaining namespaces (`pretargeting`) - Objective: close remaining `es` `pretargeting` key gaps; Current: first core chunk is landed; Acceptance: `pretargeting` namespace reaches parity with active UI paths.
       - [x] Added first Spanish (`es`) `pretargeting` core chunk (page shell, tabs, breakdown states, history badges, push/suspend dialogs) (`dashboard/src/lib/i18n/translations/es.ts`)
     - [x] Refactored English (`en`) translations into split namespace modules and added Chinese (`zh`) split dictionary scaffold (`dashboard/src/lib/i18n/translations/en/*`, `dashboard/src/lib/i18n/translations/zh/*`)
     - [x] Added first real Chinese (`zh`) split translations for core shell/auth/home namespaces (`common`, `relativeTime`, `navigation`, `qpsNav`, `settingsNav`, `adminNav`, `sidebar`, `auth`, `dashboard`, `errors`, `language`) (`dashboard/src/lib/i18n/translations/zh/*`)
@@ -173,24 +178,27 @@
       - [x] Removed hardcoded English date formatting (`en-US`) in shared/RTB UI date displays; now uses locale-aware formatting (`dashboard/src/lib/utils.ts`, `dashboard/src/components/rtb/config-breakdown-panel.tsx`)
       - [x] Added explicit CJK-capable font fallback stack for Chinese rendering consistency (kept `Inter` for Latin; added `PingFang SC` / `Microsoft YaHei` / `Noto Sans CJK SC` fallbacks) (`dashboard/src/app/layout.tsx`, `dashboard/src/app/globals.css`)
       - [x] Patched additional high-visibility number/date formatting to use selected app locale (Import History, RTB endpoints header, waste-analysis cards, pretargeting/snapshot date helpers) (`dashboard/src/components/import/ImportHistoryTable.tsx`, `dashboard/src/components/rtb/account-endpoints-header.tsx`, `dashboard/src/components/waste-analyzer/FunnelCard.tsx`, `dashboard/src/components/waste-report.tsx`, `dashboard/src/components/rtb/pretargeting-settings-editor.tsx`, `dashboard/src/components/rtb/snapshot-comparison-panel.tsx`)
-    - [ ] Add real dictionaries for remaining locales (`pl`, `ru`, `uk`, `da`, `fr`, `he`, `ar`) and expand `es` remaining namespaces
+    - [ ] Add real dictionaries for remaining locales (`pl`, `ru`, `uk`, `da`, `fr`, `he`, `ar`) and expand residual `es` namespaces - Objective: remove English alias fallback for supported locales; Current: locale scaffolds are partial; Acceptance: each listed locale has maintainable baseline dictionaries for active surfaces.
 
 ---
 
 ## Known Bugs
 
-- [ ] **Campaigns tab filtering** - Creative ID type mismatch causing empty campaigns view
-- [ ] **Thumbnail placeholders** - Some creatives show placeholder instead of generated thumbnail (ffmpeg)
-- [ ] **FFmpeg missing on install** - Creatives tab fails to render video thumbnails until ffmpeg installed
-- [ ] **CSV import account mismatch** - Imports not linking to correct accounts
-- [ ] **Login loop / empty analytics** - Missing `POSTGRES_SERVING_DSN` breaks analytics; enforce Postgres-only and set DSN
-- [ ] **Size drill-down shows no creatives** - fix is in config_precompute (creative_size) but needs deploy + config precompute refresh
+- [x] **Campaigns tab filtering** - Creative ID type mismatch causing empty campaigns view
+- [x] **FFmpeg missing on install** - Container/runtime image includes ffmpeg; install blocker closed
+- [ ] **Login loop / empty analytics (rescoped)** - Objective: eliminate auth/analytics loop failure mode; Current: startup now hard-fails without `POSTGRES_SERVING_DSN`, but runtime env drift and telemetry gaps remain; Acceptance: no reproducible loop in prod/VM2 and telemetry isolates failures quickly.
 - [x] **Import Now button fails** - /import does not process queued Gmail reports
 - [x] **Campaigns create action no-op** - Clicking "Create" on auto cluster does nothing
-- [ ] **Creative modal missing publisher data** - "No publisher data for this config" despite migrated tables
 - [x] **Duplicate migration numbers** - resolved
-- [ ] ~~**CI/CD pipeline** - Build images in GitHub Actions and deploy via docker pull (Artifact Registry)~~ **(Done)**
-- [ ] **BigQuery raw_facts coverage** - Data only through Jan 25; Jan 26–28 pending reprocess after pipeline fix
+- [x] **CI/CD pipeline** - Build images in GitHub Actions and deploy via docker pull (Artifact Registry)
+
+Runtime-verified bug checks have been moved to **Runtime Verification Queue (Prod/VM2)** to keep this section code-actionable.
+
+---
+
+## Reopened Regressions (Code-Verified)
+
+- [ ] **Creative language persistence path regression** - Objective: restore deterministic language-write persistence; Current: language-analysis paths call `store.creative_repository.*` while `PostgresStore` exposes no `creative_repository` attribute (`api/routers/seats.py`, `services/creative_language_service.py`, `storage/postgres_store.py`); Acceptance: persistence is routed through a valid repo/service interface with tests.
 
 ---
 
@@ -212,10 +220,7 @@
   - [x] No broken nav routes (`/creatives` redirect/replace behavior settled where required).
   - Verified on 2026-02-15 (UTC): latest raw/serving dates aligned at 2026-02-12, recent import windows completed successfully, and sync-all completed for active seats.
 
-- [ ] **P1: Naming alignment only after P0 passes**
-  - Keep physical table names unchanged in first step.
-  - Add compatibility views/canonical aliases, then migrate reads/writes.
-  - Defer hard table renames until after first-release stabilization window.
+- [ ] **P1: Naming alignment only after P0 passes** - Objective: finish naming cleanup with low migration risk; Current: compatibility views/canonical aliases are in place and reads are mostly migrated; Acceptance: hard renames are deferred until post-stabilization decision gate.
 
 ### Implemented Schema Changes (in repo)
 - [x] `001_init` baseline tables include creative language fields (`detected_language`, `detected_language_code`, `language_confidence`, `language_source`, `language_analyzed_at`, `language_analysis_error`).
@@ -232,10 +237,10 @@
 - [x] `042_precompute_refresh_runs` added append-only precompute run ledger (`run_id`, table/domain status, row_count, error, host/version/sha, timing).
 
 ### Proposed Schema Changes Still Open
-- [ ] Universal serving tables for fixed windows (`7/14/30`) under Phase U1 (`serve_home_*`, `serve_qps_*`, `serve_config_*`), including metadata fields (`as_of_date`, `last_refreshed_at`, `refresh_run_id`, `data_state`) and read indexes.
-- [ ] Stronger seat/config integrity guarantees from Home Phase 1 TODOs (persisted seat identity and stricter billing/join-safe keys). Existing columns exist, but strict enforcement is still pending.
+- [ ] Universal serving tables for fixed windows (`7/14/30`) under Phase U1 (`serve_home_*`, `serve_qps_*`, `serve_config_*`) - Objective: precompute all user-facing windows with explicit freshness metadata/indexes; Current: architecture is defined but not fully delivered; Acceptance: tables exist with (`as_of_date`, `last_refreshed_at`, `refresh_run_id`, `data_state`) and production read-path coverage.
+- [ ] Stronger seat/config integrity guarantees (rescoped) - Objective: enforce strict seat/config boundaries on all analytics paths; Current: major safeguards are in place; Acceptance: enforcement audits and regression tests cover all critical endpoints.
 - [x] Precompute observability upgrade: append-only run table (per refresh run/table/status/row_count/error/host/version) to diagnose partial refreshes and stale tables quickly.
-- [ ] Ingestion lineage extension: persist importer host/version + source message lineage (where available) so scheduler "200 OK but no new data" can be traced deterministically.
+- [ ] Ingestion lineage extension - Objective: trace scheduler/import outcomes deterministically; Current: partial run metadata exists but message-level lineage is incomplete; Acceptance: importer host/version and source message lineage are persisted where available.
 
 ### Stale Schema Notes Corrected
 - [x] Language-detection schema is already present in Postgres baseline; previous roadmap text referencing `migrations/015_language_detection.sql` was stale for current repo layout.
@@ -255,7 +260,7 @@
   - [x] Precompute health read path now prefers canonical aliases with legacy fallback.
   - [x] Home analytics, endpoints QPS, data health, RTB config breakdown, and contract checks now query canonical aliases (`seat_*`, `pretarg_*`) while preserving API compatibility keys.
   - [x] Precompute validation + service/repository read SQL now use canonical aliases; legacy table names remain on write paths and compatibility responses.
-- [ ] Keep backward-compatible aliases until first release stabilizes, then decide whether physical table renames are worth migration risk.
+- [ ] Keep backward-compatible aliases until first release stabilizes - Objective: avoid premature physical renames; Current: canonical↔legacy fallback is active; Acceptance: rename decision is made only after stabilization metrics are met.
   - [x] Added canonical↔legacy fallback resolution in precompute-status paths (analytics + RTB service) so mixed migration states remain readable.
 - [x] Add terminology map in API/docs/UI labels so "billing_id" is consistently presented as "pretargeting config" where users expect Google UI wording.
 
@@ -289,8 +294,8 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 ## Features 
 
 ### Core Improvements
-- [ ] **MCP Integration** - Connect AI tools via Model Context Protocol
-- [ ] **Navigation restructure** - Cleaner sidebar organization with unified Settings
+- [ ] **MCP Integration** - Objective: expose safe AI tooling via Model Context Protocol; Current: hooks exist but integration is not complete; Acceptance: approved MCP tools are wired with auth/scope controls and operator workflows.
+- [ ] **Navigation restructure (rescoped)** - Objective: finalize stable information architecture and link behavior; Current: buyer-route model and grouping improved; Acceptance: nav paths are consistent, deep-linkable, and new-tab behavior is correct where expected.
 - [x] **Creative geo display (MVP)** - Serving countries + language mismatch alerts in UI
 - [x] **Creative language detection (AI)** - Automated OCR/Gemini language detection pipeline (implemented)
 
@@ -328,11 +333,12 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
      - `check_language_country_match()` function for mismatch detection
      - Example: "de" (German) -> ["DE", "AT", "CH"]
 
-  5. **Repository Updates** (`storage/repositories/creative_repository.py`)
+  5. **Repository Updates** (`storage/postgres_store.py` / Postgres repository surface)
      - `update_language_detection()` - save detection results
      - `get_creatives_needing_language_analysis()` - find unanalyzed creatives
+     - Note: current persistence wiring is tracked in **Reopened Regressions** due to `store.creative_repository` surface mismatch.
 
-  6. **API Endpoints** (`api/routers/creatives.py`)
+  6. **API Endpoints** (`api/routers/creative_language.py`)
      - `POST /creatives/{id}/analyze-language?force=false` - trigger analysis
      - `PUT /creatives/{id}/language` - manual update
      - `GET /creatives/{id}/geo-mismatch` - check mismatch status
@@ -365,12 +371,12 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
   | `storage/models.py` | Add 6 new fields to Creative |
   | `api/analysis/language_analyzer.py` | New Gemini analyzer module |
   | `utils/language_country_map.py` | New language-country mapping |
-  | `storage/repositories/creative_repository.py` | Add update methods |
-  | `api/routers/creatives.py` | 3 new endpoints, update response |
+  | `storage/postgres_store.py` | Language fields and persistence operations |
+  | `api/routers/creative_language.py` | 3 language endpoints and response models |
   | `api/routers/seats.py` | Add language analysis to sync |
   | `dashboard/src/types/api.ts` | Add new interfaces |
-  | `dashboard/src/lib/api.ts` | Add 3 API functions |
-  | `dashboard/src/components/preview-modal.tsx` | Add LanguageSection |
+  | `dashboard/src/lib/api/creatives.ts` | Add 3 language API functions |
+  | `dashboard/src/components/preview-modal/LanguageSection.tsx` | Add LanguageSection |
   | `requirements.txt` | Add google-generativeai |
 
   **Verification:**
@@ -391,9 +397,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
   - [x] Blacklist/whitelist table UX + mode-adaptive labels/actions (Spec §§3-5) — implemented, pending deploy verification
   - [x] Inline add/remove staging flow + pending changes panel + apply/discard UX (Spec §§6-11) — implemented, pending deploy verification
   - [x] Bulk list editing/import-export/history/rollback flows (Spec §§12-14) — implemented, pending deploy verification
-  - [ ] Empty/error states parity audit against spec examples (Spec §§15-16) — needs explicit UI pass
-  - [ ] Keyboard shortcuts + responsive behavior parity audit (Spec §§17-18) — needs explicit UI pass
-  - [ ] Acceptance checks run and documented against spec (Spec §19 / Acceptance Checks) — pending post-deploy validation
+  - Runtime verification items moved to **Runtime Verification Queue (Prod/VM2)**.
 
   **Publisher Targeting UX (per pretargeting config):**
   - Add a `Publishers` section under each config with mode toggle:
@@ -433,12 +437,12 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [x] **Remove redundant section** - Drop "5 Reports to Schedule in Authorized Buyers"
 
 ### Creative Clusters (Campaigns)
-- [ ] **Rename Campaigns → Creative Clusters** (UI + routes)
+- [ ] **Rename Campaigns → Creative Clusters (rescoped)** - Objective: complete naming migration across routes/APIs/UI; Current: UI wording is mostly updated while `/campaigns` compatibility remains; Acceptance: canonical naming is consistent with controlled backward-compat windows.
 - [x] **Cluster create action** - "Create" in auto cluster should persist
 - [x] **Thumbnail modal** - Clicking cluster thumbnail opens creative modal
 
 ### Cosmetic Cleanup
-- [ ] Remove "Go To WASTE optimizer" link from `/settings/accounts`
+- [x] Remove "Go To WASTE optimizer" link from `/settings/accounts`
 
 ---
 
@@ -485,14 +489,8 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
   - Audit note: `docs/review/2026-02-25/audit/HOME_IDENTIFIER_INTEGRITY_AUDIT.md`
 
 ### Gmail Import & Pipeline (Operational)
-- [ ] **Backlog ingestion** - Run `scripts/gmail_import_batch.py` with checkpointing; track progress in `~/.catscan/gmail_batch_checkpoint.json`.
-  - 2026-02-25 progress: batch run processed all 15 visible Gmail emails (13 imported ~3M rows, 2 had no CSV). Scheduled importer also ran, advancing `latest_metric_date` to 2026-02-24 and `total_imports` to 700. Unread count dropped 33 → 30. Backlog reduced but not verifiably cleared — remaining 30 unread emails not yet characterized. Known bug: deployed batch script has `CatscanImportResult` unpack mismatch (imports succeed, but per-file tracking/counters broken).
-  - Progress note: `docs/review/2026-02-25/audit/GMAIL_BACKLOG_INGESTION_PROGRESS.md`
-- [ ] **Cloud Scheduler** - Configure `/api/gmail/import/scheduled` with `GMAIL_IMPORT_SECRET`. See `docs/gmail-autodownload-fix-plan.md`.
-  - Ensure nginx has a dedicated unauthenticated `location = /api/gmail/import/scheduled` route (secret header still enforced by API).
-- [ ] **Token health monitoring** - Alert on `invalid_grant` in logs and on `/gmail/status` when `authorized=false` or `last_error` contains `invalid_grant`. See `docs/gmail-autodownload-fix-plan.md`.
-- [ ] **Pipeline env parity** - Ensure `CATSCAN_PIPELINE_ENABLED`, `BIGQUERY_PROJECT_ID`, `BIGQUERY_DATASET`, `RAW_PARQUET_BUCKET`, `CATSCAN_GCS_BUCKET`, and `GOOGLE_APPLICATION_CREDENTIALS` are set on VM2.
-- [ ] **Ops runbook** - Link: `docs/POSTGRES_MIGRATION_RUNBOOK.md` §2b and `docs/GCP_CREDENTIALS_SETUP.md` (Gmail OAuth + Scheduler).
+- Runtime-verified operational checks moved to **Runtime Verification Queue (Prod/VM2)**.
+- [x] **Ops runbook** - `docs/POSTGRES_MIGRATION_RUNBOOK.md` §2b and `docs/GCP_CREDENTIALS_SETUP.md` remain the canonical references for Gmail OAuth + scheduler operations.
 
 ### Universal Precompute Program (Fresh-Only, Single-Seat Assumption)
 
@@ -500,91 +498,47 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 **Accuracy rule:** do not serve stale snapshots as current. If refresh is pending, return `refreshing` state (not old data).  
 **Scope rule:** optimize for one buyer seat per user session; admin diagnostics may remain slower.
 
-#### Phase U0 — Endpoint Inventory + Runtime Query Freeze
-- [ ] Inventory all analytics endpoints used by `/`, `/qps/*`, `/settings/*` and classify each as `precomputed_read` or `runtime_aggregate`.
-- [ ] Mark all non-admin `runtime_aggregate` routes as migration targets.
-- [ ] Add a CI/static guard to block new multi-day fact-table aggregations in non-admin routers.
+- [ ] **Epic A — Inventory + Guardrails**
+  - Objective: inventory user analytics read paths and prevent regression to hot runtime aggregation.
+  - Current: endpoint inventory is partial and guardrails are not enforced in CI.
+  - Acceptance: all `/`, `/qps/*`, `/settings/*` routes are classified and non-admin multi-day runtime aggregations are blocked by policy checks.
 
-#### Phase U1 — Canonical Serving Tables
-- [ ] Add universal serving tables keyed by `(window_days, buyer_account_id, dimension_key)` for windows `7/14/30`.
-- [ ] Table families: `serve_home_*`, `serve_qps_*`, `serve_config_*` at seat/config/publisher/geo/size grains.
-- [ ] Include metadata fields in each table: `as_of_date`, `last_refreshed_at`, `refresh_run_id`, `data_state`.
-- [ ] Add indexes for read paths: `(window_days, buyer_account_id, <dimension>)`.
+- [ ] **Epic B — Universal Serving Tables + Orchestrator**
+  - Objective: provide one serving-table model plus one refresh orchestrator for all user windows.
+  - Current: schema and orchestrator design exist but full implementation is pending.
+  - Acceptance: `serve_home_*`, `serve_qps_*`, `serve_config_*` support `7/14/30`, include freshness metadata/indexes, and refresh via idempotent atomic runs.
 
-#### Phase U2 — Universal Refresh Orchestrator
-- [ ] Build one orchestrator job that recomputes all serving tables for `7/14/30` windows.
-- [ ] Trigger refresh on: scheduled cadence + post-import completion + manual admin refresh.
-- [ ] Make refresh idempotent and atomic per table/window (upsert/swap pattern).
-- [ ] Persist run logs and durations per domain/table/window.
-
-#### Phase U3 — API Cutover (Read-Only Serving)
-- [ ] Migrate non-admin analytics endpoints to serving-table reads only.
-- [ ] Remove runtime `SUM/GROUP BY` over fact/precompute-daily tables from hot paths.
-- [ ] Standardize response metadata: `data_state`, `last_refreshed_at`, `window_days`.
-- [ ] Keep admin-only deep-check endpoints separate under admin/system routes.
-
-#### Phase U4 — UI Behavior for Fresh-Only Accuracy
-- [ ] Replace long loading waits with explicit status states: `refreshing`, `ready`, `unavailable`.
-- [ ] Show “calculating now” banners when current window refresh is in progress.
-- [ ] Avoid presenting previous-window or stale-window data as if it were current.
-- [ ] Ensure core page sections render independently so one slow section does not block all.
-
-#### Phase U5 — Performance/Correctness Gates
-- [ ] SLO: non-admin analytics endpoints P95 < 500ms after warmup.
-- [ ] Correctness test: serving-table values match truth-query samples within tolerance.
-- [ ] Freshness test: requested window must have successful current refresh before `ready` state.
-- [ ] Deployment gate: fail release if any non-admin route still uses runtime multi-day aggregation.
-
-#### Phase U6 — Rollout Plan
-- [ ] Wave 1: Home page (`/analytics/home/*`) + pretargeting/config performance feeds.
-- [ ] Wave 2: QPS pages (`/qps/publisher`, `/qps/geo`, `/qps/size`) and backing APIs.
-- [ ] Wave 3: Remaining user-facing analytics and recommendation inputs.
-- [ ] Wave 4: remove deprecated runtime paths; keep admin diagnostic endpoints only.
+- [ ] **Epic C — API/UI Cutover + Gates**
+  - Objective: cut APIs/UI to serving reads with explicit freshness semantics.
+  - Current: metadata/state behavior is inconsistent across routes and surfaces.
+  - Acceptance: non-admin paths avoid hot `SUM/GROUP BY`, metadata is standardized (`data_state`, `last_refreshed_at`, `window_days`), and staged rollout checks pass (Home -> QPS -> remaining analytics).
 
 ### Home UI Refactor & Features
-- [ ] **Pretargeting configs** - “No data” state when performance missing; seat-only list (10 active)
-- [ ] **Recommended Optimizations panel (Home)** - Disabled until data correctness and optimization engine are ready
-- [ ] **By Size** - Billing ID scoped; add size drill-down to list creatives + modal icon per creative (backend fix staged; deploy + refresh pending)
-- [ ] **By Geo / By Publisher** - Re-enable once join-safe keys are available; seat-only
-- [ ] **By Creative** - Confirm billing_id scoping; add creative modal icon; move country targeting near top
-- [ ] **Publisher Performance** - Title “overall for {seat}”; fix blank publisher name fallback
-- [ ] **Size Analysis** - Seat-wide only; two-column layout with “No Creatives” and wasted QPS
-- [ ] **Geographic Performance** - Title “overall for {seat}”; sortable columns; fix totals + bids/reached mismatch; replace blocks with table icons (trophy/!)
+- [ ] **Pretargeting configs (rescoped)** - Objective: make config-state UX stable across delayed/fallback data; Current: “No data” and seat-only behaviors are present; Acceptance: acceptance tests cover delayed refresh and fallback modes.
+- [x] **Recommended Optimizations panel (Home)** - Disabled until data correctness and optimization engine are ready
+- [ ] **By Size (rescoped)** - Objective: ship consistent size drill-down behavior; Current: billing_id scoping and drill-down mostly work; Acceptance: deploy/refresh validation passes with consistent totals.
+- [ ] **By Geo / By Publisher (rescoped)** - Objective: fully re-enable geo/publisher surfaces safely; Current: join-safe prerequisites are mostly in place; Acceptance: production validation confirms stable, seat-correct outputs.
+- [ ] **By Creative (rescoped)** - Objective: complete creative breakdown UX and targeting context; Current: billing_id scoping path exists; Acceptance: UI completeness and country-targeting placement match spec.
+- [ ] **Publisher Performance (rescoped)** - Objective: guarantee correct publisher labeling across sources; Current: title behavior is implemented; Acceptance: blank-name fallback is correct across all source variants.
+- [ ] **Size Analysis (rescoped)** - Objective: finalize seat-wide/two-column analysis behavior; Current: baseline behavior exists; Acceptance: acceptance criteria and edge-case validations pass.
+- [ ] **Geographic Performance (rescoped)** - Objective: finalize geo totals/sorting presentation; Current: title/sort behaviors exist; Acceptance: totals integrity and iconography match spec.
 
 ### Home Validation
-- [ ] **Data correctness checks** - Assert `bids <= reached` where applicable; warn on inconsistent source data
-- [ ] **Performance checks** - Home page loads in sections with independent loading states
-- [ ] **Deploy verification** - Follow `docs/DEPLOY_CHECKLIST.md` after UI + precompute deploys
+- [ ] **Data correctness checks** - Objective: enforce key metric invariants; Current: checks are not uniformly codified; Acceptance: `bids <= reached` (where applicable) plus inconsistency warnings are automated.
+- [ ] **Performance checks (rescoped)** - Objective: lock explicit performance gates; Current: section-level loading exists; Acceptance: measured budgets and regression gates are defined and enforced.
+- Runtime deploy checks moved to **Runtime Verification Queue (Prod/VM2)**.
 
 ---
 
 ## Features - Optimization Engine
 
-- [ ] **QPS Adjudication Engine** - Auto-calculate optimal pretargeting based on performance data:
-
-  the most crucial part of the app: QPS optimisation. So far we just built the framework.
-
-  QPS optim is two parts:
-  1. having the right data to hand to evaluate what is needed (we are 60% there with the current UI, there are some very confusing elements in the ui and missing data)
-  2. the logic to figure out the best pretargeting config to apply. 
-
-  Operationally we also need to WRITE the findings to the AB seat. AND crucially record those changes so we can roll them back in case it goes wrong.
-
-  
-
-  How do we use game theory to determine the best optimisation to the QPS problem?
-  The factors are:
-  1. the settings inside a pretargeting setting
-  2. there are 10 pretargeting settings available
-  3. the creatives uploaded to the AB seat contain targeting or the CSV's show what the bidder and media buyer is trying to do. A creative will always have at least one country targeting. 
-
-
-  /home/jen/Documents/rtbcat-platform/DATA_SCIENCE_EVALUATION.md was an attempt at compiling what we have available. 
-
-  We need to consult /home/jen/Documents/rtbcat-platform/DATA_SCIENCE_EVALUATION.md to see if we are actually using all data available to use to make those decisions. 
-- [ ] **Creative change monitoring** - Detect new creatives and trigger optimization workflows
-- [ ] **AI/MCP optimization** - Let AI agents analyze and optimize via MCP tools
-- [ ] **Learning from outcomes** - Track before/after results to improve recommendation confidence
+- [ ] **QPS Adjudication Engine** - Objective: calculate, apply, and track optimal pretargeting actions from seat-scoped performance/targeting data; Current: framework/UI exist but decision logic and safe writeback/rollback loop are incomplete; Acceptance: recommendations are explainable, AB write actions are reversible, and outcome deltas are measurable.
+  - Decision inputs: pretargeting settings (up to 10 configs), creative and CSV targeting context (including country), and performance/funnel signals cataloged in `DATA_SCIENCE_EVALUATION.md`.
+  - Method requirement: rank candidate actions with constrained optimization/game-theory-inspired scoring rather than single-metric heuristics.
+  - Operational requirement: every automated action writes audit + rollback metadata before apply.
+- [ ] **Creative change monitoring** - Objective: detect net-new/changed creatives as optimization triggers; Current: trigger path is manual/partial; Acceptance: monitored deltas enqueue deterministic optimization workflows.
+- [ ] **AI/MCP optimization** - Objective: let AI agents run bounded optimization workflows via MCP; Current: MCP and optimizer coupling is not complete; Acceptance: approved MCP tools can analyze data and propose/apply guarded changes.
+- [ ] **Learning from outcomes** - Objective: improve recommendation confidence with measured before/after results; Current: outcome feedback loop is not systematized; Acceptance: recommendation quality metrics are tracked and used for model/policy tuning.
 
 
 
@@ -592,50 +546,71 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 
 ## Integrations
 
-- [ ] **Robyn MMM integration** - Marketing mix modeling data export and visualization
-- [ ] **Clerk auth for Terraform** - Secure credential handling during deployment
+- [ ] **Robyn MMM integration** - Objective: support MMM export/visualization workflows; Current: integration is not started; Acceptance: required data contracts and visualization outputs are available for Robyn runs.
+- [ ] **Clerk auth for Terraform** - Objective: harden Terraform credential/auth handling; Current: deployment auth flow is pending; Acceptance: Clerk-backed credential handling is integrated and documented.
 
 ---
 
 ## Technical Debt
 
 ### Secrets Rollout Follow-up
-- [ ] Enable `SECRETS_HEALTH_STRICT=true` in production after all required feature secrets are present in the selected backend
-- [ ] Add deployment health probe for `GET /api/system/secrets-health` (status-only, non-sensitive)
-- [ ] Wire `CATSCAN_ENABLE_*` feature toggles explicitly in deploy templates so secret checks are deterministic
+- [ ] Add deployment health probe for `GET /api/system/secrets-health` (status-only, non-sensitive) - Objective: make secrets readiness observable in deploy checks; Current: probe is not wired into deploy flow; Acceptance: deploy pipeline validates status endpoint before promotion.
+- [ ] Wire `CATSCAN_ENABLE_*` feature toggles explicitly in deploy templates so secret checks are deterministic - Objective: remove toggle drift across environments; Current: toggle wiring is implicit/incomplete; Acceptance: templates define toggles explicitly per environment.
+- Runtime strict-mode enablement check moved to **Runtime Verification Queue (Prod/VM2)**.
 
 ### Naming Standardization (Pre-OSS)
-- [ ] **Rename `rtbcat` → `catscan` in Docker** - Container user is `rtbcat`, VM user is `catscan`. Causes confusion when debugging paths (see `docs/GCP_CREDENTIALS_SETUP.md` for current paths).
+- [ ] **Rename `rtbcat` → `catscan` in Docker** - Objective: align runtime naming across VM/container/docs; Current: container user is `rtbcat` while VM user is `catscan`; Acceptance: naming is unified and runbooks/path references stay correct (`docs/GCP_CREDENTIALS_SETUP.md`).
 
 ### Large File Refactoring
-- [ ] `dashboard/src/lib/api.ts` - Still has ~30 legacy functions to extract
+- [x] `dashboard/src/lib/api.ts` split completed (modular API clients under `dashboard/src/lib/api/*`)
 - [x] **Postgres-only migration** - Replace SQLiteStore with PostgresStore + repositories; SQLite legacy removed
-- [ ] `storage/repositories/user_repository.py` (1,188 lines) - Split into auth, permissions, audit repos
-- [ ] `api/routers/creatives.py` - Continue split after schema + response-builder extraction (keep route layer HTTP-only)
-- [ ] `cli/qps_analyzer.py` (1,053 lines) - Split into separate command modules under `cli/commands/`
+- [x] `storage/repositories/user_repository.py` split completed via Postgres repos (`auth_repo`, `permissions_repo`, `audit_repo`)
+- [ ] `api/routers/creatives.py` (rescoped) - Objective: complete router/service boundary cleanup; Current: file size and complexity are reduced; Acceptance: router keeps transport concerns only and business logic lives in services.
+- [x] Legacy `cli/qps_analyzer.py` split/retirement completed (legacy module no longer present)
 
 ### Security
-- [ ] XSS via `dangerouslySetInnerHTML` in preview-modal - Sanitize HTML, use sandboxed iframe
-- [ ] API keys logged in plaintext - Mask sensitive data in logs
+- [ ] XSS via `dangerouslySetInnerHTML` in preview-modal - Objective: remove high-risk HTML injection path; Current: preview still relies on direct HTML rendering; Acceptance: sanitized content and sandboxed iframe isolation are enforced.
+- Runtime log-masking verification moved to **Runtime Verification Queue (Prod/VM2)**.
 
 ### Code Quality
 - [x] **Analytics auth/scope sweep (2026-02-25)** — 14 unauthenticated analytics routes gated (`get_current_user`, `resolve_bidder_id`, or `require_admin`); 5 routes gained billing_id ownership validation via strict repo calls; 20 generic `except Exception` blocks now re-raise `HTTPException`; spend endpoint silent-fallback removed. Audit: `docs/review/2026-02-25/audit/analytics-audit.md`. Residual: 5 service methods still lack buyer/bidder scope filtering (auth-gated but unscoped at query level).
 - [x] **Analytics service query-scope hardening (2026-02-25)** — Added query-level `buyer_id` scoping to `rtb-funnel/publishers`, `rtb-funnel/geos`, `app-drilldown`, and `spend-stats` across route/service/repo layers (including app bid-filtering and spend precompute status filters). Residual: legacy `GET /analytics/rtb-funnel/creatives` (`RTBFunnelAnalyzer`) remains auth-gated but not buyer-scoped.
 - [x] **Analytics creative-win route scope replacement (2026-02-25)** — Replaced legacy CSV-backed `GET /analytics/rtb-funnel/creatives` analyzer path with buyer-scoped DB/precompute-backed service/repo queries (plus optional `rtb_bid_filtering` bids aggregation).
-- [ ] Overly broad exception handling (`except Exception`) - Use specific exceptions
-- [ ] Missing type annotations in several Python files
-- [ ] Code duplication in frontend API response handling
-- [ ] Inconsistent patterns (mix of sync/async, different logging approaches)
-- [ ] **Schema gate for refactors** - Verify migrations before adding columns or ON CONFLICT targets
+- [ ] Overly broad exception handling (`except Exception`) - Objective: reduce silent error masking; Current: broad catches remain in parts of the codebase; Acceptance: critical paths use specific exceptions and preserve status semantics.
+- [ ] Missing type annotations in several Python files - Objective: raise static-safety baseline; Current: annotation coverage is incomplete; Acceptance: critical services/repos/routes have complete type hints.
+- [ ] Code duplication in frontend API response handling - Objective: reduce duplicated parsing/error plumbing; Current: response handling is repeated across clients; Acceptance: shared response helpers cover common API patterns.
+- [ ] Inconsistent patterns (mix of sync/async, different logging approaches) - Objective: standardize async/logging conventions; Current: style varies by module; Acceptance: agreed conventions are documented and applied to active paths.
+- [ ] **Schema gate for refactors** - Objective: block unsafe schema assumptions during refactors; Current: migration checks are manual; Acceptance: migration presence/ordering is verified before new columns or `ON CONFLICT` targets are introduced.
 
 ### Architecture
-- [ ] Business logic mixed into route handlers - Extract to service layer
-- [ ] Environment variables read directly throughout - Centralize config
-- [ ] No structured logging or request ID tracking
+- [ ] Business logic mixed into route handlers - Objective: keep routers thin and testable; Current: some business decisions still live in handlers; Acceptance: logic is moved to service layer with clear boundaries.
+- [ ] Environment variables read directly throughout (rescoped) - Objective: centralize runtime config access; Current: partial normalization exists; Acceptance: env reads are routed through a unified config layer.
+- [ ] No structured logging or request ID tracking - Objective: improve traceability across requests/jobs; Current: logging is mostly unstructured and uncorrelated; Acceptance: request/job IDs and structured logs are standard in core flows.
 
 ### Testing
-- [ ] Current coverage: <5%, target: 70%+ for critical paths
-- [ ] Missing: API endpoint tests, repository tests, frontend component tests, E2E tests
+- [ ] Current coverage targeting (rescoped) - Objective: set enforceable coverage gates on critical paths; Current: coverage is above initial floor but below target; Acceptance: baseline and target thresholds are measured and enforced.
+- [ ] Missing test layers (rescoped) - Objective: close remaining API/repo/frontend/E2E gaps; Current: partial tests exist across layers; Acceptance: broader endpoint coverage and E2E suite cover critical user/admin flows.
+
+---
+
+## Runtime Verification Queue (Prod/VM2)
+
+- [ ] **Thumbnail placeholders** - Some creatives still show placeholders instead of generated thumbnails (runtime verification of retry/coverage paths)
+- [ ] **CSV import account mismatch** - Verify imports link to correct accounts under current production data
+- [ ] **Size drill-down shows no creatives** - Validate staged fix after deploy + config precompute refresh
+- [ ] **Creative modal missing publisher data** - Verify migrated publisher sources are consistently available in production
+- [ ] **BigQuery raw_facts coverage** - Confirm Jan 26–28 backfill/reprocess is complete
+- [ ] **Publisher List UI parity checks** - Run empty/error-state, keyboard/responsive, and acceptance-check validation (Spec §§15-19)
+- [ ] **Backlog ingestion** - Continue/verify `scripts/gmail_import_batch.py` progress with checkpoint tracking (`~/.catscan/gmail_batch_checkpoint.json`)
+- [ ] **Cloud Scheduler (Gmail import)** - Verify `/api/gmail/import/scheduled` behavior + VM2 parity with `GMAIL_IMPORT_SECRET`
+- [ ] **Token health monitoring** - Verify alerting on `invalid_grant` and `/gmail/status` health signals
+- [ ] **Pipeline env parity (VM2)** - Validate `CATSCAN_PIPELINE_ENABLED`, `BIGQUERY_PROJECT_ID`, `BIGQUERY_DATASET`, `RAW_PARQUET_BUCKET`, `CATSCAN_GCS_BUCKET`, and `GOOGLE_APPLICATION_CREDENTIALS`
+- [ ] **SLO verification** - Confirm non-admin analytics endpoints meet P95 < 500ms after warmup
+- [ ] **Deploy verification** - Execute `docs/DEPLOY_CHECKLIST.md` after UI + precompute rollouts
+- [ ] **Secrets strict mode rollout** - Enable `SECRETS_HEALTH_STRICT=true` in production after required-key matrix is verified
+- [ ] **API key masking** - Verify sensitive key/token values are masked in operational logs
+- [ ] **Campaign clustering runtime stability** - Validate clustering behavior at production scale
+- [ ] **Video thumbnail generation on SG VM** - Validate stability and failure rates on current SG runtime
 
 ---
 
@@ -647,8 +622,6 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [x] Gmail auto-import
 - [x] RTB bidstream visualization (renamed from rtb_funnel)
 - [x] Efficiency analysis with recommendations
-- [ ] Campaign clustering (faulty)
-- [ ] Video thumbnail generation (failing on the new SG VM)
 - [x] GCP deployment with OAuth2 authentication
 - [x] **UTC timezone standardization** - All CSV reports now require UTC timezone
 - [x] **Data quality flagging** - Legacy (pre-UTC) vs production data separation

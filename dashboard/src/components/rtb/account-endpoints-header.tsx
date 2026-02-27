@@ -469,7 +469,7 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
                 <Info className="h-3 w-3 text-blue-400" />
               </button>
               {showQpsInfo && (
-                <div className="absolute left-0 top-5 w-64 p-2 bg-white border border-gray-200 rounded shadow-lg z-10 text-[11px] text-gray-600">
+                <div className="absolute left-0 top-5 w-72 p-2.5 bg-white border border-gray-200 rounded shadow-lg z-10 text-sm leading-normal text-gray-700">
                   {t.pretargeting.endpointsHeaderQpsInfoTooltip}
                 </div>
               )}
