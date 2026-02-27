@@ -398,15 +398,67 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
               <span className="font-medium text-gray-900 truncate">
                 {config.name}
               </span>
-              {isGoogleName && (
-                <span className="text-xs text-gray-400">{t.pretargeting.cardFromGoogleTag}</span>
-              )}
               <button
                 onClick={handleStartEdit}
                 className="p-1 text-gray-400 hover:text-gray-600"
               >
                 <Pencil className="h-3 w-3" />
               </button>
+              <span className="text-gray-300 mx-0.5">|</span>
+              {/* QPS inline display/edit */}
+              <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                <span className="text-[10px] text-gray-500">{t.pretargeting.cardQpsLabel}</span>
+                {isEditingQps ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      ref={qpsInputRef}
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={qpsInput}
+                      onChange={(e) => setQpsInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { applyQpsChange(); setIsEditingQps(false); }
+                        if (e.key === 'Escape') { setIsEditingQps(false); const qpsValue = configDetail?.effective_maximum_qps ?? configDetail?.maximum_qps; setQpsInput(qpsValue === null || qpsValue === undefined ? '' : String(qpsValue)); }
+                      }}
+                      className="w-20 rounded border border-gray-300 bg-white px-1.5 py-0.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      placeholder={t.pretargeting.cardQpsUnsetPlaceholder}
+                    />
+                    <button
+                      onClick={() => { applyQpsChange(); setIsEditingQps(false); }}
+                      disabled={qpsMutationPending}
+                      className="p-0.5 text-green-600 hover:bg-green-50 rounded"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsEditingQps(false);
+                        const qpsValue = configDetail?.effective_maximum_qps ?? configDetail?.maximum_qps;
+                        setQpsInput(qpsValue === null || qpsValue === undefined ? '' : String(qpsValue));
+                      }}
+                      className="p-0.5 text-gray-400 hover:bg-gray-100 rounded"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs font-medium text-gray-700">{qpsInput || '—'}</span>
+                    {latestPendingQpsChange && (
+                      <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] text-amber-800">
+                        {t.pretargeting.cardPendingLabel}: {latestPendingQpsChange.value}
+                      </span>
+                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setIsEditingQps(true); }}
+                      className="p-0.5 text-gray-400 hover:text-gray-600"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -457,60 +509,6 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
           )}
         </div>
 
-        {/* QPS inline display/edit */}
-        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-          <span className="text-[10px] text-gray-500">{t.pretargeting.cardQpsLabel}</span>
-          {isEditingQps ? (
-            <div className="flex items-center gap-1">
-              <input
-                ref={qpsInputRef}
-                type="number"
-                min={0}
-                step={1}
-                value={qpsInput}
-                onChange={(e) => setQpsInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { applyQpsChange(); setIsEditingQps(false); }
-                  if (e.key === 'Escape') { setIsEditingQps(false); const qpsValue = configDetail?.effective_maximum_qps ?? configDetail?.maximum_qps; setQpsInput(qpsValue === null || qpsValue === undefined ? '' : String(qpsValue)); }
-                }}
-                className="w-20 rounded border border-gray-300 bg-white px-1.5 py-0.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                placeholder={t.pretargeting.cardQpsUnsetPlaceholder}
-              />
-              <button
-                onClick={() => { applyQpsChange(); setIsEditingQps(false); }}
-                disabled={qpsMutationPending}
-                className="p-0.5 text-green-600 hover:bg-green-50 rounded"
-              >
-                <Check className="h-3.5 w-3.5" />
-              </button>
-              <button
-                onClick={() => {
-                  setIsEditingQps(false);
-                  const qpsValue = configDetail?.effective_maximum_qps ?? configDetail?.maximum_qps;
-                  setQpsInput(qpsValue === null || qpsValue === undefined ? '' : String(qpsValue));
-                }}
-                className="p-0.5 text-gray-400 hover:bg-gray-100 rounded"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1">
-              <span className="text-xs font-medium text-gray-700">{qpsInput || '—'}</span>
-              {latestPendingQpsChange && (
-                <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] text-amber-800">
-                  {t.pretargeting.cardPendingLabel}: {latestPendingQpsChange.value}
-                </span>
-              )}
-              <button
-                onClick={(e) => { e.stopPropagation(); setIsEditingQps(true); }}
-                className="p-0.5 text-gray-400 hover:text-gray-600"
-              >
-                <Pencil className="h-3 w-3" />
-              </button>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Expanded content */}
