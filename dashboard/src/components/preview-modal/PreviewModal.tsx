@@ -17,6 +17,7 @@ import { formatSpend, formatNumber, formatCTR, formatCostMetric, getDataNotes, e
 import { CopyButton, MetricCard, DataNotesSection } from "./SharedComponents";
 import { VideoPreviewPlayer, HtmlPreviewFrame, NativePreviewCard } from "./PreviewRenderers";
 import { LanguageSection } from "./LanguageSection";
+import { GeoLinguisticSection } from "./GeoLinguisticSection";
 
 interface PreviewModalProps {
   creative: Creative;
@@ -332,6 +333,11 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                 }));
               }}
             />
+          </div>
+
+          {/* Geo-Linguistic Mismatch Analysis */}
+          <div className="p-4 border-b">
+            <GeoLinguisticSection creativeId={creative.id} />
           </div>
 
           {/* Data Notes */}

@@ -65,6 +65,7 @@ from api.routers import (
     creatives_live_router,
     creative_cache_router,
     creative_language_router,
+    creative_geo_linguistic_router,
     seats_router,
     settings_router,
     uploads_router,
@@ -228,6 +229,7 @@ app.include_router(creatives_router)
 app.include_router(creatives_live_router)
 app.include_router(creative_cache_router)
 app.include_router(creative_language_router)
+app.include_router(creative_geo_linguistic_router)
 app.include_router(seats_router)
 app.include_router(campaigns_router)
 

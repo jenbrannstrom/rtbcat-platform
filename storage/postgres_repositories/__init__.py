@@ -17,6 +17,7 @@ from .creative_performance_repo import CreativePerformanceRepository
 from .rtb_bidstream_repo import RtbBidstreamRepository
 from .analytics_repo import AnalyticsRepository
 from .precompute_repo import PrecomputeRepository
+from .creative_analysis_repo import CreativeAnalysisRepository
 
 __all__ = [
     "EndpointsRepository",
@@ -36,4 +37,5 @@ __all__ = [
     "RtbBidstreamRepository",
     "AnalyticsRepository",
     "PrecomputeRepository",
+    "CreativeAnalysisRepository",
 ]

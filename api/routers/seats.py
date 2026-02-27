@@ -14,7 +14,7 @@ import logging
 from datetime import datetime
 from typing import Optional, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from config import ConfigManager
@@ -354,10 +354,30 @@ async def discover_seats(
         raise HTTPException(status_code=500, detail=f"Seat discovery failed: {str(e)}")
 
 
+async def _trigger_geo_linguistic_batch(
+    creative_ids: list[str], store: Any, triggered_by: str, max_batch: int = 50
+) -> None:
+    """Background task: run geo-linguistic analysis on recently synced creatives."""
+    try:
+        from services.geo_linguistic_service import GeoLinguisticService
+
+        service = GeoLinguisticService()
+        for cid in creative_ids[:max_batch]:
+            try:
+                await service.analyze_creative(
+                    creative_id=cid, store=store, force=False, triggered_by=triggered_by
+                )
+            except Exception as exc:
+                logger.debug("Geo-linguistic analysis skipped for %s: %s", cid, exc)
+    except Exception as exc:
+        logger.warning("Geo-linguistic batch trigger failed: %s", exc)
+
+
 @router.post("/seats/{buyer_id}/sync", response_model=SyncSeatResponse)
 async def sync_seat_creatives(
     buyer_id: str,
     filter_query: Optional[str] = Query(None, description="Optional API filter"),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     config: ConfigManager = Depends(get_config),
     seats_service: SeatsService = Depends(get_seats_service),
     store: StoreType = Depends(get_store),
@@ -398,6 +418,15 @@ async def sync_seat_creatives(
 
         # Update seat metadata
         await seats_service.update_seat_after_sync(buyer_id)
+
+        # Trigger geo-linguistic analysis for synced creatives in background
+        synced_ids = [c.get("id") or c.get("creative_id", "") for c in storage_creatives if isinstance(c, dict)]
+        if not synced_ids and storage_creatives:
+            synced_ids = [getattr(c, "id", "") for c in storage_creatives if hasattr(c, "id")]
+        if synced_ids:
+            background_tasks.add_task(
+                _trigger_geo_linguistic_batch, synced_ids, store, user.email
+            )
 
         return SyncSeatResponse(
             status="completed",

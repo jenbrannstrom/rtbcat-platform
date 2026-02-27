@@ -12,6 +12,7 @@ import type {
   GeoMismatchResponse,
   ManualLanguageUpdate,
   PaginatedCreativesResponse,
+  GeoLinguisticReport,
 } from "@/types/api";
 
 // =============================================================================
@@ -195,5 +196,28 @@ export async function getCreativeGeoMismatch(
 ): Promise<GeoMismatchResponse> {
   return fetchApi<GeoMismatchResponse>(
     `/creatives/${encodeURIComponent(creativeId)}/geo-mismatch?days=${days}`
+  );
+}
+
+// =============================================================================
+// Geo-Linguistic Analysis
+// =============================================================================
+
+export async function analyzeGeoLinguistic(
+  creativeId: string,
+  force: boolean = false
+): Promise<GeoLinguisticReport> {
+  const params = force ? "?force=true" : "";
+  return fetchApi<GeoLinguisticReport>(
+    `/creatives/${encodeURIComponent(creativeId)}/analyze-geo-linguistic${params}`,
+    { method: "POST" }
+  );
+}
+
+export async function getGeoLinguisticReport(
+  creativeId: string
+): Promise<GeoLinguisticReport> {
+  return fetchApi<GeoLinguisticReport>(
+    `/creatives/${encodeURIComponent(creativeId)}/geo-linguistic-report`
   );
 }

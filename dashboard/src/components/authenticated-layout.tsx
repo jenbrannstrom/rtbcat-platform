@@ -13,12 +13,14 @@
  */
 
 import { Suspense, type ReactNode } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useTranslation } from "@/contexts/i18n-context";
 import { Sidebar } from "@/components/sidebar";
 import { FirstRunCheck } from "@/components/first-run-check";
 import { BuyerRouteSync } from "@/components/buyer-route-sync";
+import { isRestrictedUser, isAllowedForRestrictedUser } from "@/lib/feature-gates";
+import { splitBuyerPath } from "@/lib/buyer-routes";
 
 interface AuthenticatedLayoutProps {
   children: ReactNode;
@@ -33,8 +35,9 @@ export function AuthenticatedLayout({
   sidebarFallback,
 }: AuthenticatedLayoutProps) {
   const pathname = usePathname();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const { t } = useTranslation();
+  const router = useRouter();
 
   // Check if this is a public page
   const isPublicPage = PUBLIC_PAGES.includes(pathname);
@@ -67,6 +70,13 @@ export function AuthenticatedLayout({
         </div>
       </div>
     );
+  }
+
+  // Restricted users can only access allowed paths
+  const { pathWithoutBuyer } = splitBuyerPath(pathname);
+  if (isRestrictedUser(user) && !isAllowedForRestrictedUser(pathWithoutBuyer)) {
+    router.replace("/");
+    return null;
   }
 
   // Authenticated users get the full layout with sidebar
