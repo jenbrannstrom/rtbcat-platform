@@ -277,6 +277,7 @@ export interface Translations {
     historyShort: string;
     fullEditor: string;
     filterPublishersPlaceholder: string;
+    filterGeosPlaceholder: string;
     lastPushed: string;
     publisherHistory: string;
     viewAllArrow: string;

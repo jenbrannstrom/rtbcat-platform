@@ -47,6 +47,7 @@ const value: PartialTranslations['pretargeting'] = {
   historyShort: '历史',
   fullEditor: '完整编辑器',
   filterPublishersPlaceholder: '筛选 publishers...',
+  filterGeosPlaceholder: '筛选地区...',
   lastPushed: '最后推送：',
   publisherHistory: 'Publisher 历史',
   viewAllArrow: '查看全部 ->',
