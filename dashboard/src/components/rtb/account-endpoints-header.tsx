@@ -25,6 +25,17 @@ function formatQPS(qps: number | null, t: Translations, locale: string): string 
   return qps.toLocaleString(locale);
 }
 
+function HeaderInfoTip({ text, ariaLabel }: { text: string; ariaLabel: string }) {
+  return (
+    <span className="relative inline-flex items-center ml-0.5 group">
+      <Info className="h-3 w-3 text-gray-400 hover:text-gray-600 cursor-help" aria-label={ariaLabel} />
+      <span className="pointer-events-none absolute left-1/2 top-full z-[9999] mt-1 hidden w-72 -translate-x-1/2 rounded border border-gray-200 bg-white p-2.5 text-sm font-normal normal-case leading-normal text-gray-700 shadow-lg group-hover:block">
+        {text}
+      </span>
+    </span>
+  );
+}
+
 interface AccountEndpointsHeaderProps {
   observedQpsByEndpointId?: Record<string, number | null>;
 }
@@ -286,8 +297,20 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
       <div className="space-y-0.5">
         {/* Column headers */}
         <div className="flex items-center justify-end gap-4 px-2 text-[10px] uppercase tracking-wide text-gray-400">
-          <span className="w-24 text-right">{t.pretargeting.endpointsHeaderAllocated}</span>
-          <span className="w-24 text-right">{t.pretargeting.endpointsHeaderObserved}</span>
+          <span className="w-24 text-right inline-flex items-center justify-end">
+            {t.pretargeting.endpointsHeaderAllocated}
+            <HeaderInfoTip
+              text={t.pretargeting.endpointsHeaderAllocatedInfoTooltip}
+              ariaLabel={t.pretargeting.endpointsHeaderAllocatedInfoAria}
+            />
+          </span>
+          <span className="w-24 text-right inline-flex items-center justify-end">
+            {t.pretargeting.endpointsHeaderObserved}
+            <HeaderInfoTip
+              text={t.pretargeting.endpointsHeaderObservedInfoTooltip}
+              ariaLabel={t.pretargeting.endpointsHeaderObservedInfoAria}
+            />
+          </span>
         </div>
 
         {/* Endpoint rows */}
