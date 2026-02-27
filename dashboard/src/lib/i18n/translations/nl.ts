@@ -729,6 +729,7 @@ export const nl: PartialTranslations = {
     historyShort: 'Geschiedenis',
     fullEditor: 'Volledige editor',
     filterPublishersPlaceholder: 'Filter publishers...',
+    filterGeosPlaceholder: 'Filter geos...',
     lastPushed: 'Laatst gepusht:',
     publisherHistory: 'Publisher-geschiedenis',
     viewAllArrow: 'Alles bekijken ->',

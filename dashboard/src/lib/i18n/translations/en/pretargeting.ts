@@ -38,6 +38,7 @@ const value: Translations['pretargeting'] = {
     historyShort: 'History',
     fullEditor: 'Full Editor',
     filterPublishersPlaceholder: 'Filter publishers...',
+    filterGeosPlaceholder: 'Filter geos...',
     lastPushed: 'Last pushed:',
     publisherHistory: 'Publisher History',
     viewAllArrow: 'View all ->',

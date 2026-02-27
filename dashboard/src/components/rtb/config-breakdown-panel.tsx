@@ -114,6 +114,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
   const [publisherBlockInput, setPublisherBlockInput] = useState('');
   const [publisherBlockError, setPublisherBlockError] = useState<string | null>(null);
   const [publisherFilter, setPublisherFilter] = useState('');
+  const [geoFilter, setGeoFilter] = useState('');
   const [showBlockSuggestions, setShowBlockSuggestions] = useState(false);
   const [showPublisherHistory, setShowPublisherHistory] = useState(false);
   const [undoPushSnapshot, setUndoPushSnapshot] = useState<PretargetingSnapshot | null>(null);
@@ -224,6 +225,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
     setPublisherBlockInput('');
     setPublisherBlockError(null);
     setPublisherFilter('');
+    setGeoFilter('');
     setShowBlockSuggestions(false);
   }, [activeTab, billing_id]);
 
@@ -410,6 +412,13 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
   const filteredPublisherBreakdown = activeTab === 'publisher' && publisherFilter
     ? sortedBreakdown.filter((item) => {
         const q = publisherFilter.toLowerCase();
+        return item.name.toLowerCase().includes(q) ||
+          (item.target_value || '').toLowerCase().includes(q);
+      })
+    : sortedBreakdown;
+  const filteredGeoBreakdown = activeTab === 'geo' && geoFilter
+    ? sortedBreakdown.filter((item) => {
+        const q = geoFilter.toLowerCase();
         return item.name.toLowerCase().includes(q) ||
           (item.target_value || '').toLowerCase().includes(q);
       })
@@ -1016,7 +1025,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                     value={publisherFilter}
                     onChange={(e) => setPublisherFilter(e.target.value)}
                     placeholder={t.pretargeting.filterPublishersPlaceholder}
-                    className="flex-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-300"
+                    className="w-1/3 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-300"
                   />
                   {publisherFilter && (
                     <button
@@ -1247,7 +1256,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                     </button>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {hiddenLowVolumeSizeCount > 0 && (
+                    {(hiddenLowVolumeSizeCount > 0 || showLowVolumeSizes) && (
                       <button
                         onClick={() => setShowLowVolumeSizes((prev) => !prev)}
                         className="rounded border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
@@ -1264,6 +1273,26 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
                     )}
                   </div>
                 </div>
+              </div>
+            )}
+            {activeTab === 'geo' && (
+              <div className="mb-2 flex items-center gap-2 px-2">
+                <Search className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  value={geoFilter}
+                  onChange={(e) => setGeoFilter(e.target.value)}
+                  placeholder={t.pretargeting.filterGeosPlaceholder}
+                  className="w-1/3 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-teal-300"
+                />
+                {geoFilter && (
+                  <button
+                    onClick={() => setGeoFilter('')}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
               </div>
             )}
             {activeTab === 'geo' && (
@@ -1453,7 +1482,7 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
 
             {/* Table body */}
 	            <div className="divide-y divide-gray-100">
-	              {(activeTab === 'size' ? visibleSizeRows : activeTab === 'publisher' ? filteredPublisherBreakdown : sortedBreakdown).map((item, index) => {
+	              {(activeTab === 'size' ? visibleSizeRows : activeTab === 'publisher' ? filteredPublisherBreakdown : activeTab === 'geo' ? filteredGeoBreakdown : sortedBreakdown).map((item, index) => {
 	                const isClickable = false;
 	                const winRate = item.win_rate ?? 0;
 	                const winRateClass =

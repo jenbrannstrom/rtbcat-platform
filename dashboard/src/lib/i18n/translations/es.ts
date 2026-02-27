@@ -297,6 +297,7 @@ export const es: PartialTranslations = {
     fullEditor: 'Editor completo',
     filterPublishersPlaceholder:
       'Filtrar publishers...',
+    filterGeosPlaceholder: 'Filtrar geos...',
     lastPushed: 'Último push:',
     publisherHistory: 'Historial de publisher',
     viewAllArrow: 'Ver todo ->',
