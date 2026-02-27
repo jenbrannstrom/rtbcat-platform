@@ -364,7 +364,7 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
                       {!isPending && isEditable && (
                         <button
                           onClick={() => handleStartEdit(endpoint.endpoint_id, endpoint.maximum_qps)}
-                          className="p-0.5 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100"
+                          className="p-0.5 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600"
                         >
                           <Pencil className="h-2.5 w-2.5" />
                         </button>
