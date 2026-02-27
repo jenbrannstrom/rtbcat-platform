@@ -40,6 +40,7 @@ import {
   splitBuyerPath,
   toBuyerScopedPath,
 } from "@/lib/buyer-routes";
+import { isRestrictedUser } from "@/lib/feature-gates";
 
 const SIDEBAR_COLLAPSED_KEY = "rtbcat-sidebar-collapsed";
 const SIDEBAR_SETTINGS_EXPANDED_KEY = "rtbcat-sidebar-settings-expanded";
@@ -85,6 +86,7 @@ export function Sidebar() {
   const queryClient = useQueryClient();
   const { selectedBuyerId, setSelectedBuyerId } = useAccount();
   const { user, isAdmin, isSudo, logout } = useAuth();
+  const restricted = isRestrictedUser(user);
   const { t } = useTranslation();
 
   // Helper for relative time formatting with translations
@@ -500,7 +502,7 @@ export function Sidebar() {
               </button>
             </div>
           )}
-          {(!collapsed && qpsExpanded) && (
+          {(!collapsed && qpsExpanded && !restricted) && (
             <div className="ml-6 space-y-1">
               {qpsItems.map((item) => {
                 const isActive = pathWithoutBuyer.startsWith(item.href);
@@ -526,7 +528,7 @@ export function Sidebar() {
         </div>
 
         {/* Main navigation items */}
-        {navigationItems.map((item) => {
+        {!restricted && navigationItems.map((item) => {
           const isActive = item.href === "/"
             ? pathWithoutBuyer === "/"
             : pathWithoutBuyer.startsWith(item.href);
@@ -557,7 +559,7 @@ export function Sidebar() {
         })}
 
         {/* Settings Section */}
-        <div className="pt-4">
+        {!restricted && <div className="pt-4">
           {!collapsed && (
             <div className="px-3 mb-1">
               <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
@@ -623,7 +625,7 @@ export function Sidebar() {
               })}
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Admin Section (only for sudo / global admins) */}
         {isSudo && (

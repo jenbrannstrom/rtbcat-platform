@@ -5,6 +5,7 @@ from .creatives import router as creatives_router
 from .creatives_live import router as creatives_live_router
 from .creative_cache import router as creative_cache_router
 from .creative_language import router as creative_language_router
+from .creative_geo_linguistic import router as creative_geo_linguistic_router
 from .seats import router as seats_router
 from .settings import router as settings_router
 from .uploads import router as uploads_router
@@ -35,6 +36,7 @@ __all__ = [
     "creatives_live_router",
     "creative_cache_router",
     "creative_language_router",
+    "creative_geo_linguistic_router",
     "seats_router",
     "settings_router",
     "uploads_router",

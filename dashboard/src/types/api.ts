@@ -294,3 +294,49 @@ export interface ManualLanguageUpdate {
   detected_language: string;
   detected_language_code: string;
 }
+
+export interface GeoLinguisticFinding {
+  category: string;
+  severity: string;
+  description: string;
+  evidence: string;
+}
+
+export interface GeoLinguisticEvidenceSummary {
+  text_length: number;
+  image_count: number;
+  ocr_texts_count: number;
+  video_frames_count: number;
+  has_screenshot: boolean;
+  currencies_detected: string[];
+  cta_phrases: string[];
+}
+
+export interface GeoLinguisticEvidence {
+  id: string;
+  run_id: string;
+  evidence_type: string;
+  file_path: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface GeoLinguisticReport {
+  status: string;
+  run_id: string | null;
+  creative_id: string;
+  decision: string;
+  risk_score: number;
+  confidence: number;
+  primary_languages: string[];
+  secondary_languages: string[];
+  detected_currencies: string[];
+  findings: GeoLinguisticFinding[];
+  serving_countries: string[];
+  evidence_summary: GeoLinguisticEvidenceSummary | null;
+  evidence: GeoLinguisticEvidence[];
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string | null;
+}
