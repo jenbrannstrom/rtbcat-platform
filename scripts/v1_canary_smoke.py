@@ -153,6 +153,7 @@ def main() -> int:
     )
     parser.add_argument("--buyer-id", default=os.getenv("CATSCAN_BUYER_ID"))
     parser.add_argument("--model-id", default=os.getenv("CATSCAN_MODEL_ID"))
+    parser.add_argument("--proposal-id", default=os.getenv("CATSCAN_PROPOSAL_ID"))
     parser.add_argument("--token", default=os.getenv("CATSCAN_BEARER_TOKEN"))
     parser.add_argument("--cookie", default=os.getenv("CATSCAN_SESSION_COOKIE"))
     parser.add_argument("--timeout", type=float, default=20.0)
@@ -301,10 +302,16 @@ def main() -> int:
     def check_proposal_lifecycle() -> None:
         if not args.run_lifecycle:
             return
-        _assert(args.run_workflow, "--run-lifecycle requires --run-workflow")
-        _assert(bool(workflow_proposal_id), "proposal lifecycle check missing proposal_id from workflow")
+        selected_proposal_id = (
+            str(args.proposal_id or "").strip()
+            or str(workflow_proposal_id or "").strip()
+        )
+        _assert(
+            bool(selected_proposal_id),
+            "--run-lifecycle requires --proposal-id or --run-workflow with generated proposal",
+        )
 
-        proposal_id = urllib.parse.quote(workflow_proposal_id or "", safe="")
+        proposal_id = urllib.parse.quote(selected_proposal_id, safe="")
         approve = client.request(
             "POST",
             f"/optimizer/proposals/{proposal_id}/approve",
