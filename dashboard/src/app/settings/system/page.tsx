@@ -12,6 +12,7 @@ import {
   getSystemDataHealth,
   getOptimizerModels,
   createOptimizerModel,
+  updateOptimizerModel,
   activateOptimizerModel,
   deactivateOptimizerModel,
   listOptimizerSegmentScores,
@@ -66,6 +67,10 @@ export default function SystemStatusPage() {
     message: string;
     changes_made: string[];
   } | null>(null);
+  const [editModelName, setEditModelName] = useState<string>("");
+  const [editModelDescription, setEditModelDescription] = useState<string>("");
+  const [editModelEndpointUrl, setEditModelEndpointUrl] = useState<string>("");
+  const [editModelAuthHeader, setEditModelAuthHeader] = useState<string>("");
   const [monthlyHostingCostInput, setMonthlyHostingCostInput] = useState<string>("");
   const parsedMinCompleteness = Number(minCompleteness);
   const normalizedMinCompleteness =
@@ -259,6 +264,24 @@ export default function SystemStatusPage() {
   }, [optimizerModels, selectedModelId]);
 
   useEffect(() => {
+    if (!selectedModelId) {
+      setEditModelName("");
+      setEditModelDescription("");
+      setEditModelEndpointUrl("");
+      setEditModelAuthHeader("");
+      return;
+    }
+    const model = (optimizerModels?.rows || []).find((row) => row.model_id === selectedModelId);
+    if (!model) {
+      return;
+    }
+    setEditModelName(model.name || "");
+    setEditModelDescription(model.description || "");
+    setEditModelEndpointUrl(model.endpoint_url || "");
+    setEditModelAuthHeader("");
+  }, [optimizerModels, selectedModelId]);
+
+  useEffect(() => {
     const proposals = optimizerProposals?.rows || [];
     if (!proposals.length) {
       if (selectedProposalHistoryId) {
@@ -383,6 +406,44 @@ export default function SystemStatusPage() {
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : "Failed to update model status.";
+      setOptimizerNotice(msg);
+    },
+  });
+
+  const updateModelMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedModel) {
+        throw new Error("Select a model before updating.");
+      }
+      const name = editModelName.trim();
+      if (!name) {
+        throw new Error("Model name cannot be empty.");
+      }
+      const endpoint = editModelEndpointUrl.trim();
+      if (selectedModel.model_type === "api" && !endpoint) {
+        throw new Error("Endpoint URL is required for API model type.");
+      }
+      return updateOptimizerModel(
+        selectedModel.model_id,
+        {
+          name,
+          description: editModelDescription.trim() || undefined,
+          endpoint_url: selectedModel.model_type === "api" ? endpoint : undefined,
+          auth_header_encrypted: editModelAuthHeader.trim() || undefined,
+        },
+        { buyer_id: selectedBuyerId || undefined },
+      );
+    },
+    onSuccess: (payload) => {
+      queryClient.invalidateQueries({ queryKey: ["optimizerModels", selectedBuyerId] });
+      setEditModelName(payload.name || "");
+      setEditModelDescription(payload.description || "");
+      setEditModelEndpointUrl(payload.endpoint_url || "");
+      setEditModelAuthHeader("");
+      setOptimizerNotice(`Model updated: ${payload.name}`);
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to update model.";
       setOptimizerNotice(msg);
     },
   });
@@ -528,6 +589,7 @@ export default function SystemStatusPage() {
   });
 
   const activeModelCount = optimizerModels?.rows.filter((row) => row.is_active).length ?? 0;
+  const selectedModel = (optimizerModels?.rows || []).find((row) => row.model_id === selectedModelId) || null;
   const activeModels = (optimizerModels?.rows || []).filter((row) => row.is_active);
   const proposalRows = optimizerProposals?.rows ?? [];
   const proposalHistoryRows = optimizerProposalHistory?.rows || [];
@@ -941,6 +1003,98 @@ export default function SystemStatusPage() {
                   </div>
                 ) : (
                   <div className="px-3 py-4 text-xs text-gray-500">No models found.</div>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-gray-200 p-3">
+                <div className="mb-3 text-xs font-semibold text-gray-600">Selected Model Details</div>
+                {!selectedModel ? (
+                  <div className="text-xs text-gray-500">Select a model to edit details.</div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="text-xs text-gray-600">
+                        Name
+                        <input
+                          type="text"
+                          value={editModelName}
+                          onChange={(e) => setEditModelName(e.target.value)}
+                          className="mt-1 block w-full input py-1 text-sm"
+                          disabled={updateModelMutation.isPending}
+                        />
+                      </label>
+                      <label className="text-xs text-gray-600">
+                        Type
+                        <input
+                          type="text"
+                          value={selectedModel.model_type}
+                          className="mt-1 block w-full input py-1 text-sm bg-gray-50"
+                          disabled
+                        />
+                      </label>
+                      <label className="text-xs text-gray-600 col-span-2">
+                        Description
+                        <input
+                          type="text"
+                          value={editModelDescription}
+                          onChange={(e) => setEditModelDescription(e.target.value)}
+                          className="mt-1 block w-full input py-1 text-sm"
+                          disabled={updateModelMutation.isPending}
+                        />
+                      </label>
+                      {selectedModel.model_type === "api" ? (
+                        <label className="text-xs text-gray-600 col-span-2">
+                          Endpoint URL
+                          <input
+                            type="url"
+                            value={editModelEndpointUrl}
+                            onChange={(e) => setEditModelEndpointUrl(e.target.value)}
+                            className="mt-1 block w-full input py-1 text-sm"
+                            disabled={updateModelMutation.isPending}
+                          />
+                        </label>
+                      ) : null}
+                      <label className="text-xs text-gray-600 col-span-2">
+                        Replace Authorization Header (optional)
+                        <input
+                          type="text"
+                          value={editModelAuthHeader}
+                          onChange={(e) => setEditModelAuthHeader(e.target.value)}
+                          className="mt-1 block w-full input py-1 text-sm"
+                          placeholder={selectedModel.has_auth_header ? "Header currently set" : "Bearer <token>"}
+                          disabled={updateModelMutation.isPending}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="flex items-center justify-end">
+                      <button
+                        type="button"
+                        onClick={() => updateModelMutation.mutate()}
+                        disabled={
+                          updateModelMutation.isPending ||
+                          editModelName.trim() === "" ||
+                          (selectedModel.model_type === "api" && editModelEndpointUrl.trim() === "")
+                        }
+                        className={cn(
+                          "btn-primary",
+                          (updateModelMutation.isPending ||
+                            editModelName.trim() === "" ||
+                            (selectedModel.model_type === "api" && editModelEndpointUrl.trim() === "")) &&
+                            "cursor-not-allowed opacity-50",
+                        )}
+                      >
+                        {updateModelMutation.isPending ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          "Save Model"
+                        )}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
 
