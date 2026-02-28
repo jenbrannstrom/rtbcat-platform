@@ -1,7 +1,7 @@
 # Conversion Connectors Setup Guide
 
 **Last updated:** 2026-02-28  
-**Scope:** AppsFlyer, Adjust, Branch, generic postback, and CSV upload ingestion for Cat-Scan v1.
+**Scope:** AppsFlyer, Adjust, Branch, generic postback, lightweight pixel, and CSV upload ingestion for Cat-Scan v1.
 
 ## 1. Endpoint Map
 
@@ -11,11 +11,12 @@ Use these API routes for inbound conversion events:
 - `POST /conversions/adjust/callback`
 - `POST /conversions/branch/webhook`
 - `POST /conversions/generic/postback`
+- `GET /conversions/pixel`
 - `POST /conversions/csv/upload`
 
 Optional query/form override:
 
-- `buyer_id=<seat_id>` can be passed for provider endpoints and CSV uploads when payloads do not include buyer seat identifiers.
+- `buyer_id=<seat_id>` can be passed for provider endpoints, pixel, and CSV uploads when payloads do not include buyer seat identifiers.
 
 ## 2. Security Controls
 
@@ -184,7 +185,28 @@ curl -sS -X POST "https://<host>/api/conversions/generic/postback" \
   }'
 ```
 
-### 3.5 CSV upload
+### 3.5 Web conversion pixel
+
+Endpoint:
+
+- `GET /conversions/pixel`
+
+Usage notes:
+
+- Accepts query-string payload fields (for example `event_name`, `event_ts`, `buyer_id`, `billing_id`, `click_id`).
+- Uses shared/generic conversion secret and optional HMAC controls from section 2.
+- Returns a cache-busted transparent 1x1 GIF and includes `X-CatScan-Conversion-Status: accepted|rejected`.
+- Ingestion failures are written to DLQ (`conversion_ingestion_failures`) and can be replayed.
+
+Example:
+
+```bash
+curl -sS "https://<host>/api/conversions/pixel?source_type=pixel&buyer_id=1111111111&event_name=purchase&event_ts=2026-02-28T15:30:00Z&event_value=19.99&currency=USD&click_id=clk-250" \
+  -H "X-Webhook-Secret: ${CATSCAN_GENERIC_CONVERSION_WEBHOOK_SECRET}" \
+  -o /tmp/catscan-pixel.gif
+```
+
+### 3.6 CSV upload
 
 Endpoint:
 
