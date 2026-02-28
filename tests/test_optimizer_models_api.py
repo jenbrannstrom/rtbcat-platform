@@ -232,3 +232,26 @@ def test_validate_optimizer_model(monkeypatch: pytest.MonkeyPatch):
     payload = response.json()
     assert payload["valid"] is True
     assert payload["http_status"] == 200
+
+
+def test_validate_optimizer_model_forwards_sample_payload(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubOptimizerModelsService()
+    client = _build_client(stub, monkeypatch)
+
+    response = client.post(
+        "/api/optimizer/models/mdl_1/validate",
+        params={"buyer_id": "1111111111", "timeout_seconds": 12},
+        json={
+            "sample_payload": {
+                "model_id": "mdl_1",
+                "buyer_id": "1111111111",
+                "features": [{"feature_id": "f1", "spend_usd": 12.3}],
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(stub.validate_calls) == 1
+    call = stub.validate_calls[0]
+    assert call["timeout_seconds"] == 12
+    assert call["sample_payload"]["features"][0]["feature_id"] == "f1"
