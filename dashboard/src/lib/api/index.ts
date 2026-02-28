@@ -20,6 +20,7 @@
  *   - integrations.ts: credentials, Gmail, GCP
  *   - uploads.ts: upload tracking, import history, new creatives
  *   - snapshots.ts: pretargeting snapshots
+ *   - conversions.ts: conversion health and ingestion telemetry
  */
 
 // Re-export from modular files
@@ -35,3 +36,4 @@ export * from "./snapshots";
 export * from "./settings";
 export * from "./uploads";
 export * from "./optimizer";
+export * from "./conversions";
