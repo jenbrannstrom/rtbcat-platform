@@ -15,6 +15,7 @@ import {
   listOptimizerProposals,
   listOptimizerProposalHistory,
   runOptimizerScoreAndPropose,
+  validateOptimizerModelEndpoint,
   approveOptimizerProposal,
   applyOptimizerProposal,
   syncOptimizerProposalApplyStatus,
@@ -272,6 +273,32 @@ export default function SystemStatusPage() {
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : "Failed to save optimizer setup.";
+      setOptimizerNotice(msg);
+    },
+  });
+
+  const validateModelMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedModelId) {
+        throw new Error("Select an active model before validation.");
+      }
+      return validateOptimizerModelEndpoint(selectedModelId, {
+        buyer_id: selectedBuyerId || undefined,
+        timeout_seconds: 10,
+      });
+    },
+    onSuccess: (payload) => {
+      if (payload.valid) {
+        setOptimizerNotice(
+          `Model validation passed${payload.http_status ? ` (HTTP ${payload.http_status})` : ""}.`,
+        );
+        return;
+      }
+      const statusText = payload.http_status ? `HTTP ${payload.http_status}` : "validation failed";
+      setOptimizerNotice(`Model validation failed (${statusText}): ${payload.message}`);
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to validate model endpoint.";
       setOptimizerNotice(msg);
     },
   });
@@ -784,25 +811,46 @@ export default function SystemStatusPage() {
                     </select>
                   </label>
 
-                  <button
-                    type="button"
-                    onClick={() => scoreAndProposeMutation.mutate()}
-                    disabled={scoreAndProposeMutation.isPending || !selectedModelId}
-                    className={cn(
-                      "btn-primary",
-                      (scoreAndProposeMutation.isPending || !selectedModelId) &&
-                        "cursor-not-allowed opacity-50",
-                    )}
-                  >
-                    {scoreAndProposeMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Running...
-                      </>
-                    ) : (
-                      "Run Score + Propose"
-                    )}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => validateModelMutation.mutate()}
+                      disabled={validateModelMutation.isPending || !selectedModelId}
+                      className={cn(
+                        "rounded border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700",
+                        (validateModelMutation.isPending || !selectedModelId) &&
+                          "cursor-not-allowed opacity-50",
+                      )}
+                    >
+                      {validateModelMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Validating...
+                        </>
+                      ) : (
+                        "Validate Endpoint"
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scoreAndProposeMutation.mutate()}
+                      disabled={scoreAndProposeMutation.isPending || !selectedModelId}
+                      className={cn(
+                        "btn-primary",
+                        (scoreAndProposeMutation.isPending || !selectedModelId) &&
+                          "cursor-not-allowed opacity-50",
+                      )}
+                    >
+                      {scoreAndProposeMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Running...
+                        </>
+                      ) : (
+                        "Run Score + Propose"
+                      )}
+                    </button>
+                  </div>
                 </div>
                 {optimizerNotice ? (
                   <div className="mt-3 rounded bg-slate-50 px-3 py-2 text-xs text-slate-700">

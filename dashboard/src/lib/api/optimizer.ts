@@ -226,6 +226,34 @@ export async function runOptimizerScoreAndPropose(params: {
 }
 
 
+export interface OptimizerModelValidationResponse {
+  model_id: string;
+  buyer_id: string | null;
+  valid: boolean;
+  skipped: boolean;
+  http_status: number | null;
+  message: string;
+  response_preview: string | null;
+}
+
+
+export async function validateOptimizerModelEndpoint(
+  modelId: string,
+  params?: { buyer_id?: string; timeout_seconds?: number },
+): Promise<OptimizerModelValidationResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  if (typeof params?.timeout_seconds === "number") {
+    searchParams.set("timeout_seconds", String(params.timeout_seconds));
+  }
+  const query = searchParams.toString();
+  return fetchApi<OptimizerModelValidationResponse>(
+    `/optimizer/models/${encodeURIComponent(modelId)}/validate${query ? `?${query}` : ""}`,
+    { method: "POST" },
+  );
+}
+
+
 export interface OptimizerProposalStatusResponse {
   proposal_id: string;
   status: string;
