@@ -79,6 +79,15 @@ class _StubOptimizerProposalsService:
         return {
             "proposal_id": kwargs["proposal_id"],
             "status": kwargs["status"],
+            "apply_details": (
+                {
+                    "mode": kwargs.get("apply_mode", "queue"),
+                    "pending_change_id": 77,
+                    "queued_maximum_qps": 120,
+                }
+                if kwargs.get("status") == "applied"
+                else None
+            ),
         }
 
 
@@ -164,7 +173,10 @@ def test_approve_reject_apply_proposal_endpoints(monkeypatch: pytest.MonkeyPatch
 
     approve = client.post("/api/optimizer/proposals/prp_1/approve", params={"buyer_id": "1111111111"})
     reject = client.post("/api/optimizer/proposals/prp_1/reject", params={"buyer_id": "1111111111"})
-    apply = client.post("/api/optimizer/proposals/prp_1/apply", params={"buyer_id": "1111111111"})
+    apply = client.post(
+        "/api/optimizer/proposals/prp_1/apply",
+        params={"buyer_id": "1111111111", "mode": "live"},
+    )
 
     assert approve.status_code == 200
     assert reject.status_code == 200
@@ -173,7 +185,9 @@ def test_approve_reject_apply_proposal_endpoints(monkeypatch: pytest.MonkeyPatch
     assert stub.update_calls[0]["status"] == "approved"
     assert stub.update_calls[1]["status"] == "rejected"
     assert stub.update_calls[2]["status"] == "applied"
+    assert stub.update_calls[2]["apply_mode"] == "live"
+    assert stub.update_calls[2]["applied_by"] == "u1"
     assert approve.json()["status"] == "approved"
     assert reject.json()["status"] == "rejected"
     assert apply.json()["status"] == "applied"
-
+    assert apply.json()["apply_details"]["mode"] == "live"
