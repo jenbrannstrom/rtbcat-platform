@@ -5,12 +5,18 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
+from services.changes_service import ChangesService
+from services.pretargeting_service import PretargetingService
 from storage.postgres_database import pg_execute, pg_query, pg_query_one
+
+if TYPE_CHECKING:
+    from services.actions_service import ActionsService
 
 
 _ALLOWED_STATUSES = {"draft", "approved", "applied", "rejected"}
+_ALLOWED_APPLY_MODES = {"queue", "live"}
 
 
 def _to_iso_ts(value: Any) -> Optional[str]:
@@ -62,6 +68,17 @@ def _to_list(value: Any) -> list[str]:
 
 class OptimizerProposalsService:
     """Builds and manages QPS allocation proposals."""
+
+    def __init__(
+        self,
+        *,
+        changes_service: ChangesService | None = None,
+        pretargeting_service: PretargetingService | None = None,
+        actions_service: "ActionsService | None" = None,
+    ) -> None:
+        self._changes = changes_service or ChangesService()
+        self._pretargeting = pretargeting_service or PretargetingService()
+        self._actions = actions_service
 
     async def generate_from_scores(
         self,
@@ -216,12 +233,25 @@ class OptimizerProposalsService:
         proposal_id: str,
         buyer_id: str,
         status: str,
+        apply_mode: str = "queue",
+        applied_by: Optional[str] = None,
     ) -> Optional[dict[str, Any]]:
         safe_status = status.strip().lower()
         if safe_status not in _ALLOWED_STATUSES:
             raise ValueError("status must be one of: draft, approved, applied, rejected")
         if safe_status == "draft":
             raise ValueError("status transition to draft is not supported via workflow endpoint")
+        safe_apply_mode = str(apply_mode or "queue").strip().lower()
+        if safe_apply_mode not in _ALLOWED_APPLY_MODES:
+            raise ValueError("apply_mode must be one of: queue, live")
+
+        if safe_status == "applied":
+            return await self._apply_proposal(
+                proposal_id=proposal_id,
+                buyer_id=buyer_id,
+                apply_mode=safe_apply_mode,
+                applied_by=applied_by,
+            )
 
         row = await pg_query_one(
             """
@@ -247,6 +277,110 @@ class OptimizerProposalsService:
                 applied_at
             """,
             (safe_status, safe_status, proposal_id, buyer_id),
+        )
+        if not row:
+            return None
+        return self._row_to_payload(row)
+
+    async def _apply_proposal(
+        self,
+        *,
+        proposal_id: str,
+        buyer_id: str,
+        apply_mode: str,
+        applied_by: Optional[str],
+    ) -> Optional[dict[str, Any]]:
+        proposal = await pg_query_one(
+            """
+            SELECT
+                proposal_id,
+                model_id,
+                buyer_id,
+                billing_id,
+                current_qps,
+                proposed_qps,
+                delta_qps,
+                rationale,
+                projected_impact,
+                status,
+                created_at,
+                updated_at,
+                applied_at
+            FROM qps_allocation_proposals
+            WHERE proposal_id = %s AND buyer_id = %s
+            LIMIT 1
+            """,
+            (proposal_id, buyer_id),
+        )
+        if not proposal:
+            return None
+
+        billing_id = str(proposal.get("billing_id") or "").strip()
+        if not billing_id:
+            raise ValueError("Cannot apply proposal without billing_id")
+
+        pretargeting_config = await self._pretargeting.get_config(billing_id)
+        if not pretargeting_config:
+            raise ValueError(f"Pretargeting config not found for billing_id={billing_id}")
+
+        proposed_qps = _to_float(proposal.get("proposed_qps"))
+        qps_value = max(0, int(round(proposed_qps)))
+        pending_change_id = await self._changes.create_pending_change(
+            config_id=str(pretargeting_config.get("config_id") or ""),
+            billing_id=billing_id,
+            change_type="set_maximum_qps",
+            field_name="maximum_qps",
+            value=str(qps_value),
+            reason=f"optimizer_proposal:{proposal_id}",
+            estimated_qps_impact=_to_float(proposal.get("delta_qps")),
+            created_by=applied_by or "optimizer",
+        )
+
+        live_result: Optional[dict[str, Any]] = None
+        if apply_mode == "live":
+            if self._actions is None:
+                from services.actions_service import ActionsService
+                self._actions = ActionsService()
+            live_result = await self._actions.apply_pending_change(
+                billing_id=billing_id,
+                change_id=int(pending_change_id),
+                dry_run=False,
+            )
+
+        projected = _to_dict(proposal.get("projected_impact"))
+        projected["apply"] = {
+            "mode": apply_mode,
+            "pending_change_id": int(pending_change_id),
+            "queued_maximum_qps": qps_value,
+            "applied_by": applied_by,
+            "live_result": live_result,
+        }
+
+        row = await pg_query_one(
+            """
+            UPDATE qps_allocation_proposals
+            SET
+                status = 'applied',
+                projected_impact = %s::jsonb,
+                updated_at = NOW(),
+                applied_at = NOW()
+            WHERE proposal_id = %s AND buyer_id = %s
+            RETURNING
+                proposal_id,
+                model_id,
+                buyer_id,
+                billing_id,
+                current_qps,
+                proposed_qps,
+                delta_qps,
+                rationale,
+                projected_impact,
+                status,
+                created_at,
+                updated_at,
+                applied_at
+            """,
+            (json.dumps(projected), proposal_id, buyer_id),
         )
         if not row:
             return None
@@ -338,6 +472,8 @@ class OptimizerProposalsService:
         )
 
     def _row_to_payload(self, row: dict[str, Any]) -> dict[str, Any]:
+        projected_impact = _to_dict(row.get("projected_impact"))
+        apply_details = projected_impact.get("apply")
         return {
             "proposal_id": str(row.get("proposal_id") or ""),
             "model_id": str(row.get("model_id") or ""),
@@ -347,10 +483,10 @@ class OptimizerProposalsService:
             "proposed_qps": _to_float(row.get("proposed_qps")),
             "delta_qps": _to_float(row.get("delta_qps")),
             "rationale": str(row.get("rationale") or ""),
-            "projected_impact": _to_dict(row.get("projected_impact")),
+            "projected_impact": projected_impact,
+            "apply_details": apply_details if isinstance(apply_details, dict) else None,
             "status": str(row.get("status") or "draft"),
             "created_at": _to_iso_ts(row.get("created_at")),
             "updated_at": _to_iso_ts(row.get("updated_at")),
             "applied_at": _to_iso_ts(row.get("applied_at")),
         }
-

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 import pytest
@@ -151,3 +152,171 @@ async def test_update_status_rejects_invalid_status():
             status="invalid",
         )
 
+
+@pytest.mark.asyncio
+async def test_apply_status_queues_pending_qps_change(monkeypatch: pytest.MonkeyPatch):
+    class _StubPretargetingService:
+        async def get_config(self, billing_id: str):
+            assert billing_id == "cfg-1"
+            return {"config_id": "ptcfg-1", "bidder_id": "bidder-1"}
+
+    class _StubChangesService:
+        def __init__(self):
+            self.calls: list[dict] = []
+
+        async def create_pending_change(self, **kwargs):
+            self.calls.append(kwargs)
+            return 77
+
+    class _StubActionsService:
+        def __init__(self):
+            self.calls: list[dict] = []
+
+        async def apply_pending_change(self, **kwargs):
+            self.calls.append(kwargs)
+            return {"status": "applied"}
+
+    changes_stub = _StubChangesService()
+    actions_stub = _StubActionsService()
+
+    async def _stub_query_one(sql: str, params: tuple = ()):
+        if "FROM qps_allocation_proposals" in sql and "LIMIT 1" in sql:
+            return {
+                "proposal_id": "prp_1",
+                "model_id": "mdl_rules",
+                "buyer_id": "1111111111",
+                "billing_id": "cfg-1",
+                "current_qps": 100.0,
+                "proposed_qps": 120.0,
+                "delta_qps": 20.0,
+                "rationale": "test rationale",
+                "projected_impact": {"expected_event_lift_pct": 10.0},
+                "status": "approved",
+                "created_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+                "updated_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+                "applied_at": None,
+            }
+        if "UPDATE qps_allocation_proposals" in sql:
+            projected = json.loads(params[0]) if isinstance(params[0], str) else params[0]
+            return {
+                "proposal_id": "prp_1",
+                "model_id": "mdl_rules",
+                "buyer_id": "1111111111",
+                "billing_id": "cfg-1",
+                "current_qps": 100.0,
+                "proposed_qps": 120.0,
+                "delta_qps": 20.0,
+                "rationale": "test rationale",
+                "projected_impact": projected,
+                "status": "applied",
+                "created_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+                "updated_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+                "applied_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+            }
+        return None
+
+    monkeypatch.setattr("services.optimizer_proposals_service.pg_query_one", _stub_query_one)
+    service = OptimizerProposalsService(
+        changes_service=changes_stub,
+        pretargeting_service=_StubPretargetingService(),
+        actions_service=actions_stub,
+    )
+    payload = await service.update_status(
+        proposal_id="prp_1",
+        buyer_id="1111111111",
+        status="applied",
+        apply_mode="queue",
+        applied_by="u1",
+    )
+
+    assert payload is not None
+    assert payload["status"] == "applied"
+    assert payload["apply_details"]["mode"] == "queue"
+    assert payload["apply_details"]["pending_change_id"] == 77
+    assert payload["apply_details"]["queued_maximum_qps"] == 120
+    assert len(changes_stub.calls) == 1
+    call = changes_stub.calls[0]
+    assert call["change_type"] == "set_maximum_qps"
+    assert call["field_name"] == "maximum_qps"
+    assert call["value"] == "120"
+    assert actions_stub.calls == []
+
+
+@pytest.mark.asyncio
+async def test_apply_status_live_executes_pending_change(monkeypatch: pytest.MonkeyPatch):
+    class _StubPretargetingService:
+        async def get_config(self, billing_id: str):
+            return {"config_id": "ptcfg-1", "bidder_id": "bidder-1"}
+
+    class _StubChangesService:
+        async def create_pending_change(self, **kwargs):
+            return 88
+
+    class _StubActionsService:
+        def __init__(self):
+            self.calls: list[dict] = []
+
+        async def apply_pending_change(self, **kwargs):
+            self.calls.append(kwargs)
+            return {"status": "applied", "change_id": kwargs["change_id"]}
+
+    actions_stub = _StubActionsService()
+
+    async def _stub_query_one(sql: str, params: tuple = ()):
+        if "FROM qps_allocation_proposals" in sql and "LIMIT 1" in sql:
+            return {
+                "proposal_id": "prp_1",
+                "model_id": "mdl_rules",
+                "buyer_id": "1111111111",
+                "billing_id": "cfg-1",
+                "current_qps": 100.0,
+                "proposed_qps": 119.6,
+                "delta_qps": 19.6,
+                "rationale": "test rationale",
+                "projected_impact": {"expected_event_lift_pct": 10.0},
+                "status": "approved",
+                "created_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+                "updated_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+                "applied_at": None,
+            }
+        if "UPDATE qps_allocation_proposals" in sql:
+            projected = json.loads(params[0]) if isinstance(params[0], str) else params[0]
+            return {
+                "proposal_id": "prp_1",
+                "model_id": "mdl_rules",
+                "buyer_id": "1111111111",
+                "billing_id": "cfg-1",
+                "current_qps": 100.0,
+                "proposed_qps": 119.6,
+                "delta_qps": 19.6,
+                "rationale": "test rationale",
+                "projected_impact": projected,
+                "status": "applied",
+                "created_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+                "updated_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+                "applied_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+            }
+        return None
+
+    monkeypatch.setattr("services.optimizer_proposals_service.pg_query_one", _stub_query_one)
+    service = OptimizerProposalsService(
+        changes_service=_StubChangesService(),
+        pretargeting_service=_StubPretargetingService(),
+        actions_service=actions_stub,
+    )
+    payload = await service.update_status(
+        proposal_id="prp_1",
+        buyer_id="1111111111",
+        status="applied",
+        apply_mode="live",
+        applied_by="u1",
+    )
+
+    assert payload is not None
+    assert payload["apply_details"]["mode"] == "live"
+    assert payload["apply_details"]["pending_change_id"] == 88
+    assert payload["apply_details"]["queued_maximum_qps"] == 120
+    assert payload["apply_details"]["live_result"]["status"] == "applied"
+    assert len(actions_stub.calls) == 1
+    assert actions_stub.calls[0]["billing_id"] == "cfg-1"
+    assert actions_stub.calls[0]["change_id"] == 88

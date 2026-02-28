@@ -25,6 +25,7 @@ class ProposalRow(BaseModel):
     delta_qps: float
     rationale: str
     projected_impact: dict[str, Any]
+    apply_details: Optional[dict[str, Any]] = None
     status: str
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
@@ -68,6 +69,7 @@ class ProposalGenerateResponse(BaseModel):
 class ProposalStatusResponse(BaseModel):
     proposal_id: str
     status: str
+    apply_details: Optional[dict[str, Any]] = None
 
 
 @router.post("/generate", response_model=ProposalGenerateResponse)
@@ -128,6 +130,7 @@ async def _update_proposal_status(
     *,
     proposal_id: str,
     status: str,
+    apply_mode: str = "queue",
     buyer_id: Optional[str],
     store,
     user: User,
@@ -139,6 +142,8 @@ async def _update_proposal_status(
             proposal_id=proposal_id,
             buyer_id=resolved_buyer_id or "unknown",
             status=status,
+            apply_mode=apply_mode,
+            applied_by=getattr(user, "id", None),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -148,6 +153,7 @@ async def _update_proposal_status(
     return ProposalStatusResponse(
         proposal_id=payload["proposal_id"],
         status=payload["status"],
+        apply_details=payload.get("apply_details"),
     )
 
 
@@ -186,6 +192,7 @@ async def reject_qps_proposal(
 @router.post("/{proposal_id}/apply", response_model=ProposalStatusResponse)
 async def apply_qps_proposal(
     proposal_id: str,
+    mode: str = Query("queue", description="queue | live"),
     buyer_id: Optional[str] = Query(None),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
@@ -193,8 +200,8 @@ async def apply_qps_proposal(
     return await _update_proposal_status(
         proposal_id=proposal_id,
         status="applied",
+        apply_mode=mode,
         buyer_id=buyer_id,
         store=store,
         user=user,
     )
-
