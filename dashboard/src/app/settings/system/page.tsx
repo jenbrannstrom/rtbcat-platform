@@ -51,6 +51,11 @@ export default function SystemStatusPage() {
   const [minCompleteness, setMinCompleteness] = useState<string>("");
   const [selectedModelId, setSelectedModelId] = useState<string>("");
   const [modelValidationPayloadInput, setModelValidationPayloadInput] = useState<string>("");
+  const [workflowDaysInput, setWorkflowDaysInput] = useState<string>("14");
+  const [workflowScoreLimitInput, setWorkflowScoreLimitInput] = useState<string>("1000");
+  const [workflowProposalLimitInput, setWorkflowProposalLimitInput] = useState<string>("200");
+  const [workflowMinConfidenceInput, setWorkflowMinConfidenceInput] = useState<string>("0.3");
+  const [workflowMaxDeltaInput, setWorkflowMaxDeltaInput] = useState<string>("0.3");
   const [selectedProposalHistoryId, setSelectedProposalHistoryId] = useState<string>("");
   const [optimizerNotice, setOptimizerNotice] = useState<string>("");
   const [newModelName, setNewModelName] = useState<string>("");
@@ -495,14 +500,36 @@ export default function SystemStatusPage() {
       if (!selectedModelId) {
         throw new Error("Select an active model before running score + propose.");
       }
+      const parsedDays = Number(workflowDaysInput);
+      const parsedScoreLimit = Number(workflowScoreLimitInput);
+      const parsedProposalLimit = Number(workflowProposalLimitInput);
+      const parsedMinConfidence = Number(workflowMinConfidenceInput);
+      const parsedMaxDelta = Number(workflowMaxDeltaInput);
+
+      if (!Number.isFinite(parsedDays) || parsedDays < 1 || parsedDays > 365) {
+        throw new Error("Days must be between 1 and 365.");
+      }
+      if (!Number.isFinite(parsedScoreLimit) || parsedScoreLimit < 1 || parsedScoreLimit > 5000) {
+        throw new Error("Score limit must be between 1 and 5000.");
+      }
+      if (!Number.isFinite(parsedProposalLimit) || parsedProposalLimit < 1 || parsedProposalLimit > 2000) {
+        throw new Error("Proposal limit must be between 1 and 2000.");
+      }
+      if (!Number.isFinite(parsedMinConfidence) || parsedMinConfidence < 0 || parsedMinConfidence > 1) {
+        throw new Error("Min confidence must be between 0 and 1.");
+      }
+      if (!Number.isFinite(parsedMaxDelta) || parsedMaxDelta < 0.05 || parsedMaxDelta > 1) {
+        throw new Error("Max delta % must be between 0.05 and 1.");
+      }
+
       return runOptimizerScoreAndPropose({
         model_id: selectedModelId,
         buyer_id: selectedBuyerId || undefined,
-        days: 14,
-        min_confidence: 0.3,
-        max_delta_pct: 0.3,
-        score_limit: 1000,
-        proposal_limit: 200,
+        days: parsedDays,
+        min_confidence: parsedMinConfidence,
+        max_delta_pct: parsedMaxDelta,
+        score_limit: parsedScoreLimit,
+        proposal_limit: parsedProposalLimit,
       });
     },
     onSuccess: (payload) => {
@@ -1369,6 +1396,70 @@ export default function SystemStatusPage() {
                       )}
                     </button>
                   </div>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                  <label className="text-xs text-gray-600">
+                    Days
+                    <input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={workflowDaysInput}
+                      onChange={(e) => setWorkflowDaysInput(e.target.value)}
+                      className="mt-1 input py-1 text-xs"
+                      disabled={scoreAndProposeMutation.isPending}
+                    />
+                  </label>
+                  <label className="text-xs text-gray-600">
+                    Score Limit
+                    <input
+                      type="number"
+                      min={1}
+                      max={5000}
+                      value={workflowScoreLimitInput}
+                      onChange={(e) => setWorkflowScoreLimitInput(e.target.value)}
+                      className="mt-1 input py-1 text-xs"
+                      disabled={scoreAndProposeMutation.isPending}
+                    />
+                  </label>
+                  <label className="text-xs text-gray-600">
+                    Proposal Limit
+                    <input
+                      type="number"
+                      min={1}
+                      max={2000}
+                      value={workflowProposalLimitInput}
+                      onChange={(e) => setWorkflowProposalLimitInput(e.target.value)}
+                      className="mt-1 input py-1 text-xs"
+                      disabled={scoreAndProposeMutation.isPending}
+                    />
+                  </label>
+                  <label className="text-xs text-gray-600">
+                    Min Confidence
+                    <input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step="0.01"
+                      value={workflowMinConfidenceInput}
+                      onChange={(e) => setWorkflowMinConfidenceInput(e.target.value)}
+                      className="mt-1 input py-1 text-xs"
+                      disabled={scoreAndProposeMutation.isPending}
+                    />
+                  </label>
+                  <label className="text-xs text-gray-600">
+                    Max Delta %
+                    <input
+                      type="number"
+                      min={0.05}
+                      max={1}
+                      step="0.01"
+                      value={workflowMaxDeltaInput}
+                      onChange={(e) => setWorkflowMaxDeltaInput(e.target.value)}
+                      className="mt-1 input py-1 text-xs"
+                      disabled={scoreAndProposeMutation.isPending}
+                    />
+                  </label>
                 </div>
                 <label className="mt-3 block text-xs text-gray-600">
                   Optional Validation Payload (JSON)
