@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+"""v1 canary smoke checks for core Cat-Scan API flows."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from typing import Any
+
+
+class SmokeFailure(RuntimeError):
+    """Raised when a smoke check fails."""
+
+
+def _join_url(base_url: str, path: str) -> str:
+    base = base_url.rstrip("/")
+    suffix = path if path.startswith("/") else f"/{path}"
+    return f"{base}{suffix}"
+
+
+class SmokeClient:
+    def __init__(self, *, base_url: str, token: str | None, cookie: str | None, timeout: float):
+        self.base_url = base_url
+        self.timeout = timeout
+        self.default_headers: dict[str, str] = {}
+        if token:
+            self.default_headers["Authorization"] = f"Bearer {token}"
+        if cookie:
+            self.default_headers["Cookie"] = cookie
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        json_body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        url = _join_url(self.base_url, path)
+        if params:
+            query = urllib.parse.urlencode(
+                {k: v for k, v in params.items() if v is not None},
+                doseq=True,
+            )
+            if query:
+                join_char = "&" if "?" in url else "?"
+                url = f"{url}{join_char}{query}"
+
+        headers = dict(self.default_headers)
+        data = None
+        if json_body is not None:
+            data = json.dumps(json_body).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+
+        req = urllib.request.Request(url=url, data=data, headers=headers, method=method.upper())
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                raw = resp.read().decode("utf-8")
+                if not raw:
+                    return {}
+                try:
+                    payload = json.loads(raw)
+                except json.JSONDecodeError as exc:
+                    raise SmokeFailure(f"{method} {path}: non-JSON response") from exc
+                if not isinstance(payload, dict):
+                    raise SmokeFailure(f"{method} {path}: expected JSON object")
+                return payload
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise SmokeFailure(f"{method} {path}: HTTP {exc.code} {detail[:240]}") from exc
+        except urllib.error.URLError as exc:
+            raise SmokeFailure(f"{method} {path}: {exc}") from exc
+
+
+def _assert(condition: bool, message: str) -> None:
+    if not condition:
+        raise SmokeFailure(message)
+
+
+def _run_check(name: str, fn) -> tuple[bool, str]:
+    try:
+        fn()
+        return True, f"PASS  {name}"
+    except Exception as exc:  # noqa: BLE001
+        return False, f"FAIL  {name} -> {exc}"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Run v1 canary smoke checks against API.")
+    parser.add_argument(
+        "--base-url",
+        default=os.getenv("CATSCAN_API_BASE_URL", "http://127.0.0.1:8000"),
+        help="API base URL (example: http://127.0.0.1:8000 or https://scan.rtb.cat/api)",
+    )
+    parser.add_argument("--buyer-id", default=os.getenv("CATSCAN_BUYER_ID"))
+    parser.add_argument("--model-id", default=os.getenv("CATSCAN_MODEL_ID"))
+    parser.add_argument("--token", default=os.getenv("CATSCAN_BEARER_TOKEN"))
+    parser.add_argument("--cookie", default=os.getenv("CATSCAN_SESSION_COOKIE"))
+    parser.add_argument("--timeout", type=float, default=20.0)
+    parser.add_argument("--run-workflow", action="store_true", help="Run score+propose workflow check.")
+    parser.add_argument(
+        "--allow-no-active-model",
+        action="store_true",
+        help="Do not fail if no active model is found.",
+    )
+    parser.add_argument("--billing-id", help="Optional billing_id for rollback dry-run check.")
+    parser.add_argument("--snapshot-id", type=int, help="Optional snapshot_id for rollback dry-run check.")
+    args = parser.parse_args()
+
+    client = SmokeClient(
+        base_url=args.base_url,
+        token=args.token,
+        cookie=args.cookie,
+        timeout=args.timeout,
+    )
+
+    resolved_model_id = args.model_id
+    results: list[tuple[bool, str]] = []
+
+    def check_health() -> None:
+        payload = client.request("GET", "/health")
+        status = str(payload.get("status", "")).lower()
+        _assert(status in {"healthy", "ok"}, "health status is not healthy/ok")
+
+    def check_data_health() -> None:
+        payload = client.request(
+            "GET",
+            "/system/data-health",
+            params={"buyer_id": args.buyer_id, "days": 14, "limit": 10},
+        )
+        _assert("optimizer_readiness" in payload, "optimizer_readiness missing from /system/data-health")
+
+    def check_conversion_health() -> None:
+        payload = client.request("GET", "/conversions/health", params={"buyer_id": args.buyer_id})
+        _assert("state" in payload, "state missing from /conversions/health")
+        _assert("ingestion" in payload, "ingestion missing from /conversions/health")
+
+    def check_conversion_stats() -> None:
+        payload = client.request(
+            "GET",
+            "/conversions/ingestion/stats",
+            params={"buyer_id": args.buyer_id, "days": 7},
+        )
+        _assert("accepted_total" in payload, "accepted_total missing from /conversions/ingestion/stats")
+        _assert("rejected_total" in payload, "rejected_total missing from /conversions/ingestion/stats")
+
+    def check_optimizer_economics() -> None:
+        payload = client.request(
+            "GET",
+            "/optimizer/economics/efficiency",
+            params={"buyer_id": args.buyer_id, "days": 14},
+        )
+        _assert("qps_efficiency" in payload, "qps_efficiency missing from /optimizer/economics/efficiency")
+
+    def check_models_and_resolve() -> None:
+        nonlocal resolved_model_id
+        payload = client.request(
+            "GET",
+            "/optimizer/models",
+            params={
+                "buyer_id": args.buyer_id,
+                "include_inactive": "true",
+                "limit": 200,
+                "offset": 0,
+            },
+        )
+        rows = payload.get("rows") or []
+        if not isinstance(rows, list):
+            raise SmokeFailure("invalid /optimizer/models response shape")
+        if resolved_model_id:
+            return
+        active = [row for row in rows if isinstance(row, dict) and row.get("is_active")]
+        if active:
+            resolved_model_id = str(active[0].get("model_id", "")).strip() or None
+        if not resolved_model_id and not args.allow_no_active_model:
+            raise SmokeFailure("no active model found; set one or pass --allow-no-active-model")
+
+    def check_model_validation() -> None:
+        if not resolved_model_id:
+            return
+        payload = client.request(
+            "POST",
+            f"/optimizer/models/{urllib.parse.quote(resolved_model_id, safe='')}/validate",
+            params={"buyer_id": args.buyer_id, "timeout_seconds": 10},
+        )
+        _assert(bool(payload.get("valid") or payload.get("skipped")), "model validation failed")
+
+    def check_workflow() -> None:
+        if not args.run_workflow or not resolved_model_id:
+            return
+        payload = client.request(
+            "POST",
+            "/optimizer/workflows/score-and-propose",
+            params={
+                "model_id": resolved_model_id,
+                "buyer_id": args.buyer_id,
+                "days": 7,
+                "score_limit": 200,
+                "proposal_limit": 50,
+                "min_confidence": 0.3,
+                "max_delta_pct": 0.3,
+            },
+        )
+        score_run = payload.get("score_run") or {}
+        proposal_run = payload.get("proposal_run") or {}
+        _assert(
+            "scores_written" in score_run and "proposals_created" in proposal_run,
+            "workflow response missing score/proposal summary fields",
+        )
+
+    def check_rollback_dry_run() -> None:
+        if args.billing_id is None or args.snapshot_id is None:
+            return
+        payload = client.request(
+            "POST",
+            f"/settings/pretargeting/{urllib.parse.quote(args.billing_id, safe='')}/rollback",
+            json_body={
+                "snapshot_id": args.snapshot_id,
+                "dry_run": True,
+                "reason": "canary_smoke",
+                "proposal_id": "canary_smoke",
+            },
+        )
+        _assert(payload.get("dry_run") is True, "rollback dry-run did not return dry_run=true")
+
+    checks = [
+        ("API health", check_health),
+        ("Data health", check_data_health),
+        ("Conversion health", check_conversion_health),
+        ("Conversion ingestion stats", check_conversion_stats),
+        ("Optimizer economics", check_optimizer_economics),
+        ("Optimizer models", check_models_and_resolve),
+        ("Model endpoint validation", check_model_validation),
+        ("Score+propose workflow (optional)", check_workflow),
+        ("Rollback dry-run (optional)", check_rollback_dry_run),
+    ]
+
+    for name, fn in checks:
+        ok, line = _run_check(name, fn)
+        print(line)
+        results.append((ok, line))
+
+    failures = [line for ok, line in results if not ok]
+    if failures:
+        print(f"\nSmoke checks failed: {len(failures)}")
+        return 1
+
+    print("\nAll smoke checks passed.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -4,6 +4,19 @@
 **Owner:** QA + SRE + Backend  
 **Applies to:** Cat-Scan v1 candidate release
 
+## 0. Quick Smoke Command
+
+Run the scripted smoke gate before manual checklist review:
+
+```bash
+python scripts/v1_canary_smoke.py \
+  --base-url http://127.0.0.1:8000 \
+  --buyer-id <buyer_id> \
+  --run-workflow
+```
+
+Add `--billing-id <billing_id> --snapshot-id <snapshot_id>` to include rollback dry-run check.
+
 ## 1. Pre-Canary Gate (Must Pass)
 
 1. Latest migration set applied without error in target environment.

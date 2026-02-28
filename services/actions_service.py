@@ -225,6 +225,9 @@ class ActionsService:
         billing_id: str,
         snapshot_id: int,
         dry_run: bool,
+        reason: str | None = None,
+        proposal_id: str | None = None,
+        initiated_by: str | None = None,
     ) -> dict[str, Any]:
         snapshot = await self._snapshots.get_snapshot(snapshot_id)
         if not snapshot or snapshot["billing_id"] != billing_id:
@@ -314,15 +317,23 @@ class ActionsService:
         elif snapshot.get("state") == "ACTIVE" and current.get("state") == "SUSPENDED":
             await client.activate_pretargeting_config(config_id)
 
-        await self._pretargeting.add_history(
+        history_payload = {
+            "snapshot_id": snapshot_id,
+            "proposal_id": proposal_id,
+            "reason": reason,
+            "initiated_by": initiated_by,
+            "changes_made": changes,
+        }
+        history_id = await self._pretargeting.add_history(
             config_id=str(config_id),
             bidder_id=str(bidder_id),
             change_type="rollback",
             field_changed="all",
             old_value=None,
             new_value=f"snapshot_{snapshot_id}",
-            changed_by="system",
-            change_source="api",
+            changed_by=initiated_by or "system",
+            change_source="optimizer" if proposal_id else "api",
+            raw_config_snapshot=history_payload,
         )
 
         return {
@@ -331,6 +342,7 @@ class ActionsService:
             "snapshot_id": snapshot_id,
             "changes_made": changes,
             "message": f"Rolled back to snapshot. Applied {len(changes)} changes.",
+            "history_id": history_id,
         }
 
     async def _apply_change_to_client(

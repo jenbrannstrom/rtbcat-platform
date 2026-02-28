@@ -2,8 +2,10 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from api.dependencies import get_current_user
+from services.auth_service import User
 from services.actions_service import ActionsService
 
 from .models import (
@@ -129,6 +131,7 @@ async def activate_pretargeting_config(
 async def rollback_to_snapshot(
     billing_id: str,
     request: RollbackRequest,
+    user: User = Depends(get_current_user),
 ):
     """
     Rollback a pretargeting config to a previous snapshot state.
@@ -144,6 +147,9 @@ async def rollback_to_snapshot(
             billing_id=billing_id,
             snapshot_id=request.snapshot_id,
             dry_run=request.dry_run,
+            reason=request.reason,
+            proposal_id=request.proposal_id,
+            initiated_by=getattr(user, "id", None),
         )
         return RollbackResponse(**result)
     except ValueError as e:
