@@ -9,6 +9,7 @@ import {
   getSystemDataHealth,
   getOptimizerModels,
   getOptimizerSetup,
+  validateOptimizerModelEndpoint,
   getConversionHealth,
 } from "@/lib/api";
 import { ErrorPage } from "@/components/error";
@@ -61,6 +62,22 @@ export default function SetupPage() {
         offset: 0,
       }),
   });
+  const firstActiveModelId =
+    (optimizerModels?.rows || []).find((row) => row.is_active)?.model_id || "";
+
+  const {
+    data: modelValidation,
+    isLoading: modelValidationLoading,
+    error: modelValidationError,
+  } = useQuery({
+    queryKey: ["setupModelValidation", firstActiveModelId],
+    queryFn: () =>
+      validateOptimizerModelEndpoint(firstActiveModelId, {
+        timeout_seconds: 10,
+      }),
+    enabled: !!firstActiveModelId,
+    retry: false,
+  });
 
   const {
     data: optimizerSetup,
@@ -81,7 +98,14 @@ export default function SetupPage() {
     retry: false,
   });
 
-  if (seatsLoading || dataHealthLoading || modelsLoading || optimizerSetupLoading || conversionHealthLoading) {
+  if (
+    seatsLoading ||
+    dataHealthLoading ||
+    modelsLoading ||
+    optimizerSetupLoading ||
+    conversionHealthLoading ||
+    modelValidationLoading
+  ) {
     return <LoadingPage />;
   }
 
@@ -105,6 +129,9 @@ export default function SetupPage() {
   const dataReadinessReady = reportCompletenessHealthy && qualityFreshnessHealthy && seatDayCompleteness >= 80;
   const activeModels = (optimizerModels?.rows || []).filter((row) => row.is_active);
   const modelsReady = activeModels.length > 0;
+  const modelValidationReady =
+    !!firstActiveModelId && !!(modelValidation?.valid || modelValidation?.skipped);
+  const modelValidationUnavailable = !!modelValidationError;
   const hostingCostReady = (optimizerSetup?.monthly_hosting_cost_usd || 0) > 0;
   const conversionSourcesReady = (conversionHealth?.ingestion?.total_events || 0) > 0;
   const conversionHealthUnavailable = !!conversionHealthError;
@@ -130,6 +157,15 @@ export default function SetupPage() {
       description: "Create at least one active BYOM model for scoring and proposals.",
       href: "/settings/system",
       done: modelsReady,
+    },
+    {
+      key: "model-validation",
+      title: "Validate Model Endpoint",
+      description: modelValidationUnavailable
+        ? "Endpoint validation failed or unavailable. Re-check connectivity in System."
+        : "Run endpoint validation for the active model before score/propose.",
+      href: "/settings/system",
+      done: modelValidationReady,
     },
     {
       key: "costs",
