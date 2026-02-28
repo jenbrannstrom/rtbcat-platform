@@ -1,0 +1,758 @@
+# QPS AI Optimizer — Reconciled Data Model & Roadmap
+
+**Version:** 0.4 | **Date:** 2026-02-28
+
+---
+
+## Executive Summary
+
+Cat-Scan is a workaround to Google's lack of a reporting API, using CSVs. It seeks to be an RTB analytics and recommendation engine — the toolbox that gives advertisers and agencies the spanners, wrenches, and diagnostic gauges to tune their RTB operation themselves.
+
+**Our role:** Collect the data, compile it, present it clearly, and provide the tools. The customer controls the strategy.
+
+The path to advertiser-first optimization:
+
+1. **Phase 0** — Fix current data-plumbing gaps so the foundation is trustworthy.
+2. **Phase 1** — Build the conversion schema. A universal database structure that can store conversion events of all types (installs, deposits, purchases, signups) regardless of where they come from.
+3. **Phase 2** — Connect to conversion data sources. MMP integrations (AppsFlyer, Adjust, Branch) are the primary path since most app advertisers already use them. Secondary: agency pixels (Redtrack, Voluum), our own pixel, or bidder data feeds.
+4. **Phase 3** — BYOM (Bring Your Own Model). Once we have real outcome data flowing in, let customers plug in their own AI to generate recommendations from Cat-Scan's compiled data.
+
+---
+
+## 1. Current State (Reconciled)
+
+### 1.1 What is ingested and usable now
+
+| Source | Primary table/path | Current status | Notes |
+|---|---|---|---|
+| Performance Detail / Quality-style CSV (`catscan-quality`) | `rtb_daily` | Live | Includes core delivery metrics and viewability-related fields where present |
+| Bids-in-auction CSV (`catscan-bidsinauction`) | `rtb_daily` | Live | Complements quality-style report for bid-side metrics |
+| RTB Funnel Geo CSV (`catscan-pipeline-geo`) | `rtb_bidstream` | Live | Funnel metrics by country/hour |
+| RTB Funnel Publisher CSV (`catscan-pipeline`) | `rtb_bidstream` | Live | Funnel metrics with publisher dimension |
+| Bid Filtering CSV (`catscan-bid-filtering`) | `rtb_bid_filtering` | Live | Filtering reasons and opportunity cost |
+| Quality Signals / IVT CSV (dedicated report) | `rtb_quality` | Partial/Gap | Detectable as report type, but no full unified-import write path currently |
+| Authorized Buyers API sync | Postgres + services | Live | Seats, pretargeting, endpoints, creatives |
+
+### 1.2 Existing optimization modules
+
+- `analytics/qps_optimizer.py`
+- `analytics/recommendation_engine.py`
+- `analytics/fraud_analyzer.py`
+- `analytics/waste_analyzer.py`
+- `analytics/geo_waste_analyzer.py`
+- `analytics/size_coverage_analyzer.py`
+- `analytics/pretargeting_recommender.py`
+
+### 1.3 Blind spots that remain structural
+
+- No live sealed-auction competitor prices.
+- No full bidder-internal no-bid reason stream.
+- Post-click/post-install outcomes are mostly absent unless added externally.
+- Buyer intent can be intentionally different from top-line conversion (for compliant lead-gen and audience-building strategies).
+
+### 1.4 Confirmed data-plumbing gaps (must-fix)
+
+**In plain English:** We read Google's CSV reports and store them in our database. But some of that data is being dropped or stored incorrectly. Before we build a smart optimizer on top, we need to make sure the foundation data is clean and complete. Here are the four problems:
+
+**Gap 1 — Fraud/quality data doesn't fully arrive in our database.**
+
+Google provides a "Quality Signals" CSV report containing fraud rates (how much of the traffic is bots) and viewability (did a human actually see the ad). Our importer can *detect* this report type, but doesn't have the code to actually write it into the `rtb_quality` database table. It's like receiving a letter but never opening the envelope.
+
+**Why it matters:** Our fraud analyzer (`fraud_analyzer.py`) queries the `rtb_quality` table expecting data to be there. When it's empty, fraud detection runs on incomplete information — it may miss fraudulent publishers or produce weaker recommendations.
+
+**Gap 2 — We read some data from CSVs but throw it away before saving.**
+
+When we import the bidstream funnel CSVs, we correctly read columns like "what device?" (mobile/desktop/tablet), "what environment?" (web/app), and "what deal type?" (open auction/private). But our database INSERT statement doesn't include those fields — so they're read, then silently discarded. They're lost because the save-to-database step doesn't include them.
+
+**Why it matters:** Without device type, we can't tell you "your Android traffic converts 3x better than iOS — shift QPS there." Without deal type, we can't distinguish private marketplace deals (which are typically higher quality) from open auction. The data exists in the CSV — we just need to stop dropping it.
+
+**Gap 3 — We can't tell the difference between "zero" and "we don't know."**
+
+When a field is missing from a CSV row, we currently store `0`. But `0` impressions and "impressions data not available" are very different things:
+- **True zero:** "This publisher got zero clicks" — that's a meaningful signal (bad publisher, consider blocking it).
+- **Missing/unknown:** "The clicks column wasn't in this particular CSV export" — that's not a signal at all.
+
+By storing `0` for both cases, our optimizer can't tell if a publisher genuinely has zero clicks (bad) or if we simply don't have click data for it (unknown). This leads to false recommendations — flagging things as "wasteful" when we actually just don't have the data.
+
+**How we fix this:** When data is missing from a report, we store a special marker instead of `0`. In database terms this is called `NULL` — it simply means "no value was recorded." We could alternatively use a text label like `NODATA` or `NOREPORT`, but there's a practical reason to use `NULL`: every database, every query tool, and every analytics library in existence already understands `NULL` natively. Functions like `AVG()` automatically skip `NULL` values, `WHERE clicks IS NULL` finds rows without data, and `COALESCE(clicks, 0)` lets you choose a fallback when needed. Using a custom string like `NODATA` would mean every single query in every analyzer would need special handling code to recognize it — and a single missed check would produce wrong numbers. `NULL` gives us correct behavior for free in most cases. The key point: `0` means "Google measured it and the answer was zero." `NULL` means "this data point wasn't in the report."
+
+**Gap 4 — Downstream code assumes data exists that may not.**
+
+Several analyzer modules query the `rtb_quality` table (Gap 1) expecting data. When that table is empty or only partially filled, the analyzers either return incomplete results or silently produce lower-quality recommendations. The system doesn't warn you that its advice is based on partial information.
+
+---
+
+## 2. Phase 0 — Foundation Hardening (Do First)
+
+**In plain English:** Before building an AI optimizer, make sure the data it will learn from is trustworthy. Garbage in, garbage out.
+
+### 2.1 Data pipeline fixes
+
+**Why this matters:** Every recommendation the optimizer makes is only as good as the data feeding it. If we're missing fraud data, dropping device-type info, or confusing "zero" with "unknown," the optimizer will make bad recommendations — and the advertiser loses money following bad advice.
+
+1. **Complete the quality-signals import path.** Write the missing code that takes Google's fraud/viewability CSV and actually saves it to our database. Without this, fraud detection is flying blind.
+
+2. **Stop discarding device, environment, and deal-type data.** Update the database save step to include the fields we're already reading from CSVs. This unlocks per-device and per-deal-type optimization — e.g., "your iOS app inventory is 3x more expensive but converts 5x better."
+
+3. **Distinguish "zero" from "we don't know."**
+   - If Google's report says "0 clicks" → store `0` (this is a real measurement — zero clicks were recorded)
+   - If the clicks column isn't in the report at all → store nothing / mark as absent (this means "we have no data for this field")
+   - This prevents the optimizer from punishing segments where we simply lack data
+
+4. **Label where each piece of data came from.** When data flows from CSV import to our database to BigQuery, tag it consistently so we can trace any number back to its source report.
+
+### 2.2 Reliability and observability
+
+1. **Automated checks that data arrives correctly:**
+   - Does the quality-signals CSV actually land in the right database table?
+   - Are device/environment fields actually saved (not silently dropped)?
+   - Does a missing column result in "no data" (not `0`)?
+
+2. **Dashboard health indicators:**
+   - Is the fraud/quality data fresh? (If it's 5 days old, tell the user)
+   - What percentage of rows have device-type data? (If only 30%, flag it)
+   - Are all 5 report types imported for each seat, each day?
+
+### 2.3 Deliverables
+
+**In plain English:** Hardening is complete when, for every number the optimizer uses to make a recommendation, we can answer three questions:
+
+- **"Is this a real zero?"** — Yes, Google measured it and it was zero. (Example: a publisher really got zero clicks. That's actionable — consider blocking it.)
+- **"Is this a real non-zero value?"** — Yes, Google measured it and here's the number. (Example: this geo got 12,000 impressions at $1.40 CPM. That's solid data to optimize on.)
+- **"Do we actually not know?"** — The data wasn't in the report. (Example: we don't have viewability data for this publisher. The optimizer should NOT treat this as "0% viewable" — it should say "viewability: no data" and reduce its confidence in any recommendation about this publisher.)
+
+This matters because an optimizer that treats "no data" as "zero" will wrongly recommend blocking segments that might actually be performing well — we just haven't measured them yet.
+
+---
+
+## 3. The Economics: What We Know vs. What We Assume
+
+### 3.1 We have NO advertiser revenue data
+
+Cat-Scan sees what Google tells us in CSV reports: impressions, clicks, spend. We never see the advertiser's actual revenue, profit margins, or conversion rates. Everything about "value" is inferred.
+
+### 3.2 Assumed-Value Model
+
+Since we can't see real revenue, we construct an **Assumed-Value** indicator from signals we do have:
+
+| Signal | What we observe | What it implies | Confidence |
+|---|---|---|---|
+| **Daily spend level** | $20/day vs $10,000/day | Higher spend = advertiser sees enough value to keep investing. A rational business doesn't burn $10K/day on ads that don't work. | Medium — could be a new campaign in testing, or an irrational buyer |
+| **Spend trend** | Increasing week-over-week | Advertiser is scaling — strong signal they're profitable or at least see growth potential | Medium-High |
+| **Spend trend** | Decreasing week-over-week | Advertiser may be cutting losses or seasonally adjusting | Medium |
+| **Win rate** | 25% vs 2% | Higher win rate = bidder is pricing aggressively = advertiser values this inventory | Medium |
+| **Bid rate** | Bidder bids on 80% of requests vs 5% | High bid rate = bidder's internal model sees value in most traffic Google Authorized Buyers sends | Medium |
+| **CTR** | 2% vs 0.01% | See explanation below | Medium |
+| **Sustained spending** | Active for 6+ months | Long-running = advertiser has found a sustainable unit economics model | High |
+
+**About CTR and "gaming":**
+
+CTR (Click-Through Rate) measures how often users click on the ad. A 2% CTR means 2 out of every 100 people who saw the ad clicked it. Higher CTR generally means the ad is relevant to the audience and placed well.
+
+However, CTR can be artificially inflated in ways that don't reflect real user interest:
+- **Misleading creatives:** An ad that says "You won a prize! Click here!" will get high CTR, but those clicks are low quality — users click out of curiosity, not genuine intent.
+- **Accidental clicks:** Certain ad placements (like a tiny "X" close button that's hard to hit on mobile) cause users to click the ad by mistake. The publisher gets paid for the click, the advertiser pays for it, but no one actually wanted to engage.
+- **Click farms / bot traffic:** Automated scripts or low-paid workers clicking ads to generate revenue for the publisher.
+
+So when we see high CTR, we can't blindly assume "great ad." We use it as one signal among many, and we cross-reference it with other indicators (is viewability also high? Is the IVT rate low? Does the publisher have a pattern of suspiciously high CTR across ALL advertisers?).
+
+**For Cat-Scan's purposes:** CTR influences the Assumed-Value score, but with lower weight than spend or win rate, precisely because it can be unreliable. When CTR is high AND other signals are healthy (low fraud, good viewability, sustained spend), it's a strong positive. When CTR is high but other signals are weak, it's a red flag.
+
+**What Assumed-Value is NOT:**
+- It is not actual revenue. We don't know if the advertiser makes $0.50 or $50 per conversion.
+- It is not ROAS. We can't calculate return on ad spend without knowing what the ad spend returns.
+- It does not account for the advertiser's other costs (product, fulfillment, support).
+
+**Assumed-Value formula (proxy):**
+
+```
+Assumed_Value_Score = weighted_sum(
+  spend_level_tier        x 0.25   (bucketed: <$100/d, $100-1K, $1K-10K, $10K+)
+  spend_trend_7d          x 0.20   (growing/stable/declining)
+  bid_rate_pct            x 0.15   (how often the bidder chooses to bid)
+  win_rate_pct            x 0.15   (how aggressively the bidder prices)
+  ctr_pct                 x 0.10   (user engagement, used cautiously - see above)
+  account_age_months      x 0.10   (longevity = sustained value)
+  viewability_pct         x 0.05   (ad was actually seen)
+)
+```
+
+This gives us a 0-to-1 score that says: "Based on observable behavior, this advertiser **probably** finds value in this traffic." It's the best we can do without conversion data (Phase 1) or MMP data (Phase 2).
+
+### 3.3 Total Cost of Operation Model
+
+The advertiser's actual profit isn't just "revenue minus ad spend." There are infrastructure costs that eat into the bottom line. Cat-Scan should help the advertiser understand the **all-in cost** of running their RTB operation.
+
+**What Cat-Scan needs from the user (one-time setup):**
+
+We keep this simple. We don't ask for cost-per-million-bid-requests — most advertisers and agencies won't know that number and won't spend time calculating it. We ask for one number they do know:
+
+| Input | Why | Example |
+|---|---|---|
+| `monthly_hosting_cost` | The total monthly cost of running the bidder, servers, databases, and any analytics tools — one round figure | $3,000/month |
+
+That's it. From this single number plus the data we already have, Cat-Scan can derive:
+
+```
+TOTAL COST OF RTB OPERATION
+
+1. MEDIA COST (what you pay Google for impressions won)
+   We have this from: rtb_daily.spend_micros
+
+2. INFRASTRUCTURE COST (what it costs to run the operation)
+   User provides: monthly_hosting_cost
+   This covers: bidder servers, databases, analytics, Cat-Scan, etc.
+   Derived per-impression: monthly_hosting_cost / monthly_impressions
+
+3. ALL-IN CPM = (media_spend + infra_share) / impressions x 1000
+   This is the REAL cost per thousand impressions - not just
+   what you paid Google, but what it actually cost you to win
+   and serve those impressions including your own infrastructure.
+
+4. OPPORTUNITY COST (the main target - see below)
+   QPS allocated to low-value segments that could have gone
+   to high-value segments. This is where the real savings are.
+```
+
+**The main target is not cost savings — it's getting more good impressions.**
+
+Modern bidders are cheap to run. Colocated servers, optimized code, efficient infrastructure — the processing cost per bid request is negligible in 2026. The real waste isn't server costs. The real waste is:
+
+> "Config X is consuming 50,000 QPS and winning 0 impressions. That's 50,000 QPS that could have gone to Config Y, which has a 25% win rate and delivers the advertiser's best-performing geo."
+
+The optimizer's primary goal: **shift QPS from segments that produce nothing toward segments that produce the impressions the advertiser actually wants.** Cost modeling is secondary context. Getting more of the right impressions is the point.
+
+---
+
+## 4. Phase 1 — Conversion Schema (The Database Foundation)
+
+### 4.1 Why this comes first
+
+Before we can ingest conversion data from ANY source (MMP, pixel, agency tracker, bidder), we need a universal database structure that can store all types of conversion events. This is the schema — the shape of the container. We build the container first, then figure out how to fill it.
+
+### 4.2 The app conversion funnel — what advertisers actually pay for
+
+When dealing with app advertisers (games, fintech, utilities) or the agencies representing them, "conversion" isn't one thing — it's a ladder of increasingly valuable events:
+
+| Step | Event | What it means | Typical payout | Who cares |
+|---|---|---|---|---|
+| 1 | **Install** | User downloaded and installed the app | $0.30 - $2.00 | Everyone — cheapest, easiest to get |
+| 2 | **Open / First Launch** | User actually opened the app after installing | $0.50 - $3.00 | Filters out accidental installs |
+| 3 | **Tutorial Complete** | User got through the intro/demo/onboarding | $1.00 - $5.00 | Shows genuine interest |
+| 4 | **Level / Milestone** | User reached a specified level or used the app meaningfully | $2.00 - $15.00 | Proves retention and engagement |
+| 5 | **First Deposit / Purchase** | User spent real money in the app | $10.00 - $80.00+ | The ultimate goal — a paying customer |
+
+**Real-world example:** A gaming advertiser pays agencies:
+- Install: $0.90
+- First deposit: $40.00
+
+That's a 44x difference in value between the cheapest event and the most valuable one. An optimizer that only sees "installs" and treats them all equally is missing the point entirely. What matters is how many of those installs turn into depositing users.
+
+**For e-commerce / web advertisers:** the ladder is similar but different events:
+1. Landing page visit
+2. Add to cart
+3. Begin checkout
+4. Purchase
+5. Repeat purchase
+
+### 4.3 Data model — universal conversion events
+
+This schema stores conversion events from any source (MMP, pixel, agency tracker, bidder feed):
+
+```text
+conversion_events
+- event_id          (unique identifier for this event)
+- source_type       (where the data came from: "appsflyer" | "adjust" | "branch" |
+                     "pixel" | "redtrack" | "voluum" | "bidder" | "manual_csv")
+- buyer_id          (which advertiser account)
+- billing_id        (which pretargeting config - links back to our RTB data)
+- creative_id       (which ad creative was shown)
+- event_type        (what happened - see standardized list below)
+- event_name        (source's own name: "af_purchase", "level_achieved", etc.)
+- event_value       (money amount if applicable - e.g., $40 for first deposit)
+- currency          (USD / EUR / etc.)
+- country           (user's country)
+- platform          (iOS / Android / Web)
+- app_id            (bundle ID / package name)
+- publisher_id      (where the ad was shown)
+- campaign_id       (MMP or agency campaign ID)
+- click_id          (links back to the click that led here)
+- impression_id     (links back to the impression)
+- attribution_type  (last_click | view_through | organic)
+- is_retargeting    (was this a returning user, not new?)
+- click_ts          (when the user clicked the ad)
+- event_ts          (when the conversion happened)
+- latency_seconds   (time between click and conversion)
+- fraud_status      (clean | suspected | confirmed_fraud)
+- raw_payload       (the full original data from the source, for debugging)
+- created_at        (when we stored this record)
+
+Standardized event_type values:
+- install
+- open
+- registration
+- tutorial_complete
+- level_achieved
+- first_purchase
+- first_deposit
+- purchase
+- subscription
+- add_to_cart
+- checkout
+- custom (for anything else - event_name has the specifics)
+```
+
+### 4.4 Daily aggregates for optimization
+
+```text
+conversion_aggregates_daily
+- agg_date
+- buyer_id
+- billing_id        (pretargeting config - the key optimization lever)
+- country
+- publisher_id
+- creative_id
+- app_id
+- source_type       (where the conversion data came from)
+- event_type        (install / deposit / purchase / etc.)
+- event_count       (how many conversions of this type)
+- event_value_total (total monetary value)
+- impressions       (joined from rtb_daily)
+- clicks            (joined from rtb_daily)
+- spend_usd         (joined from rtb_daily)
+- cost_per_event    (spend / event_count - the CPA)
+- event_rate_pct    (event_count / clicks - conversion rate)
+- created_at
+```
+
+This is the foundation. Once this schema exists, we can fill it from any source.
+
+---
+
+## 5. Phase 2 — Connecting Conversion Data Sources
+
+### 5.1 The reality: most app advertisers already use an MMP
+
+Advertisers running app-install campaigns almost always use AppsFlyer, Adjust, or Branch. These platforms track the full funnel from install through to deposit/purchase. They already have the data we need — we just need to connect to it.
+
+This is the primary integration path because:
+- The data already exists (no new tracking to set up)
+- It includes professional fraud detection
+- It covers the full event ladder (install through to deposit)
+- MMPs provide APIs specifically designed for this kind of integration
+
+### 5.2 Primary: MMP integration (AppsFlyer, Adjust, Branch)
+
+**How it works:**
+
+1. Advertiser configures their MMP to send "postbacks" to Cat-Scan. A postback is a server-to-server message that says: "The click with ID abc123 resulted in an install, and later a $40 deposit."
+2. Cat-Scan receives the postback, normalizes it into our universal `conversion_events` schema, and stores it.
+3. The optimizer can now see: "Pretargeting config X in country PH generates installs at $0.90 but deposits at $40 — that's a 44:1 return. Config Y generates installs at $0.50 but zero deposits — that's worthless."
+
+**Inbound endpoints:**
+
+```
+POST /conversions/appsflyer/postback   - receives AppsFlyer S2S postbacks
+POST /conversions/adjust/callback      - receives Adjust callbacks
+POST /conversions/branch/webhook       - receives Branch webhooks
+```
+
+Each normalizes the provider-specific format into our `conversion_events` table.
+
+### 5.3 Secondary: Agency tracking platforms (Redtrack, Voluum, custom)
+
+Many agencies use their own tracking platforms. These work similarly to MMPs but with different data formats:
+
+```
+POST /conversions/generic/postback     - accepts a standardized JSON payload
+POST /conversions/csv/upload           - accepts CSV upload of conversion data
+```
+
+The generic endpoint accepts a simple JSON format that any agency tracker can be configured to send. The CSV upload is for agencies that prefer batch imports.
+
+### 5.4 Tertiary: Our own pixel (optional, for web-only advertisers)
+
+For advertisers who don't use an MMP or agency tracker (typically web/e-commerce, not app), we can offer a lightweight pixel:
+
+```
+GET /pixel/conversion?click_id=X&type=purchase&value=29.99
+```
+
+This is the simplest possible integration — a URL the advertiser places on their thank-you page. But it's limited:
+- Only works on web (not in-app)
+- No built-in fraud detection
+- Single-event only (no funnel tracking)
+- Requires cookie-based attribution (degraded by privacy changes)
+
+**Our recommendation:** Focus engineering effort on MMP integrations. The pixel is a nice-to-have for web advertisers, not the primary path.
+
+### 5.5 What a bidder could feed us (and what to expect)
+
+**The reality of bidders:** Most bidders have been optimized to cost as little as possible. They process bid requests, make bid/no-bid decisions, and dump logs. They typically have very little API capability built in. Asking customers to develop new bidder features is possible, but not fast.
+
+**If a bidder COULD feed us data, here's what would be valuable — ranked from most to least useful:**
+
+| Priority | Data | Why it's valuable | How hard to add |
+|---|---|---|---|
+| 1 (gold) | **Bid price per request** | We'd know what you're willing to pay per segment — the strongest signal of perceived value | Medium — bidder already knows this, just needs to export it |
+| 2 (gold) | **No-bid reasons** | Why did the bidder decline? (floor too high, budget exhausted, frequency cap, user already seen) | Medium — most bidders log this internally |
+| 3 (silver) | **Internal value score** | What did the bidder's own model score this request at? | Easy if they have a model, N/A if they don't |
+| 4 (silver) | **Budget utilization** | How much of the daily/campaign budget was spent? How much remains? | Easy — bidders track this |
+| 5 (bronze) | **Frequency data** | How many times has this user seen this ad? | Medium — requires user ID matching |
+| 6 (bronze) | **Auction clearing prices** | What was the second-highest bid? (i.e., the actual price paid) | Hard — only available from win notifications |
+
+**Realistic integration path for bidder data:**
+
+Most bidders will start with a daily CSV or JSON dump of aggregated data:
+
+```
+POST /bidder-feed/batch    - accepts daily batch of bid-level data
+POST /bidder-feed/stream   - accepts real-time bid events (for advanced bidders)
+```
+
+Schema for bidder feed:
+
+```text
+bidder_feed_events
+- feed_id
+- buyer_id
+- billing_id
+- country
+- publisher_id
+- app_id
+- creative_size
+- platform
+- feed_date
+- bid_requests_received  (how many requests the bidder saw)
+- bids_submitted         (how many it chose to bid on)
+- no_bid_reasons         (counts by reason, e.g., {"floor_too_high": 4200, "budget_exhausted": 800})
+- avg_bid_price_cpm      (average bid price in CPM)
+- budget_remaining_pct   (how much budget is left)
+- internal_value_score   (bidder's own quality score, if available)
+- source_type            ("bidder_api" | "bidder_csv")
+- raw_payload            (full original data)
+- created_at
+```
+
+**What to expect realistically:** Most customers will start with items 1-2 (bid prices and no-bid reasons) via a daily CSV export. Items 3-6 are aspirational and depend on the bidder's sophistication.
+
+---
+
+## 6. Phase 3 — BYOM (Bring Your Own Model)
+
+### 6.1 Why this comes last
+
+BYOM is most powerful when there's real conversion data to optimize against (from Phase 2). Without conversions, the model can only optimize on proxy metrics (CPM, CTR, win rate). With conversions, it can optimize on what actually matters: cost per deposit, install-to-deposit ratio, ROAS.
+
+### 6.2 Concept
+
+**In plain English:** Cat-Scan collects the data, compiles the reports, and presents the tools. The customer's AI decides what to do with it.
+
+We provide:
+- A structured data export (the "feature vector") for each traffic segment
+- An API where the customer's model sends back scores
+- A recommendation engine that turns those scores into pretargeting changes
+- A human approval step before anything is applied
+
+### 6.3 Data model (control and scoring)
+
+```text
+optimization_models
+- model_id
+- buyer_id
+- name                    ("Q1 APAC Install Model v2")
+- description
+- model_type              (api | rules | csv)
+- endpoint_url            (where to send data for scoring)
+- auth_header_encrypted
+- input_schema            (what data the model expects)
+- output_schema           (what format scores come back in)
+- is_active
+- created_at / updated_at
+
+segment_scores
+- score_id
+- model_id
+- buyer_id
+- billing_id
+- country
+- publisher_id
+- app_id
+- creative_size
+- platform
+- environment
+- hour
+- score_date
+- value_score (0..1)
+- confidence (0..1)
+- reason_codes
+- raw_response
+- created_at
+
+qps_allocation_proposals
+- proposal_id
+- model_id
+- buyer_id
+- billing_id
+- current_qps
+- proposed_qps
+- delta_qps
+- rationale
+- projected_impact
+- status (draft | approved | applied | rejected)
+- created_at / applied_at
+```
+
+### 6.4 Built-in fallback (no AI needed)
+
+For customers without a data science team, provide a simple rules-based model:
+- Rank by: win rate, cost per conversion (when available), CTR, viewability
+- Penalize: high fraud rate, high bid filtering, zero traffic configs
+- Safety: minimum QPS floor, maximum change per cycle, sample-size requirements
+
+### 6.5 Example BYOM prompts for customers
+
+The goal: show the customer one or two example prompts they can customize and plug into their own AI (which has access to Cat-Scan's API). The AI queries Cat-Scan data and produces recommendations. We provide the toolbox — they drive.
+
+**Example 1: App install campaign in Southeast Asia**
+
+```
+You are an optimization model for an app-install campaign on Google Authorized Buyers.
+
+OBJECTIVE: Maximize first-deposit conversions in the Philippines and Indonesia,
+while keeping cost-per-install below $1.20.
+
+DATA SOURCE: Query Cat-Scan API at https://api.scan.rtb.cat
+- GET /analytics/rtb-funnel/configs?days=14      - config-level funnel metrics
+- GET /conversions/aggregates?days=14&event_type=first_deposit  - deposit data
+- GET /conversions/aggregates?days=14&event_type=install        - install data
+- GET /analytics/publisher-efficiency?days=14    - publisher waste ranking
+
+CONTEXT:
+- We have seen good deposit rates on publishers in the gaming category.
+- Our app is similar to [COMPETITOR APP] - target similar user demographics.
+- Current best-performing configs: billing_id 157331516553 (25% win rate),
+  billing_id 72245759413 (24.9% win rate).
+- Three configs show zero traffic - flag for review or removal.
+
+WHEN DECIDING ON EFFICIENCY, CONSIDER:
+1. Deposit-to-install ratio (most important - an install without a deposit
+   is nearly worthless at $0.90 vs $40 payout)
+2. Cost per deposit (target: under $45)
+3. Publisher fraud rate (reject publishers with IVT > 5%)
+4. Geographic deposit concentration (which countries produce depositing users?)
+5. Time-of-day patterns (are deposits concentrated in certain hours?)
+
+OUTPUT FORMAT:
+For each pretargeting config, recommend:
+- Keep / Increase QPS / Decrease QPS / Pause
+- Specific QPS number (current -> proposed)
+- Reason (one sentence)
+- Confidence level (high / medium / low)
+- What data is missing that would improve this recommendation
+```
+
+**Example 2: Brand awareness campaign (no conversion data)**
+
+```
+You are an optimization model for a display brand awareness campaign.
+
+OBJECTIVE: Maximize viewable impressions in Brazil, Mexico, and Argentina,
+while keeping CPM below $2.50 and ensuring >60% viewability.
+
+DATA SOURCE: Query Cat-Scan API at https://api.scan.rtb.cat
+- GET /analytics/rtb-funnel/configs?days=7
+- GET /analytics/geo-waste?days=7
+- GET /analytics/publisher-efficiency?days=7
+
+WHEN DECIDING ON EFFICIENCY, CONSIDER:
+1. Viewability rate (most important - an unseen impression has zero brand value)
+2. CPM (lower is better, but not at the expense of viewability)
+3. Publisher quality (avoid publishers with IVT > 3%)
+4. Creative size coverage (are we missing high-traffic sizes?)
+5. Frequency (estimated - are we over-serving the same users?)
+
+OUTPUT: Recommend pretargeting config changes with QPS reallocation rationale.
+Flag any configs where our data quality is too low to make confident recommendations.
+```
+
+**Example 3: Lead generation campaign (sweepstakes / insurance quotes / finance)**
+
+```
+You are an optimization model for a lead generation campaign on Google Authorized Buyers.
+
+OBJECTIVE: Maximize qualified leads (form submissions with valid contact info)
+across Saudi Arabia, UAE, Egypt, and South Africa, while keeping cost-per-lead
+below $8.00.
+
+DATA SOURCE: Query Cat-Scan API at https://api.scan.rtb.cat
+- GET /analytics/rtb-funnel/configs?days=14      - config-level funnel metrics
+- GET /conversions/aggregates?days=14&event_type=registration  - form submissions
+- GET /conversions/aggregates?days=14&event_type=custom&event_name=qualified_lead
+  - leads that passed validation (real phone number, real email)
+- GET /analytics/publisher-efficiency?days=14    - publisher waste ranking
+- GET /analytics/geo-waste?days=14               - geographic performance
+
+CONTEXT:
+- We run sweepstakes-style landing pages that collect name, phone, and email.
+- Raw form submissions are cheap ($1-3) but most are junk (fake info, bots,
+  people who just want the prize and will never answer the phone).
+- A "qualified lead" is one where the call center successfully reached the
+  person and they showed genuine interest. These are worth $25-60 to us.
+- Typical ratio: 100 form submissions -> 15-20 qualified leads (15-20% quality rate).
+- Quality rate varies enormously by publisher and geo. Some publishers deliver
+  40% qualified leads, others deliver 2% (mostly bots filling forms).
+
+IMPORTANT - BEWARE OF MISLEADING METRICS:
+- High CTR on a sweepstakes campaign is expected (everyone wants to "win").
+  Do NOT treat high CTR as a positive signal by itself.
+- High form-submission volume is NOT the goal. A publisher that delivers
+  500 submissions/day at 2% quality rate is WORSE than one delivering
+  50 submissions/day at 40% quality rate.
+- The ONLY metric that matters is cost per QUALIFIED lead.
+
+WHEN DECIDING ON EFFICIENCY, CONSIDER:
+1. Qualified-lead rate (qualified_leads / registrations) - this is the
+   single most important number. It separates real inventory from junk.
+2. Cost per qualified lead (target: under $8.00)
+3. Geographic quality patterns (some countries have higher bot/fake-info rates)
+4. Publisher quality tier - build a ranked list:
+   - Tier 1: >30% quality rate, scale these up
+   - Tier 2: 15-30% quality rate, maintain
+   - Tier 3: <15% quality rate, reduce or pause
+   - Tier 4: <5% quality rate, block
+5. Time-of-day patterns (leads submitted at 3am local time are almost
+   always bots - weight daytime leads higher)
+6. Device patterns (desktop leads in MENA often have higher quality
+   than mobile - validate this from the data)
+
+OUTPUT FORMAT:
+For each pretargeting config, recommend:
+- Keep / Increase QPS / Decrease QPS / Pause
+- Specific QPS number (current -> proposed)
+- Reason (one sentence)
+- Publisher block list (publishers in Tier 4 that should be excluded)
+- Confidence level (high / medium / low)
+- What data is missing that would improve this recommendation
+
+ALSO PROVIDE:
+- Top 5 publishers by qualified-lead rate (these are your gold — protect them)
+- Bottom 5 publishers by qualified-lead rate (candidates for blocking)
+- Any geos where quality rate is below 10% (candidates for exclusion)
+```
+
+**The key insight:** Cat-Scan doesn't need to BE the AI. It needs to be the best possible data source for whatever AI the customer chooses to use. We collect, compile, and present. They decide.
+
+---
+
+## 7. CSV & Data Additions Needed (per METRICS_GUIDE.md)
+
+### 7.1 What Google CSVs we should request that we don't currently
+
+| Report/Dimension | Currently imported? | Value if added |
+|---|---|---|
+| **Deal ID / Deal Name** | Column exists in `rtb_daily` but no analyzer uses it | Distinguishes private marketplace deals (usually higher quality, fixed price) from open auction. Could reveal that PMP deals have 5x better win rate. |
+| **Hour-of-day in all reports** | Available in bidstream, not always in performance detail | Enables dayparting: "Your best hours are 14:00-18:00 UTC in PH. Shift QPS to those hours." |
+| **Advertiser dimension** | Column exists but unused | For multi-advertiser seats, isolates performance by advertiser |
+| **Video completion quartiles** | Columns exist in `rtb_daily` (video_starts through video_completions) | For video campaigns: completion rate is a key quality signal. 50%+ VCR = good placement. |
+
+### 7.2 What we should compute from existing data but don't surface
+
+| Metric | Formula | Why it matters |
+|---|---|---|
+| **Assumed-Value per QPS** | Assumed_Value_Score x daily_spend / allocated_qps | Answers: "Is this QPS allocation earning its keep?" |
+| **QPS Efficiency** | Impressions / Bid Requests | Answers: "What fraction of traffic I request do I actually use?" |
+| **Effective CPM** | (media_spend + infra_share) / impressions x 1000 | Answers: "What does an impression REALLY cost me?" |
+| **Config overlap score** | Geo/publisher intersection between billing_ids | Answers: "Are two of my configs bidding against each other for the same traffic?" |
+| **Hourly concentration** | Distribution of hourly bid_requests | Answers: "Is my traffic spread across the day or spiked in a few hours?" |
+
+### 7.3 What we need from conversion sources (new data, not from Google CSVs)
+
+| Data | Source | Why |
+|---|---|---|
+| **Event type + value** | MMP / pixel / agency tracker | The core conversion signal. Without this, everything is proxy. |
+| **Attribution type** | MMP | Last-click vs view-through. A view-through conversion is worth less confidence than a click-through one. |
+| **Fraud verdict** | MMP | Professional fraud detection on the conversion itself, not just the impression. |
+| **Cohort LTV** | MMP (d1, d7, d30 reports) | An install worth $0.90 today might be worth $40 in deposits over 30 days. Without LTV, we optimize for the wrong thing. |
+
+---
+
+## 8. Gap Analysis vs. METRICS_GUIDE.md (Updated)
+
+| Topic | Status | Reconciled note |
+|---|---|---|
+| `inefficiency_signals` references | Stale/inconsistent | Align guide with current recommendation tables and workflows |
+| Assumed-Value per QPS | Computable from spend + bid behavior | Surface as first-class metric; rename from misleading "Revenue per QPS" — we have no actual revenue data |
+| QPS Efficiency (impressions / bid_requests) | Computable | Add to Efficiency panel |
+| Confidence scoring in UI | Partial | Surface confidence and evidence in recommendation UX |
+| Hourly patterns | Backend available | Add dayparting UI/actions |
+| Deal/PMP dimensions | Underused | Add analyzers and recommendation paths |
+| Dedicated quality-signals ingestion | Not fully wired | Phase 0 fix before advanced quality optimization |
+| Total Cost of Operation | Not modeled | Add one user input (monthly hosting cost); derive Effective CPM |
+| Conversion event types | Not modeled | Phase 1 schema — universal conversion_events table |
+| MMP integration | Not implemented | Phase 2 — primary conversion data source |
+
+---
+
+## 9. Implementation Priority (Reconciled)
+
+### Phase 0 (now, 2-3 weeks): Foundation hardening
+
+- Complete `rtb_quality` ingestion path.
+- Stop discarding device/environment/deal-type fields from bidstream imports.
+- Distinguish "real zero" from "no data available" across all tables.
+- Add monthly hosting cost input; derive Effective CPM.
+- Refresh stale docs and add dashboard data-quality indicators.
+
+### Phase 1 (3-4 weeks): Conversion schema
+
+- Create `conversion_events` and `conversion_aggregates_daily` tables.
+- Standardized event types (the install-to-deposit ladder).
+- Multi-source design (MMP, pixel, agency tracker, bidder feed, CSV upload).
+- Aggregation job that joins conversions to RTB data by billing_id/country/publisher.
+
+### Phase 2 (4-6 weeks): Connect conversion data sources
+
+- AppsFlyer S2S postback receiver + normalizer.
+- Adjust callback receiver + normalizer.
+- Branch webhook receiver + normalizer.
+- Generic postback endpoint (for Redtrack, Voluum, custom trackers).
+- CSV upload for batch conversion import.
+- Optional: lightweight pixel for web-only advertisers.
+- Bidder feed endpoint (batch + stream) for bid-level data.
+
+### Phase 3 (2-3 weeks): BYOM model platform
+
+- Model registry and scoring jobs.
+- Proposal generation and approval workflow.
+- Rules-based fallback model.
+- Example BYOM prompt templates for customers.
+- Assumed-Value scoring as default model (upgraded to conversion-based scoring when data is available).
+
+---
+
+## 10. Success Metrics
+
+| Metric | Baseline | Target |
+|---|---|---|
+| Optimizer input completeness | Partial quality + dimension gaps | >95% feature completeness for active seats |
+| Recommendation confidence quality | Mixed (can't distinguish "bad" from "no data") | Confidence-calibrated actions with explicit evidence and data-availability flags |
+| Conversion data availability | Zero — no conversion events stored | At least 1 MMP integrated per active customer with app campaigns |
+| BYOM adoption | N/A | Customer can paste an example prompt, point their AI at Cat-Scan API, and get actionable recommendations within 30 minutes of setup |
+| QPS reallocation quality | Manual guesswork | Data-driven proposals that shift QPS toward higher-converting segments |
+| Time to actionable recommendation | Daily batch | Sub-daily where conversion signals exist |
+| Advertiser value visibility | Proxy-heavy (Assumed-Value) | Outcome-centric (CPA per event type, deposit rate, LTV where integrated) |
+
+---
+
+## 11. Evidence Anchors (for v0.4 assumptions)
+
+- `importers/flexible_mapper.py` detects `quality_signals -> rtb_quality`.
+- `importers/unified_importer.py` routing currently lacks explicit `rtb_quality` import branch.
+- `importers/unified_importer.py` maps bidstream optional dimensions that are not fully inserted.
+- `analytics/qps_optimizer.py` quality/fraud methods expect `rtb_quality`.
+- `importers/csv_report_types.py` still documents dedicated IVT quality flow as not fully implemented.
+
+---
+
+This document is the reconciled working plan and should supersede all prior versions.
