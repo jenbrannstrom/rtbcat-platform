@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from api.dependencies import get_store, require_admin
 from services.config_service import ConfigService
+from services.language_ai_config import SUPPORTED_LANGUAGE_AI_PROVIDERS
 
 logger = logging.getLogger(__name__)
 
@@ -228,39 +229,151 @@ async def delete_service_account(
 
 
 # =============================================================================
-# Gemini API Key Endpoints
+# Language AI Provider Endpoints
 # =============================================================================
 
-class GeminiKeyStatusResponse(BaseModel):
-    """Response model for Gemini API key status."""
+
+class AIProviderKeyStatusResponse(BaseModel):
+    """Response model for one AI provider API key status."""
+
     configured: bool
-    masked_key: Optional[str] = None  # e.g., "AIza...x7Qm"
+    masked_key: Optional[str] = None
+    source: Optional[str] = None
+    message: str
+
+
+class LanguageAIProviderConfigResponse(BaseModel):
+    """Response model for language AI provider configuration."""
+
+    provider: str
+    available_providers: List[str]
+    configured: bool
+    providers: dict[str, AIProviderKeyStatusResponse]
+    message: str
+
+
+class LanguageAIProviderUpdateRequest(BaseModel):
+    """Request to set active language AI provider."""
+
+    provider: str = Field(
+        ...,
+        description=f"One of: {', '.join(SUPPORTED_LANGUAGE_AI_PROVIDERS)}",
+    )
+
+
+class AIProviderKeyUpdateRequest(BaseModel):
+    """Request to update API key for a provider."""
+
+    api_key: str = Field(..., min_length=10, description="Provider API key")
+
+
+class AIProviderKeyUpdateResponse(BaseModel):
+    """Response after updating/removing provider API key."""
+
+    success: bool
+    provider: str
+    message: str
+
+
+@router.get("/config/language-ai/provider", response_model=LanguageAIProviderConfigResponse)
+async def get_language_ai_provider_config(
+    store=Depends(get_store),
+):
+    """Get active language AI provider and provider key statuses."""
+    service = ConfigService()
+    result = await service.get_language_ai_provider_config(store)
+    providers = {
+        key: AIProviderKeyStatusResponse(**value)
+        for key, value in result["providers"].items()
+    }
+    return LanguageAIProviderConfigResponse(
+        provider=result["provider"],
+        available_providers=result["available_providers"],
+        configured=result["configured"],
+        providers=providers,
+        message=result["message"],
+    )
+
+
+@router.put("/config/language-ai/provider", response_model=AIProviderKeyUpdateResponse)
+async def update_language_ai_provider(
+    request: LanguageAIProviderUpdateRequest,
+    store=Depends(get_store),
+):
+    """Set active language AI provider (gemini/claude/grok)."""
+    service = ConfigService()
+    result = await service.update_language_ai_provider(store, request.provider)
+    return AIProviderKeyUpdateResponse(**result)
+
+
+@router.get(
+    "/config/language-ai/providers/{provider}/key",
+    response_model=AIProviderKeyStatusResponse,
+)
+async def get_language_ai_provider_key_status(
+    provider: str,
+    store=Depends(get_store),
+):
+    """Get key status for a single language AI provider."""
+    service = ConfigService()
+    result = await service.get_ai_provider_key_status(store, provider)
+    return AIProviderKeyStatusResponse(**result)
+
+
+@router.put(
+    "/config/language-ai/providers/{provider}/key",
+    response_model=AIProviderKeyUpdateResponse,
+)
+async def update_language_ai_provider_key(
+    provider: str,
+    request: AIProviderKeyUpdateRequest,
+    store=Depends(get_store),
+):
+    """Update key for a single language AI provider."""
+    service = ConfigService()
+    result = await service.update_ai_provider_key(store, provider, request.api_key)
+    return AIProviderKeyUpdateResponse(**result)
+
+
+@router.delete(
+    "/config/language-ai/providers/{provider}/key",
+    response_model=AIProviderKeyUpdateResponse,
+)
+async def delete_language_ai_provider_key(
+    provider: str,
+    store=Depends(get_store),
+):
+    """Delete key for a single language AI provider from DB."""
+    service = ConfigService()
+    result = await service.delete_ai_provider_key(store, provider)
+    return AIProviderKeyUpdateResponse(**result)
+
+
+# Backward-compatible Gemini-specific endpoints used by existing clients.
+class GeminiKeyStatusResponse(BaseModel):
+    configured: bool
+    masked_key: Optional[str] = None
     message: str
 
 
 class GeminiKeyUpdateRequest(BaseModel):
-    """Request to update Gemini API key."""
     api_key: str = Field(..., min_length=10, description="Gemini API key")
 
 
 class GeminiKeyUpdateResponse(BaseModel):
-    """Response after updating Gemini API key."""
     success: bool
     message: str
 
 
 @router.get("/config/gemini-key", response_model=GeminiKeyStatusResponse)
-async def get_gemini_key_status(
-    store=Depends(get_store),
-):
-    """Get Gemini API key configuration status.
-
-    The key is used for AI-powered language detection in creatives.
-    Returns masked key for security.
-    """
+async def get_gemini_key_status(store=Depends(get_store)):
     service = ConfigService()
     status = await service.get_gemini_key_status(store)
-    return GeminiKeyStatusResponse(**status)
+    return GeminiKeyStatusResponse(
+        configured=status["configured"],
+        masked_key=status.get("masked_key"),
+        message=status["message"],
+    )
 
 
 @router.put("/config/gemini-key", response_model=GeminiKeyUpdateResponse)
@@ -268,24 +381,13 @@ async def update_gemini_key(
     request: GeminiKeyUpdateRequest,
     store=Depends(get_store),
 ):
-    """Update Gemini API key.
-
-    The key is stored securely in the database and used for AI-powered
-    language detection in creatives.
-    """
     service = ConfigService()
     result = await service.update_gemini_key(store, request.api_key)
-    return GeminiKeyUpdateResponse(**result)
+    return GeminiKeyUpdateResponse(success=result["success"], message=result["message"])
 
 
 @router.delete("/config/gemini-key", response_model=GeminiKeyUpdateResponse)
-async def delete_gemini_key(
-    store=Depends(get_store),
-):
-    """Delete Gemini API key from database.
-
-    Note: If GEMINI_API_KEY environment variable is set, it will be used as fallback.
-    """
+async def delete_gemini_key(store=Depends(get_store)):
     service = ConfigService()
     result = await service.delete_gemini_key(store)
-    return GeminiKeyUpdateResponse(**result)
+    return GeminiKeyUpdateResponse(success=result["success"], message=result["message"])

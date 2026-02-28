@@ -51,10 +51,29 @@ def _is_creative_cache_scheduler_enabled() -> bool:
     )
 
 
+def _language_ai_provider_env() -> str:
+    return (os.getenv("CATSCAN_LANGUAGE_AI_PROVIDER") or "gemini").strip().lower()
+
+
 def _is_gemini_enabled() -> bool:
-    return _env_true("CATSCAN_ENABLE_LANGUAGE_AI", default=False) or bool(
-        os.getenv("GEMINI_API_KEY")
-    )
+    return (
+        _env_true("CATSCAN_ENABLE_LANGUAGE_AI", default=False)
+        and _language_ai_provider_env() == "gemini"
+    ) or bool(os.getenv("GEMINI_API_KEY"))
+
+
+def _is_claude_enabled() -> bool:
+    return (
+        _env_true("CATSCAN_ENABLE_LANGUAGE_AI", default=False)
+        and _language_ai_provider_env() == "claude"
+    ) or bool(os.getenv("ANTHROPIC_API_KEY"))
+
+
+def _is_grok_enabled() -> bool:
+    return (
+        _env_true("CATSCAN_ENABLE_LANGUAGE_AI", default=False)
+        and _language_ai_provider_env() == "grok"
+    ) or bool(os.getenv("XAI_API_KEY"))
 
 
 def _is_clustering_enabled() -> bool:
@@ -107,6 +126,18 @@ def _feature_checks() -> list[FeatureCheck]:
             description="Gemini language detection",
             required_keys=("GEMINI_API_KEY",),
             enabled=_is_gemini_enabled(),
+        ),
+        FeatureCheck(
+            name="claude_language_ai",
+            description="Claude language detection",
+            required_keys=("ANTHROPIC_API_KEY",),
+            enabled=_is_claude_enabled(),
+        ),
+        FeatureCheck(
+            name="grok_language_ai",
+            description="Grok language detection",
+            required_keys=("XAI_API_KEY",),
+            enabled=_is_grok_enabled(),
         ),
         FeatureCheck(
             name="anthropic_clustering_ai",

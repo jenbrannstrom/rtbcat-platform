@@ -1,6 +1,6 @@
 /**
  * Integrations API module.
- * Handles credentials, service accounts, Gemini, Gmail, and GCP.
+ * Handles credentials, service accounts, language AI providers, Gmail, and GCP.
  */
 
 import { fetchApi } from "./core";
@@ -33,17 +33,29 @@ export interface ServiceAccountListResponse {
 }
 
 // =============================================================================
-// Gemini Types
+// Language AI Provider Types
 // =============================================================================
 
-export interface GeminiKeyStatus {
+export type LanguageAIProvider = "gemini" | "claude" | "grok";
+
+export interface AIProviderKeyStatus {
   configured: boolean;
   masked_key: string | null;
+  source?: string | null;
   message: string;
 }
 
-export interface GeminiKeyUpdateResponse {
+export interface LanguageAIProviderConfig {
+  provider: LanguageAIProvider;
+  available_providers: LanguageAIProvider[];
+  configured: boolean;
+  providers: Record<LanguageAIProvider, AIProviderKeyStatus>;
+  message: string;
+}
+
+export interface AIProviderKeyUpdateResponse {
   success: boolean;
+  provider: LanguageAIProvider;
   message: string;
 }
 
@@ -138,22 +150,66 @@ export async function deleteServiceAccount(accountId: string): Promise<{ success
 }
 
 // =============================================================================
-// Gemini API
+// Language AI Provider API
 // =============================================================================
 
-export async function getGeminiKeyStatus(): Promise<GeminiKeyStatus> {
-  return fetchApi<GeminiKeyStatus>("/config/gemini-key");
+export async function getLanguageAIProviderConfig(): Promise<LanguageAIProviderConfig> {
+  return fetchApi<LanguageAIProviderConfig>("/config/language-ai/provider");
 }
 
-export async function updateGeminiKey(apiKey: string): Promise<GeminiKeyUpdateResponse> {
-  return fetchApi<GeminiKeyUpdateResponse>("/config/gemini-key", {
+export async function updateLanguageAIProvider(
+  provider: LanguageAIProvider
+): Promise<AIProviderKeyUpdateResponse> {
+  return fetchApi<AIProviderKeyUpdateResponse>("/config/language-ai/provider", {
+    method: "PUT",
+    body: JSON.stringify({ provider }),
+  });
+}
+
+export async function getLanguageAIProviderKeyStatus(
+  provider: LanguageAIProvider
+): Promise<AIProviderKeyStatus> {
+  return fetchApi<AIProviderKeyStatus>(
+    `/config/language-ai/providers/${encodeURIComponent(provider)}/key`
+  );
+}
+
+export async function updateLanguageAIProviderKey(
+  provider: LanguageAIProvider,
+  apiKey: string
+): Promise<AIProviderKeyUpdateResponse> {
+  return fetchApi<AIProviderKeyUpdateResponse>(
+    `/config/language-ai/providers/${encodeURIComponent(provider)}/key`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ api_key: apiKey }),
+    }
+  );
+}
+
+export async function deleteLanguageAIProviderKey(
+  provider: LanguageAIProvider
+): Promise<AIProviderKeyUpdateResponse> {
+  return fetchApi<AIProviderKeyUpdateResponse>(
+    `/config/language-ai/providers/${encodeURIComponent(provider)}/key`,
+    { method: "DELETE" }
+  );
+}
+
+// Backward-compatible Gemini wrappers
+export async function getGeminiKeyStatus(): Promise<AIProviderKeyStatus> {
+  return fetchApi<AIProviderKeyStatus>("/config/gemini-key");
+}
+
+export async function updateGeminiKey(apiKey: string): Promise<{ success: boolean; message: string }> {
+  return fetchApi<{ success: boolean; message: string }>("/config/gemini-key", {
     method: "PUT",
     body: JSON.stringify({ api_key: apiKey }),
   });
 }
 
-export async function deleteGeminiKey(): Promise<GeminiKeyUpdateResponse> {
-  return fetchApi<GeminiKeyUpdateResponse>("/config/gemini-key", {
+export async function deleteGeminiKey(): Promise<{ success: boolean; message: string }> {
+  return fetchApi<{ success: boolean; message: string }>("/config/gemini-key", {
     method: "DELETE",
   });
 }

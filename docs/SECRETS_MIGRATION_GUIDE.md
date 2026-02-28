@@ -16,6 +16,7 @@ Use these logical keys in all backends:
 - `PRECOMPUTE_MONITOR_SECRET`
 - `GEMINI_API_KEY`
 - `ANTHROPIC_API_KEY`
+- `XAI_API_KEY`
 
 ## 2) Backend selection
 
@@ -39,6 +40,9 @@ PRECOMPUTE_REFRESH_SECRET=replace-me
 PRECOMPUTE_MONITOR_SECRET=replace-me
 CREATIVE_CACHE_REFRESH_SECRET=replace-me
 GEMINI_API_KEY=replace-me
+ANTHROPIC_API_KEY=replace-me
+XAI_API_KEY=replace-me
+CATSCAN_LANGUAGE_AI_PROVIDER=gemini
 ```
 
 ### B) `gcp` backend (Google Secret Manager)
