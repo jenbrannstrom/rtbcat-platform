@@ -3,15 +3,27 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Server, Database, Video, Loader2, CheckCircle, XCircle, AlertTriangle, Image, Cpu, BarChart3 } from "lucide-react";
-import { getHealth, getStats, getThumbnailStatus, generateThumbnailsBatch, getSystemStatus, getSystemDataHealth } from "@/lib/api";
+import {
+  getHealth,
+  getStats,
+  getThumbnailStatus,
+  generateThumbnailsBatch,
+  getSystemStatus,
+  getSystemDataHealth,
+  getOptimizerModels,
+  listOptimizerSegmentScores,
+  listOptimizerProposals,
+} from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/contexts/i18n-context";
+import { useAccount } from "@/contexts/account-context";
 
 export default function SystemStatusPage() {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
+  const { selectedBuyerId } = useAccount();
   const [batchLimit, setBatchLimit] = useState(50);
   const [forceRetry, setForceRetry] = useState(false);
   const [healthDays, setHealthDays] = useState(7);
@@ -50,13 +62,65 @@ export default function SystemStatusPage() {
   });
 
   const { data: dataHealth, isLoading: dataHealthLoading } = useQuery({
-    queryKey: ["systemDataHealth", healthDays, healthLimit, healthStateFilter, minCompleteness],
+    queryKey: [
+      "systemDataHealth",
+      selectedBuyerId,
+      healthDays,
+      healthLimit,
+      healthStateFilter,
+      minCompleteness,
+    ],
     queryFn: () =>
       getSystemDataHealth({
         days: healthDays,
+        buyer_id: selectedBuyerId || undefined,
         limit: healthLimit,
         availability_state: healthStateFilter === "all" ? undefined : healthStateFilter,
         min_completeness_pct: normalizedMinCompleteness,
+      }),
+  });
+
+  const {
+    data: optimizerModels,
+    isLoading: optimizerModelsLoading,
+    error: optimizerModelsError,
+  } = useQuery({
+    queryKey: ["optimizerModels", selectedBuyerId],
+    queryFn: () =>
+      getOptimizerModels({
+        buyer_id: selectedBuyerId || undefined,
+        include_inactive: true,
+        limit: 200,
+        offset: 0,
+      }),
+  });
+
+  const {
+    data: optimizerScores,
+    isLoading: optimizerScoresLoading,
+    error: optimizerScoresError,
+  } = useQuery({
+    queryKey: ["optimizerScores", selectedBuyerId],
+    queryFn: () =>
+      listOptimizerSegmentScores({
+        buyer_id: selectedBuyerId || undefined,
+        days: 14,
+        limit: 20,
+        offset: 0,
+      }),
+  });
+
+  const {
+    data: optimizerProposals,
+    isLoading: optimizerProposalsLoading,
+    error: optimizerProposalsError,
+  } = useQuery({
+    queryKey: ["optimizerProposals", selectedBuyerId],
+    queryFn: () =>
+      listOptimizerProposals({
+        buyer_id: selectedBuyerId || undefined,
+        limit: 100,
+        offset: 0,
       }),
   });
 
@@ -66,6 +130,21 @@ export default function SystemStatusPage() {
       queryClient.invalidateQueries({ queryKey: ["thumbnailStatus"] });
     },
   });
+
+  const activeModelCount = optimizerModels?.rows.filter((row) => row.is_active).length ?? 0;
+  const proposalRows = optimizerProposals?.rows ?? [];
+  const proposalStatusCounts = proposalRows.reduce(
+    (acc, row) => {
+      const key = row.status || "draft";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
+  const optimizerPanelLoading =
+    optimizerModelsLoading || optimizerScoresLoading || optimizerProposalsLoading;
+  const optimizerPanelError =
+    optimizerModelsError || optimizerScoresError || optimizerProposalsError;
 
   if (healthLoading) {
     return <LoadingPage />;
@@ -215,6 +294,141 @@ export default function SystemStatusPage() {
             </div>
           ) : (
             <div className="text-sm text-gray-500">{t.settings.systemStatusUnavailable}</div>
+          )}
+        </div>
+
+        {/* Optimizer Control Plane Panel */}
+        <div className="card p-6">
+          <div className="flex items-center mb-4">
+            <BarChart3 className="h-5 w-5 text-gray-400 mr-2" />
+            <h2 className="text-lg font-medium text-gray-900">Optimizer Control Plane</h2>
+          </div>
+
+          {optimizerPanelLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+            </div>
+          ) : optimizerPanelError ? (
+            <div className="text-sm text-red-600">
+              {optimizerPanelError instanceof Error
+                ? optimizerPanelError.message
+                : "Failed to load optimizer control plane data."}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <div className="text-xs text-gray-500">Models</div>
+                  <div className="mt-1 text-lg font-semibold text-gray-900">
+                    {activeModelCount}/{optimizerModels?.meta.total ?? 0}
+                  </div>
+                  <div className="text-xs text-gray-500">active/total</div>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <div className="text-xs text-gray-500">Scores (14d)</div>
+                  <div className="mt-1 text-lg font-semibold text-gray-900">
+                    {optimizerScores?.meta.total ?? 0}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    latest: {optimizerScores?.rows[0]?.score_date || "-"}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <div className="text-xs text-gray-500">Proposals</div>
+                  <div className="mt-1 text-lg font-semibold text-gray-900">
+                    {optimizerProposals?.meta.total ?? 0}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    draft {proposalStatusCounts.draft || 0}, approved {proposalStatusCounts.approved || 0}, applied{" "}
+                    {proposalStatusCounts.applied || 0}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50">
+                  Recent Segment Scores
+                </div>
+                {optimizerScores?.rows.length ? (
+                  <div className="max-h-52 overflow-auto">
+                    <table className="min-w-full text-xs">
+                      <thead className="bg-gray-50 text-gray-600">
+                        <tr>
+                          <th className="text-left px-3 py-2">Date</th>
+                          <th className="text-left px-3 py-2">Billing</th>
+                          <th className="text-left px-3 py-2">Score</th>
+                          <th className="text-left px-3 py-2">Confidence</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {optimizerScores.rows.slice(0, 8).map((row) => (
+                          <tr key={row.score_id} className="border-t border-gray-100">
+                            <td className="px-3 py-2 text-gray-700">{row.score_date || "-"}</td>
+                            <td className="px-3 py-2 font-mono text-gray-700">{row.billing_id || "-"}</td>
+                            <td className="px-3 py-2 text-gray-700">{row.value_score.toFixed(3)}</td>
+                            <td className="px-3 py-2 text-gray-700">{row.confidence.toFixed(3)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="px-3 py-4 text-xs text-gray-500">No segment scores found.</div>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50">
+                  Recent QPS Proposals
+                </div>
+                {optimizerProposals?.rows.length ? (
+                  <div className="max-h-52 overflow-auto">
+                    <table className="min-w-full text-xs">
+                      <thead className="bg-gray-50 text-gray-600">
+                        <tr>
+                          <th className="text-left px-3 py-2">Updated</th>
+                          <th className="text-left px-3 py-2">Billing</th>
+                          <th className="text-left px-3 py-2">Delta QPS</th>
+                          <th className="text-left px-3 py-2">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {optimizerProposals.rows.slice(0, 8).map((row) => (
+                          <tr key={row.proposal_id} className="border-t border-gray-100">
+                            <td className="px-3 py-2 text-gray-700">{row.updated_at || row.created_at || "-"}</td>
+                            <td className="px-3 py-2 font-mono text-gray-700">{row.billing_id || "-"}</td>
+                            <td
+                              className={cn(
+                                "px-3 py-2 font-medium",
+                                row.delta_qps >= 0 ? "text-green-700" : "text-red-700",
+                              )}
+                            >
+                              {row.delta_qps >= 0 ? "+" : ""}
+                              {row.delta_qps.toFixed(2)}
+                            </td>
+                            <td className="px-3 py-2">
+                              <span
+                                className={cn(
+                                  "inline-flex rounded px-2 py-0.5 text-xs font-medium",
+                                  row.status === "draft" && "bg-slate-100 text-slate-700",
+                                  row.status === "approved" && "bg-blue-50 text-blue-700",
+                                  row.status === "applied" && "bg-green-50 text-green-700",
+                                  row.status === "rejected" && "bg-red-50 text-red-700",
+                                )}
+                              >
+                                {row.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="px-3 py-4 text-xs text-gray-500">No proposals found.</div>
+                )}
+              </div>
+            </div>
           )}
         </div>
 

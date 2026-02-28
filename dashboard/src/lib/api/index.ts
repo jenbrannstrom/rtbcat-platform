@@ -34,3 +34,4 @@ export * from "./analytics";
 export * from "./snapshots";
 export * from "./settings";
 export * from "./uploads";
+export * from "./optimizer";
