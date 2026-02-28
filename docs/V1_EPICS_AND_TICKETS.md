@@ -40,7 +40,7 @@
 - `E4-003` started (audit linkage slice): optimizer-triggered rollbacks can now attach `proposal_id` + reason context to pretargeting history entries, and History UI renders this rollback context for operator traceability.
 - `QA-004` started (audit coverage slice): API tests now verify rollback context passthrough (`proposal_id`/reason/user) and history rollback-context serialization from both JSON objects and JSON strings.
 - `E4-003` started: operator playbook drafted in `docs/OPTIMIZER_V1_OPERATOR_RUNBOOK.md` covering preflight checks, score/propose/apply workflow, rollback procedure, and webhook security controls.
-- `QA-004` started: canary go/no-go checklist drafted in `docs/V1_CANARY_GO_NO_GO_CHECKLIST.md` with data integrity, conversion ingestion, optimizer workflow, and rollback gates; runnable smoke script added at `scripts/v1_canary_smoke.py` with env-driven wrapper `scripts/run_v1_canary_smoke.sh`, stricter readiness assertions, and root `make v1-canary-smoke` / `make phase0-gate` entrypoints.
+- `QA-004` started: canary go/no-go checklist drafted in `docs/V1_CANARY_GO_NO_GO_CHECKLIST.md` with data integrity, conversion ingestion, optimizer workflow, and rollback gates; runnable smoke script added at `scripts/v1_canary_smoke.py` with env-driven wrapper `scripts/run_v1_canary_smoke.sh`, stricter readiness assertions, root `make v1-canary-smoke` / `make phase0-gate` entrypoints, and unit coverage in `tests/test_v1_canary_smoke.py`.
 
 ---
 
