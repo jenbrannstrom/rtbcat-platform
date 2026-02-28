@@ -52,6 +52,7 @@ Optional workflow tuning for canary:
 
 ```bash
 CATSCAN_CANARY_RUN_WORKFLOW=1 \
+CATSCAN_CANARY_WORKFLOW_PROFILE=balanced \
 CATSCAN_CANARY_WORKFLOW_DAYS=14 \
 CATSCAN_CANARY_WORKFLOW_SCORE_LIMIT=1000 \
 CATSCAN_CANARY_WORKFLOW_PROPOSAL_LIMIT=200 \
@@ -59,6 +60,8 @@ CATSCAN_CANARY_WORKFLOW_MIN_CONFIDENCE=0.3 \
 CATSCAN_CANARY_WORKFLOW_MAX_DELTA_PCT=0.3 \
 make v1-canary-smoke
 ```
+
+`CATSCAN_CANARY_WORKFLOW_PROFILE` forwards the workflow profile hint to the API while explicit numeric values remain authoritative overrides.
 
 Preset shortcut (same profile concept as UI runtime controls):
 

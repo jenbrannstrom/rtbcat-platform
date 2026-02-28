@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.v1_canary_smoke import SmokeFailure, validate_data_health_payload
+from scripts.v1_canary_smoke import SmokeFailure, build_workflow_request_params, validate_data_health_payload
 
 
 def _base_payload() -> dict:
@@ -70,3 +70,34 @@ def test_validate_data_health_payload_rejects_non_healthy_when_strict():
             require_healthy_readiness=True,
             max_dimension_missing_pct=99.9,
         )
+
+
+def test_build_workflow_request_params_includes_profile_when_present():
+    params = build_workflow_request_params(
+        model_id="model-1",
+        buyer_id="buyer-1",
+        workflow_days=14,
+        workflow_score_limit=1000,
+        workflow_proposal_limit=200,
+        workflow_min_confidence=0.3,
+        workflow_max_delta_pct=0.3,
+        workflow_profile="balanced",
+    )
+    assert params["profile"] == "balanced"
+    assert params["days"] == 14
+    assert params["score_limit"] == 1000
+
+
+def test_build_workflow_request_params_omits_profile_when_missing():
+    params = build_workflow_request_params(
+        model_id="model-1",
+        buyer_id=None,
+        workflow_days=14,
+        workflow_score_limit=1000,
+        workflow_proposal_limit=200,
+        workflow_min_confidence=0.3,
+        workflow_max_delta_pct=0.3,
+        workflow_profile=None,
+    )
+    assert "profile" not in params
+    assert params["buyer_id"] is None

@@ -144,6 +144,31 @@ def validate_data_health_payload(
         )
 
 
+def build_workflow_request_params(
+    *,
+    model_id: str,
+    buyer_id: str | None,
+    workflow_days: int,
+    workflow_score_limit: int,
+    workflow_proposal_limit: int,
+    workflow_min_confidence: float,
+    workflow_max_delta_pct: float,
+    workflow_profile: str | None,
+) -> dict[str, Any]:
+    params: dict[str, Any] = {
+        "model_id": model_id,
+        "buyer_id": buyer_id,
+        "days": workflow_days,
+        "score_limit": workflow_score_limit,
+        "proposal_limit": workflow_proposal_limit,
+        "min_confidence": workflow_min_confidence,
+        "max_delta_pct": workflow_max_delta_pct,
+    }
+    if workflow_profile:
+        params["profile"] = workflow_profile
+    return params
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run v1 canary smoke checks against API.")
     parser.add_argument(
@@ -179,16 +204,27 @@ def main() -> int:
         action="store_true",
         help="Do not fail if no active model is found.",
     )
-    parser.add_argument("--workflow-days", type=int, default=int(os.getenv("CATSCAN_CANARY_WORKFLOW_DAYS", "7")))
+    default_workflow_profile = (
+        os.getenv("CATSCAN_CANARY_WORKFLOW_PROFILE")
+        or os.getenv("CATSCAN_CANARY_PROFILE")
+        or ""
+    ).strip().lower()
+    parser.add_argument(
+        "--workflow-profile",
+        choices=("safe", "balanced", "aggressive"),
+        default=default_workflow_profile or None,
+        help="Optional workflow preset profile forwarded to /optimizer/workflows/score-and-propose.",
+    )
+    parser.add_argument("--workflow-days", type=int, default=int(os.getenv("CATSCAN_CANARY_WORKFLOW_DAYS", "14")))
     parser.add_argument(
         "--workflow-score-limit",
         type=int,
-        default=int(os.getenv("CATSCAN_CANARY_WORKFLOW_SCORE_LIMIT", "200")),
+        default=int(os.getenv("CATSCAN_CANARY_WORKFLOW_SCORE_LIMIT", "1000")),
     )
     parser.add_argument(
         "--workflow-proposal-limit",
         type=int,
-        default=int(os.getenv("CATSCAN_CANARY_WORKFLOW_PROPOSAL_LIMIT", "50")),
+        default=int(os.getenv("CATSCAN_CANARY_WORKFLOW_PROPOSAL_LIMIT", "200")),
     )
     parser.add_argument(
         "--workflow-min-confidence",
@@ -304,15 +340,16 @@ def main() -> int:
         payload = client.request(
             "POST",
             "/optimizer/workflows/score-and-propose",
-            params={
-                "model_id": resolved_model_id,
-                "buyer_id": args.buyer_id,
-                "days": args.workflow_days,
-                "score_limit": args.workflow_score_limit,
-                "proposal_limit": args.workflow_proposal_limit,
-                "min_confidence": args.workflow_min_confidence,
-                "max_delta_pct": args.workflow_max_delta_pct,
-            },
+            params=build_workflow_request_params(
+                model_id=resolved_model_id,
+                buyer_id=args.buyer_id,
+                workflow_days=args.workflow_days,
+                workflow_score_limit=args.workflow_score_limit,
+                workflow_proposal_limit=args.workflow_proposal_limit,
+                workflow_min_confidence=args.workflow_min_confidence,
+                workflow_max_delta_pct=args.workflow_max_delta_pct,
+                workflow_profile=args.workflow_profile,
+            ),
         )
         score_run = payload.get("score_run") or {}
         proposal_run = payload.get("proposal_run") or {}
