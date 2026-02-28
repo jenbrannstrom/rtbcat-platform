@@ -28,10 +28,13 @@ async def run_score_and_propose_workflow(
     model_id: str = Query(...),
     buyer_id: Optional[str] = Query(None),
     days: int = Query(14, ge=1, le=365),
+    scoring_days: Optional[int] = Query(None, ge=1, le=365, description="Deprecated alias for days"),
+    proposal_days: Optional[int] = Query(None, ge=1, le=365, description="Deprecated alias for days"),
     start_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
     event_type: Optional[str] = Query(None),
     score_limit: int = Query(1000, ge=1, le=5000),
+    scoring_limit: Optional[int] = Query(None, ge=1, le=5000, description="Deprecated alias for score_limit"),
     min_confidence: float = Query(0.3, ge=0.0, le=1.0),
     max_delta_pct: float = Query(0.3, ge=0.05, le=1.0),
     proposal_limit: int = Query(200, ge=1, le=2000),
@@ -40,6 +43,8 @@ async def run_score_and_propose_workflow(
 ):
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     resolved_buyer_id = buyer_id or "unknown"
+    resolved_days = scoring_days if scoring_days is not None else proposal_days if proposal_days is not None else days
+    resolved_score_limit = scoring_limit if scoring_limit is not None else score_limit
 
     scoring_service = OptimizerScoringService()
     proposals_service = OptimizerProposalsService()
@@ -48,16 +53,16 @@ async def run_score_and_propose_workflow(
         score_run = await scoring_service.run_scoring(
             model_id=model_id,
             buyer_id=resolved_buyer_id,
-            days=days,
+            days=resolved_days,
             start_date=start_date,
             end_date=end_date,
             event_type=event_type,
-            limit=score_limit,
+            limit=resolved_score_limit,
         )
         proposal_run = await proposals_service.generate_from_scores(
             model_id=model_id,
             buyer_id=resolved_buyer_id,
-            days=days,
+            days=resolved_days,
             min_confidence=min_confidence,
             max_delta_pct=max_delta_pct,
             limit=proposal_limit,
@@ -74,4 +79,3 @@ async def run_score_and_propose_workflow(
         score_run=score_run,
         proposal_run=proposal_run,
     )
-
