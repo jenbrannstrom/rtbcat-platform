@@ -20,6 +20,8 @@ import {
   syncOptimizerProposalApplyStatus,
   getOptimizerSetup,
   updateOptimizerSetup,
+  getOptimizerEffectiveCpm,
+  getOptimizerEfficiencySummary,
 } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
@@ -141,6 +143,32 @@ export default function SystemStatusPage() {
   });
 
   const {
+    data: optimizerEffectiveCpm,
+    isLoading: optimizerEffectiveCpmLoading,
+    error: optimizerEffectiveCpmError,
+  } = useQuery({
+    queryKey: ["optimizerEffectiveCpm", selectedBuyerId],
+    queryFn: () =>
+      getOptimizerEffectiveCpm({
+        buyer_id: selectedBuyerId || undefined,
+        days: 14,
+      }),
+  });
+
+  const {
+    data: optimizerEfficiencySummary,
+    isLoading: optimizerEfficiencySummaryLoading,
+    error: optimizerEfficiencySummaryError,
+  } = useQuery({
+    queryKey: ["optimizerEfficiencySummary", selectedBuyerId],
+    queryFn: () =>
+      getOptimizerEfficiencySummary({
+        buyer_id: selectedBuyerId || undefined,
+        days: 14,
+      }),
+  });
+
+  const {
     data: optimizerProposalHistory,
     isLoading: optimizerProposalHistoryLoading,
     error: optimizerProposalHistoryError,
@@ -205,6 +233,7 @@ export default function SystemStatusPage() {
     },
     onSuccess: (payload) => {
       queryClient.invalidateQueries({ queryKey: ["optimizerSetup"] });
+      queryClient.invalidateQueries({ queryKey: ["optimizerEffectiveCpm", selectedBuyerId] });
       setMonthlyHostingCostInput(
         payload.monthly_hosting_cost_usd === null
           ? ""
@@ -300,6 +329,20 @@ export default function SystemStatusPage() {
   const pendingProposalId = proposalActionMutation.isPending
     ? proposalActionMutation.variables?.proposalId
     : null;
+  const efficiencyBlockLoading = optimizerEffectiveCpmLoading || optimizerEfficiencySummaryLoading;
+  const efficiencyBlockError = optimizerEffectiveCpmError || optimizerEfficiencySummaryError;
+  const formatUsd = (value: number | null | undefined, decimals = 4) => {
+    if (value === null || value === undefined || !Number.isFinite(value)) {
+      return "-";
+    }
+    return `$${value.toFixed(decimals)}`;
+  };
+  const formatPct = (value: number | null | undefined) => {
+    if (value === null || value === undefined || !Number.isFinite(value)) {
+      return "-";
+    }
+    return `${(value * 100).toFixed(2)}%`;
+  };
 
   if (healthLoading) {
     return <LoadingPage />;
@@ -498,6 +541,69 @@ export default function SystemStatusPage() {
                     {proposalStatusCounts.applied || 0}
                   </div>
                 </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50">
+                  Efficiency Context (14d)
+                </div>
+                {efficiencyBlockLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                  </div>
+                ) : efficiencyBlockError ? (
+                  <div className="px-3 py-4 text-xs text-red-600">
+                    {efficiencyBlockError instanceof Error
+                      ? efficiencyBlockError.message
+                      : "Failed to load optimizer efficiency metrics."}
+                  </div>
+                ) : (
+                  <div className="space-y-3 p-3">
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="rounded-lg border border-gray-200 p-2">
+                        <div className="text-[11px] text-gray-500">Effective CPM</div>
+                        <div className="mt-1 text-sm font-semibold text-gray-900">
+                          {formatUsd(optimizerEffectiveCpm?.effective_cpm_usd, 4)}
+                        </div>
+                        <div className="text-[11px] text-gray-500">
+                          media {formatUsd(optimizerEffectiveCpm?.media_cpm_usd, 4)}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-gray-200 p-2">
+                        <div className="text-[11px] text-gray-500">QPS Efficiency</div>
+                        <div className="mt-1 text-sm font-semibold text-gray-900">
+                          {formatPct(optimizerEfficiencySummary?.qps_efficiency)}
+                        </div>
+                        <div className="text-[11px] text-gray-500">
+                          impressions / bid requests
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-gray-200 p-2">
+                        <div className="text-[11px] text-gray-500">Assumed Value / QPS</div>
+                        <div className="mt-1 text-sm font-semibold text-gray-900">
+                          {optimizerEfficiencySummary?.assumed_value_per_qps === null ||
+                          optimizerEfficiencySummary?.assumed_value_per_qps === undefined
+                            ? "-"
+                            : optimizerEfficiencySummary.assumed_value_per_qps.toFixed(6)}
+                        </div>
+                        <div className="text-[11px] text-gray-500">
+                          score {optimizerEfficiencySummary?.assumed_value_score.toFixed(3) ?? "-"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] text-gray-500">
+                      spend {formatUsd(optimizerEfficiencySummary?.spend_usd, 2)}, bid requests{" "}
+                      {(optimizerEfficiencySummary?.bid_requests ?? 0).toLocaleString()}, reached{" "}
+                      {(optimizerEfficiencySummary?.reached_queries ?? 0).toLocaleString()}, avg
+                      allocated QPS{" "}
+                      {optimizerEfficiencySummary?.avg_allocated_qps === null ||
+                      optimizerEfficiencySummary?.avg_allocated_qps === undefined
+                        ? "-"
+                        : optimizerEfficiencySummary.avg_allocated_qps.toFixed(3)}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="rounded-lg border border-gray-200 p-3">

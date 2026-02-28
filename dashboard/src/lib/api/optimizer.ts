@@ -275,6 +275,83 @@ export async function syncOptimizerProposalApplyStatus(
 }
 
 
+export interface OptimizerEffectiveCpmResponse {
+  buyer_id: string;
+  billing_id: string | null;
+  start_date: string;
+  end_date: string;
+  days: number;
+  impressions: number;
+  media_spend_usd: number;
+  monthly_hosting_cost_usd: number | null;
+  infra_cost_period_usd: number | null;
+  media_cpm_usd: number | null;
+  infra_cpm_usd: number | null;
+  effective_cpm_usd: number | null;
+  cost_context_ready: boolean;
+}
+
+
+export async function getOptimizerEffectiveCpm(params?: {
+  buyer_id?: string;
+  billing_id?: string;
+  days?: number;
+  start_date?: string;
+  end_date?: string;
+}): Promise<OptimizerEffectiveCpmResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  if (params?.billing_id) searchParams.set("billing_id", params.billing_id);
+  if (typeof params?.days === "number") searchParams.set("days", String(params.days));
+  if (params?.start_date) searchParams.set("start_date", params.start_date);
+  if (params?.end_date) searchParams.set("end_date", params.end_date);
+  const query = searchParams.toString();
+  return fetchApi<OptimizerEffectiveCpmResponse>(
+    `/optimizer/economics/effective-cpm${query ? `?${query}` : ""}`,
+  );
+}
+
+
+export interface OptimizerEfficiencySummaryResponse {
+  buyer_id: string;
+  billing_id: string | null;
+  start_date: string;
+  end_date: string;
+  days: number;
+  spend_usd: number;
+  impressions: number;
+  bid_requests: number;
+  reached_queries: number;
+  avg_daily_spend_usd: number;
+  avg_allocated_qps: number | null;
+  assumed_value_score: number;
+  qps_efficiency: number | null;
+  assumed_value_per_qps: number | null;
+  has_bid_request_data: boolean;
+  has_reached_query_data: boolean;
+}
+
+
+export async function getOptimizerEfficiencySummary(params?: {
+  buyer_id?: string;
+  billing_id?: string;
+  days?: number;
+  start_date?: string;
+  end_date?: string;
+}): Promise<OptimizerEfficiencySummaryResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  if (params?.billing_id) searchParams.set("billing_id", params.billing_id);
+  if (typeof params?.days === "number") searchParams.set("days", String(params.days));
+  if (params?.start_date) searchParams.set("start_date", params.start_date);
+  if (params?.end_date) searchParams.set("end_date", params.end_date);
+  const query = searchParams.toString();
+  return fetchApi<OptimizerEfficiencySummaryResponse>(
+    `/optimizer/economics/efficiency${query ? `?${query}` : ""}`,
+  );
+}
+
+
 export interface OptimizerSetupResponse {
   monthly_hosting_cost_usd: number | null;
   effective_cpm_enabled: boolean;
