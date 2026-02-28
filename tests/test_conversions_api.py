@@ -354,6 +354,79 @@ def test_ingest_generic_postback_forwards_payload(monkeypatch: pytest.MonkeyPatc
     assert payload["source_type"] == "redtrack"
 
 
+def test_ingest_conversion_pixel_returns_gif_and_forwards_payload(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    client = _build_client(stub, ingestion_stub, monkeypatch)
+
+    response = client.get(
+        "/api/conversions/pixel",
+        params={
+            "buyer_id": "1111111111",
+            "source_type": "pixel",
+            "event_name": "purchase",
+            "event_ts": "2026-02-28T00:00:00Z",
+            "event_id": "evt-px-1",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/gif")
+    assert response.headers["x-catscan-conversion-status"] == "accepted"
+    assert response.content.startswith(b"GIF89a")
+    assert len(ingestion_stub.provider_calls) == 1
+    assert ingestion_stub.provider_calls[0]["source_type"] == "pixel"
+    assert ingestion_stub.provider_calls[0]["buyer_id_override"] == "1111111111"
+
+
+def test_ingest_conversion_pixel_records_dlq_on_ingest_failure(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService(fail_provider=True)
+    client = _build_client(stub, ingestion_stub, monkeypatch)
+
+    response = client.get(
+        "/api/conversions/pixel",
+        params={
+            "buyer_id": "1111111111",
+            "source_type": "pixel",
+            "event_name": "purchase",
+            "event_ts": "2026-02-28T00:00:00Z",
+            "event_id": "evt-px-2",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/gif")
+    assert response.headers["x-catscan-conversion-status"] == "rejected"
+    assert response.content.startswith(b"GIF89a")
+    assert len(ingestion_stub.provider_calls) == 1
+    assert len(ingestion_stub.failure_records) == 1
+    assert ingestion_stub.failure_records[0]["source_type"] == "pixel"
+    assert ingestion_stub.failure_records[0]["buyer_id"] == "1111111111"
+
+
+def test_ingest_conversion_pixel_requires_generic_secret_when_configured(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    client = _build_client(stub, ingestion_stub, monkeypatch)
+    monkeypatch.setenv("CATSCAN_GENERIC_CONVERSION_WEBHOOK_SECRET", "pixel-secret")
+
+    no_secret = client.get(
+        "/api/conversions/pixel",
+        params={"event_name": "purchase", "event_ts": "2026-02-28T00:00:00Z"},
+    )
+    assert no_secret.status_code == 401
+
+    with_secret = client.get(
+        "/api/conversions/pixel",
+        params={"event_name": "purchase", "event_ts": "2026-02-28T00:00:00Z"},
+        headers={"X-Webhook-Secret": "pixel-secret"},
+    )
+    assert with_secret.status_code == 200
+    assert with_secret.headers["content-type"].startswith("image/gif")
+    assert len(ingestion_stub.provider_calls) == 1
+
+
 def test_ingest_appsflyer_requires_secret_when_configured(monkeypatch: pytest.MonkeyPatch):
     stub = _StubConversionsService()
     ingestion_stub = _StubConversionIngestionService()

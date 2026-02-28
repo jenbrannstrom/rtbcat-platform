@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from threading import Lock
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from pydantic import BaseModel
 
 from api.dependencies import get_current_user, get_store, resolve_buyer_id
@@ -206,6 +206,11 @@ _HMAC_SECRET_ENV_BY_SOURCE = {
 
 _WEBHOOK_RATE_LIMIT_STATE: dict[str, deque[int]] = {}
 _WEBHOOK_RATE_LIMIT_LOCK = Lock()
+_PIXEL_GIF_BYTES = (
+    b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!"
+    b"\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00"
+    b"\x00\x02\x02D\x01\x00;"
+)
 
 
 def _extract_auth_bearer_token(request: Request) -> Optional[str]:
@@ -479,6 +484,18 @@ def _safe_request_headers(request: Request) -> dict[str, str]:
     }
 
 
+def _pixel_response(*, ingest_status: str) -> Response:
+    return Response(
+        content=_PIXEL_GIF_BYTES,
+        media_type="image/gif",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "X-CatScan-Conversion-Status": ingest_status,
+        },
+    )
+
+
 async def _ingest_with_dlq(
     *,
     request: Request,
@@ -587,6 +604,29 @@ async def ingest_generic_postback(
         payload=payload,
         buyer_id=buyer_id,
     )
+
+
+@router.get("/pixel")
+async def ingest_conversion_pixel(
+    request: Request,
+    buyer_id: Optional[str] = Query(None, description="Optional buyer override"),
+):
+    payload = await _parse_payload(request)
+    payload = normalize_generic_payload(payload)
+    _verify_webhook_secret("generic", request, payload)
+    _verify_webhook_signature("generic", request, payload)
+    source_type = str(payload.get("source_type") or "pixel")
+    _enforce_webhook_rate_limit(source_type, request)
+    try:
+        await _ingest_with_dlq(
+            request=request,
+            source_type=source_type,
+            payload=payload,
+            buyer_id=buyer_id,
+        )
+    except HTTPException:
+        return _pixel_response(ingest_status="rejected")
+    return _pixel_response(ingest_status="accepted")
 
 
 @router.post("/csv/upload", response_model=ConversionCSVIngestResponse)
