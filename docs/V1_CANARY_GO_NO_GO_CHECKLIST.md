@@ -17,6 +17,15 @@ python3 scripts/v1_canary_smoke.py \
 
 Add `--billing-id <billing_id> --snapshot-id <snapshot_id>` to include rollback dry-run check.
 
+Or use the env-driven wrapper:
+
+```bash
+CATSCAN_API_BASE_URL=http://127.0.0.1:8000 \
+CATSCAN_BUYER_ID=<buyer_id> \
+CATSCAN_CANARY_RUN_WORKFLOW=1 \
+bash scripts/run_v1_canary_smoke.sh
+```
+
 ## 1. Pre-Canary Gate (Must Pass)
 
 1. Latest migration set applied without error in target environment.
