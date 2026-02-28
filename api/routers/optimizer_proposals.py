@@ -45,6 +45,23 @@ class ProposalListResponse(BaseModel):
     meta: ProposalMeta
 
 
+class ProposalHistoryRow(BaseModel):
+    event_id: str
+    proposal_id: str
+    buyer_id: str
+    from_status: Optional[str] = None
+    to_status: str
+    apply_mode: Optional[str] = None
+    changed_by: Optional[str] = None
+    details: dict[str, Any]
+    created_at: Optional[str] = None
+
+
+class ProposalHistoryResponse(BaseModel):
+    rows: list[ProposalHistoryRow]
+    meta: ProposalMeta
+
+
 class ProposalGenerateTop(BaseModel):
     proposal_id: str
     billing_id: str
@@ -142,6 +159,26 @@ async def get_qps_proposal(
     if not payload:
         raise HTTPException(status_code=404, detail="Proposal not found")
     return ProposalRow(**payload)
+
+
+@router.get("/{proposal_id}/history", response_model=ProposalHistoryResponse)
+async def list_qps_proposal_history(
+    proposal_id: str,
+    buyer_id: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    service = OptimizerProposalsService()
+    payload = await service.list_history(
+        proposal_id=proposal_id,
+        buyer_id=resolved_buyer_id or "unknown",
+        limit=limit,
+        offset=offset,
+    )
+    return ProposalHistoryResponse(**payload)
 
 
 async def _update_proposal_status(

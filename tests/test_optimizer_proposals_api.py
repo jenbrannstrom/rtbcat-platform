@@ -18,6 +18,7 @@ class _StubOptimizerProposalsService:
         self.generate_calls: list[dict] = []
         self.list_calls: list[dict] = []
         self.get_calls: list[dict] = []
+        self.list_history_calls: list[dict] = []
         self.update_calls: list[dict] = []
         self.sync_calls: list[dict] = []
         self.not_found_ids: set[str] = {"missing"}
@@ -93,6 +94,31 @@ class _StubOptimizerProposalsService:
             "created_at": "2026-02-28T00:00:00+00:00",
             "updated_at": "2026-02-28T00:00:00+00:00",
             "applied_at": None,
+        }
+
+    async def list_history(self, **kwargs):
+        self.list_history_calls.append(kwargs)
+        return {
+            "rows": [
+                {
+                    "event_id": "prp_evt_1",
+                    "proposal_id": kwargs["proposal_id"],
+                    "buyer_id": kwargs["buyer_id"],
+                    "from_status": "draft",
+                    "to_status": "approved",
+                    "apply_mode": None,
+                    "changed_by": "u1",
+                    "details": {"transition": "manual_workflow"},
+                    "created_at": "2026-02-28T00:05:00+00:00",
+                }
+            ],
+            "meta": {
+                "total": 1,
+                "returned": 1,
+                "limit": kwargs.get("limit", 100),
+                "offset": kwargs.get("offset", 0),
+                "has_more": False,
+            },
         }
 
     async def update_status(self, **kwargs):
@@ -231,6 +257,27 @@ def test_get_qps_proposal_endpoint(monkeypatch: pytest.MonkeyPatch):
     assert len(stub.get_calls) == 1
     assert stub.get_calls[0]["proposal_id"] == "prp_1"
     assert response.json()["proposal_id"] == "prp_1"
+
+
+def test_list_qps_proposal_history_endpoint(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubOptimizerProposalsService()
+    client = _build_client(stub, monkeypatch)
+
+    response = client.get(
+        "/api/optimizer/proposals/prp_1/history",
+        params={"buyer_id": "1111111111", "limit": 25, "offset": 0},
+    )
+
+    assert response.status_code == 200
+    assert len(stub.list_history_calls) == 1
+    call = stub.list_history_calls[0]
+    assert call["proposal_id"] == "prp_1"
+    assert call["buyer_id"] == "1111111111"
+    assert call["limit"] == 25
+    payload = response.json()
+    assert payload["meta"]["total"] == 1
+    assert payload["rows"][0]["event_id"] == "prp_evt_1"
+    assert payload["rows"][0]["to_status"] == "approved"
 
 
 def test_approve_reject_apply_proposal_endpoints(monkeypatch: pytest.MonkeyPatch):

@@ -63,7 +63,8 @@ async def test_generate_from_scores_creates_rows(monkeypatch: pytest.MonkeyPatch
     assert payload["proposals_created"] == 2
     assert len(payload["top_proposals"]) == 2
     assert inserts
-    assert "INSERT INTO qps_allocation_proposals" in inserts[0][0]
+    assert any("INSERT INTO qps_allocation_proposals" in sql for sql, _ in inserts)
+    assert any("INSERT INTO qps_allocation_proposal_history" in sql for sql, _ in inserts)
 
 
 @pytest.mark.asyncio
@@ -110,6 +111,8 @@ async def test_list_proposals_returns_meta(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.asyncio
 async def test_update_status_returns_row(monkeypatch: pytest.MonkeyPatch):
+    executes: list[tuple[str, tuple]] = []
+
     async def _stub_query_one(sql: str, params: tuple = ()):
         if "FROM qps_allocation_proposals" in sql and "LIMIT 1" in sql:
             return {
@@ -145,7 +148,12 @@ async def test_update_status_returns_row(monkeypatch: pytest.MonkeyPatch):
             "applied_at": None,
         }
 
+    async def _stub_execute(sql: str, params: tuple = ()) -> int:
+        executes.append((sql, params))
+        return 1
+
     monkeypatch.setattr("services.optimizer_proposals_service.pg_query_one", _stub_query_one)
+    monkeypatch.setattr("services.optimizer_proposals_service.pg_execute", _stub_execute)
     service = OptimizerProposalsService()
     payload = await service.update_status(
         proposal_id="prp_1",
@@ -156,6 +164,7 @@ async def test_update_status_returns_row(monkeypatch: pytest.MonkeyPatch):
     assert payload is not None
     assert payload["proposal_id"] == "prp_1"
     assert payload["status"] == "approved"
+    assert any("INSERT INTO qps_allocation_proposal_history" in sql for sql, _ in executes)
 
 
 @pytest.mark.asyncio
@@ -203,6 +212,8 @@ async def test_update_status_rejects_invalid_transition(monkeypatch: pytest.Monk
 
 @pytest.mark.asyncio
 async def test_apply_status_queues_pending_qps_change(monkeypatch: pytest.MonkeyPatch):
+    executes: list[tuple[str, tuple]] = []
+
     class _StubPretargetingService:
         async def get_config(self, billing_id: str):
             assert billing_id == "cfg-1"
@@ -263,7 +274,12 @@ async def test_apply_status_queues_pending_qps_change(monkeypatch: pytest.Monkey
             }
         return None
 
+    async def _stub_execute(sql: str, params: tuple = ()) -> int:
+        executes.append((sql, params))
+        return 1
+
     monkeypatch.setattr("services.optimizer_proposals_service.pg_query_one", _stub_query_one)
+    monkeypatch.setattr("services.optimizer_proposals_service.pg_execute", _stub_execute)
     service = OptimizerProposalsService(
         changes_service=changes_stub,
         pretargeting_service=_StubPretargetingService(),
@@ -288,10 +304,13 @@ async def test_apply_status_queues_pending_qps_change(monkeypatch: pytest.Monkey
     assert call["field_name"] == "maximum_qps"
     assert call["value"] == "120"
     assert actions_stub.calls == []
+    assert any("INSERT INTO qps_allocation_proposal_history" in sql for sql, _ in executes)
 
 
 @pytest.mark.asyncio
 async def test_apply_status_live_executes_pending_change(monkeypatch: pytest.MonkeyPatch):
+    executes: list[tuple[str, tuple]] = []
+
     class _StubPretargetingService:
         async def get_config(self, billing_id: str):
             return {"config_id": "ptcfg-1", "bidder_id": "bidder-1"}
@@ -346,7 +365,12 @@ async def test_apply_status_live_executes_pending_change(monkeypatch: pytest.Mon
             }
         return None
 
+    async def _stub_execute(sql: str, params: tuple = ()) -> int:
+        executes.append((sql, params))
+        return 1
+
     monkeypatch.setattr("services.optimizer_proposals_service.pg_query_one", _stub_query_one)
+    monkeypatch.setattr("services.optimizer_proposals_service.pg_execute", _stub_execute)
     service = OptimizerProposalsService(
         changes_service=_StubChangesService(),
         pretargeting_service=_StubPretargetingService(),
@@ -368,6 +392,7 @@ async def test_apply_status_live_executes_pending_change(monkeypatch: pytest.Mon
     assert len(actions_stub.calls) == 1
     assert actions_stub.calls[0]["billing_id"] == "cfg-1"
     assert actions_stub.calls[0]["change_id"] == 88
+    assert any("INSERT INTO qps_allocation_proposal_history" in sql for sql, _ in executes)
 
 
 @pytest.mark.asyncio
@@ -400,6 +425,44 @@ async def test_get_proposal_returns_payload(monkeypatch: pytest.MonkeyPatch):
     assert payload is not None
     assert payload["proposal_id"] == "prp_1"
     assert payload["status"] == "draft"
+
+
+@pytest.mark.asyncio
+async def test_list_history_returns_meta(monkeypatch: pytest.MonkeyPatch):
+    async def _stub_query(sql: str, params: tuple = ()):
+        assert "FROM qps_allocation_proposal_history" in sql
+        return [
+            {
+                "event_id": "prp_evt_1",
+                "proposal_id": "prp_1",
+                "buyer_id": "1111111111",
+                "from_status": "draft",
+                "to_status": "approved",
+                "apply_mode": None,
+                "changed_by": "u1",
+                "details": {"transition": "manual_workflow"},
+                "created_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+            }
+        ]
+
+    async def _stub_query_one(sql: str, params: tuple = ()):
+        assert "COUNT(*) AS total_rows" in sql
+        return {"total_rows": 1}
+
+    monkeypatch.setattr("services.optimizer_proposals_service.pg_query", _stub_query)
+    monkeypatch.setattr("services.optimizer_proposals_service.pg_query_one", _stub_query_one)
+    service = OptimizerProposalsService()
+    payload = await service.list_history(
+        proposal_id="prp_1",
+        buyer_id="1111111111",
+        limit=50,
+        offset=0,
+    )
+
+    assert payload["meta"]["total"] == 1
+    assert payload["meta"]["returned"] == 1
+    assert payload["rows"][0]["event_id"] == "prp_evt_1"
+    assert payload["rows"][0]["to_status"] == "approved"
 
 
 @pytest.mark.asyncio
