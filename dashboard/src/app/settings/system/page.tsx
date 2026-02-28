@@ -22,6 +22,8 @@ import {
   updateOptimizerSetup,
   getOptimizerEffectiveCpm,
   getOptimizerEfficiencySummary,
+  getConversionHealth,
+  getConversionIngestionStats,
 } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
@@ -181,6 +183,33 @@ export default function SystemStatusPage() {
         offset: 0,
       }),
     enabled: !!selectedProposalHistoryId,
+  });
+
+  const {
+    data: conversionHealth,
+    isLoading: conversionHealthLoading,
+    error: conversionHealthError,
+  } = useQuery({
+    queryKey: ["conversionHealth", selectedBuyerId],
+    queryFn: () =>
+      getConversionHealth({
+        buyer_id: selectedBuyerId || undefined,
+      }),
+    retry: false,
+  });
+
+  const {
+    data: conversionIngestionStats,
+    isLoading: conversionIngestionStatsLoading,
+    error: conversionIngestionStatsError,
+  } = useQuery({
+    queryKey: ["conversionIngestionStats", selectedBuyerId],
+    queryFn: () =>
+      getConversionIngestionStats({
+        buyer_id: selectedBuyerId || undefined,
+        days: 7,
+      }),
+    retry: false,
   });
 
   useEffect(() => {
@@ -343,6 +372,8 @@ export default function SystemStatusPage() {
     }
     return `${(value * 100).toFixed(2)}%`;
   };
+  const conversionSignalsLoading = conversionHealthLoading || conversionIngestionStatsLoading;
+  const conversionSignalsError = conversionHealthError || conversionIngestionStatsError;
 
   if (healthLoading) {
     return <LoadingPage />;
@@ -602,6 +633,81 @@ export default function SystemStatusPage() {
                         ? "-"
                         : optimizerEfficiencySummary.avg_allocated_qps.toFixed(3)}
                     </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50">
+                  Conversion Signal Health (7d)
+                </div>
+                {conversionSignalsLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                  </div>
+                ) : conversionSignalsError ? (
+                  <div className="px-3 py-4 text-xs text-red-600">
+                    {conversionSignalsError instanceof Error
+                      ? conversionSignalsError.message
+                      : "Failed to load conversion signal health."}
+                  </div>
+                ) : (
+                  <div className="space-y-3 p-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-lg border border-gray-200 p-2">
+                        <div className="text-[11px] text-gray-500">Health State</div>
+                        <div className="mt-1 text-sm font-semibold text-gray-900">
+                          {conversionHealth?.state || "-"}
+                        </div>
+                        <div className="text-[11px] text-gray-500">
+                          lag {conversionHealth?.ingestion?.lag_hours ?? "-"}h
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-gray-200 p-2">
+                        <div className="text-[11px] text-gray-500">Accepted / Rejected</div>
+                        <div className="mt-1 text-sm font-semibold text-gray-900">
+                          {(conversionIngestionStats?.accepted_total ?? 0).toLocaleString()} /{" "}
+                          {(conversionIngestionStats?.rejected_total ?? 0).toLocaleString()}
+                        </div>
+                        <div className="text-[11px] text-gray-500">
+                          events {(conversionHealth?.ingestion?.total_events ?? 0).toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+
+                    {conversionIngestionStats?.rows?.length ? (
+                      <div className="max-h-40 overflow-auto">
+                        <table className="min-w-full text-xs">
+                          <thead className="bg-gray-50 text-gray-600">
+                            <tr>
+                              <th className="text-left px-2 py-1">Source</th>
+                              <th className="text-left px-2 py-1">Accepted</th>
+                              <th className="text-left px-2 py-1">Rejected</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {conversionIngestionStats.rows.slice(0, 6).map((row) => (
+                              <tr
+                                key={`${row.metric_date || "na"}-${row.source_type}`}
+                                className="border-t border-gray-100"
+                              >
+                                <td className="px-2 py-1 text-gray-700">{row.source_type}</td>
+                                <td className="px-2 py-1 text-gray-700">
+                                  {row.accepted_count.toLocaleString()}
+                                </td>
+                                <td className="px-2 py-1 text-gray-700">
+                                  {row.rejected_count.toLocaleString()}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-gray-500">
+                        No conversion ingestion events recorded in the selected window.
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
