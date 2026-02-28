@@ -36,6 +36,7 @@ class _StubOptimizerModelsService:
         self.create_calls: list[dict] = []
         self.get_calls: list[dict] = []
         self.update_calls: list[dict] = []
+        self.validate_calls: list[dict] = []
         self.not_found_ids: set[str] = {"missing"}
 
     async def list_models(self, **kwargs):
@@ -69,6 +70,20 @@ class _StubOptimizerModelsService:
         row = _model_row(model_id=kwargs.get("model_id", "mdl_1"))
         row.update({k: v for k, v in updates.items() if k in row})
         return row
+
+    async def validate_model_endpoint(self, **kwargs):
+        self.validate_calls.append(kwargs)
+        if kwargs.get("model_id") in self.not_found_ids:
+            raise ValueError("Model not found")
+        return {
+            "model_id": kwargs["model_id"],
+            "buyer_id": kwargs.get("buyer_id"),
+            "valid": True,
+            "skipped": False,
+            "http_status": 200,
+            "message": "Model endpoint validated",
+            "response_preview": '{"scores":[]}',
+        }
 
 
 def _build_client(
@@ -198,3 +213,22 @@ def test_activate_and_deactivate_optimizer_model(monkeypatch: pytest.MonkeyPatch
     assert activate.json()["is_active"] is True
     assert deactivate.json()["is_active"] is False
 
+
+def test_validate_optimizer_model(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubOptimizerModelsService()
+    client = _build_client(stub, monkeypatch)
+
+    response = client.post(
+        "/api/optimizer/models/mdl_1/validate",
+        params={"buyer_id": "1111111111", "timeout_seconds": 15},
+    )
+
+    assert response.status_code == 200
+    assert len(stub.validate_calls) == 1
+    call = stub.validate_calls[0]
+    assert call["model_id"] == "mdl_1"
+    assert call["buyer_id"] == "1111111111"
+    assert call["timeout_seconds"] == 15
+    payload = response.json()
+    assert payload["valid"] is True
+    assert payload["http_status"] == 200
