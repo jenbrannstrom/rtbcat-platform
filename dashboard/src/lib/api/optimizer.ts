@@ -135,3 +135,107 @@ export async function listOptimizerProposals(params?: {
   const query = searchParams.toString();
   return fetchApi<OptimizerProposalsResponse>(`/optimizer/proposals${query ? `?${query}` : ""}`);
 }
+
+
+export interface OptimizerScoringRunSummary {
+  model_type?: string;
+  model_id: string;
+  buyer_id: string;
+  start_date: string;
+  end_date: string;
+  event_type?: string | null;
+  segments_scanned: number;
+  scores_written: number;
+}
+
+
+export interface OptimizerProposalRunSummary {
+  model_id: string;
+  buyer_id: string;
+  days: number;
+  min_confidence: number;
+  max_delta_pct: number;
+  scores_considered: number;
+  proposals_created: number;
+}
+
+
+export interface OptimizerScoreAndProposeResponse {
+  score_run: OptimizerScoringRunSummary;
+  proposal_run: OptimizerProposalRunSummary;
+}
+
+
+export async function runOptimizerScoreAndPropose(params: {
+  model_id: string;
+  buyer_id?: string;
+  scoring_days?: number;
+  proposal_days?: number;
+  scoring_limit?: number;
+  proposal_limit?: number;
+  min_confidence?: number;
+  max_delta_pct?: number;
+}): Promise<OptimizerScoreAndProposeResponse> {
+  const searchParams = new URLSearchParams();
+  searchParams.set("model_id", params.model_id);
+  if (params.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  if (typeof params.scoring_days === "number") searchParams.set("scoring_days", String(params.scoring_days));
+  if (typeof params.proposal_days === "number") searchParams.set("proposal_days", String(params.proposal_days));
+  if (typeof params.scoring_limit === "number") searchParams.set("scoring_limit", String(params.scoring_limit));
+  if (typeof params.proposal_limit === "number") searchParams.set("proposal_limit", String(params.proposal_limit));
+  if (typeof params.min_confidence === "number") searchParams.set("min_confidence", String(params.min_confidence));
+  if (typeof params.max_delta_pct === "number") searchParams.set("max_delta_pct", String(params.max_delta_pct));
+  return fetchApi<OptimizerScoreAndProposeResponse>(
+    `/optimizer/workflows/score-and-propose?${searchParams.toString()}`,
+    { method: "POST" },
+  );
+}
+
+
+export interface OptimizerProposalStatusResponse {
+  proposal_id: string;
+  status: string;
+  apply_details?: Record<string, unknown> | null;
+}
+
+
+export async function approveOptimizerProposal(
+  proposalId: string,
+  params?: { buyer_id?: string },
+): Promise<OptimizerProposalStatusResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  const query = searchParams.toString();
+  return fetchApi<OptimizerProposalStatusResponse>(
+    `/optimizer/proposals/${encodeURIComponent(proposalId)}/approve${query ? `?${query}` : ""}`,
+    { method: "POST" },
+  );
+}
+
+
+export async function applyOptimizerProposal(
+  proposalId: string,
+  params?: { buyer_id?: string; mode?: "queue" | "live" },
+): Promise<OptimizerProposalStatusResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  searchParams.set("mode", params?.mode || "queue");
+  return fetchApi<OptimizerProposalStatusResponse>(
+    `/optimizer/proposals/${encodeURIComponent(proposalId)}/apply?${searchParams.toString()}`,
+    { method: "POST" },
+  );
+}
+
+
+export async function syncOptimizerProposalApplyStatus(
+  proposalId: string,
+  params?: { buyer_id?: string },
+): Promise<OptimizerProposalRow> {
+  const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  const query = searchParams.toString();
+  return fetchApi<OptimizerProposalRow>(
+    `/optimizer/proposals/${encodeURIComponent(proposalId)}/sync-apply-status${query ? `?${query}` : ""}`,
+    { method: "POST" },
+  );
+}

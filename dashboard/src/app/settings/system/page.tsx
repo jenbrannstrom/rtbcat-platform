@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Server, Database, Video, Loader2, CheckCircle, XCircle, AlertTriangle, Image, Cpu, BarChart3 } from "lucide-react";
 import {
@@ -13,6 +13,10 @@ import {
   getOptimizerModels,
   listOptimizerSegmentScores,
   listOptimizerProposals,
+  runOptimizerScoreAndPropose,
+  approveOptimizerProposal,
+  applyOptimizerProposal,
+  syncOptimizerProposalApplyStatus,
 } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
@@ -30,6 +34,8 @@ export default function SystemStatusPage() {
   const [healthLimit, setHealthLimit] = useState(20);
   const [healthStateFilter, setHealthStateFilter] = useState<"all" | "healthy" | "degraded" | "unavailable">("all");
   const [minCompleteness, setMinCompleteness] = useState<string>("");
+  const [selectedModelId, setSelectedModelId] = useState<string>("");
+  const [optimizerNotice, setOptimizerNotice] = useState<string>("");
   const parsedMinCompleteness = Number(minCompleteness);
   const normalizedMinCompleteness =
     minCompleteness.trim() === "" || !Number.isFinite(parsedMinCompleteness)
@@ -124,6 +130,16 @@ export default function SystemStatusPage() {
       }),
   });
 
+  useEffect(() => {
+    const activeModels = (optimizerModels?.rows || []).filter((row) => row.is_active);
+    if (selectedModelId && activeModels.some((row) => row.model_id === selectedModelId)) {
+      return;
+    }
+    if (activeModels.length > 0) {
+      setSelectedModelId(activeModels[0].model_id);
+    }
+  }, [optimizerModels, selectedModelId]);
+
   const generateMutation = useMutation({
     mutationFn: () => generateThumbnailsBatch({ limit: batchLimit, force: forceRetry }),
     onSuccess: () => {
@@ -131,7 +147,67 @@ export default function SystemStatusPage() {
     },
   });
 
+  const scoreAndProposeMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedModelId) {
+        throw new Error("Select an active model before running score + propose.");
+      }
+      return runOptimizerScoreAndPropose({
+        model_id: selectedModelId,
+        buyer_id: selectedBuyerId || undefined,
+        scoring_days: 14,
+        proposal_days: 14,
+        min_confidence: 0.3,
+        max_delta_pct: 0.3,
+        scoring_limit: 1000,
+        proposal_limit: 200,
+      });
+    },
+    onSuccess: (payload) => {
+      queryClient.invalidateQueries({ queryKey: ["optimizerScores", selectedBuyerId] });
+      queryClient.invalidateQueries({ queryKey: ["optimizerProposals", selectedBuyerId] });
+      setOptimizerNotice(
+        `Score + propose completed: ${payload.score_run.scores_written} scores written, ${payload.proposal_run.proposals_created} proposals created.`,
+      );
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to run score + propose workflow.";
+      setOptimizerNotice(msg);
+    },
+  });
+
+  const proposalActionMutation = useMutation({
+    mutationFn: async (params: { proposalId: string; action: "approve" | "apply" | "sync" }) => {
+      if (params.action === "approve") {
+        await approveOptimizerProposal(params.proposalId, {
+          buyer_id: selectedBuyerId || undefined,
+        });
+        return "Proposal approved.";
+      }
+      if (params.action === "apply") {
+        await applyOptimizerProposal(params.proposalId, {
+          buyer_id: selectedBuyerId || undefined,
+          mode: "queue",
+        });
+        return "Proposal applied in queue mode.";
+      }
+      await syncOptimizerProposalApplyStatus(params.proposalId, {
+        buyer_id: selectedBuyerId || undefined,
+      });
+      return "Proposal apply status synced.";
+    },
+    onSuccess: (message) => {
+      queryClient.invalidateQueries({ queryKey: ["optimizerProposals", selectedBuyerId] });
+      setOptimizerNotice(message);
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to run proposal action.";
+      setOptimizerNotice(msg);
+    },
+  });
+
   const activeModelCount = optimizerModels?.rows.filter((row) => row.is_active).length ?? 0;
+  const activeModels = (optimizerModels?.rows || []).filter((row) => row.is_active);
   const proposalRows = optimizerProposals?.rows ?? [];
   const proposalStatusCounts = proposalRows.reduce(
     (acc, row) => {
@@ -145,6 +221,9 @@ export default function SystemStatusPage() {
     optimizerModelsLoading || optimizerScoresLoading || optimizerProposalsLoading;
   const optimizerPanelError =
     optimizerModelsError || optimizerScoresError || optimizerProposalsError;
+  const pendingProposalId = proposalActionMutation.isPending
+    ? proposalActionMutation.variables?.proposalId
+    : null;
 
   if (healthLoading) {
     return <LoadingPage />;
@@ -345,6 +424,55 @@ export default function SystemStatusPage() {
                 </div>
               </div>
 
+              <div className="rounded-lg border border-gray-200 p-3">
+                <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                  <label className="text-xs text-gray-600">
+                    Active Model
+                    <select
+                      value={selectedModelId}
+                      onChange={(e) => setSelectedModelId(e.target.value)}
+                      className="mt-1 block min-w-52 input py-1 text-sm"
+                      disabled={scoreAndProposeMutation.isPending || activeModels.length === 0}
+                    >
+                      {activeModels.length === 0 ? (
+                        <option value="">No active models</option>
+                      ) : (
+                        activeModels.map((model) => (
+                          <option key={model.model_id} value={model.model_id}>
+                            {model.name} ({model.model_type})
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => scoreAndProposeMutation.mutate()}
+                    disabled={scoreAndProposeMutation.isPending || !selectedModelId}
+                    className={cn(
+                      "btn-primary",
+                      (scoreAndProposeMutation.isPending || !selectedModelId) &&
+                        "cursor-not-allowed opacity-50",
+                    )}
+                  >
+                    {scoreAndProposeMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Running...
+                      </>
+                    ) : (
+                      "Run Score + Propose"
+                    )}
+                  </button>
+                </div>
+                {optimizerNotice ? (
+                  <div className="mt-3 rounded bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                    {optimizerNotice}
+                  </div>
+                ) : null}
+              </div>
+
               <div className="rounded-lg border border-gray-200 overflow-hidden">
                 <div className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50">
                   Recent Segment Scores
@@ -390,6 +518,7 @@ export default function SystemStatusPage() {
                           <th className="text-left px-3 py-2">Billing</th>
                           <th className="text-left px-3 py-2">Delta QPS</th>
                           <th className="text-left px-3 py-2">Status</th>
+                          <th className="text-left px-3 py-2">Action</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -418,6 +547,68 @@ export default function SystemStatusPage() {
                               >
                                 {row.status}
                               </span>
+                            </td>
+                            <td className="px-3 py-2">
+                              {row.status === "draft" ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    proposalActionMutation.mutate({
+                                      proposalId: row.proposal_id,
+                                      action: "approve",
+                                    })
+                                  }
+                                  disabled={proposalActionMutation.isPending}
+                                  className={cn(
+                                    "rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700",
+                                    proposalActionMutation.isPending &&
+                                      pendingProposalId === row.proposal_id &&
+                                      "opacity-60",
+                                  )}
+                                >
+                                  Approve
+                                </button>
+                              ) : row.status === "approved" ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    proposalActionMutation.mutate({
+                                      proposalId: row.proposal_id,
+                                      action: "apply",
+                                    })
+                                  }
+                                  disabled={proposalActionMutation.isPending}
+                                  className={cn(
+                                    "rounded bg-green-50 px-2 py-1 text-xs font-medium text-green-700",
+                                    proposalActionMutation.isPending &&
+                                      pendingProposalId === row.proposal_id &&
+                                      "opacity-60",
+                                  )}
+                                >
+                                  Apply Queue
+                                </button>
+                              ) : row.status === "applied" ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    proposalActionMutation.mutate({
+                                      proposalId: row.proposal_id,
+                                      action: "sync",
+                                    })
+                                  }
+                                  disabled={proposalActionMutation.isPending}
+                                  className={cn(
+                                    "rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700",
+                                    proposalActionMutation.isPending &&
+                                      pendingProposalId === row.proposal_id &&
+                                      "opacity-60",
+                                  )}
+                                >
+                                  Sync
+                                </button>
+                              ) : (
+                                <span className="text-xs text-gray-400">-</span>
+                              )}
                             </td>
                           </tr>
                         ))}
