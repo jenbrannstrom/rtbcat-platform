@@ -10,6 +10,10 @@ from typing import Any, Optional
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 
+from services.optimizer_model_crypto import (
+    decrypt_optimizer_model_auth_header,
+    encrypt_optimizer_model_auth_header,
+)
 from storage.postgres_database import pg_query, pg_query_one
 
 
@@ -76,6 +80,7 @@ class OptimizerModelsService:
         safe_model_type = _normalize_model_type(model_type)
         if safe_model_type == "api" and not str(endpoint_url or "").strip():
             raise ValueError("endpoint_url is required for api model_type")
+        stored_auth_header = encrypt_optimizer_model_auth_header(auth_header_encrypted)
 
         model_id = f"mdl_{uuid.uuid4().hex}"
         row = await pg_query_one(
@@ -117,7 +122,7 @@ class OptimizerModelsService:
                 description,
                 safe_model_type,
                 endpoint_url,
-                auth_header_encrypted,
+                stored_auth_header,
                 json.dumps(input_schema or {}),
                 json.dumps(output_schema or {}),
                 bool(is_active),
@@ -226,6 +231,31 @@ class OptimizerModelsService:
             return None
         return _model_row_to_payload(row)
 
+    async def get_model_auth_header(
+        self,
+        *,
+        model_id: str,
+        buyer_id: Optional[str] = None,
+    ) -> Optional[str]:
+        clauses = ["model_id = %s"]
+        params: list[Any] = [model_id]
+        if buyer_id:
+            clauses.append("buyer_id = %s")
+            params.append(buyer_id)
+        where_sql = " AND ".join(clauses)
+        row = await pg_query_one(
+            f"""
+            SELECT auth_header_encrypted
+            FROM optimization_models
+            WHERE {where_sql}
+            LIMIT 1
+            """,
+            tuple(params),
+        )
+        if not row:
+            return None
+        return decrypt_optimizer_model_auth_header(row.get("auth_header_encrypted"))
+
     async def update_model(
         self,
         *,
@@ -271,7 +301,9 @@ class OptimizerModelsService:
             params.append(updates.get("endpoint_url"))
         if "auth_header_encrypted" in updates:
             set_clauses.append("auth_header_encrypted = %s")
-            params.append(updates.get("auth_header_encrypted"))
+            params.append(
+                encrypt_optimizer_model_auth_header(updates.get("auth_header_encrypted"))
+            )
         if "input_schema" in updates:
             set_clauses.append("input_schema = %s::jsonb")
             params.append(json.dumps(updates.get("input_schema") or {}))
@@ -348,19 +380,11 @@ class OptimizerModelsService:
             "features": [],
         }
         headers = {"Content-Type": "application/json"}
-        if model.get("has_auth_header"):
-            # auth_header_encrypted is write-only in API responses; pull it directly.
-            raw_model = await pg_query_one(
-                """
-                SELECT auth_header_encrypted
-                FROM optimization_models
-                WHERE model_id = %s
-                LIMIT 1
-                """,
-                (model_id,),
-            )
-            if raw_model and raw_model.get("auth_header_encrypted"):
-                headers["Authorization"] = str(raw_model.get("auth_header_encrypted"))
+        auth_header = None
+        if model.get("has_auth_header") or model.get("auth_header_encrypted"):
+            auth_header = await self.get_model_auth_header(model_id=model_id, buyer_id=buyer_id)
+        if auth_header:
+            headers["Authorization"] = auth_header
 
         result = await self._post_json(
             endpoint_url=endpoint_url,
