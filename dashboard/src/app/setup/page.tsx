@@ -9,6 +9,7 @@ import {
   getSystemDataHealth,
   getOptimizerModels,
   getOptimizerSetup,
+  getConversionHealth,
 } from "@/lib/api";
 import { ErrorPage } from "@/components/error";
 import { LoadingPage } from "@/components/loading";
@@ -70,7 +71,17 @@ export default function SetupPage() {
     queryFn: getOptimizerSetup,
   });
 
-  if (seatsLoading || dataHealthLoading || modelsLoading || optimizerSetupLoading) {
+  const {
+    data: conversionHealth,
+    isLoading: conversionHealthLoading,
+    error: conversionHealthError,
+  } = useQuery({
+    queryKey: ["setupConversionHealth"],
+    queryFn: () => getConversionHealth(),
+    retry: false,
+  });
+
+  if (seatsLoading || dataHealthLoading || modelsLoading || optimizerSetupLoading || conversionHealthLoading) {
     return <LoadingPage />;
   }
 
@@ -95,6 +106,8 @@ export default function SetupPage() {
   const activeModels = (optimizerModels?.rows || []).filter((row) => row.is_active);
   const modelsReady = activeModels.length > 0;
   const hostingCostReady = (optimizerSetup?.monthly_hosting_cost_usd || 0) > 0;
+  const conversionSourcesReady = (conversionHealth?.ingestion?.total_events || 0) > 0;
+  const conversionHealthUnavailable = !!conversionHealthError;
 
   const items: SetupItem[] = [
     {
@@ -124,6 +137,15 @@ export default function SetupPage() {
       description: "Save monthly hosting cost so effective CPM context is enabled.",
       href: "/settings/system",
       done: hostingCostReady,
+    },
+    {
+      key: "conversion-sources",
+      title: "Connect Conversion Source",
+      description: conversionHealthUnavailable
+        ? "Conversion health check unavailable right now. Verify webhook/pixel setup in System."
+        : "Verify at least one conversion source is ingesting events.",
+      href: "/settings/system",
+      done: conversionSourcesReady,
     },
   ];
 
