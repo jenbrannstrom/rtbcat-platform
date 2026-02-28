@@ -18,7 +18,7 @@ from api.auth_bootstrap import (
 # ---------------------------------------------------------------------------
 
 
-def _make_fake_user(user_id="u1", email="admin@test.com", role="admin"):
+def _make_fake_user(user_id="u1", email="admin@test.com", role="sudo"):
     user = MagicMock()
     user.id = user_id
     user.email = email
@@ -35,7 +35,7 @@ def _make_auth_service(user_count=0, existing_user=None, bootstrap_completed="0"
     svc.create_user = AsyncMock(side_effect=lambda **kw: _make_fake_user(
         user_id=kw.get("user_id", "u1"),
         email=kw.get("email", "admin@test.com"),
-        role=kw.get("role", "admin"),
+        role=kw.get("role", "sudo"),
     ))
     svc.create_session = AsyncMock()
     svc.log_audit = AsyncMock()
@@ -144,7 +144,7 @@ class TestBootstrapEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
-        assert data["user"]["role"] == "admin"
+        assert data["user"]["role"] == "sudo"
         svc.create_user.assert_called_once()
         svc.set_setting.assert_called_once_with(
             "bootstrap_completed", "1", updated_by=ANY,

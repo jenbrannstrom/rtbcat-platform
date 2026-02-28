@@ -46,7 +46,7 @@ function AdminDashboard() {
       name: t.admin.adminUsers,
       value: stats?.admin_users ?? 0,
       icon: Shield,
-      href: "/admin/users?role=admin",
+      href: "/admin/users?role=sudo",
       color: "bg-purple-500",
     },
   ];
@@ -62,10 +62,12 @@ function AdminDashboard() {
   const currentRetention = settings?.audit_retention_days ?? "60";
   const multiUserEnabled = settings?.multi_user_enabled === "1";
   const currentUserRoleLabel =
-    user?.role === "admin"
+    user?.role === "sudo"
+      ? "Sudo"
+      : user?.role === "admin"
       ? t.admin.adminRole
-      : user?.role === "user"
-        ? t.admin.userRole
+      : user?.role === "read"
+        ? "Read"
         : (user?.role ?? t.common.none);
 
   return (

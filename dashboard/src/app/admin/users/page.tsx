@@ -204,6 +204,12 @@ function UsersPage() {
     });
   };
 
+  const getRoleLabel = (role: string): string => {
+    if (role === "sudo") return "Sudo";
+    if (role === "admin") return "Admin";
+    return "Read";
+  };
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       {/* Header */}
@@ -277,15 +283,22 @@ function UsersPage() {
                         <div
                           className={cn(
                             "h-10 w-10 rounded-full flex items-center justify-center",
-                            user.role === "admin"
+                            user.role === "sudo"
                               ? "bg-purple-100"
+                              : user.role === "admin"
+                                ? "bg-blue-100"
                               : "bg-gray-100"
                           )}
                         >
-                          {user.role === "admin" ? (
-                            <Shield className="h-5 w-5 text-purple-600" />
-                          ) : (
+                          {user.role === "read" ? (
                             <User className="h-5 w-5 text-gray-500" />
+                          ) : (
+                            <Shield
+                              className={cn(
+                                "h-5 w-5",
+                                user.role === "sudo" ? "text-purple-600" : "text-blue-600"
+                              )}
+                            />
                           )}
                         </div>
                       </div>
@@ -301,12 +314,14 @@ function UsersPage() {
                     <span
                       className={cn(
                         "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize",
-                        user.role === "admin"
+                        user.role === "sudo"
                           ? "bg-purple-100 text-purple-800"
+                          : user.role === "admin"
+                            ? "bg-blue-100 text-blue-800"
                           : "bg-gray-100 text-gray-800"
                       )}
                     >
-                      {user.role === "admin" ? t.admin.adminRole : t.admin.userRole}
+                      {getRoleLabel(user.role)}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -421,11 +436,12 @@ function UsersPage() {
                 </label>
                 <select
                   name="role"
-                  defaultValue="user"
+                  defaultValue="read"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 >
-                  <option value="user">{t.admin.userRole}</option>
+                  <option value="read">Read</option>
                   <option value="admin">{t.admin.adminRole}</option>
+                  <option value="sudo">Sudo</option>
                 </select>
               </div>
               <div>

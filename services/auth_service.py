@@ -17,7 +17,7 @@ class User:
     id: str
     email: str
     display_name: Optional[str] = None
-    role: str = "user"
+    role: str = "read"
     is_active: bool = True
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
@@ -98,7 +98,7 @@ class AuthService:
         user_id: str,
         email: str,
         display_name: Optional[str] = None,
-        role: str = "user",
+        role: str = "read",
         default_language: str = "en",
     ) -> User:
         """Create a new user."""
@@ -378,7 +378,7 @@ class AuthService:
             id=row["id"],
             email=row["email"],
             display_name=row.get("display_name"),
-            role=row.get("role", "user"),
+            role=row.get("role", "read"),
             is_active=row.get("is_active", True),
             created_at=str(row["created_at"]) if row.get("created_at") else None,
             updated_at=str(row["updated_at"]) if row.get("updated_at") else None,

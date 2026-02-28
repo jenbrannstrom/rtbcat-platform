@@ -109,8 +109,8 @@ class AdminService:
         if existing:
             raise HTTPException(status_code=400, detail="Email already in use")
 
-        if role not in ("admin", "user"):
-            raise HTTPException(status_code=400, detail="Role must be 'admin' or 'user'")
+        if role not in ("sudo", "admin", "read"):
+            raise HTTPException(status_code=400, detail="Role must be 'sudo', 'admin', or 'read'")
 
         normalized_auth_method = self._validate_create_auth_method(auth_method)
         if normalized_auth_method == "local-password":
@@ -185,8 +185,8 @@ class AdminService:
         if is_active is False and user_id == admin.id:
             raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
 
-        if role == "user" and user_id == admin.id:
-            raise HTTPException(status_code=400, detail="Cannot remove your own admin role")
+        if role in ("admin", "read") and user_id == admin.id:
+            raise HTTPException(status_code=400, detail="Cannot remove your own sudo role")
 
         normalized_language = self._validate_default_language(default_language)
         await self._auth.update_user(
@@ -462,7 +462,7 @@ class AdminService:
     async def get_admin_stats(self) -> dict[str, Any]:
         users = await self._auth.get_users()
         active_users = [u for u in users if u.is_active]
-        admin_users = [u for u in users if u.role == "admin"]
+        admin_users = [u for u in users if u.role == "sudo"]
 
         expected_report_kinds = [
             "catscan-quality",

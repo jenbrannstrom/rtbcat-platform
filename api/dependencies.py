@@ -135,7 +135,7 @@ async def get_current_user_optional(request: Request) -> Optional[User]:
 
 
 async def require_admin(user: User = Depends(get_current_user)) -> User:
-    """Require the current user to have admin role (sudo).
+    """Require the current user to have global sudo role.
 
     Use for global/system admin actions only. For seat-scoped admin
     actions, use require_buyer_admin_access instead.
@@ -147,19 +147,19 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
         The admin user.
 
     Raises:
-        HTTPException: If user is not an admin.
+        HTTPException: If user is not sudo.
     """
-    if user.role != "admin":
+    if not is_sudo(user):
         raise HTTPException(
             status_code=403,
-            detail="Admin access required.",
+            detail="Sudo access required.",
         )
     return user
 
 
 def is_sudo(user: User) -> bool:
     """Check if user has sudo (global admin) role."""
-    return user.role == "admin"
+    return user.role == "sudo"
 
 
 async def get_user_buyer_access_map(
@@ -249,8 +249,8 @@ async def get_user_service_accounts(
 ) -> List[str]:
     """Get list of service account IDs the user can access.
 
-    Admins can access all service accounts.
-    Regular users can only access accounts they have permissions for.
+    Sudo users can access all service accounts.
+    Non-sudo users can only access accounts they have permissions for.
 
     Args:
         user: Current authenticated user.
@@ -258,8 +258,8 @@ async def get_user_service_accounts(
     Returns:
         List of service account IDs the user can access.
     """
-    if user.role == "admin":
-        # Admins can access all service accounts
+    if is_sudo(user):
+        # Sudo users can access all service accounts
         return []  # Empty list means "all accounts"
 
     auth_svc = get_auth_service()
@@ -271,9 +271,9 @@ async def get_allowed_service_account_ids(
 ) -> list[str]:
     """Get service account IDs allowed for the current user.
 
-    Returns an empty list for admins to signal "all accounts".
+    Returns an empty list for sudo users to signal "all accounts".
     """
-    if user.role == "admin":
+    if is_sudo(user):
         return []
     auth_svc = get_auth_service()
     return await auth_svc.get_user_service_account_ids(user.id)
@@ -285,23 +285,14 @@ async def get_allowed_buyer_ids(
 ) -> Optional[list[str]]:
     """Get buyer IDs allowed for the current user.
 
-    Returns None for admins to signal "all buyers".
+    Returns None for sudo users to signal "all buyers".
     """
-    if user.role == "admin":
+    if is_sudo(user):
         return None
 
     auth_svc = get_auth_service()
-
-    # Prefer explicit buyer-seat assignments when present (Phase 3 RBAC path).
-    # Fallback to legacy service-account-derived access during transition.
-    explicit_buyer_ids = await auth_svc.get_user_buyer_seat_ids(user.id)
-    if explicit_buyer_ids:
-        return explicit_buyer_ids
-
-    service_account_ids = await auth_svc.get_user_service_account_ids(user.id)
-    if not service_account_ids:
-        return []
-    return await store.get_buyer_ids_for_service_accounts(service_account_ids)
+    # Enforce assigned-seat-only access for non-sudo roles.
+    return await auth_svc.get_user_buyer_seat_ids(user.id)
 
 
 async def get_allowed_bidder_ids(
@@ -324,8 +315,8 @@ async def resolve_buyer_id(
 ) -> Optional[str]:
     """Resolve buyer_id for a request based on user access.
 
-    - Admins: return buyer_id as-is (may be None).
-    - Non-admins: if buyer_id provided, must be allowed.
+    - Sudo users: return buyer_id as-is (may be None).
+    - Non-sudo users: if buyer_id provided, must be allowed.
       If not provided, allow only when user has exactly one buyer_id.
     """
     allowed = await get_allowed_buyer_ids(store=store, user=user)
@@ -410,7 +401,7 @@ async def check_service_account_access(
     Raises:
         HTTPException: If user doesn't have access.
     """
-    if user.role == "admin":
+    if is_sudo(user):
         return True
 
     auth_svc = get_auth_service()

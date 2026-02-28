@@ -85,7 +85,7 @@ export function Sidebar() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { selectedBuyerId, setSelectedBuyerId } = useAccount();
-  const { user, isAdmin, isSudo, logout } = useAuth();
+  const { user, isSudo, logout } = useAuth();
   const restricted = isRestrictedUser(user);
   const { t } = useTranslation();
 

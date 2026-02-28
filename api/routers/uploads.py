@@ -179,7 +179,7 @@ async def get_upload_tracking(
     service: UploadsService = Depends(get_uploads_service),
 ):
     """Get daily upload tracking summary."""
-    if user.role != "admin":
+    if user.role != "sudo":
         return UploadTrackingResponse(
             daily_summaries=[],
             total_days=0,

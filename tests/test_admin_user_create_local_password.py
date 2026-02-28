@@ -9,10 +9,10 @@ from services.auth_service import User
 
 
 def _make_admin() -> User:
-    return User(id="admin-1", email="admin@example.com", role="admin")
+    return User(id="admin-1", email="admin@example.com", role="sudo")
 
 
-def _make_created_user(email: str = "new@example.com", role: str = "user") -> User:
+def _make_created_user(email: str = "new@example.com", role: str = "read") -> User:
     return User(id="created-user", email=email, role=role, display_name="New User", default_language="en")
 
 
@@ -36,7 +36,7 @@ async def test_create_user_with_local_password_stores_hash_and_audits_method():
         admin=_make_admin(),
         email="New@Example.com",
         display_name="New User",
-        role="user",
+        role="read",
         default_language="en",
         auth_method="local-password",
         password="password123",
@@ -65,7 +65,7 @@ async def test_create_user_rejects_local_password_when_missing():
             admin=_make_admin(),
             email="new@example.com",
             display_name=None,
-            role="user",
+            role="read",
             default_language="en",
             auth_method="local-password",
             password=None,
@@ -91,7 +91,7 @@ async def test_create_user_rejects_short_local_password():
             admin=_make_admin(),
             email="new@example.com",
             display_name=None,
-            role="user",
+            role="read",
             default_language="en",
             auth_method="local-password",
             password="short",
@@ -116,7 +116,7 @@ async def test_create_user_legacy_default_remains_oauth_precreate():
         admin=_make_admin(),
         email="legacy@example.com",
         display_name=None,
-        role="user",
+        role="read",
         default_language="en",
         auth_method=None,
         password=None,
@@ -142,7 +142,7 @@ async def test_create_user_rejects_password_for_oauth_precreate():
             admin=_make_admin(),
             email="legacy@example.com",
             display_name=None,
-            role="user",
+            role="read",
             default_language="en",
             auth_method="oauth-precreate",
             password="password123",
