@@ -320,3 +320,95 @@ async def test_apply_status_live_executes_pending_change(monkeypatch: pytest.Mon
     assert len(actions_stub.calls) == 1
     assert actions_stub.calls[0]["billing_id"] == "cfg-1"
     assert actions_stub.calls[0]["change_id"] == 88
+
+
+@pytest.mark.asyncio
+async def test_get_proposal_returns_payload(monkeypatch: pytest.MonkeyPatch):
+    async def _stub_query_one(sql: str, params: tuple = ()):
+        assert "FROM qps_allocation_proposals" in sql
+        return {
+            "proposal_id": "prp_1",
+            "model_id": "mdl_rules",
+            "buyer_id": "1111111111",
+            "billing_id": "cfg-1",
+            "current_qps": 100.0,
+            "proposed_qps": 120.0,
+            "delta_qps": 20.0,
+            "rationale": "test rationale",
+            "projected_impact": {"expected_event_lift_pct": 10.0},
+            "status": "draft",
+            "created_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+            "updated_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+            "applied_at": None,
+        }
+
+    monkeypatch.setattr("services.optimizer_proposals_service.pg_query_one", _stub_query_one)
+    service = OptimizerProposalsService()
+    payload = await service.get_proposal(
+        proposal_id="prp_1",
+        buyer_id="1111111111",
+    )
+
+    assert payload is not None
+    assert payload["proposal_id"] == "prp_1"
+    assert payload["status"] == "draft"
+
+
+@pytest.mark.asyncio
+async def test_sync_apply_status_updates_projected_impact(monkeypatch: pytest.MonkeyPatch):
+    async def _stub_query_one(sql: str, params: tuple = ()):
+        if "FROM qps_allocation_proposals" in sql and "LIMIT 1" in sql:
+            return {
+                "proposal_id": "prp_1",
+                "model_id": "mdl_rules",
+                "buyer_id": "1111111111",
+                "billing_id": "cfg-1",
+                "current_qps": 100.0,
+                "proposed_qps": 120.0,
+                "delta_qps": 20.0,
+                "rationale": "test rationale",
+                "projected_impact": {"apply": {"pending_change_id": 77, "mode": "queue"}},
+                "status": "applied",
+                "created_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+                "updated_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+                "applied_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+            }
+        if "FROM pretargeting_pending_changes" in sql:
+            assert params[0] == 77
+            return {
+                "id": 77,
+                "status": "applied",
+                "applied_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+                "applied_by": "u1",
+            }
+        if "UPDATE qps_allocation_proposals" in sql:
+            projected = json.loads(params[0]) if isinstance(params[0], str) else params[0]
+            return {
+                "proposal_id": "prp_1",
+                "model_id": "mdl_rules",
+                "buyer_id": "1111111111",
+                "billing_id": "cfg-1",
+                "current_qps": 100.0,
+                "proposed_qps": 120.0,
+                "delta_qps": 20.0,
+                "rationale": "test rationale",
+                "projected_impact": projected,
+                "status": "applied",
+                "created_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+                "updated_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+                "applied_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+            }
+        return None
+
+    monkeypatch.setattr("services.optimizer_proposals_service.pg_query_one", _stub_query_one)
+    service = OptimizerProposalsService()
+    payload = await service.sync_apply_status(
+        proposal_id="prp_1",
+        buyer_id="1111111111",
+    )
+
+    assert payload is not None
+    assert payload["proposal_id"] == "prp_1"
+    assert payload["apply_details"]["pending_change_id"] == 77
+    assert payload["apply_details"]["pending_change_status"] == "applied"
+    assert payload["apply_details"]["pending_change_applied_by"] == "u1"

@@ -17,7 +17,9 @@ class _StubOptimizerProposalsService:
     def __init__(self):
         self.generate_calls: list[dict] = []
         self.list_calls: list[dict] = []
+        self.get_calls: list[dict] = []
         self.update_calls: list[dict] = []
+        self.sync_calls: list[dict] = []
         self.not_found_ids: set[str] = {"missing"}
 
     async def generate_from_scores(self, **kwargs):
@@ -72,6 +74,27 @@ class _StubOptimizerProposalsService:
             },
         }
 
+    async def get_proposal(self, **kwargs):
+        self.get_calls.append(kwargs)
+        if kwargs.get("proposal_id") in self.not_found_ids:
+            return None
+        return {
+            "proposal_id": kwargs["proposal_id"],
+            "model_id": "mdl_rules",
+            "buyer_id": kwargs["buyer_id"],
+            "billing_id": "cfg-1",
+            "current_qps": 100.0,
+            "proposed_qps": 120.0,
+            "delta_qps": 20.0,
+            "rationale": "test rationale",
+            "projected_impact": {"expected_event_lift_pct": 10.0},
+            "apply_details": None,
+            "status": "draft",
+            "created_at": "2026-02-28T00:00:00+00:00",
+            "updated_at": "2026-02-28T00:00:00+00:00",
+            "applied_at": None,
+        }
+
     async def update_status(self, **kwargs):
         self.update_calls.append(kwargs)
         if kwargs.get("proposal_id") in self.not_found_ids:
@@ -88,6 +111,37 @@ class _StubOptimizerProposalsService:
                 if kwargs.get("status") == "applied"
                 else None
             ),
+        }
+
+    async def sync_apply_status(self, **kwargs):
+        self.sync_calls.append(kwargs)
+        if kwargs.get("proposal_id") in self.not_found_ids:
+            return None
+        return {
+            "proposal_id": kwargs["proposal_id"],
+            "model_id": "mdl_rules",
+            "buyer_id": kwargs["buyer_id"],
+            "billing_id": "cfg-1",
+            "current_qps": 100.0,
+            "proposed_qps": 120.0,
+            "delta_qps": 20.0,
+            "rationale": "test rationale",
+            "projected_impact": {
+                "apply": {
+                    "mode": "queue",
+                    "pending_change_id": 77,
+                    "pending_change_status": "applied",
+                }
+            },
+            "apply_details": {
+                "mode": "queue",
+                "pending_change_id": 77,
+                "pending_change_status": "applied",
+            },
+            "status": "applied",
+            "created_at": "2026-02-28T00:00:00+00:00",
+            "updated_at": "2026-02-28T00:00:00+00:00",
+            "applied_at": "2026-02-28T00:10:00+00:00",
         }
 
 
@@ -167,6 +221,18 @@ def test_list_qps_proposals_endpoint(monkeypatch: pytest.MonkeyPatch):
     assert payload["rows"][0]["proposal_id"] == "prp_1"
 
 
+def test_get_qps_proposal_endpoint(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubOptimizerProposalsService()
+    client = _build_client(stub, monkeypatch)
+
+    response = client.get("/api/optimizer/proposals/prp_1", params={"buyer_id": "1111111111"})
+
+    assert response.status_code == 200
+    assert len(stub.get_calls) == 1
+    assert stub.get_calls[0]["proposal_id"] == "prp_1"
+    assert response.json()["proposal_id"] == "prp_1"
+
+
 def test_approve_reject_apply_proposal_endpoints(monkeypatch: pytest.MonkeyPatch):
     stub = _StubOptimizerProposalsService()
     client = _build_client(stub, monkeypatch)
@@ -191,3 +257,20 @@ def test_approve_reject_apply_proposal_endpoints(monkeypatch: pytest.MonkeyPatch
     assert reject.json()["status"] == "rejected"
     assert apply.json()["status"] == "applied"
     assert apply.json()["apply_details"]["mode"] == "live"
+
+
+def test_sync_apply_status_endpoint(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubOptimizerProposalsService()
+    client = _build_client(stub, monkeypatch)
+
+    response = client.post(
+        "/api/optimizer/proposals/prp_1/sync-apply-status",
+        params={"buyer_id": "1111111111"},
+    )
+
+    assert response.status_code == 200
+    assert len(stub.sync_calls) == 1
+    assert stub.sync_calls[0]["proposal_id"] == "prp_1"
+    payload = response.json()
+    assert payload["status"] == "applied"
+    assert payload["apply_details"]["pending_change_status"] == "applied"

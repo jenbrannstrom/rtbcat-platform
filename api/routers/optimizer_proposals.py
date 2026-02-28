@@ -126,6 +126,24 @@ async def list_qps_proposals(
     return ProposalListResponse(**payload)
 
 
+@router.get("/{proposal_id}", response_model=ProposalRow)
+async def get_qps_proposal(
+    proposal_id: str,
+    buyer_id: Optional[str] = Query(None),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    service = OptimizerProposalsService()
+    payload = await service.get_proposal(
+        proposal_id=proposal_id,
+        buyer_id=resolved_buyer_id or "unknown",
+    )
+    if not payload:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    return ProposalRow(**payload)
+
+
 async def _update_proposal_status(
     *,
     proposal_id: str,
@@ -205,3 +223,21 @@ async def apply_qps_proposal(
         store=store,
         user=user,
     )
+
+
+@router.post("/{proposal_id}/sync-apply-status", response_model=ProposalRow)
+async def sync_qps_proposal_apply_status(
+    proposal_id: str,
+    buyer_id: Optional[str] = Query(None),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    service = OptimizerProposalsService()
+    payload = await service.sync_apply_status(
+        proposal_id=proposal_id,
+        buyer_id=resolved_buyer_id or "unknown",
+    )
+    if not payload:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    return ProposalRow(**payload)

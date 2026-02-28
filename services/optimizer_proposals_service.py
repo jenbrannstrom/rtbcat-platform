@@ -282,17 +282,58 @@ class OptimizerProposalsService:
             return None
         return self._row_to_payload(row)
 
-    async def _apply_proposal(
+    async def get_proposal(
         self,
         *,
         proposal_id: str,
         buyer_id: str,
-        apply_mode: str,
-        applied_by: Optional[str],
     ) -> Optional[dict[str, Any]]:
-        proposal = await pg_query_one(
+        row = await self._select_proposal_row(proposal_id=proposal_id, buyer_id=buyer_id)
+        if not row:
+            return None
+        return self._row_to_payload(row)
+
+    async def sync_apply_status(
+        self,
+        *,
+        proposal_id: str,
+        buyer_id: str,
+    ) -> Optional[dict[str, Any]]:
+        proposal = await self._select_proposal_row(proposal_id=proposal_id, buyer_id=buyer_id)
+        if not proposal:
+            return None
+
+        projected = _to_dict(proposal.get("projected_impact"))
+        apply_details = _to_dict(projected.get("apply"))
+        pending_change_id = apply_details.get("pending_change_id")
+        if not pending_change_id:
+            return self._row_to_payload(proposal)
+
+        pending_change = await pg_query_one(
             """
-            SELECT
+            SELECT id, status, applied_at, applied_by
+            FROM pretargeting_pending_changes
+            WHERE id = %s
+            """,
+            (int(pending_change_id),),
+        )
+        apply_details["synced_at"] = datetime.now(timezone.utc).isoformat()
+        if pending_change:
+            apply_details["pending_change_status"] = str(pending_change.get("status") or "unknown")
+            apply_details["pending_change_applied_at"] = _to_iso_ts(pending_change.get("applied_at"))
+            apply_details["pending_change_applied_by"] = pending_change.get("applied_by")
+        else:
+            apply_details["pending_change_status"] = "missing"
+            apply_details["pending_change_applied_at"] = None
+            apply_details["pending_change_applied_by"] = None
+        projected["apply"] = apply_details
+
+        row = await pg_query_one(
+            """
+            UPDATE qps_allocation_proposals
+            SET projected_impact = %s::jsonb, updated_at = NOW()
+            WHERE proposal_id = %s AND buyer_id = %s
+            RETURNING
                 proposal_id,
                 model_id,
                 buyer_id,
@@ -306,12 +347,22 @@ class OptimizerProposalsService:
                 created_at,
                 updated_at,
                 applied_at
-            FROM qps_allocation_proposals
-            WHERE proposal_id = %s AND buyer_id = %s
-            LIMIT 1
             """,
-            (proposal_id, buyer_id),
+            (json.dumps(projected), proposal_id, buyer_id),
         )
+        if not row:
+            return None
+        return self._row_to_payload(row)
+
+    async def _apply_proposal(
+        self,
+        *,
+        proposal_id: str,
+        buyer_id: str,
+        apply_mode: str,
+        applied_by: Optional[str],
+    ) -> Optional[dict[str, Any]]:
+        proposal = await self._select_proposal_row(proposal_id=proposal_id, buyer_id=buyer_id)
         if not proposal:
             return None
 
@@ -385,6 +436,35 @@ class OptimizerProposalsService:
         if not row:
             return None
         return self._row_to_payload(row)
+
+    async def _select_proposal_row(
+        self,
+        *,
+        proposal_id: str,
+        buyer_id: str,
+    ) -> Optional[dict[str, Any]]:
+        return await pg_query_one(
+            """
+            SELECT
+                proposal_id,
+                model_id,
+                buyer_id,
+                billing_id,
+                current_qps,
+                proposed_qps,
+                delta_qps,
+                rationale,
+                projected_impact,
+                status,
+                created_at,
+                updated_at,
+                applied_at
+            FROM qps_allocation_proposals
+            WHERE proposal_id = %s AND buyer_id = %s
+            LIMIT 1
+            """,
+            (proposal_id, buyer_id),
+        )
 
     def _build_proposal_row(
         self,
