@@ -533,6 +533,26 @@ async def _ingest_with_dlq(
         ) from exc
 
 
+async def _ingest_generic_family_postback(
+    *,
+    request: Request,
+    buyer_id: Optional[str],
+    default_source_type: str,
+) -> ConversionIngestResponse:
+    payload = await _parse_payload(request)
+    payload = normalize_generic_payload(payload)
+    _verify_webhook_secret("generic", request, payload)
+    _verify_webhook_signature("generic", request, payload)
+    source_type = str(payload.get("source_type") or default_source_type)
+    _enforce_webhook_rate_limit(source_type, request)
+    return await _ingest_with_dlq(
+        request=request,
+        source_type=source_type,
+        payload=payload,
+        buyer_id=buyer_id,
+    )
+
+
 @router.post("/appsflyer/postback", response_model=ConversionIngestResponse)
 async def ingest_appsflyer_postback(
     request: Request,
@@ -592,17 +612,34 @@ async def ingest_generic_postback(
     request: Request,
     buyer_id: Optional[str] = Query(None, description="Optional buyer override"),
 ):
-    payload = await _parse_payload(request)
-    payload = normalize_generic_payload(payload)
-    _verify_webhook_secret("generic", request, payload)
-    _verify_webhook_signature("generic", request, payload)
-    source_type = str(payload.get("source_type") or "generic")
-    _enforce_webhook_rate_limit(source_type, request)
-    return await _ingest_with_dlq(
+    return await _ingest_generic_family_postback(
         request=request,
-        source_type=source_type,
-        payload=payload,
         buyer_id=buyer_id,
+        default_source_type="generic",
+    )
+
+
+@router.post("/redtrack/postback", response_model=ConversionIngestResponse)
+async def ingest_redtrack_postback(
+    request: Request,
+    buyer_id: Optional[str] = Query(None, description="Optional buyer override"),
+):
+    return await _ingest_generic_family_postback(
+        request=request,
+        buyer_id=buyer_id,
+        default_source_type="redtrack",
+    )
+
+
+@router.post("/voluum/postback", response_model=ConversionIngestResponse)
+async def ingest_voluum_postback(
+    request: Request,
+    buyer_id: Optional[str] = Query(None, description="Optional buyer override"),
+):
+    return await _ingest_generic_family_postback(
+        request=request,
+        buyer_id=buyer_id,
+        default_source_type="voluum",
     )
 
 
@@ -611,18 +648,11 @@ async def ingest_conversion_pixel(
     request: Request,
     buyer_id: Optional[str] = Query(None, description="Optional buyer override"),
 ):
-    payload = await _parse_payload(request)
-    payload = normalize_generic_payload(payload)
-    _verify_webhook_secret("generic", request, payload)
-    _verify_webhook_signature("generic", request, payload)
-    source_type = str(payload.get("source_type") or "pixel")
-    _enforce_webhook_rate_limit(source_type, request)
     try:
-        await _ingest_with_dlq(
+        await _ingest_generic_family_postback(
             request=request,
-            source_type=source_type,
-            payload=payload,
             buyer_id=buyer_id,
+            default_source_type="pixel",
         )
     except HTTPException:
         return _pixel_response(ingest_status="rejected")
