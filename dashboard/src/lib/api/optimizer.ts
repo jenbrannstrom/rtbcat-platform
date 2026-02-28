@@ -284,6 +284,7 @@ export interface OptimizerScoreAndProposeResponse {
 export async function runOptimizerScoreAndPropose(params: {
   model_id: string;
   buyer_id?: string;
+  profile?: "safe" | "balanced" | "aggressive";
   days?: number;
   score_limit?: number;
   proposal_limit?: number;
@@ -299,6 +300,7 @@ export async function runOptimizerScoreAndPropose(params: {
   const resolvedScoreLimit = params.score_limit ?? params.scoring_limit;
   searchParams.set("model_id", params.model_id);
   if (params.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  if (params.profile) searchParams.set("profile", params.profile);
   if (typeof resolvedDays === "number") searchParams.set("days", String(resolvedDays));
   if (typeof resolvedScoreLimit === "number") searchParams.set("score_limit", String(resolvedScoreLimit));
   if (typeof params.proposal_limit === "number") searchParams.set("proposal_limit", String(params.proposal_limit));
