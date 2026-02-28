@@ -562,9 +562,13 @@ export default function SystemStatusPage() {
         throw new Error("Max delta % must be between 0.05 and 1.");
       }
 
+      const selectedProfile =
+        workflowPreset === "custom" ? undefined : (workflowPreset as Exclude<WorkflowPresetId, "custom">);
+
       return runOptimizerScoreAndPropose({
         model_id: selectedModelId,
         buyer_id: selectedBuyerId || undefined,
+        profile: selectedProfile,
         days: parsedDays,
         min_confidence: parsedMinConfidence,
         max_delta_pct: parsedMaxDelta,
