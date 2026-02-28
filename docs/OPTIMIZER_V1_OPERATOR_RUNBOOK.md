@@ -76,6 +76,8 @@ If a proposal causes unexpected spend, win-rate collapse, or inventory quality d
 
 Conversion webhook hardening controls are env-driven:
 
+Reference setup guide: `docs/CONVERSION_CONNECTORS_SETUP_GUIDE.md`
+
 1. HMAC validation:
    - `CATSCAN_*_WEBHOOK_HMAC_SECRET`
 2. Freshness guard:
