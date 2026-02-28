@@ -55,6 +55,7 @@
 - `QA-004` started (workflow depth slice): canary workflow execution now supports env/CLI tuning for days, score/proposal limits, min confidence, and max delta guardrails.
 - `QA-004` started (workflow depth slice): canary wrapper supports `CATSCAN_CANARY_PROFILE=safe|balanced|aggressive` preset mapping to workflow guardrail defaults.
 - `QA-004` started (workflow depth slice): root `make` now exposes `v1-canary-safe|balanced|aggressive` targets for one-command preset execution.
+- `QA-004` started (workflow depth slice): canary workflow defaults are now aligned with System UI balanced preset values (days=14, score_limit=1000, proposal_limit=200, min_confidence=0.3, max_delta=0.3).
 - `QA-004` started (ops hardening slice): `make phase0-gate` now runs reliably in restricted environments by building dashboard with webpack mode (`npm --prefix dashboard run build -- --webpack`), avoiding Turbopack sandbox port-binding failures.
 
 ---
