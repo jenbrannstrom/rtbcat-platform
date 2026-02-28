@@ -498,11 +498,10 @@ export default function SystemStatusPage() {
       return runOptimizerScoreAndPropose({
         model_id: selectedModelId,
         buyer_id: selectedBuyerId || undefined,
-        scoring_days: 14,
-        proposal_days: 14,
+        days: 14,
         min_confidence: 0.3,
         max_delta_pct: 0.3,
-        scoring_limit: 1000,
+        score_limit: 1000,
         proposal_limit: 200,
       });
     },
