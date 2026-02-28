@@ -68,6 +68,14 @@ CATSCAN_CANARY_PROFILE=balanced make v1-canary-workflow
 CATSCAN_CANARY_PROFILE=aggressive make v1-canary-workflow
 ```
 
+Equivalent convenience targets:
+
+```bash
+make v1-canary-safe
+make v1-canary-balanced
+make v1-canary-aggressive
+```
+
 Or run lifecycle check on an existing proposal:
 
 ```bash
