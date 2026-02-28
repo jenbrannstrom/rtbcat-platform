@@ -12,6 +12,7 @@ v1-canary-smoke:
 
 phase0-regression:
 	pytest -q \
+	  tests/test_v1_canary_smoke.py \
 	  tests/test_import_foundation_contracts.py \
 	  tests/test_data_health_service.py \
 	  tests/test_system_data_health_api.py
