@@ -13,6 +13,7 @@ import {
   getOptimizerModels,
   listOptimizerSegmentScores,
   listOptimizerProposals,
+  listOptimizerProposalHistory,
   runOptimizerScoreAndPropose,
   approveOptimizerProposal,
   applyOptimizerProposal,
@@ -37,6 +38,7 @@ export default function SystemStatusPage() {
   const [healthStateFilter, setHealthStateFilter] = useState<"all" | "healthy" | "degraded" | "unavailable">("all");
   const [minCompleteness, setMinCompleteness] = useState<string>("");
   const [selectedModelId, setSelectedModelId] = useState<string>("");
+  const [selectedProposalHistoryId, setSelectedProposalHistoryId] = useState<string>("");
   const [optimizerNotice, setOptimizerNotice] = useState<string>("");
   const [monthlyHostingCostInput, setMonthlyHostingCostInput] = useState<string>("");
   const parsedMinCompleteness = Number(minCompleteness);
@@ -138,6 +140,21 @@ export default function SystemStatusPage() {
     queryFn: getOptimizerSetup,
   });
 
+  const {
+    data: optimizerProposalHistory,
+    isLoading: optimizerProposalHistoryLoading,
+    error: optimizerProposalHistoryError,
+  } = useQuery({
+    queryKey: ["optimizerProposalHistory", selectedBuyerId, selectedProposalHistoryId],
+    queryFn: () =>
+      listOptimizerProposalHistory(selectedProposalHistoryId, {
+        buyer_id: selectedBuyerId || undefined,
+        limit: 100,
+        offset: 0,
+      }),
+    enabled: !!selectedProposalHistoryId,
+  });
+
   useEffect(() => {
     const activeModels = (optimizerModels?.rows || []).filter((row) => row.is_active);
     if (selectedModelId && activeModels.some((row) => row.model_id === selectedModelId)) {
@@ -147,6 +164,20 @@ export default function SystemStatusPage() {
       setSelectedModelId(activeModels[0].model_id);
     }
   }, [optimizerModels, selectedModelId]);
+
+  useEffect(() => {
+    const proposals = optimizerProposals?.rows || [];
+    if (!proposals.length) {
+      if (selectedProposalHistoryId) {
+        setSelectedProposalHistoryId("");
+      }
+      return;
+    }
+    if (selectedProposalHistoryId && proposals.some((row) => row.proposal_id === selectedProposalHistoryId)) {
+      return;
+    }
+    setSelectedProposalHistoryId(proposals[0].proposal_id);
+  }, [optimizerProposals, selectedProposalHistoryId]);
 
   useEffect(() => {
     if (!optimizerSetup) return;
@@ -238,6 +269,7 @@ export default function SystemStatusPage() {
     },
     onSuccess: (message) => {
       queryClient.invalidateQueries({ queryKey: ["optimizerProposals", selectedBuyerId] });
+      queryClient.invalidateQueries({ queryKey: ["optimizerProposalHistory", selectedBuyerId] });
       setOptimizerNotice(message);
     },
     onError: (err: unknown) => {
@@ -249,6 +281,7 @@ export default function SystemStatusPage() {
   const activeModelCount = optimizerModels?.rows.filter((row) => row.is_active).length ?? 0;
   const activeModels = (optimizerModels?.rows || []).filter((row) => row.is_active);
   const proposalRows = optimizerProposals?.rows ?? [];
+  const proposalHistoryRows = optimizerProposalHistory?.rows || [];
   const proposalStatusCounts = proposalRows.reduce(
     (acc, row) => {
       const key = row.status || "draft";
@@ -642,66 +675,80 @@ export default function SystemStatusPage() {
                               </span>
                             </td>
                             <td className="px-3 py-2">
-                              {row.status === "draft" ? (
+                              <div className="flex items-center gap-2">
+                                {row.status === "draft" ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      proposalActionMutation.mutate({
+                                        proposalId: row.proposal_id,
+                                        action: "approve",
+                                      })
+                                    }
+                                    disabled={proposalActionMutation.isPending}
+                                    className={cn(
+                                      "rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700",
+                                      proposalActionMutation.isPending &&
+                                        pendingProposalId === row.proposal_id &&
+                                        "opacity-60",
+                                    )}
+                                  >
+                                    Approve
+                                  </button>
+                                ) : row.status === "approved" ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      proposalActionMutation.mutate({
+                                        proposalId: row.proposal_id,
+                                        action: "apply",
+                                      })
+                                    }
+                                    disabled={proposalActionMutation.isPending}
+                                    className={cn(
+                                      "rounded bg-green-50 px-2 py-1 text-xs font-medium text-green-700",
+                                      proposalActionMutation.isPending &&
+                                        pendingProposalId === row.proposal_id &&
+                                        "opacity-60",
+                                    )}
+                                  >
+                                    Apply Queue
+                                  </button>
+                                ) : row.status === "applied" ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      proposalActionMutation.mutate({
+                                        proposalId: row.proposal_id,
+                                        action: "sync",
+                                      })
+                                    }
+                                    disabled={proposalActionMutation.isPending}
+                                    className={cn(
+                                      "rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700",
+                                      proposalActionMutation.isPending &&
+                                        pendingProposalId === row.proposal_id &&
+                                        "opacity-60",
+                                    )}
+                                  >
+                                    Sync
+                                  </button>
+                                ) : (
+                                  <span className="text-xs text-gray-400">-</span>
+                                )}
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    proposalActionMutation.mutate({
-                                      proposalId: row.proposal_id,
-                                      action: "approve",
-                                    })
-                                  }
-                                  disabled={proposalActionMutation.isPending}
+                                  onClick={() => setSelectedProposalHistoryId(row.proposal_id)}
                                   className={cn(
-                                    "rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700",
-                                    proposalActionMutation.isPending &&
-                                      pendingProposalId === row.proposal_id &&
-                                      "opacity-60",
+                                    "rounded px-2 py-1 text-xs font-medium",
+                                    selectedProposalHistoryId === row.proposal_id
+                                      ? "bg-indigo-50 text-indigo-700"
+                                      : "bg-slate-100 text-slate-700",
                                   )}
                                 >
-                                  Approve
+                                  History
                                 </button>
-                              ) : row.status === "approved" ? (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    proposalActionMutation.mutate({
-                                      proposalId: row.proposal_id,
-                                      action: "apply",
-                                    })
-                                  }
-                                  disabled={proposalActionMutation.isPending}
-                                  className={cn(
-                                    "rounded bg-green-50 px-2 py-1 text-xs font-medium text-green-700",
-                                    proposalActionMutation.isPending &&
-                                      pendingProposalId === row.proposal_id &&
-                                      "opacity-60",
-                                  )}
-                                >
-                                  Apply Queue
-                                </button>
-                              ) : row.status === "applied" ? (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    proposalActionMutation.mutate({
-                                      proposalId: row.proposal_id,
-                                      action: "sync",
-                                    })
-                                  }
-                                  disabled={proposalActionMutation.isPending}
-                                  className={cn(
-                                    "rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700",
-                                    proposalActionMutation.isPending &&
-                                      pendingProposalId === row.proposal_id &&
-                                      "opacity-60",
-                                  )}
-                                >
-                                  Sync
-                                </button>
-                              ) : (
-                                <span className="text-xs text-gray-400">-</span>
-                              )}
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -710,6 +757,52 @@ export default function SystemStatusPage() {
                   </div>
                 ) : (
                   <div className="px-3 py-4 text-xs text-gray-500">No proposals found.</div>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50">
+                  Proposal History {selectedProposalHistoryId ? `(${selectedProposalHistoryId})` : ""}
+                </div>
+                {!selectedProposalHistoryId ? (
+                  <div className="px-3 py-4 text-xs text-gray-500">Select a proposal to view workflow history.</div>
+                ) : optimizerProposalHistoryLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                  </div>
+                ) : optimizerProposalHistoryError ? (
+                  <div className="px-3 py-4 text-xs text-red-600">
+                    {optimizerProposalHistoryError instanceof Error
+                      ? optimizerProposalHistoryError.message
+                      : "Failed to load proposal history."}
+                  </div>
+                ) : proposalHistoryRows.length ? (
+                  <div className="max-h-52 overflow-auto">
+                    <table className="min-w-full text-xs">
+                      <thead className="bg-gray-50 text-gray-600">
+                        <tr>
+                          <th className="text-left px-3 py-2">Created</th>
+                          <th className="text-left px-3 py-2">Transition</th>
+                          <th className="text-left px-3 py-2">Mode</th>
+                          <th className="text-left px-3 py-2">By</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {proposalHistoryRows.slice(0, 12).map((row) => (
+                          <tr key={row.event_id} className="border-t border-gray-100">
+                            <td className="px-3 py-2 text-gray-700">{row.created_at || "-"}</td>
+                            <td className="px-3 py-2 text-gray-700">
+                              {row.from_status || "initial"} → {row.to_status}
+                            </td>
+                            <td className="px-3 py-2 text-gray-700">{row.apply_mode || "-"}</td>
+                            <td className="px-3 py-2 text-gray-700">{row.changed_by || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="px-3 py-4 text-xs text-gray-500">No history events for this proposal.</div>
                 )}
               </div>
             </div>
