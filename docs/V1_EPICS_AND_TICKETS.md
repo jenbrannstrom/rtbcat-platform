@@ -44,6 +44,7 @@
 - `E4-003` started: BYOM integration docs drafted in `docs/BYOM_MODEL_INTEGRATION_GUIDE.md` with model registry + external scoring contract details; example prompt template added at `prompts/byom-qps-optimizer.example.md`.
 - `QA-004` started: canary go/no-go checklist drafted in `docs/V1_CANARY_GO_NO_GO_CHECKLIST.md` with data integrity, conversion ingestion, optimizer workflow, and rollback gates; runnable smoke script added at `scripts/v1_canary_smoke.py` with env-driven wrapper `scripts/run_v1_canary_smoke.sh`, stricter readiness assertions, root `make v1-canary-smoke` / `make phase0-gate` entrypoints, and unit coverage in `tests/test_v1_canary_smoke.py`.
 - `QA-004` started (workflow depth slice): canary smoke supports optional full proposal lifecycle validation (`CATSCAN_CANARY_RUN_LIFECYCLE=1`) for approve -> apply(queue) -> sync -> history verification after score/propose.
+- `QA-004` started (workflow depth slice): lifecycle canary can target either fresh workflow output or explicit existing `proposal_id` (`CATSCAN_PROPOSAL_ID`) for deterministic go/no-go validation.
 - `QA-004` started (ops hardening slice): `make phase0-gate` now runs reliably in restricted environments by building dashboard with webpack mode (`npm --prefix dashboard run build -- --webpack`), avoiding Turbopack sandbox port-binding failures.
 
 ---

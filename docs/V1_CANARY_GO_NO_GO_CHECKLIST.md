@@ -42,6 +42,14 @@ CATSCAN_CANARY_RUN_LIFECYCLE=1 \
 make v1-canary-smoke
 ```
 
+Or run lifecycle check on an existing proposal:
+
+```bash
+CATSCAN_CANARY_RUN_LIFECYCLE=1 \
+CATSCAN_PROPOSAL_ID=<proposal_id> \
+make v1-canary-smoke
+```
+
 Phase 0 local gate command:
 
 ```bash
