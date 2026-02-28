@@ -50,6 +50,7 @@ export default function SystemStatusPage() {
   const [healthStateFilter, setHealthStateFilter] = useState<"all" | "healthy" | "degraded" | "unavailable">("all");
   const [minCompleteness, setMinCompleteness] = useState<string>("");
   const [selectedModelId, setSelectedModelId] = useState<string>("");
+  const [modelValidationPayloadInput, setModelValidationPayloadInput] = useState<string>("");
   const [selectedProposalHistoryId, setSelectedProposalHistoryId] = useState<string>("");
   const [optimizerNotice, setOptimizerNotice] = useState<string>("");
   const [newModelName, setNewModelName] = useState<string>("");
@@ -453,9 +454,24 @@ export default function SystemStatusPage() {
       if (!selectedModelId) {
         throw new Error("Select an active model before validation.");
       }
+      const rawPayload = modelValidationPayloadInput.trim();
+      let samplePayload: Record<string, unknown> | undefined;
+      if (rawPayload) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(rawPayload);
+        } catch {
+          throw new Error("Validation payload must be valid JSON.");
+        }
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error("Validation payload must be a JSON object.");
+        }
+        samplePayload = parsed as Record<string, unknown>;
+      }
       return validateOptimizerModelEndpoint(selectedModelId, {
         buyer_id: selectedBuyerId || undefined,
         timeout_seconds: 10,
+        sample_payload: samplePayload,
       });
     },
     onSuccess: (payload) => {
@@ -1355,6 +1371,20 @@ export default function SystemStatusPage() {
                     </button>
                   </div>
                 </div>
+                <label className="mt-3 block text-xs text-gray-600">
+                  Optional Validation Payload (JSON)
+                  <textarea
+                    value={modelValidationPayloadInput}
+                    onChange={(e) => setModelValidationPayloadInput(e.target.value)}
+                    rows={5}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-xs text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    placeholder='{"features":[{"feature_id":"f1","spend_usd":12.3}]}'
+                    disabled={validateModelMutation.isPending}
+                  />
+                  <span className="mt-1 block text-[11px] text-gray-500">
+                    Used only for endpoint validation; leave empty to use default ping payload.
+                  </span>
+                </label>
                 {optimizerNotice ? (
                   <div className="mt-3 rounded bg-slate-50 px-3 py-2 text-xs text-slate-700">
                     {optimizerNotice}
