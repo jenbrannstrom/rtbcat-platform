@@ -78,6 +78,7 @@ from api.routers import (
     troubleshooting_router,
     collect_router,
     conversions_router,
+    optimizer_models_router,
     admin_router,
     seat_admin_router,
     # Analytics sub-routers (refactored from monolithic analytics.py)
@@ -256,6 +257,7 @@ app.include_router(collect_router)
 app.include_router(gmail_router)
 app.include_router(retention_router)
 app.include_router(conversions_router)
+app.include_router(optimizer_models_router)
 app.include_router(precompute_router)
 app.include_router(troubleshooting_router)
 

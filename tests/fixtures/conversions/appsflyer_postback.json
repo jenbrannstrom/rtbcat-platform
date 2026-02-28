@@ -1,0 +1,13 @@
+{
+  "eventName": "af_first_deposit",
+  "eventTime": "2026-02-28T12:34:56Z",
+  "eventValue": "{\"af_revenue\":\"42.5\",\"af_currency\":\"usd\"}",
+  "af_sub1": "1111111111",
+  "af_sub2": "cfg-100",
+  "af_click_id": "af-click-1",
+  "af_impression_id": "imp-1",
+  "campaign": "campaign-alpha",
+  "country_code": "US",
+  "platform": "android",
+  "appsflyer_id": "af-user-1"
+}

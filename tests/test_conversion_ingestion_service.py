@@ -136,3 +136,144 @@ def test_normalized_event_uses_hash_when_no_id():
     assert event["event_id"]
     assert len(event["event_id"]) >= 20
     assert event["event_type"] == "purchase"
+
+
+@pytest.mark.asyncio
+async def test_record_failure_returns_inserted_id(monkeypatch: pytest.MonkeyPatch):
+    async def _stub_insert(sql: str, params: tuple = ()) -> int:
+        assert "INSERT INTO conversion_ingestion_failures" in sql
+        assert params[0] == "appsflyer"
+        assert params[3] == "ingestion_error"
+        return 77
+
+    monkeypatch.setattr("services.conversion_ingestion_service.pg_insert_returning_id", _stub_insert)
+    service = ConversionIngestionService()
+
+    failure_id = await service.record_failure(
+        source_type="appsflyer",
+        payload={"eventName": "af_purchase"},
+        error_code="ingestion_error",
+        error_message="bad payload",
+        buyer_id="1111111111",
+        endpoint_path="/conversions/appsflyer/postback",
+        idempotency_key="idem-1",
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert failure_id == 77
+
+
+@pytest.mark.asyncio
+async def test_list_failures_shapes_rows_and_meta(monkeypatch: pytest.MonkeyPatch):
+    async def _stub_query(sql: str, params: tuple = ()):
+        assert "FROM conversion_ingestion_failures" in sql
+        return [
+            {
+                "id": 77,
+                "source_type": "appsflyer",
+                "buyer_id": "1111111111",
+                "endpoint_path": "/conversions/appsflyer/postback",
+                "error_code": "ingestion_error",
+                "error_message": "bad payload",
+                "payload": {"eventName": "af_purchase"},
+                "request_headers": {"Content-Type": "application/json"},
+                "idempotency_key": "idem-1",
+                "status": "pending",
+                "replay_attempts": 0,
+                "last_replayed_at": None,
+                "created_at": datetime(2026, 2, 28, 0, 0, tzinfo=timezone.utc),
+                "updated_at": datetime(2026, 2, 28, 0, 0, tzinfo=timezone.utc),
+            }
+        ]
+
+    async def _stub_query_one(sql: str, params: tuple = ()):
+        return {"total_rows": 1}
+
+    monkeypatch.setattr("services.conversion_ingestion_service.pg_query", _stub_query)
+    monkeypatch.setattr("services.conversion_ingestion_service.pg_query_one", _stub_query_one)
+    service = ConversionIngestionService()
+
+    payload = await service.list_failures(
+        source_type="appsflyer",
+        buyer_id="1111111111",
+        status="pending",
+        limit=20,
+        offset=0,
+    )
+
+    assert payload["meta"]["total"] == 1
+    assert payload["meta"]["returned"] == 1
+    assert payload["rows"][0]["id"] == 77
+    assert payload["rows"][0]["source_type"] == "appsflyer"
+
+
+@pytest.mark.asyncio
+async def test_replay_failure_updates_status(monkeypatch: pytest.MonkeyPatch):
+    updates: list[tuple[str, tuple]] = []
+
+    async def _stub_query_one(sql: str, params: tuple = ()):
+        return {
+            "id": 77,
+            "source_type": "appsflyer",
+            "buyer_id": "1111111111",
+            "payload": {"eventName": "af_purchase"},
+            "idempotency_key": "idem-1",
+            "replay_attempts": 0,
+        }
+
+    async def _stub_execute(sql: str, params: tuple = ()) -> int:
+        updates.append((sql, params))
+        return 1
+
+    async def _stub_ingest(self, **kwargs):
+        return {
+            "accepted": True,
+            "duplicate": False,
+            "source_type": "appsflyer",
+            "event_id": "evt-1",
+            "event_type": "purchase",
+            "buyer_id": "1111111111",
+            "event_ts": "2026-02-28T00:00:00+00:00",
+            "import_batch_id": "batch-1",
+        }
+
+    monkeypatch.setattr("services.conversion_ingestion_service.pg_query_one", _stub_query_one)
+    monkeypatch.setattr("services.conversion_ingestion_service.pg_execute", _stub_execute)
+    monkeypatch.setattr(ConversionIngestionService, "ingest_provider_payload", _stub_ingest)
+    service = ConversionIngestionService()
+
+    payload = await service.replay_failure(77)
+
+    assert payload["failure_id"] == 77
+    assert payload["status"] == "replayed"
+    assert len(updates) == 1
+    assert "status = 'replayed'" in updates[0][0]
+
+
+@pytest.mark.asyncio
+async def test_get_ingestion_stats_returns_totals(monkeypatch: pytest.MonkeyPatch):
+    async def _stub_query(sql: str, params: tuple = ()):
+        return [
+            {
+                "metric_date": "2026-02-28",
+                "source_type": "appsflyer",
+                "accepted_count": 10,
+                "rejected_count": 2,
+            }
+        ]
+
+    monkeypatch.setattr("services.conversion_ingestion_service.pg_query", _stub_query)
+    service = ConversionIngestionService()
+
+    payload = await service.get_ingestion_stats(
+        days=14,
+        source_type="appsflyer",
+        buyer_id="1111111111",
+    )
+
+    assert payload["days"] == 14
+    assert payload["source_type"] == "appsflyer"
+    assert payload["buyer_id"] == "1111111111"
+    assert payload["accepted_total"] == 10
+    assert payload["rejected_total"] == 2
+    assert payload["rows"][0]["source_type"] == "appsflyer"

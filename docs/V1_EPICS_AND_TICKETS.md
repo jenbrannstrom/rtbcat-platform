@@ -18,11 +18,14 @@
 - `E1-002` started: canonical conversion taxonomy + source normalization helpers added in `services/conversion_taxonomy.py`, with provider-specific payload normalizers in `services/conversion_normalizers.py`.
 - `E1-003` started: daily conversion aggregation service implemented (`services/conversions_service.py`) with RTB join and upsert refresh flow.
 - `E1-004` started: conversion aggregate read API and lag health endpoints added under `/conversions/*` with router wiring in `api/main.py`.
-- `QA-002` (Phase 1 slice) started: conversion taxonomy/service/API tests added and passing in local regression runs.
+- `QA-002` (Phase 1/2 slice) started: conversion taxonomy/service/API coverage plus provider fixture suite (`tests/fixtures/conversions/*`, `tests/test_conversion_connector_fixtures.py`) are passing in local regression runs.
 - `E2-001` started: `/conversions/appsflyer/postback` endpoint added with provider secret validation and idempotent event ingestion.
 - `E2-002` started: `/conversions/adjust/callback` endpoint added with provider secret validation and idempotent event ingestion.
 - `E2-003` started: `/conversions/branch/webhook` endpoint added with provider secret validation and idempotent event ingestion.
 - `E2-004` started: `/conversions/generic/postback` and `/conversions/csv/upload` endpoints added, feeding the universal conversion event schema.
+- `E2-005` started: conversion ingestion observability + DLQ operations added (`conversion_ingestion_failures`, list/replay/discard endpoints, accepted/rejected stats).
+- `E3-001` started: migration `056_byom_optimizer_platform.sql` adds `optimization_models`, `segment_scores`, and `qps_allocation_proposals`; model registry APIs are available under `/optimizer/models/*` with service/test coverage.
+- `E4-004` (security hardening slice) started: conversion webhook endpoints now support optional HMAC verification and configurable timestamp-freshness checks for replay-risk reduction.
 
 ---
 
