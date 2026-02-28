@@ -11,6 +11,7 @@ import {
   getOptimizerSetup,
   validateOptimizerModelEndpoint,
   getConversionHealth,
+  getConversionIngestionStats,
 } from "@/lib/api";
 import { ErrorPage } from "@/components/error";
 import { LoadingPage } from "@/components/loading";
@@ -98,12 +99,26 @@ export default function SetupPage() {
     retry: false,
   });
 
+  const {
+    data: conversionIngestionStats,
+    isLoading: conversionStatsLoading,
+    error: conversionStatsError,
+  } = useQuery({
+    queryKey: ["setupConversionIngestionStats"],
+    queryFn: () =>
+      getConversionIngestionStats({
+        days: 14,
+      }),
+    retry: false,
+  });
+
   if (
     seatsLoading ||
     dataHealthLoading ||
     modelsLoading ||
     optimizerSetupLoading ||
     conversionHealthLoading ||
+    conversionStatsLoading ||
     modelValidationLoading
   ) {
     return <LoadingPage />;
@@ -133,8 +148,32 @@ export default function SetupPage() {
     !!firstActiveModelId && !!(modelValidation?.valid || modelValidation?.skipped);
   const modelValidationUnavailable = !!modelValidationError;
   const hostingCostReady = (optimizerSetup?.monthly_hosting_cost_usd || 0) > 0;
-  const conversionSourcesReady = (conversionHealth?.ingestion?.total_events || 0) > 0;
   const conversionHealthUnavailable = !!conversionHealthError;
+  const conversionHealthState = String(conversionHealth?.state || "").toLowerCase();
+  const conversionStatsUnavailable = !!conversionStatsError;
+  const conversionAcceptedTotal = conversionIngestionStats?.accepted_total || 0;
+  const conversionActiveSources = (conversionIngestionStats?.rows || []).filter(
+    (row) => row.accepted_count > 0,
+  ).length;
+  const rawConversionLagHours = conversionHealth?.ingestion?.lag_hours;
+  const conversionLagKnown = typeof rawConversionLagHours === "number" && Number.isFinite(rawConversionLagHours);
+  const conversionLagHours = conversionLagKnown ? rawConversionLagHours : null;
+  const conversionLagDisplay = conversionLagHours !== null ? `${conversionLagHours.toFixed(1)}h` : "unknown";
+  const conversionIngestionFresh = conversionLagHours !== null && conversionLagHours <= 72;
+  const conversionSourcesReady =
+    !conversionHealthUnavailable &&
+    !conversionStatsUnavailable &&
+    conversionAcceptedTotal > 0 &&
+    conversionHealthState !== "unavailable" &&
+    conversionIngestionFresh;
+  const conversionSourcesDescription =
+    conversionHealthUnavailable || conversionStatsUnavailable
+      ? "Conversion health/stats unavailable right now. Verify webhook or pixel setup in System."
+      : conversionAcceptedTotal <= 0
+        ? "No accepted conversion events in the last 14 days. Send a test event before go-live."
+        : !conversionIngestionFresh
+          ? `Conversions are ingesting (${conversionAcceptedTotal} accepted in 14 days), but lag is ${conversionLagDisplay}. Restore freshness before go-live.`
+          : `Healthy conversion flow: ${conversionActiveSources} active source(s), ${conversionAcceptedTotal} accepted in 14 days, lag ${conversionLagDisplay}.`;
 
   const items: SetupItem[] = [
     {
@@ -177,9 +216,7 @@ export default function SetupPage() {
     {
       key: "conversion-sources",
       title: "Connect Conversion Source",
-      description: conversionHealthUnavailable
-        ? "Conversion health check unavailable right now. Verify webhook/pixel setup in System."
-        : "Verify at least one conversion source is ingesting events.",
+      description: conversionSourcesDescription,
       href: "/settings/system",
       done: conversionSourcesReady,
     },
