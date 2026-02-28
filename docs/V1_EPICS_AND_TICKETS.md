@@ -43,6 +43,7 @@
 - `E4-003` started: conversion connector setup guide drafted in `docs/CONVERSION_CONNECTORS_SETUP_GUIDE.md` covering AppsFlyer/Adjust/Branch/generic/CSV ingestion paths, security envs, and post-setup validation/DLQ flow.
 - `E4-003` started: BYOM integration docs drafted in `docs/BYOM_MODEL_INTEGRATION_GUIDE.md` with model registry + external scoring contract details; example prompt template added at `prompts/byom-qps-optimizer.example.md`.
 - `QA-004` started: canary go/no-go checklist drafted in `docs/V1_CANARY_GO_NO_GO_CHECKLIST.md` with data integrity, conversion ingestion, optimizer workflow, and rollback gates; runnable smoke script added at `scripts/v1_canary_smoke.py` with env-driven wrapper `scripts/run_v1_canary_smoke.sh`, stricter readiness assertions, root `make v1-canary-smoke` / `make phase0-gate` entrypoints, and unit coverage in `tests/test_v1_canary_smoke.py`.
+- `QA-004` started (ops hardening slice): `make phase0-gate` now runs reliably in restricted environments by building dashboard with webpack mode (`npm --prefix dashboard run build -- --webpack`), avoiding Turbopack sandbox port-binding failures.
 
 ---
 
