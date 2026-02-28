@@ -71,6 +71,16 @@ class OptimizerModelUpdateActiveResponse(BaseModel):
     is_active: bool
 
 
+class ValidateOptimizerModelResponse(BaseModel):
+    model_id: str
+    buyer_id: Optional[str] = None
+    valid: bool
+    skipped: bool = False
+    http_status: Optional[int] = None
+    message: str
+    response_preview: Optional[str] = None
+
+
 @router.get("", response_model=OptimizerModelsResponse)
 async def list_optimizer_models(
     buyer_id: Optional[str] = Query(None),
@@ -199,3 +209,26 @@ async def deactivate_optimizer_model(
         is_active=bool(payload["is_active"]),
     )
 
+
+@router.post("/{model_id}/validate", response_model=ValidateOptimizerModelResponse)
+async def validate_optimizer_model(
+    model_id: str,
+    buyer_id: Optional[str] = Query(None),
+    timeout_seconds: int = Query(10, ge=1, le=60),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    service = OptimizerModelsService()
+    try:
+        payload = await service.validate_model_endpoint(
+            model_id=model_id,
+            buyer_id=buyer_id,
+            timeout_seconds=timeout_seconds,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if "not found" in message.lower():
+            raise HTTPException(status_code=404, detail=message) from exc
+        raise HTTPException(status_code=400, detail=message) from exc
+    return ValidateOptimizerModelResponse(**payload)

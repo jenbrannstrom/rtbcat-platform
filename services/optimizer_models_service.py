@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 from storage.postgres_database import pg_query, pg_query_one
 
@@ -313,6 +316,116 @@ class OptimizerModelsService:
             return None
         return _model_row_to_payload(row)
 
+    async def validate_model_endpoint(
+        self,
+        *,
+        model_id: str,
+        buyer_id: Optional[str] = None,
+        sample_payload: Optional[dict[str, Any]] = None,
+        timeout_seconds: int = 10,
+    ) -> dict[str, Any]:
+        model = await self.get_model(model_id=model_id, buyer_id=buyer_id)
+        if not model:
+            raise ValueError("Model not found")
+
+        if str(model.get("model_type") or "") != "api":
+            return {
+                "model_id": model_id,
+                "buyer_id": model.get("buyer_id"),
+                "valid": True,
+                "skipped": True,
+                "message": "Validation skipped for non-api model_type",
+            }
+
+        endpoint_url = str(model.get("endpoint_url") or "").strip()
+        if not endpoint_url:
+            raise ValueError("API model missing endpoint_url")
+
+        payload = sample_payload or {
+            "model_id": model_id,
+            "buyer_id": model.get("buyer_id"),
+            "ping": True,
+            "features": [],
+        }
+        headers = {"Content-Type": "application/json"}
+        if model.get("has_auth_header"):
+            # auth_header_encrypted is write-only in API responses; pull it directly.
+            raw_model = await pg_query_one(
+                """
+                SELECT auth_header_encrypted
+                FROM optimization_models
+                WHERE model_id = %s
+                LIMIT 1
+                """,
+                (model_id,),
+            )
+            if raw_model and raw_model.get("auth_header_encrypted"):
+                headers["Authorization"] = str(raw_model.get("auth_header_encrypted"))
+
+        result = await self._post_json(
+            endpoint_url=endpoint_url,
+            payload=payload,
+            headers=headers,
+            timeout_seconds=timeout_seconds,
+        )
+        body = result.get("json")
+        valid = False
+        if isinstance(body, dict):
+            if isinstance(body.get("scores"), list):
+                valid = True
+            elif body.get("ok") is True:
+                valid = True
+
+        return {
+            "model_id": model_id,
+            "buyer_id": model.get("buyer_id"),
+            "valid": valid,
+            "skipped": False,
+            "http_status": result.get("status"),
+            "message": "Model endpoint validated" if valid else "Model endpoint responded but contract check failed",
+            "response_preview": (
+                json.dumps(body)[:300]
+                if isinstance(body, (dict, list))
+                else str(result.get("raw") or "")[:300]
+            ),
+        }
+
+    async def _post_json(
+        self,
+        *,
+        endpoint_url: str,
+        payload: dict[str, Any],
+        headers: dict[str, str],
+        timeout_seconds: int,
+    ) -> dict[str, Any]:
+        def _request() -> dict[str, Any]:
+            req = urllib_request.Request(
+                endpoint_url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers=headers,
+                method="POST",
+            )
+            try:
+                with urllib_request.urlopen(req, timeout=timeout_seconds) as resp:
+                    status = int(getattr(resp, "status", 200))
+                    raw = resp.read().decode("utf-8", errors="replace")
+            except urllib_error.HTTPError as exc:
+                raw = exc.read().decode("utf-8", errors="replace") if hasattr(exc, "read") else str(exc)
+                return {"status": int(exc.code), "raw": raw, "json": _try_json(raw)}
+            except Exception as exc:
+                raise ValueError(f"Endpoint validation request failed: {exc}") from exc
+
+            return {"status": status, "raw": raw, "json": _try_json(raw)}
+
+        return await asyncio.to_thread(_request)
+
+
+def _try_json(raw: str) -> Any:
+    try:
+        return json.loads(raw)
+    except Exception:
+        return None
+
 
 def _model_row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
     return {
@@ -329,4 +442,3 @@ def _model_row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
         "created_at": _to_iso_ts(row.get("created_at")),
         "updated_at": _to_iso_ts(row.get("updated_at")),
     }
-

@@ -187,3 +187,53 @@ async def test_update_model_returns_updated_row(monkeypatch: pytest.MonkeyPatch)
     assert payload["endpoint_url"] == "https://example.com/new-score"
     assert payload["is_active"] is False
 
+
+@pytest.mark.asyncio
+async def test_validate_model_endpoint_skips_non_api(monkeypatch: pytest.MonkeyPatch):
+    async def _stub_get_model(self, *, model_id: str, buyer_id=None):
+        return {
+            "model_id": model_id,
+            "buyer_id": "1111111111",
+            "model_type": "rules",
+            "endpoint_url": None,
+            "has_auth_header": False,
+        }
+
+    monkeypatch.setattr(OptimizerModelsService, "get_model", _stub_get_model)
+    service = OptimizerModelsService()
+    payload = await service.validate_model_endpoint(
+        model_id="mdl_rules",
+        buyer_id="1111111111",
+    )
+
+    assert payload["valid"] is True
+    assert payload["skipped"] is True
+
+
+@pytest.mark.asyncio
+async def test_validate_model_endpoint_checks_contract(monkeypatch: pytest.MonkeyPatch):
+    async def _stub_get_model(self, *, model_id: str, buyer_id=None):
+        return {
+            "model_id": model_id,
+            "buyer_id": "1111111111",
+            "model_type": "api",
+            "endpoint_url": "https://example.com/score",
+            "has_auth_header": False,
+        }
+
+    async def _stub_post_json(self, **kwargs):
+        assert kwargs["endpoint_url"] == "https://example.com/score"
+        assert kwargs["payload"]["model_id"] == "mdl_api"
+        return {"status": 200, "raw": '{"scores":[]}', "json": {"scores": []}}
+
+    monkeypatch.setattr(OptimizerModelsService, "get_model", _stub_get_model)
+    monkeypatch.setattr(OptimizerModelsService, "_post_json", _stub_post_json)
+    service = OptimizerModelsService()
+    payload = await service.validate_model_endpoint(
+        model_id="mdl_api",
+        buyer_id="1111111111",
+    )
+
+    assert payload["valid"] is True
+    assert payload["skipped"] is False
+    assert payload["http_status"] == 200
