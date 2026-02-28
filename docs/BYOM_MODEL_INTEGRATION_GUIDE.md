@@ -118,6 +118,24 @@ Validation passes when endpoint returns:
 1. JSON object with `scores` array, or
 2. JSON object with `{"ok": true}` for ping-style health.
 
+You can validate with a custom payload:
+
+```bash
+curl -sS -X POST \
+  "https://<host>/api/optimizer/models/<model_id>/validate?buyer_id=<buyer_id>&timeout_seconds=15" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sample_payload": {
+      "model_id": "<model_id>",
+      "buyer_id": "<buyer_id>",
+      "event_type": "purchase",
+      "start_date": "2026-02-15",
+      "end_date": "2026-02-28",
+      "features": [{"feature_id":"f1","billing_id":"cfg-1","spend_usd":12.3}]
+    }
+  }'
+```
+
 ## 5. Run Scoring and Proposals
 
 ### 5.1 Scoring only

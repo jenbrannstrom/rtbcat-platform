@@ -81,6 +81,10 @@ class ValidateOptimizerModelResponse(BaseModel):
     response_preview: Optional[str] = None
 
 
+class ValidateOptimizerModelRequest(BaseModel):
+    sample_payload: Optional[dict[str, Any]] = None
+
+
 @router.get("", response_model=OptimizerModelsResponse)
 async def list_optimizer_models(
     buyer_id: Optional[str] = Query(None),
@@ -213,6 +217,7 @@ async def deactivate_optimizer_model(
 @router.post("/{model_id}/validate", response_model=ValidateOptimizerModelResponse)
 async def validate_optimizer_model(
     model_id: str,
+    request: ValidateOptimizerModelRequest | None = None,
     buyer_id: Optional[str] = Query(None),
     timeout_seconds: int = Query(10, ge=1, le=60),
     store=Depends(get_store),
@@ -224,6 +229,7 @@ async def validate_optimizer_model(
         payload = await service.validate_model_endpoint(
             model_id=model_id,
             buyer_id=buyer_id,
+            sample_payload=(request.sample_payload if request else None),
             timeout_seconds=timeout_seconds,
         )
     except ValueError as exc:

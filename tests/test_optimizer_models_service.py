@@ -284,6 +284,38 @@ async def test_validate_model_endpoint_checks_contract(monkeypatch: pytest.Monke
 
 
 @pytest.mark.asyncio
+async def test_validate_model_endpoint_uses_sample_payload_when_provided(monkeypatch: pytest.MonkeyPatch):
+    async def _stub_get_model(self, *, model_id: str, buyer_id=None):
+        return {
+            "model_id": model_id,
+            "buyer_id": "1111111111",
+            "model_type": "api",
+            "endpoint_url": "https://example.com/score",
+            "has_auth_header": False,
+        }
+
+    async def _stub_post_json(self, **kwargs):
+        assert kwargs["payload"]["features"][0]["feature_id"] == "custom-f1"
+        return {"status": 200, "raw": '{"scores":[]}', "json": {"scores": []}}
+
+    monkeypatch.setattr(OptimizerModelsService, "get_model", _stub_get_model)
+    monkeypatch.setattr(OptimizerModelsService, "_post_json", _stub_post_json)
+    service = OptimizerModelsService()
+    payload = await service.validate_model_endpoint(
+        model_id="mdl_api",
+        buyer_id="1111111111",
+        sample_payload={
+            "model_id": "mdl_api",
+            "buyer_id": "1111111111",
+            "features": [{"feature_id": "custom-f1"}],
+        },
+    )
+
+    assert payload["valid"] is True
+    assert payload["http_status"] == 200
+
+
+@pytest.mark.asyncio
 async def test_get_model_auth_header_decrypts_stored_value(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("CATSCAN_OPTIMIZER_MODEL_SECRET_KEY", "unit-test-secret")
     clear_optimizer_model_crypto_cache()
