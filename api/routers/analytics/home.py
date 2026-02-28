@@ -104,8 +104,8 @@ async def refresh_home_cache(
     user: User = Depends(get_current_user),
 ):
     """Refresh Home precomputed tables for a date range."""
-    if user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if user.role != "sudo":
+        raise HTTPException(status_code=403, detail="Sudo access required")
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     refresh_kwargs = {"buyer_account_id": buyer_id}
     if dates:

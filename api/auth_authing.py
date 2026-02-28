@@ -319,7 +319,7 @@ async def authing_callback(
 
     user = await auth_svc.get_user_by_email(email)
     if not user:
-        # Auto-create user (first user gets admin role)
+        # Auto-create user (first user gets sudo role)
         user_id = str(uuid.uuid4())
         user_count = await auth_svc.count_users()
         if user_count == 0 and is_bootstrap_token_required() and not await is_bootstrap_completed():
@@ -340,7 +340,7 @@ async def authing_callback(
                 url="/login?error=User+provisioning+disabled.+Contact+administrator",
                 status_code=302,
             )
-        role = "admin" if user_count == 0 else "user"
+        role = "sudo" if user_count == 0 else "read"
 
         user = await auth_svc.create_user(
             user_id=user_id,

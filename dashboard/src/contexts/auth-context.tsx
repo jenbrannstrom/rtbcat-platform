@@ -6,7 +6,7 @@
  * - Google (via OAuth2 Proxy)
  * - Email/Password
  *
- * Users are auto-created on first login (first user gets admin role).
+ * Users are auto-created on first login (first user gets sudo role).
  *
  * Loop prevention:
  * - Tracks redirect attempts via sessionStorage counter
@@ -33,7 +33,7 @@ interface User {
   role: string;
   is_admin: boolean;
   default_language?: string | null;
-  global_role?: string | null; // "sudo" | "user"
+  global_role?: string | null; // "sudo" | null
 }
 
 type AuthErrorKind = "service_unavailable" | "network_error" | null;
@@ -123,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAuth = useCallback(async () => {
     // DEV BYPASS: skip auth when backend is not running
     if (process.env.NODE_ENV === "development") {
-      setUser({ id: "dev", email: "dev@localhost", display_name: "Dev User", role: "admin", is_admin: true, global_role: "sudo" });
+      setUser({ id: "dev", email: "dev@localhost", display_name: "Dev User", role: "sudo", is_admin: true, global_role: "sudo" });
       setPermissions(["admin", "read", "write"]);
       setSeatPermissions({});
       setAuthError(null);
@@ -246,7 +246,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [initialized, isLoading, user, isPublicPage, router]);
 
-  const userIsSudo = user?.global_role === "sudo" || user?.is_admin === true;
+  const userIsSudo = user?.role === "sudo" || user?.global_role === "sudo";
 
   const isSeatAdmin = useCallback(
     (buyerId: string): boolean => {
@@ -260,7 +260,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     isLoading,
     isAuthenticated: !!user,
-    isAdmin: user?.is_admin ?? false,
+    isAdmin: userIsSudo,
     isSudo: userIsSudo,
     permissions,
     seatPermissions,

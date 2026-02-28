@@ -22,17 +22,17 @@ from services.auth_service import User, UserBuyerSeatPermission
 
 
 def _sudo_user() -> User:
-    return User(id="sudo-1", email="cat-scan@rtb.cat", role="admin")
+    return User(id="sudo-1", email="cat-scan@rtb.cat", role="sudo")
 
 
 def _local_admin_user() -> User:
     """User with admin access to buyer 299038253 (TUKY) only."""
-    return User(id="dea-1", email="dea@rtb.cat", role="user")
+    return User(id="dea-1", email="dea@rtb.cat", role="admin")
 
 
 def _readonly_user() -> User:
     """User with read access to buyer 299038253 (TUKY) only."""
-    return User(id="ro-1", email="readonly@rtb.cat", role="user")
+    return User(id="ro-1", email="readonly@rtb.cat", role="read")
 
 
 def _tuky_admin_perm() -> UserBuyerSeatPermission:
@@ -160,14 +160,14 @@ async def test_require_buyer_admin_access_readonly_denied():
 @pytest.mark.asyncio
 async def test_require_seat_admin_or_sudo_for_sudo():
     result = await require_seat_admin_or_sudo(_sudo_user())
-    assert result.role == "admin"
+    assert result.role == "sudo"
 
 
 @pytest.mark.asyncio
 async def test_require_seat_admin_or_sudo_for_local_admin():
     with patch("api.dependencies.get_auth_service", return_value=_mock_auth_svc([_tuky_admin_perm()])):
         result = await require_seat_admin_or_sudo(_local_admin_user())
-        assert result.role == "user"
+        assert result.role == "admin"
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,7 @@
 """Admin API for user management.
 
 This module provides administrative endpoints for managing users,
-permissions, and viewing audit logs. All endpoints require admin role.
+permissions, and viewing audit logs. All endpoints require sudo role.
 """
 
 from typing import Optional, List
@@ -32,7 +32,7 @@ class CreateUserRequest(BaseModel):
     """Request to create a new user (local password or OAuth pre-create)."""
     email: str = Field(..., description="User email address")
     display_name: Optional[str] = Field(None, description="User display name")
-    role: str = Field("user", description="User role (admin or user)")
+    role: str = Field("read", description="User role (sudo, admin, or read)")
     default_language: Optional[str] = Field("en", description="Default UI language code")
     auth_method: Optional[str] = Field(
         None,

@@ -3,7 +3,7 @@
 This module provides user authentication via OAuth2 Proxy (Google Auth):
 - Users authenticate via Google through OAuth2 Proxy
 - X-Email header from OAuth2 Proxy identifies the user
-- Users are auto-created on first login (first user gets admin role)
+- Users are auto-created on first login (first user gets sudo role)
 - Session middleware handles all authentication
 
 Password-based login has been removed - Google Auth only.
@@ -35,7 +35,7 @@ class UserInfo(BaseModel):
     permissions: list[str]  # List of service account IDs (legacy)
     default_language: Optional[str] = None
     # RBAC v2 fields
-    global_role: Optional[str] = None  # "sudo" | "user"
+    global_role: Optional[str] = None  # "sudo" for global users, else None
     seat_permissions: Optional[dict[str, str]] = None  # {buyer_id: "read"|"admin"}
 
 
@@ -110,15 +110,15 @@ async def get_current_user_info(request: Request):
         auth_svc = get_auth_service()
         permissions = await auth_svc.get_user_service_account_ids(user.id)
         # RBAC v2: build seat permissions map for non-sudo users
-        is_admin = user.role == "admin"
-        global_role = "sudo" if is_admin else "user"
-        seat_perms = {} if is_admin else await auth_svc.get_user_buyer_seat_access_map(user.id)
+        is_sudo = user.role == "sudo"
+        global_role = "sudo" if is_sudo else None
+        seat_perms = {} if is_sudo else await auth_svc.get_user_buyer_seat_access_map(user.id)
         return UserInfo(
             id=user.id,
             email=user.email,
             display_name=user.display_name,
             role=user.role,
-            is_admin=is_admin,
+            is_admin=is_sudo,
             permissions=permissions,
             default_language=getattr(user, "default_language", None),
             global_role=global_role,
@@ -143,7 +143,7 @@ async def check_auth_status(request: Request):
     """
     if hasattr(request.state, "user") and request.state.user:
         user = request.state.user
-        is_admin = user.role == "admin"
+        is_sudo = user.role == "sudo"
         return {
             "authenticated": True,
             "auth_method": "oauth2_proxy",
@@ -152,9 +152,9 @@ async def check_auth_status(request: Request):
                 "email": user.email,
                 "display_name": user.display_name,
                 "role": user.role,
-                "is_admin": is_admin,
+                "is_admin": is_sudo,
                 "default_language": getattr(user, "default_language", None),
-                "global_role": "sudo" if is_admin else "user",
+                "global_role": "sudo" if is_sudo else None,
             },
         }
 

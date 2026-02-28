@@ -119,7 +119,7 @@ async def bootstrap_first_admin(
         logger.warning("Bootstrap attempt with invalid token from %s", request.client.host if request.client else "unknown")
         raise HTTPException(status_code=403, detail="Invalid bootstrap token.")
 
-    # Create admin user
+    # Create first sudo user
     email = payload.email.lower().strip()
     user_id = str(uuid.uuid4())
     display_name = payload.display_name or email.split("@")[0].replace(".", " ").title()
@@ -128,7 +128,7 @@ async def bootstrap_first_admin(
         user_id=user_id,
         email=email,
         display_name=display_name,
-        role="admin",
+        role="sudo",
     )
 
     # If password provided, store it

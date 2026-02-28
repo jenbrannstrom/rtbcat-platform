@@ -18,7 +18,7 @@ class AuthRepository:
         user_id: str,
         email: str,
         display_name: Optional[str] = None,
-        role: str = "user",
+        role: str = "read",
         default_language: str = "en",
     ) -> dict[str, Any]:
         """Create a new user."""

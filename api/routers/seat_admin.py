@@ -172,7 +172,7 @@ async def revoke_seat_permission(
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if target_user.role == "admin" and not is_sudo(caller):
+    if target_user.role == "sudo" and not is_sudo(caller):
         raise HTTPException(
             status_code=403,
             detail="Cannot revoke seat access from a sudo user. Contact a system administrator.",

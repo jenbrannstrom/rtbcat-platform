@@ -9,7 +9,7 @@ from services.auth_service import User, UserBuyerSeatPermission
 
 
 def _admin_user() -> User:
-    return User(id="admin-1", email="admin@example.com", role="admin")
+    return User(id="admin-1", email="admin@example.com", role="sudo")
 
 
 @pytest.mark.asyncio
@@ -77,7 +77,7 @@ async def test_get_allowed_buyer_ids_prefers_explicit_seat_permissions(monkeypat
     store = MagicMock()
     store.get_buyer_ids_for_service_accounts = AsyncMock(return_value=["legacy-should-not-be-used"])
 
-    user = User(id="user-1", email="user@example.com", role="user")
+    user = User(id="user-1", email="user@example.com", role="read")
     allowed = await dependencies.get_allowed_buyer_ids(store=store, user=user)
 
     assert allowed == ["1487810529"]
@@ -85,7 +85,7 @@ async def test_get_allowed_buyer_ids_prefers_explicit_seat_permissions(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_get_allowed_buyer_ids_falls_back_to_legacy_service_accounts(monkeypatch):
+async def test_get_allowed_buyer_ids_no_longer_falls_back_to_legacy_service_accounts(monkeypatch):
     auth = MagicMock()
     auth.get_user_buyer_seat_ids = AsyncMock(return_value=[])
     auth.get_user_service_account_ids = AsyncMock(return_value=["sa-1", "sa-2"])
@@ -95,8 +95,8 @@ async def test_get_allowed_buyer_ids_falls_back_to_legacy_service_accounts(monke
     store = MagicMock()
     store.get_buyer_ids_for_service_accounts = AsyncMock(return_value=["111", "222"])
 
-    user = User(id="user-1", email="user@example.com", role="user")
+    user = User(id="user-1", email="user@example.com", role="admin")
     allowed = await dependencies.get_allowed_buyer_ids(store=store, user=user)
 
-    assert allowed == ["111", "222"]
-    store.get_buyer_ids_for_service_accounts.assert_awaited_once_with(["sa-1", "sa-2"])
+    assert allowed == []
+    store.get_buyer_ids_for_service_accounts.assert_not_called()

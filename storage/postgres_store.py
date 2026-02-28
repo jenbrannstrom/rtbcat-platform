@@ -744,7 +744,7 @@ class PostgresStore:
         user_id: str,
         email: str,
         display_name: Optional[str] = None,
-        role: str = "user",
+        role: str = "read",
         default_language: str = "en",
     ) -> User:
         """Create a new user."""

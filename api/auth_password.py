@@ -2,7 +2,7 @@
 
 This module provides traditional username/password authentication:
 - /auth/login: Login with email and password
-- /auth/register: Register new user (admin only or first user)
+- /auth/register: Register new user (sudo only or first user)
 
 Password hashing uses bcrypt via passlib.
 """
@@ -210,7 +210,7 @@ async def login(request: Request, response: Response, login_data: LoginRequest):
             "email": user.email,
             "display_name": user.display_name,
             "role": user.role,
-            "is_admin": user.role == "admin",
+            "is_admin": user.role == "sudo",
         },
     )
 
@@ -219,8 +219,8 @@ async def login(request: Request, response: Response, login_data: LoginRequest):
 async def register(request: Request, response: Response, register_data: RegisterRequest):
     """Register a new user with email and password.
 
-    First user becomes admin. Subsequent registrations require admin approval
-    (via admin user management) or can be done by admins.
+    First user becomes sudo. Subsequent registrations require sudo approval
+    (via admin user management) or can be done by sudo users.
     """
     auth_svc = get_auth_service()
     email = register_data.email.lower().strip()
@@ -234,7 +234,7 @@ async def register(request: Request, response: Response, register_data: Register
     if len(register_data.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
 
-    # Check if this is the first user (becomes admin)
+    # Check if this is the first user (becomes sudo)
     user_count = await auth_svc.count_users()
     is_first_user = user_count == 0
 
@@ -252,12 +252,12 @@ async def register(request: Request, response: Response, register_data: Register
         )
 
     if not is_first_user:
-        # Check if requester is admin
+        # Check if requester is sudo
         if hasattr(request.state, "user") and request.state.user:
-            if request.state.user.role != "admin":
+            if request.state.user.role != "sudo":
                 raise HTTPException(
                     status_code=403,
-                    detail="Only admins can register new users. Please contact an administrator."
+                    detail="Only sudo users can register new users. Please contact an administrator."
                 )
         else:
             raise HTTPException(
@@ -267,7 +267,7 @@ async def register(request: Request, response: Response, register_data: Register
 
     # Create user
     user_id = str(uuid.uuid4())
-    role = "admin" if is_first_user else "user"
+    role = "sudo" if is_first_user else "read"
     display_name = register_data.display_name or email.split("@")[0].replace(".", " ").title()
 
     user = await auth_svc.create_user(
@@ -315,13 +315,13 @@ async def register(request: Request, response: Response, register_data: Register
 
     return AuthResponse(
         status="success",
-        message="Registration successful" + (" - you are now logged in as admin" if is_first_user else ""),
+        message="Registration successful" + (" - you are now logged in as sudo" if is_first_user else ""),
         user={
             "id": user.id,
             "email": user.email,
             "display_name": user.display_name,
             "role": user.role,
-            "is_admin": user.role == "admin",
+            "is_admin": user.role == "sudo",
         },
     )
 

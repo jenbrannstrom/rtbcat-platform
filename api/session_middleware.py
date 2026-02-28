@@ -182,7 +182,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
         """Get or create a user from OAuth2 Proxy authentication.
 
         When behind OAuth2 Proxy, we trust the X-Email header.
-        Users are auto-created on first access with admin role.
+        Users are auto-created on first access (first user = sudo, others = read).
 
         On DB failure, sets request.state.auth_error so /auth/check can
         return 503 instead of silently claiming "not authenticated".
@@ -200,7 +200,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             user_id = str(uuid.uuid4())
             display_name = email.split("@")[0].replace(".", " ").title()
 
-            # First user gets admin role, others get user role
+            # First user gets sudo role, others get read role
             user_count = await auth_svc.count_users()
             if user_count == 0 and is_bootstrap_token_required() and not await is_bootstrap_completed():
                 logger.warning(
@@ -214,7 +214,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
                     email,
                 )
                 return None, True
-            role = "admin" if user_count == 0 else "user"
+            role = "sudo" if user_count == 0 else "read"
 
             user = await auth_svc.create_user(
                 user_id=user_id,
@@ -280,13 +280,13 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
                 user = await self._validate_session(session_id)
                 if user:
                     request.state.user = user
-            # Provide a default user so route dependencies don't fail
+            # Provide a default local user so route dependencies don't fail
             if not getattr(request.state, "user", None):
                 request.state.user = User(
                     id="local-dev",
                     email="dev@localhost",
                     display_name="Local Dev",
-                    role="admin",
+                    role="sudo",
                 )
             return await call_next(request)
 
