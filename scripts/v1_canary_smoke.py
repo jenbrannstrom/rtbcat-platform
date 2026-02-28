@@ -104,6 +104,17 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=20.0)
     parser.add_argument("--run-workflow", action="store_true", help="Run score+propose workflow check.")
     parser.add_argument(
+        "--require-healthy-readiness",
+        action="store_true",
+        help="Require healthy readiness states instead of only rejecting unavailable data.",
+    )
+    parser.add_argument(
+        "--max-dimension-missing-pct",
+        type=float,
+        default=99.9,
+        help="Maximum tolerated missing percent for bidstream dimensions (default: 99.9).",
+    )
+    parser.add_argument(
         "--allow-no-active-model",
         action="store_true",
         help="Do not fail if no active model is found.",
@@ -133,7 +144,52 @@ def main() -> int:
             "/system/data-health",
             params={"buyer_id": args.buyer_id, "days": 14, "limit": 10},
         )
-        _assert("optimizer_readiness" in payload, "optimizer_readiness missing from /system/data-health")
+        readiness = payload.get("optimizer_readiness")
+        _assert(isinstance(readiness, dict), "optimizer_readiness missing from /system/data-health")
+
+        report = readiness.get("report_completeness") or {}
+        quality = readiness.get("rtb_quality_freshness") or {}
+        bidstream = readiness.get("bidstream_dimension_coverage") or {}
+        seat_day = readiness.get("seat_day_completeness") or {}
+        seat_day_summary = seat_day.get("summary") or {}
+
+        quality_state = str(quality.get("availability_state", "")).lower()
+        _assert(quality_state != "unavailable", "rtb_quality_freshness state is unavailable")
+
+        bidstream_state = str(bidstream.get("availability_state", "")).lower()
+        _assert(bidstream_state != "unavailable", "bidstream dimension coverage is unavailable")
+
+        total_rows = int(bidstream.get("total_rows") or 0)
+        _assert(total_rows > 0, "bidstream dimension coverage has zero rows")
+
+        max_missing_pct = float(args.max_dimension_missing_pct)
+        for field in ("platform_missing_pct", "environment_missing_pct", "transaction_type_missing_pct"):
+            raw_value = bidstream.get(field)
+            _assert(raw_value is not None, f"{field} missing from bidstream dimension coverage")
+            value = float(raw_value)
+            _assert(
+                value <= max_missing_pct,
+                f"{field}={value:.2f}% exceeds max {max_missing_pct:.2f}%",
+            )
+
+        _assert(
+            int(seat_day_summary.get("total_seat_days") or 0) > 0,
+            "seat_day_completeness has zero seat-day rows",
+        )
+
+        if args.require_healthy_readiness:
+            report_state = str(report.get("availability_state", "")).lower()
+            seat_day_state = str(seat_day.get("availability_state", "")).lower()
+            _assert(report_state == "healthy", f"report_completeness state is {report_state!r}, expected healthy")
+            _assert(quality_state == "healthy", f"rtb_quality_freshness state is {quality_state!r}, expected healthy")
+            _assert(
+                bidstream_state == "healthy",
+                f"bidstream dimension coverage state is {bidstream_state!r}, expected healthy",
+            )
+            _assert(
+                seat_day_state == "healthy",
+                f"seat_day_completeness state is {seat_day_state!r}, expected healthy",
+            )
 
     def check_conversion_health() -> None:
         payload = client.request("GET", "/conversions/health", params={"buyer_id": args.buyer_id})
