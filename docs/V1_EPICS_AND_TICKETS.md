@@ -14,7 +14,7 @@
 - `E0-005` completed: `/system/data-health` exposes optimizer-readiness checks for report completeness, `rtb_quality` freshness, bidstream dimension coverage, and seat/day completeness rollups (with endpoint filters).
 - `E4-001` completed for Phase 0 scope: Settings System page renders an Optimizer Readiness panel from `/system/data-health`, including interactive filters (window/state/min completeness/row limit).
 - `QA-001` completed: foundation regression suite is passing for import hardening and optimizer-readiness service/API contracts.
-- `QA-001` started (CI automation slice): `.github/workflows/phase0-regression.yml` runs `make phase0-regression` plus canary CLI sanity checks on push/PR for foundation-related paths.
+- `QA-001` started (CI automation slice): `.github/workflows/phase0-regression.yml` runs full `make phase0-gate` (foundation regression + dashboard production build) plus canary CLI sanity checks on push/PR for foundation-related paths, including `dashboard/**`.
 - `E1-001` started: migration `054_conversion_platform.sql` adds `conversion_events` and `conversion_aggregates_daily` with indexes and constraints.
 - `E1-002` started: canonical conversion taxonomy + source normalization helpers added in `services/conversion_taxonomy.py`, with provider-specific payload normalizers in `services/conversion_normalizers.py`.
 - `E1-003` started: daily conversion aggregation service implemented (`services/conversions_service.py`) with RTB join and upsert refresh flow.
