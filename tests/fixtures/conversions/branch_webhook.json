@@ -1,0 +1,11 @@
+{
+  "name": "first_purchase",
+  "timestamp": "2026-02-28T14:00:00Z",
+  "~campaign": "campaign-gamma",
+  "~id": "branch-click-7",
+  "revenue": 9.99,
+  "currency": "USD",
+  "os": "android",
+  "app_id": "com.example.branch",
+  "branch_id": "branch-user-1"
+}

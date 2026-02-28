@@ -11,7 +11,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from storage.postgres_database import pg_execute
+from storage.postgres_database import (
+    pg_execute,
+    pg_insert_returning_id,
+    pg_query,
+    pg_query_one,
+)
 from services.conversion_taxonomy import (
     normalize_attribution_type,
     normalize_currency,
@@ -480,3 +485,311 @@ class ConversionIngestionService:
             ),
         )
         return int(rowcount or 0) > 0
+
+    async def record_failure(
+        self,
+        *,
+        source_type: str,
+        payload: dict[str, Any],
+        error_code: str,
+        error_message: str,
+        buyer_id: Optional[str] = None,
+        endpoint_path: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
+    ) -> int:
+        source = normalize_source_type(source_type)
+        sql = """
+            INSERT INTO conversion_ingestion_failures (
+                source_type,
+                buyer_id,
+                endpoint_path,
+                error_code,
+                error_message,
+                payload,
+                request_headers,
+                idempotency_key,
+                status,
+                replay_attempts,
+                created_at,
+                updated_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, 'pending', 0, NOW(), NOW()
+            )
+            RETURNING id
+        """
+        return await pg_insert_returning_id(
+            sql,
+            (
+                source,
+                buyer_id,
+                endpoint_path,
+                error_code,
+                error_message[:500],
+                json.dumps(payload),
+                json.dumps(headers or {}),
+                idempotency_key,
+            ),
+        )
+
+    async def list_failures(
+        self,
+        *,
+        source_type: Optional[str] = None,
+        buyer_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        clauses = ["1=1"]
+        params: list[Any] = []
+        if source_type:
+            clauses.append("source_type = %s")
+            params.append(normalize_source_type(source_type))
+        if buyer_id:
+            clauses.append("buyer_id = %s")
+            params.append(buyer_id)
+        if status:
+            clauses.append("status = %s")
+            params.append(status)
+        where_sql = " AND ".join(clauses)
+        safe_limit = max(1, min(limit, 1000))
+        safe_offset = max(0, offset)
+
+        rows = await pg_query(
+            f"""
+            SELECT
+                id,
+                source_type,
+                buyer_id,
+                endpoint_path,
+                error_code,
+                error_message,
+                payload,
+                request_headers,
+                idempotency_key,
+                status,
+                replay_attempts,
+                last_replayed_at,
+                created_at,
+                updated_at
+            FROM conversion_ingestion_failures
+            WHERE {where_sql}
+            ORDER BY created_at DESC
+            LIMIT %s OFFSET %s
+            """,
+            tuple([*params, safe_limit, safe_offset]),
+        )
+        count_row = await pg_query_one(
+            f"""
+            SELECT COUNT(*) AS total_rows
+            FROM conversion_ingestion_failures
+            WHERE {where_sql}
+            """,
+            tuple(params),
+        )
+        total = int((count_row or {}).get("total_rows") or 0)
+
+        return {
+            "rows": [
+                {
+                    "id": int(row.get("id") or 0),
+                    "source_type": str(row.get("source_type") or ""),
+                    "buyer_id": row.get("buyer_id"),
+                    "endpoint_path": row.get("endpoint_path"),
+                    "error_code": str(row.get("error_code") or ""),
+                    "error_message": str(row.get("error_message") or ""),
+                    "payload": row.get("payload") or {},
+                    "request_headers": row.get("request_headers") or {},
+                    "idempotency_key": row.get("idempotency_key"),
+                    "status": str(row.get("status") or "pending"),
+                    "replay_attempts": int(row.get("replay_attempts") or 0),
+                    "last_replayed_at": _to_iso_ts(row.get("last_replayed_at")),
+                    "created_at": _to_iso_ts(row.get("created_at")),
+                    "updated_at": _to_iso_ts(row.get("updated_at")),
+                }
+                for row in rows
+            ],
+            "meta": {
+                "total": total,
+                "returned": len(rows),
+                "limit": safe_limit,
+                "offset": safe_offset,
+                "has_more": safe_offset + len(rows) < total,
+            },
+        }
+
+    async def replay_failure(self, failure_id: int) -> dict[str, Any]:
+        row = await pg_query_one(
+            """
+            SELECT
+                id,
+                source_type,
+                buyer_id,
+                payload,
+                idempotency_key,
+                replay_attempts
+            FROM conversion_ingestion_failures
+            WHERE id = %s
+            """,
+            (failure_id,),
+        )
+        if not row:
+            raise ValueError("Failure item not found")
+
+        payload = row.get("payload")
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        if not isinstance(payload, dict):
+            payload = {}
+
+        try:
+            result = await self.ingest_provider_payload(
+                source_type=str(row.get("source_type") or "generic"),
+                payload=payload,
+                buyer_id_override=str(row.get("buyer_id") or "") or None,
+                idempotency_key=str(row.get("idempotency_key") or "") or None,
+            )
+            await pg_execute(
+                """
+                UPDATE conversion_ingestion_failures
+                SET
+                    status = 'replayed',
+                    replay_attempts = COALESCE(replay_attempts, 0) + 1,
+                    last_replayed_at = NOW(),
+                    error_message = NULL,
+                    updated_at = NOW()
+                WHERE id = %s
+                """,
+                (failure_id,),
+            )
+            return {
+                "failure_id": failure_id,
+                "status": "replayed",
+                "result": result,
+            }
+        except Exception as exc:
+            await pg_execute(
+                """
+                UPDATE conversion_ingestion_failures
+                SET
+                    status = 'pending',
+                    replay_attempts = COALESCE(replay_attempts, 0) + 1,
+                    last_replayed_at = NOW(),
+                    error_message = %s,
+                    updated_at = NOW()
+                WHERE id = %s
+                """,
+                (str(exc)[:500], failure_id),
+            )
+            raise
+
+    async def discard_failure(self, failure_id: int) -> bool:
+        rowcount = await pg_execute(
+            """
+            UPDATE conversion_ingestion_failures
+            SET status = 'discarded', updated_at = NOW()
+            WHERE id = %s
+            """,
+            (failure_id,),
+        )
+        return int(rowcount or 0) > 0
+
+    async def get_ingestion_stats(
+        self,
+        *,
+        days: int = 7,
+        source_type: Optional[str] = None,
+        buyer_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        safe_days = max(1, min(days, 365))
+        source_filter_accepted = ""
+        source_filter_rejected = ""
+        buyer_filter_accepted = ""
+        buyer_filter_rejected = ""
+        params: list[Any] = [safe_days]
+
+        if source_type:
+            source = normalize_source_type(source_type)
+            source_filter_accepted = " AND source_type = %s"
+            source_filter_rejected = " AND source_type = %s"
+            params.append(source)
+        if buyer_id:
+            buyer_filter_accepted = " AND buyer_id = %s"
+            buyer_filter_rejected = " AND buyer_id = %s"
+            params.append(buyer_id)
+
+        sql = f"""
+            WITH accepted AS (
+                SELECT
+                    event_ts::date AS metric_date,
+                    source_type,
+                    COUNT(*)::bigint AS accepted_count
+                FROM conversion_events
+                WHERE event_ts::date >= CURRENT_DATE - %s::int
+                    {source_filter_accepted}
+                    {buyer_filter_accepted}
+                GROUP BY event_ts::date, source_type
+            ),
+            rejected AS (
+                SELECT
+                    created_at::date AS metric_date,
+                    source_type,
+                    COUNT(*)::bigint AS rejected_count
+                FROM conversion_ingestion_failures
+                WHERE created_at::date >= CURRENT_DATE - %s::int
+                    {source_filter_rejected}
+                    {buyer_filter_rejected}
+                GROUP BY created_at::date, source_type
+            )
+            SELECT
+                COALESCE(a.metric_date, r.metric_date) AS metric_date,
+                COALESCE(a.source_type, r.source_type) AS source_type,
+                COALESCE(a.accepted_count, 0)::bigint AS accepted_count,
+                COALESCE(r.rejected_count, 0)::bigint AS rejected_count
+            FROM accepted a
+            FULL OUTER JOIN rejected r
+                ON a.metric_date = r.metric_date
+                AND a.source_type = r.source_type
+            ORDER BY metric_date DESC, source_type
+        """
+
+        # params for accepted and rejected use same filter tuple
+        filter_params = params[1:]
+        rows = await pg_query(sql, tuple([safe_days, *filter_params, safe_days, *filter_params]))
+
+        accepted_total = 0
+        rejected_total = 0
+        normalized_rows = []
+        for row in rows:
+            accepted = int(row.get("accepted_count") or 0)
+            rejected = int(row.get("rejected_count") or 0)
+            accepted_total += accepted
+            rejected_total += rejected
+            normalized_rows.append(
+                {
+                    "metric_date": _to_iso_ts(row.get("metric_date")),
+                    "source_type": str(row.get("source_type") or ""),
+                    "accepted_count": accepted,
+                    "rejected_count": rejected,
+                }
+            )
+
+        return {
+            "days": safe_days,
+            "source_type": normalize_source_type(source_type) if source_type else None,
+            "buyer_id": buyer_id,
+            "accepted_total": accepted_total,
+            "rejected_total": rejected_total,
+            "rows": normalized_rows,
+        }
+
+
+def _to_iso_ts(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc).isoformat()
+        return value.astimezone(timezone.utc).isoformat()
+    return str(value)

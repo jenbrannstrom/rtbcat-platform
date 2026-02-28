@@ -1,0 +1,12 @@
+{
+  "event_token": "first_deposit",
+  "created_at": "2026-02-28T13:00:00Z",
+  "click_time": "2026-02-28T12:50:00Z",
+  "campaign_name": "campaign-beta",
+  "tracker_token": "trk-1",
+  "revenue": "15.75",
+  "currency": "eur",
+  "os_name": "ios",
+  "app_token": "com.example.adjust",
+  "adid": "adid-1"
+}
