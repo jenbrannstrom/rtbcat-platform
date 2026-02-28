@@ -119,6 +119,25 @@ export interface OptimizerProposalsResponse {
 }
 
 
+export interface OptimizerProposalHistoryRow {
+  event_id: string;
+  proposal_id: string;
+  buyer_id: string;
+  from_status: string | null;
+  to_status: string;
+  apply_mode: string | null;
+  changed_by: string | null;
+  details: Record<string, unknown>;
+  created_at: string | null;
+}
+
+
+export interface OptimizerProposalHistoryResponse {
+  rows: OptimizerProposalHistoryRow[];
+  meta: OptimizerMeta;
+}
+
+
 export async function listOptimizerProposals(params?: {
   buyer_id?: string;
   model_id?: string;
@@ -134,6 +153,21 @@ export async function listOptimizerProposals(params?: {
   if (typeof params?.offset === "number") searchParams.set("offset", String(params.offset));
   const query = searchParams.toString();
   return fetchApi<OptimizerProposalsResponse>(`/optimizer/proposals${query ? `?${query}` : ""}`);
+}
+
+
+export async function listOptimizerProposalHistory(
+  proposalId: string,
+  params?: { buyer_id?: string; limit?: number; offset?: number },
+): Promise<OptimizerProposalHistoryResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  if (typeof params?.limit === "number") searchParams.set("limit", String(params.limit));
+  if (typeof params?.offset === "number") searchParams.set("offset", String(params.offset));
+  const query = searchParams.toString();
+  return fetchApi<OptimizerProposalHistoryResponse>(
+    `/optimizer/proposals/${encodeURIComponent(proposalId)}/history${query ? `?${query}` : ""}`,
+  );
 }
 
 
