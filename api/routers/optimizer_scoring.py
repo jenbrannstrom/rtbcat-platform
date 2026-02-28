@@ -62,7 +62,8 @@ class RulesTopScore(BaseModel):
     reason_codes: list[str]
 
 
-class RulesScoringRunResponse(BaseModel):
+class ScoringRunResponse(BaseModel):
+    model_type: Optional[str] = None
     model_id: str
     buyer_id: str
     start_date: str
@@ -73,7 +74,39 @@ class RulesScoringRunResponse(BaseModel):
     top_scores: list[RulesTopScore]
 
 
-@router.post("/rules/run", response_model=RulesScoringRunResponse)
+@router.post("/run", response_model=ScoringRunResponse)
+async def run_scoring(
+    model_id: str = Query(...),
+    buyer_id: Optional[str] = Query(None),
+    days: int = Query(14, ge=1, le=365),
+    start_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    event_type: Optional[str] = Query(None),
+    limit: int = Query(1000, ge=1, le=5000),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    service = OptimizerScoringService()
+    try:
+        payload = await service.run_scoring(
+            model_id=model_id,
+            buyer_id=buyer_id or "unknown",
+            days=days,
+            start_date=start_date,
+            end_date=end_date,
+            event_type=event_type,
+            limit=limit,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if "not found" in message.lower():
+            raise HTTPException(status_code=404, detail=message) from exc
+        raise HTTPException(status_code=400, detail=message) from exc
+    return ScoringRunResponse(**payload)
+
+
+@router.post("/rules/run", response_model=ScoringRunResponse)
 async def run_rules_scoring(
     model_id: str = Query(...),
     buyer_id: Optional[str] = Query(None),
@@ -102,7 +135,8 @@ async def run_rules_scoring(
         if "not found" in message.lower():
             raise HTTPException(status_code=404, detail=message) from exc
         raise HTTPException(status_code=400, detail=message) from exc
-    return RulesScoringRunResponse(**payload)
+    payload["model_type"] = "rules"
+    return ScoringRunResponse(**payload)
 
 
 @router.get("/segments", response_model=SegmentScoresResponse)
@@ -140,4 +174,3 @@ async def list_segment_scores(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return SegmentScoresResponse(**payload)
-

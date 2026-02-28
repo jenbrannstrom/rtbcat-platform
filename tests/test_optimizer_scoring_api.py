@@ -15,12 +15,40 @@ from api.routers import optimizer_scoring as optimizer_scoring_router
 
 class _StubOptimizerScoringService:
     def __init__(self):
+        self.run_dispatch_calls: list[dict] = []
         self.run_calls: list[dict] = []
         self.list_calls: list[dict] = []
+
+    async def run_scoring(self, **kwargs):
+        self.run_dispatch_calls.append(kwargs)
+        return {
+            "model_type": "api",
+            "model_id": kwargs["model_id"],
+            "buyer_id": kwargs["buyer_id"],
+            "start_date": kwargs.get("start_date") or "2026-02-15",
+            "end_date": kwargs.get("end_date") or "2026-02-28",
+            "event_type": kwargs.get("event_type"),
+            "segments_scanned": 2,
+            "scores_written": 2,
+            "top_scores": [
+                {
+                    "score_id": "scr_1",
+                    "billing_id": "cfg-1",
+                    "country": "US",
+                    "publisher_id": "pub-1",
+                    "app_id": "com.example.app",
+                    "score_date": "2026-02-28",
+                    "value_score": 0.93,
+                    "confidence": 0.84,
+                    "reason_codes": ["external_model_score"],
+                }
+            ],
+        }
 
     async def run_rules_scoring(self, **kwargs):
         self.run_calls.append(kwargs)
         return {
+            "model_type": "rules",
             "model_id": kwargs["model_id"],
             "buyer_id": kwargs["buyer_id"],
             "start_date": kwargs.get("start_date") or "2026-02-15",
@@ -129,6 +157,32 @@ def test_run_rules_scoring_endpoint(monkeypatch: pytest.MonkeyPatch):
     assert payload["top_scores"][0]["score_id"] == "scr_1"
 
 
+def test_run_scoring_endpoint(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubOptimizerScoringService()
+    client = _build_client(stub, monkeypatch)
+
+    response = client.post(
+        "/api/optimizer/scoring/run",
+        params={
+            "model_id": "mdl_api",
+            "buyer_id": "1111111111",
+            "days": 14,
+            "event_type": "first_deposit",
+            "limit": 200,
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(stub.run_dispatch_calls) == 1
+    call = stub.run_dispatch_calls[0]
+    assert call["model_id"] == "mdl_api"
+    assert call["buyer_id"] == "1111111111"
+    assert call["event_type"] == "first_deposit"
+    payload = response.json()
+    assert payload["model_type"] == "api"
+    assert payload["top_scores"][0]["value_score"] == 0.93
+
+
 def test_list_segment_scores_endpoint(monkeypatch: pytest.MonkeyPatch):
     stub = _StubOptimizerScoringService()
     client = _build_client(stub, monkeypatch)
@@ -155,4 +209,3 @@ def test_list_segment_scores_endpoint(monkeypatch: pytest.MonkeyPatch):
     payload = response.json()
     assert payload["meta"]["total"] == 1
     assert payload["rows"][0]["score_id"] == "scr_1"
-

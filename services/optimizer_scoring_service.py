@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 from storage.postgres_database import pg_execute, pg_query, pg_query_one
 from services.optimizer_models_service import OptimizerModelsService
@@ -35,15 +38,15 @@ def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
     return max(low, min(high, value))
 
 
-def _to_float(value: Any) -> float:
+def _to_float(value: Any, default: float = 0.0) -> float:
     if value is None:
-        return 0.0
+        return default
     if isinstance(value, (int, float)):
         return float(value)
     try:
         return float(str(value))
     except (TypeError, ValueError):
-        return 0.0
+        return default
 
 
 def _parse_date(value: str, field_name: str) -> date:
@@ -55,6 +58,53 @@ def _parse_date(value: str, field_name: str) -> date:
 
 class OptimizerScoringService:
     """Builds segment features and persists rule-based scores."""
+
+    async def run_scoring(
+        self,
+        *,
+        model_id: str,
+        buyer_id: str,
+        days: int = 14,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        event_type: Optional[str] = None,
+        limit: int = 1000,
+    ) -> dict[str, Any]:
+        model_service = OptimizerModelsService()
+        model = await model_service.get_model(model_id=model_id, buyer_id=buyer_id)
+        if not model:
+            raise ValueError("Model not found")
+
+        model_type = str(model.get("model_type") or "").strip().lower()
+        if model_type == "rules":
+            payload = await self.run_rules_scoring(
+                model_id=model_id,
+                buyer_id=buyer_id,
+                days=days,
+                start_date=start_date,
+                end_date=end_date,
+                event_type=event_type,
+                limit=limit,
+            )
+            payload["model_type"] = "rules"
+            return payload
+
+        if model_type == "api":
+            payload = await self.run_api_scoring(
+                model_id=model_id,
+                buyer_id=buyer_id,
+                endpoint_url=str(model.get("endpoint_url") or ""),
+                auth_header_encrypted=model.get("auth_header_encrypted"),
+                days=days,
+                start_date=start_date,
+                end_date=end_date,
+                event_type=event_type,
+                limit=limit,
+            )
+            payload["model_type"] = "api"
+            return payload
+
+        raise ValueError(f"Unsupported model_type for scoring: {model_type or 'unknown'}")
 
     async def run_rules_scoring(
         self,
@@ -91,6 +141,86 @@ class OptimizerScoringService:
                 model_id=model_id,
                 buyer_id=buyer_id,
                 feature_row=feature_row,
+            )
+            score_rows.append(score_row)
+            rowcount = await self._insert_score(score_row)
+            if int(rowcount or 0) > 0:
+                inserted += 1
+
+        top_rows = sorted(score_rows, key=lambda row: row["value_score"], reverse=True)[:10]
+        return {
+            "model_id": model_id,
+            "buyer_id": buyer_id,
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+            "event_type": event_type,
+            "segments_scanned": len(features),
+            "scores_written": inserted,
+            "top_scores": [
+                {
+                    "score_id": row["score_id"],
+                    "billing_id": row["billing_id"],
+                    "country": row["country"],
+                    "publisher_id": row["publisher_id"],
+                    "app_id": row["app_id"],
+                    "score_date": row["score_date"].isoformat(),
+                    "value_score": row["value_score"],
+                    "confidence": row["confidence"],
+                    "reason_codes": row["reason_codes"],
+                }
+                for row in top_rows
+            ],
+        }
+
+    async def run_api_scoring(
+        self,
+        *,
+        model_id: str,
+        buyer_id: str,
+        endpoint_url: str,
+        auth_header_encrypted: Optional[str],
+        days: int = 14,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        event_type: Optional[str] = None,
+        limit: int = 1000,
+    ) -> dict[str, Any]:
+        endpoint = str(endpoint_url or "").strip()
+        if not endpoint:
+            raise ValueError("API model missing endpoint_url")
+
+        start, end = self._resolve_date_range(days=days, start_date=start_date, end_date=end_date)
+        safe_limit = max(1, min(limit, 5000))
+        features = await self._fetch_segment_features(
+            buyer_id=buyer_id,
+            start_date=start,
+            end_date=end,
+            event_type=event_type,
+            limit=safe_limit,
+        )
+        feature_payload = [self._feature_row_to_model_payload(row) for row in features]
+
+        scores_by_feature_id = await self._invoke_external_model(
+            endpoint_url=endpoint,
+            auth_header_encrypted=auth_header_encrypted,
+            model_id=model_id,
+            buyer_id=buyer_id,
+            event_type=event_type,
+            start_date=start.isoformat(),
+            end_date=end.isoformat(),
+            features=feature_payload,
+        )
+
+        inserted = 0
+        score_rows: list[dict[str, Any]] = []
+        for feature_row in features:
+            feature_id = self._feature_id(feature_row)
+            output = scores_by_feature_id.get(feature_id, {})
+            score_row = self._external_output_to_score_row(
+                model_id=model_id,
+                buyer_id=buyer_id,
+                feature_row=feature_row,
+                output=output,
             )
             score_rows.append(score_row)
             rowcount = await self._insert_score(score_row)
@@ -270,6 +400,178 @@ class OptimizerScoringService:
             tuple(params),
         )
 
+    async def _invoke_external_model(
+        self,
+        *,
+        endpoint_url: str,
+        auth_header_encrypted: Optional[str],
+        model_id: str,
+        buyer_id: str,
+        event_type: Optional[str],
+        start_date: str,
+        end_date: str,
+        features: list[dict[str, Any]],
+    ) -> dict[str, dict[str, Any]]:
+        headers = {"Content-Type": "application/json"}
+        if auth_header_encrypted:
+            # Stored value is treated as an already-prepared Authorization header token.
+            headers["Authorization"] = str(auth_header_encrypted)
+
+        payload = {
+            "model_id": model_id,
+            "buyer_id": buyer_id,
+            "event_type": event_type,
+            "start_date": start_date,
+            "end_date": end_date,
+            "features": features,
+        }
+        body = await self._post_json(endpoint_url=endpoint_url, payload=payload, headers=headers)
+
+        scores = body.get("scores") if isinstance(body, dict) else None
+        if not isinstance(scores, list):
+            raise ValueError("External model response must include 'scores' list")
+
+        results: dict[str, dict[str, Any]] = {}
+        for idx, item in enumerate(scores):
+            if not isinstance(item, dict):
+                continue
+            feature_id = str(item.get("feature_id") or "").strip()
+            if not feature_id and idx < len(features):
+                feature_id = str(features[idx].get("feature_id") or "").strip()
+            if not feature_id:
+                continue
+            results[feature_id] = item
+        return results
+
+    async def _post_json(
+        self,
+        *,
+        endpoint_url: str,
+        payload: dict[str, Any],
+        headers: dict[str, str],
+    ) -> dict[str, Any]:
+        def _request() -> dict[str, Any]:
+            req = urllib_request.Request(
+                endpoint_url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers=headers,
+                method="POST",
+            )
+            try:
+                with urllib_request.urlopen(req, timeout=20) as resp:
+                    status = int(getattr(resp, "status", 200))
+                    raw = resp.read().decode("utf-8", errors="replace")
+            except urllib_error.HTTPError as exc:
+                raw = exc.read().decode("utf-8", errors="replace") if hasattr(exc, "read") else str(exc)
+                raise ValueError(f"External model returned HTTP {exc.code}: {raw[:300]}") from exc
+            except Exception as exc:
+                raise ValueError(f"External model request failed: {exc}") from exc
+
+            if status >= 400:
+                raise ValueError(f"External model returned HTTP {status}: {raw[:300]}")
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"External model returned non-JSON response: {exc}") from exc
+            if not isinstance(parsed, dict):
+                raise ValueError("External model response must be a JSON object")
+            return parsed
+
+        return await asyncio.to_thread(_request)
+
+    def _feature_id(self, feature_row: dict[str, Any]) -> str:
+        score_date_value = feature_row.get("score_date")
+        if isinstance(score_date_value, datetime):
+            score_date = score_date_value.date().isoformat()
+        elif isinstance(score_date_value, date):
+            score_date = score_date_value.isoformat()
+        else:
+            score_date = str(score_date_value or "")
+        parts = [
+            str(feature_row.get("billing_id") or ""),
+            str(feature_row.get("country") or ""),
+            str(feature_row.get("publisher_id") or ""),
+            str(feature_row.get("app_id") or ""),
+            score_date,
+        ]
+        return "|".join(parts)
+
+    def _feature_row_to_model_payload(self, feature_row: dict[str, Any]) -> dict[str, Any]:
+        event_count = int(feature_row.get("event_count") or 0)
+        impressions = int(feature_row.get("impressions") or 0)
+        clicks = int(feature_row.get("clicks") or 0)
+        spend_usd = _to_float(feature_row.get("spend_usd"))
+        event_value_total = _to_float(feature_row.get("event_value_total"))
+        score_date_value = feature_row.get("score_date")
+        if isinstance(score_date_value, datetime):
+            score_date = score_date_value.date().isoformat()
+        elif isinstance(score_date_value, date):
+            score_date = score_date_value.isoformat()
+        else:
+            score_date = str(score_date_value or "")
+
+        return {
+            "feature_id": self._feature_id(feature_row),
+            "score_date": score_date,
+            "billing_id": str(feature_row.get("billing_id") or ""),
+            "country": str(feature_row.get("country") or ""),
+            "publisher_id": str(feature_row.get("publisher_id") or ""),
+            "app_id": str(feature_row.get("app_id") or ""),
+            "event_count": event_count,
+            "impressions": impressions,
+            "clicks": clicks,
+            "spend_usd": spend_usd,
+            "event_value_total": event_value_total,
+            "event_rate": (event_count / impressions) if impressions > 0 else 0.0,
+            "cost_per_event": (spend_usd / event_count) if event_count > 0 else None,
+            "roas": (event_value_total / spend_usd) if spend_usd > 0 else None,
+        }
+
+    def _external_output_to_score_row(
+        self,
+        *,
+        model_id: str,
+        buyer_id: str,
+        feature_row: dict[str, Any],
+        output: dict[str, Any],
+    ) -> dict[str, Any]:
+        value_score = _clamp(_to_float(output.get("value_score"), 0.5))
+        confidence = _clamp(_to_float(output.get("confidence"), 0.5))
+        reason_codes = output.get("reason_codes")
+        if isinstance(reason_codes, list):
+            normalized_reasons = [str(code) for code in reason_codes if code is not None]
+        else:
+            normalized_reasons = []
+        if not normalized_reasons:
+            normalized_reasons = ["external_model_score"]
+
+        score_date_value = feature_row.get("score_date")
+        if isinstance(score_date_value, datetime):
+            score_date = score_date_value.date()
+        elif isinstance(score_date_value, date):
+            score_date = score_date_value
+        else:
+            score_date = datetime.now(timezone.utc).date()
+
+        return {
+            "score_id": f"scr_{uuid.uuid4().hex}",
+            "model_id": model_id,
+            "buyer_id": buyer_id,
+            "billing_id": str(feature_row.get("billing_id") or ""),
+            "country": str(feature_row.get("country") or ""),
+            "publisher_id": str(feature_row.get("publisher_id") or ""),
+            "app_id": str(feature_row.get("app_id") or ""),
+            "creative_size": str(output.get("creative_size") or ""),
+            "platform": str(output.get("platform") or ""),
+            "environment": str(output.get("environment") or ""),
+            "hour": output.get("hour"),
+            "score_date": score_date,
+            "value_score": round(value_score, 6),
+            "confidence": round(confidence, 6),
+            "reason_codes": sorted(set(normalized_reasons)),
+            "raw_response": output if isinstance(output, dict) else {},
+        }
+
     def _score_feature_row(
         self,
         *,
@@ -445,4 +747,3 @@ class OptimizerScoringService:
             "raw_response": raw_response if isinstance(raw_response, dict) else {},
             "created_at": _to_iso_ts(row.get("created_at")),
         }
-
