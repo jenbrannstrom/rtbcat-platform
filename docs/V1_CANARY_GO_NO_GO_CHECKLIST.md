@@ -48,6 +48,18 @@ Equivalent convenience target:
 make v1-canary-lifecycle
 ```
 
+Optional workflow tuning for canary:
+
+```bash
+CATSCAN_CANARY_RUN_WORKFLOW=1 \
+CATSCAN_CANARY_WORKFLOW_DAYS=14 \
+CATSCAN_CANARY_WORKFLOW_SCORE_LIMIT=500 \
+CATSCAN_CANARY_WORKFLOW_PROPOSAL_LIMIT=100 \
+CATSCAN_CANARY_WORKFLOW_MIN_CONFIDENCE=0.4 \
+CATSCAN_CANARY_WORKFLOW_MAX_DELTA_PCT=0.25 \
+make v1-canary-smoke
+```
+
 Or run lifecycle check on an existing proposal:
 
 ```bash

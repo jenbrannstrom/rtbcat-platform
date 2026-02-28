@@ -179,9 +179,40 @@ def main() -> int:
         action="store_true",
         help="Do not fail if no active model is found.",
     )
+    parser.add_argument("--workflow-days", type=int, default=int(os.getenv("CATSCAN_CANARY_WORKFLOW_DAYS", "7")))
+    parser.add_argument(
+        "--workflow-score-limit",
+        type=int,
+        default=int(os.getenv("CATSCAN_CANARY_WORKFLOW_SCORE_LIMIT", "200")),
+    )
+    parser.add_argument(
+        "--workflow-proposal-limit",
+        type=int,
+        default=int(os.getenv("CATSCAN_CANARY_WORKFLOW_PROPOSAL_LIMIT", "50")),
+    )
+    parser.add_argument(
+        "--workflow-min-confidence",
+        type=float,
+        default=float(os.getenv("CATSCAN_CANARY_WORKFLOW_MIN_CONFIDENCE", "0.3")),
+    )
+    parser.add_argument(
+        "--workflow-max-delta-pct",
+        type=float,
+        default=float(os.getenv("CATSCAN_CANARY_WORKFLOW_MAX_DELTA_PCT", "0.3")),
+    )
     parser.add_argument("--billing-id", help="Optional billing_id for rollback dry-run check.")
     parser.add_argument("--snapshot-id", type=int, help="Optional snapshot_id for rollback dry-run check.")
     args = parser.parse_args()
+    if args.workflow_days < 1 or args.workflow_days > 365:
+        parser.error("--workflow-days must be between 1 and 365")
+    if args.workflow_score_limit < 1 or args.workflow_score_limit > 5000:
+        parser.error("--workflow-score-limit must be between 1 and 5000")
+    if args.workflow_proposal_limit < 1 or args.workflow_proposal_limit > 2000:
+        parser.error("--workflow-proposal-limit must be between 1 and 2000")
+    if args.workflow_min_confidence < 0 or args.workflow_min_confidence > 1:
+        parser.error("--workflow-min-confidence must be between 0 and 1")
+    if args.workflow_max_delta_pct < 0.05 or args.workflow_max_delta_pct > 1:
+        parser.error("--workflow-max-delta-pct must be between 0.05 and 1")
 
     client = SmokeClient(
         base_url=args.base_url,
@@ -276,11 +307,11 @@ def main() -> int:
             params={
                 "model_id": resolved_model_id,
                 "buyer_id": args.buyer_id,
-                "days": 7,
-                "score_limit": 200,
-                "proposal_limit": 50,
-                "min_confidence": 0.3,
-                "max_delta_pct": 0.3,
+                "days": args.workflow_days,
+                "score_limit": args.workflow_score_limit,
+                "proposal_limit": args.workflow_proposal_limit,
+                "min_confidence": args.workflow_min_confidence,
+                "max_delta_pct": args.workflow_max_delta_pct,
             },
         )
         score_run = payload.get("score_run") or {}
