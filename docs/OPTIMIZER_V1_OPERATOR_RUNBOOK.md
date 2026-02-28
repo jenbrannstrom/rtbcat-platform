@@ -27,6 +27,8 @@ If health is degraded, do not apply live changes. Continue with score/proposal r
 
 ## 3. Standard Workflow
 
+BYOM model contract reference: `docs/BYOM_MODEL_INTEGRATION_GUIDE.md`
+
 ### 3.1 Validate model endpoint
 
 1. `POST /optimizer/models/{model_id}/validate?buyer_id={buyer_id}&timeout_seconds=10`
