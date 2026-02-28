@@ -19,6 +19,8 @@ from .troubleshooting import router as troubleshooting_router
 from .collect import router as collect_router
 from .conversions import router as conversions_router
 from .optimizer_models import router as optimizer_models_router
+from .optimizer_scoring import router as optimizer_scoring_router
+from .optimizer_proposals import router as optimizer_proposals_router
 from .admin import router as admin_router
 from .seat_admin import router as seat_admin_router
 
@@ -52,6 +54,8 @@ __all__ = [
     "collect_router",
     "conversions_router",
     "optimizer_models_router",
+    "optimizer_scoring_router",
+    "optimizer_proposals_router",
     "admin_router",
     "seat_admin_router",
     # Analytics sub-routers
