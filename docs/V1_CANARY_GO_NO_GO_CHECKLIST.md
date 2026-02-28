@@ -9,7 +9,7 @@
 Run the scripted smoke gate before manual checklist review:
 
 ```bash
-python scripts/v1_canary_smoke.py \
+python3 scripts/v1_canary_smoke.py \
   --base-url http://127.0.0.1:8000 \
   --buyer-id <buyer_id> \
   --run-workflow
