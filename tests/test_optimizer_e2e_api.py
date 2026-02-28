@@ -23,6 +23,7 @@ class _StubOptimizerScoringService:
             "start_date": kwargs.get("start_date") or "2026-02-15",
             "end_date": kwargs.get("end_date") or "2026-02-28",
             "event_type": kwargs.get("event_type"),
+            "score_limit": kwargs.get("limit"),
             "segments_scanned": 1,
             "scores_written": 1,
             "top_scores": [
@@ -294,3 +295,25 @@ def test_end_to_end_optimizer_workflow(monkeypatch: pytest.MonkeyPatch):
     assert (None, "draft") in transitions
     assert ("draft", "approved") in transitions
     assert ("approved", "applied") in transitions
+
+
+def test_optimizer_workflow_accepts_legacy_query_aliases(monkeypatch: pytest.MonkeyPatch):
+    client = _build_client(monkeypatch)
+
+    workflow_response = client.post(
+        "/api/optimizer/workflows/score-and-propose",
+        params={
+            "model_id": "mdl_rules",
+            "buyer_id": "1111111111",
+            "scoring_days": 9,
+            "proposal_days": 5,
+            "scoring_limit": 321,
+            "proposal_limit": 17,
+            "min_confidence": 0.4,
+            "max_delta_pct": 0.2,
+        },
+    )
+    assert workflow_response.status_code == 200
+    payload = workflow_response.json()
+    assert payload["score_run"]["score_limit"] == 321
+    assert payload["proposal_run"]["days"] == 9
