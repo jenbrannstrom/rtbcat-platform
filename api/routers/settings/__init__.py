@@ -57,6 +57,7 @@ from .pretargeting import router as pretargeting_router
 from .snapshots import router as snapshots_router
 from .changes import router as changes_router
 from .actions import router as actions_router
+from .optimizer import router as optimizer_router
 
 router = APIRouter(
     tags=["RTB Settings"],
@@ -67,6 +68,7 @@ router.include_router(pretargeting_router)
 router.include_router(snapshots_router)
 router.include_router(changes_router)
 router.include_router(actions_router)
+router.include_router(optimizer_router)
 
 __all__ = [
     "router",
