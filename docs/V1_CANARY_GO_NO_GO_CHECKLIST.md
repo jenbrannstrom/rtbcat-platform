@@ -42,6 +42,12 @@ CATSCAN_CANARY_RUN_LIFECYCLE=1 \
 make v1-canary-smoke
 ```
 
+Equivalent convenience target:
+
+```bash
+make v1-canary-lifecycle
+```
+
 Or run lifecycle check on an existing proposal:
 
 ```bash
