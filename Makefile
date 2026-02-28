@@ -18,6 +18,6 @@ phase0-regression:
 	  tests/test_system_data_health_api.py
 
 phase0-dashboard-build:
-	npm --prefix dashboard run build
+	npm --prefix dashboard run build -- --webpack
 
 phase0-gate: phase0-regression phase0-dashboard-build

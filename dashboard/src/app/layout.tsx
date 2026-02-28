@@ -1,13 +1,10 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import { Suspense } from "react";
 import "./globals.css";
 import { Providers } from "./providers";
 import { Sidebar } from "@/components/sidebar";
 import { FirstRunCheck } from "@/components/first-run-check";
 import { AuthenticatedLayout } from "@/components/authenticated-layout";
-
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
   title: "Cat-Scan Dashboard",
@@ -41,7 +38,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.variable}>
+      <body>
         <Providers>
           <AuthenticatedLayout sidebarFallback={<SidebarFallback />}>
             {children}
