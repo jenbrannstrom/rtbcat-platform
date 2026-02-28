@@ -32,6 +32,31 @@ export interface OptimizerModelsResponse {
 }
 
 
+export interface CreateOptimizerModelRequest {
+  buyer_id?: string;
+  name: string;
+  description?: string;
+  model_type: "api" | "rules" | "csv";
+  endpoint_url?: string;
+  auth_header_encrypted?: string;
+  input_schema?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
+  is_active?: boolean;
+}
+
+
+export interface UpdateOptimizerModelRequest {
+  name?: string;
+  description?: string;
+  model_type?: "api" | "rules" | "csv";
+  endpoint_url?: string;
+  auth_header_encrypted?: string;
+  input_schema?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
+  is_active?: boolean;
+}
+
+
 export async function getOptimizerModels(params?: {
   buyer_id?: string;
   include_inactive?: boolean;
@@ -47,6 +72,62 @@ export async function getOptimizerModels(params?: {
   if (typeof params?.offset === "number") searchParams.set("offset", String(params.offset));
   const query = searchParams.toString();
   return fetchApi<OptimizerModelsResponse>(`/optimizer/models${query ? `?${query}` : ""}`);
+}
+
+
+export async function createOptimizerModel(
+  payload: CreateOptimizerModelRequest,
+): Promise<OptimizerModelRow> {
+  return fetchApi<OptimizerModelRow>("/optimizer/models", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+
+export async function updateOptimizerModel(
+  modelId: string,
+  payload: UpdateOptimizerModelRequest,
+  params?: { buyer_id?: string },
+): Promise<OptimizerModelRow> {
+  const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  const query = searchParams.toString();
+  return fetchApi<OptimizerModelRow>(
+    `/optimizer/models/${encodeURIComponent(modelId)}${query ? `?${query}` : ""}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+
+export async function activateOptimizerModel(
+  modelId: string,
+  params?: { buyer_id?: string },
+): Promise<{ model_id: string; is_active: boolean }> {
+  const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  const query = searchParams.toString();
+  return fetchApi<{ model_id: string; is_active: boolean }>(
+    `/optimizer/models/${encodeURIComponent(modelId)}/activate${query ? `?${query}` : ""}`,
+    { method: "POST" },
+  );
+}
+
+
+export async function deactivateOptimizerModel(
+  modelId: string,
+  params?: { buyer_id?: string },
+): Promise<{ model_id: string; is_active: boolean }> {
+  const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  const query = searchParams.toString();
+  return fetchApi<{ model_id: string; is_active: boolean }>(
+    `/optimizer/models/${encodeURIComponent(modelId)}/deactivate${query ? `?${query}` : ""}`,
+    { method: "POST" },
+  );
 }
 
 
