@@ -1,6 +1,6 @@
 # QPS AI Optimizer — Reconciled Data Model & Roadmap
 
-**Version:** 0.4 | **Date:** 2026-02-28
+**Version:** 0.5 | **Date:** 2026-02-28
 
 ---
 
@@ -12,7 +12,7 @@ Cat-Scan is a workaround to Google's lack of a reporting API, using CSVs. It see
 
 The path to advertiser-first optimization:
 
-1. **Phase 0** — Fix current data-plumbing gaps so the foundation is trustworthy.
+1. **Phase 0 (completed)** — Data-plumbing gaps fixed so the foundation is trustworthy.
 2. **Phase 1** — Build the conversion schema. A universal database structure that can store conversion events of all types (installs, deposits, purchases, signups) regardless of where they come from.
 3. **Phase 2** — Connect to conversion data sources. MMP integrations (AppsFlyer, Adjust, Branch) are the primary path since most app advertisers already use them. Secondary: agency pixels (Redtrack, Voluum), our own pixel, or bidder data feeds.
 4. **Phase 3** — BYOM (Bring Your Own Model). Once we have real outcome data flowing in, let customers plug in their own AI to generate recommendations from Cat-Scan's compiled data.
@@ -30,7 +30,7 @@ The path to advertiser-first optimization:
 | RTB Funnel Geo CSV (`catscan-pipeline-geo`) | `rtb_bidstream` | Live | Funnel metrics by country/hour |
 | RTB Funnel Publisher CSV (`catscan-pipeline`) | `rtb_bidstream` | Live | Funnel metrics with publisher dimension |
 | Bid Filtering CSV (`catscan-bid-filtering`) | `rtb_bid_filtering` | Live | Filtering reasons and opportunity cost |
-| Quality Signals / IVT CSV (dedicated report) | `rtb_quality` | Partial/Gap | Detectable as report type, but no full unified-import write path currently |
+| Quality Signals / IVT CSV (dedicated report) | `rtb_quality` | Live | Unified importer writes directly to `rtb_quality`; freshness/coverage exposed in `/system/data-health` |
 | Authorized Buyers API sync | Postgres + services | Live | Seats, pretargeting, endpoints, creatives |
 
 ### 1.2 Existing optimization modules
@@ -50,72 +50,53 @@ The path to advertiser-first optimization:
 - Post-click/post-install outcomes are mostly absent unless added externally.
 - Buyer intent can be intentionally different from top-line conversion (for compliant lead-gen and audience-building strategies).
 
-### 1.4 Confirmed data-plumbing gaps (must-fix)
+### 1.4 Phase 0 Closure Notes (Completed)
 
-**In plain English:** We read Google's CSV reports and store them in our database. But some of that data is being dropped or stored incorrectly. Before we build a smart optimizer on top, we need to make sure the foundation data is clean and complete. Here are the four problems:
+Phase 0 hardening is implemented in production code paths:
 
-**Gap 1 — Fraud/quality data doesn't fully arrive in our database.**
+1. Quality-signals ingestion is fully routed and persisted to `rtb_quality`.
+2. Bidstream optional dimensions (`platform`, `environment`, `transaction_type`) are persisted instead of dropped.
+3. Missingness semantics baseline now uses `NULL` for absent source columns and preserves true measured zeroes.
+4. Data-health readiness checks expose report completeness, `rtb_quality` freshness, and bidstream-dimension coverage via `/system/data-health`.
 
-Google provides a "Quality Signals" CSV report containing fraud rates (how much of the traffic is bots) and viewability (did a human actually see the ad). Our importer can *detect* this report type, but doesn't have the code to actually write it into the `rtb_quality` database table. It's like receiving a letter but never opening the envelope.
-
-**Why it matters:** Our fraud analyzer (`fraud_analyzer.py`) queries the `rtb_quality` table expecting data to be there. When it's empty, fraud detection runs on incomplete information — it may miss fraudulent publishers or produce weaker recommendations.
-
-**Gap 2 — We read some data from CSVs but throw it away before saving.**
-
-When we import the bidstream funnel CSVs, we correctly read columns like "what device?" (mobile/desktop/tablet), "what environment?" (web/app), and "what deal type?" (open auction/private). But our database INSERT statement doesn't include those fields — so they're read, then silently discarded. They're lost because the save-to-database step doesn't include them.
-
-**Why it matters:** Without device type, we can't tell you "your Android traffic converts 3x better than iOS — shift QPS there." Without deal type, we can't distinguish private marketplace deals (which are typically higher quality) from open auction. The data exists in the CSV — we just need to stop dropping it.
-
-**Gap 3 — We can't tell the difference between "zero" and "we don't know."**
-
-When a field is missing from a CSV row, we currently store `0`. But `0` impressions and "impressions data not available" are very different things:
-- **True zero:** "This publisher got zero clicks" — that's a meaningful signal (bad publisher, consider blocking it).
-- **Missing/unknown:** "The clicks column wasn't in this particular CSV export" — that's not a signal at all.
-
-By storing `0` for both cases, our optimizer can't tell if a publisher genuinely has zero clicks (bad) or if we simply don't have click data for it (unknown). This leads to false recommendations — flagging things as "wasteful" when we actually just don't have the data.
-
-**How we fix this:** When data is missing from a report, we store a special marker instead of `0`. In database terms this is called `NULL` — it simply means "no value was recorded." We could alternatively use a text label like `NODATA` or `NOREPORT`, but there's a practical reason to use `NULL`: every database, every query tool, and every analytics library in existence already understands `NULL` natively. Functions like `AVG()` automatically skip `NULL` values, `WHERE clicks IS NULL` finds rows without data, and `COALESCE(clicks, 0)` lets you choose a fallback when needed. Using a custom string like `NODATA` would mean every single query in every analyzer would need special handling code to recognize it — and a single missed check would produce wrong numbers. `NULL` gives us correct behavior for free in most cases. The key point: `0` means "Google measured it and the answer was zero." `NULL` means "this data point wasn't in the report."
-
-**Gap 4 — Downstream code assumes data exists that may not.**
-
-Several analyzer modules query the `rtb_quality` table (Gap 1) expecting data. When that table is empty or only partially filled, the analyzers either return incomplete results or silently produce lower-quality recommendations. The system doesn't warn you that its advice is based on partial information.
+**Residual risk that still requires operations discipline:** freshness and coverage can still degrade if source CSV delivery stalls. This is now observable (stateful readiness signals + canary smoke gates), not silent.
 
 ---
 
-## 2. Phase 0 — Foundation Hardening (Do First)
+## 2. Phase 0 — Foundation Hardening (Completed)
 
-**In plain English:** Before building an AI optimizer, make sure the data it will learn from is trustworthy. Garbage in, garbage out.
+**In plain English:** The trust layer for optimizer inputs is in place; continue operating it with explicit gates.
 
 ### 2.1 Data pipeline fixes
 
 **Why this matters:** Every recommendation the optimizer makes is only as good as the data feeding it. If we're missing fraud data, dropping device-type info, or confusing "zero" with "unknown," the optimizer will make bad recommendations — and the advertiser loses money following bad advice.
 
-1. **Complete the quality-signals import path.** Write the missing code that takes Google's fraud/viewability CSV and actually saves it to our database. Without this, fraud detection is flying blind.
+1. **Quality-signals import path completed.** Dedicated quality/fraud CSV rows now land in `rtb_quality`.
 
-2. **Stop discarding device, environment, and deal-type data.** Update the database save step to include the fields we're already reading from CSVs. This unlocks per-device and per-deal-type optimization — e.g., "your iOS app inventory is 3x more expensive but converts 5x better."
+2. **Device/environment/deal-type persistence completed.** Bidstream imports preserve those dimensions.
 
-3. **Distinguish "zero" from "we don't know."**
+3. **"Zero" vs "unknown" semantics completed.**
    - If Google's report says "0 clicks" → store `0` (this is a real measurement — zero clicks were recorded)
    - If the clicks column isn't in the report at all → store nothing / mark as absent (this means "we have no data for this field")
    - This prevents the optimizer from punishing segments where we simply lack data
 
-4. **Label where each piece of data came from.** When data flows from CSV import to our database to BigQuery, tag it consistently so we can trace any number back to its source report.
+4. **Lineage + readiness visibility added.** Data-health API and UI expose readiness state, coverage, and freshness.
 
 ### 2.2 Reliability and observability
 
-1. **Automated checks that data arrives correctly:**
+1. **Automated checks that data arrives correctly (implemented):**
    - Does the quality-signals CSV actually land in the right database table?
    - Are device/environment fields actually saved (not silently dropped)?
    - Does a missing column result in "no data" (not `0`)?
 
-2. **Dashboard health indicators:**
+2. **Dashboard health indicators (implemented):**
    - Is the fraud/quality data fresh? (If it's 5 days old, tell the user)
    - What percentage of rows have device-type data? (If only 30%, flag it)
    - Are all 5 report types imported for each seat, each day?
 
 ### 2.3 Deliverables
 
-**In plain English:** Hardening is complete when, for every number the optimizer uses to make a recommendation, we can answer three questions:
+**In plain English:** Hardening is complete when, for every number the optimizer uses to make a recommendation, we can answer three questions. This baseline is now in place:
 
 - **"Is this a real zero?"** — Yes, Google measured it and it was zero. (Example: a publisher really got zero clicks. That's actionable — consider blocking it.)
 - **"Is this a real non-zero value?"** — Yes, Google measured it and here's the number. (Example: this geo got 12,000 impressions at $1.40 CPM. That's solid data to optimize on.)
@@ -682,13 +663,13 @@ ALSO PROVIDE:
 | Topic | Status | Reconciled note |
 |---|---|---|
 | `inefficiency_signals` references | Stale/inconsistent | Align guide with current recommendation tables and workflows |
-| Assumed-Value per QPS | Computable from spend + bid behavior | Surface as first-class metric; rename from misleading "Revenue per QPS" — we have no actual revenue data |
-| QPS Efficiency (impressions / bid_requests) | Computable | Add to Efficiency panel |
+| Assumed-Value per QPS | Implemented (proxy) | Exposed via optimizer economics APIs/UI as assumed-value context (still proxy, not revenue) |
+| QPS Efficiency (impressions / bid_requests) | Implemented | Exposed via optimizer economics efficiency endpoints/UI |
 | Confidence scoring in UI | Partial | Surface confidence and evidence in recommendation UX |
 | Hourly patterns | Backend available | Add dayparting UI/actions |
 | Deal/PMP dimensions | Underused | Add analyzers and recommendation paths |
-| Dedicated quality-signals ingestion | Not fully wired | Phase 0 fix before advanced quality optimization |
-| Total Cost of Operation | Not modeled | Add one user input (monthly hosting cost); derive Effective CPM |
+| Dedicated quality-signals ingestion | Completed | Unified import path is live; freshness/availability surfaced in readiness API + UI |
+| Total Cost of Operation | Implemented baseline | Monthly hosting cost setup + Effective CPM calculations available |
 | Conversion event types | Not modeled | Phase 1 schema — universal conversion_events table |
 | MMP integration | Not implemented | Phase 2 — primary conversion data source |
 
@@ -696,13 +677,13 @@ ALSO PROVIDE:
 
 ## 9. Implementation Priority (Reconciled)
 
-### Phase 0 (now, 2-3 weeks): Foundation hardening
+### Phase 0 (completed): Foundation hardening
 
-- Complete `rtb_quality` ingestion path.
-- Stop discarding device/environment/deal-type fields from bidstream imports.
-- Distinguish "real zero" from "no data available" across all tables.
-- Add monthly hosting cost input; derive Effective CPM.
-- Refresh stale docs and add dashboard data-quality indicators.
+- `rtb_quality` ingestion path completed.
+- Bidstream dimension persistence completed.
+- Missing-vs-zero baseline semantics completed.
+- Effective CPM context added with monthly hosting cost setup.
+- Data-quality/readiness indicators added to API + dashboard, with canary smoke gates.
 
 ### Phase 1 (3-4 weeks): Conversion schema
 
@@ -735,7 +716,7 @@ ALSO PROVIDE:
 
 | Metric | Baseline | Target |
 |---|---|---|
-| Optimizer input completeness | Partial quality + dimension gaps | >95% feature completeness for active seats |
+| Optimizer input completeness | Phase 0 baseline in place; freshness still operationally variable | >95% feature completeness for active seats |
 | Recommendation confidence quality | Mixed (can't distinguish "bad" from "no data") | Confidence-calibrated actions with explicit evidence and data-availability flags |
 | Conversion data availability | Zero — no conversion events stored | At least 1 MMP integrated per active customer with app campaigns |
 | BYOM adoption | N/A | Customer can paste an example prompt, point their AI at Cat-Scan API, and get actionable recommendations within 30 minutes of setup |
@@ -745,14 +726,15 @@ ALSO PROVIDE:
 
 ---
 
-## 11. Evidence Anchors (for v0.4 assumptions)
+## 11. Evidence Anchors (v0.5 state)
 
-- `importers/flexible_mapper.py` detects `quality_signals -> rtb_quality`.
-- `importers/unified_importer.py` routing currently lacks explicit `rtb_quality` import branch.
-- `importers/unified_importer.py` maps bidstream optional dimensions that are not fully inserted.
-- `analytics/qps_optimizer.py` quality/fraud methods expect `rtb_quality`.
-- `importers/csv_report_types.py` still documents dedicated IVT quality flow as not fully implemented.
+- `importers/unified_importer.py` includes explicit `rtb_quality` routing + `import_to_rtb_quality(...)`.
+- `importers/unified_importer.py` persists bidstream optional dimensions (`platform`, `environment`, `transaction_type`).
+- `services/data_health_service.py` computes optimizer-readiness checks for completeness/freshness/dimension coverage.
+- `api/routers/system.py` exposes readiness via `GET /system/data-health`.
+- `tests/test_import_foundation_contracts.py`, `tests/test_data_health_service.py`, and `tests/test_system_data_health_api.py` cover core Phase 0 behaviors.
+- `scripts/v1_canary_smoke.py` and `scripts/run_v1_canary_smoke.sh` provide operational canary checks; root `make` targets wrap execution.
 
 ---
 
-This document is the reconciled working plan and should supersede all prior versions.
+This document is the reconciled working plan and should supersede prior versions.
