@@ -37,6 +37,7 @@
 - `E4-001` started (backend metric slice): optimizer economics endpoints now expose `/optimizer/economics/effective-cpm` (media/infra/effective CPM), `/optimizer/economics/assumed-value` (proxy value score with weighted components), and `/optimizer/economics/efficiency` (QPS efficiency + assumed-value-per-QPS context) using core RTB fact tables.
 - `E4-001` started (frontend slice): Settings System now includes an Optimizer Control Plane panel showing model inventory, recent segment scores, recent QPS proposals, proposal-history drilldown, a 14-day efficiency context block (effective CPM, QPS efficiency, assumed-value per QPS), 7-day conversion signal health telemetry, and an applied-proposal rollback modal (snapshot preview + execute) for the active buyer context.
 - `E4-003` started: operator playbook drafted in `docs/OPTIMIZER_V1_OPERATOR_RUNBOOK.md` covering preflight checks, score/propose/apply workflow, rollback procedure, and webhook security controls.
+- `QA-004` started: canary go/no-go checklist drafted in `docs/V1_CANARY_GO_NO_GO_CHECKLIST.md` with data integrity, conversion ingestion, optimizer workflow, and rollback gates.
 
 ---
 
