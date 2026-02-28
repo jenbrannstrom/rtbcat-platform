@@ -9,21 +9,35 @@
 Run the scripted smoke gate before manual checklist review:
 
 ```bash
-python3 scripts/v1_canary_smoke.py \
-  --base-url http://127.0.0.1:8000 \
-  --buyer-id <buyer_id> \
-  --run-workflow
+CATSCAN_API_BASE_URL=http://127.0.0.1:8000 \
+CATSCAN_BUYER_ID=<buyer_id> \
+CATSCAN_CANARY_RUN_WORKFLOW=1 \
+make v1-canary-smoke
 ```
 
-Add `--billing-id <billing_id> --snapshot-id <snapshot_id>` to include rollback dry-run check.
+Set `CATSCAN_ROLLBACK_BILLING_ID=<billing_id>` and `CATSCAN_ROLLBACK_SNAPSHOT_ID=<snapshot_id>` to include rollback dry-run check.
 
-Or use the env-driven wrapper:
+Equivalent direct wrapper command:
 
 ```bash
 CATSCAN_API_BASE_URL=http://127.0.0.1:8000 \
 CATSCAN_BUYER_ID=<buyer_id> \
 CATSCAN_CANARY_RUN_WORKFLOW=1 \
 bash scripts/run_v1_canary_smoke.sh
+```
+
+Optional stricter gate:
+
+```bash
+CATSCAN_CANARY_REQUIRE_HEALTHY_READINESS=1 \
+CATSCAN_MAX_DIMENSION_MISSING_PCT=20 \
+make v1-canary-smoke
+```
+
+Phase 0 local gate command:
+
+```bash
+make phase0-gate
 ```
 
 ## 1. Pre-Canary Gate (Must Pass)
