@@ -238,6 +238,7 @@ def _build_client(
     ingestion_stub: _StubConversionIngestionService,
     monkeypatch: pytest.MonkeyPatch,
 ) -> TestClient:
+    conversions_router._clear_webhook_rate_limit_state()
     app = FastAPI()
     app.include_router(conversions_router.router, prefix="/api")
     app.dependency_overrides[conversions_router.get_store] = lambda: SimpleNamespace()
@@ -427,6 +428,39 @@ def test_ingest_appsflyer_rejects_stale_timestamp_when_enforced(monkeypatch: pyt
 
     assert response.status_code == 401
     assert len(ingestion_stub.provider_calls) == 0
+
+
+def test_ingest_generic_postback_rate_limited_when_enabled(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    client = _build_client(stub, ingestion_stub, monkeypatch)
+    monkeypatch.setenv("CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_ENABLED", "1")
+    monkeypatch.setenv("CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_PER_MINUTE", "1")
+    monkeypatch.setenv("CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_WINDOW_SECONDS", "60")
+    monkeypatch.setattr(conversions_router, "_current_unix_ts", lambda: 1_700_000_000)
+
+    first = client.post(
+        "/api/conversions/generic/postback?buyer_id=1111111111",
+        json={
+            "source_type": "redtrack",
+            "event_name": "purchase",
+            "event_ts": "2026-02-28T00:00:00Z",
+            "event_id": "evt-100",
+        },
+    )
+    second = client.post(
+        "/api/conversions/generic/postback?buyer_id=1111111111",
+        json={
+            "source_type": "redtrack",
+            "event_name": "purchase",
+            "event_ts": "2026-02-28T00:00:01Z",
+            "event_id": "evt-101",
+        },
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert len(ingestion_stub.provider_calls) == 1
 
 
 def test_ingest_csv_upload(monkeypatch: pytest.MonkeyPatch):
