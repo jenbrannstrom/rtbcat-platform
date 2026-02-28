@@ -11,6 +11,9 @@ import {
   getSystemStatus,
   getSystemDataHealth,
   getOptimizerModels,
+  createOptimizerModel,
+  activateOptimizerModel,
+  deactivateOptimizerModel,
   listOptimizerSegmentScores,
   listOptimizerProposals,
   listOptimizerProposalHistory,
@@ -45,6 +48,11 @@ export default function SystemStatusPage() {
   const [selectedModelId, setSelectedModelId] = useState<string>("");
   const [selectedProposalHistoryId, setSelectedProposalHistoryId] = useState<string>("");
   const [optimizerNotice, setOptimizerNotice] = useState<string>("");
+  const [newModelName, setNewModelName] = useState<string>("");
+  const [newModelDescription, setNewModelDescription] = useState<string>("");
+  const [newModelType, setNewModelType] = useState<"api" | "rules" | "csv">("api");
+  const [newModelEndpointUrl, setNewModelEndpointUrl] = useState<string>("");
+  const [newModelAuthHeader, setNewModelAuthHeader] = useState<string>("");
   const [monthlyHostingCostInput, setMonthlyHostingCostInput] = useState<string>("");
   const parsedMinCompleteness = Number(minCompleteness);
   const normalizedMinCompleteness =
@@ -277,6 +285,66 @@ export default function SystemStatusPage() {
     },
   });
 
+  const createModelMutation = useMutation({
+    mutationFn: async () => {
+      const name = newModelName.trim();
+      if (!name) {
+        throw new Error("Model name is required.");
+      }
+      const endpoint = newModelEndpointUrl.trim();
+      if (newModelType === "api" && !endpoint) {
+        throw new Error("Endpoint URL is required for API model type.");
+      }
+      return createOptimizerModel({
+        buyer_id: selectedBuyerId || undefined,
+        name,
+        description: newModelDescription.trim() || undefined,
+        model_type: newModelType,
+        endpoint_url: newModelType === "api" ? endpoint : undefined,
+        auth_header_encrypted: newModelAuthHeader.trim() || undefined,
+        input_schema: {},
+        output_schema: {
+          value_score: "number",
+          confidence: "number",
+        },
+        is_active: true,
+      });
+    },
+    onSuccess: (payload) => {
+      queryClient.invalidateQueries({ queryKey: ["optimizerModels", selectedBuyerId] });
+      setSelectedModelId(payload.model_id);
+      setNewModelName("");
+      setNewModelDescription("");
+      setNewModelType("api");
+      setNewModelEndpointUrl("");
+      setNewModelAuthHeader("");
+      setOptimizerNotice(`Model created: ${payload.name}`);
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to create model.";
+      setOptimizerNotice(msg);
+    },
+  });
+
+  const modelActivationMutation = useMutation({
+    mutationFn: async (params: { modelId: string; isActive: boolean }) => {
+      if (params.isActive) {
+        await deactivateOptimizerModel(params.modelId, { buyer_id: selectedBuyerId || undefined });
+        return "Model deactivated.";
+      }
+      await activateOptimizerModel(params.modelId, { buyer_id: selectedBuyerId || undefined });
+      return "Model activated.";
+    },
+    onSuccess: (message) => {
+      queryClient.invalidateQueries({ queryKey: ["optimizerModels", selectedBuyerId] });
+      setOptimizerNotice(message);
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to update model status.";
+      setOptimizerNotice(msg);
+    },
+  });
+
   const validateModelMutation = useMutation({
     mutationFn: async () => {
       if (!selectedModelId) {
@@ -384,6 +452,9 @@ export default function SystemStatusPage() {
     optimizerModelsError || optimizerScoresError || optimizerProposalsError;
   const pendingProposalId = proposalActionMutation.isPending
     ? proposalActionMutation.variables?.proposalId
+    : null;
+  const pendingModelId = modelActivationMutation.isPending
+    ? modelActivationMutation.variables?.modelId
     : null;
   const efficiencyBlockLoading = optimizerEffectiveCpmLoading || optimizerEfficiencySummaryLoading;
   const efficiencyBlockError = optimizerEffectiveCpmError || optimizerEfficiencySummaryError;
@@ -599,6 +670,180 @@ export default function SystemStatusPage() {
                     {proposalStatusCounts.applied || 0}
                   </div>
                 </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-200 p-3">
+                <div className="mb-3 text-xs font-semibold text-gray-600">Model Registry</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs text-gray-600">
+                    Model Name
+                    <input
+                      type="text"
+                      value={newModelName}
+                      onChange={(e) => setNewModelName(e.target.value)}
+                      className="mt-1 block w-full input py-1 text-sm"
+                      placeholder="e.g. Buyer API Model"
+                      disabled={createModelMutation.isPending}
+                    />
+                  </label>
+                  <label className="text-xs text-gray-600">
+                    Model Type
+                    <select
+                      value={newModelType}
+                      onChange={(e) => setNewModelType(e.target.value as "api" | "rules" | "csv")}
+                      className="mt-1 block w-full input py-1 text-sm"
+                      disabled={createModelMutation.isPending}
+                    >
+                      <option value="api">api</option>
+                      <option value="rules">rules</option>
+                      <option value="csv">csv</option>
+                    </select>
+                  </label>
+                  <label className="text-xs text-gray-600 col-span-2">
+                    Description
+                    <input
+                      type="text"
+                      value={newModelDescription}
+                      onChange={(e) => setNewModelDescription(e.target.value)}
+                      className="mt-1 block w-full input py-1 text-sm"
+                      placeholder="optional"
+                      disabled={createModelMutation.isPending}
+                    />
+                  </label>
+                  {newModelType === "api" ? (
+                    <label className="text-xs text-gray-600 col-span-2">
+                      Endpoint URL
+                      <input
+                        type="url"
+                        value={newModelEndpointUrl}
+                        onChange={(e) => setNewModelEndpointUrl(e.target.value)}
+                        className="mt-1 block w-full input py-1 text-sm"
+                        placeholder="https://example.com/score"
+                        disabled={createModelMutation.isPending}
+                      />
+                    </label>
+                  ) : null}
+                  <label className="text-xs text-gray-600 col-span-2">
+                    Authorization Header (optional)
+                    <input
+                      type="text"
+                      value={newModelAuthHeader}
+                      onChange={(e) => setNewModelAuthHeader(e.target.value)}
+                      className="mt-1 block w-full input py-1 text-sm"
+                      placeholder="Bearer <token>"
+                      disabled={createModelMutation.isPending}
+                    />
+                  </label>
+                </div>
+                <div className="mt-3 flex items-center justify-between">
+                  <div className="text-[11px] text-gray-500">
+                    Headers are stored encrypted when `CATSCAN_OPTIMIZER_MODEL_SECRET_KEY` is set.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => createModelMutation.mutate()}
+                    disabled={
+                      createModelMutation.isPending ||
+                      newModelName.trim() === "" ||
+                      (newModelType === "api" && newModelEndpointUrl.trim() === "")
+                    }
+                    className={cn(
+                      "btn-primary",
+                      (createModelMutation.isPending ||
+                        newModelName.trim() === "" ||
+                        (newModelType === "api" && newModelEndpointUrl.trim() === "")) &&
+                        "cursor-not-allowed opacity-50",
+                    )}
+                  >
+                    {createModelMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      "Create Model"
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50">
+                  Models
+                </div>
+                {optimizerModels?.rows.length ? (
+                  <div className="max-h-48 overflow-auto">
+                    <table className="min-w-full text-xs">
+                      <thead className="bg-gray-50 text-gray-600">
+                        <tr>
+                          <th className="text-left px-3 py-2">Updated</th>
+                          <th className="text-left px-3 py-2">Name</th>
+                          <th className="text-left px-3 py-2">Type</th>
+                          <th className="text-left px-3 py-2">Status</th>
+                          <th className="text-left px-3 py-2">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {optimizerModels.rows.slice(0, 12).map((row) => (
+                          <tr key={row.model_id} className="border-t border-gray-100">
+                            <td className="px-3 py-2 text-gray-700">{row.updated_at || row.created_at || "-"}</td>
+                            <td className="px-3 py-2 text-gray-700">{row.name}</td>
+                            <td className="px-3 py-2 text-gray-700">{row.model_type}</td>
+                            <td className="px-3 py-2">
+                              <span
+                                className={cn(
+                                  "inline-flex rounded px-2 py-0.5 text-xs font-medium",
+                                  row.is_active ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-700",
+                                )}
+                              >
+                                {row.is_active ? "active" : "inactive"}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedModelId(row.model_id)}
+                                  className={cn(
+                                    "rounded px-2 py-1 text-xs font-medium",
+                                    selectedModelId === row.model_id
+                                      ? "bg-indigo-50 text-indigo-700"
+                                      : "bg-slate-100 text-slate-700",
+                                  )}
+                                >
+                                  Use
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    modelActivationMutation.mutate({
+                                      modelId: row.model_id,
+                                      isActive: row.is_active,
+                                    })
+                                  }
+                                  disabled={modelActivationMutation.isPending}
+                                  className={cn(
+                                    "rounded px-2 py-1 text-xs font-medium",
+                                    row.is_active
+                                      ? "bg-amber-50 text-amber-700"
+                                      : "bg-blue-50 text-blue-700",
+                                    modelActivationMutation.isPending &&
+                                      pendingModelId === row.model_id &&
+                                      "opacity-60",
+                                  )}
+                                >
+                                  {row.is_active ? "Deactivate" : "Activate"}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="px-3 py-4 text-xs text-gray-500">No models found.</div>
+                )}
               </div>
 
               <div className="rounded-lg border border-gray-200 overflow-hidden">
