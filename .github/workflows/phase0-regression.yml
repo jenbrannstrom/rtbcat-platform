@@ -1,0 +1,58 @@
+name: Phase 0 Regression Gate
+
+on:
+  pull_request:
+    paths:
+      - "api/**"
+      - "services/**"
+      - "importers/**"
+      - "tests/**"
+      - "scripts/v1_canary_smoke.py"
+      - "scripts/run_v1_canary_smoke.sh"
+      - "Makefile"
+      - ".github/workflows/phase0-regression.yml"
+  push:
+    branches:
+      - unified-platform
+    paths:
+      - "api/**"
+      - "services/**"
+      - "importers/**"
+      - "tests/**"
+      - "scripts/v1_canary_smoke.py"
+      - "scripts/run_v1_canary_smoke.sh"
+      - "Makefile"
+      - ".github/workflows/phase0-regression.yml"
+
+concurrency:
+  group: phase0-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  phase0-regression:
+    name: Run Phase 0 Regression Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest pytest-asyncio
+
+      - name: Run Phase 0 regression tests
+        run: make phase0-regression
+
+      - name: Canary CLI sanity
+        run: |
+          make help
+          python3 scripts/v1_canary_smoke.py --help
+          bash scripts/run_v1_canary_smoke.sh --help
