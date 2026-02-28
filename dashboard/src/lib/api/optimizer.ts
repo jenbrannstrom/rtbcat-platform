@@ -320,7 +320,11 @@ export interface OptimizerModelValidationResponse {
 
 export async function validateOptimizerModelEndpoint(
   modelId: string,
-  params?: { buyer_id?: string; timeout_seconds?: number },
+  params?: {
+    buyer_id?: string;
+    timeout_seconds?: number;
+    sample_payload?: Record<string, unknown>;
+  },
 ): Promise<OptimizerModelValidationResponse> {
   const searchParams = new URLSearchParams();
   if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
@@ -330,7 +334,13 @@ export async function validateOptimizerModelEndpoint(
   const query = searchParams.toString();
   return fetchApi<OptimizerModelValidationResponse>(
     `/optimizer/models/${encodeURIComponent(modelId)}/validate${query ? `?${query}` : ""}`,
-    { method: "POST" },
+    {
+      method: "POST",
+      body:
+        params?.sample_payload !== undefined
+          ? JSON.stringify({ sample_payload: params.sample_payload })
+          : undefined,
+    },
   );
 }
 
