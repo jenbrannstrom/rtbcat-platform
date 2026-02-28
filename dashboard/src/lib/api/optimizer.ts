@@ -239,3 +239,24 @@ export async function syncOptimizerProposalApplyStatus(
     { method: "POST" },
   );
 }
+
+
+export interface OptimizerSetupResponse {
+  monthly_hosting_cost_usd: number | null;
+  effective_cpm_enabled: boolean;
+}
+
+
+export async function getOptimizerSetup(): Promise<OptimizerSetupResponse> {
+  return fetchApi<OptimizerSetupResponse>("/settings/optimizer/setup");
+}
+
+
+export async function updateOptimizerSetup(params: {
+  monthly_hosting_cost_usd: number;
+}): Promise<OptimizerSetupResponse> {
+  return fetchApi<OptimizerSetupResponse>("/settings/optimizer/setup", {
+    method: "PUT",
+    body: JSON.stringify(params),
+  });
+}

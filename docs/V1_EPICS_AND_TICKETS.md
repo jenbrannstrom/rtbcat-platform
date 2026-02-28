@@ -31,6 +31,7 @@
 - `E3-005` started: rules fallback path is operational (`/optimizer/scoring/rules/run` -> `/optimizer/proposals/generate`) and a one-shot orchestrator endpoint `/optimizer/workflows/score-and-propose` runs scoring + proposal generation in one call.
 - `E4-004` (security hardening slice) started: conversion webhook endpoints now support optional HMAC verification and configurable timestamp-freshness checks for replay-risk reduction.
 - `E4-002` started (backend slice): optimizer setup API now supports persisted monthly hosting cost under `/settings/optimizer/setup` for effective-CPM context and setup-flow readiness.
+- `E4-002` started (frontend slice): Optimizer Control Plane now includes monthly hosting cost save controls wired to `/settings/optimizer/setup` with effective-CPM enabled/disabled state feedback.
 - `E4-001` started (backend metric slice): optimizer economics endpoints now expose `/optimizer/economics/effective-cpm` (media/infra/effective CPM) and `/optimizer/economics/assumed-value` (proxy value score with weighted components) using core RTB fact tables.
 - `E4-001` started (frontend slice): Settings System now includes an Optimizer Control Plane panel showing model inventory, recent segment scores, and recent QPS proposals for the active buyer context, with one-click score+propose runs and proposal approve/apply/sync actions.
 
