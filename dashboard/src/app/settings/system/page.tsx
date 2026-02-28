@@ -28,6 +28,9 @@ import {
   getOptimizerEfficiencySummary,
   getConversionHealth,
   getConversionIngestionStats,
+  getSnapshots,
+  rollbackSnapshot,
+  type PretargetingSnapshot,
 } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
@@ -53,6 +56,16 @@ export default function SystemStatusPage() {
   const [newModelType, setNewModelType] = useState<"api" | "rules" | "csv">("api");
   const [newModelEndpointUrl, setNewModelEndpointUrl] = useState<string>("");
   const [newModelAuthHeader, setNewModelAuthHeader] = useState<string>("");
+  const [rollbackProposal, setRollbackProposal] = useState<{
+    proposalId: string;
+    billingId: string;
+  } | null>(null);
+  const [selectedRollbackSnapshotId, setSelectedRollbackSnapshotId] = useState<string>("");
+  const [rollbackReason, setRollbackReason] = useState<string>("");
+  const [rollbackPreview, setRollbackPreview] = useState<{
+    message: string;
+    changes_made: string[];
+  } | null>(null);
   const [monthlyHostingCostInput, setMonthlyHostingCostInput] = useState<string>("");
   const parsedMinCompleteness = Number(minCompleteness);
   const normalizedMinCompleteness =
@@ -217,8 +230,22 @@ export default function SystemStatusPage() {
       getConversionIngestionStats({
         buyer_id: selectedBuyerId || undefined,
         days: 7,
-      }),
+    }),
     retry: false,
+  });
+
+  const {
+    data: rollbackSnapshots,
+    isLoading: rollbackSnapshotsLoading,
+    error: rollbackSnapshotsError,
+  } = useQuery({
+    queryKey: ["rollbackSnapshots", rollbackProposal?.billingId],
+    queryFn: () =>
+      getSnapshots({
+        billing_id: rollbackProposal?.billingId,
+        limit: 25,
+      }),
+    enabled: !!rollbackProposal?.billingId,
   });
 
   useEffect(() => {
@@ -253,6 +280,21 @@ export default function SystemStatusPage() {
     }
     setMonthlyHostingCostInput(String(optimizerSetup.monthly_hosting_cost_usd));
   }, [optimizerSetup]);
+
+  useEffect(() => {
+    if (!rollbackProposal) {
+      setSelectedRollbackSnapshotId("");
+      return;
+    }
+    if (!rollbackSnapshots?.length) {
+      setSelectedRollbackSnapshotId("");
+      return;
+    }
+    if (rollbackSnapshots.some((row) => String(row.id) === selectedRollbackSnapshotId)) {
+      return;
+    }
+    setSelectedRollbackSnapshotId(String(rollbackSnapshots[0].id));
+  }, [rollbackProposal, rollbackSnapshots, selectedRollbackSnapshotId]);
 
   const generateMutation = useMutation({
     mutationFn: () => generateThumbnailsBatch({ limit: batchLimit, force: forceRetry }),
@@ -431,6 +473,60 @@ export default function SystemStatusPage() {
     },
   });
 
+  const rollbackPreviewMutation = useMutation({
+    mutationFn: async () => {
+      if (!rollbackProposal?.billingId) {
+        throw new Error("No billing ID available for rollback.");
+      }
+      const snapshotId = Number(selectedRollbackSnapshotId);
+      if (!Number.isFinite(snapshotId) || snapshotId <= 0) {
+        throw new Error("Select a snapshot before previewing rollback.");
+      }
+      return rollbackSnapshot({
+        billing_id: rollbackProposal.billingId,
+        snapshot_id: snapshotId,
+        dry_run: true,
+      });
+    },
+    onSuccess: (payload) => {
+      setRollbackPreview({
+        message: payload.message,
+        changes_made: payload.changes_made || [],
+      });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to preview rollback.";
+      setOptimizerNotice(msg);
+    },
+  });
+
+  const rollbackExecuteMutation = useMutation({
+    mutationFn: async () => {
+      if (!rollbackProposal?.billingId) {
+        throw new Error("No billing ID available for rollback.");
+      }
+      const snapshotId = Number(selectedRollbackSnapshotId);
+      if (!Number.isFinite(snapshotId) || snapshotId <= 0) {
+        throw new Error("Select a snapshot before rollback.");
+      }
+      return rollbackSnapshot({
+        billing_id: rollbackProposal.billingId,
+        snapshot_id: snapshotId,
+        dry_run: false,
+      });
+    },
+    onSuccess: (payload) => {
+      setOptimizerNotice(`Rollback executed: ${payload.message}`);
+      setRollbackProposal(null);
+      setRollbackReason("");
+      setRollbackPreview(null);
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to execute rollback.";
+      setOptimizerNotice(msg);
+    },
+  });
+
   const activeModelCount = optimizerModels?.rows.filter((row) => row.is_active).length ?? 0;
   const activeModels = (optimizerModels?.rows || []).filter((row) => row.is_active);
   const proposalRows = optimizerProposals?.rows ?? [];
@@ -456,6 +552,8 @@ export default function SystemStatusPage() {
   const pendingModelId = modelActivationMutation.isPending
     ? modelActivationMutation.variables?.modelId
     : null;
+  const selectedRollbackSnapshot: PretargetingSnapshot | null =
+    (rollbackSnapshots || []).find((row) => String(row.id) === selectedRollbackSnapshotId) || null;
   const efficiencyBlockLoading = optimizerEffectiveCpmLoading || optimizerEfficiencySummaryLoading;
   const efficiencyBlockError = optimizerEffectiveCpmError || optimizerEfficiencySummaryError;
   const formatUsd = (value: number | null | undefined, decimals = 4) => {
@@ -1220,24 +1318,40 @@ export default function SystemStatusPage() {
                                     Apply Queue
                                   </button>
                                 ) : row.status === "applied" ? (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      proposalActionMutation.mutate({
-                                        proposalId: row.proposal_id,
-                                        action: "sync",
-                                      })
-                                    }
-                                    disabled={proposalActionMutation.isPending}
-                                    className={cn(
-                                      "rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700",
-                                      proposalActionMutation.isPending &&
-                                        pendingProposalId === row.proposal_id &&
-                                        "opacity-60",
-                                    )}
-                                  >
-                                    Sync
-                                  </button>
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        proposalActionMutation.mutate({
+                                          proposalId: row.proposal_id,
+                                          action: "sync",
+                                        })
+                                      }
+                                      disabled={proposalActionMutation.isPending}
+                                      className={cn(
+                                        "rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700",
+                                        proposalActionMutation.isPending &&
+                                          pendingProposalId === row.proposal_id &&
+                                          "opacity-60",
+                                      )}
+                                    >
+                                      Sync
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setRollbackProposal({
+                                          proposalId: row.proposal_id,
+                                          billingId: row.billing_id,
+                                        });
+                                        setRollbackReason("");
+                                        setRollbackPreview(null);
+                                      }}
+                                      className="rounded bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700"
+                                    >
+                                      Rollback
+                                    </button>
+                                  </>
                                 ) : (
                                   <span className="text-xs text-gray-400">-</span>
                                 )}
@@ -1672,6 +1786,147 @@ export default function SystemStatusPage() {
           )}
         </div>
       </div>
+
+      {rollbackProposal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-xl rounded-lg bg-white shadow-xl">
+            <div className="border-b border-gray-200 px-4 py-3">
+              <div className="text-sm font-semibold text-gray-900">
+                Rollback Applied Proposal
+              </div>
+              <div className="mt-1 text-xs text-gray-500">
+                proposal {rollbackProposal.proposalId}, billing {rollbackProposal.billingId}
+              </div>
+            </div>
+
+            <div className="space-y-3 px-4 py-4">
+              {rollbackSnapshotsLoading ? (
+                <div className="flex items-center justify-center py-3">
+                  <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                </div>
+              ) : rollbackSnapshotsError ? (
+                <div className="rounded bg-red-50 px-3 py-2 text-xs text-red-700">
+                  {rollbackSnapshotsError instanceof Error
+                    ? rollbackSnapshotsError.message
+                    : "Failed to load snapshots."}
+                </div>
+              ) : rollbackSnapshots?.length ? (
+                <>
+                  <label className="text-xs text-gray-600">
+                    Snapshot
+                    <select
+                      value={selectedRollbackSnapshotId}
+                      onChange={(e) => setSelectedRollbackSnapshotId(e.target.value)}
+                      className="mt-1 block w-full input py-1 text-sm"
+                      disabled={rollbackPreviewMutation.isPending || rollbackExecuteMutation.isPending}
+                    >
+                      {rollbackSnapshots.map((row) => (
+                        <option key={row.id} value={String(row.id)}>
+                          #{row.id} {row.snapshot_name || row.snapshot_type} ({row.created_at})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  {selectedRollbackSnapshot ? (
+                    <div className="rounded border border-gray-200 px-3 py-2 text-xs text-gray-600">
+                      selected snapshot: #{selectedRollbackSnapshot.id}{" "}
+                      {selectedRollbackSnapshot.snapshot_name || selectedRollbackSnapshot.snapshot_type}
+                    </div>
+                  ) : null}
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => rollbackPreviewMutation.mutate()}
+                      disabled={
+                        rollbackPreviewMutation.isPending ||
+                        rollbackExecuteMutation.isPending ||
+                        !selectedRollbackSnapshotId
+                      }
+                      className={cn(
+                        "rounded border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700",
+                        (rollbackPreviewMutation.isPending ||
+                          rollbackExecuteMutation.isPending ||
+                          !selectedRollbackSnapshotId) &&
+                          "cursor-not-allowed opacity-50",
+                      )}
+                    >
+                      {rollbackPreviewMutation.isPending ? "Previewing..." : "Preview Rollback"}
+                    </button>
+                  </div>
+
+                  {rollbackPreview ? (
+                    <div className="space-y-2 rounded border border-gray-200 px-3 py-2">
+                      <div className="text-xs font-medium text-gray-700">{rollbackPreview.message}</div>
+                      {rollbackPreview.changes_made.length ? (
+                        <div className="max-h-28 overflow-auto space-y-1">
+                          {rollbackPreview.changes_made.map((change, idx) => (
+                            <div key={`${idx}-${change}`} className="text-[11px] font-mono text-gray-600">
+                              {change}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-gray-500">No changes detected for rollback.</div>
+                      )}
+                    </div>
+                  ) : null}
+
+                  <label className="text-xs text-gray-600">
+                    Reason
+                    <input
+                      type="text"
+                      value={rollbackReason}
+                      onChange={(e) => setRollbackReason(e.target.value)}
+                      className="mt-1 block w-full input py-1 text-sm"
+                      placeholder="why rollback is required"
+                      disabled={rollbackExecuteMutation.isPending}
+                    />
+                  </label>
+                </>
+              ) : (
+                <div className="rounded bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                  No snapshots found for this billing ID.
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setRollbackProposal(null);
+                  setRollbackReason("");
+                  setRollbackPreview(null);
+                }}
+                className="rounded px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                disabled={rollbackExecuteMutation.isPending}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => rollbackExecuteMutation.mutate()}
+                disabled={
+                  rollbackExecuteMutation.isPending ||
+                  !selectedRollbackSnapshotId ||
+                  rollbackReason.trim() === ""
+                }
+                className={cn(
+                  "rounded bg-orange-600 px-3 py-2 text-xs font-medium text-white",
+                  (rollbackExecuteMutation.isPending ||
+                    !selectedRollbackSnapshotId ||
+                    rollbackReason.trim() === "") &&
+                    "cursor-not-allowed opacity-50",
+                )}
+              >
+                {rollbackExecuteMutation.isPending ? "Executing..." : "Rollback Now"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
