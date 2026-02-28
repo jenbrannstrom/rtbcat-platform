@@ -6,14 +6,22 @@ This module provides REST API endpoints for:
 - Campaign performance aggregation
 """
 
+import asyncio
 import logging
+import re
 from typing import Optional
+from urllib.parse import parse_qs, unquote, urlparse
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 
 from services.campaigns_service import CampaignsService, AICampaign
-from utils.app_parser import format_package_id_as_name, parse_app_store_url
+from utils.app_parser import (
+    fetch_website_title,
+    format_package_id_as_name,
+    get_app_name,
+    parse_app_store_url,
+)
 from api.dependencies import get_store, get_current_user, resolve_buyer_id
 from storage.postgres_store import PostgresStore
 from services.auth_service import User
@@ -21,6 +29,38 @@ from services.auth_service import User
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
+
+
+CLICK_MACRO_PATTERNS = [
+    r"%%Click_Url_Unesc%%",
+    r"%%Click_Url%%",
+    r"%%CLICK_URL_UNESC%%",
+    r"%%CLICK_URL%%",
+    r"\$\{CLICK_URL\}",
+    r"\[CLICK_URL\]",
+]
+
+NAME_GARBAGE_TOKENS = [
+    "click_url",
+    "click url",
+    "%%",
+    "%3a",
+    "%2f",
+    "http%",
+    "https%",
+    "{click",
+    "[click",
+]
+
+TRACKING_DOMAIN_TOKENS = [
+    "appsflyer",
+    "adjust",
+    "branch",
+    "onelink",
+    "page.link",
+    "doubleclick",
+    "googleadservices",
+]
 
 
 # Singleton CampaignsService instance
@@ -169,6 +209,200 @@ def _split_clusters_by_country(
     return result
 
 
+def _normalize_whitespace(value: str) -> str:
+    return " ".join((value or "").strip().split())
+
+
+def _slugify_name(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", (value or "").strip().lower()).strip("_")
+    return slug[:80] if slug else "unknown"
+
+
+def _is_name_garbage(value: Optional[str]) -> bool:
+    if value is None:
+        return True
+    normalized = _normalize_whitespace(value)
+    if not normalized:
+        return True
+
+    lower = normalized.lower()
+    if lower in {"unknown", "none", "null", "untitled", "campaign"}:
+        return True
+    if re.fullmatch(r"(?:id)?\d{6,}", lower):
+        return True
+    if re.match(r"^(https?://|www\.)", lower):
+        return True
+
+    percent_count = normalized.count("%")
+    if percent_count >= 3 or (len(normalized) > 0 and percent_count / len(normalized) > 0.15):
+        return True
+
+    if len(normalized) > 140:
+        return True
+
+    return any(token in lower for token in NAME_GARBAGE_TOKENS)
+
+
+def _is_usable_name(value: Optional[str]) -> bool:
+    return not _is_name_garbage(value)
+
+
+def _sanitize_destination_url(url: Optional[str]) -> str:
+    if not url:
+        return ""
+
+    cleaned = url.strip().strip("'").strip('"')
+
+    for macro in CLICK_MACRO_PATTERNS:
+        cleaned = re.sub(macro, "", cleaned, flags=re.IGNORECASE)
+
+    decoded = cleaned
+    for _ in range(3):
+        if "%" not in decoded:
+            break
+        candidate = unquote(decoded)
+        if candidate == decoded:
+            break
+        decoded = candidate
+
+    decoded = _normalize_whitespace(decoded).strip().strip("'").strip('"')
+    for macro in CLICK_MACRO_PATTERNS:
+        decoded = re.sub(macro, "", decoded, flags=re.IGNORECASE)
+
+    embedded_match = re.search(r"(https?://[^\s\"'<>]+)", decoded, re.IGNORECASE)
+    if embedded_match:
+        decoded = embedded_match.group(1)
+    elif decoded.startswith("//"):
+        decoded = f"https:{decoded}"
+    elif decoded and not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", decoded):
+        decoded = f"https://{decoded.lstrip('/')}"
+
+    decoded = re.sub(
+        r"^(https?)://",
+        lambda match: f"{match.group(1).lower()}://",
+        decoded,
+        flags=re.IGNORECASE,
+    )
+
+    return decoded.strip()
+
+
+def _extract_reference_domain(url: Optional[str]) -> Optional[str]:
+    cleaned_url = _sanitize_destination_url(url)
+    if not cleaned_url:
+        return None
+
+    try:
+        parsed = urlparse(cleaned_url)
+        domain = (parsed.netloc or "").strip().lower()
+        if not domain and parsed.path:
+            first_part = parsed.path.split("/")[0]
+            if "." in first_part and " " not in first_part:
+                domain = first_part.strip().lower()
+        if domain.startswith("www."):
+            domain = domain[4:]
+        if not domain or _is_name_garbage(domain):
+            return None
+        return domain
+    except Exception:
+        return None
+
+
+async def _resolve_cluster_display_name(
+    *,
+    cluster_key: str,
+    app_name: Optional[str],
+    app_id: Optional[str],
+    app_store: Optional[str],
+    final_url: Optional[str],
+    advertiser_name: Optional[str],
+) -> str:
+    if _is_usable_name(app_name):
+        return _normalize_whitespace(app_name or "")
+
+    cleaned_url = _sanitize_destination_url(final_url)
+
+    if app_id and app_store in {"play_store", "app_store"}:
+        try:
+            store_name = await get_app_name(app_id, app_store)
+            if _is_usable_name(store_name):
+                return _normalize_whitespace(store_name or "")
+        except Exception as e:
+            logger.debug("App store name lookup failed for %s (%s): %s", app_id, app_store, e)
+
+        fallback_name = format_package_id_as_name(app_id)
+        if _is_usable_name(fallback_name):
+            return fallback_name
+
+    if cleaned_url:
+        try:
+            parsed_store_info = parse_app_store_url(cleaned_url)
+        except Exception:
+            parsed_store_info = None
+
+        if parsed_store_info:
+            parsed_app_id = parsed_store_info.get("app_id")
+            parsed_store = parsed_store_info.get("store")
+            if parsed_app_id and parsed_store:
+                try:
+                    store_name = await get_app_name(parsed_app_id, parsed_store)
+                    if _is_usable_name(store_name):
+                        return _normalize_whitespace(store_name or "")
+                except Exception as e:
+                    logger.debug(
+                        "Parsed app store name lookup failed for %s (%s): %s",
+                        parsed_app_id,
+                        parsed_store,
+                        e,
+                    )
+
+                fallback_name = format_package_id_as_name(parsed_app_id)
+                if _is_usable_name(fallback_name):
+                    return fallback_name
+
+        domain_for_title = _extract_reference_domain(cleaned_url) or ""
+        is_tracking_domain = any(token in domain_for_title for token in TRACKING_DOMAIN_TOKENS)
+        if not is_tracking_domain:
+            try:
+                website_title = await fetch_website_title(cleaned_url)
+                if _is_usable_name(website_title):
+                    return _normalize_whitespace(website_title or "")
+            except Exception as e:
+                logger.debug("Website title lookup failed for %s: %s", cleaned_url, e)
+
+    if _is_usable_name(advertiser_name):
+        return _normalize_whitespace(advertiser_name or "")
+
+    if cluster_key.startswith("name:"):
+        candidate = cluster_key.split(":", 1)[1].replace("_", " ").strip()
+        candidate = " ".join(word.capitalize() for word in candidate.split())
+        if _is_usable_name(candidate):
+            return candidate
+
+    if cluster_key.startswith("advertiser:"):
+        candidate = cluster_key.split(":", 1)[1].replace("_", " ").strip()
+        candidate = " ".join(word.capitalize() for word in candidate.split())
+        if _is_usable_name(candidate):
+            return candidate
+
+    if cluster_key.startswith("app:"):
+        candidate = cluster_key.split(":", 1)[1]
+        fallback_name = format_package_id_as_name(candidate)
+        if _is_usable_name(fallback_name):
+            return fallback_name
+
+    fallback_domain = _extract_reference_domain(cleaned_url)
+    if not fallback_domain and ":" not in cluster_key and "." in cluster_key:
+        fallback_domain = cluster_key.strip().lower()
+
+    if fallback_domain:
+        fallback_name = _generate_name_from_domain(fallback_domain)
+        if _is_usable_name(fallback_name):
+            return fallback_name
+
+    return "Unknown Campaign"
+
+
 @router.post("/auto-cluster", response_model=AutoClusterResponse)
 async def auto_cluster_creatives(
     request: AutoClusterRequest,
@@ -192,11 +426,21 @@ async def auto_cluster_creatives(
 
         logger.info(f"Found {unclustered_count} unclustered creatives for buyer_id={buyer_id}")
 
-        # Group by cluster key (app ID for app stores, domain for others)
+        # Group by cluster key (app ID for app stores, domain/brand for others)
         from collections import defaultdict
 
-        # Maps cluster_key -> (display_name, domain, [creative_ids])
-        cluster_data: dict[str, dict] = defaultdict(lambda: {'name': '', 'domain': '', 'creative_ids': []})
+        # Maps cluster_key -> metadata + creative IDs
+        cluster_data: dict[str, dict] = defaultdict(
+            lambda: {
+                "name": "",
+                "domain": "",
+                "creative_ids": [],
+                "sample_url": "",
+                "app_id": None,
+                "app_store": None,
+                "advertiser_name": None,
+            }
+        )
 
         for row in rows:
             row_dict = dict(row)
@@ -207,37 +451,55 @@ async def auto_cluster_creatives(
             app_store = row_dict.get('app_store')
             advertiser_name = row_dict.get('advertiser_name')
 
-            # Phase 29: Priority order for cluster key/name:
-            # 1. Use pre-stored app_name if available (from backfill or sync)
-            # 2. Fall back to URL parsing
-            if app_name:
-                # Use stored app name - it was fetched from the store/website
-                if app_id:
-                    cluster_key = f"app:{app_id}"
-                else:
-                    # Website destination - use app_name as key
-                    cluster_key = f"name:{app_name.lower().replace(' ', '_')[:50]}"
-                display_name = app_name
+            # Cluster by stable ID when possible.
+            if app_id:
+                cluster_key = f"app:{app_id}"
+            elif _is_usable_name(app_name):
+                cluster_key = f"name:{_slugify_name(app_name or '')}"
             else:
-                # Fall back to URL parsing (should be rare after backfill)
-                cluster_key, display_name = _extract_cluster_key_and_name(final_url)
-                # If still unknown, try advertiser name
-                if cluster_key == 'unknown' and advertiser_name:
-                    cluster_key = f"advertiser:{advertiser_name.lower().replace(' ', '_')}"
-                    display_name = advertiser_name
+                cluster_key, _ = _extract_cluster_key_and_name(final_url)
+                if cluster_key == "unknown" and _is_usable_name(advertiser_name):
+                    cluster_key = f"advertiser:{_slugify_name(advertiser_name or '')}"
 
-            # Store the data
-            if not cluster_data[cluster_key]['name']:
-                cluster_data[cluster_key]['name'] = display_name
-                # Extract domain for reference
-                from urllib.parse import urlparse
-                try:
-                    parsed = urlparse(final_url)
-                    cluster_data[cluster_key]['domain'] = (parsed.netloc or '').replace('www.', '').lower()
-                except Exception:
-                    cluster_data[cluster_key]['domain'] = cluster_key
+            entry = cluster_data[cluster_key]
+            entry["creative_ids"].append(creative_id)
 
-            cluster_data[cluster_key]['creative_ids'].append(creative_id)
+            if not entry["sample_url"] and final_url:
+                entry["sample_url"] = final_url
+            if not entry["app_id"] and app_id:
+                entry["app_id"] = app_id
+            if not entry["app_store"] and app_store:
+                entry["app_store"] = app_store
+            if not entry["advertiser_name"] and advertiser_name:
+                entry["advertiser_name"] = advertiser_name
+            if not entry["name"] and _is_usable_name(app_name):
+                entry["name"] = _normalize_whitespace(app_name or "")
+            if not entry["domain"]:
+                entry["domain"] = _extract_reference_domain(final_url) or ""
+
+        # Resolve best display names per cluster (store lookup / website title / safe fallback).
+        semaphore = asyncio.Semaphore(8)
+
+        async def _resolve_one(cluster_key: str, metadata: dict) -> tuple[str, str]:
+            async with semaphore:
+                resolved_name = await _resolve_cluster_display_name(
+                    cluster_key=cluster_key,
+                    app_name=metadata.get("name"),
+                    app_id=metadata.get("app_id"),
+                    app_store=metadata.get("app_store"),
+                    final_url=metadata.get("sample_url"),
+                    advertiser_name=metadata.get("advertiser_name"),
+                )
+                return cluster_key, resolved_name
+
+        resolve_tasks = [_resolve_one(cluster_key, metadata) for cluster_key, metadata in cluster_data.items()]
+        resolve_results = await asyncio.gather(*resolve_tasks, return_exceptions=True)
+        for result in resolve_results:
+            if isinstance(result, Exception):
+                logger.warning("Cluster display-name resolution failed: %s", result)
+                continue
+            cluster_key, resolved_name = result
+            cluster_data[cluster_key]["name"] = resolved_name
 
         # Generate cluster suggestions
         suggestions: list[ClusterSuggestion] = []
@@ -246,10 +508,16 @@ async def auto_cluster_creatives(
             if len(data['creative_ids']) < 1:
                 continue
 
+            suggestion_name = data["name"]
+            if not _is_usable_name(suggestion_name):
+                suggestion_name = _generate_name_from_domain(data.get("domain") or cluster_key)
+            if not _is_usable_name(suggestion_name):
+                suggestion_name = "Unknown Campaign"
+
             suggestions.append(ClusterSuggestion(
-                suggested_name=data['name'],
+                suggested_name=suggestion_name,
                 creative_ids=data['creative_ids'],
-                domain=data['domain'] or cluster_key,
+                domain=data['domain'] or _extract_reference_domain(data.get("sample_url")) or cluster_key,
                 country=None,  # Could be populated if by_country is True
             ))
 
@@ -304,16 +572,21 @@ def _extract_cluster_key_and_name(url: str) -> tuple[str, str]:
     Returns:
         (cluster_key, display_name) tuple
     """
-    from urllib.parse import urlparse, parse_qs
-
     if not url:
-        return ('unknown', 'Unknown')
+        return ('unknown', 'Unknown Campaign')
 
     try:
-        parsed = urlparse(url)
+        cleaned_url = _sanitize_destination_url(url)
+        if not cleaned_url:
+            return ('unknown', 'Unknown Campaign')
+
+        parsed = urlparse(cleaned_url)
         domain = (parsed.netloc or '').replace('www.', '').lower()
         path = parsed.path or ''
         query = parsed.query or ''
+
+        if _is_name_garbage(domain):
+            domain = ""
 
         # Google Play Store: play.google.com/store/apps/details?id=com.example.app
         if 'play.google.com' in domain and '/store/apps/details' in path:
@@ -321,7 +594,7 @@ def _extract_cluster_key_and_name(url: str) -> tuple[str, str]:
             app_id = params.get('id', [''])[0]
             if app_id:
                 name = _format_bundle_id(app_id)
-                return (f'play:{app_id}', f'{name} (Play Store)')
+                return (f'play:{app_id}', name)
 
         # Apple App Store: apps.apple.com/us/app/app-name/id123456789
         if 'apps.apple.com' in domain or 'itunes.apple.com' in domain:
@@ -340,8 +613,8 @@ def _extract_cluster_key_and_name(url: str) -> tuple[str, str]:
             if app_id:
                 if app_name:
                     name = app_name.replace('-', ' ').title()
-                    return (f'appstore:{app_id}', f'{name} (App Store)')
-                return (f'appstore:{app_id}', f'App {app_id} (App Store)')
+                    return (f'appstore:{app_id}', name)
+                return (f'appstore:{app_id}', _format_bundle_id(app_id))
 
         # Apple Music: music.apple.com/us/album/album-name/123456789
         if 'music.apple.com' in domain:
@@ -358,8 +631,7 @@ def _extract_cluster_key_and_name(url: str) -> tuple[str, str]:
 
             if content_id:
                 name = content_name.replace('-', ' ').title() if content_name else content_id
-                type_label = content_type.title() if content_type else 'Music'
-                return (f'applemusic:{content_type}:{content_id}', f'{name} (Apple {type_label})')
+                return (f'applemusic:{content_type}:{content_id}', name)
 
         # AppsFlyer tracking URLs: app.appsflyer.com/com.example.app?...
         if 'appsflyer.com' in domain:
@@ -368,7 +640,7 @@ def _extract_cluster_key_and_name(url: str) -> tuple[str, str]:
             for part in parts:
                 if '.' in part and (part.startswith('com.') or part.startswith('org.') or part.startswith('io.')):
                     name = _format_bundle_id(part)
-                    return (f'appsflyer:{part}', f'{name} (AppsFlyer)')
+                    return (f'appsflyer:{part}', name)
             # Fallback - check for bundle ID in query params
             params = parse_qs(query)
             for key in ['app_id', 'af_dp', 'pid']:
@@ -376,7 +648,7 @@ def _extract_cluster_key_and_name(url: str) -> tuple[str, str]:
                     val = params[key][0]
                     if '.' in val:
                         name = _format_bundle_id(val)
-                        return (f'appsflyer:{val}', f'{name} (AppsFlyer)')
+                        return (f'appsflyer:{val}', name)
 
         # Adjust tracking URLs
         if 'adjust.com' in domain or 'adj.st' in domain:
@@ -385,11 +657,13 @@ def _extract_cluster_key_and_name(url: str) -> tuple[str, str]:
             for key in ['campaign', 'adgroup', 'label']:
                 if key in params and params[key][0]:
                     name = params[key][0].replace('_', ' ').replace('-', ' ').title()
-                    return (f'adjust:{params[key][0]}', f'{name} (Adjust)')
+                    if _is_usable_name(name):
+                        return (f'adjust:{params[key][0]}', name)
             # Fallback to path-based extraction
             if path and len(path) > 1:
                 tracker = path.strip('/').split('/')[0]
-                return (f'adjust:{tracker}', f'Adjust Campaign {tracker[:8]}')
+                if _is_usable_name(tracker):
+                    return (f'adjust:{tracker}', f'Adjust {tracker[:8]}')
 
         # Firebase Dynamic Links: *.page.link
         if '.page.link' in domain:
@@ -403,11 +677,13 @@ def _extract_cluster_key_and_name(url: str) -> tuple[str, str]:
             return (f'firebase:{subdomain}', f'{subdomain.title()} (Firebase)')
 
         # Default: domain-based clustering
+        if not domain:
+            return ('unknown', 'Unknown Campaign')
         return (domain, _generate_name_from_domain(domain))
 
     except Exception as e:
         logger.warning(f"Failed to parse URL '{url[:100]}': {e}")
-        return ('unknown', 'Unknown')
+        return ('unknown', 'Unknown Campaign')
 
 
 def _format_bundle_id(bundle_id: str) -> str:
@@ -424,8 +700,8 @@ def _format_bundle_id(bundle_id: str) -> str:
 
 def _generate_name_from_domain(domain: str) -> str:
     """Generate a clean campaign name from a domain."""
-    if not domain or domain == 'unknown':
-        return 'Unknown'
+    if not domain or domain == 'unknown' or _is_name_garbage(domain):
+        return 'Unknown Campaign'
 
     # Handle bundle IDs (com.example.app)
     if domain.startswith('com.') or domain.startswith('org.') or domain.startswith('io.'):
@@ -442,7 +718,10 @@ def _generate_name_from_domain(domain: str) -> str:
     name = clean_domain.replace('.', ' ').replace('-', ' ').replace('_', ' ')
     name = ' '.join(word.capitalize() for word in name.split() if word)
 
-    return name or domain
+    candidate = name or domain
+    if _is_name_garbage(candidate):
+        return "Unknown Campaign"
+    return candidate
 
 
 # ============================================
