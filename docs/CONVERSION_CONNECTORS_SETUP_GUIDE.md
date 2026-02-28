@@ -1,7 +1,7 @@
 # Conversion Connectors Setup Guide
 
 **Last updated:** 2026-02-28  
-**Scope:** AppsFlyer, Adjust, Branch, generic postback, lightweight pixel, and CSV upload ingestion for Cat-Scan v1.
+**Scope:** AppsFlyer, Adjust, Branch, generic postback, agency-tracker aliases, lightweight pixel, and CSV upload ingestion for Cat-Scan v1.
 
 ## 1. Endpoint Map
 
@@ -11,12 +11,14 @@ Use these API routes for inbound conversion events:
 - `POST /conversions/adjust/callback`
 - `POST /conversions/branch/webhook`
 - `POST /conversions/generic/postback`
+- `POST /conversions/redtrack/postback`
+- `POST /conversions/voluum/postback`
 - `GET /conversions/pixel`
 - `POST /conversions/csv/upload`
 
 Optional query/form override:
 
-- `buyer_id=<seat_id>` can be passed for provider endpoints, pixel, and CSV uploads when payloads do not include buyer seat identifiers.
+- `buyer_id=<seat_id>` can be passed for provider endpoints, tracker aliases, pixel, and CSV uploads when payloads do not include buyer seat identifiers.
 
 ## 2. Security Controls
 
@@ -185,7 +187,35 @@ curl -sS -X POST "https://<host>/api/conversions/generic/postback" \
   }'
 ```
 
-### 3.5 Web conversion pixel
+### 3.5 Agency tracker aliases (Redtrack / Voluum)
+
+Endpoints:
+
+- `POST /conversions/redtrack/postback`
+- `POST /conversions/voluum/postback`
+
+Usage notes:
+
+- These routes share the generic ingestion contract and security controls.
+- If `source_type` is omitted, source defaults to `redtrack` or `voluum` based on endpoint.
+- If `source_type` is provided in payload, it is respected for custom segmentation.
+
+Example:
+
+```bash
+curl -sS -X POST "https://<host>/api/conversions/redtrack/postback?buyer_id=1111111111" \
+  -H "Content-Type: application/json" \
+  -H "X-Webhook-Secret: ${CATSCAN_GENERIC_CONVERSION_WEBHOOK_SECRET}" \
+  -d '{
+    "event_name":"purchase",
+    "event_ts":"2026-02-28T15:20:00Z",
+    "event_value":"31.25",
+    "currency":"USD",
+    "click_id":"clk-240"
+  }'
+```
+
+### 3.6 Web conversion pixel
 
 Endpoint:
 
@@ -206,7 +236,7 @@ curl -sS "https://<host>/api/conversions/pixel?source_type=pixel&buyer_id=111111
   -o /tmp/catscan-pixel.gif
 ```
 
-### 3.6 CSV upload
+### 3.7 CSV upload
 
 Endpoint:
 

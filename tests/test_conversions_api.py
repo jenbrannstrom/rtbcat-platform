@@ -354,6 +354,53 @@ def test_ingest_generic_postback_forwards_payload(monkeypatch: pytest.MonkeyPatc
     assert payload["source_type"] == "redtrack"
 
 
+def test_ingest_redtrack_postback_defaults_source_type(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    client = _build_client(stub, ingestion_stub, monkeypatch)
+
+    response = client.post(
+        "/api/conversions/redtrack/postback?buyer_id=1111111111",
+        json={
+            "event_name": "purchase",
+            "event_ts": "2026-02-28T00:00:00Z",
+            "event_id": "evt-rt-1",
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(ingestion_stub.provider_calls) == 1
+    assert ingestion_stub.provider_calls[0]["source_type"] == "redtrack"
+    assert ingestion_stub.provider_calls[0]["buyer_id_override"] == "1111111111"
+    payload = response.json()
+    assert payload["accepted"] is True
+    assert payload["source_type"] == "redtrack"
+
+
+def test_ingest_voluum_postback_allows_source_override(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    client = _build_client(stub, ingestion_stub, monkeypatch)
+
+    response = client.post(
+        "/api/conversions/voluum/postback?buyer_id=1111111111",
+        json={
+            "source_type": "custom_tracker",
+            "event_name": "lead",
+            "event_ts": "2026-02-28T00:00:00Z",
+            "event_id": "evt-vol-1",
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(ingestion_stub.provider_calls) == 1
+    assert ingestion_stub.provider_calls[0]["source_type"] == "custom_tracker"
+    assert ingestion_stub.provider_calls[0]["buyer_id_override"] == "1111111111"
+    payload = response.json()
+    assert payload["accepted"] is True
+    assert payload["source_type"] == "custom_tracker"
+
+
 def test_ingest_conversion_pixel_returns_gif_and_forwards_payload(monkeypatch: pytest.MonkeyPatch):
     stub = _StubConversionsService()
     ingestion_stub = _StubConversionIngestionService()

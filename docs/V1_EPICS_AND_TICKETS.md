@@ -25,6 +25,7 @@
 - `E2-002` started: `/conversions/adjust/callback` endpoint added with provider secret validation and idempotent event ingestion.
 - `E2-003` started: `/conversions/branch/webhook` endpoint added with provider secret validation and idempotent event ingestion.
 - `E2-004` started: `/conversions/generic/postback` and `/conversions/csv/upload` endpoints added, feeding the universal conversion event schema.
+- `E2-004` started (agency connector slice): `/conversions/redtrack/postback` and `/conversions/voluum/postback` alias routes now reuse generic ingestion/security with source defaults for lower-friction tracker onboarding.
 - `E2-004` started (stretch slice): lightweight web conversion pixel endpoint `GET /conversions/pixel` added, ingesting query payloads into conversion events while returning a cache-busted 1x1 GIF and preserving DLQ capture on ingest failures.
 - `E2-005` started: conversion ingestion observability + DLQ operations added (`conversion_ingestion_failures`, list/replay/discard endpoints, accepted/rejected stats, and `/conversions/ingestion/error-taxonomy` breakdowns).
 - `E3-001` started: migration `056_byom_optimizer_platform.sql` adds `optimization_models`, `segment_scores`, and `qps_allocation_proposals`; model registry APIs are available under `/optimizer/models/*` with service/test coverage, including endpoint contract validation via `/optimizer/models/{model_id}/validate` and encrypted-at-rest handling for model auth headers when `CATSCAN_OPTIMIZER_MODEL_SECRET_KEY` is configured.
