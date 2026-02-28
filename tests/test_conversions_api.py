@@ -105,6 +105,7 @@ class _StubConversionIngestionService:
         self.replay_calls: list[int] = []
         self.discard_calls: list[int] = []
         self.stats_calls: list[dict] = []
+        self.taxonomy_calls: list[dict] = []
 
     async def ingest_provider_payload(self, **kwargs):
         self.provider_calls.append(kwargs)
@@ -204,6 +205,30 @@ class _StubConversionIngestionService:
                     "accepted_count": 10,
                     "rejected_count": 2,
                 }
+            ],
+        }
+
+    async def get_failure_taxonomy(self, **kwargs):
+        self.taxonomy_calls.append(kwargs)
+        return {
+            "days": kwargs.get("days", 7),
+            "source_type": kwargs.get("source_type"),
+            "buyer_id": kwargs.get("buyer_id"),
+            "total_failures": 12,
+            "other_count": 0,
+            "rows": [
+                {
+                    "error_code": "invalid_payload",
+                    "failure_count": 7,
+                    "last_seen_at": "2026-02-28T00:00:00+00:00",
+                    "sample_error_message": "missing event_name",
+                },
+                {
+                    "error_code": "auth_failed",
+                    "failure_count": 5,
+                    "last_seen_at": "2026-02-28T01:00:00+00:00",
+                    "sample_error_message": "bad signature",
+                },
             ],
         }
 
@@ -519,6 +544,33 @@ def test_get_ingestion_stats(monkeypatch: pytest.MonkeyPatch):
     payload = response.json()
     assert payload["accepted_total"] == 10
     assert payload["rejected_total"] == 2
+
+
+def test_get_ingestion_error_taxonomy(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    client = _build_client(stub, ingestion_stub, monkeypatch)
+
+    response = client.get(
+        "/api/conversions/ingestion/error-taxonomy",
+        params={
+            "days": 14,
+            "source_type": "appsflyer",
+            "buyer_id": "1111111111",
+            "limit": 10,
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(ingestion_stub.taxonomy_calls) == 1
+    call = ingestion_stub.taxonomy_calls[0]
+    assert call["days"] == 14
+    assert call["source_type"] == "appsflyer"
+    assert call["buyer_id"] == "1111111111"
+    assert call["limit"] == 10
+    payload = response.json()
+    assert payload["total_failures"] == 12
+    assert payload["rows"][0]["error_code"] == "invalid_payload"
 
 
 def test_adjust_callback_accepts_form_payload(monkeypatch: pytest.MonkeyPatch):

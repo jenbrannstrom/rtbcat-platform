@@ -23,7 +23,7 @@
 - `E2-002` started: `/conversions/adjust/callback` endpoint added with provider secret validation and idempotent event ingestion.
 - `E2-003` started: `/conversions/branch/webhook` endpoint added with provider secret validation and idempotent event ingestion.
 - `E2-004` started: `/conversions/generic/postback` and `/conversions/csv/upload` endpoints added, feeding the universal conversion event schema.
-- `E2-005` started: conversion ingestion observability + DLQ operations added (`conversion_ingestion_failures`, list/replay/discard endpoints, accepted/rejected stats).
+- `E2-005` started: conversion ingestion observability + DLQ operations added (`conversion_ingestion_failures`, list/replay/discard endpoints, accepted/rejected stats, and `/conversions/ingestion/error-taxonomy` breakdowns).
 - `E3-001` started: migration `056_byom_optimizer_platform.sql` adds `optimization_models`, `segment_scores`, and `qps_allocation_proposals`; model registry APIs are available under `/optimizer/models/*` with service/test coverage.
 - `E3-002` started: segment scoring orchestration supports both `rules` and external `api` model types (`services/optimizer_scoring_service.py`) with run/read APIs under `/optimizer/scoring/*`, persisting scored segments into `segment_scores`.
 - `E3-003` started: QPS proposal generation service/API added (`services/optimizer_proposals_service.py`, `/optimizer/proposals/generate`) with confidence/delta guardrails and persisted draft proposals.
