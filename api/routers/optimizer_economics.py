@@ -69,6 +69,25 @@ class AssumedValueResponse(BaseModel):
     metrics: AssumedValueMetrics
 
 
+class EfficiencySummaryResponse(BaseModel):
+    buyer_id: str
+    billing_id: Optional[str] = None
+    start_date: str
+    end_date: str
+    days: int
+    spend_usd: float
+    impressions: int
+    bid_requests: int
+    reached_queries: int
+    avg_daily_spend_usd: float
+    avg_allocated_qps: Optional[float] = None
+    assumed_value_score: float
+    qps_efficiency: Optional[float] = None
+    assumed_value_per_qps: Optional[float] = None
+    has_bid_request_data: bool
+    has_reached_query_data: bool
+
+
 @router.get("/effective-cpm", response_model=EffectiveCpmResponse)
 async def get_effective_cpm(
     buyer_id: Optional[str] = Query(None),
@@ -117,3 +136,28 @@ async def get_assumed_value(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return AssumedValueResponse(**payload)
+
+
+@router.get("/efficiency", response_model=EfficiencySummaryResponse)
+async def get_efficiency_summary(
+    buyer_id: Optional[str] = Query(None),
+    billing_id: Optional[str] = Query(None),
+    days: int = Query(14, ge=1, le=365),
+    start_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    service = OptimizerEconomicsService()
+    try:
+        payload = await service.get_efficiency_summary(
+            buyer_id=buyer_id or "unknown",
+            billing_id=billing_id,
+            days=days,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return EfficiencySummaryResponse(**payload)

@@ -278,6 +278,82 @@ class OptimizerEconomicsService:
             },
         }
 
+    async def get_efficiency_summary(
+        self,
+        *,
+        buyer_id: str,
+        days: int = 14,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        billing_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        start, end = self._resolve_date_range(days=days, start_date=start_date, end_date=end_date)
+        num_days = (end - start).days + 1
+
+        clauses = ["metric_date BETWEEN %s AND %s", "buyer_account_id = %s"]
+        params: list[Any] = [start, end, buyer_id]
+        if billing_id:
+            clauses.append("billing_id = %s")
+            params.append(billing_id)
+        where_sql = " AND ".join(clauses)
+
+        totals = await pg_query_one(
+            f"""
+            SELECT
+                COALESCE(SUM(spend_micros), 0)::bigint AS spend_micros,
+                COALESCE(SUM(impressions), 0)::bigint AS impressions,
+                COALESCE(SUM(bid_requests), 0)::bigint AS bid_requests,
+                COALESCE(SUM(reached_queries), 0)::bigint AS reached_queries
+            FROM rtb_daily
+            WHERE {where_sql}
+            """,
+            tuple(params),
+        ) or {}
+
+        spend_usd = int(totals.get("spend_micros") or 0) / 1_000_000.0
+        impressions = int(totals.get("impressions") or 0)
+        bid_requests = int(totals.get("bid_requests") or 0)
+        reached_queries = int(totals.get("reached_queries") or 0)
+        avg_daily_spend_usd = spend_usd / max(num_days, 1)
+
+        qps_efficiency = (impressions / bid_requests) if bid_requests > 0 else None
+        avg_allocated_qps = (
+            reached_queries / max(float(num_days * 86400), 1.0)
+            if reached_queries > 0
+            else None
+        )
+
+        assumed = await self.get_assumed_value(
+            buyer_id=buyer_id,
+            billing_id=billing_id,
+            start_date=start.isoformat(),
+            end_date=end.isoformat(),
+            days=num_days,
+        )
+        assumed_value_score = _to_float(assumed.get("assumed_value_score"), default=0.0)
+        assumed_value_per_qps = None
+        if avg_allocated_qps and avg_allocated_qps > 0:
+            assumed_value_per_qps = (assumed_value_score * avg_daily_spend_usd) / avg_allocated_qps
+
+        return {
+            "buyer_id": buyer_id,
+            "billing_id": billing_id,
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+            "days": num_days,
+            "spend_usd": round(spend_usd, 6),
+            "impressions": impressions,
+            "bid_requests": bid_requests,
+            "reached_queries": reached_queries,
+            "avg_daily_spend_usd": round(avg_daily_spend_usd, 6),
+            "avg_allocated_qps": _round_or_none(avg_allocated_qps, 6),
+            "assumed_value_score": round(assumed_value_score, 6),
+            "qps_efficiency": _round_or_none(qps_efficiency, 6),
+            "assumed_value_per_qps": _round_or_none(assumed_value_per_qps, 6),
+            "has_bid_request_data": bid_requests > 0,
+            "has_reached_query_data": reached_queries > 0,
+        }
+
     def _spend_level_tier(self, avg_daily_spend: float) -> float:
         if avg_daily_spend < 100:
             return 0.1

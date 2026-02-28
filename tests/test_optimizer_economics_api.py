@@ -17,6 +17,7 @@ class _StubOptimizerEconomicsService:
     def __init__(self):
         self.calls: list[dict] = []
         self.assumed_value_calls: list[dict] = []
+        self.efficiency_calls: list[dict] = []
 
     async def get_effective_cpm(self, **kwargs):
         self.calls.append(kwargs)
@@ -70,6 +71,27 @@ class _StubOptimizerEconomicsService:
                 "viewability": 0.7,
                 "account_age_months": 10.5,
             },
+        }
+
+    async def get_efficiency_summary(self, **kwargs):
+        self.efficiency_calls.append(kwargs)
+        return {
+            "buyer_id": kwargs["buyer_id"],
+            "billing_id": kwargs.get("billing_id"),
+            "start_date": kwargs.get("start_date") or "2026-02-15",
+            "end_date": kwargs.get("end_date") or "2026-02-28",
+            "days": 14,
+            "spend_usd": 120.0,
+            "impressions": 1000000,
+            "bid_requests": 2500000,
+            "reached_queries": 3000000,
+            "avg_daily_spend_usd": 8.571429,
+            "avg_allocated_qps": 2.480159,
+            "assumed_value_score": 0.712345,
+            "qps_efficiency": 0.4,
+            "assumed_value_per_qps": 2.463819,
+            "has_bid_request_data": True,
+            "has_reached_query_data": True,
         }
 
 
@@ -142,3 +164,27 @@ def test_get_assumed_value_endpoint(monkeypatch: pytest.MonkeyPatch):
     payload = response.json()
     assert payload["assumed_value_score"] == 0.712345
     assert payload["metrics"]["bid_rate"] == 0.2
+
+
+def test_get_efficiency_summary_endpoint(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubOptimizerEconomicsService()
+    client = _build_client(stub, monkeypatch)
+
+    response = client.get(
+        "/api/optimizer/economics/efficiency",
+        params={
+            "buyer_id": "1111111111",
+            "billing_id": "cfg-1",
+            "days": 14,
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(stub.efficiency_calls) == 1
+    call = stub.efficiency_calls[0]
+    assert call["buyer_id"] == "1111111111"
+    assert call["billing_id"] == "cfg-1"
+    payload = response.json()
+    assert payload["qps_efficiency"] == 0.4
+    assert payload["assumed_value_per_qps"] == 2.463819
+    assert payload["has_bid_request_data"] is True
