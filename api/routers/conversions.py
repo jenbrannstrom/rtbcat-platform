@@ -8,7 +8,9 @@ import json
 import os
 import secrets
 import time
+from collections import deque
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
@@ -202,6 +204,9 @@ _HMAC_SECRET_ENV_BY_SOURCE = {
     "generic": "CATSCAN_GENERIC_CONVERSION_WEBHOOK_HMAC_SECRET",
 }
 
+_WEBHOOK_RATE_LIMIT_STATE: dict[str, deque[int]] = {}
+_WEBHOOK_RATE_LIMIT_LOCK = Lock()
+
 
 def _extract_auth_bearer_token(request: Request) -> Optional[str]:
     auth_header = request.headers.get("Authorization", "")
@@ -209,6 +214,11 @@ def _extract_auth_bearer_token(request: Request) -> Optional[str]:
     if len(parts) == 2 and parts[0].lower() == "bearer":
         return parts[1]
     return None
+
+
+def _clear_webhook_rate_limit_state() -> None:
+    with _WEBHOOK_RATE_LIMIT_LOCK:
+        _WEBHOOK_RATE_LIMIT_STATE.clear()
 
 
 def _get_expected_webhook_secret(source_type: str) -> Optional[str]:
@@ -377,6 +387,48 @@ def _verify_webhook_signature(source_type: str, request: Request, payload: dict)
         raise HTTPException(status_code=401, detail="Webhook timestamp outside allowed skew")
 
 
+def _extract_request_client_key(request: Request) -> str:
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip() or "unknown"
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def _enforce_webhook_rate_limit(source_type: str, request: Request) -> None:
+    enabled = os.getenv("CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_ENABLED", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if not enabled:
+        return
+
+    limit = int(os.getenv("CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_PER_MINUTE", "240") or "240")
+    window_seconds = int(os.getenv("CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_WINDOW_SECONDS", "60") or "60")
+    limit = max(1, limit)
+    window_seconds = max(1, window_seconds)
+    now = _current_unix_ts()
+    client_key = _extract_request_client_key(request)
+    bucket_key = f"{source_type}:{client_key}"
+
+    with _WEBHOOK_RATE_LIMIT_LOCK:
+        bucket = _WEBHOOK_RATE_LIMIT_STATE.setdefault(bucket_key, deque())
+        cutoff = now - window_seconds
+        while bucket and bucket[0] <= cutoff:
+            bucket.popleft()
+
+        if len(bucket) >= limit:
+            raise HTTPException(
+                status_code=429,
+                detail="Webhook rate limit exceeded; retry later",
+            )
+
+        bucket.append(now)
+
+
 async def _parse_payload(request: Request) -> dict:
     content_type = (request.headers.get("content-type") or "").lower()
 
@@ -473,6 +525,7 @@ async def ingest_appsflyer_postback(
     payload = normalize_appsflyer_payload(payload)
     _verify_webhook_secret("appsflyer", request, payload)
     _verify_webhook_signature("appsflyer", request, payload)
+    _enforce_webhook_rate_limit("appsflyer", request)
     return await _ingest_with_dlq(
         request=request,
         source_type="appsflyer",
@@ -490,6 +543,7 @@ async def ingest_adjust_callback(
     payload = normalize_adjust_payload(payload)
     _verify_webhook_secret("adjust", request, payload)
     _verify_webhook_signature("adjust", request, payload)
+    _enforce_webhook_rate_limit("adjust", request)
     return await _ingest_with_dlq(
         request=request,
         source_type="adjust",
@@ -507,6 +561,7 @@ async def ingest_branch_webhook(
     payload = normalize_branch_payload(payload)
     _verify_webhook_secret("branch", request, payload)
     _verify_webhook_signature("branch", request, payload)
+    _enforce_webhook_rate_limit("branch", request)
     return await _ingest_with_dlq(
         request=request,
         source_type="branch",
@@ -525,6 +580,7 @@ async def ingest_generic_postback(
     _verify_webhook_secret("generic", request, payload)
     _verify_webhook_signature("generic", request, payload)
     source_type = str(payload.get("source_type") or "generic")
+    _enforce_webhook_rate_limit(source_type, request)
     return await _ingest_with_dlq(
         request=request,
         source_type=source_type,
