@@ -17,6 +17,8 @@ import {
   approveOptimizerProposal,
   applyOptimizerProposal,
   syncOptimizerProposalApplyStatus,
+  getOptimizerSetup,
+  updateOptimizerSetup,
 } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
@@ -36,6 +38,7 @@ export default function SystemStatusPage() {
   const [minCompleteness, setMinCompleteness] = useState<string>("");
   const [selectedModelId, setSelectedModelId] = useState<string>("");
   const [optimizerNotice, setOptimizerNotice] = useState<string>("");
+  const [monthlyHostingCostInput, setMonthlyHostingCostInput] = useState<string>("");
   const parsedMinCompleteness = Number(minCompleteness);
   const normalizedMinCompleteness =
     minCompleteness.trim() === "" || !Number.isFinite(parsedMinCompleteness)
@@ -130,6 +133,11 @@ export default function SystemStatusPage() {
       }),
   });
 
+  const { data: optimizerSetup, isLoading: optimizerSetupLoading } = useQuery({
+    queryKey: ["optimizerSetup"],
+    queryFn: getOptimizerSetup,
+  });
+
   useEffect(() => {
     const activeModels = (optimizerModels?.rows || []).filter((row) => row.is_active);
     if (selectedModelId && activeModels.some((row) => row.model_id === selectedModelId)) {
@@ -140,10 +148,42 @@ export default function SystemStatusPage() {
     }
   }, [optimizerModels, selectedModelId]);
 
+  useEffect(() => {
+    if (!optimizerSetup) return;
+    if (optimizerSetup.monthly_hosting_cost_usd === null) {
+      setMonthlyHostingCostInput("");
+      return;
+    }
+    setMonthlyHostingCostInput(String(optimizerSetup.monthly_hosting_cost_usd));
+  }, [optimizerSetup]);
+
   const generateMutation = useMutation({
     mutationFn: () => generateThumbnailsBatch({ limit: batchLimit, force: forceRetry }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["thumbnailStatus"] });
+    },
+  });
+
+  const saveOptimizerSetupMutation = useMutation({
+    mutationFn: async () => {
+      const value = Number(monthlyHostingCostInput);
+      if (!Number.isFinite(value) || value < 0) {
+        throw new Error("Monthly hosting cost must be a non-negative number.");
+      }
+      return updateOptimizerSetup({ monthly_hosting_cost_usd: value });
+    },
+    onSuccess: (payload) => {
+      queryClient.invalidateQueries({ queryKey: ["optimizerSetup"] });
+      setMonthlyHostingCostInput(
+        payload.monthly_hosting_cost_usd === null
+          ? ""
+          : String(payload.monthly_hosting_cost_usd),
+      );
+      setOptimizerNotice("Optimizer setup saved.");
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to save optimizer setup.";
+      setOptimizerNotice(msg);
     },
   });
 
@@ -218,7 +258,10 @@ export default function SystemStatusPage() {
     {} as Record<string, number>,
   );
   const optimizerPanelLoading =
-    optimizerModelsLoading || optimizerScoresLoading || optimizerProposalsLoading;
+    optimizerModelsLoading ||
+    optimizerScoresLoading ||
+    optimizerProposalsLoading ||
+    optimizerSetupLoading;
   const optimizerPanelError =
     optimizerModelsError || optimizerScoresError || optimizerProposalsError;
   const pendingProposalId = proposalActionMutation.isPending
@@ -420,6 +463,56 @@ export default function SystemStatusPage() {
                   <div className="text-xs text-gray-500">
                     draft {proposalStatusCounts.draft || 0}, approved {proposalStatusCounts.approved || 0}, applied{" "}
                     {proposalStatusCounts.applied || 0}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-200 p-3">
+                <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                  <label className="text-xs text-gray-600">
+                    Monthly Hosting Cost (USD)
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={monthlyHostingCostInput}
+                      onChange={(e) => setMonthlyHostingCostInput(e.target.value)}
+                      className="mt-1 block min-w-52 input py-1 text-sm"
+                      placeholder="0.00"
+                      disabled={saveOptimizerSetupMutation.isPending}
+                    />
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={cn(
+                        "rounded px-2 py-1 text-xs font-medium",
+                        optimizerSetup?.effective_cpm_enabled
+                          ? "bg-green-50 text-green-700"
+                          : "bg-slate-100 text-slate-600",
+                      )}
+                    >
+                      Effective CPM {optimizerSetup?.effective_cpm_enabled ? "enabled" : "disabled"}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => saveOptimizerSetupMutation.mutate()}
+                      disabled={saveOptimizerSetupMutation.isPending || monthlyHostingCostInput.trim() === ""}
+                      className={cn(
+                        "btn-primary",
+                        (saveOptimizerSetupMutation.isPending ||
+                          monthlyHostingCostInput.trim() === "") &&
+                          "cursor-not-allowed opacity-50",
+                      )}
+                    >
+                      {saveOptimizerSetupMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        "Save Cost"
+                      )}
+                    </button>
                   </div>
                 </div>
               </div>
