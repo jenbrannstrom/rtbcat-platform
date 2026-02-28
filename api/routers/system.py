@@ -216,6 +216,79 @@ class IngestionRunsSummary(BaseModel):
     last_finished_at: Optional[str] = None
 
 
+class ReportTableCompletenessState(BaseModel):
+    rows: int
+    active_days: int
+    expected_days: int
+    coverage_pct: float
+    max_metric_date: Optional[str] = None
+    availability_state: str
+
+
+class ReportCompletenessSummary(BaseModel):
+    expected_report_types: int
+    available_report_types: int
+    coverage_pct: float
+    missing_report_types: list[str]
+    availability_state: str
+    tables: dict[str, ReportTableCompletenessState]
+
+
+class QualityFreshnessSummary(BaseModel):
+    rows: int
+    max_metric_date: Optional[str] = None
+    age_days: Optional[int] = None
+    fresh_within_days: int
+    availability_state: str
+
+
+class BidstreamDimensionCoverageSummary(BaseModel):
+    total_rows: int
+    platform_missing_pct: float
+    environment_missing_pct: float
+    transaction_type_missing_pct: float
+    availability_state: str
+
+
+class SeatDayCompletenessRow(BaseModel):
+    metric_date: Optional[str] = None
+    buyer_account_id: str
+    has_rtb_daily: bool
+    has_rtb_bidstream: bool
+    has_rtb_bid_filtering: bool
+    has_rtb_quality: bool
+    has_web_domain_daily: bool
+    available_report_types: int
+    expected_report_types: int
+    completeness_pct: float
+    availability_state: str
+    refreshed_at: Optional[str] = None
+
+
+class SeatDayCompletenessSummary(BaseModel):
+    total_seat_days: int
+    healthy_seat_days: int
+    degraded_seat_days: int
+    unavailable_seat_days: int
+    avg_completeness_pct: float
+    min_completeness_pct: float
+    max_completeness_pct: float
+
+
+class SeatDayCompletenessPayload(BaseModel):
+    rows: list[SeatDayCompletenessRow]
+    summary: SeatDayCompletenessSummary
+    availability_state: str
+    refreshed_at: Optional[str] = None
+
+
+class OptimizerReadinessSummary(BaseModel):
+    report_completeness: ReportCompletenessSummary
+    rtb_quality_freshness: QualityFreshnessSummary
+    bidstream_dimension_coverage: BidstreamDimensionCoverageSummary
+    seat_day_completeness: SeatDayCompletenessPayload
+
+
 class DataHealthResponse(BaseModel):
     checked_at: str
     days: int
@@ -225,6 +298,7 @@ class DataHealthResponse(BaseModel):
     serving_freshness: DataHealthServingFreshness
     coverage: DataCoverageSummary
     ingestion_runs: IngestionRunsSummary
+    optimizer_readiness: OptimizerReadinessSummary
 
 
 # =============================================================================
@@ -354,13 +428,28 @@ async def get_system_secrets_health():
 async def get_system_data_health(
     days: int = Query(7, ge=1, le=90),
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    availability_state: Optional[Literal["healthy", "degraded", "unavailable"]] = Query(
+        None, description="Filter seat-day completeness rows by state"
+    ),
+    min_completeness_pct: Optional[float] = Query(
+        None, ge=0.0, le=100.0, description="Filter seat-day completeness rows by minimum completeness percent"
+    ),
+    limit: int = Query(200, ge=1, le=1000),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
     """Get source/serving freshness and dimension coverage state."""
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = DataHealthService()
-    return DataHealthResponse(**await service.get_data_health(days=days, buyer_id=buyer_id))
+    return DataHealthResponse(
+        **await service.get_data_health(
+            days=days,
+            buyer_id=buyer_id,
+            availability_state=availability_state,
+            min_completeness_pct=min_completeness_pct,
+            limit=limit,
+        )
+    )
 
 
 @router.post("/thumbnails/generate", response_model=ThumbnailGenerateResponse, tags=["Thumbnails"])

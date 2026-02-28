@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Server, Database, Video, Loader2, CheckCircle, XCircle, AlertTriangle, Image, Cpu, HardDrive } from "lucide-react";
-import { getHealth, getStats, getThumbnailStatus, generateThumbnailsBatch, getSystemStatus } from "@/lib/api";
+import { Server, Database, Video, Loader2, CheckCircle, XCircle, AlertTriangle, Image, Cpu, BarChart3 } from "lucide-react";
+import { getHealth, getStats, getThumbnailStatus, generateThumbnailsBatch, getSystemStatus, getSystemDataHealth } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,15 @@ export default function SystemStatusPage() {
   const { t } = useTranslation();
   const [batchLimit, setBatchLimit] = useState(50);
   const [forceRetry, setForceRetry] = useState(false);
+  const [healthDays, setHealthDays] = useState(7);
+  const [healthLimit, setHealthLimit] = useState(20);
+  const [healthStateFilter, setHealthStateFilter] = useState<"all" | "healthy" | "degraded" | "unavailable">("all");
+  const [minCompleteness, setMinCompleteness] = useState<string>("");
+  const parsedMinCompleteness = Number(minCompleteness);
+  const normalizedMinCompleteness =
+    minCompleteness.trim() === "" || !Number.isFinite(parsedMinCompleteness)
+      ? undefined
+      : Math.min(100, Math.max(0, parsedMinCompleteness));
 
   const {
     data: health,
@@ -38,6 +47,17 @@ export default function SystemStatusPage() {
   const { data: systemStatus, isLoading: systemStatusLoading } = useQuery({
     queryKey: ["systemStatus"],
     queryFn: getSystemStatus,
+  });
+
+  const { data: dataHealth, isLoading: dataHealthLoading } = useQuery({
+    queryKey: ["systemDataHealth", healthDays, healthLimit, healthStateFilter, minCompleteness],
+    queryFn: () =>
+      getSystemDataHealth({
+        days: healthDays,
+        limit: healthLimit,
+        availability_state: healthStateFilter === "all" ? undefined : healthStateFilter,
+        min_completeness_pct: normalizedMinCompleteness,
+      }),
   });
 
   const generateMutation = useMutation({
@@ -195,6 +215,169 @@ export default function SystemStatusPage() {
             </div>
           ) : (
             <div className="text-sm text-gray-500">{t.settings.systemStatusUnavailable}</div>
+          )}
+        </div>
+
+        {/* Database Panel */}
+        <div className="card p-6">
+          <div className="flex items-center mb-4">
+            <BarChart3 className="h-5 w-5 text-gray-400 mr-2" />
+            <h2 className="text-lg font-medium text-gray-900">Optimizer Readiness</h2>
+          </div>
+
+          {dataHealthLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+            </div>
+          ) : dataHealth ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs text-gray-600">
+                  Window
+                  <select
+                    value={healthDays}
+                    onChange={(e) => setHealthDays(Number(e.target.value))}
+                    className="mt-1 block w-full input py-1 text-sm"
+                  >
+                    <option value={7}>7 days</option>
+                    <option value={14}>14 days</option>
+                    <option value={30}>30 days</option>
+                  </select>
+                </label>
+                <label className="text-xs text-gray-600">
+                  State Filter
+                  <select
+                    value={healthStateFilter}
+                    onChange={(e) =>
+                      setHealthStateFilter(
+                        e.target.value as "all" | "healthy" | "degraded" | "unavailable"
+                      )
+                    }
+                    className="mt-1 block w-full input py-1 text-sm"
+                  >
+                    <option value="all">all</option>
+                    <option value="healthy">healthy</option>
+                    <option value="degraded">degraded</option>
+                    <option value="unavailable">unavailable</option>
+                  </select>
+                </label>
+                <label className="text-xs text-gray-600">
+                  Min Completeness %
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    placeholder="none"
+                    value={minCompleteness}
+                    onChange={(e) => setMinCompleteness(e.target.value)}
+                    className="mt-1 block w-full input py-1 text-sm"
+                  />
+                </label>
+                <label className="text-xs text-gray-600">
+                  Row Limit
+                  <select
+                    value={healthLimit}
+                    onChange={(e) => setHealthLimit(Number(e.target.value))}
+                    className="mt-1 block w-full input py-1 text-sm"
+                  >
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <div className="text-xs text-gray-500">Report Type Coverage</div>
+                  <div className="mt-1 text-lg font-semibold text-gray-900">
+                    {dataHealth.optimizer_readiness.report_completeness.available_report_types}/
+                    {dataHealth.optimizer_readiness.report_completeness.expected_report_types}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {dataHealth.optimizer_readiness.report_completeness.coverage_pct}% available
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <div className="text-xs text-gray-500">Quality Freshness</div>
+                  <div className="mt-1 text-lg font-semibold text-gray-900">
+                    {dataHealth.optimizer_readiness.rtb_quality_freshness.age_days ?? "-"} day(s)
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    state: {dataHealth.optimizer_readiness.rtb_quality_freshness.availability_state}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <div className="text-xs text-gray-500">Bidstream Dimension Coverage</div>
+                  <div className="mt-1 text-sm font-semibold text-gray-900">
+                    platform {100 - dataHealth.optimizer_readiness.bidstream_dimension_coverage.platform_missing_pct}%
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    env {100 - dataHealth.optimizer_readiness.bidstream_dimension_coverage.environment_missing_pct}%,
+                    deal {100 - dataHealth.optimizer_readiness.bidstream_dimension_coverage.transaction_type_missing_pct}%
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <div className="text-xs text-gray-500">Seat-Day Completeness</div>
+                  <div className="mt-1 text-lg font-semibold text-gray-900">
+                    {dataHealth.optimizer_readiness.seat_day_completeness.summary.avg_completeness_pct}%
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {dataHealth.optimizer_readiness.seat_day_completeness.summary.total_seat_days} seat-day rows
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-xs text-gray-500">
+                Seat-day rollup refreshed at:{" "}
+                {dataHealth.optimizer_readiness.seat_day_completeness.refreshed_at || "unknown"}
+              </div>
+
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50">
+                  Latest Seat-Day Completeness Rows
+                </div>
+                <div className="max-h-56 overflow-auto">
+                  <table className="min-w-full text-xs">
+                    <thead className="bg-gray-50 text-gray-600">
+                      <tr>
+                        <th className="text-left px-3 py-2">Date</th>
+                        <th className="text-left px-3 py-2">Seat</th>
+                        <th className="text-left px-3 py-2">Reports</th>
+                        <th className="text-left px-3 py-2">Completeness</th>
+                        <th className="text-left px-3 py-2">State</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dataHealth.optimizer_readiness.seat_day_completeness.rows.slice(0, 10).map((row) => (
+                        <tr key={`${row.metric_date}-${row.buyer_account_id}`} className="border-t border-gray-100">
+                          <td className="px-3 py-2 text-gray-700">{row.metric_date || "-"}</td>
+                          <td className="px-3 py-2 font-mono text-gray-700">{row.buyer_account_id}</td>
+                          <td className="px-3 py-2 text-gray-700">
+                            {row.available_report_types}/{row.expected_report_types}
+                          </td>
+                          <td className="px-3 py-2 text-gray-700">{row.completeness_pct}%</td>
+                          <td className="px-3 py-2">
+                            <span
+                              className={cn(
+                                "inline-flex rounded px-2 py-0.5 text-xs font-medium",
+                                row.availability_state === "healthy" && "bg-green-50 text-green-700",
+                                row.availability_state === "degraded" && "bg-yellow-50 text-yellow-700",
+                                row.availability_state === "unavailable" && "bg-red-50 text-red-700"
+                              )}
+                            >
+                              {row.availability_state}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-gray-500">Data health details unavailable.</div>
           )}
         </div>
 
