@@ -131,6 +131,18 @@ class OptimizerProposalsService:
             rowcount = await self._insert_proposal(proposal)
             if int(rowcount or 0) > 0:
                 created += 1
+                await self._record_history(
+                    proposal_id=proposal["proposal_id"],
+                    buyer_id=buyer_id,
+                    from_status=None,
+                    to_status="draft",
+                    changed_by="optimizer",
+                    details={
+                        "source": "score_generation",
+                        "model_id": model_id,
+                        "score_id": str(row.get("score_id") or ""),
+                    },
+                )
 
         top = sorted(proposals, key=lambda item: abs(item["delta_qps"]), reverse=True)[:10]
         return {
@@ -303,6 +315,15 @@ class OptimizerProposalsService:
         )
         if not row:
             return None
+        await self._record_history(
+            proposal_id=proposal_id,
+            buyer_id=buyer_id,
+            from_status=current_status,
+            to_status=safe_status,
+            changed_by=applied_by,
+            apply_mode=safe_apply_mode if safe_status == "applied" else None,
+            details={"transition": "manual_workflow"},
+        )
         return self._row_to_payload(row)
 
     async def get_proposal(
@@ -315,6 +336,56 @@ class OptimizerProposalsService:
         if not row:
             return None
         return self._row_to_payload(row)
+
+    async def list_history(
+        self,
+        *,
+        proposal_id: str,
+        buyer_id: str,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        safe_limit = max(1, min(limit, 500))
+        safe_offset = max(0, offset)
+        rows = await pg_query(
+            """
+            SELECT
+                event_id,
+                proposal_id,
+                buyer_id,
+                from_status,
+                to_status,
+                apply_mode,
+                changed_by,
+                details,
+                created_at
+            FROM qps_allocation_proposal_history
+            WHERE proposal_id = %s AND buyer_id = %s
+            ORDER BY created_at DESC, id DESC
+            LIMIT %s OFFSET %s
+            """,
+            (proposal_id, buyer_id, safe_limit, safe_offset),
+        )
+        count_row = await pg_query_one(
+            """
+            SELECT COUNT(*) AS total_rows
+            FROM qps_allocation_proposal_history
+            WHERE proposal_id = %s AND buyer_id = %s
+            """,
+            (proposal_id, buyer_id),
+        )
+        total = int((count_row or {}).get("total_rows") or 0)
+        payload_rows = [self._history_row_to_payload(row) for row in rows]
+        return {
+            "rows": payload_rows,
+            "meta": {
+                "total": total,
+                "returned": len(payload_rows),
+                "limit": safe_limit,
+                "offset": safe_offset,
+                "has_more": safe_offset + len(payload_rows) < total,
+            },
+        }
 
     async def sync_apply_status(
         self,
@@ -465,6 +536,19 @@ class OptimizerProposalsService:
         )
         if not row:
             return None
+        await self._record_history(
+            proposal_id=proposal_id,
+            buyer_id=buyer_id,
+            from_status=current_status,
+            to_status="applied",
+            changed_by=applied_by or "optimizer",
+            apply_mode=apply_mode,
+            details={
+                "pending_change_id": int(pending_change_id),
+                "queued_maximum_qps": qps_value,
+                "live_applied": apply_mode == "live",
+            },
+        )
         return self._row_to_payload(row)
 
     async def _select_proposal_row(
@@ -581,6 +665,60 @@ class OptimizerProposalsService:
             ),
         )
 
+    async def _record_history(
+        self,
+        *,
+        proposal_id: str,
+        buyer_id: str,
+        from_status: Optional[str],
+        to_status: str,
+        changed_by: Optional[str],
+        apply_mode: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None,
+    ) -> int:
+        safe_to_status = str(to_status or "").strip().lower()
+        if safe_to_status not in _ALLOWED_STATUSES:
+            raise ValueError("to_status must be one of: draft, approved, applied, rejected")
+        safe_from_status: Optional[str] = None
+        if from_status is not None and str(from_status).strip():
+            normalized = str(from_status).strip().lower()
+            if normalized not in _ALLOWED_STATUSES:
+                raise ValueError("from_status must be one of: draft, approved, applied, rejected")
+            safe_from_status = normalized
+        safe_apply_mode: Optional[str] = None
+        if apply_mode is not None and str(apply_mode).strip():
+            normalized_mode = str(apply_mode).strip().lower()
+            if normalized_mode not in _ALLOWED_APPLY_MODES:
+                raise ValueError("apply_mode must be one of: queue, live")
+            safe_apply_mode = normalized_mode
+
+        return await pg_execute(
+            """
+            INSERT INTO qps_allocation_proposal_history (
+                event_id,
+                proposal_id,
+                buyer_id,
+                from_status,
+                to_status,
+                apply_mode,
+                changed_by,
+                details,
+                created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW())
+            ON CONFLICT (event_id) DO NOTHING
+            """,
+            (
+                f"prp_evt_{uuid.uuid4().hex}",
+                proposal_id,
+                buyer_id,
+                safe_from_status,
+                safe_to_status,
+                safe_apply_mode,
+                changed_by,
+                json.dumps(details or {}),
+            ),
+        )
+
     def _row_to_payload(self, row: dict[str, Any]) -> dict[str, Any]:
         projected_impact = _to_dict(row.get("projected_impact"))
         apply_details = projected_impact.get("apply")
@@ -599,4 +737,17 @@ class OptimizerProposalsService:
             "created_at": _to_iso_ts(row.get("created_at")),
             "updated_at": _to_iso_ts(row.get("updated_at")),
             "applied_at": _to_iso_ts(row.get("applied_at")),
+        }
+
+    def _history_row_to_payload(self, row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "event_id": str(row.get("event_id") or ""),
+            "proposal_id": str(row.get("proposal_id") or ""),
+            "buyer_id": str(row.get("buyer_id") or ""),
+            "from_status": str(row.get("from_status")) if row.get("from_status") is not None else None,
+            "to_status": str(row.get("to_status") or ""),
+            "apply_mode": str(row.get("apply_mode")) if row.get("apply_mode") is not None else None,
+            "changed_by": str(row.get("changed_by")) if row.get("changed_by") is not None else None,
+            "details": _to_dict(row.get("details")),
+            "created_at": _to_iso_ts(row.get("created_at")),
         }
