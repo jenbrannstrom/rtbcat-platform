@@ -111,6 +111,22 @@ async def test_list_proposals_returns_meta(monkeypatch: pytest.MonkeyPatch):
 @pytest.mark.asyncio
 async def test_update_status_returns_row(monkeypatch: pytest.MonkeyPatch):
     async def _stub_query_one(sql: str, params: tuple = ()):
+        if "FROM qps_allocation_proposals" in sql and "LIMIT 1" in sql:
+            return {
+                "proposal_id": "prp_1",
+                "model_id": "mdl_rules",
+                "buyer_id": "1111111111",
+                "billing_id": "cfg-1",
+                "current_qps": 100.0,
+                "proposed_qps": 120.0,
+                "delta_qps": 20.0,
+                "rationale": "test rationale",
+                "projected_impact": {"expected_event_lift_pct": 10.0},
+                "status": "draft",
+                "created_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+                "updated_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+                "applied_at": None,
+            }
         assert "UPDATE qps_allocation_proposals" in sql
         assert params[0] == "approved"
         return {
@@ -150,6 +166,38 @@ async def test_update_status_rejects_invalid_status():
             proposal_id="prp_1",
             buyer_id="1111111111",
             status="invalid",
+        )
+
+
+@pytest.mark.asyncio
+async def test_update_status_rejects_invalid_transition(monkeypatch: pytest.MonkeyPatch):
+    async def _stub_query_one(sql: str, params: tuple = ()):
+        if "FROM qps_allocation_proposals" in sql and "LIMIT 1" in sql:
+            return {
+                "proposal_id": "prp_1",
+                "model_id": "mdl_rules",
+                "buyer_id": "1111111111",
+                "billing_id": "cfg-1",
+                "current_qps": 100.0,
+                "proposed_qps": 120.0,
+                "delta_qps": 20.0,
+                "rationale": "test rationale",
+                "projected_impact": {"expected_event_lift_pct": 10.0},
+                "status": "draft",
+                "created_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+                "updated_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+                "applied_at": None,
+            }
+        return None
+
+    monkeypatch.setattr("services.optimizer_proposals_service.pg_query_one", _stub_query_one)
+    service = OptimizerProposalsService()
+    with pytest.raises(ValueError, match="Invalid status transition"):
+        await service.update_status(
+            proposal_id="prp_1",
+            buyer_id="1111111111",
+            status="applied",
+            apply_mode="queue",
         )
 
 
