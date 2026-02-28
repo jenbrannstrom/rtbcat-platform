@@ -574,10 +574,16 @@ export default function SystemStatusPage() {
         billing_id: rollbackProposal.billingId,
         snapshot_id: snapshotId,
         dry_run: false,
+        reason: rollbackReason.trim(),
+        proposal_id: rollbackProposal.proposalId,
       });
     },
     onSuccess: (payload) => {
-      setOptimizerNotice(`Rollback executed: ${payload.message}`);
+      queryClient.invalidateQueries({ queryKey: ["optimizerProposals", selectedBuyerId] });
+      queryClient.invalidateQueries({ queryKey: ["optimizerProposalHistory", selectedBuyerId] });
+      queryClient.invalidateQueries({ queryKey: ["pretargeting-history"] });
+      const suffix = payload.history_id ? ` (history #${payload.history_id})` : "";
+      setOptimizerNotice(`Rollback executed: ${payload.message}${suffix}`);
       setRollbackProposal(null);
       setRollbackReason("");
       setRollbackPreview(null);

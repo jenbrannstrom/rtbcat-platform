@@ -1,7 +1,7 @@
 """Pydantic models for RTB Settings routers."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -87,6 +87,7 @@ class PretargetingHistoryResponse(BaseModel):
     changed_at: str
     changed_by: Optional[str] = None
     change_source: str
+    rollback_context: Optional[dict[str, Any]] = None
 
 
 # =============================================================================
@@ -269,6 +270,8 @@ class RollbackRequest(BaseModel):
     """Request to rollback to a snapshot."""
     snapshot_id: int
     dry_run: bool = True
+    reason: Optional[str] = None
+    proposal_id: Optional[str] = None
 
 
 class RollbackResponse(BaseModel):
@@ -278,3 +281,4 @@ class RollbackResponse(BaseModel):
     snapshot_id: int
     changes_made: list[str]
     message: str
+    history_id: Optional[int] = None

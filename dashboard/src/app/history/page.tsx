@@ -320,6 +320,24 @@ function HistoryCard({
               </div>
             )}
 
+            {isRollback && entry.rollback_context ? (
+              <div className="mt-2 space-y-1 text-xs text-gray-600">
+                {entry.rollback_context.proposal_id ? (
+                  <div>
+                    proposal:{" "}
+                    <span className="font-mono text-gray-800">
+                      {entry.rollback_context.proposal_id}
+                    </span>
+                  </div>
+                ) : null}
+                {entry.rollback_context.reason ? (
+                  <div>
+                    reason: <span className="text-gray-800">{entry.rollback_context.reason}</span>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
               <span title={formatDate(entry.changed_at, language)}>
                 <Clock className="h-3 w-3 inline mr-1" />

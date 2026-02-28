@@ -78,6 +78,13 @@ export interface PretargetingHistoryItem {
   changed_at: string;
   changed_by?: string | null;
   change_source: string;
+  rollback_context?: {
+    snapshot_id?: number;
+    proposal_id?: string | null;
+    reason?: string | null;
+    initiated_by?: string | null;
+    changes_made?: string[];
+  } | null;
 }
 
 export interface NewlyUploadedCreative {

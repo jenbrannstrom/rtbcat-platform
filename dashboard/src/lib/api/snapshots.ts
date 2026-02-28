@@ -74,18 +74,23 @@ export async function rollbackSnapshot(params: {
   billing_id: string;
   snapshot_id: number;
   dry_run?: boolean;
+  reason?: string;
+  proposal_id?: string;
 }): Promise<{
   status: string;
   dry_run: boolean;
   snapshot_id: number;
   changes_made: string[];
   message: string;
+  history_id?: number | null;
 }> {
   return fetchApi(`/settings/pretargeting/${encodeURIComponent(params.billing_id)}/rollback`, {
     method: "POST",
     body: JSON.stringify({
       snapshot_id: params.snapshot_id,
       dry_run: params.dry_run ?? true,
+      reason: params.reason,
+      proposal_id: params.proposal_id,
     }),
   });
 }

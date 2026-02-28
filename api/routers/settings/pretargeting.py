@@ -341,6 +341,18 @@ async def get_pretargeting_history(
 
         results = []
         for row in rows:
+            rollback_context = None
+            if row.get("change_type") == "rollback":
+                raw_context = row.get("raw_config_snapshot")
+                if isinstance(raw_context, str):
+                    try:
+                        parsed = json.loads(raw_context)
+                    except json.JSONDecodeError:
+                        parsed = None
+                    if isinstance(parsed, dict):
+                        rollback_context = parsed
+                elif isinstance(raw_context, dict):
+                    rollback_context = raw_context
             results.append(
                 PretargetingHistoryResponse(
                     id=row["id"],
@@ -353,6 +365,7 @@ async def get_pretargeting_history(
                     changed_at=row["changed_at"],
                     changed_by=row["changed_by"],
                     change_source=row["change_source"] or "unknown",
+                    rollback_context=rollback_context,
                 )
             )
 
