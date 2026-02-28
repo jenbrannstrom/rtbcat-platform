@@ -158,6 +158,11 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=20.0)
     parser.add_argument("--run-workflow", action="store_true", help="Run score+propose workflow check.")
     parser.add_argument(
+        "--run-lifecycle",
+        action="store_true",
+        help="After workflow, run proposal approve/apply(queue)/sync/history checks.",
+    )
+    parser.add_argument(
         "--require-healthy-readiness",
         action="store_true",
         help="Require healthy readiness states instead of only rejecting unavailable data.",
@@ -185,6 +190,7 @@ def main() -> int:
     )
 
     resolved_model_id = args.model_id
+    workflow_proposal_id: str | None = None
     results: list[tuple[bool, str]] = []
 
     def check_health() -> None:
@@ -260,6 +266,7 @@ def main() -> int:
         _assert(bool(payload.get("valid") or payload.get("skipped")), "model validation failed")
 
     def check_workflow() -> None:
+        nonlocal workflow_proposal_id
         if not args.run_workflow or not resolved_model_id:
             return
         payload = client.request(
@@ -281,6 +288,51 @@ def main() -> int:
             "scores_written" in score_run and "proposals_created" in proposal_run,
             "workflow response missing score/proposal summary fields",
         )
+        if args.run_lifecycle:
+            top_proposals = proposal_run.get("top_proposals") or []
+            _assert(
+                isinstance(top_proposals, list) and len(top_proposals) > 0,
+                "workflow produced no top_proposals for lifecycle check",
+            )
+            proposal_id = str((top_proposals[0] or {}).get("proposal_id") or "").strip()
+            _assert(bool(proposal_id), "workflow top proposal missing proposal_id")
+            workflow_proposal_id = proposal_id
+
+    def check_proposal_lifecycle() -> None:
+        if not args.run_lifecycle:
+            return
+        _assert(args.run_workflow, "--run-lifecycle requires --run-workflow")
+        _assert(bool(workflow_proposal_id), "proposal lifecycle check missing proposal_id from workflow")
+
+        proposal_id = urllib.parse.quote(workflow_proposal_id or "", safe="")
+        approve = client.request(
+            "POST",
+            f"/optimizer/proposals/{proposal_id}/approve",
+            params={"buyer_id": args.buyer_id},
+        )
+        _assert(str(approve.get("status", "")).lower() == "approved", "proposal approve did not return status=approved")
+
+        applied = client.request(
+            "POST",
+            f"/optimizer/proposals/{proposal_id}/apply",
+            params={"buyer_id": args.buyer_id, "mode": "queue"},
+        )
+        _assert(str(applied.get("status", "")).lower() == "applied", "proposal apply did not return status=applied")
+
+        sync = client.request(
+            "POST",
+            f"/optimizer/proposals/{proposal_id}/sync-apply-status",
+            params={"buyer_id": args.buyer_id},
+        )
+        _assert(str(sync.get("status", "")).lower() == "applied", "proposal sync did not return status=applied")
+
+        history = client.request(
+            "GET",
+            f"/optimizer/proposals/{proposal_id}/history",
+            params={"buyer_id": args.buyer_id, "limit": 10},
+        )
+        rows = history.get("rows") or []
+        _assert(isinstance(rows, list) and len(rows) > 0, "proposal history is empty after lifecycle execution")
 
     def check_rollback_dry_run() -> None:
         if args.billing_id is None or args.snapshot_id is None:
@@ -306,6 +358,7 @@ def main() -> int:
         ("Optimizer models", check_models_and_resolve),
         ("Model endpoint validation", check_model_validation),
         ("Score+propose workflow (optional)", check_workflow),
+        ("Proposal lifecycle (optional)", check_proposal_lifecycle),
         ("Rollback dry-run (optional)", check_rollback_dry_run),
     ]
 

@@ -34,6 +34,14 @@ CATSCAN_MAX_DIMENSION_MISSING_PCT=20 \
 make v1-canary-smoke
 ```
 
+Optional full proposal lifecycle gate:
+
+```bash
+CATSCAN_CANARY_RUN_WORKFLOW=1 \
+CATSCAN_CANARY_RUN_LIFECYCLE=1 \
+make v1-canary-smoke
+```
+
 Phase 0 local gate command:
 
 ```bash
