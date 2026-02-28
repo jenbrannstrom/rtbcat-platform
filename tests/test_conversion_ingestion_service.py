@@ -277,3 +277,44 @@ async def test_get_ingestion_stats_returns_totals(monkeypatch: pytest.MonkeyPatc
     assert payload["accepted_total"] == 10
     assert payload["rejected_total"] == 2
     assert payload["rows"][0]["source_type"] == "appsflyer"
+
+
+@pytest.mark.asyncio
+async def test_get_failure_taxonomy_returns_breakdown(monkeypatch: pytest.MonkeyPatch):
+    async def _stub_query(sql: str, params: tuple = ()):
+        assert "FROM conversion_ingestion_failures" in sql
+        return [
+            {
+                "error_code": "invalid_payload",
+                "failure_count": 7,
+                "last_seen_at": "2026-02-28T00:00:00+00:00",
+                "sample_error_message": "missing event_name",
+            },
+            {
+                "error_code": "auth_failed",
+                "failure_count": 5,
+                "last_seen_at": "2026-02-28T01:00:00+00:00",
+                "sample_error_message": "bad signature",
+            },
+        ]
+
+    async def _stub_query_one(sql: str, params: tuple = ()):
+        return {"total_failures": 12}
+
+    monkeypatch.setattr("services.conversion_ingestion_service.pg_query", _stub_query)
+    monkeypatch.setattr("services.conversion_ingestion_service.pg_query_one", _stub_query_one)
+    service = ConversionIngestionService()
+
+    payload = await service.get_failure_taxonomy(
+        days=14,
+        source_type="appsflyer",
+        buyer_id="1111111111",
+        limit=10,
+    )
+
+    assert payload["days"] == 14
+    assert payload["source_type"] == "appsflyer"
+    assert payload["buyer_id"] == "1111111111"
+    assert payload["total_failures"] == 12
+    assert payload["other_count"] == 0
+    assert payload["rows"][0]["error_code"] == "invalid_payload"

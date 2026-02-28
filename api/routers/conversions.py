@@ -173,6 +173,22 @@ class ConversionIngestionStatsResponse(BaseModel):
     rows: list[ConversionIngestionStatsRow]
 
 
+class ConversionFailureTaxonomyRow(BaseModel):
+    error_code: str
+    failure_count: int
+    last_seen_at: Optional[str] = None
+    sample_error_message: str
+
+
+class ConversionFailureTaxonomyResponse(BaseModel):
+    days: int
+    source_type: Optional[str] = None
+    buyer_id: Optional[str] = None
+    total_failures: int
+    other_count: int
+    rows: list[ConversionFailureTaxonomyRow]
+
+
 _SECRET_ENV_BY_SOURCE = {
     "appsflyer": "CATSCAN_APPSFLYER_WEBHOOK_SECRET",
     "adjust": "CATSCAN_ADJUST_WEBHOOK_SECRET",
@@ -617,6 +633,26 @@ async def get_conversion_ingestion_stats(
         buyer_id=buyer_id,
     )
     return ConversionIngestionStatsResponse(**payload)
+
+
+@router.get("/ingestion/error-taxonomy", response_model=ConversionFailureTaxonomyResponse)
+async def get_conversion_ingestion_error_taxonomy(
+    days: int = Query(7, ge=1, le=365),
+    source_type: Optional[str] = Query(None),
+    buyer_id: Optional[str] = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    service = ConversionIngestionService()
+    payload = await service.get_failure_taxonomy(
+        days=days,
+        source_type=source_type,
+        buyer_id=buyer_id,
+        limit=limit,
+    )
+    return ConversionFailureTaxonomyResponse(**payload)
 
 
 @router.get("/aggregates", response_model=ConversionAggregatesResponse)

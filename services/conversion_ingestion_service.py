@@ -784,6 +784,75 @@ class ConversionIngestionService:
             "rows": normalized_rows,
         }
 
+    async def get_failure_taxonomy(
+        self,
+        *,
+        days: int = 7,
+        source_type: Optional[str] = None,
+        buyer_id: Optional[str] = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        safe_days = max(1, min(days, 365))
+        safe_limit = max(1, min(limit, 100))
+        clauses = ["created_at::date >= CURRENT_DATE - %s::int"]
+        params: list[Any] = [safe_days]
+        if source_type:
+            clauses.append("source_type = %s")
+            params.append(normalize_source_type(source_type))
+        if buyer_id:
+            clauses.append("buyer_id = %s")
+            params.append(buyer_id)
+        where_sql = " AND ".join(clauses)
+
+        rows = await pg_query(
+            f"""
+            SELECT
+                error_code,
+                COUNT(*)::bigint AS failure_count,
+                MAX(created_at) AS last_seen_at,
+                MAX(error_message) AS sample_error_message
+            FROM conversion_ingestion_failures
+            WHERE {where_sql}
+            GROUP BY error_code
+            ORDER BY failure_count DESC, error_code
+            LIMIT %s
+            """,
+            tuple([*params, safe_limit]),
+        )
+        total_row = await pg_query_one(
+            f"""
+            SELECT COUNT(*)::bigint AS total_failures
+            FROM conversion_ingestion_failures
+            WHERE {where_sql}
+            """,
+            tuple(params),
+        )
+        total_failures = int((total_row or {}).get("total_failures") or 0)
+
+        taxonomy_rows = []
+        accounted = 0
+        for row in rows:
+            count = int(row.get("failure_count") or 0)
+            accounted += count
+            taxonomy_rows.append(
+                {
+                    "error_code": str(row.get("error_code") or "unknown"),
+                    "failure_count": count,
+                    "last_seen_at": _to_iso_ts(row.get("last_seen_at")),
+                    "sample_error_message": str(row.get("sample_error_message") or ""),
+                }
+            )
+
+        other_count = max(total_failures - accounted, 0)
+        return {
+            "days": safe_days,
+            "source_type": normalize_source_type(source_type) if source_type else None,
+            "buyer_id": buyer_id,
+            "total_failures": total_failures,
+            "other_count": other_count,
+            "rows": taxonomy_rows,
+        }
+
 
 def _to_iso_ts(value: Any) -> Optional[str]:
     if value is None:
