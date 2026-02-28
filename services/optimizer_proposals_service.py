@@ -245,12 +245,35 @@ class OptimizerProposalsService:
         if safe_apply_mode not in _ALLOWED_APPLY_MODES:
             raise ValueError("apply_mode must be one of: queue, live")
 
+        current = await self._select_proposal_row(
+            proposal_id=proposal_id,
+            buyer_id=buyer_id,
+        )
+        if not current:
+            return None
+
+        current_status = str(current.get("status") or "draft").strip().lower()
+        if current_status == safe_status:
+            return self._row_to_payload(current)
+
+        allowed_transitions = {
+            "draft": {"approved", "rejected"},
+            "approved": {"applied", "rejected"},
+            "rejected": {"approved"},
+            "applied": set(),
+        }
+        if safe_status not in allowed_transitions.get(current_status, set()):
+            raise ValueError(
+                f"Invalid status transition: {current_status} -> {safe_status}"
+            )
+
         if safe_status == "applied":
             return await self._apply_proposal(
                 proposal_id=proposal_id,
                 buyer_id=buyer_id,
                 apply_mode=safe_apply_mode,
                 applied_by=applied_by,
+                proposal=current,
             )
 
         row = await pg_query_one(
@@ -361,10 +384,17 @@ class OptimizerProposalsService:
         buyer_id: str,
         apply_mode: str,
         applied_by: Optional[str],
+        proposal: Optional[dict[str, Any]] = None,
     ) -> Optional[dict[str, Any]]:
-        proposal = await self._select_proposal_row(proposal_id=proposal_id, buyer_id=buyer_id)
+        if proposal is None:
+            proposal = await self._select_proposal_row(proposal_id=proposal_id, buyer_id=buyer_id)
         if not proposal:
             return None
+        current_status = str(proposal.get("status") or "draft").strip().lower()
+        if current_status != "approved":
+            raise ValueError(
+                f"Proposal must be approved before applying (current status: {current_status})"
+            )
 
         billing_id = str(proposal.get("billing_id") or "").strip()
         if not billing_id:
