@@ -46,6 +46,7 @@ Notes:
 - `endpoint_url` is required for `model_type=api`.
 - `auth_header_encrypted` is stored encrypted-at-rest when `CATSCAN_OPTIMIZER_MODEL_SECRET_KEY` is configured; otherwise it falls back to plaintext compatibility mode.
 - Supported model types are `api`, `rules`, `csv`.
+- `csv` currently uses the same deterministic rules scoring path as `rules` until a dedicated CSV scorer is introduced.
 
 ## 3. External Scoring Endpoint Contract
 

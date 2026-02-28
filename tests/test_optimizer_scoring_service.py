@@ -63,6 +63,39 @@ async def test_run_scoring_dispatches_rules(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.mark.asyncio
+async def test_run_scoring_dispatches_csv_to_rules_path(monkeypatch: pytest.MonkeyPatch):
+    async def _stub_get_model(self, *, model_id: str, buyer_id=None):
+        return {
+            "model_id": model_id,
+            "buyer_id": buyer_id,
+            "model_type": "csv",
+        }
+
+    async def _stub_run_rules(self, **kwargs):
+        return {
+            "model_id": kwargs["model_id"],
+            "buyer_id": kwargs["buyer_id"],
+            "start_date": "2026-02-15",
+            "end_date": "2026-02-28",
+            "event_type": None,
+            "segments_scanned": 0,
+            "scores_written": 0,
+            "top_scores": [],
+        }
+
+    monkeypatch.setattr("services.optimizer_models_service.OptimizerModelsService.get_model", _stub_get_model)
+    monkeypatch.setattr(OptimizerScoringService, "run_rules_scoring", _stub_run_rules)
+    service = OptimizerScoringService()
+    payload = await service.run_scoring(
+        model_id="mdl_csv",
+        buyer_id="1111111111",
+    )
+
+    assert payload["model_type"] == "csv"
+    assert payload["model_id"] == "mdl_csv"
+
+
+@pytest.mark.asyncio
 async def test_run_scoring_api_invokes_external_model(monkeypatch: pytest.MonkeyPatch):
     writes: list[tuple[str, tuple]] = []
 

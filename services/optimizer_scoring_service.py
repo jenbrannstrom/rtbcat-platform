@@ -76,7 +76,9 @@ class OptimizerScoringService:
             raise ValueError("Model not found")
 
         model_type = str(model.get("model_type") or "").strip().lower()
-        if model_type == "rules":
+        if model_type in {"rules", "csv"}:
+            # csv model_type uses the deterministic rules path until a dedicated
+            # CSV-trained scorer is introduced.
             payload = await self.run_rules_scoring(
                 model_id=model_id,
                 buyer_id=buyer_id,
@@ -86,7 +88,7 @@ class OptimizerScoringService:
                 event_type=event_type,
                 limit=limit,
             )
-            payload["model_type"] = "rules"
+            payload["model_type"] = model_type
             return payload
 
         if model_type == "api":
@@ -127,8 +129,8 @@ class OptimizerScoringService:
         model = await model_service.get_model(model_id=model_id, buyer_id=buyer_id)
         if not model:
             raise ValueError("Model not found")
-        if str(model.get("model_type") or "") != "rules":
-            raise ValueError("run_rules_scoring requires model_type=rules")
+        if str(model.get("model_type") or "") not in {"rules", "csv"}:
+            raise ValueError("run_rules_scoring requires model_type=rules or csv")
 
         start, end = self._resolve_date_range(days=days, start_date=start_date, end_date=end_date)
         safe_limit = max(1, min(limit, 5000))
