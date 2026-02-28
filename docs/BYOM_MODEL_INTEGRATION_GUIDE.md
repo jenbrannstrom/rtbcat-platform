@@ -146,6 +146,10 @@ curl -sS -X POST \
 
 - `POST /optimizer/workflows/score-and-propose?model_id=<model_id>&buyer_id=<buyer_id>&days=14&score_limit=1000&min_confidence=0.3&max_delta_pct=0.3&proposal_limit=200`
 
+Optional profile shorthand:
+
+- `POST /optimizer/workflows/score-and-propose?...&profile=safe|balanced|aggressive`
+
 Then review/approve/apply:
 
 1. `GET /optimizer/proposals?buyer_id=<buyer_id>&status=draft`

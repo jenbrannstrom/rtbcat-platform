@@ -317,3 +317,46 @@ def test_optimizer_workflow_accepts_legacy_query_aliases(monkeypatch: pytest.Mon
     payload = workflow_response.json()
     assert payload["score_run"]["score_limit"] == 321
     assert payload["proposal_run"]["days"] == 9
+
+
+def test_optimizer_workflow_profile_defaults(monkeypatch: pytest.MonkeyPatch):
+    client = _build_client(monkeypatch)
+
+    workflow_response = client.post(
+        "/api/optimizer/workflows/score-and-propose",
+        params={
+            "model_id": "mdl_rules",
+            "buyer_id": "1111111111",
+            "profile": "safe",
+        },
+    )
+    assert workflow_response.status_code == 200
+    payload = workflow_response.json()
+    assert payload["score_run"]["score_limit"] == 500
+    assert payload["proposal_run"]["days"] == 14
+    assert payload["proposal_run"]["min_confidence"] == 0.45
+    assert payload["proposal_run"]["max_delta_pct"] == 0.2
+
+
+def test_optimizer_workflow_profile_allows_explicit_overrides(monkeypatch: pytest.MonkeyPatch):
+    client = _build_client(monkeypatch)
+
+    workflow_response = client.post(
+        "/api/optimizer/workflows/score-and-propose",
+        params={
+            "model_id": "mdl_rules",
+            "buyer_id": "1111111111",
+            "profile": "safe",
+            "days": 5,
+            "score_limit": 777,
+            "proposal_limit": 33,
+            "min_confidence": 0.6,
+            "max_delta_pct": 0.4,
+        },
+    )
+    assert workflow_response.status_code == 200
+    payload = workflow_response.json()
+    assert payload["score_run"]["score_limit"] == 777
+    assert payload["proposal_run"]["days"] == 5
+    assert payload["proposal_run"]["min_confidence"] == 0.6
+    assert payload["proposal_run"]["max_delta_pct"] == 0.4
