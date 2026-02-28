@@ -144,7 +144,7 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
         user: Current authenticated user.
 
     Returns:
-        The admin user.
+        The sudo user.
 
     Raises:
         HTTPException: If user is not sudo.

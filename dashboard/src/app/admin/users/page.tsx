@@ -205,9 +205,9 @@ function UsersPage() {
   };
 
   const getRoleLabel = (role: string): string => {
-    if (role === "sudo") return "Sudo";
-    if (role === "admin") return "Admin";
-    return "Read";
+    if (role === "sudo") return t.admin.sudoRole;
+    if (role === "admin") return t.admin.adminRole;
+    return t.admin.readRole;
   };
 
   return (
@@ -439,9 +439,9 @@ function UsersPage() {
                   defaultValue="read"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 >
-                  <option value="read">Read</option>
+                  <option value="read">{t.admin.readRole}</option>
                   <option value="admin">{t.admin.adminRole}</option>
-                  <option value="sudo">Sudo</option>
+                  <option value="sudo">{t.admin.sudoRole}</option>
                 </select>
               </div>
               <div>

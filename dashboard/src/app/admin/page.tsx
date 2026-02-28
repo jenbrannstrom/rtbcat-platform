@@ -63,11 +63,11 @@ function AdminDashboard() {
   const multiUserEnabled = settings?.multi_user_enabled === "1";
   const currentUserRoleLabel =
     user?.role === "sudo"
-      ? "Sudo"
+      ? t.admin.sudoRole
       : user?.role === "admin"
       ? t.admin.adminRole
       : user?.role === "read"
-        ? "Read"
+        ? t.admin.readRole
         : (user?.role ?? t.common.none);
 
   return (

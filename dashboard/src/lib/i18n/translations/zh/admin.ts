@@ -5,7 +5,7 @@ const value: PartialTranslations['admin'] = {
   manageUsers: '管理用户、权限和系统设置',
   totalUsers: '用户总数',
   activeUsers: '活跃用户',
-  adminUsers: '管理员用户',
+  adminUsers: 'Sudo 用户',
   userManagement: '用户管理',
   manageUsersLink: '管理用户',
   createNewUser: '创建新用户',
@@ -63,7 +63,9 @@ const value: PartialTranslations['admin'] = {
   emailPlaceholder: 'user@example.com',
   displayNameOptional: '显示名称（可选）',
   displayNamePlaceholder: '张三',
-  userRole: '用户',
+  sudoRole: 'Sudo',
+  readRole: '只读',
+  userRole: '只读',
   adminRole: '管理员',
   authMethod: '认证方式',
   localPasswordAuth: '本地密码',
@@ -107,9 +109,9 @@ const value: PartialTranslations['admin'] = {
   configureSettings: '配置系统级设置与功能。',
   settingUpdated: '设置“{key}”已更新',
   multiUserDescription:
-    '允许创建额外用户账号。禁用时仅管理员账号可以访问系统。',
+    '允许创建额外用户账号。禁用时仅 sudo 账号可以访问系统。',
   multiUserInfo:
-    '始终需要登录。该设置控制你是否可以在管理员之外添加更多用户账号。团队协作请启用，个人使用可禁用。',
+    '始终需要登录。该设置控制你是否可以在 sudo 账号之外添加更多用户账号。团队协作请启用，个人使用可禁用。',
   retentionDescription:
     '配置审计日志条目在自动清理前保留的时间。',
   retentionUnlimited: '无限制',
@@ -171,4 +173,3 @@ const value: PartialTranslations['admin'] = {
 };
 
 export default value;
-

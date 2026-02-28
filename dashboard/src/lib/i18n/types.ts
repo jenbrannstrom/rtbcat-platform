@@ -1159,6 +1159,8 @@ export interface Translations {
     emailPlaceholder: string;
     displayNameOptional: string;
     displayNamePlaceholder: string;
+    sudoRole: string;
+    readRole: string;
     userRole: string;
     adminRole: string;
     authMethod: string;

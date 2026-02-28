@@ -153,7 +153,7 @@ async def list_users(
 ):
     """List all users.
 
-    Requires admin role.
+    Requires sudo role.
     """
     admin_svc = get_admin_service()
     users = await admin_svc.list_users(active_only=active_only, role=role)
@@ -181,7 +181,7 @@ async def create_user(
 ):
     """Create a new user (local password or OAuth pre-register).
 
-    Requires admin role.
+    Requires sudo role.
     - local-password: creates user and stores password hash immediately
     - oauth-precreate: pre-creates user for external auth login
     """
@@ -206,7 +206,7 @@ async def get_user(
 ):
     """Get a specific user's details.
 
-    Requires admin role.
+    Requires sudo role.
     """
     admin_svc = get_admin_service()
     user = await admin_svc.get_user(user_id)
@@ -235,7 +235,7 @@ async def update_user(
 ):
     """Update a user's details.
 
-    Requires admin role. Can update display_name, role, and is_active.
+    Requires sudo role. Can update display_name, role, and is_active.
     """
     admin_svc = get_admin_service()
     updated_user = await admin_svc.update_user(
@@ -268,7 +268,7 @@ async def deactivate_user(
 ):
     """Deactivate a user (soft delete).
 
-    Requires admin role. The user account is deactivated, not deleted.
+    Requires sudo role. The user account is deactivated, not deleted.
     This also invalidates all their sessions.
     """
     admin_svc = get_admin_service()
@@ -288,7 +288,7 @@ async def get_user_buyer_seat_permissions(
 ):
     """Get a user's explicit buyer seat permissions.
 
-    Requires admin role.
+    Requires sudo role.
     """
     admin_svc = get_admin_service()
     user = await admin_svc.get_user(user_id)
@@ -323,7 +323,7 @@ async def grant_buyer_seat_permission(
 ):
     """Grant a user explicit access to a buyer seat.
 
-    Requires admin role. If permission already exists, it will be updated.
+    Requires sudo role. If permission already exists, it will be updated.
     """
     admin_svc = get_admin_service()
     user = await admin_svc.get_user(user_id)
@@ -361,7 +361,7 @@ async def revoke_buyer_seat_permission(
 ):
     """Revoke a user's explicit access to a buyer seat.
 
-    Requires admin role.
+    Requires sudo role.
     """
     admin_svc = get_admin_service()
     user = await admin_svc.get_user(user_id)
@@ -384,7 +384,7 @@ async def get_user_permissions(
 ):
     """Get a user's service account permissions.
 
-    Requires admin role.
+    Requires sudo role.
     """
     admin_svc = get_admin_service()
     user = await admin_svc.get_user(user_id)
@@ -416,7 +416,7 @@ async def grant_permission(
 ):
     """Grant a user access to a service account.
 
-    Requires admin role. If permission already exists, it will be updated.
+    Requires sudo role. If permission already exists, it will be updated.
     """
     admin_svc = get_admin_service()
     user = await admin_svc.get_user(user_id)
@@ -451,7 +451,7 @@ async def revoke_permission(
 ):
     """Revoke a user's access to a service account.
 
-    Requires admin role.
+    Requires sudo role.
     """
     admin_svc = get_admin_service()
     user = await admin_svc.get_user(user_id)
@@ -482,7 +482,7 @@ async def get_audit_logs(
 ):
     """Query audit log entries.
 
-    Requires admin role. Supports filtering by user, action, resource type,
+    Requires sudo role. Supports filtering by user, action, resource type,
     and time range.
     """
     admin_svc = get_admin_service()
@@ -518,7 +518,7 @@ async def get_settings(
 ):
     """Get all system settings.
 
-    Requires admin role.
+    Requires sudo role.
     """
     admin_svc = get_admin_service()
     return await admin_svc.get_settings()
@@ -533,7 +533,7 @@ async def update_setting(
 ):
     """Update a system setting.
 
-    Requires admin role.
+    Requires sudo role.
     """
     admin_svc = get_admin_service()
     return await admin_svc.update_setting(
@@ -552,7 +552,7 @@ async def get_admin_stats(
 ):
     """Get admin dashboard stats.
 
-    Requires admin role. Returns counts of users, sessions, etc.
+    Requires sudo role. Returns counts of users, sessions, etc.
     """
     admin_svc = get_admin_service()
     return await admin_svc.get_admin_stats()
@@ -566,7 +566,7 @@ async def get_diagnostics(
 ):
     """Get diagnostic information for debugging data issues.
 
-    Requires admin role. Returns:
+    Requires sudo role. Returns:
     - All buyer seats (including inactive)
     - Campaign-creative mapping status
     - Thumbnail generation status

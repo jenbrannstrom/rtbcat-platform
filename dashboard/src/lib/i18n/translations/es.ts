@@ -1175,7 +1175,7 @@ export const es: PartialTranslations = {
     manageUsers: 'Gestiona usuarios, permisos y ajustes del sistema',
     totalUsers: 'Usuarios totales',
     activeUsers: 'Usuarios activos',
-    adminUsers: 'Usuarios administradores',
+    adminUsers: 'Usuarios sudo',
     userManagement: 'Gestión de usuarios',
     manageUsersLink: 'Gestionar usuarios',
     createNewUser: 'Crear nuevo usuario',
@@ -1237,7 +1237,9 @@ export const es: PartialTranslations = {
     emailPlaceholder: 'usuario@ejemplo.com',
     displayNameOptional: 'Nombre visible (opcional)',
     displayNamePlaceholder: 'Juan Pérez',
-    userRole: 'Usuario',
+    sudoRole: 'Sudo',
+    readRole: 'Lectura',
+    userRole: 'Lectura',
     adminRole: 'Admin',
     authMethod: 'Método de autenticación',
     localPasswordAuth: 'Contraseña local',
@@ -1296,9 +1298,9 @@ export const es: PartialTranslations = {
       'Configura ajustes y funciones a nivel de sistema.',
     settingUpdated: 'Ajuste "{key}" actualizado correctamente',
     multiUserDescription:
-      'Permite crear cuentas de usuario adicionales. Cuando está deshabilitado, solo la cuenta admin puede acceder al sistema.',
+      'Permite crear cuentas de usuario adicionales. Cuando está deshabilitado, solo la cuenta sudo puede acceder al sistema.',
     multiUserInfo:
-      'El inicio de sesión siempre es obligatorio. Este ajuste controla si puedes agregar más cuentas además de la admin. Actívalo para acceso en equipo, desactívalo para uso personal.',
+      'El inicio de sesión siempre es obligatorio. Este ajuste controla si puedes agregar más cuentas además de la cuenta sudo. Actívalo para acceso en equipo, desactívalo para uso personal.',
     retentionDescription:
       'Configura cuánto tiempo conservar entradas del registro de auditoría antes de la limpieza automática.',
     retentionUnlimited: 'Ilimitado',

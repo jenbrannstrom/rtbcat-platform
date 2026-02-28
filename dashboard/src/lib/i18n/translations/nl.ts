@@ -1367,7 +1367,7 @@ export const nl: PartialTranslations = {
     manageUsers: 'Beheer gebruikers, permissies en systeeminstellingen',
     totalUsers: 'Totaal gebruikers',
     activeUsers: 'Actieve gebruikers',
-    adminUsers: 'Admin-gebruikers',
+    adminUsers: 'Sudo-gebruikers',
     userManagement: 'Gebruikersbeheer',
     manageUsersLink: 'Gebruikers beheren',
     createNewUser: 'Nieuwe gebruiker aanmaken',
@@ -1427,7 +1427,9 @@ export const nl: PartialTranslations = {
     emailPlaceholder: 'user@example.com',
     displayNameOptional: 'Weergavenaam (optioneel)',
     displayNamePlaceholder: 'Jan Jansen',
-    userRole: 'Gebruiker',
+    sudoRole: 'Sudo',
+    readRole: 'Lezen',
+    userRole: 'Lezen',
     adminRole: 'Admin',
     authMethod: 'Authenticatiemethode',
     localPasswordAuth: 'Lokaal wachtwoord',
@@ -1476,9 +1478,9 @@ export const nl: PartialTranslations = {
     configureSettings: 'Configureer systeeminstellingen en functies voor het hele systeem.',
     settingUpdated: 'Instelling "{key}" succesvol bijgewerkt',
     multiUserDescription:
-      'Sta het aanmaken van extra gebruikersaccounts toe. Wanneer uitgeschakeld heeft alleen het admin-account toegang tot het systeem.',
+      'Sta het aanmaken van extra gebruikersaccounts toe. Wanneer uitgeschakeld heeft alleen het sudo-account toegang tot het systeem.',
     multiUserInfo:
-      'Inloggen is altijd vereist. Deze instelling bepaalt of je extra gebruikersaccounts naast de admin kunt toevoegen. Schakel in voor teamtoegang, schakel uit voor persoonlijk gebruik.',
+      'Inloggen is altijd vereist. Deze instelling bepaalt of je extra gebruikersaccounts naast het sudo-account kunt toevoegen. Schakel in voor teamtoegang, schakel uit voor persoonlijk gebruik.',
     retentionDescription:
       'Configureer hoe lang auditlog-items bewaard blijven voor automatische opschoning.',
     retentionUnlimited: 'Onbeperkt',
