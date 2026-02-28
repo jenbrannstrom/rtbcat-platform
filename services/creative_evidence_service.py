@@ -6,10 +6,15 @@ to feed into the geo-linguistic mismatch analyzer.
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
+import mimetypes
 import re
 import shutil
 import subprocess
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -70,14 +75,28 @@ class CreativeEvidenceService:
         creative_id: str,
         raw_data: dict,
         creative_format: str,
+        ai_provider: str = "gemini",
+        ai_api_key: Optional[str] = None,
     ) -> EvidenceResult:
         """Collect all available evidence from a creative."""
         result = EvidenceResult()
 
         if creative_format == "HTML":
-            self._collect_html_evidence(creative_id, raw_data, result)
+            self._collect_html_evidence(
+                creative_id,
+                raw_data,
+                result,
+                ai_provider=ai_provider,
+                ai_api_key=ai_api_key,
+            )
         elif creative_format == "VIDEO":
-            self._collect_video_evidence(creative_id, raw_data, result)
+            self._collect_video_evidence(
+                creative_id,
+                raw_data,
+                result,
+                ai_provider=ai_provider,
+                ai_api_key=ai_api_key,
+            )
         elif creative_format == "NATIVE":
             self._collect_native_evidence(creative_id, raw_data, result)
         elif creative_format == "IMAGE":
@@ -93,7 +112,12 @@ class CreativeEvidenceService:
     # ==================== Format-specific collectors ====================
 
     def _collect_html_evidence(
-        self, creative_id: str, raw_data: dict, result: EvidenceResult
+        self,
+        creative_id: str,
+        raw_data: dict,
+        result: EvidenceResult,
+        ai_provider: str = "gemini",
+        ai_api_key: Optional[str] = None,
     ) -> None:
         html_data = raw_data.get("html", {})
         snippet = html_data.get("snippet", "")
@@ -106,7 +130,11 @@ class CreativeEvidenceService:
             screenshot_path = self._take_html_screenshot(creative_id, snippet)
             if screenshot_path:
                 result.screenshot_path = screenshot_path
-                ocr_text = self._ocr_image(screenshot_path)
+                ocr_text = self._ocr_image(
+                    screenshot_path,
+                    ai_provider=ai_provider,
+                    ai_api_key=ai_api_key,
+                )
                 if ocr_text:
                     result.ocr_texts.append(ocr_text)
 
@@ -116,7 +144,12 @@ class CreativeEvidenceService:
             result.text_content = f"{result.text_content} {advertiser}".strip()
 
     def _collect_video_evidence(
-        self, creative_id: str, raw_data: dict, result: EvidenceResult
+        self,
+        creative_id: str,
+        raw_data: dict,
+        result: EvidenceResult,
+        ai_provider: str = "gemini",
+        ai_api_key: Optional[str] = None,
     ) -> None:
         video_data = raw_data.get("video", {})
         vast_xml = video_data.get("vastXml", "")
@@ -131,7 +164,11 @@ class CreativeEvidenceService:
 
                 # OCR each extracted frame
                 for frame_path in frames:
-                    ocr_text = self._ocr_image(frame_path)
+                    ocr_text = self._ocr_image(
+                        frame_path,
+                        ai_provider=ai_provider,
+                        ai_api_key=ai_api_key,
+                    )
                     if ocr_text:
                         result.ocr_texts.append(ocr_text)
 
@@ -325,34 +362,168 @@ class CreativeEvidenceService:
 
     # ==================== OCR ====================
 
-    def _ocr_image(self, image_path: str) -> Optional[str]:
-        """Extract text from image using Gemini Vision. Returns text or None."""
+    def _ocr_image(
+        self,
+        image_path: str,
+        ai_provider: str = "gemini",
+        ai_api_key: Optional[str] = None,
+    ) -> Optional[str]:
+        """Extract text from image using selected provider."""
+        provider = (ai_provider or "gemini").strip().lower()
+        if not ai_api_key:
+            return None
+
         try:
-            from services.secrets_manager import get_secrets_manager
-
-            api_key = get_secrets_manager().get("GEMINI_API_KEY")
-            if not api_key:
+            if provider == "gemini":
+                text = self._ocr_with_gemini(image_path, ai_api_key)
+            elif provider == "claude":
+                text = self._ocr_with_claude(image_path, ai_api_key)
+            elif provider == "grok":
+                text = self._ocr_with_grok(image_path, ai_api_key)
+            else:
                 return None
-
-            import google.generativeai as genai
-
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel("gemini-1.5-flash")
-
-            import PIL.Image
-
-            img = PIL.Image.open(image_path)
-            response = model.generate_content(
-                [
-                    "Extract ALL visible text from this image. "
-                    "Return only the extracted text, nothing else. "
-                    "If there is no text, return EMPTY.",
-                    img,
-                ],
-                generation_config={"temperature": 0.1, "max_output_tokens": 500},
-            )
-            text = response.text.strip()
             return text if text and text != "EMPTY" else None
         except Exception as e:
             logger.warning("OCR failed for %s: %s", image_path, e)
             return None
+
+    @staticmethod
+    def _ocr_with_gemini(image_path: str, api_key: str) -> str:
+        import google.generativeai as genai
+        import PIL.Image
+
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        img = PIL.Image.open(image_path)
+        response = model.generate_content(
+            [
+                "Extract ALL visible text from this image. "
+                "Return only the extracted text, nothing else. "
+                "If there is no text, return EMPTY.",
+                img,
+            ],
+            generation_config={"temperature": 0.1, "max_output_tokens": 500},
+        )
+        return str(getattr(response, "text", "")).strip()
+
+    def _ocr_with_claude(self, image_path: str, api_key: str) -> str:
+        encoded = self._load_image_base64(image_path)
+        if not encoded:
+            return ""
+        payload = {
+            "model": "claude-3-5-sonnet-latest",
+            "max_tokens": 500,
+            "temperature": 0,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Extract ALL visible text from this image. "
+                                "Return only extracted text. If no text, return EMPTY."
+                            ),
+                        },
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": encoded["media_type"],
+                                "data": encoded["data"],
+                            },
+                        },
+                    ],
+                }
+            ],
+        }
+        response_data = self._post_json(
+            url="https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            payload=payload,
+            timeout=20.0,
+        )
+        for block in response_data.get("content", []):
+            if block.get("type") == "text" and block.get("text"):
+                return str(block["text"]).strip()
+        return ""
+
+    def _ocr_with_grok(self, image_path: str, api_key: str) -> str:
+        encoded = self._load_image_base64(image_path)
+        if not encoded:
+            return ""
+        payload = {
+            "model": "grok-2-latest",
+            "temperature": 0,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Extract ALL visible text from this image. "
+                                "Return only extracted text. If no text, return EMPTY."
+                            ),
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": (
+                                    f"data:{encoded['media_type']};base64,{encoded['data']}"
+                                )
+                            },
+                        },
+                    ],
+                }
+            ],
+        }
+        response_data = self._post_json(
+            url="https://api.x.ai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            payload=payload,
+            timeout=20.0,
+        )
+        choices = response_data.get("choices", [])
+        if not choices:
+            return ""
+        content = choices[0].get("message", {}).get("content")
+        return str(content).strip() if content else ""
+
+    @staticmethod
+    def _load_image_base64(path: str) -> Optional[dict[str, str]]:
+        try:
+            data = Path(path).read_bytes()
+        except Exception as exc:
+            logger.debug("Failed to read OCR image %s: %s", path, exc)
+            return None
+        mime_type, _ = mimetypes.guess_type(path)
+        media_type = mime_type or "image/png"
+        encoded = base64.b64encode(data).decode("utf-8")
+        return {"media_type": media_type, "data": encoded}
+
+    @staticmethod
+    def _post_json(
+        url: str,
+        headers: dict[str, str],
+        payload: dict,
+        timeout: float,
+    ) -> dict:
+        data = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as resp:
+                body = resp.read().decode("utf-8")
+                return json.loads(body)
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="ignore")
+            raise RuntimeError(f"HTTP {exc.code}: {body[:500]}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Provider request failed: {exc}") from exc

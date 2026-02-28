@@ -31,6 +31,8 @@ from services.auth_service import User
 from collectors import BuyerSeatsClient, CreativesClient, EndpointsClient, PretargetingClient
 from services.seats_service import SeatsService, BuyerSeat, is_gcp_mode
 from services.pretargeting_service import PretargetingService
+from services.config_service import ConfigService
+from services.language_ai_config import get_selected_language_ai_provider
 
 StoreType = Any
 
@@ -74,16 +76,25 @@ async def _trigger_background_language_analysis(
     Returns:
         Number of creatives successfully analyzed.
     """
-    # Check if Gemini API is configured (database or env var)
+    # Check if selected provider API is configured (database or env var)
     try:
-        from api.analysis.language_analyzer import GeminiLanguageAnalyzer
+        from api.analysis.language_analyzer import LanguageAnalyzer
     except ImportError as e:
         logger.warning(f"Language analyzer not available: {e}")
         return 0
 
-    analyzer = GeminiLanguageAnalyzer(db_path=getattr(store, "db_path", None))
+    provider = await get_selected_language_ai_provider(store)
+    api_key = await ConfigService().get_ai_provider_api_key(store, provider)
+    analyzer = LanguageAnalyzer(
+        provider=provider,
+        api_key=api_key,
+        db_path=getattr(store, "db_path", None),
+    )
     if not analyzer.is_configured:
-        logger.debug("Gemini API key not configured, skipping language analysis")
+        logger.debug(
+            "%s API key not configured, skipping language analysis",
+            provider.capitalize(),
+        )
         return 0
 
     # Get creatives needing analysis
@@ -130,7 +141,7 @@ async def _trigger_background_language_analysis(
                 detected_language=None,
                 detected_language_code=None,
                 language_confidence=None,
-                language_source="gemini",
+                language_source=provider,
                 language_analysis_error=str(e),
             )
 

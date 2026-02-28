@@ -1,16 +1,23 @@
-"""Geo-linguistic mismatch analysis using Google Gemini API.
+"""Geo-linguistic mismatch analysis using configurable AI providers.
 
-Analyzes creative content (text, OCR, images) against serving countries
-to detect language/currency/cultural mismatches that indicate waste.
+Analyzes creative content (text, OCR, images) against serving countries to detect
+language/currency/cultural mismatches that indicate waste.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
+import mimetypes
+import os
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
+from services.language_ai_config import normalize_language_ai_provider
 from services.secrets_manager import get_secrets_manager
 
 logger = logging.getLogger(__name__)
@@ -65,11 +72,24 @@ class GeoLinguisticAnalysisResult:
         }
 
 
-class GeminiGeoLinguisticAnalyzer:
-    """Gemini-powered geo-linguistic mismatch detection."""
+class GeoLinguisticAnalyzer:
+    """Provider-agnostic geo-linguistic mismatch detection."""
 
-    def __init__(self, api_key: Optional[str] = None) -> None:
-        self.api_key = api_key or get_secrets_manager().get("GEMINI_API_KEY")
+    def __init__(
+        self,
+        provider: str = "gemini",
+        api_key: Optional[str] = None,
+    ) -> None:
+        self.provider = normalize_language_ai_provider(provider)
+        if api_key:
+            self.api_key = api_key
+        else:
+            if self.provider == "gemini":
+                self.api_key = get_secrets_manager().get("GEMINI_API_KEY")
+            elif self.provider == "claude":
+                self.api_key = get_secrets_manager().get("ANTHROPIC_API_KEY")
+            else:
+                self.api_key = get_secrets_manager().get("XAI_API_KEY")
         self._model = None
 
     @property
@@ -79,6 +99,8 @@ class GeminiGeoLinguisticAnalyzer:
     @property
     def model(self):
         """Lazy-load Gemini model."""
+        if self.provider != "gemini":
+            raise ValueError(f"{self.provider} does not use local Gemini SDK model")
         if self._model is None:
             if not self.api_key:
                 raise ValueError("GEMINI_API_KEY not configured")
@@ -97,19 +119,10 @@ class GeminiGeoLinguisticAnalyzer:
         creative_metadata: dict | None = None,
         timeout: float = 30.0,
     ) -> GeoLinguisticAnalysisResult:
-        """Analyze creative content for geo-linguistic mismatches.
-
-        Args:
-            serving_countries: List of country codes where the creative is served.
-            text_content: Extracted text from the creative.
-            ocr_texts: OCR-extracted text from screenshots/frames.
-            image_paths: Paths to images for multimodal analysis.
-            creative_metadata: Additional metadata (format, advertiser, etc.).
-            timeout: API call timeout in seconds.
-        """
+        """Analyze creative content for geo-linguistic mismatches."""
         if not self.is_configured:
             return GeoLinguisticAnalysisResult(
-                error="Gemini API not configured",
+                error=f"{self.provider.capitalize()} API not configured",
                 decision="needs_review",
             )
 
@@ -120,43 +133,203 @@ class GeminiGeoLinguisticAnalyzer:
             )
 
         prompt = self._build_prompt(
-            serving_countries, text_content, ocr_texts or [], creative_metadata or {}
+            serving_countries,
+            text_content,
+            ocr_texts or [],
+            creative_metadata or {},
         )
 
         try:
-            content_parts = [prompt]
+            if self.provider == "gemini":
+                response_text = self._analyze_with_gemini(prompt, image_paths, timeout)
+            elif self.provider == "claude":
+                response_text = self._analyze_with_claude(prompt, image_paths, timeout)
+            elif self.provider == "grok":
+                response_text = self._analyze_with_grok(prompt, image_paths, timeout)
+            else:
+                return GeoLinguisticAnalysisResult(
+                    error=f"Unsupported provider: {self.provider}",
+                    decision="needs_review",
+                )
 
-            # Add images for multimodal analysis
-            if image_paths:
-                try:
-                    import PIL.Image
+            return self._parse_response(response_text, serving_countries)
 
-                    for path in image_paths[:4]:  # Cap at 4 images
-                        try:
-                            img = PIL.Image.open(path)
-                            content_parts.append(img)
-                        except Exception as e:
-                            logger.debug("Skipping image %s: %s", path, e)
-                except ImportError:
-                    logger.debug("PIL not available, skipping image analysis")
-
-            response = self.model.generate_content(
-                content_parts,
-                generation_config={
-                    "temperature": 0.1,
-                    "max_output_tokens": 1500,
-                },
-                request_options={"timeout": timeout},
-            )
-
-            return self._parse_response(response.text, serving_countries)
-
-        except Exception as e:
-            logger.error("Geo-linguistic analysis failed: %s", e)
+        except Exception as exc:
+            logger.error("Geo-linguistic analysis failed (%s): %s", self.provider, exc)
             return GeoLinguisticAnalysisResult(
-                error=str(e),
+                error=str(exc),
                 decision="needs_review",
             )
+
+    def _analyze_with_gemini(
+        self,
+        prompt: str,
+        image_paths: list[str] | None,
+        timeout: float,
+    ) -> str:
+        content_parts: list = [prompt]
+        if image_paths:
+            try:
+                import PIL.Image
+
+                for path in image_paths[:4]:
+                    try:
+                        img = PIL.Image.open(path)
+                        content_parts.append(img)
+                    except Exception as exc:
+                        logger.debug("Skipping image %s: %s", path, exc)
+            except ImportError:
+                logger.debug("PIL not available, skipping image analysis")
+
+        response = self.model.generate_content(
+            content_parts,
+            generation_config={
+                "temperature": 0.1,
+                "max_output_tokens": 1500,
+            },
+            request_options={"timeout": timeout},
+        )
+        return str(getattr(response, "text", "")).strip()
+
+    def _analyze_with_claude(
+        self,
+        prompt: str,
+        image_paths: list[str] | None,
+        timeout: float,
+    ) -> str:
+        model = os.getenv("CATSCAN_CLAUDE_MODEL", "claude-3-5-sonnet-latest")
+        content: list[dict] = [{"type": "text", "text": prompt}]
+        for image in (image_paths or [])[:4]:
+            encoded = self._load_image_base64(image)
+            if not encoded:
+                continue
+            content.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": encoded["media_type"],
+                        "data": encoded["data"],
+                    },
+                }
+            )
+
+        payload = {
+            "model": model,
+            "max_tokens": 1500,
+            "temperature": 0,
+            "messages": [{"role": "user", "content": content}],
+        }
+        response_data = self._post_json(
+            url="https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": self.api_key or "",
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            payload=payload,
+            timeout=timeout,
+        )
+        content_blocks = response_data.get("content", [])
+        for block in content_blocks:
+            if block.get("type") == "text" and block.get("text"):
+                return str(block["text"]).strip()
+        raise RuntimeError("Claude response did not contain text content")
+
+    def _analyze_with_grok(
+        self,
+        prompt: str,
+        image_paths: list[str] | None,
+        timeout: float,
+    ) -> str:
+        model = os.getenv("CATSCAN_GROK_MODEL", "grok-2-latest")
+        content: list[dict] = [{"type": "text", "text": prompt}]
+        for image in (image_paths or [])[:4]:
+            encoded = self._load_image_base64(image)
+            if not encoded:
+                continue
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": (
+                            f"data:{encoded['media_type']};base64,{encoded['data']}"
+                        )
+                    },
+                }
+            )
+
+        payload = {
+            "model": model,
+            "temperature": 0,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an ad geo-linguistic mismatch analyzer. "
+                        "Return only valid JSON."
+                    ),
+                },
+                {"role": "user", "content": content},
+            ],
+        }
+        response_data = self._post_json(
+            url="https://api.x.ai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            payload=payload,
+            timeout=timeout,
+        )
+        choices = response_data.get("choices", [])
+        if not choices:
+            raise RuntimeError("Grok response did not contain choices")
+        message = choices[0].get("message", {})
+        response_content = message.get("content")
+        if isinstance(response_content, str):
+            return response_content.strip()
+        if isinstance(response_content, list):
+            text_parts = []
+            for part in response_content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    text_parts.append(str(part.get("text", "")))
+            merged = "\n".join(p for p in text_parts if p).strip()
+            if merged:
+                return merged
+        raise RuntimeError("Grok response message content is empty")
+
+    @staticmethod
+    def _load_image_base64(path: str) -> Optional[dict[str, str]]:
+        try:
+            data = Path(path).read_bytes()
+        except Exception as exc:
+            logger.debug("Failed reading image %s: %s", path, exc)
+            return None
+
+        mime_type, _ = mimetypes.guess_type(path)
+        media_type = mime_type or "image/png"
+        encoded = base64.b64encode(data).decode("utf-8")
+        return {"media_type": media_type, "data": encoded}
+
+    @staticmethod
+    def _post_json(
+        url: str,
+        headers: dict[str, str],
+        payload: dict,
+        timeout: float,
+    ) -> dict:
+        data = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as resp:
+                body = resp.read().decode("utf-8")
+                return json.loads(body)
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="ignore")
+            raise RuntimeError(f"HTTP {exc.code}: {body[:500]}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Provider request failed: {exc}") from exc
 
     def _build_prompt(
         self,
@@ -170,7 +343,6 @@ class GeminiGeoLinguisticAnalyzer:
         if ocr_texts:
             all_text += "\n\nOCR-extracted text:\n" + "\n".join(ocr_texts)
 
-        # Truncate to save tokens
         if len(all_text) > 2000:
             all_text = all_text[:2000] + "..."
 
@@ -217,16 +389,18 @@ Return ONLY valid JSON (no markdown, no explanation) in this exact format:
 }}"""
 
     def _parse_response(
-        self, response_text: str, serving_countries: list[str]
+        self,
+        response_text: str,
+        serving_countries: list[str],
     ) -> GeoLinguisticAnalysisResult:
-        """Parse Gemini response JSON into structured result."""
+        """Parse provider response JSON into structured result."""
+        del serving_countries  # reserved for future deterministic guardrails
+
         raw = response_text.strip()
         result = GeoLinguisticAnalysisResult(raw_response=raw)
 
-        # Try to extract JSON from response
         json_str = raw
         if "```" in json_str:
-            # Strip markdown code fences
             import re
 
             match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", json_str, re.DOTALL)
@@ -236,7 +410,11 @@ Return ONLY valid JSON (no markdown, no explanation) in this exact format:
         try:
             data = json.loads(json_str)
         except json.JSONDecodeError:
-            logger.warning("Failed to parse Gemini geo-linguistic response: %s", raw[:200])
+            logger.warning(
+                "Failed to parse %s geo-linguistic response: %s",
+                self.provider,
+                raw[:200],
+            )
             result.error = "Failed to parse response"
             result.decision = "needs_review"
             return result
@@ -248,19 +426,23 @@ Return ONLY valid JSON (no markdown, no explanation) in this exact format:
         result.confidence = min(1.0, max(0.0, float(data.get("confidence", 0.0))))
 
         decision = data.get("decision", "needs_review")
-        # Override to needs_review if confidence is low
         if decision == "mismatch" and result.confidence < 0.6:
             decision = "needs_review"
         result.decision = decision
 
-        for f in data.get("findings", []):
+        for finding in data.get("findings", []):
             result.findings.append(
                 GeoLinguisticFinding(
-                    category=f.get("category", "unknown"),
-                    severity=f.get("severity", "low"),
-                    description=f.get("description", ""),
-                    evidence=f.get("evidence", ""),
+                    category=finding.get("category", "unknown"),
+                    severity=finding.get("severity", "low"),
+                    description=finding.get("description", ""),
+                    evidence=finding.get("evidence", ""),
                 )
             )
 
         return result
+
+
+# Backward-compatible alias used by existing callers/tests.
+GeminiGeoLinguisticAnalyzer = GeoLinguisticAnalyzer
+

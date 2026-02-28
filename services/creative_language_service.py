@@ -7,7 +7,9 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from services.config_service import ConfigService
 from services.creative_countries_service import CreativeCountriesService
+from services.language_ai_config import get_selected_language_ai_provider
 
 
 class CreativeLanguageService:
@@ -38,7 +40,7 @@ class CreativeLanguageService:
             )
 
         try:
-            from api.analysis.language_analyzer import GeminiLanguageAnalyzer
+            from api.analysis.language_analyzer import LanguageAnalyzer
         except ImportError as exc:
             raise HTTPException(
                 status_code=500,
@@ -46,7 +48,13 @@ class CreativeLanguageService:
             ) from exc
 
         db_path = getattr(store, "db_path", None)
-        analyzer = GeminiLanguageAnalyzer(db_path=db_path)
+        provider = await get_selected_language_ai_provider(store)
+        api_key = await ConfigService().get_ai_provider_api_key(store, provider)
+        analyzer = LanguageAnalyzer(
+            provider=provider,
+            api_key=api_key,
+            db_path=db_path,
+        )
 
         if not analyzer.is_configured:
             await store.creative_repository.update_language_detection(
@@ -54,12 +62,15 @@ class CreativeLanguageService:
                 detected_language=None,
                 detected_language_code=None,
                 language_confidence=None,
-                language_source="gemini",
-                language_analysis_error="Gemini API key not configured",
+                language_source=provider,
+                language_analysis_error=f"{provider.capitalize()} API key not configured",
             )
             raise HTTPException(
                 status_code=503,
-                detail="Gemini API key not configured. Set it in Settings > Connected Accounts.",
+                detail=(
+                    f"{provider.capitalize()} API key not configured. "
+                    "Set it in Settings > Connected Accounts."
+                ),
             )
 
         result = await analyzer.analyze_creative(

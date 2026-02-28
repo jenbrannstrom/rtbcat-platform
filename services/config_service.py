@@ -13,7 +13,16 @@ import google.auth
 from fastapi import HTTPException
 
 from collectors import BuyerSeatsClient
-from services.secrets_manager import get_secrets_manager
+from services.language_ai_config import (
+    SUPPORTED_LANGUAGE_AI_PROVIDERS,
+    get_all_provider_key_statuses,
+    get_provider_api_key,
+    get_provider_key_status,
+    get_provider_setting_key,
+    get_selected_language_ai_provider,
+    normalize_language_ai_provider,
+    set_selected_language_ai_provider,
+)
 from storage.models import ServiceAccount
 
 logger = logging.getLogger(__name__)
@@ -286,32 +295,66 @@ class ConfigService:
             detail="Failed to delete service account from database",
         )
 
-    async def get_gemini_key_status(self, store: Any) -> dict[str, Any]:
-        """Get Gemini API key configuration status."""
-        stored_key = await store.get_setting("gemini_api_key")
-        if stored_key:
-            return {
-                "configured": True,
-                "masked_key": self._mask_api_key(stored_key),
-                "message": "Gemini API key configured from database",
-            }
+    def _validate_language_ai_provider(self, provider: str) -> str:
+        normalized = normalize_language_ai_provider(provider)
+        if normalized != provider.strip().lower():
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Invalid provider. Expected one of: "
+                    f"{', '.join(SUPPORTED_LANGUAGE_AI_PROVIDERS)}"
+                ),
+            )
+        return normalized
 
-        env_key = get_secrets_manager().get("GEMINI_API_KEY")
-        if env_key:
-            return {
-                "configured": True,
-                "masked_key": self._mask_api_key(env_key),
-                "message": "Gemini API key configured from environment variable",
-            }
+    async def get_language_ai_provider_config(self, store: Any) -> dict[str, Any]:
+        """Get active language AI provider and per-provider key status."""
+        selected_provider = await get_selected_language_ai_provider(store)
+        statuses = await get_all_provider_key_statuses(store)
+        selected_status = statuses.get(selected_provider, {})
 
         return {
-            "configured": False,
-            "masked_key": None,
-            "message": "Gemini API key not configured. Language detection is disabled.",
+            "provider": selected_provider,
+            "available_providers": list(SUPPORTED_LANGUAGE_AI_PROVIDERS),
+            "configured": bool(selected_status.get("configured")),
+            "providers": statuses,
+            "message": (
+                f"Language AI provider is set to {selected_provider}"
+                if selected_status.get("configured")
+                else f"{selected_provider.capitalize()} API key is not configured"
+            ),
         }
 
-    async def update_gemini_key(self, store: Any, api_key: str) -> dict[str, Any]:
-        """Update Gemini API key."""
+    async def update_language_ai_provider(self, store: Any, provider: str) -> dict[str, Any]:
+        """Set active language AI provider."""
+        normalized = self._validate_language_ai_provider(provider)
+        await set_selected_language_ai_provider(store, normalized, updated_by="api")
+        logger.info("Language AI provider updated to %s", normalized)
+        return {
+            "success": True,
+            "provider": normalized,
+            "message": f"Language AI provider set to {normalized}",
+        }
+
+    async def get_ai_provider_key_status(self, store: Any, provider: str) -> dict[str, Any]:
+        """Get status for one provider API key."""
+        normalized = self._validate_language_ai_provider(provider)
+        status = await get_provider_key_status(store, normalized)
+        return {
+            "configured": bool(status.get("configured")),
+            "masked_key": status.get("masked_key"),
+            "source": status.get("source"),
+            "message": status.get("message"),
+        }
+
+    async def update_ai_provider_key(
+        self,
+        store: Any,
+        provider: str,
+        api_key: str,
+    ) -> dict[str, Any]:
+        """Update API key for a specific language AI provider."""
+        normalized = self._validate_language_ai_provider(provider)
         key = api_key.strip()
         if len(key) < 10:
             raise HTTPException(
@@ -319,19 +362,38 @@ class ConfigService:
                 detail="Invalid API key format. Key is too short.",
             )
 
-        await store.set_setting("gemini_api_key", key, updated_by="api")
-        logger.info("Gemini API key updated")
-        return {"success": True, "message": "Gemini API key saved successfully"}
+        setting_key = get_provider_setting_key(normalized)
+        await store.set_setting(setting_key, key, updated_by="api")
+        logger.info("%s API key updated", normalized.capitalize())
+        return {
+            "success": True,
+            "provider": normalized,
+            "message": f"{normalized.capitalize()} API key saved successfully",
+        }
+
+    async def delete_ai_provider_key(self, store: Any, provider: str) -> dict[str, Any]:
+        """Delete API key for a specific language AI provider from database."""
+        normalized = self._validate_language_ai_provider(provider)
+        setting_key = get_provider_setting_key(normalized)
+        await store.set_setting(setting_key, "", updated_by="api")
+        logger.info("%s API key removed", normalized.capitalize())
+        return {
+            "success": True,
+            "provider": normalized,
+            "message": f"{normalized.capitalize()} API key removed",
+        }
+
+    async def get_ai_provider_api_key(self, store: Any, provider: str) -> Optional[str]:
+        """Resolve active key for provider from DB or env/secrets."""
+        normalized = normalize_language_ai_provider(provider)
+        return await get_provider_api_key(store, normalized)
+
+    # Backward-compatible Gemini wrappers
+    async def get_gemini_key_status(self, store: Any) -> dict[str, Any]:
+        return await self.get_ai_provider_key_status(store, "gemini")
+
+    async def update_gemini_key(self, store: Any, api_key: str) -> dict[str, Any]:
+        return await self.update_ai_provider_key(store, "gemini", api_key)
 
     async def delete_gemini_key(self, store: Any) -> dict[str, Any]:
-        """Delete Gemini API key from database."""
-        await store.set_setting("gemini_api_key", "", updated_by="api")
-        logger.info("Gemini API key removed")
-        return {"success": True, "message": "Gemini API key removed"}
-
-    @staticmethod
-    def _mask_api_key(key: str) -> str:
-        """Mask API key for display."""
-        if len(key) <= 10:
-            return "*" * len(key)
-        return f"{key[:4]}...{key[-4:]}"
+        return await self.delete_ai_provider_key(store, "gemini")

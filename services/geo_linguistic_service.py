@@ -12,6 +12,8 @@ from typing import Any, Optional
 
 from services.creative_countries_service import CreativeCountriesService
 from services.creative_evidence_service import CreativeEvidenceService
+from services.config_service import ConfigService
+from services.language_ai_config import get_selected_language_ai_provider
 from storage.postgres_repositories.creative_analysis_repo import CreativeAnalysisRepository
 
 logger = logging.getLogger(__name__)
@@ -86,6 +88,9 @@ class GeoLinguisticService:
                 if c.get("country_code")
             ]
 
+            provider = await get_selected_language_ai_provider(store)
+            api_key = await ConfigService().get_ai_provider_api_key(store, provider)
+
             # 4. Collect evidence
             raw_data = creative.raw_data if hasattr(creative, "raw_data") else {}
             creative_format = creative.format if hasattr(creative, "format") else "HTML"
@@ -94,19 +99,26 @@ class GeoLinguisticService:
                 creative_id=creative_id,
                 raw_data=raw_data or {},
                 creative_format=creative_format,
+                ai_provider=provider,
+                ai_api_key=api_key,
             )
 
-            # 5. Run Gemini analysis
+            # 5. Run language/currency mismatch analysis with selected provider
             from api.analysis.geo_language_mismatch_analyzer import (
-                GeminiGeoLinguisticAnalyzer,
+                GeoLinguisticAnalyzer,
             )
 
-            analyzer = GeminiGeoLinguisticAnalyzer()
+            analyzer = GeoLinguisticAnalyzer(provider=provider, api_key=api_key)
             if not analyzer.is_configured:
                 await self.repo.update_run_status(
-                    run_id, "failed", error_message="Gemini API not configured"
+                    run_id,
+                    "failed",
+                    error_message=f"{provider.capitalize()} API not configured",
                 )
-                return {"status": "failed", "error_message": "Gemini API not configured"}
+                return {
+                    "status": "failed",
+                    "error_message": f"{provider.capitalize()} API not configured",
+                }
 
             # Combine image paths for multimodal analysis
             image_paths = evidence.video_frames[:]
@@ -130,6 +142,7 @@ class GeoLinguisticService:
 
             # 6. Persist result + evidence refs
             result_dict = analysis_result.to_dict()
+            result_dict["provider"] = provider
             result_dict["serving_countries"] = serving_countries
             result_dict["evidence_summary"] = {
                 "text_length": len(evidence.text_content),

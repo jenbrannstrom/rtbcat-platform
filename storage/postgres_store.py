@@ -91,6 +91,9 @@ class PostgresStore:
         environment variables.
         """
         self._initialized = False
+        # Compatibility shim: several services still resolve language persistence
+        # through `store.creative_repository.*`.
+        self.creative_repository = self
 
     async def initialize(self) -> None:
         """Initialize the database schema.
@@ -223,6 +226,54 @@ class PostgresStore:
         if row:
             return Creative(**row)
         return None
+
+    async def update_language_detection(
+        self,
+        creative_id: str,
+        detected_language: Optional[str],
+        detected_language_code: Optional[str],
+        language_confidence: Optional[float],
+        language_source: Optional[str],
+        language_analysis_error: Optional[str],
+    ) -> None:
+        """Persist language detection result on a creative."""
+        await pg_execute(
+            """
+            UPDATE creatives
+            SET detected_language = %s,
+                detected_language_code = %s,
+                language_confidence = %s,
+                language_source = %s,
+                language_analyzed_at = CURRENT_TIMESTAMP,
+                language_analysis_error = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+            """,
+            (
+                detected_language,
+                detected_language_code,
+                language_confidence,
+                language_source,
+                language_analysis_error,
+                creative_id,
+            ),
+        )
+
+    async def get_creatives_needing_language_analysis(
+        self,
+        limit: int = 50,
+    ) -> list[Creative]:
+        """Return creatives that have not been analyzed yet."""
+        rows = await pg_query(
+            """
+            SELECT * FROM creatives
+            WHERE language_analyzed_at IS NULL
+            ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+            LIMIT %s
+            """,
+            (limit,),
+        )
+        return [Creative(**row) for row in rows]
 
     async def list_creatives(
         self,
