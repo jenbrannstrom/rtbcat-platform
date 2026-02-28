@@ -39,6 +39,45 @@ import { cn } from "@/lib/utils";
 import { useTranslation } from "@/contexts/i18n-context";
 import { useAccount } from "@/contexts/account-context";
 
+type WorkflowPresetId = "safe" | "balanced" | "aggressive" | "custom";
+
+const WORKFLOW_PRESETS: Record<
+  Exclude<WorkflowPresetId, "custom">,
+  {
+    label: string;
+    days: string;
+    scoreLimit: string;
+    proposalLimit: string;
+    minConfidence: string;
+    maxDelta: string;
+  }
+> = {
+  safe: {
+    label: "Safe",
+    days: "14",
+    scoreLimit: "500",
+    proposalLimit: "100",
+    minConfidence: "0.45",
+    maxDelta: "0.20",
+  },
+  balanced: {
+    label: "Balanced",
+    days: "14",
+    scoreLimit: "1000",
+    proposalLimit: "200",
+    minConfidence: "0.30",
+    maxDelta: "0.30",
+  },
+  aggressive: {
+    label: "Aggressive",
+    days: "7",
+    scoreLimit: "2000",
+    proposalLimit: "400",
+    minConfidence: "0.20",
+    maxDelta: "0.50",
+  },
+};
+
 export default function SystemStatusPage() {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
@@ -56,6 +95,7 @@ export default function SystemStatusPage() {
   const [workflowProposalLimitInput, setWorkflowProposalLimitInput] = useState<string>("200");
   const [workflowMinConfidenceInput, setWorkflowMinConfidenceInput] = useState<string>("0.3");
   const [workflowMaxDeltaInput, setWorkflowMaxDeltaInput] = useState<string>("0.3");
+  const [workflowPreset, setWorkflowPreset] = useState<WorkflowPresetId>("balanced");
   const [selectedProposalHistoryId, setSelectedProposalHistoryId] = useState<string>("");
   const [optimizerNotice, setOptimizerNotice] = useState<string>("");
   const [newModelName, setNewModelName] = useState<string>("");
@@ -544,6 +584,16 @@ export default function SystemStatusPage() {
       setOptimizerNotice(msg);
     },
   });
+
+  const applyWorkflowPreset = (preset: Exclude<WorkflowPresetId, "custom">) => {
+    const values = WORKFLOW_PRESETS[preset];
+    setWorkflowDaysInput(values.days);
+    setWorkflowScoreLimitInput(values.scoreLimit);
+    setWorkflowProposalLimitInput(values.proposalLimit);
+    setWorkflowMinConfidenceInput(values.minConfidence);
+    setWorkflowMaxDeltaInput(values.maxDelta);
+    setWorkflowPreset(preset);
+  };
 
   const proposalActionMutation = useMutation({
     mutationFn: async (params: { proposalId: string; action: "approve" | "apply" | "sync" }) => {
@@ -1397,6 +1447,31 @@ export default function SystemStatusPage() {
                     </button>
                   </div>
                 </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-gray-600">Preset</span>
+                  {(["safe", "balanced", "aggressive"] as const).map((presetKey) => (
+                    <button
+                      key={presetKey}
+                      type="button"
+                      onClick={() => applyWorkflowPreset(presetKey)}
+                      disabled={scoreAndProposeMutation.isPending}
+                      className={cn(
+                        "rounded border px-2 py-1 text-xs font-medium",
+                        workflowPreset === presetKey
+                          ? "border-primary-500 bg-primary-50 text-primary-700"
+                          : "border-slate-300 text-slate-700 hover:bg-slate-50",
+                        scoreAndProposeMutation.isPending && "cursor-not-allowed opacity-50",
+                      )}
+                    >
+                      {WORKFLOW_PRESETS[presetKey].label}
+                    </button>
+                  ))}
+                  {workflowPreset === "custom" ? (
+                    <span className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                      Custom
+                    </span>
+                  ) : null}
+                </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
                   <label className="text-xs text-gray-600">
                     Days
@@ -1405,7 +1480,10 @@ export default function SystemStatusPage() {
                       min={1}
                       max={365}
                       value={workflowDaysInput}
-                      onChange={(e) => setWorkflowDaysInput(e.target.value)}
+                      onChange={(e) => {
+                        setWorkflowDaysInput(e.target.value);
+                        setWorkflowPreset("custom");
+                      }}
                       className="mt-1 input py-1 text-xs"
                       disabled={scoreAndProposeMutation.isPending}
                     />
@@ -1417,7 +1495,10 @@ export default function SystemStatusPage() {
                       min={1}
                       max={5000}
                       value={workflowScoreLimitInput}
-                      onChange={(e) => setWorkflowScoreLimitInput(e.target.value)}
+                      onChange={(e) => {
+                        setWorkflowScoreLimitInput(e.target.value);
+                        setWorkflowPreset("custom");
+                      }}
                       className="mt-1 input py-1 text-xs"
                       disabled={scoreAndProposeMutation.isPending}
                     />
@@ -1429,7 +1510,10 @@ export default function SystemStatusPage() {
                       min={1}
                       max={2000}
                       value={workflowProposalLimitInput}
-                      onChange={(e) => setWorkflowProposalLimitInput(e.target.value)}
+                      onChange={(e) => {
+                        setWorkflowProposalLimitInput(e.target.value);
+                        setWorkflowPreset("custom");
+                      }}
                       className="mt-1 input py-1 text-xs"
                       disabled={scoreAndProposeMutation.isPending}
                     />
@@ -1442,7 +1526,10 @@ export default function SystemStatusPage() {
                       max={1}
                       step="0.01"
                       value={workflowMinConfidenceInput}
-                      onChange={(e) => setWorkflowMinConfidenceInput(e.target.value)}
+                      onChange={(e) => {
+                        setWorkflowMinConfidenceInput(e.target.value);
+                        setWorkflowPreset("custom");
+                      }}
                       className="mt-1 input py-1 text-xs"
                       disabled={scoreAndProposeMutation.isPending}
                     />
@@ -1455,7 +1542,10 @@ export default function SystemStatusPage() {
                       max={1}
                       step="0.01"
                       value={workflowMaxDeltaInput}
-                      onChange={(e) => setWorkflowMaxDeltaInput(e.target.value)}
+                      onChange={(e) => {
+                        setWorkflowMaxDeltaInput(e.target.value);
+                        setWorkflowPreset("custom");
+                      }}
                       className="mt-1 input py-1 text-xs"
                       disabled={scoreAndProposeMutation.isPending}
                     />

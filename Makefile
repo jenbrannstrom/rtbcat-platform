@@ -8,6 +8,7 @@ help:
 	@echo "  make phase0-regression   # Run core Phase 0 regression tests"
 	@echo "  make phase0-dashboard-build  # Build dashboard production bundle"
 	@echo "  make phase0-gate         # Run regression tests + dashboard build"
+	@echo "Env presets: CATSCAN_CANARY_PROFILE=safe|balanced|aggressive"
 
 v1-canary-smoke:
 	bash scripts/run_v1_canary_smoke.sh

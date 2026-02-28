@@ -39,6 +39,7 @@
 - `E4-002` started (frontend slice): Optimizer Control Plane now includes monthly hosting cost save controls wired to `/settings/optimizer/setup` with effective-CPM enabled/disabled state feedback, one-click active-model endpoint validation, and model lifecycle controls (create/update + activate/deactivate + select).
 - `E4-002` started (frontend slice): endpoint validation now supports optional custom JSON payload input in System Settings for contract checks against realistic model request bodies.
 - `E4-002` started (frontend slice): score+propose controls now expose configurable runtime parameters (days, score/proposal limits, min confidence, max delta) with client-side guardrails instead of fixed constants.
+- `E4-002` started (frontend slice): score+propose controls include preset profiles (`safe`, `balanced`, `aggressive`) with explicit `custom` mode when fields are manually edited.
 - `E4-002` started (frontend setup slice): `/setup` is now a v1 checklist page with readiness progress and direct links for accounts, data-health validation, BYOM model activation, active-model endpoint validation, hosting-cost configuration, and conversion-source readiness (from `/conversions/health`).
 - `E4-001` started (backend metric slice): optimizer economics endpoints now expose `/optimizer/economics/effective-cpm` (media/infra/effective CPM), `/optimizer/economics/assumed-value` (proxy value score with weighted components), and `/optimizer/economics/efficiency` (QPS efficiency + assumed-value-per-QPS context) using core RTB fact tables.
 - `E4-001` started (frontend slice): Settings System now includes an Optimizer Control Plane panel showing model inventory, recent segment scores, recent QPS proposals, proposal-history drilldown, a 14-day efficiency context block (effective CPM, QPS efficiency, assumed-value per QPS), 7-day conversion signal health telemetry, and an applied-proposal rollback modal (snapshot preview + execute) for the active buyer context.
@@ -52,6 +53,7 @@
 - `QA-004` started (workflow depth slice): lifecycle canary can target either fresh workflow output or explicit existing `proposal_id` (`CATSCAN_PROPOSAL_ID`) for deterministic go/no-go validation.
 - `QA-004` started (workflow depth slice): root `make` now includes convenience targets `v1-canary-workflow` and `v1-canary-lifecycle` for deeper canary execution without manual env wiring.
 - `QA-004` started (workflow depth slice): canary workflow execution now supports env/CLI tuning for days, score/proposal limits, min confidence, and max delta guardrails.
+- `QA-004` started (workflow depth slice): canary wrapper supports `CATSCAN_CANARY_PROFILE=safe|balanced|aggressive` preset mapping to workflow guardrail defaults.
 - `QA-004` started (ops hardening slice): `make phase0-gate` now runs reliably in restricted environments by building dashboard with webpack mode (`npm --prefix dashboard run build -- --webpack`), avoiding Turbopack sandbox port-binding failures.
 
 ---

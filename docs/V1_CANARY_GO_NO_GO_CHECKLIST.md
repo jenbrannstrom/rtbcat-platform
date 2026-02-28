@@ -60,6 +60,14 @@ CATSCAN_CANARY_WORKFLOW_MAX_DELTA_PCT=0.25 \
 make v1-canary-smoke
 ```
 
+Preset shortcut (same profile concept as UI runtime controls):
+
+```bash
+CATSCAN_CANARY_PROFILE=safe make v1-canary-workflow
+CATSCAN_CANARY_PROFILE=balanced make v1-canary-workflow
+CATSCAN_CANARY_PROFILE=aggressive make v1-canary-workflow
+```
+
 Or run lifecycle check on an existing proposal:
 
 ```bash
