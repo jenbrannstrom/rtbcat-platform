@@ -1,11 +1,11 @@
-"""Bootstrap endpoint for first-admin provisioning.
+"""Bootstrap endpoint for first-sudo provisioning.
 
 When CATSCAN_BOOTSTRAP_TOKEN is set, the first admin must be created via
 POST /auth/bootstrap with the correct token.  This prevents an attacker
 from racing to become admin on a fresh deploy.
 
 When CATSCAN_BOOTSTRAP_TOKEN is *not* set, the legacy behaviour (first
-OAuth/password user auto-promoted to admin) remains active for dev-friendly
+OAuth/password user auto-promoted to sudo) remains active for dev-friendly
 local workflows.
 """
 
@@ -83,7 +83,7 @@ async def bootstrap_first_admin(
     request: Request,
     response: Response,
 ):
-    """Create the first admin user using the bootstrap token.
+    """Create the first sudo user using the bootstrap token.
 
     Requires:
     - CATSCAN_BOOTSTRAP_TOKEN env var is set
@@ -163,7 +163,7 @@ async def bootstrap_first_admin(
 
     return {
         "status": "ok",
-        "message": "First admin created successfully.",
+        "message": "First sudo user created successfully.",
         "user": {
             "id": user.id,
             "email": user.email,

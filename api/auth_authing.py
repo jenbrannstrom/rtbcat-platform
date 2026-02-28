@@ -324,7 +324,7 @@ async def authing_callback(
         user_count = await auth_svc.count_users()
         if user_count == 0 and is_bootstrap_token_required() and not await is_bootstrap_completed():
             logger.warning(
-                "Blocked Authing first-user auto-admin for %s (CATSCAN_BOOTSTRAP_TOKEN is set, use /auth/bootstrap)",
+                "Blocked Authing first-user auto-sudo for %s (CATSCAN_BOOTSTRAP_TOKEN is set, use /auth/bootstrap)",
                 email,
             )
             return RedirectResponse(
