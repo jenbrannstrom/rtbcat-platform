@@ -132,6 +132,77 @@ async def test_run_scoring_api_invokes_external_model(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.asyncio
+async def test_run_scoring_api_loads_auth_header_from_model_service(monkeypatch: pytest.MonkeyPatch):
+    writes: list[tuple[str, tuple]] = []
+
+    async def _stub_get_model(self, *, model_id: str, buyer_id=None):
+        return {
+            "model_id": model_id,
+            "buyer_id": buyer_id,
+            "model_type": "api",
+            "endpoint_url": "https://example.com/score",
+            "has_auth_header": True,
+        }
+
+    async def _stub_get_model_auth_header(self, *, model_id: str, buyer_id=None):
+        assert model_id == "mdl_api"
+        return "Bearer loaded-token"
+
+    async def _stub_query(sql: str, params: tuple = ()):
+        return [
+            {
+                "score_date": date(2026, 2, 28),
+                "buyer_id": "1111111111",
+                "billing_id": "cfg-1",
+                "country": "US",
+                "publisher_id": "pub-1",
+                "app_id": "com.example.app",
+                "event_count": 4,
+                "event_value_total": 20.0,
+                "impressions": 1500,
+                "clicks": 20,
+                "spend_usd": 10.0,
+            }
+        ]
+
+    async def _stub_execute(sql: str, params: tuple = ()) -> int:
+        writes.append((sql, params))
+        return 1
+
+    async def _stub_invoke_external_model(self, **kwargs):
+        assert kwargs["auth_header_encrypted"] == "Bearer loaded-token"
+        feature_id = kwargs["features"][0]["feature_id"]
+        return {
+            feature_id: {
+                "feature_id": feature_id,
+                "value_score": 0.7,
+                "confidence": 0.6,
+                "reason_codes": ["auth_loaded"],
+            }
+        }
+
+    monkeypatch.setattr("services.optimizer_models_service.OptimizerModelsService.get_model", _stub_get_model)
+    monkeypatch.setattr(
+        "services.optimizer_models_service.OptimizerModelsService.get_model_auth_header",
+        _stub_get_model_auth_header,
+    )
+    monkeypatch.setattr("services.optimizer_scoring_service.pg_query", _stub_query)
+    monkeypatch.setattr("services.optimizer_scoring_service.pg_execute", _stub_execute)
+    monkeypatch.setattr(OptimizerScoringService, "_invoke_external_model", _stub_invoke_external_model)
+    service = OptimizerScoringService()
+    payload = await service.run_scoring(
+        model_id="mdl_api",
+        buyer_id="1111111111",
+        days=14,
+    )
+
+    assert payload["model_type"] == "api"
+    assert payload["scores_written"] == 1
+    assert writes
+    assert "INSERT INTO segment_scores" in writes[0][0]
+
+
+@pytest.mark.asyncio
 async def test_run_rules_scoring_writes_scores(monkeypatch: pytest.MonkeyPatch):
     writes: list[tuple[str, tuple]] = []
 

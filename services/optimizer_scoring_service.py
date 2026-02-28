@@ -90,11 +90,17 @@ class OptimizerScoringService:
             return payload
 
         if model_type == "api":
+            auth_header = model.get("auth_header_encrypted")
+            if not auth_header and model.get("has_auth_header"):
+                auth_header = await model_service.get_model_auth_header(
+                    model_id=model_id,
+                    buyer_id=buyer_id,
+                )
             payload = await self.run_api_scoring(
                 model_id=model_id,
                 buyer_id=buyer_id,
                 endpoint_url=str(model.get("endpoint_url") or ""),
-                auth_header_encrypted=model.get("auth_header_encrypted"),
+                auth_header_encrypted=auth_header,
                 days=days,
                 start_date=start_date,
                 end_date=end_date,

@@ -6,6 +6,10 @@ from datetime import datetime, timezone
 
 import pytest
 
+from services.optimizer_model_crypto import (
+    clear_optimizer_model_crypto_cache,
+    encrypt_optimizer_model_auth_header,
+)
 from services.optimizer_models_service import OptimizerModelsService
 
 
@@ -60,6 +64,46 @@ async def test_create_model_shapes_response(monkeypatch: pytest.MonkeyPatch):
     assert payload["has_auth_header"] is True
     assert payload["input_schema"]["features"] == ["spend_usd"]
     assert payload["is_active"] is True
+
+
+@pytest.mark.asyncio
+async def test_create_model_encrypts_auth_header_with_secret_key(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("CATSCAN_OPTIMIZER_MODEL_SECRET_KEY", "unit-test-secret")
+    clear_optimizer_model_crypto_cache()
+
+    async def _stub_query_one(sql: str, params: tuple = ()):
+        assert "INSERT INTO optimization_models" in sql
+        stored_value = str(params[6] or "")
+        assert stored_value.startswith("enc::v1:")
+        assert "top-secret" not in stored_value
+        return {
+            "model_id": "mdl_abc",
+            "buyer_id": "1111111111",
+            "name": "Model A",
+            "description": "desc",
+            "model_type": "api",
+            "endpoint_url": "https://example.com/score",
+            "auth_header_encrypted": stored_value,
+            "input_schema": {"features": ["spend_usd"]},
+            "output_schema": {"score": "float"},
+            "is_active": True,
+            "created_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+            "updated_at": datetime(2026, 2, 28, tzinfo=timezone.utc),
+        }
+
+    monkeypatch.setattr("services.optimizer_models_service.pg_query_one", _stub_query_one)
+    service = OptimizerModelsService()
+    payload = await service.create_model(
+        buyer_id="1111111111",
+        name="Model A",
+        description="desc",
+        model_type="api",
+        endpoint_url="https://example.com/score",
+        auth_header_encrypted="Bearer top-secret",
+    )
+
+    assert payload["has_auth_header"] is True
+    clear_optimizer_model_crypto_cache()
 
 
 @pytest.mark.asyncio
@@ -236,4 +280,57 @@ async def test_validate_model_endpoint_checks_contract(monkeypatch: pytest.Monke
 
     assert payload["valid"] is True
     assert payload["skipped"] is False
+    assert payload["http_status"] == 200
+
+
+@pytest.mark.asyncio
+async def test_get_model_auth_header_decrypts_stored_value(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("CATSCAN_OPTIMIZER_MODEL_SECRET_KEY", "unit-test-secret")
+    clear_optimizer_model_crypto_cache()
+    encrypted = encrypt_optimizer_model_auth_header("Bearer abc123")
+
+    async def _stub_query_one(sql: str, params: tuple = ()):
+        assert "SELECT auth_header_encrypted" in sql
+        return {"auth_header_encrypted": encrypted}
+
+    monkeypatch.setattr("services.optimizer_models_service.pg_query_one", _stub_query_one)
+    service = OptimizerModelsService()
+    token = await service.get_model_auth_header(
+        model_id="mdl_api",
+        buyer_id="1111111111",
+    )
+
+    assert token == "Bearer abc123"
+    clear_optimizer_model_crypto_cache()
+
+
+@pytest.mark.asyncio
+async def test_validate_model_endpoint_uses_decrypted_auth_header(monkeypatch: pytest.MonkeyPatch):
+    async def _stub_get_model(self, *, model_id: str, buyer_id=None):
+        return {
+            "model_id": model_id,
+            "buyer_id": "1111111111",
+            "model_type": "api",
+            "endpoint_url": "https://example.com/score",
+            "has_auth_header": True,
+        }
+
+    async def _stub_get_auth_header(self, *, model_id: str, buyer_id=None):
+        assert model_id == "mdl_api"
+        return "Bearer decoded-token"
+
+    async def _stub_post_json(self, **kwargs):
+        assert kwargs["headers"]["Authorization"] == "Bearer decoded-token"
+        return {"status": 200, "raw": '{"scores":[]}', "json": {"scores": []}}
+
+    monkeypatch.setattr(OptimizerModelsService, "get_model", _stub_get_model)
+    monkeypatch.setattr(OptimizerModelsService, "get_model_auth_header", _stub_get_auth_header)
+    monkeypatch.setattr(OptimizerModelsService, "_post_json", _stub_post_json)
+    service = OptimizerModelsService()
+    payload = await service.validate_model_endpoint(
+        model_id="mdl_api",
+        buyer_id="1111111111",
+    )
+
+    assert payload["valid"] is True
     assert payload["http_status"] == 200
