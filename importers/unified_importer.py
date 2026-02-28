@@ -110,6 +110,20 @@ def get_value(row: Dict, mapping: MappingResult, db_field: str, default: str = "
     return default
 
 
+def get_optional_int(row: Dict, mapping: MappingResult, db_field: str) -> Optional[int]:
+    """Return parsed int when source field exists; otherwise None for unknown."""
+    if not mapping.has_field(db_field):
+        return None
+    return parse_int(get_value(row, mapping, db_field, ""), default=None)
+
+
+def get_optional_float(row: Dict, mapping: MappingResult, db_field: str) -> Optional[float]:
+    """Return parsed float when source field exists; otherwise None for unknown."""
+    if not mapping.has_field(db_field):
+        return None
+    return parse_float(get_value(row, mapping, db_field, ""), default=None)
+
+
 _SIZE_SEPARATORS = re.compile(r"[xX×]")
 
 
@@ -251,6 +265,7 @@ def ensure_table_exists(cursor, table_name: str):
                 viewable_impressions INTEGER DEFAULT 0,
                 measurable_impressions INTEGER DEFAULT 0,
                 bidder_id TEXT,
+                source_report TEXT,
                 row_hash TEXT UNIQUE,
                 import_batch_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -303,6 +318,7 @@ def ensure_table_exists(cursor, table_name: str):
                 auctions_won INTEGER DEFAULT 0,
                 impressions INTEGER DEFAULT 0,
                 clicks INTEGER DEFAULT 0,
+                source_report TEXT,
                 row_hash TEXT UNIQUE,
                 import_batch_id TEXT,
                 bidder_id TEXT,
@@ -337,6 +353,7 @@ def ensure_table_exists(cursor, table_name: str):
                 bids_in_auction INTEGER DEFAULT 0,
                 opportunity_cost_micros BIGINT DEFAULT 0,
                 bidder_id TEXT,
+                source_report TEXT,
                 row_hash TEXT UNIQUE,
                 import_batch_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -344,6 +361,33 @@ def ensure_table_exists(cursor, table_name: str):
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_bid_filtering_date ON rtb_bid_filtering(metric_date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_bid_filtering_reason ON rtb_bid_filtering(filtering_reason)")
+
+    elif table_name == "rtb_quality":
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS rtb_quality (
+                id SERIAL PRIMARY KEY,
+                metric_date DATE NOT NULL,
+                publisher_id TEXT,
+                publisher_name TEXT,
+                country TEXT,
+                buyer_account_id TEXT,
+                impressions INTEGER DEFAULT 0,
+                pre_filtered_impressions INTEGER DEFAULT 0,
+                ivt_credited_impressions INTEGER DEFAULT 0,
+                billed_impressions INTEGER DEFAULT 0,
+                measurable_impressions INTEGER DEFAULT 0,
+                viewable_impressions INTEGER DEFAULT 0,
+                ivt_rate_pct REAL,
+                viewability_pct REAL,
+                bidder_id TEXT,
+                source_report TEXT,
+                row_hash TEXT UNIQUE,
+                import_batch_id TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_quality_date ON rtb_quality(metric_date)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_rtb_quality_publisher ON rtb_quality(publisher_id)")
 
     elif table_name == "web_domain_daily":
         cursor.execute("""
@@ -479,6 +523,7 @@ def import_to_rtb_daily(
         ("measurable_impressions", "INTEGER DEFAULT 0"),
         ("buyer_account_id", "TEXT"),
         ("bidder_id", "TEXT"),
+        ("source_report", "TEXT"),
     ])
     conn.commit()
 
@@ -496,8 +541,8 @@ def import_to_rtb_daily(
             app_id, app_name, buyer_account_id, reached_queries, impressions, clicks, spend_micros,
             bids, bids_in_auction, auctions_won,
             video_starts, video_completions, viewable_impressions, measurable_impressions,
-            bidder_id, row_hash, import_batch_id
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            bidder_id, source_report, row_hash, import_batch_id
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (row_hash) DO NOTHING
     """
     rows_to_insert: list[tuple] = []
@@ -553,16 +598,16 @@ def import_to_rtb_daily(
                         "app_id": get_value(row, mapping, "app_id", ""),
                         "app_name": get_value(row, mapping, "app_name", ""),
                         "buyer_account_id": get_value(row, mapping, "buyer_account_id", ""),
-                        "reached_queries": parse_int(get_value(row, mapping, "reached_queries", "0")),
-                        "impressions": parse_int(get_value(row, mapping, "impressions", "0")),
-                        "clicks": parse_int(get_value(row, mapping, "clicks", "0")),
-                        "bids": parse_int(get_value(row, mapping, "bids", "0")),
-                        "bids_in_auction": parse_int(get_value(row, mapping, "bids_in_auction", "0")),
-                        "auctions_won": parse_int(get_value(row, mapping, "auctions_won", "0")),
-                        "video_starts": parse_int(get_value(row, mapping, "video_starts", "0")),
-                        "video_completions": parse_int(get_value(row, mapping, "video_completions", "0")),
-                        "viewable_impressions": parse_int(get_value(row, mapping, "viewable_impressions", "0")),
-                        "measurable_impressions": parse_int(get_value(row, mapping, "measurable_impressions", "0")),
+                        "reached_queries": get_optional_int(row, mapping, "reached_queries"),
+                        "impressions": get_optional_int(row, mapping, "impressions"),
+                        "clicks": get_optional_int(row, mapping, "clicks"),
+                        "bids": get_optional_int(row, mapping, "bids"),
+                        "bids_in_auction": get_optional_int(row, mapping, "bids_in_auction"),
+                        "auctions_won": get_optional_int(row, mapping, "auctions_won"),
+                        "video_starts": get_optional_int(row, mapping, "video_starts"),
+                        "video_completions": get_optional_int(row, mapping, "video_completions"),
+                        "viewable_impressions": get_optional_int(row, mapping, "viewable_impressions"),
+                        "measurable_impressions": get_optional_int(row, mapping, "measurable_impressions"),
                     }
 
                     effective_bidder_id = bidder_id
@@ -582,6 +627,7 @@ def import_to_rtb_daily(
                         except Exception:
                             effective_bidder_id = None
                     row_data["bidder_id"] = effective_bidder_id
+                    row_data["source_report"] = report_type
 
                     # If buyer_account_id missing from CSV, use bidder_id from filename
                     if not row_data["buyer_account_id"] and effective_bidder_id:
@@ -590,8 +636,11 @@ def import_to_rtb_daily(
                         raise ValueError("buyer_account_id missing and no seat ID detected in filename")
 
                     # Parse spend (convert to micros)
-                    spend = parse_float(get_value(row, mapping, "spend", "0"))
-                    row_data["spend_micros"] = int(spend * 1_000_000) if spend < 1000 else int(spend)
+                    spend = get_optional_float(row, mapping, "spend")
+                    if spend is None:
+                        row_data["spend_micros"] = None
+                    else:
+                        row_data["spend_micros"] = int(spend * 1_000_000) if spend < 1000 else int(spend)
 
                     # Compute hash
                     row_hash = compute_row_hash(row_data, hash_keys)
@@ -619,7 +668,7 @@ def import_to_rtb_daily(
                         row_data["spend_micros"], row_data["bids"], row_data["bids_in_auction"],
                         row_data["auctions_won"], row_data["video_starts"], row_data["video_completions"],
                         row_data["viewable_impressions"], row_data["measurable_impressions"],
-                        row_data["bidder_id"], row_hash, batch_id
+                        row_data["bidder_id"], row_data["source_report"], row_hash, batch_id
                     ))
                     if len(rows_to_insert) >= IMPORT_BATCH_SIZE:
                         flush_rows()
@@ -657,7 +706,17 @@ def import_to_rtb_bidstream(
     conn = get_postgres_connection()
     cursor = conn.cursor()
     ensure_table_exists(cursor, "rtb_bidstream")
-    ensure_columns_exist(cursor, "rtb_bidstream", [("bidder_id", "TEXT")])
+    ensure_columns_exist(
+        cursor,
+        "rtb_bidstream",
+        [
+            ("bidder_id", "TEXT"),
+            ("platform", "TEXT"),
+            ("environment", "TEXT"),
+            ("transaction_type", "TEXT"),
+            ("source_report", "TEXT"),
+        ],
+    )
     conn.commit()
 
     hash_keys = ["metric_date", "hour", "country", "buyer_account_id", "publisher_id", "bidder_id"]
@@ -667,10 +726,11 @@ def import_to_rtb_bidstream(
     insert_sql = """
         INSERT INTO rtb_bidstream (
             metric_date, hour, country, buyer_account_id, publisher_id, publisher_name,
+            platform, environment, transaction_type,
             inventory_matches, bid_requests, successful_responses, reached_queries,
             bids, bids_in_auction, auctions_won, impressions, clicks,
-            bidder_id, row_hash, import_batch_id
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            bidder_id, source_report, row_hash, import_batch_id
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (row_hash) DO NOTHING
     """
     rows_to_insert: list[tuple] = []
@@ -715,15 +775,15 @@ def import_to_rtb_bidstream(
                         "platform": get_value(row, mapping, "platform", ""),
                         "environment": get_value(row, mapping, "environment", ""),
                         "transaction_type": get_value(row, mapping, "transaction_type", ""),
-                        "inventory_matches": parse_int(get_value(row, mapping, "inventory_matches", "0")),
-                        "bid_requests": parse_int(get_value(row, mapping, "bid_requests", "0")),
-                        "successful_responses": parse_int(get_value(row, mapping, "successful_responses", "0")),
-                        "reached_queries": parse_int(get_value(row, mapping, "reached_queries", "0")),
-                        "bids": parse_int(get_value(row, mapping, "bids", "0")),
-                        "bids_in_auction": parse_int(get_value(row, mapping, "bids_in_auction", "0")),
-                        "auctions_won": parse_int(get_value(row, mapping, "auctions_won", "0")),
-                        "impressions": parse_int(get_value(row, mapping, "impressions", "0")),
-                        "clicks": parse_int(get_value(row, mapping, "clicks", "0")),
+                        "inventory_matches": get_optional_int(row, mapping, "inventory_matches"),
+                        "bid_requests": get_optional_int(row, mapping, "bid_requests"),
+                        "successful_responses": get_optional_int(row, mapping, "successful_responses"),
+                        "reached_queries": get_optional_int(row, mapping, "reached_queries"),
+                        "bids": get_optional_int(row, mapping, "bids"),
+                        "bids_in_auction": get_optional_int(row, mapping, "bids_in_auction"),
+                        "auctions_won": get_optional_int(row, mapping, "auctions_won"),
+                        "impressions": get_optional_int(row, mapping, "impressions"),
+                        "clicks": get_optional_int(row, mapping, "clicks"),
                     }
 
                     # If buyer_account_id missing from CSV, use bidder_id from filename
@@ -741,6 +801,7 @@ def import_to_rtb_bidstream(
                         except Exception:
                             effective_bidder_id = None
                     row_data["bidder_id"] = effective_bidder_id
+                    row_data["source_report"] = report_type
 
                     row_hash = compute_row_hash(row_data, hash_keys)
 
@@ -759,11 +820,12 @@ def import_to_rtb_bidstream(
                     rows_to_insert.append((
                         row_data["metric_date"], row_data["hour"], row_data["country"],
                         row_data["buyer_account_id"], row_data["publisher_id"], row_data["publisher_name"],
+                        row_data["platform"], row_data["environment"], row_data["transaction_type"],
                         row_data["inventory_matches"], row_data["bid_requests"],
                         row_data["successful_responses"], row_data["reached_queries"],
                         row_data["bids"], row_data["bids_in_auction"], row_data["auctions_won"],
                         row_data["impressions"], row_data["clicks"],
-                        row_data["bidder_id"], row_hash, batch_id
+                        row_data["bidder_id"], row_data["source_report"], row_hash, batch_id
                     ))
                     if len(rows_to_insert) >= IMPORT_BATCH_SIZE:
                         flush_rows()
@@ -799,7 +861,7 @@ def import_to_rtb_bid_filtering(
     conn = get_postgres_connection()
     cursor = conn.cursor()
     ensure_table_exists(cursor, "rtb_bid_filtering")
-    ensure_columns_exist(cursor, "rtb_bid_filtering", [("bidder_id", "TEXT")])
+    ensure_columns_exist(cursor, "rtb_bid_filtering", [("bidder_id", "TEXT"), ("source_report", "TEXT")])
     conn.commit()
 
     hash_keys = ["metric_date", "country", "filtering_reason", "creative_id", "bidder_id"]
@@ -810,8 +872,8 @@ def import_to_rtb_bid_filtering(
         INSERT INTO rtb_bid_filtering (
             metric_date, country, buyer_account_id, filtering_reason, creative_id,
             bids, bids_in_auction, opportunity_cost_micros,
-            bidder_id, row_hash, import_batch_id
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            bidder_id, source_report, row_hash, import_batch_id
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (row_hash) DO NOTHING
     """
     rows_to_insert: list[tuple] = []
@@ -854,8 +916,8 @@ def import_to_rtb_bid_filtering(
                         "buyer_account_id": get_value(row, mapping, "buyer_account_id", ""),
                         "filtering_reason": filtering_reason,
                         "creative_id": get_value(row, mapping, "creative_id", ""),
-                        "bids": parse_int(get_value(row, mapping, "bids", "0")),
-                        "bids_in_auction": parse_int(get_value(row, mapping, "bids_in_auction", "0")),
+                        "bids": get_optional_int(row, mapping, "bids"),
+                        "bids_in_auction": get_optional_int(row, mapping, "bids_in_auction"),
                     }
 
                     # If buyer_account_id missing from CSV, use bidder_id from filename
@@ -873,10 +935,14 @@ def import_to_rtb_bid_filtering(
                         except Exception:
                             effective_bidder_id = None
                     row_data["bidder_id"] = effective_bidder_id
+                    row_data["source_report"] = report_type
 
                     # Parse opportunity cost
-                    opp_cost = parse_float(get_value(row, mapping, "opportunity_cost", "0"))
-                    row_data["opportunity_cost_micros"] = int(opp_cost * 1_000_000) if opp_cost < 1000 else int(opp_cost)
+                    opp_cost = get_optional_float(row, mapping, "opportunity_cost")
+                    if opp_cost is None:
+                        row_data["opportunity_cost_micros"] = None
+                    else:
+                        row_data["opportunity_cost_micros"] = int(opp_cost * 1_000_000) if opp_cost < 1000 else int(opp_cost)
 
                     row_hash = compute_row_hash(row_data, hash_keys)
 
@@ -886,6 +952,7 @@ def import_to_rtb_bid_filtering(
                             {
                                 **row_data,
                                 "bidder_id": row_data["bidder_id"],
+                                "report_type": report_type,
                                 "row_hash": row_hash,
                                 "import_batch_id": batch_id,
                             },
@@ -895,8 +962,183 @@ def import_to_rtb_bid_filtering(
                         row_data["metric_date"], row_data["country"], row_data["buyer_account_id"],
                         row_data["filtering_reason"], row_data["creative_id"],
                         row_data["bids"], row_data["bids_in_auction"], row_data["opportunity_cost_micros"],
-                        row_data["bidder_id"], row_hash, batch_id
+                        row_data["bidder_id"], row_data["source_report"], row_hash, batch_id
                     ))
+                    if len(rows_to_insert) >= IMPORT_BATCH_SIZE:
+                        flush_rows()
+
+                except Exception as e:
+                    result.rows_skipped += 1
+                    if len(result.errors) < 10:
+                        result.errors.append(f"Row {row_num}: {str(e)}")
+
+        flush_rows()
+        conn.commit()
+        result.success = True
+        _apply_date_continuity(result, observed_dates, min_date, max_date)
+
+    except Exception as e:
+        result.error_message = str(e)
+        result.errors.append(f"Fatal: {e}")
+
+    finally:
+        conn.close()
+
+
+def import_to_rtb_quality(
+    csv_path: str,
+    mapping: MappingResult,
+    batch_id: str,
+    result: UnifiedImportResult,
+    bidder_id: Optional[str] = None,
+    parquet_exporter: Optional["ParquetExportManager"] = None,
+    report_type: Optional[str] = None,
+):
+    """Import quality/fraud metrics to rtb_quality table (Postgres)."""
+    conn = get_postgres_connection()
+    cursor = conn.cursor()
+    ensure_table_exists(cursor, "rtb_quality")
+    ensure_columns_exist(
+        cursor,
+        "rtb_quality",
+        [("bidder_id", "TEXT"), ("buyer_account_id", "TEXT"), ("source_report", "TEXT")],
+    )
+    conn.commit()
+
+    hash_keys = ["metric_date", "publisher_id", "country", "buyer_account_id", "bidder_id"]
+    min_date, max_date = None, None
+    observed_dates: set = set()
+
+    insert_sql = """
+        INSERT INTO rtb_quality (
+            metric_date, publisher_id, publisher_name, country, buyer_account_id,
+            impressions, pre_filtered_impressions, ivt_credited_impressions,
+            billed_impressions, measurable_impressions, viewable_impressions,
+            ivt_rate_pct, viewability_pct, bidder_id, source_report, row_hash, import_batch_id
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (row_hash) DO NOTHING
+    """
+    rows_to_insert: list[tuple] = []
+
+    def flush_rows():
+        nonlocal rows_to_insert
+        if not rows_to_insert:
+            return
+        batch_count = len(rows_to_insert)
+        cursor.executemany(insert_sql, rows_to_insert)
+        inserted = cursor.rowcount if cursor.rowcount >= 0 else batch_count
+        result.rows_imported += inserted
+        result.rows_duplicate += batch_count - inserted
+        rows_to_insert = []
+
+    try:
+        with open(csv_path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+
+            for row_num, row in enumerate(reader, start=2):
+                result.rows_read += 1
+
+                try:
+                    metric_date = parse_date(get_value(row, mapping, "day"))
+                    publisher_id = get_value(row, mapping, "publisher_id", "")
+
+                    if not metric_date or not publisher_id:
+                        result.rows_skipped += 1
+                        continue
+
+                    if min_date is None or metric_date < min_date:
+                        min_date = metric_date
+                    if max_date is None or metric_date > max_date:
+                        max_date = metric_date
+                    observed_dates.add(metric_date)
+
+                    row_data = {
+                        "metric_date": metric_date,
+                        "publisher_id": publisher_id,
+                        "publisher_name": get_value(row, mapping, "publisher_name", ""),
+                        "country": get_value(row, mapping, "country", ""),
+                        "buyer_account_id": get_value(row, mapping, "buyer_account_id", ""),
+                        "impressions": get_optional_int(row, mapping, "impressions"),
+                        "pre_filtered_impressions": get_optional_int(
+                            row, mapping, "pre_filtered_impressions"
+                        ),
+                        "ivt_credited_impressions": get_optional_int(
+                            row, mapping, "ivt_credited_impressions"
+                        ),
+                        "billed_impressions": get_optional_int(
+                            row, mapping, "billed_impressions"
+                        ),
+                        "measurable_impressions": get_optional_int(
+                            row, mapping, "measurable_impressions"
+                        ),
+                        "viewable_impressions": get_optional_int(
+                            row, mapping, "viewable_impressions"
+                        ),
+                    }
+
+                    # If buyer_account_id missing from CSV, use bidder_id from filename
+                    effective_bidder_id = bidder_id
+                    if not row_data["buyer_account_id"] and effective_bidder_id:
+                        row_data["buyer_account_id"] = effective_bidder_id
+
+                    if not effective_bidder_id and row_data["buyer_account_id"]:
+                        try:
+                            from importers.account_mapper import get_bidder_id_for_buyer_id
+
+                            effective_bidder_id = get_bidder_id_for_buyer_id(
+                                row_data["buyer_account_id"]
+                            )
+                        except Exception:
+                            effective_bidder_id = None
+                    row_data["bidder_id"] = effective_bidder_id
+                    row_data["source_report"] = report_type
+
+                    impressions = row_data["impressions"] or 0
+                    measurable = row_data["measurable_impressions"] or 0
+                    ivt_impressions = row_data["ivt_credited_impressions"] or 0
+                    viewable = row_data["viewable_impressions"] or 0
+
+                    row_data["ivt_rate_pct"] = (
+                        (100.0 * ivt_impressions / impressions) if impressions > 0 else None
+                    )
+                    row_data["viewability_pct"] = (
+                        (100.0 * viewable / measurable) if measurable > 0 else None
+                    )
+
+                    row_hash = compute_row_hash(row_data, hash_keys)
+
+                    if parquet_exporter:
+                        parquet_exporter.add_row(
+                            metric_date,
+                            {
+                                **row_data,
+                                "report_type": report_type,
+                                "row_hash": row_hash,
+                                "import_batch_id": batch_id,
+                            },
+                        )
+
+                    rows_to_insert.append(
+                        (
+                            row_data["metric_date"],
+                            row_data["publisher_id"],
+                            row_data["publisher_name"],
+                            row_data["country"],
+                            row_data["buyer_account_id"],
+                            row_data["impressions"],
+                            row_data["pre_filtered_impressions"],
+                            row_data["ivt_credited_impressions"],
+                            row_data["billed_impressions"],
+                            row_data["measurable_impressions"],
+                            row_data["viewable_impressions"],
+                            row_data["ivt_rate_pct"],
+                            row_data["viewability_pct"],
+                            row_data["bidder_id"],
+                            row_data["source_report"],
+                            row_hash,
+                            batch_id,
+                        )
+                    )
                     if len(rows_to_insert) >= IMPORT_BATCH_SIZE:
                         flush_rows()
 
@@ -1173,6 +1415,12 @@ def unified_import(
             "contains the seat ID (e.g. catscan-pipeline-<seat>-yesterday-UTC.csv)."
         )
         return result
+    if target_table == "rtb_quality" and not bidder_id and not mapping.has_field("buyer_account_id"):
+        result.error_message = (
+            "Missing Buyer account ID. Include the column in the report or ensure the filename "
+            "contains the seat ID (e.g. catscan-ivt-<seat>-yesterday-UTC.csv)."
+        )
+        return result
     if target_table == "rtb_daily" and not mapping.has_field("buyer_account_id") and not mapping.has_field("billing_id") and not bidder_id:
         result.error_message = (
             "Missing Billing ID and Buyer account ID. Include Billing ID in the report or "
@@ -1208,6 +1456,16 @@ def unified_import(
             )
         elif target_table == "rtb_bid_filtering":
             import_to_rtb_bid_filtering(
+                csv_path,
+                mapping,
+                result.batch_id,
+                result,
+                bidder_id=bidder_id,
+                parquet_exporter=parquet_exporter,
+                report_type=report_type,
+            )
+        elif target_table == "rtb_quality":
+            import_to_rtb_quality(
                 csv_path,
                 mapping,
                 result.batch_id,

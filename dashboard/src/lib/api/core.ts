@@ -3,7 +3,7 @@
  * All other API modules import fetchApi from here.
  */
 
-import type { Stats, Health, SizesResponse } from "@/types/api";
+import type { Stats, Health, SizesResponse, DataHealthResponse } from "@/types/api";
 
 export const API_BASE = "/api";
 const DEFAULT_API_TIMEOUT_MS = 30000;
@@ -118,6 +118,30 @@ export interface SystemStatus {
 
 export async function getSystemStatus(): Promise<SystemStatus> {
   return fetchApi<SystemStatus>("/system/status");
+}
+
+export interface SystemDataHealthQuery {
+  days?: number;
+  buyer_id?: string;
+  availability_state?: "healthy" | "degraded" | "unavailable";
+  min_completeness_pct?: number;
+  limit?: number;
+}
+
+export async function getSystemDataHealth(
+  query: SystemDataHealthQuery = {}
+): Promise<DataHealthResponse> {
+  const params = new URLSearchParams();
+  if (typeof query.days === "number") params.set("days", String(query.days));
+  if (query.buyer_id) params.set("buyer_id", query.buyer_id);
+  if (query.availability_state) params.set("availability_state", query.availability_state);
+  if (typeof query.min_completeness_pct === "number") {
+    params.set("min_completeness_pct", String(query.min_completeness_pct));
+  }
+  if (typeof query.limit === "number") params.set("limit", String(query.limit));
+
+  const qs = params.toString();
+  return fetchApi<DataHealthResponse>(`/system/data-health${qs ? `?${qs}` : ""}`);
 }
 
 // =============================================================================

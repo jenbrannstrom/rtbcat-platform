@@ -114,6 +114,29 @@ def _parquet_schema_for_table(table_name: str) -> "pa.Schema":
                 ("bids_in_auction", pa.int64()),
                 ("opportunity_cost_micros", pa.int64()),
                 ("bidder_id", pa.string()),
+                ("report_type", pa.string()),
+                ("row_hash", pa.string()),
+                ("import_batch_id", pa.string()),
+            ]
+        )
+    if table_name == "rtb_quality":
+        return pa.schema(
+            [
+                ("metric_date", pa.date32()),
+                ("publisher_id", pa.string()),
+                ("publisher_name", pa.string()),
+                ("country", pa.string()),
+                ("buyer_account_id", pa.string()),
+                ("impressions", pa.int64()),
+                ("pre_filtered_impressions", pa.int64()),
+                ("ivt_credited_impressions", pa.int64()),
+                ("billed_impressions", pa.int64()),
+                ("measurable_impressions", pa.int64()),
+                ("viewable_impressions", pa.int64()),
+                ("ivt_rate_pct", pa.float64()),
+                ("viewability_pct", pa.float64()),
+                ("bidder_id", pa.string()),
+                ("report_type", pa.string()),
                 ("row_hash", pa.string()),
                 ("import_batch_id", pa.string()),
             ]
@@ -191,6 +214,27 @@ def _bq_schema_for_table(table_name: str) -> list["bigquery.SchemaField"]:
             bigquery.SchemaField("bids_in_auction", "INT64"),
             bigquery.SchemaField("opportunity_cost_micros", "INT64"),
             bigquery.SchemaField("bidder_id", "STRING"),
+            bigquery.SchemaField("report_type", "STRING"),
+            bigquery.SchemaField("row_hash", "STRING"),
+            bigquery.SchemaField("import_batch_id", "STRING"),
+        ]
+    if table_name == "rtb_quality":
+        return [
+            bigquery.SchemaField("metric_date", "DATE"),
+            bigquery.SchemaField("publisher_id", "STRING"),
+            bigquery.SchemaField("publisher_name", "STRING"),
+            bigquery.SchemaField("country", "STRING"),
+            bigquery.SchemaField("buyer_account_id", "STRING"),
+            bigquery.SchemaField("impressions", "INT64"),
+            bigquery.SchemaField("pre_filtered_impressions", "INT64"),
+            bigquery.SchemaField("ivt_credited_impressions", "INT64"),
+            bigquery.SchemaField("billed_impressions", "INT64"),
+            bigquery.SchemaField("measurable_impressions", "INT64"),
+            bigquery.SchemaField("viewable_impressions", "INT64"),
+            bigquery.SchemaField("ivt_rate_pct", "FLOAT64"),
+            bigquery.SchemaField("viewability_pct", "FLOAT64"),
+            bigquery.SchemaField("bidder_id", "STRING"),
+            bigquery.SchemaField("report_type", "STRING"),
             bigquery.SchemaField("row_hash", "STRING"),
             bigquery.SchemaField("import_batch_id", "STRING"),
         ]

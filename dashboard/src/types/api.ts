@@ -103,6 +103,123 @@ export interface Health {
   configured: boolean;
 }
 
+export interface DataHealthTableState {
+  rows: number;
+  max_metric_date: string | null;
+}
+
+export interface DataHealthSourceFreshness {
+  rtb_daily: DataHealthTableState;
+  rtb_geo_daily: DataHealthTableState;
+}
+
+export interface DataHealthServingFreshness {
+  home_geo_daily: DataHealthTableState;
+  config_geo_daily: DataHealthTableState;
+  config_publisher_daily: DataHealthTableState;
+}
+
+export interface DataCoverageSummary {
+  total_rows: number;
+  country_missing_pct: number;
+  publisher_missing_pct: number;
+  billing_missing_pct: number;
+  availability_state: string;
+}
+
+export interface IngestionRunsSummary {
+  total_runs: number;
+  successful_runs: number;
+  failed_runs: number;
+  last_started_at: string | null;
+  last_finished_at: string | null;
+}
+
+export interface ReportTableCompletenessState {
+  rows: number;
+  active_days: number;
+  expected_days: number;
+  coverage_pct: number;
+  max_metric_date: string | null;
+  availability_state: string;
+}
+
+export interface ReportCompletenessSummary {
+  expected_report_types: number;
+  available_report_types: number;
+  coverage_pct: number;
+  missing_report_types: string[];
+  availability_state: string;
+  tables: Record<string, ReportTableCompletenessState>;
+}
+
+export interface QualityFreshnessSummary {
+  rows: number;
+  max_metric_date: string | null;
+  age_days: number | null;
+  fresh_within_days: number;
+  availability_state: string;
+}
+
+export interface BidstreamDimensionCoverageSummary {
+  total_rows: number;
+  platform_missing_pct: number;
+  environment_missing_pct: number;
+  transaction_type_missing_pct: number;
+  availability_state: string;
+}
+
+export interface SeatDayCompletenessRow {
+  metric_date: string | null;
+  buyer_account_id: string;
+  has_rtb_daily: boolean;
+  has_rtb_bidstream: boolean;
+  has_rtb_bid_filtering: boolean;
+  has_rtb_quality: boolean;
+  has_web_domain_daily: boolean;
+  available_report_types: number;
+  expected_report_types: number;
+  completeness_pct: number;
+  availability_state: string;
+  refreshed_at: string | null;
+}
+
+export interface SeatDayCompletenessSummary {
+  total_seat_days: number;
+  healthy_seat_days: number;
+  degraded_seat_days: number;
+  unavailable_seat_days: number;
+  avg_completeness_pct: number;
+  min_completeness_pct: number;
+  max_completeness_pct: number;
+}
+
+export interface SeatDayCompletenessPayload {
+  rows: SeatDayCompletenessRow[];
+  summary: SeatDayCompletenessSummary;
+  availability_state: string;
+  refreshed_at: string | null;
+}
+
+export interface OptimizerReadinessSummary {
+  report_completeness: ReportCompletenessSummary;
+  rtb_quality_freshness: QualityFreshnessSummary;
+  bidstream_dimension_coverage: BidstreamDimensionCoverageSummary;
+  seat_day_completeness: SeatDayCompletenessPayload;
+}
+
+export interface DataHealthResponse {
+  checked_at: string;
+  days: number;
+  buyer_id: string | null;
+  state: string;
+  source_freshness: DataHealthSourceFreshness;
+  serving_freshness: DataHealthServingFreshness;
+  coverage: DataCoverageSummary;
+  ingestion_runs: IngestionRunsSummary;
+  optimizer_readiness: OptimizerReadinessSummary;
+}
+
 export interface PaginationMeta {
   timeframe_days?: number | null;
   total: number;

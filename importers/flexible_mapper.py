@@ -81,6 +81,10 @@ COLUMN_SYNONYMS: Dict[str, List[str]] = {
     "environment": [
         "environment", "#environment", "env"
     ],
+    "transaction_type": [
+        "transaction type", "transaction_type", "#transaction type",
+        "deal type", "deal_type", "auction type"
+    ],
     "inventory_type": [
         "inventory type", "inventory_type", "#inventory type", "inv type", "inv_type"
     ],
