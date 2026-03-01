@@ -39,11 +39,13 @@ function HeaderInfoTip({ text, ariaLabel }: { text: string; ariaLabel: string })
 interface AccountEndpointsHeaderProps {
   observedQpsByEndpointId?: Record<string, number | null>;
   onApiLatencyMeasured?: (apiPath: string, latencyMs: number) => void;
+  enabled?: boolean;
 }
 
 export function AccountEndpointsHeader({
   observedQpsByEndpointId,
   onApiLatencyMeasured,
+  enabled = true,
 }: AccountEndpointsHeaderProps) {
   const { t, language } = useTranslation();
   const { selectedBuyerId, selectedServiceAccountId } = useAccount();
@@ -81,7 +83,7 @@ export function AccountEndpointsHeader({
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['rtb-endpoints', selectedBuyerId],
     queryFn: fetchMeasuredEndpoints,
-    enabled: !!selectedBuyerId,
+    enabled: !!selectedBuyerId && enabled,
   });
 
   const hasPendingEdits = Object.keys(pendingQpsEdits).length > 0;
