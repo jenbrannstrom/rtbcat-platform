@@ -1,5 +1,6 @@
 """Pretargeting pending changes routes (local-only)."""
 
+import asyncio
 import json
 import logging
 from typing import Optional
@@ -249,7 +250,14 @@ async def get_pretargeting_config_detail(
     try:
         pretargeting_service = PretargetingService()
         change_service = ChangesService()
-        config = await pretargeting_service.get_config(billing_id)
+        config, pending_rows = await asyncio.gather(
+            pretargeting_service.get_config(billing_id),
+            change_service.list_pending_changes(
+                billing_id=billing_id,
+                status="pending",
+                limit=500,
+            ),
+        )
 
         if not config:
             raise HTTPException(
@@ -257,10 +265,7 @@ async def get_pretargeting_config_detail(
                 detail=f"Pretargeting config not found for ID (billing_id): {billing_id}"
             )
 
-        # Get pending changes (only pending status, ordered by created_at ASC)
-        pending_rows = await change_service.list_pending_changes(
-            billing_id=billing_id, status="pending", limit=500
-        )
+        # Service returns newest-first; reverse for deterministic oldest-first UI sequence.
         # Reverse to get ASC order (service returns DESC)
         pending_rows = list(reversed(pending_rows))
 
