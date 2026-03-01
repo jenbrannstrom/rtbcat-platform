@@ -9,6 +9,7 @@
 
 - Tracker checkpoint updated through commit `7bbb25d` and subsequent execution slices on 2026-03-01, including conversion readiness endpoint/UI/canary/CI gating and buyer-context hardening.
 - Formal closeout matrix (with local gate evidence and remaining operational blockers) is tracked in [V1_PLAN_CLOSEOUT_MATRIX.md](/home/x1-7/Documents/rtbcat-platform/docs/V1_PLAN_CLOSEOUT_MATRIX.md).
+- Deployed canary closeout commands remain operationally pending from this workspace because outbound API calls are restricted in the current sandbox (`Operation not permitted`); run those gates from a network-enabled environment.
 
 - `E0-001` completed: `rtb_quality` import route/table path is live and covered by importer contract tests.
 - `E0-002` completed: bidstream persistence includes `platform`, `environment`, `transaction_type` with mapper support for transaction-type headers.

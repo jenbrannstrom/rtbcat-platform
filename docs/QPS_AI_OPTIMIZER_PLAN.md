@@ -839,6 +839,7 @@ ALSO PROVIDE:
   - hardened canary SLO contract checks to require `time_buckets` payload presence/non-empty behavior when QPS page samples exist.
 
 - Plan closeout status and verification evidence are tracked in [V1_PLAN_CLOSEOUT_MATRIX.md](/home/x1-7/Documents/rtbcat-platform/docs/V1_PLAN_CLOSEOUT_MATRIX.md).
+- Note: strict deployed canary closeout gates are still operationally pending from this workspace because outbound API calls are sandbox-restricted (`Operation not permitted`); execute those commands from a network-enabled environment.
 
 - Add end-to-end timing instrumentation for QPS Optimizer page:
   - page-level timing marks (navigation -> first table row -> full table hydration),
