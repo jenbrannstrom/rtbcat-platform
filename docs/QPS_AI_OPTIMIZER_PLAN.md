@@ -1,6 +1,6 @@
 # QPS AI Optimizer — Reconciled Data Model & Roadmap
 
-**Version:** 0.5 | **Date:** 2026-02-28
+**Version:** 0.6 | **Date:** 2026-03-01
 
 ---
 
@@ -16,6 +16,21 @@ The path to advertiser-first optimization:
 2. **Phase 1** — Build the conversion schema. A universal database structure that can store conversion events of all types (installs, deposits, purchases, signups) regardless of where they come from.
 3. **Phase 2** — Connect to conversion data sources. MMP integrations (AppsFlyer, Adjust, Branch) are the primary path since most app advertisers already use them. Secondary: agency pixels (Redtrack, Voluum), our own pixel, or bidder data feeds.
 4. **Phase 3** — BYOM (Bring Your Own Model). Once we have real outcome data flowing in, let customers plug in their own AI to generate recommendations from Cat-Scan's compiled data.
+
+### Roadmap Tracking Update (2026-03-01)
+
+Current roadmap execution status (implemented in code, pending environment-by-environment rollout validation):
+
+1. **Conversion connectors (Phase 2) are live in platform code**:
+   - AppsFlyer, Adjust, Branch, generic postback, Redtrack/Voluum aliases, CSV upload, and lightweight pixel endpoint.
+2. **Conversion readiness is now first-class**:
+   - `GET /conversions/readiness` aggregates health + ingestion volume + freshness with explicit reason strings.
+   - Setup/System UI now consume readiness and show buyer-scoped status + troubleshooting reasons.
+3. **Operator/QA gates hardened**:
+   - canary includes workflow profile controls, optional pixel checks, strict conversion-ready checks, and strict go/no-go target.
+   - root `make v1-gate` now combines phase0 + conversion/readiness regression, and CI uses it.
+4. **BYOM workflow controls are now operationally consistent**:
+   - workflow preset/profile handling is aligned across backend API, dashboard UI, and canary wrappers.
 
 ---
 
@@ -670,8 +685,8 @@ ALSO PROVIDE:
 | Deal/PMP dimensions | Underused | Add analyzers and recommendation paths |
 | Dedicated quality-signals ingestion | Completed | Unified import path is live; freshness/availability surfaced in readiness API + UI |
 | Total Cost of Operation | Implemented baseline | Monthly hosting cost setup + Effective CPM calculations available |
-| Conversion event types | Not modeled | Phase 1 schema — universal conversion_events table |
-| MMP integration | Not implemented | Phase 2 — primary conversion data source |
+| Conversion event types | Implemented baseline | Universal `conversion_events` + `conversion_aggregates_daily` schema and APIs are live |
+| MMP integration | In progress (platform-complete, rollout-pending) | AppsFlyer/Adjust/Branch + generic/agency/pixel/CSV connectors shipped; production validation remains per environment/customer |
 
 ---
 
@@ -685,22 +700,24 @@ ALSO PROVIDE:
 - Effective CPM context added with monthly hosting cost setup.
 - Data-quality/readiness indicators added to API + dashboard, with canary smoke gates.
 
-### Phase 1 (3-4 weeks): Conversion schema
+### Phase 1 (implemented baseline): Conversion schema
 
-- Create `conversion_events` and `conversion_aggregates_daily` tables.
-- Standardized event types (the install-to-deposit ladder).
-- Multi-source design (MMP, pixel, agency tracker, bidder feed, CSV upload).
-- Aggregation job that joins conversions to RTB data by billing_id/country/publisher.
+- `conversion_events` and `conversion_aggregates_daily` schema is live.
+- Event taxonomy + normalizers are implemented.
+- Aggregation job and read APIs are operational.
+- Remaining work: production-volume validation, data-retention tuning, and connector-specific quality guardrails.
 
-### Phase 2 (4-6 weeks): Connect conversion data sources
+### Phase 2 (implemented baseline, rollout in progress): Connect conversion data sources
 
-- AppsFlyer S2S postback receiver + normalizer.
-- Adjust callback receiver + normalizer.
-- Branch webhook receiver + normalizer.
-- Generic postback endpoint (for Redtrack, Voluum, custom trackers).
-- CSV upload for batch conversion import.
-- Optional: lightweight pixel for web-only advertisers.
-- Bidder feed endpoint (batch + stream) for bid-level data.
+- AppsFlyer S2S postback receiver + normalizer implemented.
+- Adjust callback receiver + normalizer implemented.
+- Branch webhook receiver + normalizer implemented.
+- Generic postback endpoint implemented.
+- Redtrack/Voluum alias routes implemented.
+- CSV upload ingestion implemented.
+- Lightweight web conversion pixel implemented.
+- Conversion readiness endpoint + UI surfacing + strict canary gating implemented.
+- Remaining work: customer-by-customer production certification and sustained SLO checks.
 
 ### Phase 3 (2-3 weeks): BYOM model platform
 
@@ -726,14 +743,17 @@ ALSO PROVIDE:
 
 ---
 
-## 11. Evidence Anchors (v0.5 state)
+## 11. Evidence Anchors (v0.6 state)
 
 - `importers/unified_importer.py` includes explicit `rtb_quality` routing + `import_to_rtb_quality(...)`.
 - `importers/unified_importer.py` persists bidstream optional dimensions (`platform`, `environment`, `transaction_type`).
 - `services/data_health_service.py` computes optimizer-readiness checks for completeness/freshness/dimension coverage.
 - `api/routers/system.py` exposes readiness via `GET /system/data-health`.
+- `api/routers/conversions.py` exposes conversion readiness via `GET /conversions/readiness`.
+- `services/conversion_readiness.py` centralizes readiness state logic; `tests/test_conversion_readiness.py` covers state transitions.
 - `tests/test_import_foundation_contracts.py`, `tests/test_data_health_service.py`, and `tests/test_system_data_health_api.py` cover core Phase 0 behaviors.
-- `scripts/v1_canary_smoke.py` and `scripts/run_v1_canary_smoke.sh` provide operational canary checks; root `make` targets wrap execution.
+- `scripts/v1_canary_smoke.py` and `scripts/run_v1_canary_smoke.sh` provide operational canary checks (including strict conversion-readiness/pixel gates); root `make` targets wrap execution.
+- `Makefile` provides `v1-conversion-regression` and `v1-gate` for local/CI regression coverage.
 
 ---
 
