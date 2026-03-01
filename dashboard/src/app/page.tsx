@@ -205,6 +205,25 @@ function WasteAnalysisContent() {
     }, 1500);
   }, [days, postQpsLoadMetricPayload, selectedBuyerId]);
 
+  useEffect(() => {
+    return () => {
+      if (pendingApiLatencyFlushTimerRef.current !== null) {
+        window.clearTimeout(pendingApiLatencyFlushTimerRef.current);
+        pendingApiLatencyFlushTimerRef.current = null;
+      }
+      const buffered = { ...pendingApiLatencyBufferRef.current };
+      pendingApiLatencyBufferRef.current = {};
+      if (Object.keys(buffered).length === 0) return;
+      postQpsLoadMetricPayload({
+        page: "qps_home",
+        buyer_id: selectedBuyerId || null,
+        selected_days: days,
+        api_latency_ms: buffered,
+        sampled_at: new Date().toISOString(),
+      });
+    };
+  }, [days, postQpsLoadMetricPayload, selectedBuyerId]);
+
   // Fetch seats to auto-select first one if none selected
   const {
     data: seats,
