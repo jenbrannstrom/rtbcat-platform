@@ -1,8 +1,10 @@
-.PHONY: help v1-closeout-local v1-canary-smoke v1-canary-workflow v1-canary-lifecycle v1-canary-go-no-go v1-canary-conversion-ready v1-canary-pixel v1-canary-webhook-auth v1-canary-webhook-hmac v1-canary-webhook-freshness v1-canary-webhook-rate-limit v1-canary-webhook-security-status v1-canary-webhook-security v1-canary-qps-load-latency v1-canary-qps-page-slo v1-canary-qps-page-slo-strict v1-canary-safe v1-canary-balanced v1-canary-aggressive v1-conversion-regression v1-gate phase0-regression phase0-dashboard-build phase0-gate
+.PHONY: help v1-closeout-local v1-closeout-quick v1-closeout-deployed v1-canary-smoke v1-canary-workflow v1-canary-lifecycle v1-canary-go-no-go v1-canary-conversion-ready v1-canary-pixel v1-canary-webhook-auth v1-canary-webhook-hmac v1-canary-webhook-freshness v1-canary-webhook-rate-limit v1-canary-webhook-security-status v1-canary-webhook-security v1-canary-qps-load-latency v1-canary-qps-page-slo v1-canary-qps-page-slo-strict v1-canary-safe v1-canary-balanced v1-canary-aggressive v1-conversion-regression v1-gate phase0-regression phase0-dashboard-build phase0-gate
 
 help:
 	@echo "Targets:"
 	@echo "  make v1-closeout-local   # Run consolidated local closeout checks"
+	@echo "  make v1-closeout-quick   # Run quick closeout profile (no dashboard production build)"
+	@echo "  make v1-closeout-deployed # Run closeout with deployed canary gates enabled"
 	@echo "  make v1-canary-smoke     # Run canary smoke wrapper (env-driven)"
 	@echo "  make v1-canary-workflow  # Run canary with score+propose workflow gate"
 	@echo "  make v1-canary-lifecycle # Run canary with workflow + proposal lifecycle gate"
@@ -31,6 +33,12 @@ help:
 
 v1-closeout-local:
 	bash scripts/run_v1_closeout_local.sh
+
+v1-closeout-quick:
+	CATSCAN_CLOSEOUT_PROFILE=quick bash scripts/run_v1_closeout_local.sh
+
+v1-closeout-deployed:
+	CATSCAN_CLOSEOUT_RUN_DEPLOYED=1 CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED=$${CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED:-0} bash scripts/run_v1_closeout_local.sh
 
 v1-canary-smoke:
 	bash scripts/run_v1_canary_smoke.sh
