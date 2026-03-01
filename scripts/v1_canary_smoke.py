@@ -10,6 +10,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -41,6 +42,31 @@ class SmokeClient:
         params: dict[str, Any] | None = None,
         json_body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        headers, body = self.request_bytes(
+            method,
+            path,
+            params=params,
+            json_body=json_body,
+        )
+        if not body:
+            return {}
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except json.JSONDecodeError as exc:
+            raise SmokeFailure(f"{method} {path}: non-JSON response") from exc
+        if not isinstance(payload, dict):
+            raise SmokeFailure(f"{method} {path}: expected JSON object")
+        return payload
+
+    def request_bytes(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        json_body: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
+    ) -> tuple[dict[str, str], bytes]:
         url = _join_url(self.base_url, path)
         if params:
             query = urllib.parse.urlencode(
@@ -52,6 +78,8 @@ class SmokeClient:
                 url = f"{url}{join_char}{query}"
 
         headers = dict(self.default_headers)
+        if extra_headers:
+            headers.update(extra_headers)
         data = None
         if json_body is not None:
             data = json.dumps(json_body).encode("utf-8")
@@ -60,16 +88,12 @@ class SmokeClient:
         req = urllib.request.Request(url=url, data=data, headers=headers, method=method.upper())
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                raw = resp.read().decode("utf-8")
-                if not raw:
-                    return {}
-                try:
-                    payload = json.loads(raw)
-                except json.JSONDecodeError as exc:
-                    raise SmokeFailure(f"{method} {path}: non-JSON response") from exc
-                if not isinstance(payload, dict):
-                    raise SmokeFailure(f"{method} {path}: expected JSON object")
-                return payload
+                response_headers = {
+                    key.lower(): value
+                    for key, value in resp.headers.items()
+                    if key and value
+                }
+                return response_headers, resp.read()
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             raise SmokeFailure(f"{method} {path}: HTTP {exc.code} {detail[:240]}") from exc
@@ -169,6 +193,23 @@ def build_workflow_request_params(
     return params
 
 
+def build_pixel_request_params(
+    *,
+    buyer_id: str | None,
+    pixel_source_type: str,
+    pixel_event_name: str,
+    event_ts: str,
+    event_id: str,
+) -> dict[str, Any]:
+    return {
+        "buyer_id": buyer_id,
+        "source_type": pixel_source_type,
+        "event_name": pixel_event_name,
+        "event_ts": event_ts,
+        "event_id": event_id,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run v1 canary smoke checks against API.")
     parser.add_argument(
@@ -203,6 +244,33 @@ def main() -> int:
         "--allow-no-active-model",
         action="store_true",
         help="Do not fail if no active model is found.",
+    )
+    parser.add_argument(
+        "--run-pixel",
+        action="store_true",
+        help="Run lightweight conversion pixel ingestion check.",
+    )
+    parser.add_argument(
+        "--pixel-source-type",
+        default=os.getenv("CATSCAN_CANARY_PIXEL_SOURCE_TYPE", "pixel"),
+        help="Source type sent to /conversions/pixel (default: pixel).",
+    )
+    parser.add_argument(
+        "--pixel-event-name",
+        default=os.getenv("CATSCAN_CANARY_PIXEL_EVENT_NAME", "purchase"),
+        help="Event name sent to /conversions/pixel (default: purchase).",
+    )
+    parser.add_argument(
+        "--pixel-secret",
+        default=os.getenv("CATSCAN_CANARY_PIXEL_SECRET")
+        or os.getenv("CATSCAN_GENERIC_CONVERSION_WEBHOOK_SECRET"),
+        help="Optional secret for /conversions/pixel (X-Webhook-Secret header).",
+    )
+    parser.add_argument(
+        "--pixel-expected-status",
+        choices=("accepted", "rejected"),
+        default=os.getenv("CATSCAN_CANARY_PIXEL_EXPECTED_STATUS", "accepted"),
+        help="Expected X-CatScan-Conversion-Status for pixel check (default: accepted).",
     )
     default_workflow_profile = (
         os.getenv("CATSCAN_CANARY_WORKFLOW_PROFILE")
@@ -291,6 +359,39 @@ def main() -> int:
         )
         _assert("accepted_total" in payload, "accepted_total missing from /conversions/ingestion/stats")
         _assert("rejected_total" in payload, "rejected_total missing from /conversions/ingestion/stats")
+
+    def check_conversion_pixel() -> None:
+        if not args.run_pixel:
+            return
+        event_ts = datetime.now(timezone.utc).isoformat()
+        event_id = f"canary-pixel-{int(datetime.now(timezone.utc).timestamp())}"
+        params = build_pixel_request_params(
+            buyer_id=args.buyer_id,
+            pixel_source_type=args.pixel_source_type,
+            pixel_event_name=args.pixel_event_name,
+            event_ts=event_ts,
+            event_id=event_id,
+        )
+        headers = {"X-Webhook-Secret": args.pixel_secret} if args.pixel_secret else None
+        response_headers, body = client.request_bytes(
+            "GET",
+            "/conversions/pixel",
+            params=params,
+            extra_headers=headers,
+        )
+        content_type = str(response_headers.get("content-type", "")).lower()
+        _assert(content_type.startswith("image/gif"), "pixel response content-type is not image/gif")
+        status_value = str(response_headers.get("x-catscan-conversion-status", "")).lower()
+        _assert(
+            status_value == args.pixel_expected_status,
+            (
+                "pixel conversion status header mismatch: "
+                f"expected {args.pixel_expected_status!r}, got {status_value!r}"
+            ),
+        )
+        _assert(body.startswith(b"GIF8"), "pixel response is not GIF bytes")
+        cache_control = str(response_headers.get("cache-control", "")).lower()
+        _assert("no-store" in cache_control, "pixel response missing no-store cache-control")
 
     def check_optimizer_economics() -> None:
         payload = client.request(
@@ -429,6 +530,7 @@ def main() -> int:
         ("Data health", check_data_health),
         ("Conversion health", check_conversion_health),
         ("Conversion ingestion stats", check_conversion_stats),
+        ("Conversion pixel (optional)", check_conversion_pixel),
         ("Optimizer economics", check_optimizer_economics),
         ("Optimizer models", check_models_and_resolve),
         ("Model endpoint validation", check_model_validation),

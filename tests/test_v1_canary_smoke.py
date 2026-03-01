@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.v1_canary_smoke import SmokeFailure, build_workflow_request_params, validate_data_health_payload
+from scripts.v1_canary_smoke import (
+    SmokeFailure,
+    build_pixel_request_params,
+    build_workflow_request_params,
+    validate_data_health_payload,
+)
 
 
 def _base_payload() -> dict:
@@ -101,3 +106,28 @@ def test_build_workflow_request_params_omits_profile_when_missing():
     )
     assert "profile" not in params
     assert params["buyer_id"] is None
+
+
+def test_build_pixel_request_params_includes_buyer_id_when_present():
+    params = build_pixel_request_params(
+        buyer_id="buyer-1",
+        pixel_source_type="pixel",
+        pixel_event_name="purchase",
+        event_ts="2026-03-01T00:00:00+00:00",
+        event_id="evt-1",
+    )
+    assert params["buyer_id"] == "buyer-1"
+    assert params["source_type"] == "pixel"
+    assert params["event_name"] == "purchase"
+
+
+def test_build_pixel_request_params_allows_missing_buyer_id():
+    params = build_pixel_request_params(
+        buyer_id=None,
+        pixel_source_type="pixel",
+        pixel_event_name="purchase",
+        event_ts="2026-03-01T00:00:00+00:00",
+        event_id="evt-1",
+    )
+    assert params["buyer_id"] is None
+    assert params["event_id"] == "evt-1"

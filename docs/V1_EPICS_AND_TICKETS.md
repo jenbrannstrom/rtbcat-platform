@@ -62,6 +62,7 @@
 - `QA-004` started (workflow depth slice): root `make` now exposes `v1-canary-safe|balanced|aggressive` targets for one-command preset execution.
 - `QA-004` started (workflow depth slice): canary workflow defaults are now aligned with System UI balanced preset values (days=14, score_limit=1000, proposal_limit=200, min_confidence=0.3, max_delta=0.3).
 - `QA-004` started (workflow depth slice): canary CLI/wrapper now forwards optional workflow `profile` to `/optimizer/workflows/score-and-propose` while still sending explicit guardrail params as deterministic overrides.
+- `QA-004` started (connector coverage slice): canary smoke supports optional conversion pixel gate (`--run-pixel` / `CATSCAN_CANARY_RUN_PIXEL=1`) that validates GIF response + conversion status header for `/conversions/pixel`.
 - `QA-004` started (ops hardening slice): `make phase0-gate` now runs reliably in restricted environments by building dashboard with webpack mode (`npm --prefix dashboard run build -- --webpack`), avoiding Turbopack sandbox port-binding failures.
 
 ---
