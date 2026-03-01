@@ -1,7 +1,7 @@
 # V1 Plan Closeout Matrix
 
-**Last updated:** 2026-03-01 19:25:30 UTC  
-**Branch checkpoint:** `unified-platform` @ `7ee55f1`
+**Last updated:** 2026-03-01 19:38:37 UTC  
+**Branch checkpoint:** `unified-platform` @ `6d18d4e`
 
 ## Status Legend
 
@@ -14,6 +14,7 @@
 1. `make v1-closeout-local` (new consolidated local closeout runner)
    - includes `v1-gate`, Phase 4 targeted suites, BYOM service suites, optimizer syntax compile checks
    - result: passed
+   - latest artifact report: `/tmp/v1_closeout_last_run.md`
 2. `make v1-gate` (latest rerun after blocked-exit handling update)
    - `phase0-regression`: `29 passed, 1 skipped`
    - dashboard production build (`webpack`): passed
@@ -60,5 +61,6 @@ Implementation is largely complete across Phases 0-4, but final plan closure req
 ## Closeout Runner Notes
 
 - `make v1-closeout-local` runs all non-env-blocked checks.
+- It writes a structured report to `/tmp/v1_closeout_last_run.md` by default (`CATSCAN_CLOSEOUT_REPORT_PATH` overrides).
 - For deployed gates: set `CATSCAN_CLOSEOUT_RUN_DEPLOYED=1`.
 - If running from a restricted environment, keep `CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED=1` so deployed canary exit code `2` is recorded as `Blocked (Env)` instead of hard-failing local closeout runs.
