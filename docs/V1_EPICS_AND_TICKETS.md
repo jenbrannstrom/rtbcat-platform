@@ -55,6 +55,7 @@
 - `E4-005` started (startup critical-path slice): `/analytics/rtb-funnel` is now fetched only after table hydration (instead of startup) so buyer-filter messaging remains available without delaying first-row/table readiness.
 - `E4-005` started (render-cost slice): QPS Home now progressively renders pretargeting rows (first 60, then full list on next tick) to reduce initial DOM hydration work for large config sets.
 - `E4-005` started (render-cost slice): QPS Home now memoizes config transformation/sorting to avoid repeated list recomputation on unrelated rerenders.
+- `E4-005` started (telemetry accuracy slice): QPS Home page-load telemetry now resets per buyer/day load cycle (new start mark + cleared latencies + fresh hydration post), preventing stale long-session timings from polluting SLO samples.
 - `E4-002` started (backend slice): optimizer setup API now supports persisted monthly hosting cost under `/settings/optimizer/setup` for effective-CPM context and setup-flow readiness.
 - `E4-002` started (frontend slice): Optimizer Control Plane now includes monthly hosting cost save controls wired to `/settings/optimizer/setup` with effective-CPM enabled/disabled state feedback, one-click active-model endpoint validation, and model lifecycle controls (create/update + activate/deactivate + select).
 - `E4-002` started (frontend slice): endpoint validation now supports optional custom JSON payload input in System Settings for contract checks against realistic model request bodies.

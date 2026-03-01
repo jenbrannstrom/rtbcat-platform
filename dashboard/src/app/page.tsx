@@ -102,8 +102,8 @@ function WasteAnalysisContent() {
 
   const initialDays = parseInt(searchParams.get("days") || "7", 10);
   const [days, setDays] = useState<number>(initialDays);
-  const [dashboardLoadStartedAt] = useState<number>(() => Date.now());
-  const perfMarkPrefixRef = useRef<string>(`catscan:qps:${dashboardLoadStartedAt}`);
+  const loadCycleStartedAtRef = useRef<number>(Date.now());
+  const perfMarkPrefixRef = useRef<string>(`catscan:qps:${loadCycleStartedAtRef.current}`);
   const firstTableRowMsRef = useRef<number | null>(null);
   const tableHydratedMsRef = useRef<number | null>(null);
   const startupApiLatencyMsRef = useRef<Record<string, number>>({});
@@ -119,7 +119,7 @@ function WasteAnalysisContent() {
   const writeQpsLoadMetricsSnapshot = useCallback((): QpsPageLoadMetricsSnapshot | null => {
     if (typeof window === "undefined") return null;
     const snapshot: QpsPageLoadMetricsSnapshot = {
-      started_at_iso: new Date(dashboardLoadStartedAt).toISOString(),
+      started_at_iso: new Date(loadCycleStartedAtRef.current).toISOString(),
       buyer_id: selectedBuyerId || null,
       days,
       time_to_first_table_row_ms: firstTableRowMsRef.current,
@@ -128,7 +128,7 @@ function WasteAnalysisContent() {
     };
     window.__CATSCAN_QPS_LOAD_METRICS = snapshot;
     return snapshot;
-  }, [dashboardLoadStartedAt, days, selectedBuyerId]);
+  }, [days, selectedBuyerId]);
 
   const postQpsLoadMetricPayload = useCallback((payload: QpsPageLoadMetricPostPayload) => {
     const body = JSON.stringify(payload);
@@ -329,7 +329,7 @@ function WasteAnalysisContent() {
     refetchOnReconnect: true,
     refetchInterval: (query) => {
       if (!seatReady) return false;
-      if (Date.now() - dashboardLoadStartedAt > 120_000) return false;
+      if (Date.now() - loadCycleStartedAtRef.current > 120_000) return false;
       if (query.state.status === "error") return 5000;
       const rows = query.state.data as PretargetingConfigResponse[] | undefined;
       if (Array.isArray(rows) && rows.length === 0) return 8000;
@@ -354,7 +354,7 @@ function WasteAnalysisContent() {
     refetchOnReconnect: true,
     refetchInterval: (query) => {
       if (!seatReady) return false;
-      if (Date.now() - dashboardLoadStartedAt > 120_000) return false;
+      if (Date.now() - loadCycleStartedAtRef.current > 120_000) return false;
       if (query.state.status === "error") return 5000;
       return false;
     },
@@ -464,18 +464,23 @@ function WasteAnalysisContent() {
   }, [refetchFunnel, seatReady, tableHydrated, selectedBuyerId, days]);
 
   useEffect(() => {
+    const startedAtMs = Date.now();
+    loadCycleStartedAtRef.current = startedAtMs;
+    perfMarkPrefixRef.current = `catscan:qps:${startedAtMs}`;
+    firstTableRowMsRef.current = null;
+    tableHydratedMsRef.current = null;
+    startupApiLatencyMsRef.current = {};
+    qpsLoadMetricsPostedRef.current = false;
+    if (typeof window !== "undefined" && window.performance?.mark) {
+      const startMark = `${perfMarkPrefixRef.current}:navigation-start`;
+      window.performance.mark(startMark);
+    }
     writeQpsLoadMetricsSnapshot();
-  }, [writeQpsLoadMetricsSnapshot]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.performance?.mark) return;
-    const startMark = `${perfMarkPrefixRef.current}:navigation-start`;
-    window.performance.mark(startMark);
-  }, []);
+  }, [days, selectedBuyerId, writeQpsLoadMetricsSnapshot]);
 
   useEffect(() => {
     if (!hasTableRows || firstTableRowMsRef.current !== null) return;
-    const elapsedMs = Math.max(0, Date.now() - dashboardLoadStartedAt);
+    const elapsedMs = Math.max(0, Date.now() - loadCycleStartedAtRef.current);
     firstTableRowMsRef.current = elapsedMs;
     if (typeof window !== "undefined" && window.performance?.mark && window.performance?.measure) {
       try {
@@ -489,11 +494,11 @@ function WasteAnalysisContent() {
       }
     }
     writeQpsLoadMetricsSnapshot();
-  }, [dashboardLoadStartedAt, hasTableRows, writeQpsLoadMetricsSnapshot]);
+  }, [hasTableRows, writeQpsLoadMetricsSnapshot]);
 
   useEffect(() => {
     if (!tableHydrated || tableHydratedMsRef.current !== null) return;
-    const elapsedMs = Math.max(0, Date.now() - dashboardLoadStartedAt);
+    const elapsedMs = Math.max(0, Date.now() - loadCycleStartedAtRef.current);
     tableHydratedMsRef.current = elapsedMs;
     if (typeof window !== "undefined" && window.performance?.mark && window.performance?.measure) {
       try {
@@ -508,7 +513,7 @@ function WasteAnalysisContent() {
     }
     const snapshot = writeQpsLoadMetricsSnapshot();
     submitQpsLoadMetrics(snapshot);
-  }, [dashboardLoadStartedAt, submitQpsLoadMetrics, tableHydrated, writeQpsLoadMetricsSnapshot]);
+  }, [submitQpsLoadMetrics, tableHydrated, writeQpsLoadMetricsSnapshot]);
 
   // Observed QPS by endpoint for endpoints header
   const coverage = endpointEfficiency?.data_coverage;
