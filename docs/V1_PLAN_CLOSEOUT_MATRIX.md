@@ -1,7 +1,19 @@
 # V1 Plan Closeout Matrix
 
-**Last updated:** 2026-03-01 20:12:00 UTC  
+**Last updated:** 2026-03-01 20:16:39 UTC  
 **Branch checkpoint:** `unified-platform` (rolling checkpoint)
+
+## CI Status & Report Links
+
+[![v1 Closeout Quick](https://github.com/jenbrannstrom/rtbcat-platform/actions/workflows/v1-closeout-quick.yml/badge.svg?branch=unified-platform)](https://github.com/jenbrannstrom/rtbcat-platform/actions/workflows/v1-closeout-quick.yml)
+[![v1 Closeout Deployed](https://github.com/jenbrannstrom/rtbcat-platform/actions/workflows/v1-closeout-deployed.yml/badge.svg)](https://github.com/jenbrannstrom/rtbcat-platform/actions/workflows/v1-closeout-deployed.yml)
+[![v1 BYOM API Regression](https://github.com/jenbrannstrom/rtbcat-platform/actions/workflows/v1-byom-api-regression.yml/badge.svg?branch=unified-platform)](https://github.com/jenbrannstrom/rtbcat-platform/actions/workflows/v1-byom-api-regression.yml)
+
+Latest workflow/report entry points:
+
+1. Quick closeout runs + artifacts: `https://github.com/jenbrannstrom/rtbcat-platform/actions/workflows/v1-closeout-quick.yml`
+2. Deployed closeout dispatch + artifacts: `https://github.com/jenbrannstrom/rtbcat-platform/actions/workflows/v1-closeout-deployed.yml`
+3. BYOM API/e2e regression runs: `https://github.com/jenbrannstrom/rtbcat-platform/actions/workflows/v1-byom-api-regression.yml`
 
 ## Status Legend
 

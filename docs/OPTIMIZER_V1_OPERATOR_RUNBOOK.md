@@ -113,3 +113,50 @@ make v1-canary-webhook-security
 3. Treat high rejected conversion postbacks as a data-quality incident.
 4. If model validation is intermittent, pause applies and fallback to rules model.
 5. Use `GET /conversions/pixel` only for lightweight web-event instrumentation; treat repeated pixel rejections as connector incidents and inspect DLQ.
+
+## 7. CI-Driven Closeout (GitHub Actions)
+
+### 7.1 Required repository secrets
+
+At least one of these must be configured for deployed canary auth:
+
+1. `CATSCAN_CANARY_BEARER_TOKEN`
+2. `CATSCAN_CANARY_SESSION_COOKIE`
+
+### 7.2 Manual deployed closeout workflow
+
+Workflow: `.github/workflows/v1-closeout-deployed.yml`
+
+Dispatch inputs:
+
+1. `api_base_url` (required, default `https://scan.rtb.cat/api`)
+2. `buyer_id` (optional)
+3. `model_id` (optional)
+4. `canary_profile` (`safe|balanced|aggressive`, default `balanced`)
+5. `qps_page_slo_since_hours` (required, default `24`)
+6. `allow_blocked` (`true|false`, default `false`)
+
+Recommended production dispatch values:
+
+1. `canary_profile=balanced`
+2. `qps_page_slo_since_hours=24`
+3. `allow_blocked=false`
+
+Recommended staging/restricted-network dispatch values:
+
+1. `allow_blocked=true` (records blocked checks instead of hard-failing)
+
+### 7.3 Workflow outputs and evidence
+
+1. Job summary: rendered from `/tmp/v1_closeout_last_run.json`.
+2. Artifact name: `v1-closeout-deployed-report`.
+3. Artifact files:
+   - `/tmp/v1_closeout_last_run.md`
+   - `/tmp/v1_closeout_last_run.json`
+
+### 7.4 Related CI workflows
+
+1. `.github/workflows/v1-closeout-quick.yml`:
+   - push/PR quick profile gate for core closeout checks.
+2. `.github/workflows/v1-byom-api-regression.yml`:
+   - push/PR BYOM optimizer API/e2e regression in dependency-provisioned runner.
