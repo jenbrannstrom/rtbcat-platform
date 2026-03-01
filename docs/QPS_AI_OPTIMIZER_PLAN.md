@@ -757,7 +757,7 @@ ALSO PROVIDE:
   - aligned frontend summary client with backend rollup controls by wiring `api_rollup_limit` in `/system/ui-metrics/page-load/summary` requests.
   - extended QPS telemetry capture into post-expansion dependent calls by measuring `/settings/pretargeting/:billing_id/detail`, `/settings/pretargeting/history`, and `/settings/pretargeting/snapshots`, and persistently posting those API latency samples after initial page hydration.
   - removed `/analytics/rtb-funnel` from startup critical path by deferring it until after pretargeting table hydration, preserving buyer-filter messaging without blocking first table readiness.
-  - added progressive pretargeting list rendering (first 60 rows, then full list on next tick) to cut initial DOM work on large buyer seats.
+  - upgraded pretargeting list rendering to chunked infinite loading (first 60 rows, then +120 rows as scroll approaches sentinel) to keep DOM/render cost bounded on very large buyer seats.
   - memoized QPS Home config transformation/sort pipeline to reduce repeated CPU work during rerenders on large config lists.
   - fixed QPS telemetry cycle resets so buyer/day context changes start a fresh measurement window (new start mark, cleared latencies, fresh first-row/hydrated sample post), improving persisted SLO sample accuracy.
   - introduced optimistic seat readiness (fire buyer-scoped queries while seat list is still loading) with 403-aware retry suppression, reducing startup wait for users with valid cached buyer context while avoiding stale-seat retry storms.
