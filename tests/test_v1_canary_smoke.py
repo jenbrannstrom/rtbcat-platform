@@ -7,6 +7,8 @@ import pytest
 
 from scripts.v1_canary_smoke import (
     SmokeFailure,
+    SmokeEnvironmentBlocked,
+    SmokeClient,
     build_conversion_readiness_params,
     build_qps_load_latency_requests,
     build_qps_page_slo_params,
@@ -285,3 +287,16 @@ def test_is_network_blocked_urlerror_detects_operation_not_permitted():
 def test_is_network_blocked_urlerror_ignores_connection_refused():
     exc = urllib.error.URLError(OSError(111, "Connection refused"))
     assert is_network_blocked_urlerror(exc) is False
+
+
+def test_smoke_client_raises_environment_blocked_for_permission_denied_urlerror(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def _raise_url_error(*_args, **_kwargs):
+        raise urllib.error.URLError(OSError(1, "Operation not permitted"))
+
+    monkeypatch.setattr("scripts.v1_canary_smoke.urllib.request.urlopen", _raise_url_error)
+    client = SmokeClient(base_url="http://127.0.0.1:8000", token=None, cookie=None, timeout=1.0)
+
+    with pytest.raises(SmokeEnvironmentBlocked, match="outbound network blocked"):
+        client.request("GET", "/health")
