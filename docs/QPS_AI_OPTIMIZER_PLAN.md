@@ -764,6 +764,7 @@ ALSO PROVIDE:
   - increased cold-path bootstrap->full hydration deferral window (longer idle timeout/fallback delay when using `summary_only`) so uncached first-load interaction/table rendering takes priority before full-row background hydration starts.
   - removed startup geo-name lookup fan-out by resolving pretargeting geo ID names only for the expanded row (collapsed rows render IDs directly), preventing dozens of concurrent `/geo-names` requests during initial table render.
   - tuned cold-start render budget to mount fewer pretargeting rows initially (40 vs 60 warm), reducing first-hydration DOM work while preserving warm/repeat row density and infinite-load behavior.
+  - further tuned cold-start render budget to mount 30 pretargeting rows initially (warm/repeat remains 60), trimming uncached first-load DOM hydration cost again while preserving chunked infinite-load behavior.
   - added short TTL in-process caching for bidder-scoped `list_configs` reads in `PretargetingService` with explicit invalidation on config/name/state updates, reducing repeated reload latency for `/settings/pretargeting`.
   - added short TTL in-process caching for `PretargetingService.get_config` (billing_id scoped) with invalidation on config/name/state writes, reducing repeated expanded-row/detail-path config reads.
   - added short TTL in-process caching for `PretargetingService.list_history` (keyed by config/billing/day/limit) with invalidation on `add_history`, reducing repeated expanded-row history query latency for `/settings/pretargeting/history`.
