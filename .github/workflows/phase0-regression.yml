@@ -1,4 +1,4 @@
-name: Phase 0 Regression Gate
+name: v1 Regression Gate
 
 on:
   pull_request:
@@ -27,15 +27,15 @@ on:
       - ".github/workflows/phase0-regression.yml"
 
 concurrency:
-  group: phase0-regression-${{ github.ref }}
+  group: v1-regression-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  phase0-regression:
-    name: Run Phase 0 Regression Suite
+  v1-regression:
+    name: Run v1 Regression Suite
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -60,8 +60,8 @@ jobs:
       - name: Install dashboard dependencies
         run: npm --prefix dashboard ci
 
-      - name: Run Phase 0 gate
-        run: make phase0-gate
+      - name: Run v1 gate
+        run: make v1-gate
 
       - name: Canary CLI sanity
         run: |
