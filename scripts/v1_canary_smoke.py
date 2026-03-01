@@ -27,6 +27,16 @@ def _join_url(base_url: str, path: str) -> str:
     return f"{base}{suffix}"
 
 
+def is_network_blocked_urlerror(exc: urllib.error.URLError) -> bool:
+    """Best-effort detection for sandbox/network-policy blocking errors."""
+    reason = exc.reason
+    errno = getattr(reason, "errno", None)
+    if errno in {1, 13}:
+        return True
+    text = f"{exc} {reason}".lower()
+    return "operation not permitted" in text or "permission denied" in text
+
+
 class SmokeClient:
     def __init__(self, *, base_url: str, token: str | None, cookie: str | None, timeout: float):
         self.base_url = base_url
@@ -126,6 +136,8 @@ class SmokeClient:
             }
             return int(exc.code), response_headers, exc.read()
         except urllib.error.URLError as exc:
+            if is_network_blocked_urlerror(exc):
+                raise SmokeFailure(f"{method} {path}: outbound network blocked ({exc})") from exc
             raise SmokeFailure(f"{method} {path}: {exc}") from exc
 
 
@@ -1334,8 +1346,16 @@ def main() -> int:
         )
         _assert(payload.get("dry_run") is True, "rollback dry-run did not return dry_run=true")
 
+    # Fail fast on API reachability/health so blocked-network runs do not emit
+    # a long list of derivative endpoint failures.
+    initial_ok, initial_line = _run_check("API health", check_health)
+    print(initial_line)
+    results.append((initial_ok, initial_line))
+    if not initial_ok:
+        print("\nSmoke checks failed: 1")
+        return 1
+
     checks = [
-        ("API health", check_health),
         ("Data health", check_data_health),
         ("Conversion health", check_conversion_health),
         ("Conversion readiness", check_conversion_readiness),

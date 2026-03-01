@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import urllib.error
 import pytest
 
 from scripts.v1_canary_smoke import (
@@ -14,6 +15,7 @@ from scripts.v1_canary_smoke import (
     build_pixel_request_params,
     build_webhook_postback_payload,
     build_workflow_request_params,
+    is_network_blocked_urlerror,
     validate_data_health_payload,
 )
 
@@ -273,3 +275,13 @@ def test_build_webhook_security_headers_can_force_invalid_signature():
     assert headers["X-Webhook-Secret"] == "secret-1"
     assert headers["X-Webhook-Timestamp"] == "1709251200"
     assert headers["X-Signature"] == "sha256=invalid-signature"
+
+
+def test_is_network_blocked_urlerror_detects_operation_not_permitted():
+    exc = urllib.error.URLError(OSError(1, "Operation not permitted"))
+    assert is_network_blocked_urlerror(exc) is True
+
+
+def test_is_network_blocked_urlerror_ignores_connection_refused():
+    exc = urllib.error.URLError(OSError(111, "Connection refused"))
+    assert is_network_blocked_urlerror(exc) is False
