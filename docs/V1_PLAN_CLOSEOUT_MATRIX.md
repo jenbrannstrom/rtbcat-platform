@@ -68,8 +68,9 @@ Implementation is largely complete across Phases 0-4, but final plan closure req
 ## Closeout Runner Notes
 
 - `make v1-closeout-local` runs all non-env-blocked checks.
-- convenience targets: `make v1-closeout-quick` (quick profile), `make v1-closeout-deployed` (full/quick + deployed canary gates), and `make v1-closeout-deployed-only` (deployed canary gates only).
+- convenience targets: `make v1-closeout-quick` (quick profile), `make v1-closeout-deployed` (full/quick + deployed canary gates), `make v1-closeout-deployed-only` (deployed canary gates only), and `make v1-closeout-summary` (render latest JSON report as markdown).
 - Profiles: `CATSCAN_CLOSEOUT_PROFILE=full|quick|deployed_only` (`full` includes dashboard production build via `v1-gate`; `quick` skips build and runs regression suites only; `deployed_only` skips local suites and runs network canary gates).
 - It writes structured reports to `/tmp/v1_closeout_last_run.md` and `/tmp/v1_closeout_last_run.json` by default (`CATSCAN_CLOSEOUT_REPORT_PATH` and `CATSCAN_CLOSEOUT_REPORT_JSON_PATH` override).
+- Summary rendering helper (`scripts/render_v1_closeout_summary.py`) can print to stdout or append to `CATSCAN_CLOSEOUT_SUMMARY_PATH`.
 - For deployed gates: set `CATSCAN_CLOSEOUT_RUN_DEPLOYED=1`.
 - If running from a restricted environment, keep `CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED=1` so deployed canary exit code `2` is recorded as `Blocked (Env)` instead of hard-failing local closeout runs.

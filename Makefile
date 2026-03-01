@@ -1,4 +1,4 @@
-.PHONY: help v1-closeout-local v1-closeout-quick v1-closeout-deployed v1-closeout-deployed-only v1-byom-api-regression v1-canary-smoke v1-canary-workflow v1-canary-lifecycle v1-canary-go-no-go v1-canary-conversion-ready v1-canary-pixel v1-canary-webhook-auth v1-canary-webhook-hmac v1-canary-webhook-freshness v1-canary-webhook-rate-limit v1-canary-webhook-security-status v1-canary-webhook-security v1-canary-qps-load-latency v1-canary-qps-page-slo v1-canary-qps-page-slo-strict v1-canary-safe v1-canary-balanced v1-canary-aggressive v1-conversion-regression v1-gate phase0-regression phase0-dashboard-build phase0-gate
+.PHONY: help v1-closeout-local v1-closeout-quick v1-closeout-deployed v1-closeout-deployed-only v1-closeout-summary v1-byom-api-regression v1-canary-smoke v1-canary-workflow v1-canary-lifecycle v1-canary-go-no-go v1-canary-conversion-ready v1-canary-pixel v1-canary-webhook-auth v1-canary-webhook-hmac v1-canary-webhook-freshness v1-canary-webhook-rate-limit v1-canary-webhook-security-status v1-canary-webhook-security v1-canary-qps-load-latency v1-canary-qps-page-slo v1-canary-qps-page-slo-strict v1-canary-safe v1-canary-balanced v1-canary-aggressive v1-conversion-regression v1-gate phase0-regression phase0-dashboard-build phase0-gate
 
 help:
 	@echo "Targets:"
@@ -6,6 +6,7 @@ help:
 	@echo "  make v1-closeout-quick   # Run quick closeout profile (no dashboard production build)"
 	@echo "  make v1-closeout-deployed # Run closeout with deployed canary gates enabled"
 	@echo "  make v1-closeout-deployed-only # Run deployed canary gates only (skip local suites)"
+	@echo "  make v1-closeout-summary # Render latest closeout JSON report as markdown"
 	@echo "  make v1-byom-api-regression # Run BYOM optimizer API/e2e regression suite"
 	@echo "  make v1-canary-smoke     # Run canary smoke wrapper (env-driven)"
 	@echo "  make v1-canary-workflow  # Run canary with score+propose workflow gate"
@@ -31,7 +32,7 @@ help:
 	@echo "  make phase0-dashboard-build  # Build dashboard production bundle"
 	@echo "  make phase0-gate         # Run regression tests + dashboard build"
 	@echo "Env presets: CATSCAN_CANARY_PROFILE=safe|balanced|aggressive, CATSCAN_CANARY_RUN_PIXEL=1, CATSCAN_CANARY_REQUIRE_CONVERSION_READY=1, CATSCAN_CANARY_RUN_WEBHOOK_AUTH=1, CATSCAN_CANARY_RUN_WEBHOOK_HMAC=1"
-	@echo "Closeout env: CATSCAN_CLOSEOUT_PROFILE=full|quick|deployed_only, CATSCAN_CLOSEOUT_RUN_DEPLOYED=1 (also run deployed canaries), CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED=1 (treat exit 2 as blocked), CATSCAN_CLOSEOUT_REPORT_PATH=/tmp/v1_closeout_last_run.md, CATSCAN_CLOSEOUT_REPORT_JSON_PATH=/tmp/v1_closeout_last_run.json"
+	@echo "Closeout env: CATSCAN_CLOSEOUT_PROFILE=full|quick|deployed_only, CATSCAN_CLOSEOUT_RUN_DEPLOYED=1 (also run deployed canaries), CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED=1 (treat exit 2 as blocked), CATSCAN_CLOSEOUT_REPORT_PATH=/tmp/v1_closeout_last_run.md, CATSCAN_CLOSEOUT_REPORT_JSON_PATH=/tmp/v1_closeout_last_run.json, CATSCAN_CLOSEOUT_SUMMARY_PATH=/tmp/v1_closeout_summary.md"
 
 v1-closeout-local:
 	bash scripts/run_v1_closeout_local.sh
@@ -44,6 +45,12 @@ v1-closeout-deployed:
 
 v1-closeout-deployed-only:
 	CATSCAN_CLOSEOUT_PROFILE=deployed_only CATSCAN_CLOSEOUT_RUN_DEPLOYED=1 CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED=$${CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED:-0} bash scripts/run_v1_closeout_local.sh
+
+v1-closeout-summary:
+	python3 scripts/render_v1_closeout_summary.py \
+	  --title "$${CATSCAN_CLOSEOUT_SUMMARY_TITLE:-V1 Closeout Report}" \
+	  --report-json "$${CATSCAN_CLOSEOUT_REPORT_JSON_PATH:-/tmp/v1_closeout_last_run.json}" \
+	  --summary-path "$${CATSCAN_CLOSEOUT_SUMMARY_PATH:-}"
 
 v1-byom-api-regression:
 	pytest -q \
