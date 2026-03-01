@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import copy
 import json
+import time
 from typing import Any
 
 from storage.postgres_repositories.comparisons_repo import ComparisonsRepository
@@ -13,6 +15,10 @@ from storage.postgres_repositories.snapshots_repo import SnapshotsRepository
 
 class SnapshotsService:
     """Service layer for snapshot and comparison workflows."""
+
+    _LIST_CACHE_TTL_SECONDS = 15.0
+    _SNAPSHOTS_LIST_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+    _COMPARISONS_LIST_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
     def __init__(
         self,
@@ -25,6 +31,57 @@ class SnapshotsService:
         self._pretargeting = pretargeting_repo or PretargetingRepository()
         self._performance = performance_repo or PerformanceRepository()
         self._comparisons = comparisons_repo or ComparisonsRepository()
+
+    @classmethod
+    def clear_caches(cls) -> None:
+        cls._SNAPSHOTS_LIST_CACHE.clear()
+        cls._COMPARISONS_LIST_CACHE.clear()
+
+    @staticmethod
+    def _snapshots_list_cache_key(
+        billing_id: str | None,
+        limit: int,
+    ) -> str:
+        return f"billing:{billing_id or '__all__'}:limit:{limit}"
+
+    @staticmethod
+    def _comparisons_list_cache_key(
+        billing_id: str | None,
+        status: str | None,
+        limit: int,
+    ) -> str:
+        return (
+            f"billing:{billing_id or '__all__'}:"
+            f"status:{status or '__all__'}:"
+            f"limit:{limit}"
+        )
+
+    @classmethod
+    def _read_cached_rows(
+        cls,
+        cache: dict[str, tuple[float, list[dict[str, Any]]]],
+        key: str,
+    ) -> list[dict[str, Any]] | None:
+        cached = cache.get(key)
+        if not cached:
+            return None
+        expires_at, rows = cached
+        if expires_at <= time.monotonic():
+            cache.pop(key, None)
+            return None
+        return copy.deepcopy(rows)
+
+    @classmethod
+    def _write_cached_rows(
+        cls,
+        cache: dict[str, tuple[float, list[dict[str, Any]]]],
+        key: str,
+        rows: list[dict[str, Any]],
+    ) -> None:
+        cache[key] = (
+            time.monotonic() + cls._LIST_CACHE_TTL_SECONDS,
+            copy.deepcopy(rows),
+        )
 
     async def create_snapshot(
         self,
@@ -91,6 +148,7 @@ class SnapshotsService:
         snapshot = await self._snapshots.get_snapshot(snapshot_id)
         if not snapshot:
             raise ValueError("Failed to create snapshot")
+        self._SNAPSHOTS_LIST_CACHE.clear()
         return snapshot
 
     async def list_snapshots(
@@ -98,10 +156,17 @@ class SnapshotsService:
         billing_id: str | None = None,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        return await self._snapshots.list_snapshots(
+        cache_key = self._snapshots_list_cache_key(billing_id, limit)
+        cached = self._read_cached_rows(self._SNAPSHOTS_LIST_CACHE, cache_key)
+        if cached is not None:
+            return cached
+
+        rows = await self._snapshots.list_snapshots(
             billing_id=billing_id,
             limit=limit,
         )
+        self._write_cached_rows(self._SNAPSHOTS_LIST_CACHE, cache_key, rows)
+        return rows
 
     async def get_snapshot(self, snapshot_id: int) -> dict[str, Any] | None:
         if snapshot_id <= 0:
@@ -135,6 +200,7 @@ class SnapshotsService:
         comparison = await self._comparisons.get_comparison(comparison_id)
         if not comparison:
             raise ValueError("Failed to create comparison")
+        self._COMPARISONS_LIST_CACHE.clear()
         return comparison
 
     async def list_comparisons(
@@ -143,8 +209,19 @@ class SnapshotsService:
         status: str | None = None,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        return await self._comparisons.list_comparisons(
+        cache_key = self._comparisons_list_cache_key(
             billing_id=billing_id,
             status=status,
             limit=limit,
         )
+        cached = self._read_cached_rows(self._COMPARISONS_LIST_CACHE, cache_key)
+        if cached is not None:
+            return cached
+
+        rows = await self._comparisons.list_comparisons(
+            billing_id=billing_id,
+            status=status,
+            limit=limit,
+        )
+        self._write_cached_rows(self._COMPARISONS_LIST_CACHE, cache_key, rows)
+        return rows
