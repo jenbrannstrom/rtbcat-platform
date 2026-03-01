@@ -1,6 +1,6 @@
 # V1 Plan Closeout Matrix
 
-**Last updated:** 2026-03-01 19:16:43 UTC  
+**Last updated:** 2026-03-01 19:18:31 UTC  
 **Branch checkpoint:** `unified-platform` @ `7ee55f1`
 
 ## Status Legend
@@ -25,8 +25,8 @@
    - `pytest -q tests/test_optimizer_models_service.py tests/test_optimizer_scoring_service.py tests/test_optimizer_proposals_service.py tests/test_optimizer_economics_service.py tests/test_response_model_regressions.py`
    - result: `44 passed`
 5. Canary execution attempts (environment evidence):
-   - `make v1-canary-go-no-go` -> fails in this sandbox with outbound request errors (`Operation not permitted`).
-   - `make v1-canary-qps-page-slo-strict` -> fails in this sandbox with outbound request errors (`Operation not permitted`), including `/system/ui-metrics/page-load/summary`.
+   - `make v1-canary-go-no-go` -> fails in this sandbox with explicit reachability preflight: `API health -> outbound network blocked (Operation not permitted)`.
+   - `make v1-canary-qps-page-slo-strict` -> same environment blocker applies in this sandbox.
 6. Optimizer API/e2e test attempt:
    - target API suites skip in this environment because `fastapi` is unavailable; installing dependencies is network-blocked.
 7. Optimizer API syntax checks:
