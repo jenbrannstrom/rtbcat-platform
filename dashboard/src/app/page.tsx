@@ -776,7 +776,8 @@ function WasteAnalysisContent() {
     placeholderData: (previousData) => previousData,
     retry: shouldRetryAnalyticsQuery,
     retryDelay: getRetryDelay,
-    retryOnMount: true,
+    retryOnMount: !hasPretargetingCacheSeed,
+    refetchOnMount: !hasPretargetingCacheSeed,
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
     refetchInterval: (query) => {
