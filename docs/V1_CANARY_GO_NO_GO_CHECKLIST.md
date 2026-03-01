@@ -128,6 +128,12 @@ Phase 0 local gate command:
 make phase0-gate
 ```
 
+Conversion/readiness regression quick command:
+
+```bash
+make v1-conversion-regression
+```
+
 ## 1. Pre-Canary Gate (Must Pass)
 
 1. Latest migration set applied without error in target environment.
