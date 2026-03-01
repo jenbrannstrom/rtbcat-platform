@@ -28,6 +28,20 @@ function getRetryDelay(attemptIndex: number): number {
   return Math.min(1000 * 2 ** attemptIndex, 5000);
 }
 
+function shouldRetryAnalyticsQuery(failureCount: number, error: unknown): boolean {
+  if (failureCount >= 5) return false;
+  if (!(error instanceof Error)) return true;
+  const message = error.message.toLowerCase();
+  if (
+    message.includes("403")
+    || message.includes("forbidden")
+    || message.includes("unauthorized")
+  ) {
+    return false;
+  }
+  return true;
+}
+
 function normalizeDateString(value: string | null | undefined): string | null {
   if (!value) return null;
   return value.slice(0, 10);
@@ -246,7 +260,8 @@ function WasteAnalysisContent() {
   // Only fire analytics queries once seats have loaded AND selectedBuyerId is
   // confirmed valid.  This prevents 403 storms when the user's RBAC changed
   // but localStorage still holds the old buyer_id.
-  const seatReady = !!selectedBuyerId && !!seats && seats.some((s) => s.buyer_id === selectedBuyerId);
+  const selectedBuyerKnownValid = !!selectedBuyerId && !!seats && seats.some((s) => s.buyer_id === selectedBuyerId);
+  const seatReady = !!selectedBuyerId && (seatsLoading || selectedBuyerKnownValid);
 
   const fetchMeasuredPretargetingConfigs = useCallback(async () => {
     const startedAtMs = typeof window !== "undefined" && window.performance
@@ -323,7 +338,7 @@ function WasteAnalysisContent() {
     queryKey: ["pretargeting-configs", selectedBuyerId],
     queryFn: fetchMeasuredPretargetingConfigs,
     enabled: seatReady,
-    retry: 5,
+    retry: shouldRetryAnalyticsQuery,
     retryDelay: getRetryDelay,
     retryOnMount: true,
     refetchOnReconnect: true,
@@ -348,7 +363,7 @@ function WasteAnalysisContent() {
     queryKey: ["rtb-funnel-configs", days, selectedBuyerId],
     queryFn: fetchMeasuredConfigPerformance,
     enabled: seatReady,
-    retry: 5,
+    retry: shouldRetryAnalyticsQuery,
     retryDelay: getRetryDelay,
     retryOnMount: true,
     refetchOnReconnect: true,
