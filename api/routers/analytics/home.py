@@ -9,6 +9,7 @@ from api.dependencies import get_store, get_current_user, resolve_buyer_id
 from services.auth_service import User
 from services.home_precompute import refresh_home_summaries
 from services.home_analytics_service import HomeAnalyticsService
+from services.analytics_service import AnalyticsService
 
 logger = logging.getLogger(__name__)
 
@@ -117,4 +118,5 @@ async def refresh_home_cache(
         refresh_kwargs["days"] = days
     result = await refresh_home_summaries(**refresh_kwargs)
     HomeAnalyticsService.clear_payload_caches()
+    AnalyticsService.clear_spend_stats_cache()
     return result

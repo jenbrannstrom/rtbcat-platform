@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+import time
 from typing import Any, Optional
 
 from storage.postgres_repositories.analytics_repo import AnalyticsRepository
@@ -37,6 +38,9 @@ class SpendStats:
 class AnalyticsService:
     """Orchestrates analytics queries for common/spend endpoints."""
 
+    _SPEND_STATS_CACHE_TTL_SECONDS = 15.0
+    _SPEND_STATS_CACHE: dict[str, tuple[float, SpendStats]] = {}
+
     # Canonical <-> legacy compatibility map for staged naming rollout.
     PRECOMPUTE_TABLE_ALIASES: dict[str, str] = {
         "seat_daily": "home_seat_daily",
@@ -61,6 +65,33 @@ class AnalyticsService:
 
     def __init__(self, repo: AnalyticsRepository | None = None) -> None:
         self._repo = repo or AnalyticsRepository()
+
+    @classmethod
+    def clear_spend_stats_cache(cls) -> None:
+        cls._SPEND_STATS_CACHE.clear()
+
+    @staticmethod
+    def _spend_stats_cache_key(
+        days: int,
+        billing_id: Optional[str],
+        buyer_id: Optional[str],
+    ) -> str:
+        return f"{days}|{billing_id or '__all__'}|{buyer_id or '__all__'}"
+
+    @staticmethod
+    def _clone_spend_stats(stats: SpendStats) -> SpendStats:
+        return SpendStats(
+            period_days=stats.period_days,
+            total_impressions=stats.total_impressions,
+            total_spend_usd=stats.total_spend_usd,
+            avg_cpm_usd=stats.avg_cpm_usd,
+            has_spend_data=stats.has_spend_data,
+            precompute_status={
+                key: dict(value) if isinstance(value, dict) else value
+                for key, value in stats.precompute_status.items()
+            },
+            message=stats.message,
+        )
 
     # =========================================================================
     # Precompute Status
@@ -183,6 +214,12 @@ class AnalyticsService:
         Returns:
             SpendStats with totals and CPM calculation.
         """
+        cache_key = self._spend_stats_cache_key(days, billing_id, buyer_id)
+        now = time.monotonic()
+        cached = self._SPEND_STATS_CACHE.get(cache_key)
+        if cached and cached[0] > now:
+            return self._clone_spend_stats(cached[1])
+
         # Check precompute status first
         filters = []
         params = []
@@ -197,7 +234,7 @@ class AnalyticsService:
         )
 
         if not precompute_status.has_rows:
-            return SpendStats(
+            result = SpendStats(
                 period_days=days,
                 total_impressions=0,
                 total_spend_usd=0,
@@ -213,6 +250,11 @@ class AnalyticsService:
                     }
                 },
             )
+            self._SPEND_STATS_CACHE[cache_key] = (
+                now + self._SPEND_STATS_CACHE_TTL_SECONDS,
+                self._clone_spend_stats(result),
+            )
+            return result
 
         # Fetch spend stats based on filters
         if billing_id:
@@ -237,7 +279,7 @@ class AnalyticsService:
         if total_impressions > 0 and total_spend_micros > 0:
             avg_cpm = (total_spend_usd / total_impressions) * 1000
 
-        return SpendStats(
+        result = SpendStats(
             period_days=days,
             total_impressions=total_impressions,
             total_spend_usd=round(total_spend_usd, 2),
@@ -252,3 +294,8 @@ class AnalyticsService:
                 }
             },
         )
+        self._SPEND_STATS_CACHE[cache_key] = (
+            now + self._SPEND_STATS_CACHE_TTL_SECONDS,
+            self._clone_spend_stats(result),
+        )
+        return result
