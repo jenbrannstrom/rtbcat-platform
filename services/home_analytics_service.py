@@ -169,12 +169,10 @@ class HomeAnalyticsService:
                 self._write_cached_payload(self._FUNNEL_PAYLOAD_CACHE, funnel_cache_key, payload)
             return payload
 
-        funnel_row, publisher_rows, geo_rows, publisher_count, country_count = await asyncio.gather(
+        funnel_row, publisher_rows, geo_rows = await asyncio.gather(
             self._repo.get_funnel_row(days, buyer_id),
             self._repo.get_publisher_rows(days, buyer_id, limit),
             self._repo.get_geo_rows(days, buyer_id, limit),
-            self._repo.get_publisher_count(days, buyer_id),
-            self._repo.get_country_count(days, buyer_id),
         )
 
         total_reached = (funnel_row["total_reached"] or 0) if funnel_row else 0
@@ -233,6 +231,9 @@ class HomeAnalyticsService:
             buyer_filter_message = (
                 "No precomputed data for this seat. Run a refresh after imports."
             )
+
+        publisher_count = int((publisher_rows[0].get("total_publishers") or 0)) if publisher_rows else 0
+        country_count = int((geo_rows[0].get("total_countries") or 0)) if geo_rows else 0
 
         data_state = "healthy"
         fallback_reason = None

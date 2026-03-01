@@ -50,6 +50,7 @@ class _StubCachedHomeRepo:
                 "impressions": 50,
                 "total_bids": 130,
                 "auctions_won": 40,
+                "total_publishers": 10,
             }
         ]
 
@@ -62,6 +63,7 @@ class _StubCachedHomeRepo:
                 "impressions": 80,
                 "total_bids": 170,
                 "auctions_won": 60,
+                "total_countries": 3,
             }
         ]
 
@@ -125,6 +127,6 @@ async def test_funnel_payload_uses_ttl_cache_when_enabled(monkeypatch: pytest.Mo
     assert repo.funnel_calls == 1
     assert repo.publisher_rows_calls == 1
     assert repo.geo_rows_calls == 1
-    assert repo.publisher_count_calls == 1
-    assert repo.country_count_calls == 1
+    assert repo.publisher_count_calls == 0
+    assert repo.country_count_calls == 0
     assert second["funnel"]["total_reached_queries"] == 1000

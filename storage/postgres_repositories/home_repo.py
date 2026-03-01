@@ -55,18 +55,31 @@ class HomeAnalyticsRepository:
         params.append(limit)
         return await pg_query(
             f"""
+            WITH grouped AS (
+                SELECT
+                    publisher_id,
+                    MAX(publisher_name) AS publisher_name,
+                    SUM(reached_queries) AS reached,
+                    SUM(impressions) AS impressions,
+                    SUM(bids) AS total_bids,
+                    SUM(auctions_won) AS auctions_won,
+                    SUM(successful_responses) AS successful_responses,
+                    SUM(bid_requests) AS bid_requests
+                FROM seat_publisher_daily
+                WHERE metric_date BETWEEN %s AND %s{buyer_filter}
+                GROUP BY publisher_id
+            )
             SELECT
                 publisher_id,
-                MAX(publisher_name) as publisher_name,
-                SUM(reached_queries) as reached,
-                SUM(impressions) as impressions,
-                SUM(bids) as total_bids,
-                SUM(auctions_won) as auctions_won,
-                SUM(successful_responses) as successful_responses,
-                SUM(bid_requests) as bid_requests
-            FROM seat_publisher_daily
-            WHERE metric_date BETWEEN %s AND %s{buyer_filter}
-            GROUP BY publisher_id
+                publisher_name,
+                reached,
+                impressions,
+                total_bids,
+                auctions_won,
+                successful_responses,
+                bid_requests,
+                COUNT(*) OVER ()::int AS total_publishers
+            FROM grouped
             ORDER BY reached DESC
             LIMIT %s
             """,
@@ -83,17 +96,29 @@ class HomeAnalyticsRepository:
         params.append(limit)
         return await pg_query(
             f"""
+            WITH grouped AS (
+                SELECT
+                    country,
+                    SUM(reached_queries) AS reached,
+                    SUM(impressions) AS impressions,
+                    SUM(bids) AS total_bids,
+                    SUM(auctions_won) AS auctions_won,
+                    SUM(successful_responses) AS successful_responses,
+                    SUM(bid_requests) AS bid_requests
+                FROM seat_geo_daily
+                WHERE metric_date BETWEEN %s AND %s{buyer_filter}
+                GROUP BY country
+            )
             SELECT
                 country,
-                SUM(reached_queries) as reached,
-                SUM(impressions) as impressions,
-                SUM(bids) as total_bids,
-                SUM(auctions_won) as auctions_won,
-                SUM(successful_responses) as successful_responses,
-                SUM(bid_requests) as bid_requests
-            FROM seat_geo_daily
-            WHERE metric_date BETWEEN %s AND %s{buyer_filter}
-            GROUP BY country
+                reached,
+                impressions,
+                total_bids,
+                auctions_won,
+                successful_responses,
+                bid_requests,
+                COUNT(*) OVER ()::int AS total_countries
+            FROM grouped
             ORDER BY reached DESC
             LIMIT %s
             """,
