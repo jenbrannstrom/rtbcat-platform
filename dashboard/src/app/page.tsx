@@ -818,6 +818,10 @@ function WasteAnalysisContent() {
 
   const hasPretargetingRows = Array.isArray(pretargetingConfigs);
   const configPerformanceEnabled = seatReady && (!useSummaryBootstrap || hasPretargetingRows);
+  const configPerformanceCacheSeed = useMemo(
+    () => readConfigPerformanceCache(selectedBuyerId, days),
+    [days, selectedBuyerId]
+  );
 
   // Fetch config-level performance data (filtered by selected buyer)
   const {
@@ -831,10 +835,11 @@ function WasteAnalysisContent() {
     queryKey: ["rtb-funnel-configs", days, selectedBuyerId],
     queryFn: fetchMeasuredConfigPerformance,
     enabled: configPerformanceEnabled,
-    initialData: () => readConfigPerformanceCache(selectedBuyerId, days),
+    initialData: () => configPerformanceCacheSeed,
     retry: shouldRetryAnalyticsQuery,
     retryDelay: getRetryDelay,
-    retryOnMount: true,
+    retryOnMount: !configPerformanceCacheSeed,
+    refetchOnMount: !configPerformanceCacheSeed,
     refetchOnReconnect: true,
     refetchInterval: (query) => {
       if (!configPerformanceEnabled) return false;
@@ -843,6 +848,38 @@ function WasteAnalysisContent() {
       return false;
     },
   });
+
+  useEffect(() => {
+    if (!configPerformanceEnabled) return;
+    const hasSeed = Array.isArray(configPerformanceCacheSeed?.configs)
+      && configPerformanceCacheSeed.configs.length > 0;
+    if (!hasSeed) return;
+
+    const browserWindow = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback, opts?: IdleRequestOptions) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (
+      typeof browserWindow.requestIdleCallback === "function"
+      && typeof browserWindow.cancelIdleCallback === "function"
+    ) {
+      const idleId = browserWindow.requestIdleCallback(
+        () => void refetchConfigPerf(),
+        { timeout: DEFERRED_QUERY_REFRESH_IDLE_TIMEOUT_MS }
+      );
+      return () => browserWindow.cancelIdleCallback?.(idleId);
+    }
+    const timer = setTimeout(() => {
+      void refetchConfigPerf();
+    }, DEFERRED_QUERY_REFRESH_DELAY_MS_SEEDED);
+    return () => clearTimeout(timer);
+  }, [
+    configPerformanceCacheSeed,
+    configPerformanceEnabled,
+    days,
+    refetchConfigPerf,
+    selectedBuyerId,
+  ]);
 
   useEffect(() => {
     if (!configPerformanceFetchedAfterMount) return;
