@@ -33,6 +33,8 @@ const PRETARGETING_FULL_HYDRATION_IDLE_TIMEOUT_MS_WARM = 2000;
 const PRETARGETING_FULL_HYDRATION_IDLE_TIMEOUT_MS_COLD = 5000;
 const PRETARGETING_FULL_HYDRATION_FALLBACK_DELAY_MS_WARM = 750;
 const PRETARGETING_FULL_HYDRATION_FALLBACK_DELAY_MS_COLD = 2000;
+const DEFERRED_QUERY_REFRESH_IDLE_TIMEOUT_MS = 5000;
+const DEFERRED_QUERY_REFRESH_DELAY_MS_SEEDED = 1500;
 const INITIAL_VISIBLE_CONFIG_ROWS_WARM = 60;
 const INITIAL_VISIBLE_CONFIG_ROWS_COLD = 40;
 const CONFIG_ROWS_CHUNK_SIZE = 120;
@@ -701,6 +703,11 @@ function WasteAnalysisContent() {
     }
   }, [submitQpsApiLatencySample, writeQpsLoadMetricsSnapshot]);
 
+  const rtbFunnelCacheSeed = useMemo(
+    () => readRtbFunnelCache(selectedBuyerId, days),
+    [days, selectedBuyerId]
+  );
+
   // Fetch RTB funnel data from CSV files
   const {
     data: rtbFunnel,
@@ -710,7 +717,7 @@ function WasteAnalysisContent() {
   } = useQuery({
     queryKey: ["rtb-funnel", days, selectedBuyerId],
     queryFn: () => getRTBFunnel(days, selectedBuyerId || undefined),
-    initialData: () => readRtbFunnelCache(selectedBuyerId, days),
+    initialData: () => rtbFunnelCacheSeed,
     enabled: false,
   });
 
@@ -842,6 +849,11 @@ function WasteAnalysisContent() {
     writeConfigPerformanceCache(selectedBuyerId, days, configPerformance);
   }, [configPerformance, configPerformanceFetchedAfterMount, days, selectedBuyerId]);
 
+  const endpointEfficiencyCacheSeed = useMemo(
+    () => readEndpointEfficiencyCache(selectedBuyerId, days),
+    [days, selectedBuyerId]
+  );
+
   const {
     data: endpointEfficiency,
     isLoading: endpointEfficiencyLoading,
@@ -850,7 +862,7 @@ function WasteAnalysisContent() {
   } = useQuery({
     queryKey: ["endpoint-efficiency", days, selectedBuyerId],
     queryFn: fetchMeasuredEndpointEfficiency,
-    initialData: () => readEndpointEfficiencyCache(selectedBuyerId, days),
+    initialData: () => endpointEfficiencyCacheSeed,
     enabled: false,
   });
 
@@ -995,13 +1007,61 @@ function WasteAnalysisContent() {
 
   useEffect(() => {
     if (!deferredStartupQueriesReady) return;
-    refetchFunnel();
-  }, [deferredStartupQueriesReady, refetchFunnel, selectedBuyerId, days]);
+    if (!rtbFunnelCacheSeed) {
+      refetchFunnel();
+      return;
+    }
+    const browserWindow = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback, opts?: IdleRequestOptions) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (
+      typeof browserWindow.requestIdleCallback === "function"
+      && typeof browserWindow.cancelIdleCallback === "function"
+    ) {
+      const idleId = browserWindow.requestIdleCallback(
+        () => void refetchFunnel(),
+        { timeout: DEFERRED_QUERY_REFRESH_IDLE_TIMEOUT_MS }
+      );
+      return () => browserWindow.cancelIdleCallback?.(idleId);
+    }
+    const timer = setTimeout(() => {
+      void refetchFunnel();
+    }, DEFERRED_QUERY_REFRESH_DELAY_MS_SEEDED);
+    return () => clearTimeout(timer);
+  }, [days, deferredStartupQueriesReady, refetchFunnel, rtbFunnelCacheSeed, selectedBuyerId]);
 
   useEffect(() => {
     if (!deferredStartupQueriesReady) return;
-    refetchEndpointEfficiency();
-  }, [deferredStartupQueriesReady, refetchEndpointEfficiency, selectedBuyerId, days]);
+    if (!endpointEfficiencyCacheSeed) {
+      refetchEndpointEfficiency();
+      return;
+    }
+    const browserWindow = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback, opts?: IdleRequestOptions) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (
+      typeof browserWindow.requestIdleCallback === "function"
+      && typeof browserWindow.cancelIdleCallback === "function"
+    ) {
+      const idleId = browserWindow.requestIdleCallback(
+        () => void refetchEndpointEfficiency(),
+        { timeout: DEFERRED_QUERY_REFRESH_IDLE_TIMEOUT_MS }
+      );
+      return () => browserWindow.cancelIdleCallback?.(idleId);
+    }
+    const timer = setTimeout(() => {
+      void refetchEndpointEfficiency();
+    }, DEFERRED_QUERY_REFRESH_DELAY_MS_SEEDED);
+    return () => clearTimeout(timer);
+  }, [
+    days,
+    deferredStartupQueriesReady,
+    endpointEfficiencyCacheSeed,
+    refetchEndpointEfficiency,
+    selectedBuyerId,
+  ]);
 
   useEffect(() => {
     const startedAtMs = Date.now();
