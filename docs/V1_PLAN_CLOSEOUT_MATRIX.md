@@ -1,7 +1,7 @@
 # V1 Plan Closeout Matrix
 
-**Last updated:** 2026-03-01 19:39:54 UTC  
-**Branch checkpoint:** `unified-platform` @ `98b3a9b`
+**Last updated:** 2026-03-01 19:42:03 UTC  
+**Branch checkpoint:** `unified-platform` @ `ff918f8`
 
 ## Status Legend
 
@@ -29,6 +29,7 @@
 5. Canary execution attempts (environment evidence):
    - `make v1-canary-go-no-go` -> exits with code `2` (`Blocked`) in this sandbox with explicit reachability preflight: `API health -> outbound network blocked (Operation not permitted)`.
    - `make v1-canary-qps-page-slo-strict` -> same environment blocker applies in this sandbox.
+   - verified in closeout runner mode (`CATSCAN_CLOSEOUT_RUN_DEPLOYED=1`, `CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED=1`): both deployed canary steps are recorded as `BLOCKED` and report output still completes.
 6. Optimizer API/e2e test attempt:
    - target API suites skip in this environment because `fastapi` is unavailable; installing dependencies is network-blocked.
 7. Optimizer API syntax checks:
