@@ -3,6 +3,7 @@
 This module provides system status and thumbnail management endpoints.
 """
 
+import asyncio
 import logging
 import os
 import json
@@ -598,8 +599,7 @@ async def get_ui_page_load_metric_summary(
         params.append(buyer_id)
 
     where_clause = " AND ".join(conditions)
-    summary_row = await pg_query_one(
-        f"""
+    summary_sql = f"""
         SELECT
             COUNT(*)::bigint AS sample_count,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY time_to_first_table_row_ms)
@@ -613,12 +613,8 @@ async def get_ui_page_load_metric_summary(
             MAX(sampled_at) AS last_sampled_at
         FROM ui_page_load_metrics
         WHERE {where_clause}
-        """,
-        tuple(params),
-    ) or {}
-
-    latest_rows = await pg_query(
-        f"""
+        """
+    latest_sql = f"""
         SELECT
             sampled_at,
             buyer_id,
@@ -630,12 +626,8 @@ async def get_ui_page_load_metric_summary(
         WHERE {where_clause}
         ORDER BY sampled_at DESC, id DESC
         LIMIT %s
-        """,
-        tuple(params + [latest_limit]),
-    )
-
-    api_rollup_rows = await pg_query(
-        f"""
+        """
+    api_rollup_sql = f"""
         SELECT
             kv.key AS api_path,
             COUNT(*)::bigint AS sample_count,
@@ -648,12 +640,8 @@ async def get_ui_page_load_metric_summary(
         GROUP BY kv.key
         ORDER BY p95_latency_ms DESC NULLS LAST, sample_count DESC, kv.key ASC
         LIMIT %s
-        """,
-        tuple(params + [api_rollup_limit]),
-    )
-
-    bucket_rows = await pg_query(
-        f"""
+        """
+    bucket_sql = f"""
         SELECT
             to_timestamp(
                 floor(
@@ -675,9 +663,14 @@ async def get_ui_page_load_metric_summary(
         GROUP BY bucket_start
         ORDER BY bucket_start DESC
         LIMIT %s
-        """,
-        tuple([bucket_hours, bucket_hours] + params + [bucket_limit]),
+        """
+    summary_row, latest_rows, api_rollup_rows, bucket_rows = await asyncio.gather(
+        pg_query_one(summary_sql, tuple(params)),
+        pg_query(latest_sql, tuple(params + [latest_limit])),
+        pg_query(api_rollup_sql, tuple(params + [api_rollup_limit])),
+        pg_query(bucket_sql, tuple([bucket_hours, bucket_hours] + params + [bucket_limit])),
     )
+    summary_row = summary_row or {}
 
     samples = [
         UiPageLoadMetricSample(
