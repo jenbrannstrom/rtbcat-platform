@@ -755,6 +755,7 @@ ALSO PROVIDE:
   - optimized `/analytics/home/configs` query shape to compute overall totals via SQL window sums and return only top-20 rows in SQL (instead of fetching all grouped configs then truncating in Python), reducing backend work on large seats.
   - parallelized `/analytics/home/configs` precompute-status + config-row reads (requested and fallback windows) via `asyncio.gather`, reducing endpoint latency from sequential DB round trips.
   - parallelized `/analytics/home/funnel` status checks and downstream aggregate/list/count queries via `asyncio.gather`, reducing deferred post-hydration panel latency.
+  - added short TTL in-process payload caching in `HomeAnalyticsService` for `/analytics/home/configs` and `/analytics/home/funnel` (real Postgres repo path), reducing repeated reload latency and duplicate hot-query execution.
   - added migration `060_home_precompute_query_indexes.sql` to add buyer/date composite indexes for `home_seat_daily`, `home_publisher_daily`, `home_geo_daily`, and `home_config_daily`, aligning DB access paths with Home funnel/config endpoint filters.
   - persisted QPS screen-level load telemetry via `POST /system/ui-metrics/page-load` with percentile reporting from `GET /system/ui-metrics/page-load/summary` (migration `059_ui_page_load_metrics.sql`).
   - surfaced buyer-scoped QPS page-load SLO summary in Settings -> System (sample count, p50/p95 first-row + hydrated, latest samples, and target-status badge against p95 <= 6s/8s thresholds).

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import copy
+import time
 from typing import Any
 
 from storage.postgres_repositories.home_repo import HomeAnalyticsRepository
@@ -41,8 +43,45 @@ async def _get_precompute_status(
 class HomeAnalyticsService:
     """Orchestrates home analytics responses."""
 
+    _PAYLOAD_CACHE_TTL_SECONDS = 15.0
+    _FUNNEL_PAYLOAD_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+    _CONFIG_PAYLOAD_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+
     def __init__(self, repo: HomeAnalyticsRepository | None = None) -> None:
         self._repo = repo or HomeAnalyticsRepository()
+        self._cache_enabled = isinstance(self._repo, HomeAnalyticsRepository)
+
+    @classmethod
+    def clear_payload_caches(cls) -> None:
+        cls._FUNNEL_PAYLOAD_CACHE.clear()
+        cls._CONFIG_PAYLOAD_CACHE.clear()
+
+    @classmethod
+    def _read_cached_payload(
+        cls,
+        cache: dict[str, tuple[float, dict[str, Any]]],
+        key: str,
+    ) -> dict[str, Any] | None:
+        cached_entry = cache.get(key)
+        if not cached_entry:
+            return None
+        expires_at, payload = cached_entry
+        if expires_at <= time.monotonic():
+            cache.pop(key, None)
+            return None
+        return copy.deepcopy(payload)
+
+    @classmethod
+    def _write_cached_payload(
+        cls,
+        cache: dict[str, tuple[float, dict[str, Any]]],
+        key: str,
+        payload: dict[str, Any],
+    ) -> None:
+        cache[key] = (
+            time.monotonic() + cls._PAYLOAD_CACHE_TTL_SECONDS,
+            copy.deepcopy(payload),
+        )
 
     @staticmethod
     def _has_config_rows(rows: list[dict[str, Any]]) -> bool:
@@ -54,6 +93,12 @@ class HomeAnalyticsService:
         buyer_id: str | None,
         limit: int,
     ) -> dict[str, Any]:
+        funnel_cache_key = f"{days}:{buyer_id or '__all__'}:{limit}"
+        if self._cache_enabled:
+            cached = self._read_cached_payload(self._FUNNEL_PAYLOAD_CACHE, funnel_cache_key)
+            if cached is not None:
+                return cached
+
         filters = ["buyer_account_id = %s"] if buyer_id else None
         params = [buyer_id] if buyer_id else None
         seat_status, publisher_status, geo_status = await asyncio.gather(
@@ -86,7 +131,7 @@ class HomeAnalyticsService:
                 buyer_filter_message = (
                     "No precomputed data for this seat. Run a refresh after imports."
                 )
-            return {
+            payload = {
                 "has_data": False,
                 "data_state": "unavailable",
                 "fallback_applied": False,
@@ -120,6 +165,9 @@ class HomeAnalyticsService:
                     "geo_rows_available": geo_status.get("has_rows", False),
                 },
             }
+            if self._cache_enabled:
+                self._write_cached_payload(self._FUNNEL_PAYLOAD_CACHE, funnel_cache_key, payload)
+            return payload
 
         funnel_row, publisher_rows, geo_rows, publisher_count, country_count = await asyncio.gather(
             self._repo.get_funnel_row(days, buyer_id),
@@ -194,7 +242,7 @@ class HomeAnalyticsService:
             data_state = "degraded"
             fallback_reason = "missing_dimension_precompute"
 
-        return {
+        payload = {
             "has_data": effective_reached > 0,
             "data_state": data_state,
             "fallback_applied": data_state == "degraded",
@@ -226,8 +274,17 @@ class HomeAnalyticsService:
                 "geo_rows_available": geo_status.get("has_rows", False),
             },
         }
+        if self._cache_enabled:
+            self._write_cached_payload(self._FUNNEL_PAYLOAD_CACHE, funnel_cache_key, payload)
+        return payload
 
     async def get_config_payload(self, days: int, buyer_id: str | None) -> dict[str, Any]:
+        config_cache_key = f"{days}:{buyer_id or '__all__'}"
+        if self._cache_enabled:
+            cached = self._read_cached_payload(self._CONFIG_PAYLOAD_CACHE, config_cache_key)
+            if cached is not None:
+                return cached
+
         requested_days = max(days, 1)
         effective_days = requested_days
         fallback_applied = False
@@ -267,7 +324,7 @@ class HomeAnalyticsService:
                     config_status = fallback_status
 
         if not self._has_config_rows(rows):
-            return {
+            payload = {
                 "period_days": requested_days,
                 "requested_days": requested_days,
                 "effective_days": effective_days,
@@ -283,6 +340,9 @@ class HomeAnalyticsService:
                 "overall_waste_pct": 100,
                 "precompute_status": {"home_config_daily": config_status},
             }
+            if self._cache_enabled:
+                self._write_cached_payload(self._CONFIG_PAYLOAD_CACHE, config_cache_key, payload)
+            return payload
 
         configs = []
         total_reached = 0
@@ -330,7 +390,7 @@ class HomeAnalyticsService:
 
         overall_win = (total_impressions / total_reached * 100) if total_reached > 0 else 0
 
-        return {
+        payload = {
             "period_days": requested_days,
             "requested_days": requested_days,
             "effective_days": effective_days,
@@ -345,6 +405,9 @@ class HomeAnalyticsService:
             "overall_waste_pct": round(100 - overall_win, 1),
             "precompute_status": {"home_config_daily": config_status},
         }
+        if self._cache_enabled:
+            self._write_cached_payload(self._CONFIG_PAYLOAD_CACHE, config_cache_key, payload)
+        return payload
 
     async def get_endpoint_efficiency_payload(
         self,
