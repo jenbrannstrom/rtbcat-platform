@@ -179,6 +179,7 @@ export interface UiPageLoadMetricSummaryQuery {
   buyer_id?: string;
   since_hours?: number;
   latest_limit?: number;
+  api_rollup_limit?: number;
 }
 
 export async function getUiPageLoadMetricSummary(
@@ -189,6 +190,9 @@ export async function getUiPageLoadMetricSummary(
   if (query.buyer_id) params.set("buyer_id", query.buyer_id);
   if (typeof query.since_hours === "number") params.set("since_hours", String(query.since_hours));
   if (typeof query.latest_limit === "number") params.set("latest_limit", String(query.latest_limit));
+  if (typeof query.api_rollup_limit === "number") {
+    params.set("api_rollup_limit", String(query.api_rollup_limit));
+  }
   const qs = params.toString();
   return fetchApi<UiPageLoadMetricSummaryResponse>(
     `/system/ui-metrics/page-load/summary${qs ? `?${qs}` : ""}`
