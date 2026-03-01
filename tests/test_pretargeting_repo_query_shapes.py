@@ -71,8 +71,11 @@ async def test_list_configs_for_buyer_uses_single_joined_query(
 
     assert rows == []
     sql_upper = str(captured["sql"]).upper()
-    assert "JOIN BUYER_SEATS BS ON BS.BIDDER_ID = PC.BIDDER_ID" in sql_upper
-    assert "WHERE BS.BUYER_ID = %S" in sql_upper
+    assert "JOIN (" in sql_upper
+    assert "SELECT DISTINCT BIDDER_ID" in sql_upper
+    assert "FROM BUYER_SEATS" in sql_upper
+    assert ") BS ON BS.BIDDER_ID = PC.BIDDER_ID" in sql_upper
+    assert "WHERE BUYER_ID = %S" in sql_upper
     assert "DISTINCT ON" in sql_upper
     assert captured["params"] == ("buyer-1",)
 

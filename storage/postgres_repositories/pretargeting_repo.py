@@ -41,8 +41,11 @@ class PretargetingRepository:
     ) -> list[dict[str, Any]]:
         """List pretargeting configs for a specific buyer_id in one SQL query."""
         where_sql = """
-            JOIN buyer_seats bs ON bs.bidder_id = pc.bidder_id
-            WHERE bs.buyer_id = %s
+            JOIN (
+                SELECT DISTINCT bidder_id
+                FROM buyer_seats
+                WHERE buyer_id = %s
+            ) bs ON bs.bidder_id = pc.bidder_id
         """
         return await self._list_configs_with_where_clause(
             where_sql=where_sql,
