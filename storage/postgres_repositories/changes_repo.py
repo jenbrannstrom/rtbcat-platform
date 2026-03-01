@@ -47,23 +47,23 @@ class ChangesRepository:
         status: str = "pending",
         limit: int = 100,
     ) -> list[dict[str, Any]]:
-        conditions = ["status = %s"]
-        params: list[Any] = [status]
-
         if billing_id:
-            conditions.append("billing_id = %s")
-            params.append(billing_id)
-
-        params.append(limit)
-        where_clause = " AND ".join(conditions)
+            return await pg_query(
+                """
+                SELECT * FROM pretargeting_pending_changes
+                WHERE billing_id = %s AND status = %s
+                ORDER BY created_at DESC, id DESC LIMIT %s
+                """,
+                (billing_id, status, limit),
+            )
 
         return await pg_query(
-            f"""
+            """
             SELECT * FROM pretargeting_pending_changes
-            WHERE {where_clause}
-            ORDER BY created_at DESC LIMIT %s
+            WHERE status = %s
+            ORDER BY created_at DESC, id DESC LIMIT %s
             """,
-            tuple(params),
+            (status, limit),
         )
 
     async def get_pending_change(self, change_id: int) -> dict[str, Any] | None:

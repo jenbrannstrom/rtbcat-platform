@@ -747,7 +747,8 @@ ALSO PROVIDE:
   - removed startup N+1 detail fan-out by lazy-loading pretargeting detail only for expanded/QPS-edit rows,
   - reduced initial render work by mounting `ConfigBreakdownPanel` only for the expanded row,
   - added startup timing instrumentation to expose `time_to_first_table_row`, `time_to_table_hydrated`, and key API latencies on `window.__CATSCAN_QPS_LOAD_METRICS`,
-  - added optional canary startup API latency budgets (`make v1-canary-qps-load-latency`) for `/settings/endpoints`, `/settings/pretargeting`, `/analytics/home/configs`, and `/analytics/home/endpoint-efficiency`.
+  - added optional canary startup API latency budgets (`make v1-canary-qps-load-latency`) for `/settings/endpoints`, `/settings/pretargeting`, `/analytics/home/configs`, and `/analytics/home/endpoint-efficiency`,
+  - hardened backend pretargeting query paths (`DISTINCT ON` list dedupe, `EXISTS` history billing filter, bounded pending-change ordering) and added migration `058_pretargeting_query_path_indexes.sql` for composite indexes aligned to those access paths.
 
 - Add end-to-end timing instrumentation for QPS Optimizer page:
   - page-level timing marks (navigation -> first table row -> full table hydration),
