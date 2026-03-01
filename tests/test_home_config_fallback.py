@@ -53,7 +53,7 @@ async def test_home_configs_fall_back_to_30d_when_7d_empty(monkeypatch: pytest.M
 
     payload = await service.get_config_payload(days=7, buyer_id="1487810529")
 
-    assert repo.days_requested == [30]
+    assert repo.days_requested == [7, 30]
     assert payload["data_state"] == "degraded"
     assert payload["fallback_applied"] is True
     assert payload["fallback_reason"] == "no_rows_7d_used_30d"
