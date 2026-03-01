@@ -791,6 +791,9 @@ function WasteAnalysisContent() {
     writePretargetingConfigCache(selectedBuyerId, pretargetingConfigs);
   }, [configsFetchedAfterMount, pretargetingConfigs, selectedBuyerId]);
 
+  const hasPretargetingRows = Array.isArray(pretargetingConfigs);
+  const configPerformanceEnabled = seatReady && (!useSummaryBootstrap || hasPretargetingRows);
+
   // Fetch config-level performance data (filtered by selected buyer)
   const {
     data: configPerformance,
@@ -802,14 +805,14 @@ function WasteAnalysisContent() {
   } = useQuery({
     queryKey: ["rtb-funnel-configs", days, selectedBuyerId],
     queryFn: fetchMeasuredConfigPerformance,
-    enabled: seatReady,
+    enabled: configPerformanceEnabled,
     initialData: () => readConfigPerformanceCache(selectedBuyerId, days),
     retry: shouldRetryAnalyticsQuery,
     retryDelay: getRetryDelay,
     retryOnMount: true,
     refetchOnReconnect: true,
     refetchInterval: (query) => {
-      if (!seatReady) return false;
+      if (!configPerformanceEnabled) return false;
       if (Date.now() - loadCycleStartedAtRef.current > 120_000) return false;
       if (query.state.status === "error") return 5000;
       return false;
