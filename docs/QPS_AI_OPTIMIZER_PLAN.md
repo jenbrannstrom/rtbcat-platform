@@ -54,7 +54,9 @@ Current roadmap execution status (implemented in code, pending environment-by-en
    - supports explicit blocked-mode handling for restricted environments and auth via repo secrets (`CATSCAN_CANARY_BEARER_TOKEN` and/or `CATSCAN_CANARY_SESSION_COOKIE`).
 9. **BYOM API/e2e validation now has dedicated CI coverage path**:
    - `make v1-byom-api-regression` runs optimizer API/e2e suites.
-   - `.github/workflows/v1-byom-api-regression.yml` executes this suite on optimizer API/service/test changes in a dependency-provisioned runner.
+   - `.github/workflows/v1-byom-api-regression.yml` executes this suite on optimizer API/service/test changes in a dependency-provisioned runner and now supports manual `workflow_dispatch`.
+10. **Closeout execution template now standardizes final sign-off operations**:
+   - `docs/V1_CLOSEOUT_EXECUTION_CHECKLIST.md` provides exact workflow dispatch payloads (strict and blocked-mode), run-evidence capture fields, SLO evidence command template, and closeout sign-off sections.
 
 ---
 

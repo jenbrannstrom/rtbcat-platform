@@ -1,6 +1,7 @@
 name: v1 BYOM API Regression
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "api/**"
