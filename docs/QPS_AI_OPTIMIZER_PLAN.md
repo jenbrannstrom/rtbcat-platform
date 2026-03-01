@@ -750,6 +750,8 @@ ALSO PROVIDE:
   - added startup timing instrumentation to expose `time_to_first_table_row`, `time_to_table_hydrated`, and key API latencies on `window.__CATSCAN_QPS_LOAD_METRICS`,
   - added optional canary startup API latency budgets (`make v1-canary-qps-load-latency`) for `/settings/endpoints`, `/settings/pretargeting`, `/analytics/home/configs`, and `/analytics/home/endpoint-efficiency`,
   - hardened backend pretargeting query paths (`DISTINCT ON` list dedupe, `EXISTS` history billing filter, bounded pending-change ordering) and added migration `058_pretargeting_query_path_indexes.sql` for composite indexes aligned to those access paths.
+  - persisted QPS screen-level load telemetry via `POST /system/ui-metrics/page-load` with percentile reporting from `GET /system/ui-metrics/page-load/summary` (migration `059_ui_page_load_metrics.sql`).
+  - added optional canary SLO verification for recorded UI telemetry (`make v1-canary-qps-page-slo`) with p95 first-row and hydrated latency thresholds.
 
 - Add end-to-end timing instrumentation for QPS Optimizer page:
   - page-level timing marks (navigation -> first table row -> full table hydration),

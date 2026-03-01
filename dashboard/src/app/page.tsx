@@ -96,6 +96,7 @@ function WasteAnalysisContent() {
   const firstTableRowMsRef = useRef<number | null>(null);
   const tableHydratedMsRef = useRef<number | null>(null);
   const startupApiLatencyMsRef = useRef<Record<string, number>>({});
+  const qpsLoadMetricsPostedRef = useRef<boolean>(false);
 
   const setStartupApiLatency = useCallback((name: string, startedAtMs: number) => {
     const endedAtMs = typeof window !== "undefined" && window.performance
@@ -104,8 +105,8 @@ function WasteAnalysisContent() {
     startupApiLatencyMsRef.current[name] = Math.round(Math.max(0, endedAtMs - startedAtMs));
   }, []);
 
-  const writeQpsLoadMetricsSnapshot = useCallback(() => {
-    if (typeof window === "undefined") return;
+  const writeQpsLoadMetricsSnapshot = useCallback((): QpsPageLoadMetricsSnapshot | null => {
+    if (typeof window === "undefined") return null;
     const snapshot: QpsPageLoadMetricsSnapshot = {
       started_at_iso: new Date(dashboardLoadStartedAt).toISOString(),
       buyer_id: selectedBuyerId || null,
@@ -115,7 +116,45 @@ function WasteAnalysisContent() {
       api_latency_ms: { ...startupApiLatencyMsRef.current },
     };
     window.__CATSCAN_QPS_LOAD_METRICS = snapshot;
+    return snapshot;
   }, [dashboardLoadStartedAt, days, selectedBuyerId]);
+
+  const submitQpsLoadMetrics = useCallback((snapshot: QpsPageLoadMetricsSnapshot | null) => {
+    if (!snapshot || qpsLoadMetricsPostedRef.current) return;
+    if (snapshot.time_to_table_hydrated_ms === null) return;
+
+    const payload = {
+      page: "qps_home" as const,
+      buyer_id: snapshot.buyer_id,
+      selected_days: snapshot.days,
+      time_to_first_table_row_ms: snapshot.time_to_first_table_row_ms,
+      time_to_table_hydrated_ms: snapshot.time_to_table_hydrated_ms,
+      api_latency_ms: snapshot.api_latency_ms,
+      sampled_at: snapshot.started_at_iso,
+    };
+    const body = JSON.stringify(payload);
+    let queued = false;
+    if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+      try {
+        queued = navigator.sendBeacon(
+          "/api/system/ui-metrics/page-load",
+          new Blob([body], { type: "application/json" })
+        );
+      } catch {
+        queued = false;
+      }
+    }
+    if (!queued) {
+      fetch("/api/system/ui-metrics/page-load", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body,
+        keepalive: true,
+      }).catch(() => undefined);
+    }
+    qpsLoadMetricsPostedRef.current = true;
+  }, []);
 
   // Fetch seats to auto-select first one if none selected
   const {
@@ -412,8 +451,9 @@ function WasteAnalysisContent() {
         // Best-effort mark/measure for operator diagnostics.
       }
     }
-    writeQpsLoadMetricsSnapshot();
-  }, [dashboardLoadStartedAt, tableHydrated, writeQpsLoadMetricsSnapshot]);
+    const snapshot = writeQpsLoadMetricsSnapshot();
+    submitQpsLoadMetrics(snapshot);
+  }, [dashboardLoadStartedAt, submitQpsLoadMetrics, tableHydrated, writeQpsLoadMetricsSnapshot]);
 
   // Observed QPS by endpoint for endpoints header
   const coverage = endpointEfficiency?.data_coverage;

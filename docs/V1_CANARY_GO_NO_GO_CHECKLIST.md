@@ -177,6 +177,23 @@ Equivalent convenience target:
 make v1-canary-qps-load-latency
 ```
 
+Optional QPS page SLO summary gate (requires recorded UI metrics):
+
+```bash
+CATSCAN_CANARY_RUN_QPS_PAGE_SLO=1 \
+CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS=24 \
+CATSCAN_CANARY_QPS_PAGE_SLO_MIN_SAMPLES=1 \
+CATSCAN_CANARY_MAX_QPS_PAGE_P95_FIRST_ROW_MS=6000 \
+CATSCAN_CANARY_MAX_QPS_PAGE_P95_HYDRATED_MS=8000 \
+make v1-canary-smoke
+```
+
+Equivalent convenience target:
+
+```bash
+make v1-canary-qps-page-slo
+```
+
 Bundled webhook security suite (auth + HMAC + freshness + rate-limit + security-status):
 
 ```bash
@@ -295,7 +312,8 @@ For at least one canary buyer:
 1. Error rates remain within normal range during canary window.
 2. Conversion webhook reject spike alerts are clear/understood.
 3. No sustained 5xx from optimizer/conversion routes.
-4. Audit trail entries appear for optimizer setup and proposal actions.
+4. QPS page-load summary endpoint (`/system/ui-metrics/page-load/summary`) reports expected p50/p95 trends for canary buyers.
+5. Audit trail entries appear for optimizer setup and proposal actions.
 
 ## 7. Go/No-Go Decision
 
