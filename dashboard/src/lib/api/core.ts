@@ -160,6 +160,15 @@ export interface UiPageLoadApiLatencyRollup {
   p95_latency_ms: number | null;
 }
 
+export interface UiPageLoadMetricTimeBucket {
+  bucket_start: string;
+  sample_count: number;
+  p50_first_table_row_ms: number | null;
+  p95_first_table_row_ms: number | null;
+  p50_table_hydrated_ms: number | null;
+  p95_table_hydrated_ms: number | null;
+}
+
 export interface UiPageLoadMetricSummaryResponse {
   page: "qps_home";
   buyer_id: string | null;
@@ -172,6 +181,7 @@ export interface UiPageLoadMetricSummaryResponse {
   last_sampled_at: string | null;
   latest_samples: UiPageLoadMetricSample[];
   api_latency_rollup: UiPageLoadApiLatencyRollup[];
+  time_buckets: UiPageLoadMetricTimeBucket[];
 }
 
 export interface UiPageLoadMetricSummaryQuery {
@@ -180,6 +190,8 @@ export interface UiPageLoadMetricSummaryQuery {
   since_hours?: number;
   latest_limit?: number;
   api_rollup_limit?: number;
+  bucket_hours?: number;
+  bucket_limit?: number;
 }
 
 export async function getUiPageLoadMetricSummary(
@@ -192,6 +204,12 @@ export async function getUiPageLoadMetricSummary(
   if (typeof query.latest_limit === "number") params.set("latest_limit", String(query.latest_limit));
   if (typeof query.api_rollup_limit === "number") {
     params.set("api_rollup_limit", String(query.api_rollup_limit));
+  }
+  if (typeof query.bucket_hours === "number") {
+    params.set("bucket_hours", String(query.bucket_hours));
+  }
+  if (typeof query.bucket_limit === "number") {
+    params.set("bucket_limit", String(query.bucket_limit));
   }
   const qs = params.toString();
   return fetchApi<UiPageLoadMetricSummaryResponse>(

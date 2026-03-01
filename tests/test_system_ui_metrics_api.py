@@ -121,6 +121,18 @@ def test_ui_page_load_metric_summary_returns_percentiles(monkeypatch: pytest.Mon
                     "api_latency_ms": {"/settings/pretargeting": 1800.0},
                 }
             ]
+        if "GROUP BY bucket_start" in sql:
+            assert params == (1, 1, "qps_home", 24, "1111111111", 24)
+            return [
+                {
+                    "bucket_start": "2026-03-01T00:00:00+00:00",
+                    "sample_count": 2,
+                    "p50_first_table_row_ms": 2100.0,
+                    "p95_first_table_row_ms": 5200.0,
+                    "p50_table_hydrated_ms": 4000.0,
+                    "p95_table_hydrated_ms": 7500.0,
+                }
+            ]
         assert "jsonb_each_text" in sql
         assert params == ("qps_home", 24, "1111111111", 10)
         return [
@@ -155,6 +167,8 @@ def test_ui_page_load_metric_summary_returns_percentiles(monkeypatch: pytest.Mon
     assert payload["latest_samples"][0]["api_latency_ms"]["/settings/pretargeting"] == 1800.0
     assert payload["api_latency_rollup"][0]["api_path"] == "/settings/pretargeting"
     assert payload["api_latency_rollup"][0]["p95_latency_ms"] == 1800.0
+    assert payload["time_buckets"][0]["sample_count"] == 2
+    assert payload["time_buckets"][0]["p95_first_table_row_ms"] == 5200.0
 
 
 def test_ui_page_load_metric_summary_respects_api_rollup_limit(monkeypatch: pytest.MonkeyPatch):
@@ -168,6 +182,9 @@ def test_ui_page_load_metric_summary_respects_api_rollup_limit(monkeypatch: pyte
     async def _stub_query(sql: str, params: tuple = ()):
         if "ORDER BY sampled_at DESC" in sql:
             assert params == ("qps_home", 24, "1111111111", 2)
+            return []
+        if "GROUP BY bucket_start" in sql:
+            assert params == (1, 1, "qps_home", 24, "1111111111", 24)
             return []
         assert "jsonb_each_text" in sql
         assert params == ("qps_home", 24, "1111111111", 3)

@@ -337,6 +337,7 @@ class UiPageLoadMetricSummaryResponse(BaseModel):
     last_sampled_at: Optional[str] = None
     latest_samples: list[UiPageLoadMetricSample] = Field(default_factory=list)
     api_latency_rollup: list["UiPageLoadApiLatencyRollup"] = Field(default_factory=list)
+    time_buckets: list["UiPageLoadMetricTimeBucket"] = Field(default_factory=list)
 
 
 class UiPageLoadApiLatencyRollup(BaseModel):
@@ -344,6 +345,15 @@ class UiPageLoadApiLatencyRollup(BaseModel):
     sample_count: int
     p50_latency_ms: Optional[float] = None
     p95_latency_ms: Optional[float] = None
+
+
+class UiPageLoadMetricTimeBucket(BaseModel):
+    bucket_start: str
+    sample_count: int
+    p50_first_table_row_ms: Optional[float] = None
+    p95_first_table_row_ms: Optional[float] = None
+    p50_table_hydrated_ms: Optional[float] = None
+    p95_table_hydrated_ms: Optional[float] = None
 
 
 # =============================================================================
@@ -570,6 +580,8 @@ async def get_ui_page_load_metric_summary(
     since_hours: int = Query(24, ge=1, le=168),
     latest_limit: int = Query(20, ge=1, le=100),
     api_rollup_limit: int = Query(10, ge=1, le=50),
+    bucket_hours: int = Query(1, ge=1, le=24),
+    bucket_limit: int = Query(24, ge=1, le=168),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
@@ -640,6 +652,33 @@ async def get_ui_page_load_metric_summary(
         tuple(params + [api_rollup_limit]),
     )
 
+    bucket_rows = await pg_query(
+        f"""
+        SELECT
+            to_timestamp(
+                floor(
+                    extract(epoch FROM sampled_at)
+                    / (%s::double precision * 3600.0)
+                ) * (%s::double precision * 3600.0)
+            ) AS bucket_start,
+            COUNT(*)::bigint AS sample_count,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY time_to_first_table_row_ms)
+                FILTER (WHERE time_to_first_table_row_ms IS NOT NULL) AS p50_first_table_row_ms,
+            percentile_cont(0.95) WITHIN GROUP (ORDER BY time_to_first_table_row_ms)
+                FILTER (WHERE time_to_first_table_row_ms IS NOT NULL) AS p95_first_table_row_ms,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY time_to_table_hydrated_ms)
+                FILTER (WHERE time_to_table_hydrated_ms IS NOT NULL) AS p50_table_hydrated_ms,
+            percentile_cont(0.95) WITHIN GROUP (ORDER BY time_to_table_hydrated_ms)
+                FILTER (WHERE time_to_table_hydrated_ms IS NOT NULL) AS p95_table_hydrated_ms
+        FROM ui_page_load_metrics
+        WHERE {where_clause}
+        GROUP BY bucket_start
+        ORDER BY bucket_start DESC
+        LIMIT %s
+        """,
+        tuple([bucket_hours, bucket_hours] + params + [bucket_limit]),
+    )
+
     samples = [
         UiPageLoadMetricSample(
             sampled_at=str(row["sampled_at"]),
@@ -661,6 +700,18 @@ async def get_ui_page_load_metric_summary(
         for row in api_rollup_rows
         if row.get("api_path")
     ]
+    time_buckets = [
+        UiPageLoadMetricTimeBucket(
+            bucket_start=str(row.get("bucket_start")),
+            sample_count=int(row.get("sample_count") or 0),
+            p50_first_table_row_ms=row.get("p50_first_table_row_ms"),
+            p95_first_table_row_ms=row.get("p95_first_table_row_ms"),
+            p50_table_hydrated_ms=row.get("p50_table_hydrated_ms"),
+            p95_table_hydrated_ms=row.get("p95_table_hydrated_ms"),
+        )
+        for row in bucket_rows
+        if row.get("bucket_start")
+    ]
 
     return UiPageLoadMetricSummaryResponse(
         page=page,
@@ -674,6 +725,7 @@ async def get_ui_page_load_metric_summary(
         last_sampled_at=str(summary_row["last_sampled_at"]) if summary_row.get("last_sampled_at") else None,
         latest_samples=samples,
         api_latency_rollup=api_rollup,
+        time_buckets=time_buckets,
     )
 
 

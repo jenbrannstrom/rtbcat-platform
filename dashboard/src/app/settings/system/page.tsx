@@ -317,6 +317,13 @@ export default function SystemStatusPage() {
     retry: false,
   });
 
+  const qpsPageSloBucketHours =
+    qpsPageSloSinceHours <= 24 ? 1 : qpsPageSloSinceHours <= 72 ? 3 : 6;
+  const qpsPageSloBucketLimit = Math.min(
+    24,
+    Math.max(1, Math.ceil(qpsPageSloSinceHours / qpsPageSloBucketHours)),
+  );
+
   const {
     data: qpsPageLoadSummary,
     isLoading: qpsPageLoadSummaryLoading,
@@ -330,6 +337,8 @@ export default function SystemStatusPage() {
         since_hours: qpsPageSloSinceHours,
         latest_limit: 5,
         api_rollup_limit: 20,
+        bucket_hours: qpsPageSloBucketHours,
+        bucket_limit: qpsPageSloBucketLimit,
       }),
     enabled: !!selectedBuyerId,
     retry: false,
@@ -1933,6 +1942,42 @@ export default function SystemStatusPage() {
                                   </td>
                                   <td className="px-2 py-1 text-gray-700">
                                     {formatLatencyMs(row.p95_latency_ms)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {qpsPageLoadSummary.time_buckets.length ? (
+                      <div className="space-y-2 rounded border border-gray-200 p-2">
+                        <div className="text-[11px] font-semibold text-gray-600">
+                          Latency trend buckets ({qpsPageSloBucketHours}h)
+                        </div>
+                        <div className="max-h-40 overflow-auto">
+                          <table className="min-w-full text-xs">
+                            <thead className="bg-gray-50 text-gray-600">
+                              <tr>
+                                <th className="text-left px-2 py-1">Bucket start</th>
+                                <th className="text-left px-2 py-1">Samples</th>
+                                <th className="text-left px-2 py-1">p95 first row</th>
+                                <th className="text-left px-2 py-1">p95 hydrated</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {qpsPageLoadSummary.time_buckets.slice(0, 12).map((bucket) => (
+                                <tr key={bucket.bucket_start} className="border-t border-gray-100">
+                                  <td className="px-2 py-1 text-gray-700">{bucket.bucket_start}</td>
+                                  <td className="px-2 py-1 text-gray-700">
+                                    {bucket.sample_count.toLocaleString()}
+                                  </td>
+                                  <td className="px-2 py-1 text-gray-700">
+                                    {formatLatencyMs(bucket.p95_first_table_row_ms)}
+                                  </td>
+                                  <td className="px-2 py-1 text-gray-700">
+                                    {formatLatencyMs(bucket.p95_table_hydrated_ms)}
                                   </td>
                                 </tr>
                               ))}
