@@ -38,7 +38,7 @@ const DEFERRED_QUERY_REFRESH_DELAY_MS_SEEDED = 1500;
 const INITIAL_VISIBLE_CONFIG_ROWS_WARM = 60;
 const INITIAL_VISIBLE_CONFIG_ROWS_COLD = 40;
 const CONFIG_ROWS_CHUNK_SIZE = 120;
-const PRETARGETING_CONFIG_CACHE_PREFIX = "catscan:qps:pretargeting-configs:v2";
+const PRETARGETING_CONFIG_CACHE_PREFIX = "catscan:qps:pretargeting-configs:v3";
 const PRETARGETING_CONFIG_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 const PRETARGETING_CONFIG_CACHE_MAX_ROWS = 200;
 const PRETARGETING_CONFIG_CACHE_FALLBACK_ROWS = 100;
@@ -53,9 +53,20 @@ const ENDPOINT_EFFICIENCY_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 const ACTIVE_SEATS_CACHE_KEY = "catscan:qps:active-seats:v1";
 const ACTIVE_SEATS_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 
+interface PretargetingConfigCacheSeedRow {
+  config_id: string;
+  bidder_id: string;
+  billing_id: string | null;
+  display_name: string | null;
+  user_name: string | null;
+  state: string;
+  maximum_qps: number | null;
+  synced_at: string | null;
+}
+
 interface PretargetingConfigCachePayload {
   cached_at_iso: string;
-  rows: PretargetingConfigResponse[];
+  rows: PretargetingConfigCacheSeedRow[];
 }
 
 interface ConfigPerformanceCachePayload {
@@ -143,7 +154,38 @@ function readPretargetingConfigCache(buyerId: string | null): PretargetingConfig
       return undefined;
     }
     if (!Array.isArray(parsed.rows)) return undefined;
-    return parsed.rows.slice(0, PRETARGETING_CONFIG_CACHE_MAX_ROWS);
+    const normalizedRows = parsed.rows
+      .slice(0, PRETARGETING_CONFIG_CACHE_MAX_ROWS)
+      .map((row) => {
+        if (!row || typeof row !== "object") return null;
+        const seedRow = row as Partial<PretargetingConfigCacheSeedRow>;
+        const configId = typeof seedRow.config_id === "string" ? seedRow.config_id.trim() : "";
+        const bidderId = typeof seedRow.bidder_id === "string" ? seedRow.bidder_id.trim() : "";
+        if (!configId || !bidderId) return null;
+        const maximumQps = Number.isFinite(seedRow.maximum_qps)
+          ? Math.trunc(Number(seedRow.maximum_qps))
+          : null;
+
+        const normalized: PretargetingConfigResponse = {
+          config_id: configId,
+          bidder_id: bidderId,
+          billing_id: typeof seedRow.billing_id === "string" ? seedRow.billing_id : null,
+          display_name: typeof seedRow.display_name === "string" ? seedRow.display_name : null,
+          user_name: typeof seedRow.user_name === "string" ? seedRow.user_name : null,
+          state: typeof seedRow.state === "string" && seedRow.state ? seedRow.state : "ACTIVE",
+          maximum_qps: maximumQps,
+          included_formats: null,
+          included_platforms: null,
+          included_sizes: null,
+          included_geos: null,
+          excluded_geos: null,
+          included_operating_systems: null,
+          synced_at: typeof seedRow.synced_at === "string" ? seedRow.synced_at : null,
+        };
+        return normalized;
+      })
+      .filter((row): row is PretargetingConfigResponse => row !== null);
+    return normalizedRows.length > 0 ? normalizedRows : undefined;
   } catch {
     return undefined;
   }
@@ -152,16 +194,17 @@ function readPretargetingConfigCache(buyerId: string | null): PretargetingConfig
 function writePretargetingConfigCache(buyerId: string | null, rows: PretargetingConfigResponse[] | undefined): void {
   if (!buyerId || typeof window === "undefined" || !rows) return;
   const boundedSourceRows = rows.slice(0, PRETARGETING_CONFIG_CACHE_MAX_ROWS);
-  const summaryRows = boundedSourceRows.map((row) => ({
-    ...row,
-    included_formats: null,
-    included_platforms: null,
-    included_sizes: null,
-    included_geos: null,
-    excluded_geos: null,
-    included_operating_systems: null,
+  const compactRows = boundedSourceRows.map((row): PretargetingConfigCacheSeedRow => ({
+    config_id: row.config_id,
+    bidder_id: row.bidder_id,
+    billing_id: row.billing_id ?? null,
+    display_name: row.display_name ?? null,
+    user_name: row.user_name ?? null,
+    state: row.state || "ACTIVE",
+    maximum_qps: row.maximum_qps ?? null,
+    synced_at: row.synced_at ?? null,
   }));
-  const writeRows = (candidateRows: PretargetingConfigResponse[]): void => {
+  const writeRows = (candidateRows: PretargetingConfigCacheSeedRow[]): void => {
     const payload: PretargetingConfigCachePayload = {
       cached_at_iso: new Date().toISOString(),
       rows: candidateRows,
@@ -170,10 +213,10 @@ function writePretargetingConfigCache(buyerId: string | null, rows: Pretargeting
   };
 
   try {
-    writeRows(summaryRows);
+    writeRows(compactRows);
   } catch {
     try {
-      writeRows(summaryRows.slice(0, PRETARGETING_CONFIG_CACHE_FALLBACK_ROWS));
+      writeRows(compactRows.slice(0, PRETARGETING_CONFIG_CACHE_FALLBACK_ROWS));
     } catch {
       // Ignore localStorage failures (quota/private browsing).
     }
