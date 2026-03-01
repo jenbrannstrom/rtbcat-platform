@@ -12,6 +12,7 @@ import {
   getRTBFunnel, getSpendStats, getEndpointEfficiency,
   getPretargetingConfigs, getRTBFunnelConfigs, getSeats,
   type PretargetingConfigResponse,
+  type RTBFunnelResponse,
   type ConfigPerformanceResponse,
   type SpendStatsResponse,
   type EndpointEfficiencyResponse,
@@ -34,6 +35,8 @@ const PRETARGETING_CONFIG_CACHE_PREFIX = "catscan:qps:pretargeting-configs:v1";
 const PRETARGETING_CONFIG_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 const PRETARGETING_CONFIG_CACHE_MAX_ROWS = 500;
 const PRETARGETING_CONFIG_CACHE_FALLBACK_ROWS = 200;
+const RTB_FUNNEL_CACHE_PREFIX = "catscan:qps:rtb-funnel:v1";
+const RTB_FUNNEL_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 const CONFIG_PERFORMANCE_CACHE_PREFIX = "catscan:qps:config-performance:v1";
 const CONFIG_PERFORMANCE_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 const SPEND_STATS_CACHE_PREFIX = "catscan:qps:spend-stats:v1";
@@ -51,6 +54,11 @@ interface PretargetingConfigCachePayload {
 interface ConfigPerformanceCachePayload {
   cached_at_iso: string;
   data: ConfigPerformanceResponse;
+}
+
+interface RTBFunnelCachePayload {
+  cached_at_iso: string;
+  data: RTBFunnelResponse;
 }
 
 interface ActiveSeatsCachePayload {
@@ -97,6 +105,10 @@ function getPretargetingConfigCacheKey(buyerId: string): string {
 
 function getConfigPerformanceCacheKey(buyerId: string, days: number): string {
   return `${CONFIG_PERFORMANCE_CACHE_PREFIX}:${buyerId}:${days}`;
+}
+
+function getRtbFunnelCacheKey(buyerId: string, days: number): string {
+  return `${RTB_FUNNEL_CACHE_PREFIX}:${buyerId}:${days}`;
 }
 
 function getSpendStatsCacheKey(
@@ -186,6 +198,45 @@ function writeConfigPerformanceCache(
       data,
     };
     window.localStorage.setItem(getConfigPerformanceCacheKey(buyerId, days), JSON.stringify(payload));
+  } catch {
+    // Ignore localStorage failures (quota/private browsing).
+  }
+}
+
+function readRtbFunnelCache(
+  buyerId: string | null,
+  days: number,
+): RTBFunnelResponse | undefined {
+  if (!buyerId || typeof window === "undefined") return undefined;
+  try {
+    const raw = window.localStorage.getItem(getRtbFunnelCacheKey(buyerId, days));
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as RTBFunnelCachePayload;
+    const cachedAtMs = Date.parse(parsed.cached_at_iso);
+    if (!Number.isFinite(cachedAtMs)) return undefined;
+    if ((Date.now() - cachedAtMs) > RTB_FUNNEL_CACHE_MAX_AGE_MS) {
+      window.localStorage.removeItem(getRtbFunnelCacheKey(buyerId, days));
+      return undefined;
+    }
+    if (!parsed.data || typeof parsed.data !== "object") return undefined;
+    return parsed.data;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeRtbFunnelCache(
+  buyerId: string | null,
+  days: number,
+  data: RTBFunnelResponse | undefined,
+): void {
+  if (!buyerId || typeof window === "undefined" || !data) return;
+  try {
+    const payload: RTBFunnelCachePayload = {
+      cached_at_iso: new Date().toISOString(),
+      data,
+    };
+    window.localStorage.setItem(getRtbFunnelCacheKey(buyerId, days), JSON.stringify(payload));
   } catch {
     // Ignore localStorage failures (quota/private browsing).
   }
@@ -637,11 +688,18 @@ function WasteAnalysisContent() {
     data: rtbFunnel,
     isLoading: funnelLoading,
     refetch: refetchFunnel,
+    isFetchedAfterMount: rtbFunnelFetchedAfterMount,
   } = useQuery({
     queryKey: ["rtb-funnel", days, selectedBuyerId],
     queryFn: () => getRTBFunnel(days, selectedBuyerId || undefined),
+    initialData: () => readRtbFunnelCache(selectedBuyerId, days),
     enabled: false,
   });
+
+  useEffect(() => {
+    if (!rtbFunnelFetchedAfterMount) return;
+    writeRtbFunnelCache(selectedBuyerId, days, rtbFunnel);
+  }, [days, rtbFunnel, rtbFunnelFetchedAfterMount, selectedBuyerId]);
 
   // Fetch spend stats for CPM display (filtered by expanded config if selected)
   const {
