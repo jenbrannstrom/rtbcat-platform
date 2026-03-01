@@ -21,6 +21,10 @@ class SmokeFailure(RuntimeError):
     """Raised when a smoke check fails."""
 
 
+class SmokeEnvironmentBlocked(SmokeFailure):
+    """Raised when checks are blocked by environment/network policy."""
+
+
 def _join_url(base_url: str, path: str) -> str:
     base = base_url.rstrip("/")
     suffix = path if path.startswith("/") else f"/{path}"
@@ -137,7 +141,9 @@ class SmokeClient:
             return int(exc.code), response_headers, exc.read()
         except urllib.error.URLError as exc:
             if is_network_blocked_urlerror(exc):
-                raise SmokeFailure(f"{method} {path}: outbound network blocked ({exc})") from exc
+                raise SmokeEnvironmentBlocked(
+                    f"{method} {path}: outbound network blocked ({exc})"
+                ) from exc
             raise SmokeFailure(f"{method} {path}: {exc}") from exc
 
 
@@ -1348,10 +1354,20 @@ def main() -> int:
 
     # Fail fast on API reachability/health so blocked-network runs do not emit
     # a long list of derivative endpoint failures.
-    initial_ok, initial_line = _run_check("API health", check_health)
-    print(initial_line)
-    results.append((initial_ok, initial_line))
-    if not initial_ok:
+    try:
+        check_health()
+        print("PASS  API health")
+        results.append((True, "PASS  API health"))
+    except SmokeEnvironmentBlocked as exc:
+        line = f"BLOCKED  API health -> {exc}"
+        print(line)
+        results.append((False, line))
+        print("\nSmoke checks blocked by environment/network policy.")
+        return 2
+    except Exception as exc:  # noqa: BLE001
+        line = f"FAIL  API health -> {exc}"
+        print(line)
+        results.append((False, line))
         print("\nSmoke checks failed: 1")
         return 1
 

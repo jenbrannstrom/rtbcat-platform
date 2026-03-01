@@ -841,6 +841,7 @@ ALSO PROVIDE:
 - Plan closeout status and verification evidence are tracked in [V1_PLAN_CLOSEOUT_MATRIX.md](/home/x1-7/Documents/rtbcat-platform/docs/V1_PLAN_CLOSEOUT_MATRIX.md).
 - Note: strict deployed canary closeout gates are still operationally pending from this workspace because outbound API calls are sandbox-restricted (`Operation not permitted`); execute those commands from a network-enabled environment.
 - Local non-env-blocked closeout validation is consolidated under `make v1-closeout-local`.
+- Deployed canary runs now surface explicit `Blocked` status (exit code `2`) under network-policy restrictions for clearer operational triage.
 
 - Add end-to-end timing instrumentation for QPS Optimizer page:
   - page-level timing marks (navigation -> first table row -> full table hydration),

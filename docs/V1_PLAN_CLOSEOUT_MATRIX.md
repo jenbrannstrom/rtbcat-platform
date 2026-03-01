@@ -1,6 +1,6 @@
 # V1 Plan Closeout Matrix
 
-**Last updated:** 2026-03-01 19:20:09 UTC  
+**Last updated:** 2026-03-01 19:25:30 UTC  
 **Branch checkpoint:** `unified-platform` @ `7ee55f1`
 
 ## Status Legend
@@ -14,10 +14,10 @@
 1. `make v1-closeout-local` (new consolidated local closeout runner)
    - includes `v1-gate`, Phase 4 targeted suites, BYOM service suites, optimizer syntax compile checks
    - result: passed
-2. `make v1-gate` (latest rerun after canary-test update)
-   - `phase0-regression`: `28 passed, 1 skipped`
+2. `make v1-gate` (latest rerun after blocked-exit handling update)
+   - `phase0-regression`: `29 passed, 1 skipped`
    - dashboard production build (`webpack`): passed
-   - `v1-conversion-regression`: `41 passed, 1 skipped`
+   - `v1-conversion-regression`: `42 passed, 1 skipped`
 3. Targeted Phase 4 suites:
    - `pytest -q tests/test_system_ui_metrics_api.py tests/test_pretargeting_repo_query_shapes.py tests/test_pretargeting_service_cache.py tests/test_endpoints_service_cache.py tests/test_analytics_service_cache.py`
    - result: `30 passed, 1 skipped`
@@ -25,7 +25,7 @@
    - `pytest -q tests/test_optimizer_models_service.py tests/test_optimizer_scoring_service.py tests/test_optimizer_proposals_service.py tests/test_optimizer_economics_service.py tests/test_response_model_regressions.py`
    - result: `44 passed`
 5. Canary execution attempts (environment evidence):
-   - `make v1-canary-go-no-go` -> fails in this sandbox with explicit reachability preflight: `API health -> outbound network blocked (Operation not permitted)`.
+   - `make v1-canary-go-no-go` -> exits with code `2` (`Blocked`) in this sandbox with explicit reachability preflight: `API health -> outbound network blocked (Operation not permitted)`.
    - `make v1-canary-qps-page-slo-strict` -> same environment blocker applies in this sandbox.
 6. Optimizer API/e2e test attempt:
    - target API suites skip in this environment because `fastapi` is unavailable; installing dependencies is network-blocked.
@@ -56,3 +56,9 @@ Implementation is largely complete across Phases 0-4, but final plan closure req
 3. Run BYOM API/e2e suites in provisioned test env with API deps installed.
 4. Record buyer-scoped SLO outcomes for the agreed lookback window.
 5. Mark remaining `Operational Pending` rows as `Complete` once evidence is attached.
+
+## Closeout Runner Notes
+
+- `make v1-closeout-local` runs all non-env-blocked checks.
+- For deployed gates: set `CATSCAN_CLOSEOUT_RUN_DEPLOYED=1`.
+- If running from a restricted environment, keep `CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED=1` so deployed canary exit code `2` is recorded as `Blocked (Env)` instead of hard-failing local closeout runs.
