@@ -6,6 +6,7 @@ import pytest
 
 from scripts.v1_canary_smoke import (
     SmokeFailure,
+    build_conversion_readiness_params,
     build_pixel_request_params,
     build_workflow_request_params,
     validate_data_health_payload,
@@ -131,3 +132,14 @@ def test_build_pixel_request_params_allows_missing_buyer_id():
     )
     assert params["buyer_id"] is None
     assert params["event_id"] == "evt-1"
+
+
+def test_build_conversion_readiness_params_includes_fields():
+    params = build_conversion_readiness_params(
+        buyer_id="buyer-1",
+        days=14,
+        freshness_hours=72,
+    )
+    assert params["buyer_id"] == "buyer-1"
+    assert params["days"] == 14
+    assert params["freshness_hours"] == 72

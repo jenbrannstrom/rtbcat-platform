@@ -1,10 +1,11 @@
-.PHONY: help v1-canary-smoke v1-canary-workflow v1-canary-lifecycle v1-canary-pixel v1-canary-safe v1-canary-balanced v1-canary-aggressive phase0-regression phase0-dashboard-build phase0-gate
+.PHONY: help v1-canary-smoke v1-canary-workflow v1-canary-lifecycle v1-canary-conversion-ready v1-canary-pixel v1-canary-safe v1-canary-balanced v1-canary-aggressive phase0-regression phase0-dashboard-build phase0-gate
 
 help:
 	@echo "Targets:"
 	@echo "  make v1-canary-smoke     # Run canary smoke wrapper (env-driven)"
 	@echo "  make v1-canary-workflow  # Run canary with score+propose workflow gate"
 	@echo "  make v1-canary-lifecycle # Run canary with workflow + proposal lifecycle gate"
+	@echo "  make v1-canary-conversion-ready # Require conversion readiness=ready"
 	@echo "  make v1-canary-pixel     # Run canary with conversion pixel gate"
 	@echo "  make v1-canary-safe      # Run workflow canary with safe preset"
 	@echo "  make v1-canary-balanced  # Run workflow canary with balanced preset"
@@ -12,7 +13,7 @@ help:
 	@echo "  make phase0-regression   # Run core Phase 0 regression tests"
 	@echo "  make phase0-dashboard-build  # Build dashboard production bundle"
 	@echo "  make phase0-gate         # Run regression tests + dashboard build"
-	@echo "Env presets: CATSCAN_CANARY_PROFILE=safe|balanced|aggressive, CATSCAN_CANARY_RUN_PIXEL=1"
+	@echo "Env presets: CATSCAN_CANARY_PROFILE=safe|balanced|aggressive, CATSCAN_CANARY_RUN_PIXEL=1, CATSCAN_CANARY_REQUIRE_CONVERSION_READY=1"
 
 v1-canary-smoke:
 	bash scripts/run_v1_canary_smoke.sh
@@ -22,6 +23,9 @@ v1-canary-workflow:
 
 v1-canary-lifecycle:
 	CATSCAN_CANARY_RUN_WORKFLOW=1 CATSCAN_CANARY_RUN_LIFECYCLE=1 bash scripts/run_v1_canary_smoke.sh
+
+v1-canary-conversion-ready:
+	CATSCAN_CANARY_REQUIRE_CONVERSION_READY=1 bash scripts/run_v1_canary_smoke.sh
 
 v1-canary-pixel:
 	CATSCAN_CANARY_RUN_PIXEL=1 bash scripts/run_v1_canary_smoke.sh
