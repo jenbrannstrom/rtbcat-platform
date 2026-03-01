@@ -19,6 +19,7 @@ class PretargetingRepository:
         self,
         bidder_id: str | None = None,
         limit: int | None = None,
+        summary_only: bool = False,
     ) -> list[dict[str, Any]]:
         where_sql = ""
         params: tuple[Any, ...] = ()
@@ -29,12 +30,14 @@ class PretargetingRepository:
             where_sql=where_sql,
             params=params,
             limit=limit,
+            summary_only=summary_only,
         )
 
     async def list_configs_for_buyer(
         self,
         buyer_id: str,
         limit: int | None = None,
+        summary_only: bool = False,
     ) -> list[dict[str, Any]]:
         """List pretargeting configs for a specific buyer_id in one SQL query."""
         where_sql = """
@@ -45,6 +48,7 @@ class PretargetingRepository:
             where_sql=where_sql,
             params=(buyer_id,),
             limit=limit,
+            summary_only=summary_only,
         )
 
     async def _list_configs_with_where_clause(
@@ -52,6 +56,7 @@ class PretargetingRepository:
         where_sql: str,
         params: tuple[Any, ...],
         limit: int | None = None,
+        summary_only: bool = False,
     ) -> list[dict[str, Any]]:
         limit_sql = ""
         query_params = params
@@ -59,8 +64,40 @@ class PretargetingRepository:
             limit_sql = "LIMIT %s"
             query_params = params + (limit,)
         
-        sql = f"""
-            SELECT
+        if summary_only:
+            outer_projection = """
+                deduped.config_id,
+                deduped.bidder_id,
+                deduped.billing_id,
+                deduped.display_name,
+                deduped.user_name,
+                deduped.state,
+                NULL::jsonb AS included_formats,
+                NULL::jsonb AS included_platforms,
+                NULL::jsonb AS included_sizes,
+                NULL::jsonb AS included_geos,
+                NULL::jsonb AS excluded_geos,
+                NULL::jsonb AS included_operating_systems,
+                deduped.maximum_qps,
+                deduped.synced_at
+            """
+            inner_projection = """
+                pc.config_id,
+                pc.bidder_id,
+                pc.billing_id,
+                pc.display_name,
+                pc.user_name,
+                pc.state,
+                CASE
+                    WHEN (pc.raw_config->>'maximumQps') ~ '^[0-9]+$'
+                        THEN (pc.raw_config->>'maximumQps')::integer
+                    ELSE NULL
+                END AS maximum_qps,
+                pc.synced_at,
+                pc.id
+            """
+        else:
+            outer_projection = """
                 deduped.config_id,
                 deduped.bidder_id,
                 deduped.billing_id,
@@ -75,27 +112,35 @@ class PretargetingRepository:
                 deduped.included_operating_systems,
                 deduped.maximum_qps,
                 deduped.synced_at
+            """
+            inner_projection = """
+                pc.config_id,
+                pc.bidder_id,
+                pc.billing_id,
+                pc.display_name,
+                pc.user_name,
+                pc.state,
+                pc.included_formats,
+                pc.included_platforms,
+                pc.included_sizes,
+                pc.included_geos,
+                pc.excluded_geos,
+                pc.included_operating_systems,
+                CASE
+                    WHEN (pc.raw_config->>'maximumQps') ~ '^[0-9]+$'
+                        THEN (pc.raw_config->>'maximumQps')::integer
+                    ELSE NULL
+                END AS maximum_qps,
+                pc.synced_at,
+                pc.id
+            """
+
+        sql = f"""
+            SELECT
+                {outer_projection}
             FROM (
                 SELECT DISTINCT ON (COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id))
-                    pc.config_id,
-                    pc.bidder_id,
-                    pc.billing_id,
-                    pc.display_name,
-                    pc.user_name,
-                    pc.state,
-                    pc.included_formats,
-                    pc.included_platforms,
-                    pc.included_sizes,
-                    pc.included_geos,
-                    pc.excluded_geos,
-                    pc.included_operating_systems,
-                    CASE
-                        WHEN (pc.raw_config->>'maximumQps') ~ '^[0-9]+$'
-                            THEN (pc.raw_config->>'maximumQps')::integer
-                        ELSE NULL
-                    END AS maximum_qps,
-                    pc.synced_at,
-                    pc.id
+                    {inner_projection}
                 FROM pretargeting_configs pc
                 {where_sql}
                 ORDER BY

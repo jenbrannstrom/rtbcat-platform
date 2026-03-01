@@ -181,6 +181,7 @@ async def get_pretargeting_configs(
     buyer_id: Optional[str] = Query(None, description="Buyer/seat ID to get configs for"),
     service_account_id: Optional[str] = Query(None, description="Service account ID (deprecated, use buyer_id)"),
     limit: Optional[int] = Query(None, description="Optional max rows for startup/bootstrap views", ge=1, le=5000),
+    summary_only: bool = Query(False, description="Return lightweight rows for startup (omits large targeting arrays)"),
     seats_service: SeatsService = Depends(get_seats_service),
 ):
     """Get stored pretargeting configs for the current account.
@@ -202,6 +203,7 @@ async def get_pretargeting_configs(
             rows = await pretargeting_service.list_configs_for_buyer(
                 buyer_id,
                 limit=limit,
+                summary_only=summary_only,
             )
         else:
             # Get the current account's bidder_id
@@ -229,6 +231,7 @@ async def get_pretargeting_configs(
             rows = await pretargeting_service.list_configs(
                 bidder_id=current_bidder_id,
                 limit=limit,
+                summary_only=summary_only,
             )
 
         results = []

@@ -17,6 +17,7 @@ class _StubPretargetingRepo:
         self,
         bidder_id: str | None = None,
         limit: int | None = None,
+        summary_only: bool = False,
     ) -> list[dict[str, object]]:
         self.list_calls += 1
         return [dict(row) for row in self.rows]
@@ -25,6 +26,7 @@ class _StubPretargetingRepo:
         self,
         buyer_id: str,
         limit: int | None = None,
+        summary_only: bool = False,
     ) -> list[dict[str, object]]:
         self.list_by_buyer_calls += 1
         return [dict(row) for row in self.rows]
@@ -92,6 +94,18 @@ async def test_list_configs_cache_is_scoped_by_limit() -> None:
 
     await service.list_configs(bidder_id="bidder-1", limit=100)
     await service.list_configs(bidder_id="bidder-1", limit=200)
+
+    assert repo.list_calls == 2
+
+
+@pytest.mark.asyncio
+async def test_list_configs_cache_is_scoped_by_summary_shape() -> None:
+    PretargetingService.clear_list_configs_cache()
+    repo = _StubPretargetingRepo()
+    service = PretargetingService(repo=repo)
+
+    await service.list_configs(bidder_id="bidder-1", limit=100, summary_only=True)
+    await service.list_configs(bidder_id="bidder-1", limit=100, summary_only=False)
 
     assert repo.list_calls == 2
 
