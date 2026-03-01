@@ -13,6 +13,8 @@ class PretargetingService:
 
     _LIST_CONFIGS_CACHE_TTL_SECONDS = 15.0
     _LIST_CONFIGS_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+    _HISTORY_CACHE_TTL_SECONDS = 15.0
+    _HISTORY_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
     def __init__(self, repo: PretargetingRepository | None = None) -> None:
         self._repo = repo or PretargetingRepository()
@@ -26,6 +28,19 @@ class PretargetingService:
         limit_key = "all" if limit is None else str(limit)
         summary_key = "summary" if summary_only else "full"
         return f"{scope}:limit:{limit_key}:shape:{summary_key}"
+
+    @staticmethod
+    def _history_cache_key(
+        config_id: str | None,
+        billing_id: str | None,
+        days: int,
+        limit: int,
+    ) -> str:
+        return (
+            f"config:{config_id or '__all__'}:"
+            f"billing:{billing_id or '__all__'}:"
+            f"days:{days}:limit:{limit}"
+        )
 
     async def list_configs(
         self,
@@ -88,8 +103,16 @@ class PretargetingService:
         cls._LIST_CONFIGS_CACHE.clear()
 
     @classmethod
+    def clear_history_cache(cls) -> None:
+        cls._HISTORY_CACHE.clear()
+
+    @classmethod
     def _invalidate_list_configs_cache(cls, bidder_id: str | None = None) -> None:
         cls._LIST_CONFIGS_CACHE.clear()
+
+    @classmethod
+    def _invalidate_history_cache(cls) -> None:
+        cls._HISTORY_CACHE.clear()
 
     async def get_config(self, billing_id: str) -> dict[str, Any] | None:
         if not billing_id:
@@ -127,12 +150,28 @@ class PretargetingService:
         days: int = 30,
         limit: int = 500,
     ) -> list[dict[str, Any]]:
-        return await self._repo.list_history(
+        cache_key = self._history_cache_key(
             config_id=config_id,
             billing_id=billing_id,
             days=days,
             limit=limit,
         )
+        now = time.monotonic()
+        cached_entry = self._HISTORY_CACHE.get(cache_key)
+        if cached_entry and cached_entry[0] > now:
+            return [dict(row) for row in cached_entry[1]]
+
+        rows = await self._repo.list_history(
+            config_id=config_id,
+            billing_id=billing_id,
+            days=days,
+            limit=limit,
+        )
+        self._HISTORY_CACHE[cache_key] = (
+            now + self._HISTORY_CACHE_TTL_SECONDS,
+            [dict(row) for row in rows],
+        )
+        return rows
 
     async def add_history(
         self,
@@ -150,7 +189,7 @@ class PretargetingService:
             raise ValueError("bidder_id is required")
         if not change_type:
             raise ValueError("change_type is required")
-        return await self._repo.add_history(
+        history_id = await self._repo.add_history(
             config_id=config_id,
             bidder_id=bidder_id,
             change_type=change_type,
@@ -161,6 +200,8 @@ class PretargetingService:
             change_source=change_source,
             raw_config_snapshot=raw_config_snapshot,
         )
+        self._invalidate_history_cache()
+        return history_id
 
     async def list_publishers(
         self, billing_id: str, mode: str | None = None, status: str | None = None

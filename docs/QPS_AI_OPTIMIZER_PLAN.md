@@ -761,6 +761,7 @@ ALSO PROVIDE:
   - removed startup geo-name lookup fan-out by resolving pretargeting geo ID names only for the expanded row (collapsed rows render IDs directly), preventing dozens of concurrent `/geo-names` requests during initial table render.
   - tuned cold-start render budget to mount fewer pretargeting rows initially (40 vs 60 warm), reducing first-hydration DOM work while preserving warm/repeat row density and infinite-load behavior.
   - added short TTL in-process caching for bidder-scoped `list_configs` reads in `PretargetingService` with explicit invalidation on config/name/state updates, reducing repeated reload latency for `/settings/pretargeting`.
+  - added short TTL in-process caching for `PretargetingService.list_history` (keyed by config/billing/day/limit) with invalidation on `add_history`, reducing repeated expanded-row history query latency for `/settings/pretargeting/history`.
   - optimized `/analytics/home/configs` query shape to compute overall totals via SQL window sums and return only top-20 rows in SQL (instead of fetching all grouped configs then truncating in Python), reducing backend work on large seats.
   - parallelized `/analytics/home/configs` precompute-status + config-row reads (requested and fallback windows) via `asyncio.gather`, reducing endpoint latency from sequential DB round trips.
   - parallelized `/analytics/home/funnel` status checks and downstream aggregate/list/count queries via `asyncio.gather`, reducing deferred post-hydration panel latency.
