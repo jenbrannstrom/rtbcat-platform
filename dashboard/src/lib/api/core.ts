@@ -144,6 +144,49 @@ export async function getSystemDataHealth(
   return fetchApi<DataHealthResponse>(`/system/data-health${qs ? `?${qs}` : ""}`);
 }
 
+export interface UiPageLoadMetricSample {
+  sampled_at: string;
+  buyer_id: string | null;
+  selected_days: number | null;
+  time_to_first_table_row_ms: number | null;
+  time_to_table_hydrated_ms: number | null;
+  api_latency_ms: Record<string, number>;
+}
+
+export interface UiPageLoadMetricSummaryResponse {
+  page: "qps_home";
+  buyer_id: string | null;
+  since_hours: number;
+  sample_count: number;
+  p50_first_table_row_ms: number | null;
+  p95_first_table_row_ms: number | null;
+  p50_table_hydrated_ms: number | null;
+  p95_table_hydrated_ms: number | null;
+  last_sampled_at: string | null;
+  latest_samples: UiPageLoadMetricSample[];
+}
+
+export interface UiPageLoadMetricSummaryQuery {
+  page?: "qps_home";
+  buyer_id?: string;
+  since_hours?: number;
+  latest_limit?: number;
+}
+
+export async function getUiPageLoadMetricSummary(
+  query: UiPageLoadMetricSummaryQuery = {}
+): Promise<UiPageLoadMetricSummaryResponse> {
+  const params = new URLSearchParams();
+  if (query.page) params.set("page", query.page);
+  if (query.buyer_id) params.set("buyer_id", query.buyer_id);
+  if (typeof query.since_hours === "number") params.set("since_hours", String(query.since_hours));
+  if (typeof query.latest_limit === "number") params.set("latest_limit", String(query.latest_limit));
+  const qs = params.toString();
+  return fetchApi<UiPageLoadMetricSummaryResponse>(
+    `/system/ui-metrics/page-load/summary${qs ? `?${qs}` : ""}`
+  );
+}
+
 // =============================================================================
 // Geo Utilities
 // =============================================================================
