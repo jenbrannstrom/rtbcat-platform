@@ -1,4 +1,4 @@
-.PHONY: help v1-canary-smoke v1-canary-workflow v1-canary-lifecycle v1-canary-go-no-go v1-canary-conversion-ready v1-canary-pixel v1-canary-webhook-auth v1-canary-webhook-hmac v1-canary-webhook-freshness v1-canary-webhook-rate-limit v1-canary-webhook-security-status v1-canary-webhook-security v1-canary-qps-load-latency v1-canary-qps-page-slo v1-canary-safe v1-canary-balanced v1-canary-aggressive v1-conversion-regression v1-gate phase0-regression phase0-dashboard-build phase0-gate
+.PHONY: help v1-canary-smoke v1-canary-workflow v1-canary-lifecycle v1-canary-go-no-go v1-canary-conversion-ready v1-canary-pixel v1-canary-webhook-auth v1-canary-webhook-hmac v1-canary-webhook-freshness v1-canary-webhook-rate-limit v1-canary-webhook-security-status v1-canary-webhook-security v1-canary-qps-load-latency v1-canary-qps-page-slo v1-canary-qps-page-slo-strict v1-canary-safe v1-canary-balanced v1-canary-aggressive v1-conversion-regression v1-gate phase0-regression phase0-dashboard-build phase0-gate
 
 help:
 	@echo "Targets:"
@@ -16,6 +16,7 @@ help:
 	@echo "  make v1-canary-webhook-security # Run bundled webhook security gate suite"
 	@echo "  make v1-canary-qps-load-latency # Run canary with QPS startup API latency budgets"
 	@echo "  make v1-canary-qps-page-slo # Run canary with QPS page p95 SLO summary budgets"
+	@echo "  make v1-canary-qps-page-slo-strict # Run QPS page SLO canary with strict API rollup enforcement"
 	@echo "  make v1-canary-safe      # Run workflow canary with safe preset"
 	@echo "  make v1-canary-balanced  # Run workflow canary with balanced preset"
 	@echo "  make v1-canary-aggressive # Run workflow canary with aggressive preset"
@@ -90,6 +91,15 @@ v1-canary-qps-page-slo:
 	CATSCAN_CANARY_MAX_QPS_PAGE_P95_FIRST_ROW_MS=$${CATSCAN_CANARY_MAX_QPS_PAGE_P95_FIRST_ROW_MS:-6000} \
 	CATSCAN_CANARY_MAX_QPS_PAGE_P95_HYDRATED_MS=$${CATSCAN_CANARY_MAX_QPS_PAGE_P95_HYDRATED_MS:-8000} \
 	CATSCAN_CANARY_QPS_PAGE_REQUIRE_API_ROLLUP=$${CATSCAN_CANARY_QPS_PAGE_REQUIRE_API_ROLLUP:-0} \
+	bash scripts/run_v1_canary_smoke.sh
+
+v1-canary-qps-page-slo-strict:
+	CATSCAN_CANARY_RUN_QPS_PAGE_SLO=1 \
+	CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS=$${CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS:-24} \
+	CATSCAN_CANARY_QPS_PAGE_SLO_MIN_SAMPLES=$${CATSCAN_CANARY_QPS_PAGE_SLO_MIN_SAMPLES:-1} \
+	CATSCAN_CANARY_MAX_QPS_PAGE_P95_FIRST_ROW_MS=$${CATSCAN_CANARY_MAX_QPS_PAGE_P95_FIRST_ROW_MS:-6000} \
+	CATSCAN_CANARY_MAX_QPS_PAGE_P95_HYDRATED_MS=$${CATSCAN_CANARY_MAX_QPS_PAGE_P95_HYDRATED_MS:-8000} \
+	CATSCAN_CANARY_QPS_PAGE_REQUIRE_API_ROLLUP=1 \
 	bash scripts/run_v1_canary_smoke.sh
 
 v1-canary-safe:

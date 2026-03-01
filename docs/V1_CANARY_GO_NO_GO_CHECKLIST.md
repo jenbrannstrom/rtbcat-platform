@@ -195,6 +195,12 @@ Equivalent convenience target:
 make v1-canary-qps-page-slo
 ```
 
+Strict rollup-enforced convenience target:
+
+```bash
+make v1-canary-qps-page-slo-strict
+```
+
 Bundled webhook security suite (auth + HMAC + freshness + rate-limit + security-status):
 
 ```bash
