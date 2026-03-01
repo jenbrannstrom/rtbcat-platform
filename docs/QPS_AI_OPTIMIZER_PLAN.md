@@ -752,6 +752,7 @@ ALSO PROVIDE:
   - hardened backend pretargeting query paths (`DISTINCT ON` list dedupe, `EXISTS` history billing filter, bounded pending-change ordering) and added migration `058_pretargeting_query_path_indexes.sql` for composite indexes aligned to those access paths.
   - persisted QPS screen-level load telemetry via `POST /system/ui-metrics/page-load` with percentile reporting from `GET /system/ui-metrics/page-load/summary` (migration `059_ui_page_load_metrics.sql`).
   - surfaced buyer-scoped QPS page-load SLO summary in Settings -> System (sample count, p50/p95 first-row + hydrated, latest samples, and target-status badge against p95 <= 6s/8s thresholds).
+  - expanded that System SLO panel with a latest-sample API latency table (sorted highest latency first) so operators can pinpoint slow endpoints directly from telemetry.
   - extended QPS telemetry capture into post-expansion dependent calls by measuring `/settings/pretargeting/:billing_id/detail`, `/settings/pretargeting/history`, and `/settings/pretargeting/snapshots`, and persistently posting those API latency samples after initial page hydration.
   - removed `/analytics/rtb-funnel` from startup critical path by deferring it until after pretargeting table hydration, preserving buyer-filter messaging without blocking first table readiness.
   - added optional canary SLO verification for recorded UI telemetry (`make v1-canary-qps-page-slo`) with p95 first-row and hydrated latency thresholds.
