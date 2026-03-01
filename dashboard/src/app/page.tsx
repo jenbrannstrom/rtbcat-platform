@@ -357,7 +357,7 @@ function WasteAnalysisContent() {
   } = useQuery({
     queryKey: ["spend-stats", days, selectedBuyerId, expandedConfigId],
     queryFn: () => getSpendStats(days, expandedConfigId || undefined),
-    enabled: seatReady,
+    enabled: false,
   });
 
   // Fetch pretargeting configs
@@ -535,6 +535,11 @@ function WasteAnalysisContent() {
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [displayConfigs.length, visibleConfigCount]);
+
+  useEffect(() => {
+    if (!deferredStartupQueriesReady) return;
+    refetchSpend();
+  }, [deferredStartupQueriesReady, refetchSpend, selectedBuyerId, days, expandedConfigId]);
 
   useEffect(() => {
     if (!deferredStartupQueriesReady) return;
