@@ -46,6 +46,7 @@ class HomeAnalyticsService:
     _PAYLOAD_CACHE_TTL_SECONDS = 15.0
     _FUNNEL_PAYLOAD_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
     _CONFIG_PAYLOAD_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+    _ENDPOINT_EFFICIENCY_PAYLOAD_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 
     def __init__(self, repo: HomeAnalyticsRepository | None = None) -> None:
         self._repo = repo or HomeAnalyticsRepository()
@@ -55,6 +56,7 @@ class HomeAnalyticsService:
     def clear_payload_caches(cls) -> None:
         cls._FUNNEL_PAYLOAD_CACHE.clear()
         cls._CONFIG_PAYLOAD_CACHE.clear()
+        cls._ENDPOINT_EFFICIENCY_PAYLOAD_CACHE.clear()
 
     @classmethod
     def _read_cached_payload(
@@ -415,6 +417,15 @@ class HomeAnalyticsService:
         days: int,
         buyer_id: str | None,
     ) -> dict[str, Any]:
+        endpoint_cache_key = f"{days}:{buyer_id or '__all__'}"
+        if self._cache_enabled:
+            cached = self._read_cached_payload(
+                self._ENDPOINT_EFFICIENCY_PAYLOAD_CACHE,
+                endpoint_cache_key,
+            )
+            if cached is not None:
+                return cached
+
         funnel_row = await self._repo.get_funnel_row(days, buyer_id)
         total_reached = int((funnel_row or {}).get("total_reached") or 0)
         total_impressions = int((funnel_row or {}).get("total_impressions") or 0)
@@ -590,7 +601,7 @@ class HomeAnalyticsService:
         home_seat_days_with_data = int(home_seat_coverage.get("days_with_data") or 0)
         bidstream_days_with_data = int(bidstream_coverage.get("days_with_data") or 0)
 
-        return {
+        payload = {
             "period_days": days,
             "window": {
                 "start_date": start_date,
@@ -679,3 +690,10 @@ class HomeAnalyticsService:
             },
             "alerts": alerts,
         }
+        if self._cache_enabled:
+            self._write_cached_payload(
+                self._ENDPOINT_EFFICIENCY_PAYLOAD_CACHE,
+                endpoint_cache_key,
+                payload,
+            )
+        return payload
