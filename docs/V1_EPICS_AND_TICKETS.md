@@ -15,7 +15,7 @@
 - `QA-004` started (ops automation slice): CI workflow `.github/workflows/v1-closeout-quick.yml` now runs `CATSCAN_CLOSEOUT_PROFILE=quick make v1-closeout-local` on push/PR for API/service/test/canary changes, publishes a GitHub job summary from the JSON output, and uploads generated closeout report artifacts.
 - closeout command ergonomics improved with `make v1-closeout-quick` and `make v1-closeout-deployed` wrappers for common operator flows.
 - closeout runner artifacts now include both human-readable markdown and machine-readable JSON outputs (`CATSCAN_CLOSEOUT_REPORT_PATH`, `CATSCAN_CLOSEOUT_REPORT_JSON_PATH`), and CI uploads both for quick-profile runs.
-- deployed closeout can now run as a manual GitHub workflow (`.github/workflows/v1-closeout-deployed.yml`) using `make v1-closeout-deployed-only` to execute only network-dependent canary gates and publish md/json evidence artifacts.
+- deployed closeout can now run as a manual GitHub workflow (`.github/workflows/v1-closeout-deployed.yml`) using `make v1-closeout-deployed-only` to execute only network-dependent canary gates and publish md/json evidence artifacts (auth via `CATSCAN_CANARY_BEARER_TOKEN` and/or `CATSCAN_CANARY_SESSION_COOKIE` repo secrets).
 - BYOM API/e2e coverage now has dedicated CI automation (`.github/workflows/v1-byom-api-regression.yml`) running `make v1-byom-api-regression` on optimizer API/service/test changes in a dependency-provisioned runner.
 
 - `E0-001` completed: `rtb_quality` import route/table path is live and covered by importer contract tests.
