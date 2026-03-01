@@ -105,6 +105,7 @@
 - `QA-004` started (performance coverage slice): canary smoke now supports optional QPS startup API latency budgets (`--run-qps-load-latency-check` / `CATSCAN_CANARY_RUN_QPS_LOAD_LATENCY=1`) across `/settings/endpoints`, `/settings/pretargeting`, `/analytics/home/configs`, and `/analytics/home/endpoint-efficiency`, with `make v1-canary-qps-load-latency` convenience target.
 - `QA-004` started (performance coverage slice): canary smoke now supports optional QPS page SLO summary checks (`--run-qps-page-slo-check` / `CATSCAN_CANARY_RUN_QPS_PAGE_SLO=1`) against `/system/ui-metrics/page-load/summary`, with p95 first-row/hydrated thresholds and `make v1-canary-qps-page-slo` convenience target.
 - `QA-004` started (performance coverage slice): QPS page SLO canary now supports strict API-rollup enforcement (`--qps-page-slo-require-api-rollup` / `CATSCAN_CANARY_QPS_PAGE_REQUIRE_API_ROLLUP=1`) to require startup endpoint rollups and enforce per-endpoint p95 latency budgets from recorded UI telemetry.
+- `QA-004` started (performance coverage slice): root `make` now includes `v1-canary-qps-page-slo-strict` convenience target for one-command strict rollup-enforced QPS page SLO gating.
 - `QA-004` started (ops hardening slice): `make phase0-gate` now runs reliably in restricted environments by building dashboard with webpack mode (`npm --prefix dashboard run build -- --webpack`), avoiding Turbopack sandbox port-binding failures.
 
 ---
