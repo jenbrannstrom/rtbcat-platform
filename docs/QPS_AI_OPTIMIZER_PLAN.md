@@ -764,6 +764,7 @@ ALSO PROVIDE:
   - memoized QPS Home config transformation/sort pipeline to reduce repeated CPU work during rerenders on large config lists.
   - fixed QPS telemetry cycle resets so buyer/day context changes start a fresh measurement window (new start mark, cleared latencies, fresh first-row/hydrated sample post), improving persisted SLO sample accuracy.
   - batched post-hydration API latency telemetry writes on QPS Home (short buffered flush) to reduce UI-metrics write amplification while preserving endpoint timing coverage.
+  - added buffered-telemetry flush on buyer/day context switch and unmount so in-flight API latency samples are not dropped between load cycles.
   - introduced optimistic seat readiness (fire buyer-scoped queries while seat list is still loading) with 403-aware retry suppression, reducing startup wait for users with valid cached buyer context while avoiding stale-seat retry storms.
   - removed `/analytics/home/endpoint-efficiency` from startup critical path by deferring it until pretargeting table hydration.
   - preserved manual operator refresh parity by wiring the top-level QPS refresh action to also refetch endpoint-efficiency after its deferral.
