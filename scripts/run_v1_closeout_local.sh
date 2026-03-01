@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 REPORT_PATH="${CATSCAN_CLOSEOUT_REPORT_PATH:-/tmp/v1_closeout_last_run.md}"
 RUN_DEPLOYED="${CATSCAN_CLOSEOUT_RUN_DEPLOYED:-0}"
 ALLOW_DEPLOYED_BLOCKED="${CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED:-1}"
+CLOSEOUT_PROFILE="${CATSCAN_CLOSEOUT_PROFILE:-full}"
 
 STEP_NAMES=()
 STEP_STATUSES=()
@@ -39,6 +40,7 @@ write_report() {
     echo "- commit: \`${commit}\`"
     echo "- run_deployed: \`${RUN_DEPLOYED}\`"
     echo "- allow_deployed_blocked: \`${ALLOW_DEPLOYED_BLOCKED}\`"
+    echo "- profile: \`${CLOSEOUT_PROFILE}\`"
     echo
     echo "| Step | Status | Notes |"
     echo "|---|---|---|"
@@ -75,8 +77,16 @@ run_step() {
   return "${status}"
 }
 
-run_step "Core gate" make v1-gate
-
+if [[ "${CLOSEOUT_PROFILE}" == "quick" ]]; then
+  run_step "Phase 0 regression (quick profile)" make phase0-regression
+  run_step "Conversion regression (quick profile)" make v1-conversion-regression
+elif [[ "${CLOSEOUT_PROFILE}" == "full" ]]; then
+  run_step "Core gate" make v1-gate
+else
+  record_step "Closeout profile validation" "FAIL" "unsupported profile '${CLOSEOUT_PROFILE}'"
+  echo "Unsupported CATSCAN_CLOSEOUT_PROFILE='${CLOSEOUT_PROFILE}' (expected full|quick)" >&2
+  exit 2
+fi
 run_step "Phase 4 targeted suites" \
   pytest -q \
     tests/test_system_ui_metrics_api.py \
