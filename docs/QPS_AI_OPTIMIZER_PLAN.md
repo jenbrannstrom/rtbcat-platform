@@ -765,6 +765,7 @@ ALSO PROVIDE:
   - added optional canary SLO verification for recorded UI telemetry (`make v1-canary-qps-page-slo`) with p95 first-row and hydrated latency thresholds.
   - enhanced QPS page SLO canary with optional strict API-rollup gating (`CATSCAN_CANARY_QPS_PAGE_REQUIRE_API_ROLLUP=1`) to enforce per-endpoint p95 budgets from `/system/ui-metrics/page-load/summary`.
   - added `make v1-canary-qps-page-slo-strict` convenience target to run the strict rollup-enforced QPS SLO gate in one command.
+  - added API contract coverage for summary rollup query controls (`api_rollup_limit`) in `tests/test_system_ui_metrics_api.py`.
 
 - Add end-to-end timing instrumentation for QPS Optimizer page:
   - page-level timing marks (navigation -> first table row -> full table hydration),
