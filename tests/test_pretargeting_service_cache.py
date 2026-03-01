@@ -7,6 +7,13 @@ import pytest
 from services.pretargeting_service import PretargetingService
 
 
+def _clear_service_caches() -> None:
+    PretargetingService.clear_list_configs_cache()
+    PretargetingService.clear_history_cache()
+    PretargetingService.clear_config_cache()
+    PretargetingService.clear_publishers_cache()
+
+
 class _StubPretargetingRepo:
     def __init__(self) -> None:
         self.list_calls = 0
@@ -14,9 +21,21 @@ class _StubPretargetingRepo:
         self.list_history_calls = 0
         self.add_history_calls = 0
         self.get_config_calls = 0
+        self.list_publishers_calls = 0
+        self.add_publisher_calls = 0
+        self.update_publisher_status_calls = 0
+        self.delete_publisher_calls = 0
+        self.clear_sync_publishers_calls = 0
+        self.list_pending_publisher_changes_calls = 0
         self.rows: list[dict[str, object]] = [{"billing_id": "1001"}]
         self.history_rows: list[dict[str, object]] = [{"config_id": "cfg-1", "change_type": "update"}]
         self.config_row: dict[str, object] | None = {"billing_id": "1001", "state": "ACTIVE"}
+        self.publisher_rows: list[dict[str, object]] = [
+            {"billing_id": "1001", "publisher_id": "pub-1", "mode": "WHITELIST", "status": "active"}
+        ]
+        self.pending_publisher_rows: list[dict[str, object]] = [
+            {"billing_id": "1001", "publisher_id": "pub-2", "mode": "BLACKLIST", "status": "pending_add"}
+        ]
 
     async def list_configs(
         self,
@@ -74,12 +93,94 @@ class _StubPretargetingRepo:
         self.add_history_calls += 1
         return 1
 
+    async def list_publishers(
+        self,
+        billing_id: str,
+        mode: str | None = None,
+        status: str | None = None,
+    ) -> list[dict[str, object]]:
+        self.list_publishers_calls += 1
+        rows = [row for row in self.publisher_rows if row["billing_id"] == billing_id]
+        if mode:
+            rows = [row for row in rows if row["mode"] == mode]
+        if status:
+            rows = [row for row in rows if row["status"] == status]
+        return [dict(row) for row in rows]
+
+    async def add_publisher(
+        self,
+        billing_id: str,
+        publisher_id: str,
+        mode: str,
+        status: str = "active",
+        source: str = "manual",
+    ) -> int:
+        self.add_publisher_calls += 1
+        self.publisher_rows.append(
+            {
+                "billing_id": billing_id,
+                "publisher_id": publisher_id,
+                "mode": mode,
+                "status": status,
+                "source": source,
+            }
+        )
+        return 1
+
+    async def update_publisher_status(
+        self,
+        billing_id: str,
+        publisher_id: str,
+        mode: str,
+        status: str,
+    ) -> int:
+        self.update_publisher_status_calls += 1
+        for row in self.publisher_rows:
+            if (
+                row["billing_id"] == billing_id
+                and row["publisher_id"] == publisher_id
+                and row["mode"] == mode
+            ):
+                row["status"] = status
+        return 1
+
+    async def delete_publisher(self, billing_id: str, publisher_id: str, mode: str) -> int:
+        self.delete_publisher_calls += 1
+        self.publisher_rows = [
+            row
+            for row in self.publisher_rows
+            if not (
+                row["billing_id"] == billing_id
+                and row["publisher_id"] == publisher_id
+                and row["mode"] == mode
+            )
+        ]
+        return 1
+
+    async def clear_sync_publishers(self, billing_id: str) -> int:
+        self.clear_sync_publishers_calls += 1
+        self.publisher_rows = [
+            row
+            for row in self.publisher_rows
+            if not (row["billing_id"] == billing_id and row.get("source") == "api_sync")
+        ]
+        return 1
+
+    async def list_pending_publisher_changes(
+        self,
+        billing_id: str,
+    ) -> list[dict[str, object]]:
+        self.list_pending_publisher_changes_calls += 1
+        return [
+            dict(row)
+            for row in self.pending_publisher_rows
+            if row["billing_id"] == billing_id
+        ]
+
 
 @pytest.mark.asyncio
 async def test_list_configs_uses_ttl_cache_per_bidder() -> None:
-    PretargetingService.clear_list_configs_cache()
-    PretargetingService.clear_history_cache()
-    PretargetingService.clear_config_cache()
+    _clear_service_caches()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -93,9 +194,7 @@ async def test_list_configs_uses_ttl_cache_per_bidder() -> None:
 
 @pytest.mark.asyncio
 async def test_save_config_invalidates_list_cache() -> None:
-    PretargetingService.clear_list_configs_cache()
-    PretargetingService.clear_history_cache()
-    PretargetingService.clear_config_cache()
+    _clear_service_caches()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -112,9 +211,7 @@ async def test_save_config_invalidates_list_cache() -> None:
 
 @pytest.mark.asyncio
 async def test_list_configs_for_buyer_uses_ttl_cache() -> None:
-    PretargetingService.clear_list_configs_cache()
-    PretargetingService.clear_history_cache()
-    PretargetingService.clear_config_cache()
+    _clear_service_caches()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -128,9 +225,7 @@ async def test_list_configs_for_buyer_uses_ttl_cache() -> None:
 
 @pytest.mark.asyncio
 async def test_list_configs_cache_is_scoped_by_limit() -> None:
-    PretargetingService.clear_list_configs_cache()
-    PretargetingService.clear_history_cache()
-    PretargetingService.clear_config_cache()
+    _clear_service_caches()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -142,9 +237,7 @@ async def test_list_configs_cache_is_scoped_by_limit() -> None:
 
 @pytest.mark.asyncio
 async def test_list_configs_cache_is_scoped_by_summary_shape() -> None:
-    PretargetingService.clear_list_configs_cache()
-    PretargetingService.clear_history_cache()
-    PretargetingService.clear_config_cache()
+    _clear_service_caches()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -156,9 +249,7 @@ async def test_list_configs_cache_is_scoped_by_summary_shape() -> None:
 
 @pytest.mark.asyncio
 async def test_save_config_invalidates_buyer_scoped_list_cache() -> None:
-    PretargetingService.clear_list_configs_cache()
-    PretargetingService.clear_history_cache()
-    PretargetingService.clear_config_cache()
+    _clear_service_caches()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -175,9 +266,7 @@ async def test_save_config_invalidates_buyer_scoped_list_cache() -> None:
 
 @pytest.mark.asyncio
 async def test_list_history_uses_ttl_cache() -> None:
-    PretargetingService.clear_list_configs_cache()
-    PretargetingService.clear_history_cache()
-    PretargetingService.clear_config_cache()
+    _clear_service_caches()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -191,9 +280,7 @@ async def test_list_history_uses_ttl_cache() -> None:
 
 @pytest.mark.asyncio
 async def test_add_history_invalidates_history_cache() -> None:
-    PretargetingService.clear_list_configs_cache()
-    PretargetingService.clear_history_cache()
-    PretargetingService.clear_config_cache()
+    _clear_service_caches()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -219,9 +306,7 @@ async def test_add_history_invalidates_history_cache() -> None:
 
 @pytest.mark.asyncio
 async def test_get_config_uses_ttl_cache() -> None:
-    PretargetingService.clear_list_configs_cache()
-    PretargetingService.clear_history_cache()
-    PretargetingService.clear_config_cache()
+    _clear_service_caches()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -235,9 +320,7 @@ async def test_get_config_uses_ttl_cache() -> None:
 
 @pytest.mark.asyncio
 async def test_update_user_name_invalidates_get_config_cache() -> None:
-    PretargetingService.clear_list_configs_cache()
-    PretargetingService.clear_history_cache()
-    PretargetingService.clear_config_cache()
+    _clear_service_caches()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -250,3 +333,68 @@ async def test_update_user_name_invalidates_get_config_cache() -> None:
 
     assert repo.get_config_calls == 2
     assert refreshed["state"] == "SUSPENDED"
+
+
+@pytest.mark.asyncio
+async def test_list_publishers_uses_ttl_cache() -> None:
+    _clear_service_caches()
+    repo = _StubPretargetingRepo()
+    service = PretargetingService(repo=repo)
+
+    first = await service.list_publishers("1001")
+    first[0]["publisher_id"] = "mutated-locally"
+    second = await service.list_publishers("1001")
+
+    assert repo.list_publishers_calls == 1
+    assert second[0]["publisher_id"] == "pub-1"
+
+
+@pytest.mark.asyncio
+async def test_add_publisher_invalidates_publishers_cache() -> None:
+    _clear_service_caches()
+    repo = _StubPretargetingRepo()
+    service = PretargetingService(repo=repo)
+
+    await service.list_publishers("1001")
+    assert repo.list_publishers_calls == 1
+
+    await service.add_publisher("1001", "pub-3", "WHITELIST")
+    refreshed = await service.list_publishers("1001")
+
+    assert repo.add_publisher_calls == 1
+    assert repo.list_publishers_calls == 2
+    assert any(row["publisher_id"] == "pub-3" for row in refreshed)
+
+
+@pytest.mark.asyncio
+async def test_list_pending_publisher_changes_uses_ttl_cache() -> None:
+    _clear_service_caches()
+    repo = _StubPretargetingRepo()
+    service = PretargetingService(repo=repo)
+
+    first = await service.list_pending_publisher_changes("1001")
+    first[0]["publisher_id"] = "mutated-locally"
+    second = await service.list_pending_publisher_changes("1001")
+
+    assert repo.list_pending_publisher_changes_calls == 1
+    assert second[0]["publisher_id"] == "pub-2"
+
+
+@pytest.mark.asyncio
+async def test_update_publisher_status_invalidates_pending_changes_cache() -> None:
+    _clear_service_caches()
+    repo = _StubPretargetingRepo()
+    service = PretargetingService(repo=repo)
+
+    await service.list_pending_publisher_changes("1001")
+    assert repo.list_pending_publisher_changes_calls == 1
+
+    repo.pending_publisher_rows = [
+        {"billing_id": "1001", "publisher_id": "pub-9", "mode": "BLACKLIST", "status": "pending_remove"}
+    ]
+    await service.update_publisher_status("1001", "pub-1", "WHITELIST", "pending_remove")
+    refreshed = await service.list_pending_publisher_changes("1001")
+
+    assert repo.update_publisher_status_calls == 1
+    assert repo.list_pending_publisher_changes_calls == 2
+    assert refreshed[0]["publisher_id"] == "pub-9"
