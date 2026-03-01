@@ -111,6 +111,30 @@ class ConversionReadinessResponse(BaseModel):
     checked_at: str
 
 
+class ConversionWebhookSecuritySourceStatus(BaseModel):
+    source_type: str
+    secret_enabled: bool
+    secret_values_configured: int
+    using_shared_secret: bool
+    hmac_enabled: bool
+    hmac_values_configured: int
+    using_shared_hmac: bool
+
+
+class ConversionWebhookSecurityStatusResponse(BaseModel):
+    shared_secret_enabled: bool
+    shared_secret_values_configured: int
+    shared_hmac_enabled: bool
+    shared_hmac_values_configured: int
+    sources: list[ConversionWebhookSecuritySourceStatus]
+    freshness_enforced: bool
+    max_skew_seconds: int
+    rate_limit_enabled: bool
+    rate_limit_per_window: int
+    rate_limit_window_seconds: int
+    checked_at: str
+
+
 class ConversionIngestResponse(BaseModel):
     accepted: bool
     duplicate: bool
@@ -253,6 +277,63 @@ def _parse_env_secret_list(env_name: str) -> list[str]:
         if token and token not in secrets_list:
             secrets_list.append(token)
     return secrets_list
+
+
+def _env_flag(env_name: str) -> bool:
+    return os.getenv(env_name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _webhook_security_status_payload() -> dict:
+    shared_secret_values = _parse_env_secret_list("CATSCAN_CONVERSIONS_SHARED_SECRET")
+    shared_hmac_values = _parse_env_secret_list("CATSCAN_CONVERSIONS_SHARED_HMAC_SECRET")
+
+    sources: list[dict] = []
+    for source_type in sorted(_SECRET_ENV_BY_SOURCE.keys()):
+        source_secret_env = _SECRET_ENV_BY_SOURCE.get(source_type, "")
+        source_hmac_env = _HMAC_SECRET_ENV_BY_SOURCE.get(source_type, "")
+        source_secret_values = _parse_env_secret_list(source_secret_env) if source_secret_env else []
+        source_hmac_values = _parse_env_secret_list(source_hmac_env) if source_hmac_env else []
+
+        using_shared_secret = not source_secret_values and bool(shared_secret_values)
+        using_shared_hmac = not source_hmac_values and bool(shared_hmac_values)
+
+        effective_secret_values = source_secret_values or shared_secret_values
+        effective_hmac_values = source_hmac_values or shared_hmac_values
+
+        sources.append(
+            {
+                "source_type": source_type,
+                "secret_enabled": bool(effective_secret_values),
+                "secret_values_configured": len(effective_secret_values),
+                "using_shared_secret": using_shared_secret,
+                "hmac_enabled": bool(effective_hmac_values),
+                "hmac_values_configured": len(effective_hmac_values),
+                "using_shared_hmac": using_shared_hmac,
+            }
+        )
+
+    max_skew_seconds = max(1, int(os.getenv("CATSCAN_CONVERSIONS_MAX_SKEW_SECONDS", "900") or "900"))
+    rate_limit_per_window = max(
+        1,
+        int(os.getenv("CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_PER_MINUTE", "240") or "240"),
+    )
+    rate_limit_window_seconds = max(
+        1,
+        int(os.getenv("CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_WINDOW_SECONDS", "60") or "60"),
+    )
+    return {
+        "shared_secret_enabled": bool(shared_secret_values),
+        "shared_secret_values_configured": len(shared_secret_values),
+        "shared_hmac_enabled": bool(shared_hmac_values),
+        "shared_hmac_values_configured": len(shared_hmac_values),
+        "sources": sources,
+        "freshness_enforced": _env_flag("CATSCAN_CONVERSIONS_ENFORCE_FRESHNESS"),
+        "max_skew_seconds": max_skew_seconds,
+        "rate_limit_enabled": _env_flag("CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_ENABLED"),
+        "rate_limit_per_window": rate_limit_per_window,
+        "rate_limit_window_seconds": rate_limit_window_seconds,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def _get_expected_webhook_secrets(source_type: str) -> list[str]:
@@ -881,6 +962,13 @@ async def get_conversion_health(
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = ConversionsService()
     return ConversionHealthResponse(**await service.get_health(buyer_id=buyer_id))
+
+
+@router.get("/security/status", response_model=ConversionWebhookSecurityStatusResponse)
+async def get_conversion_webhook_security_status(
+    user: User = Depends(get_current_user),
+):
+    return ConversionWebhookSecurityStatusResponse(**_webhook_security_status_payload())
 
 
 @router.get("/readiness", response_model=ConversionReadinessResponse)
