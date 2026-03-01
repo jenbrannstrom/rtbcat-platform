@@ -43,6 +43,38 @@ class SeatsRepository:
             tuple(params) if params else None,
         )
 
+    async def get_buyer_seats_by_ids(
+        self,
+        buyer_ids: list[str],
+        bidder_id: Optional[str] = None,
+        active_only: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Get buyer seats constrained to an explicit buyer_id allow-list."""
+        if not buyer_ids:
+            return []
+
+        conditions = ["buyer_id = ANY(%s)"]
+        params: list[Any] = [buyer_ids]
+
+        if bidder_id:
+            conditions.append("bidder_id = %s")
+            params.append(bidder_id)
+        if active_only:
+            conditions.append("active = true")
+
+        where_clause = "WHERE " + " AND ".join(conditions)
+
+        return await pg_query(
+            f"""
+            SELECT buyer_id, bidder_id, display_name, active,
+                   creative_count, last_synced, created_at, service_account_id
+            FROM buyer_seats
+            {where_clause}
+            ORDER BY display_name, buyer_id
+            """,
+            tuple(params),
+        )
+
     async def get_buyer_seats_for_service_accounts(
         self,
         service_account_ids: list[str],

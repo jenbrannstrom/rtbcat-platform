@@ -116,6 +116,20 @@ class SeatsService:
         rows = await self.repo.get_buyer_seats(bidder_id, active_only)
         return [BuyerSeat.from_row(row) for row in rows]
 
+    async def get_buyer_seats_by_ids(
+        self,
+        buyer_ids: list[str],
+        bidder_id: Optional[str] = None,
+        active_only: bool = True,
+    ) -> list[BuyerSeat]:
+        """Get buyer seats constrained to a provided buyer_id allow-list."""
+        rows = await self.repo.get_buyer_seats_by_ids(
+            buyer_ids=buyer_ids,
+            bidder_id=bidder_id,
+            active_only=active_only,
+        )
+        return [BuyerSeat.from_row(row) for row in rows]
+
     async def get_buyer_seats_for_service_accounts(
         self,
         service_account_ids: list[str],
