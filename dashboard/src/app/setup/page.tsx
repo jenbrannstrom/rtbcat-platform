@@ -16,6 +16,7 @@ import {
 import { ErrorPage } from "@/components/error";
 import { LoadingPage } from "@/components/loading";
 import { cn } from "@/lib/utils";
+import { useAccount } from "@/contexts/account-context";
 
 
 interface SetupItem {
@@ -28,6 +29,8 @@ interface SetupItem {
 
 
 export default function SetupPage() {
+  const { selectedBuyerId } = useAccount();
+
   const {
     data: seats,
     isLoading: seatsLoading,
@@ -42,11 +45,12 @@ export default function SetupPage() {
     isLoading: dataHealthLoading,
     error: dataHealthError,
   } = useQuery({
-    queryKey: ["setupDataHealth"],
+    queryKey: ["setupDataHealth", selectedBuyerId],
     queryFn: () =>
       getSystemDataHealth({
         days: 14,
         limit: 5,
+        buyer_id: selectedBuyerId || undefined,
       }),
   });
 
@@ -55,9 +59,10 @@ export default function SetupPage() {
     isLoading: modelsLoading,
     error: modelsError,
   } = useQuery({
-    queryKey: ["setupOptimizerModels"],
+    queryKey: ["setupOptimizerModels", selectedBuyerId],
     queryFn: () =>
       getOptimizerModels({
+        buyer_id: selectedBuyerId || undefined,
         include_inactive: true,
         limit: 200,
         offset: 0,
@@ -71,9 +76,10 @@ export default function SetupPage() {
     isLoading: modelValidationLoading,
     error: modelValidationError,
   } = useQuery({
-    queryKey: ["setupModelValidation", firstActiveModelId],
+    queryKey: ["setupModelValidation", selectedBuyerId, firstActiveModelId],
     queryFn: () =>
       validateOptimizerModelEndpoint(firstActiveModelId, {
+        buyer_id: selectedBuyerId || undefined,
         timeout_seconds: 10,
       }),
     enabled: !!firstActiveModelId,
@@ -94,8 +100,11 @@ export default function SetupPage() {
     isLoading: conversionHealthLoading,
     error: conversionHealthError,
   } = useQuery({
-    queryKey: ["setupConversionHealth"],
-    queryFn: () => getConversionHealth(),
+    queryKey: ["setupConversionHealth", selectedBuyerId],
+    queryFn: () =>
+      getConversionHealth({
+        buyer_id: selectedBuyerId || undefined,
+      }),
     retry: false,
   });
 
@@ -104,10 +113,11 @@ export default function SetupPage() {
     isLoading: conversionStatsLoading,
     error: conversionStatsError,
   } = useQuery({
-    queryKey: ["setupConversionIngestionStats"],
+    queryKey: ["setupConversionIngestionStats", selectedBuyerId],
     queryFn: () =>
       getConversionIngestionStats({
         days: 14,
+        buyer_id: selectedBuyerId || undefined,
       }),
     retry: false,
   });
