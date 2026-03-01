@@ -17,6 +17,12 @@ make v1-canary-smoke
 
 Set `CATSCAN_ROLLBACK_BILLING_ID=<billing_id>` and `CATSCAN_ROLLBACK_SNAPSHOT_ID=<snapshot_id>` to include rollback dry-run check.
 
+Strict all-in-one go/no-go target:
+
+```bash
+make v1-canary-go-no-go
+```
+
 Equivalent direct wrapper command:
 
 ```bash
