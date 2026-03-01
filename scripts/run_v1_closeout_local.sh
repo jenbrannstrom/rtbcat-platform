@@ -147,8 +147,22 @@ if [[ "${RUN_DEPLOYED}" == "1" ]]; then
     exit "${status}"
   }
 
-  run_deployed_check "Deployed canary go/no-go" "make v1-canary-go-no-go"
-  run_deployed_check "Deployed QPS strict SLO canary" "make v1-canary-qps-page-slo-strict"
+  run_deployed_check \
+    "Deployed canary go/no-go" \
+    "CATSCAN_CANARY_RUN_WORKFLOW=1 \
+CATSCAN_CANARY_RUN_LIFECYCLE=1 \
+CATSCAN_CANARY_REQUIRE_HEALTHY_READINESS=1 \
+CATSCAN_CANARY_REQUIRE_CONVERSION_READY=1 \
+bash scripts/run_v1_canary_smoke.sh"
+  run_deployed_check \
+    "Deployed QPS strict SLO canary" \
+    "CATSCAN_CANARY_RUN_QPS_PAGE_SLO=1 \
+CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS=\${CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS:-24} \
+CATSCAN_CANARY_QPS_PAGE_SLO_MIN_SAMPLES=\${CATSCAN_CANARY_QPS_PAGE_SLO_MIN_SAMPLES:-1} \
+CATSCAN_CANARY_MAX_QPS_PAGE_P95_FIRST_ROW_MS=\${CATSCAN_CANARY_MAX_QPS_PAGE_P95_FIRST_ROW_MS:-6000} \
+CATSCAN_CANARY_MAX_QPS_PAGE_P95_HYDRATED_MS=\${CATSCAN_CANARY_MAX_QPS_PAGE_P95_HYDRATED_MS:-8000} \
+CATSCAN_CANARY_QPS_PAGE_REQUIRE_API_ROLLUP=1 \
+bash scripts/run_v1_canary_smoke.sh"
 else
   record_step "Deployed canaries" "SKIPPED" "set CATSCAN_CLOSEOUT_RUN_DEPLOYED=1 to run"
   echo "==> Deployed canaries skipped (set CATSCAN_CLOSEOUT_RUN_DEPLOYED=1 to run)."
