@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from storage.postgres_repositories.home_repo import HomeAnalyticsRepository
@@ -227,26 +228,32 @@ class HomeAnalyticsService:
         fallback_applied = False
         fallback_reason: str | None = None
 
-        config_status = await _get_precompute_status(
-            "pretarg_daily",
-            requested_days,
-            filters=["buyer_account_id = %s"] if buyer_id else None,
-            params=[buyer_id] if buyer_id else None,
+        filters = ["buyer_account_id = %s"] if buyer_id else None
+        params = [buyer_id] if buyer_id else None
+
+        config_status, rows = await asyncio.gather(
+            _get_precompute_status(
+                "pretarg_daily",
+                requested_days,
+                filters=filters,
+                params=params,
+            ),
+            self._repo.get_config_rows(requested_days, buyer_id),
         )
-        rows: list[dict[str, Any]] = []
-        if config_status["has_rows"]:
-            rows = await self._repo.get_config_rows(requested_days, buyer_id)
+        rows = rows if (config_status.get("has_rows") or self._has_config_rows(rows)) else []
 
         if requested_days < 30 and not self._has_config_rows(rows):
             fallback_days = 30
-            fallback_status = await _get_precompute_status(
-                "pretarg_daily",
-                fallback_days,
-                filters=["buyer_account_id = %s"] if buyer_id else None,
-                params=[buyer_id] if buyer_id else None,
+            fallback_status, fallback_rows = await asyncio.gather(
+                _get_precompute_status(
+                    "pretarg_daily",
+                    fallback_days,
+                    filters=filters,
+                    params=params,
+                ),
+                self._repo.get_config_rows(fallback_days, buyer_id),
             )
-            if fallback_status["has_rows"]:
-                fallback_rows = await self._repo.get_config_rows(fallback_days, buyer_id)
+            if fallback_status.get("has_rows") or self._has_config_rows(fallback_rows):
                 if self._has_config_rows(fallback_rows):
                     rows = fallback_rows
                     effective_days = fallback_days
