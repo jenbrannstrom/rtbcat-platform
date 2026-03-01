@@ -35,10 +35,14 @@ def is_network_blocked_urlerror(exc: urllib.error.URLError) -> bool:
     """Best-effort detection for sandbox/network-policy blocking errors."""
     reason = exc.reason
     errno = getattr(reason, "errno", None)
-    if errno in {1, 13}:
+    if errno in {1, 13, -3}:
         return True
     text = f"{exc} {reason}".lower()
-    return "operation not permitted" in text or "permission denied" in text
+    return (
+        "operation not permitted" in text
+        or "permission denied" in text
+        or "temporary failure in name resolution" in text
+    )
 
 
 class SmokeClient:

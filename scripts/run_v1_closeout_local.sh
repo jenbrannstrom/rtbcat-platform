@@ -10,6 +10,10 @@ RUN_DEPLOYED="${CATSCAN_CLOSEOUT_RUN_DEPLOYED:-0}"
 ALLOW_DEPLOYED_BLOCKED="${CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED:-1}"
 CLOSEOUT_PROFILE="${CATSCAN_CLOSEOUT_PROFILE:-full}"
 
+if [[ "${CLOSEOUT_PROFILE}" == "deployed_only" ]]; then
+  RUN_DEPLOYED=1
+fi
+
 STEP_NAMES=()
 STEP_STATUSES=()
 STEP_NOTES=()
@@ -138,38 +142,44 @@ if [[ "${CLOSEOUT_PROFILE}" == "quick" ]]; then
   run_step "Conversion regression (quick profile)" make v1-conversion-regression
 elif [[ "${CLOSEOUT_PROFILE}" == "full" ]]; then
   run_step "Core gate" make v1-gate
+elif [[ "${CLOSEOUT_PROFILE}" == "deployed_only" ]]; then
+  record_step "Local test suites" "SKIPPED" "profile=deployed_only (run deployed canaries only)"
+  echo "==> Local test suites skipped (profile=deployed_only)."
 else
   record_step "Closeout profile validation" "FAIL" "unsupported profile '${CLOSEOUT_PROFILE}'"
-  echo "Unsupported CATSCAN_CLOSEOUT_PROFILE='${CLOSEOUT_PROFILE}' (expected full|quick)" >&2
+  echo "Unsupported CATSCAN_CLOSEOUT_PROFILE='${CLOSEOUT_PROFILE}' (expected full|quick|deployed_only)" >&2
   exit 2
 fi
-run_step "Phase 4 targeted suites" \
-  pytest -q \
-    tests/test_system_ui_metrics_api.py \
-    tests/test_pretargeting_repo_query_shapes.py \
-    tests/test_pretargeting_service_cache.py \
-    tests/test_endpoints_service_cache.py \
-    tests/test_analytics_service_cache.py
 
-run_step "BYOM/optimizer service suites" \
-  pytest -q \
-    tests/test_optimizer_models_service.py \
-    tests/test_optimizer_scoring_service.py \
-    tests/test_optimizer_proposals_service.py \
-    tests/test_optimizer_economics_service.py \
-    tests/test_response_model_regressions.py
+if [[ "${CLOSEOUT_PROFILE}" != "deployed_only" ]]; then
+  run_step "Phase 4 targeted suites" \
+    pytest -q \
+      tests/test_system_ui_metrics_api.py \
+      tests/test_pretargeting_repo_query_shapes.py \
+      tests/test_pretargeting_service_cache.py \
+      tests/test_endpoints_service_cache.py \
+      tests/test_analytics_service_cache.py
 
-run_step "Optimizer syntax compile checks" \
-  python3 -m py_compile \
-    api/routers/optimizer_models.py \
-    api/routers/optimizer_scoring.py \
-    api/routers/optimizer_proposals.py \
-    api/routers/optimizer_workflows.py \
-    api/routers/optimizer_economics.py \
-    services/optimizer_models_service.py \
-    services/optimizer_scoring_service.py \
-    services/optimizer_proposals_service.py \
-    services/optimizer_economics_service.py
+  run_step "BYOM/optimizer service suites" \
+    pytest -q \
+      tests/test_optimizer_models_service.py \
+      tests/test_optimizer_scoring_service.py \
+      tests/test_optimizer_proposals_service.py \
+      tests/test_optimizer_economics_service.py \
+      tests/test_response_model_regressions.py
+
+  run_step "Optimizer syntax compile checks" \
+    python3 -m py_compile \
+      api/routers/optimizer_models.py \
+      api/routers/optimizer_scoring.py \
+      api/routers/optimizer_proposals.py \
+      api/routers/optimizer_workflows.py \
+      api/routers/optimizer_economics.py \
+      services/optimizer_models_service.py \
+      services/optimizer_scoring_service.py \
+      services/optimizer_proposals_service.py \
+      services/optimizer_economics_service.py
+fi
 
 if [[ "${RUN_DEPLOYED}" == "1" ]]; then
   allow_blocked="${ALLOW_DEPLOYED_BLOCKED}"

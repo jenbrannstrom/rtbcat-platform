@@ -37,6 +37,7 @@
    - result: passed
 8. CI automation:
    - `.github/workflows/v1-closeout-quick.yml` runs `CATSCAN_CLOSEOUT_PROFILE=quick make v1-closeout-local`, publishes a GitHub job summary from `/tmp/v1_closeout_last_run.json`, and uploads both `/tmp/v1_closeout_last_run.md` and `/tmp/v1_closeout_last_run.json` as artifacts on matching push/PR changes.
+   - `.github/workflows/v1-closeout-deployed.yml` adds manual (`workflow_dispatch`) deployed closeout execution using `make v1-closeout-deployed-only`, with summary + md/json artifacts for attachable canary evidence.
 
 ## Closeout Matrix
 
@@ -56,8 +57,8 @@ Implementation is largely complete across Phases 0-4, but final plan closure req
 
 ## Immediate Final-Close Actions (Ops)
 
-1. Run deployed canary profile: `make v1-canary-go-no-go` (from network-enabled runner).
-2. Run deployed strict QPS SLO gate: `make v1-canary-qps-page-slo-strict`.
+1. Run deployed canary profile: `make v1-canary-go-no-go` (from network-enabled runner) or dispatch `.github/workflows/v1-closeout-deployed.yml`.
+2. Run deployed strict QPS SLO gate: `make v1-canary-qps-page-slo-strict` (or via the same deployed closeout workflow).
 3. Run BYOM API/e2e suites in provisioned test env with API deps installed.
 4. Record buyer-scoped SLO outcomes for the agreed lookback window.
 5. Mark remaining `Operational Pending` rows as `Complete` once evidence is attached.
@@ -65,8 +66,8 @@ Implementation is largely complete across Phases 0-4, but final plan closure req
 ## Closeout Runner Notes
 
 - `make v1-closeout-local` runs all non-env-blocked checks.
-- convenience targets: `make v1-closeout-quick` (quick profile) and `make v1-closeout-deployed` (enables deployed canary gates).
-- Profiles: `CATSCAN_CLOSEOUT_PROFILE=full|quick` (`full` includes dashboard production build via `v1-gate`; `quick` skips build and runs regression suites only).
+- convenience targets: `make v1-closeout-quick` (quick profile), `make v1-closeout-deployed` (full/quick + deployed canary gates), and `make v1-closeout-deployed-only` (deployed canary gates only).
+- Profiles: `CATSCAN_CLOSEOUT_PROFILE=full|quick|deployed_only` (`full` includes dashboard production build via `v1-gate`; `quick` skips build and runs regression suites only; `deployed_only` skips local suites and runs network canary gates).
 - It writes structured reports to `/tmp/v1_closeout_last_run.md` and `/tmp/v1_closeout_last_run.json` by default (`CATSCAN_CLOSEOUT_REPORT_PATH` and `CATSCAN_CLOSEOUT_REPORT_JSON_PATH` override).
 - For deployed gates: set `CATSCAN_CLOSEOUT_RUN_DEPLOYED=1`.
 - If running from a restricted environment, keep `CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED=1` so deployed canary exit code `2` is recorded as `Blocked (Env)` instead of hard-failing local closeout runs.
