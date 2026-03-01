@@ -38,7 +38,7 @@ const DEFERRED_QUERY_REFRESH_DELAY_MS_SEEDED = 1500;
 const INITIAL_VISIBLE_CONFIG_ROWS_WARM = 60;
 const INITIAL_VISIBLE_CONFIG_ROWS_COLD = 40;
 const CONFIG_ROWS_CHUNK_SIZE = 120;
-const PRETARGETING_CONFIG_CACHE_PREFIX = "catscan:qps:pretargeting-configs:v1";
+const PRETARGETING_CONFIG_CACHE_PREFIX = "catscan:qps:pretargeting-configs:v2";
 const PRETARGETING_CONFIG_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 const PRETARGETING_CONFIG_CACHE_MAX_ROWS = 300;
 const PRETARGETING_CONFIG_CACHE_FALLBACK_ROWS = 150;
@@ -151,6 +151,15 @@ function readPretargetingConfigCache(buyerId: string | null): PretargetingConfig
 
 function writePretargetingConfigCache(buyerId: string | null, rows: PretargetingConfigResponse[] | undefined): void {
   if (!buyerId || typeof window === "undefined" || !rows) return;
+  const summaryRows = rows.map((row) => ({
+    ...row,
+    included_formats: null,
+    included_platforms: null,
+    included_sizes: null,
+    included_geos: null,
+    excluded_geos: null,
+    included_operating_systems: null,
+  }));
   const writeRows = (candidateRows: PretargetingConfigResponse[]): void => {
     const payload: PretargetingConfigCachePayload = {
       cached_at_iso: new Date().toISOString(),
@@ -159,7 +168,7 @@ function writePretargetingConfigCache(buyerId: string | null, rows: Pretargeting
     window.localStorage.setItem(getPretargetingConfigCacheKey(buyerId), JSON.stringify(payload));
   };
 
-  const boundedRows = rows.slice(0, PRETARGETING_CONFIG_CACHE_MAX_ROWS);
+  const boundedRows = summaryRows.slice(0, PRETARGETING_CONFIG_CACHE_MAX_ROWS);
   try {
     writeRows(boundedRows);
   } catch {
