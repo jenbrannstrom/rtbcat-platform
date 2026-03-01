@@ -231,10 +231,19 @@ async def list_seats(
     Returns buyer seats that have been discovered via the /seats/discover endpoint.
     """
     allowed_buyer_ids = await get_allowed_buyer_ids(store=store, user=user)
-    seats = await seats_service.get_buyer_seats(bidder_id=bidder_id, active_only=active_only)
-    if allowed_buyer_ids is not None:
-        allowed_set = set(allowed_buyer_ids)
-        seats = [s for s in seats if s.buyer_id in allowed_set]
+    if allowed_buyer_ids is None:
+        seats = await seats_service.get_buyer_seats(
+            bidder_id=bidder_id,
+            active_only=active_only,
+        )
+    elif not allowed_buyer_ids:
+        seats = []
+    else:
+        seats = await seats_service.get_buyer_seats_by_ids(
+            buyer_ids=allowed_buyer_ids,
+            bidder_id=bidder_id,
+            active_only=active_only,
+        )
     return [BuyerSeatResponse(**s.to_response_dict()) for s in seats]
 
 
