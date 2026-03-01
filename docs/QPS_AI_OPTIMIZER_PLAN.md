@@ -45,6 +45,16 @@ Current roadmap execution status (implemented in code, pending environment-by-en
 6. **Known UX/runtime gap (planned, not yet executed): QPS page/table hydration latency**:
    - observed on reload: prolonged `Data freshness pending...` and skeleton rows before pretargeting tables render.
    - scope is performance hardening (query/runtime + API fan-out + frontend hydration), not data-accuracy semantics.
+7. **Closeout evidence automation is now machine-readable and reproducible**:
+   - `scripts/run_v1_closeout_local.sh` emits both markdown and JSON reports.
+   - `make v1-closeout-summary` renders standardized markdown from JSON for local/ops usage.
+   - shared renderer `scripts/render_v1_closeout_summary.py` is used by CI workflows for consistent output.
+8. **Deployed canary closeout execution is now CI-operable**:
+   - manual workflow `.github/workflows/v1-closeout-deployed.yml` runs deployed-only closeout gates and publishes md/json artifacts plus job summary.
+   - supports explicit blocked-mode handling for restricted environments and auth via repo secrets (`CATSCAN_CANARY_BEARER_TOKEN` and/or `CATSCAN_CANARY_SESSION_COOKIE`).
+9. **BYOM API/e2e validation now has dedicated CI coverage path**:
+   - `make v1-byom-api-regression` runs optimizer API/e2e suites.
+   - `.github/workflows/v1-byom-api-regression.yml` executes this suite on optimizer API/service/test changes in a dependency-provisioned runner.
 
 ---
 
