@@ -23,6 +23,7 @@ const PERIOD_OPTIONS = [
   { value: 30, label: "30 days" },
 ];
 const INITIAL_VISIBLE_CONFIG_ROWS = 60;
+const CONFIG_ROWS_CHUNK_SIZE = 120;
 
 function getRetryDelay(attemptIndex: number): number {
   return Math.min(1000 * 2 ** attemptIndex, 5000);
@@ -219,6 +220,7 @@ function WasteAnalysisContent() {
   }, [selectedBuyerId, seats, setSelectedBuyerId]);
 
   const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setExpandedConfigId(null);
@@ -471,11 +473,36 @@ function WasteAnalysisContent() {
       return;
     }
     setVisibleConfigCount(INITIAL_VISIBLE_CONFIG_ROWS);
-    const timer = window.setTimeout(() => {
-      setVisibleConfigCount(totalRows);
-    }, 0);
-    return () => window.clearTimeout(timer);
   }, [displayConfigs.length, days, selectedBuyerId, sortColumn, sortDirection]);
+
+  useEffect(() => {
+    if (!expandedConfigId) return;
+    const expandedIndex = displayConfigs.findIndex((row) => row.billing_id === expandedConfigId);
+    if (expandedIndex < 0 || expandedIndex < visibleConfigCount) return;
+    const nextVisible = Math.min(displayConfigs.length, expandedIndex + CONFIG_ROWS_CHUNK_SIZE);
+    setVisibleConfigCount(nextVisible);
+  }, [displayConfigs, expandedConfigId, visibleConfigCount]);
+
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel) return;
+    if (visibleConfigCount >= displayConfigs.length) return;
+    if (typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry?.isIntersecting) return;
+        setVisibleConfigCount((prev) =>
+          Math.min(displayConfigs.length, prev + CONFIG_ROWS_CHUNK_SIZE)
+        );
+      },
+      { root: null, rootMargin: "400px 0px", threshold: 0 }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [displayConfigs.length, visibleConfigCount]);
 
   useEffect(() => {
     if (!seatReady || !tableHydrated) return;
@@ -792,6 +819,14 @@ function WasteAnalysisContent() {
                 )}
               </div>
             ))}
+            {visibleConfigCount < displayConfigs.length && (
+              <div
+                ref={loadMoreSentinelRef}
+                className="rounded border border-dashed border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs text-gray-500"
+              >
+                Showing {visibleConfigCount.toLocaleString()} of {displayConfigs.length.toLocaleString()} configs
+              </div>
+            )}
           </div>
         )}
       </section>
