@@ -24,6 +24,13 @@ const PERIOD_OPTIONS = [
 ];
 const INITIAL_VISIBLE_CONFIG_ROWS = 60;
 const CONFIG_ROWS_CHUNK_SIZE = 120;
+const PRETARGETING_CONFIG_CACHE_PREFIX = "catscan:qps:pretargeting-configs:v1";
+const PRETARGETING_CONFIG_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
+
+interface PretargetingConfigCachePayload {
+  cached_at_iso: string;
+  rows: PretargetingConfigResponse[];
+}
 
 function getRetryDelay(attemptIndex: number): number {
   return Math.min(1000 * 2 ** attemptIndex, 5000);
@@ -46,6 +53,42 @@ function shouldRetryAnalyticsQuery(failureCount: number, error: unknown): boolea
 function normalizeDateString(value: string | null | undefined): string | null {
   if (!value) return null;
   return value.slice(0, 10);
+}
+
+function getPretargetingConfigCacheKey(buyerId: string): string {
+  return `${PRETARGETING_CONFIG_CACHE_PREFIX}:${buyerId}`;
+}
+
+function readPretargetingConfigCache(buyerId: string | null): PretargetingConfigResponse[] | undefined {
+  if (!buyerId || typeof window === "undefined") return undefined;
+  try {
+    const raw = window.localStorage.getItem(getPretargetingConfigCacheKey(buyerId));
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as PretargetingConfigCachePayload;
+    const cachedAtMs = Date.parse(parsed.cached_at_iso);
+    if (!Number.isFinite(cachedAtMs)) return undefined;
+    if ((Date.now() - cachedAtMs) > PRETARGETING_CONFIG_CACHE_MAX_AGE_MS) {
+      window.localStorage.removeItem(getPretargetingConfigCacheKey(buyerId));
+      return undefined;
+    }
+    if (!Array.isArray(parsed.rows)) return undefined;
+    return parsed.rows;
+  } catch {
+    return undefined;
+  }
+}
+
+function writePretargetingConfigCache(buyerId: string | null, rows: PretargetingConfigResponse[] | undefined): void {
+  if (!buyerId || typeof window === "undefined" || !rows) return;
+  try {
+    const payload: PretargetingConfigCachePayload = {
+      cached_at_iso: new Date().toISOString(),
+      rows,
+    };
+    window.localStorage.setItem(getPretargetingConfigCacheKey(buyerId), JSON.stringify(payload));
+  } catch {
+    // Ignore localStorage failures (quota/private browsing).
+  }
 }
 
 interface QpsPageLoadMetricsSnapshot {
@@ -365,10 +408,12 @@ function WasteAnalysisContent() {
     data: pretargetingConfigs,
     isLoading: configsLoading,
     refetch: refetchConfigs,
+    isFetchedAfterMount: configsFetchedAfterMount,
   } = useQuery({
     queryKey: ["pretargeting-configs", selectedBuyerId],
     queryFn: fetchMeasuredPretargetingConfigs,
     enabled: seatReady,
+    initialData: () => readPretargetingConfigCache(selectedBuyerId),
     retry: shouldRetryAnalyticsQuery,
     retryDelay: getRetryDelay,
     retryOnMount: true,
@@ -382,6 +427,11 @@ function WasteAnalysisContent() {
       return false;
     },
   });
+
+  useEffect(() => {
+    if (!configsFetchedAfterMount) return;
+    writePretargetingConfigCache(selectedBuyerId, pretargetingConfigs);
+  }, [configsFetchedAfterMount, pretargetingConfigs, selectedBuyerId]);
 
   // Fetch config-level performance data (filtered by selected buyer)
   const {
