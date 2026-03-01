@@ -735,6 +735,11 @@ function WasteAnalysisContent() {
     writeRtbFunnelCache(selectedBuyerId, days, rtbFunnel);
   }, [days, rtbFunnel, rtbFunnelFetchedAfterMount, selectedBuyerId]);
 
+  const spendStatsCacheSeed = useMemo(
+    () => readSpendStatsCache(selectedBuyerId, days, expandedConfigId),
+    [days, expandedConfigId, selectedBuyerId]
+  );
+
   // Fetch spend stats for CPM display (filtered by expanded config if selected)
   const {
     data: spendStats,
@@ -743,7 +748,7 @@ function WasteAnalysisContent() {
   } = useQuery({
     queryKey: ["spend-stats", days, selectedBuyerId, expandedConfigId],
     queryFn: () => getSpendStats(days, expandedConfigId || undefined),
-    initialData: () => readSpendStatsCache(selectedBuyerId, days, expandedConfigId),
+    initialData: () => spendStatsCacheSeed,
     enabled: false,
   });
 
@@ -1050,8 +1055,37 @@ function WasteAnalysisContent() {
 
   useEffect(() => {
     if (!deferredStartupQueriesReady) return;
-    refetchSpend();
-  }, [deferredStartupQueriesReady, refetchSpend, selectedBuyerId, days, expandedConfigId]);
+    const startupScope = !expandedConfigId;
+    if (!(startupScope && spendStatsCacheSeed)) {
+      refetchSpend();
+      return;
+    }
+    const browserWindow = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback, opts?: IdleRequestOptions) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (
+      typeof browserWindow.requestIdleCallback === "function"
+      && typeof browserWindow.cancelIdleCallback === "function"
+    ) {
+      const idleId = browserWindow.requestIdleCallback(
+        () => void refetchSpend(),
+        { timeout: DEFERRED_QUERY_REFRESH_IDLE_TIMEOUT_MS }
+      );
+      return () => browserWindow.cancelIdleCallback?.(idleId);
+    }
+    const timer = setTimeout(() => {
+      void refetchSpend();
+    }, DEFERRED_QUERY_REFRESH_DELAY_MS_SEEDED);
+    return () => clearTimeout(timer);
+  }, [
+    days,
+    deferredStartupQueriesReady,
+    expandedConfigId,
+    refetchSpend,
+    selectedBuyerId,
+    spendStatsCacheSeed,
+  ]);
 
   useEffect(() => {
     if (!deferredStartupQueriesReady) return;
