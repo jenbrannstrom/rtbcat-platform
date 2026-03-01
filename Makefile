@@ -29,7 +29,7 @@ help:
 	@echo "  make phase0-dashboard-build  # Build dashboard production bundle"
 	@echo "  make phase0-gate         # Run regression tests + dashboard build"
 	@echo "Env presets: CATSCAN_CANARY_PROFILE=safe|balanced|aggressive, CATSCAN_CANARY_RUN_PIXEL=1, CATSCAN_CANARY_REQUIRE_CONVERSION_READY=1, CATSCAN_CANARY_RUN_WEBHOOK_AUTH=1, CATSCAN_CANARY_RUN_WEBHOOK_HMAC=1"
-	@echo "Closeout env: CATSCAN_CLOSEOUT_PROFILE=full|quick, CATSCAN_CLOSEOUT_RUN_DEPLOYED=1 (also run deployed canaries), CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED=1 (treat exit 2 as blocked), CATSCAN_CLOSEOUT_REPORT_PATH=/tmp/v1_closeout_last_run.md"
+	@echo "Closeout env: CATSCAN_CLOSEOUT_PROFILE=full|quick, CATSCAN_CLOSEOUT_RUN_DEPLOYED=1 (also run deployed canaries), CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED=1 (treat exit 2 as blocked), CATSCAN_CLOSEOUT_REPORT_PATH=/tmp/v1_closeout_last_run.md, CATSCAN_CLOSEOUT_REPORT_JSON_PATH=/tmp/v1_closeout_last_run.json"
 
 v1-closeout-local:
 	bash scripts/run_v1_closeout_local.sh

@@ -36,7 +36,7 @@
    - `python3 -m py_compile api/routers/optimizer_models.py api/routers/optimizer_scoring.py api/routers/optimizer_proposals.py api/routers/optimizer_workflows.py api/routers/optimizer_economics.py services/optimizer_models_service.py services/optimizer_scoring_service.py services/optimizer_proposals_service.py services/optimizer_economics_service.py`
    - result: passed
 8. CI automation:
-   - `.github/workflows/v1-closeout-quick.yml` runs `CATSCAN_CLOSEOUT_PROFILE=quick make v1-closeout-local` and uploads `/tmp/v1_closeout_last_run.md` as an artifact on matching push/PR changes.
+   - `.github/workflows/v1-closeout-quick.yml` runs `CATSCAN_CLOSEOUT_PROFILE=quick make v1-closeout-local` and uploads both `/tmp/v1_closeout_last_run.md` and `/tmp/v1_closeout_last_run.json` as artifacts on matching push/PR changes.
 
 ## Closeout Matrix
 
@@ -67,6 +67,6 @@ Implementation is largely complete across Phases 0-4, but final plan closure req
 - `make v1-closeout-local` runs all non-env-blocked checks.
 - convenience targets: `make v1-closeout-quick` (quick profile) and `make v1-closeout-deployed` (enables deployed canary gates).
 - Profiles: `CATSCAN_CLOSEOUT_PROFILE=full|quick` (`full` includes dashboard production build via `v1-gate`; `quick` skips build and runs regression suites only).
-- It writes a structured report to `/tmp/v1_closeout_last_run.md` by default (`CATSCAN_CLOSEOUT_REPORT_PATH` overrides).
+- It writes structured reports to `/tmp/v1_closeout_last_run.md` and `/tmp/v1_closeout_last_run.json` by default (`CATSCAN_CLOSEOUT_REPORT_PATH` and `CATSCAN_CLOSEOUT_REPORT_JSON_PATH` override).
 - For deployed gates: set `CATSCAN_CLOSEOUT_RUN_DEPLOYED=1`.
 - If running from a restricted environment, keep `CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED=1` so deployed canary exit code `2` is recorded as `Blocked (Env)` instead of hard-failing local closeout runs.
