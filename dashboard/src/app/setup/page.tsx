@@ -30,6 +30,8 @@ interface SetupItem {
 
 export default function SetupPage() {
   const { selectedBuyerId } = useAccount();
+  const buyerContextReady = !!selectedBuyerId;
+  const buyerSelectionHint = "Select a buyer context in the header to evaluate buyer-specific setup steps.";
 
   const {
     data: seats,
@@ -52,6 +54,7 @@ export default function SetupPage() {
         limit: 5,
         buyer_id: selectedBuyerId || undefined,
       }),
+    enabled: buyerContextReady,
   });
 
   const {
@@ -67,6 +70,7 @@ export default function SetupPage() {
         limit: 200,
         offset: 0,
       }),
+    enabled: buyerContextReady,
   });
   const firstActiveModelId =
     (optimizerModels?.rows || []).find((row) => row.is_active)?.model_id || "";
@@ -82,7 +86,7 @@ export default function SetupPage() {
         buyer_id: selectedBuyerId || undefined,
         timeout_seconds: 10,
       }),
-    enabled: !!firstActiveModelId,
+    enabled: buyerContextReady && !!firstActiveModelId,
     retry: false,
   });
 
@@ -105,6 +109,7 @@ export default function SetupPage() {
       getConversionHealth({
         buyer_id: selectedBuyerId || undefined,
       }),
+    enabled: buyerContextReady,
     retry: false,
   });
 
@@ -119,6 +124,7 @@ export default function SetupPage() {
         days: 14,
         buyer_id: selectedBuyerId || undefined,
       }),
+    enabled: buyerContextReady,
     retry: false,
   });
 
@@ -151,11 +157,12 @@ export default function SetupPage() {
   const seatDayCompleteness = Number(
     dataHealth?.optimizer_readiness?.seat_day_completeness?.summary?.avg_completeness_pct || 0,
   );
-  const dataReadinessReady = reportCompletenessHealthy && qualityFreshnessHealthy && seatDayCompleteness >= 80;
+  const dataReadinessReady =
+    buyerContextReady && reportCompletenessHealthy && qualityFreshnessHealthy && seatDayCompleteness >= 80;
   const activeModels = (optimizerModels?.rows || []).filter((row) => row.is_active);
-  const modelsReady = activeModels.length > 0;
+  const modelsReady = buyerContextReady && activeModels.length > 0;
   const modelValidationReady =
-    !!firstActiveModelId && !!(modelValidation?.valid || modelValidation?.skipped);
+    buyerContextReady && !!firstActiveModelId && !!(modelValidation?.valid || modelValidation?.skipped);
   const modelValidationUnavailable = !!modelValidationError;
   const hostingCostReady = (optimizerSetup?.monthly_hosting_cost_usd || 0) > 0;
   const conversionHealthUnavailable = !!conversionHealthError;
@@ -171,13 +178,16 @@ export default function SetupPage() {
   const conversionLagDisplay = conversionLagHours !== null ? `${conversionLagHours.toFixed(1)}h` : "unknown";
   const conversionIngestionFresh = conversionLagHours !== null && conversionLagHours <= 72;
   const conversionSourcesReady =
+    buyerContextReady &&
     !conversionHealthUnavailable &&
     !conversionStatsUnavailable &&
     conversionAcceptedTotal > 0 &&
     conversionHealthState !== "unavailable" &&
     conversionIngestionFresh;
   const conversionSourcesDescription =
-    conversionHealthUnavailable || conversionStatsUnavailable
+    !buyerContextReady
+      ? buyerSelectionHint
+      : conversionHealthUnavailable || conversionStatsUnavailable
       ? "Conversion health/stats unavailable right now. Verify webhook or pixel setup in System."
       : conversionAcceptedTotal <= 0
         ? "No accepted conversion events in the last 14 days. Send a test event before go-live."
@@ -196,23 +206,29 @@ export default function SetupPage() {
     {
       key: "data-health",
       title: "Validate Optimizer Readiness",
-      description: "Ensure report completeness/freshness is healthy for decisioning.",
+      description: buyerContextReady
+        ? "Ensure report completeness/freshness is healthy for decisioning."
+        : buyerSelectionHint,
       href: "/settings/system",
       done: dataReadinessReady,
     },
     {
       key: "models",
       title: "Register an Active Model",
-      description: "Create at least one active BYOM model for scoring and proposals.",
+      description: buyerContextReady
+        ? "Create at least one active BYOM model for scoring and proposals."
+        : buyerSelectionHint,
       href: "/settings/system",
       done: modelsReady,
     },
     {
       key: "model-validation",
       title: "Validate Model Endpoint",
-      description: modelValidationUnavailable
-        ? "Endpoint validation failed or unavailable. Re-check connectivity in System."
-        : "Run endpoint validation for the active model before score/propose.",
+      description: !buyerContextReady
+        ? buyerSelectionHint
+        : modelValidationUnavailable
+          ? "Endpoint validation failed or unavailable. Re-check connectivity in System."
+          : "Run endpoint validation for the active model before score/propose.",
       href: "/settings/system",
       done: modelValidationReady,
     },
@@ -243,6 +259,14 @@ export default function SetupPage() {
         <p className="mt-1 text-sm text-gray-500">
           Complete the core setup steps to run score, generate proposals, and apply changes safely.
         </p>
+        <div
+          className={cn(
+            "mt-2 inline-flex items-center rounded px-2 py-1 text-xs font-medium",
+            buyerContextReady ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700",
+          )}
+        >
+          Buyer context: {selectedBuyerId || "Not selected"}
+        </div>
       </div>
 
       <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
