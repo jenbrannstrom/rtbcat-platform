@@ -98,18 +98,12 @@ print_run_summary() {
     "$run_id" \
     --repo "$REPO" \
     --json url,workflowName,status,conclusion,createdAt,updatedAt,displayTitle \
-  | python3 -c '
-import json, sys
-payload = json.load(sys.stdin)
-print("Run summary:")
-print(f"  workflow:   {payload.get(\"workflowName\", \"\")}")
-print(f"  title:      {payload.get(\"displayTitle\", \"\")}")
-print(f"  status:     {payload.get(\"status\", \"\")}")
-print(f"  conclusion: {payload.get(\"conclusion\", \"\")}")
-print(f"  createdAt:  {payload.get(\"createdAt\", \"\")}")
-print(f"  updatedAt:  {payload.get(\"updatedAt\", \"\")}")
-print(f"  url:        {payload.get(\"url\", \"\")}")
-'
+    --jq '"Run summary:\n  workflow:   \(.workflowName // "")\n  title:      \(.displayTitle // "")\n  status:     \(.status // "")\n  conclusion: \(.conclusion // "")\n  createdAt:  \(.createdAt // "")\n  updatedAt:  \(.updatedAt // "")\n  url:        \(.url // "")"'
+}
+
+get_run_conclusion() {
+  local run_id="$1"
+  gh run view "$run_id" --repo "$REPO" --json conclusion --jq '.conclusion // ""'
 }
 
 download_deployed_artifact() {
@@ -163,13 +157,37 @@ dispatch_deployed_workflow() {
   echo "Run URL: https://github.com/${REPO}/actions/runs/${run_id}"
 
   if [[ "$WATCH_RUN" == "1" ]]; then
+    set +e
     gh run watch "$run_id" --repo "$REPO"
+    local watch_status=$?
+    set -e
+    if [[ "$watch_status" -ne 0 ]]; then
+      echo "Warning: gh run watch returned ${watch_status}; continuing with run summary." >&2
+    fi
   fi
 
   print_run_summary "$run_id"
+  local conclusion
+  conclusion="$(get_run_conclusion "$run_id")"
 
   if [[ "$DOWNLOAD_ARTIFACT" == "1" ]]; then
-    download_deployed_artifact "$run_id"
+    if [[ "$conclusion" == "success" ]]; then
+      set +e
+      download_deployed_artifact "$run_id"
+      local artifact_status=$?
+      set -e
+      if [[ "$artifact_status" -ne 0 ]]; then
+        echo "Warning: artifact download failed with exit ${artifact_status}." >&2
+      fi
+    else
+      echo "Skipping artifact download because run conclusion='${conclusion}'." >&2
+    fi
+  fi
+
+  if [[ "$conclusion" != "success" ]]; then
+    echo "Deployed closeout workflow failed (conclusion='${conclusion}')." >&2
+    echo "Common cause: missing repo secrets CATSCAN_CANARY_BEARER_TOKEN or CATSCAN_CANARY_SESSION_COOKIE." >&2
+    return 1
   fi
 }
 
@@ -188,10 +206,22 @@ dispatch_byom_workflow() {
   echo "Run URL: https://github.com/${REPO}/actions/runs/${run_id}"
 
   if [[ "$WATCH_RUN" == "1" ]]; then
+    set +e
     gh run watch "$run_id" --repo "$REPO"
+    local watch_status=$?
+    set -e
+    if [[ "$watch_status" -ne 0 ]]; then
+      echo "Warning: gh run watch returned ${watch_status}; continuing with run summary." >&2
+    fi
   fi
 
   print_run_summary "$run_id"
+  local conclusion
+  conclusion="$(get_run_conclusion "$run_id")"
+  if [[ "$conclusion" != "success" ]]; then
+    echo "BYOM workflow failed (conclusion='${conclusion}')." >&2
+    return 1
+  fi
 }
 
 while [[ $# -gt 0 ]]; do
