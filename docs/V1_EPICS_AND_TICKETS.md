@@ -53,6 +53,7 @@
 - `E4-005` started (operator visibility slice): the same SLO panel now renders API latency rollups (sample count + p50/p95 by endpoint over the lookback window) for direct recurring-bottleneck triage.
 - `E4-005` started (operator visibility slice): the QPS SLO panel now supports lookback selection (24h/72h/7d) so operators can inspect short-term and multi-day latency trends without leaving the page.
 - `E4-005` started (contract-alignment slice): dashboard API client now forwards `api_rollup_limit` to `/system/ui-metrics/page-load/summary` so operator UI can tune rollup depth explicitly.
+- `E4-005` started (trend slice): summary API now returns bucketed latency trends and System UI renders p95 first-row/hydrated bucket tables for regression monitoring across the selected lookback window.
 - `E4-005` started (deep-path telemetry slice): QPS Home now measures expanded-panel dependent API latency for `/settings/pretargeting/:billing_id/detail`, `/settings/pretargeting/history`, and `/settings/pretargeting/snapshots`; once initial hydration telemetry is posted, additional latency samples are persisted as follow-up UI metric records.
 - `E4-005` started (startup critical-path slice): `/analytics/rtb-funnel` is now fetched only after table hydration (instead of startup) so buyer-filter messaging remains available without delaying first-row/table readiness.
 - `E4-005` started (render-cost slice): QPS Home now progressively renders pretargeting rows (first 60, then full list on next tick) to reduce initial DOM hydration work for large config sets.
