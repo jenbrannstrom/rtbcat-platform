@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 import json
 import os
 import sys
@@ -252,6 +254,22 @@ def build_webhook_postback_payload(
     }
 
 
+def build_webhook_hmac_signature(
+    *,
+    secret: str,
+    payload: dict[str, Any],
+    timestamp: int | None = None,
+) -> str:
+    message = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    if timestamp is not None:
+        message = f"{timestamp}.{message}"
+    return hmac.new(
+        secret.encode("utf-8"),
+        message.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
 def build_conversion_readiness_params(
     *,
     buyer_id: str | None,
@@ -311,6 +329,11 @@ def main() -> int:
         help="Run optional webhook auth enforcement check on generic conversion postback.",
     )
     parser.add_argument(
+        "--run-webhook-hmac-check",
+        action="store_true",
+        help="Run optional webhook HMAC signature check on generic conversion postback.",
+    )
+    parser.add_argument(
         "--pixel-source-type",
         default=os.getenv("CATSCAN_CANARY_PIXEL_SOURCE_TYPE", "pixel"),
         help="Source type sent to /conversions/pixel (default: pixel).",
@@ -348,6 +371,13 @@ def main() -> int:
         or os.getenv("CATSCAN_GENERIC_CONVERSION_WEBHOOK_SECRET")
         or os.getenv("CATSCAN_CONVERSIONS_SHARED_SECRET"),
         help="Secret used for webhook auth check (X-Webhook-Secret header).",
+    )
+    parser.add_argument(
+        "--webhook-hmac-secret",
+        default=os.getenv("CATSCAN_CANARY_WEBHOOK_HMAC_SECRET")
+        or os.getenv("CATSCAN_GENERIC_CONVERSION_WEBHOOK_HMAC_SECRET")
+        or os.getenv("CATSCAN_CONVERSIONS_SHARED_HMAC_SECRET"),
+        help="HMAC secret used for webhook signature check.",
     )
     parser.add_argument(
         "--conversion-readiness-days",
@@ -418,6 +448,12 @@ def main() -> int:
         or args.conversion_readiness_freshness_hours > 720
     ):
         parser.error("--conversion-readiness-freshness-hours must be between 1 and 720")
+    if args.run_webhook_hmac_check and not args.webhook_hmac_secret:
+        parser.error(
+            "--run-webhook-hmac-check requires --webhook-hmac-secret or "
+            "CATSCAN_CANARY_WEBHOOK_HMAC_SECRET/CATSCAN_GENERIC_CONVERSION_WEBHOOK_HMAC_SECRET/"
+            "CATSCAN_CONVERSIONS_SHARED_HMAC_SECRET"
+        )
 
     client = SmokeClient(
         base_url=args.base_url,
@@ -557,6 +593,53 @@ def main() -> int:
                 "generic webhook auth check expected HTTP 200 without secret because no canary webhook secret "
                 f"is configured, got HTTP {status_without_secret}"
             ),
+        )
+
+    def check_conversion_webhook_hmac() -> None:
+        if not args.run_webhook_hmac_check:
+            return
+        now_ts = datetime.now(timezone.utc)
+        unix_ts = int(now_ts.timestamp())
+        payload = build_webhook_postback_payload(
+            buyer_id=args.buyer_id,
+            source_type=args.webhook_source_type,
+            event_name=args.webhook_event_name,
+            event_ts=now_ts.isoformat(),
+            event_id=f"canary-webhook-hmac-{unix_ts}",
+        )
+        valid_signature = build_webhook_hmac_signature(
+            secret=str(args.webhook_hmac_secret),
+            payload=payload,
+            timestamp=unix_ts,
+        )
+        base_headers = {
+            "X-Webhook-Timestamp": str(unix_ts),
+            "X-Signature": f"sha256={valid_signature}",
+        }
+        if args.webhook_secret:
+            base_headers["X-Webhook-Secret"] = str(args.webhook_secret)
+        valid_status, _, _ = client.request_status_bytes(
+            "POST",
+            "/conversions/generic/postback",
+            json_body=payload,
+            extra_headers=base_headers,
+        )
+        _assert(
+            valid_status == 200,
+            f"generic webhook HMAC check expected HTTP 200 with valid signature, got HTTP {valid_status}",
+        )
+
+        invalid_headers = dict(base_headers)
+        invalid_headers["X-Signature"] = "sha256=invalid-signature"
+        invalid_status, _, _ = client.request_status_bytes(
+            "POST",
+            "/conversions/generic/postback",
+            json_body=payload,
+            extra_headers=invalid_headers,
+        )
+        _assert(
+            invalid_status == 401,
+            f"generic webhook HMAC check expected HTTP 401 with invalid signature, got HTTP {invalid_status}",
         )
 
     def check_optimizer_economics() -> None:
@@ -699,6 +782,7 @@ def main() -> int:
         ("Conversion ingestion stats", check_conversion_stats),
         ("Conversion pixel (optional)", check_conversion_pixel),
         ("Conversion webhook auth (optional)", check_conversion_webhook_auth),
+        ("Conversion webhook HMAC (optional)", check_conversion_webhook_hmac),
         ("Optimizer economics", check_optimizer_economics),
         ("Optimizer models", check_models_and_resolve),
         ("Model endpoint validation", check_model_validation),

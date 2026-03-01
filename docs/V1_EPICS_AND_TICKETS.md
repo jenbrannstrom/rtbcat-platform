@@ -79,6 +79,7 @@
 - `QA-004` started (connector coverage slice): canary smoke supports optional conversion pixel gate (`--run-pixel` / `CATSCAN_CANARY_RUN_PIXEL=1`) that validates GIF response + conversion status header for `/conversions/pixel`.
 - `QA-004` started (connector coverage slice): canary smoke now validates `/conversions/readiness` and supports strict readiness enforcement (`--require-conversion-ready` / `CATSCAN_CANARY_REQUIRE_CONVERSION_READY=1`).
 - `QA-004` started (security coverage slice): canary smoke now supports optional webhook auth verification (`--run-webhook-auth-check` / `CATSCAN_CANARY_RUN_WEBHOOK_AUTH=1`) for generic conversion postbacks (401 without secret, 200 with secret), with `make v1-canary-webhook-auth` convenience target.
+- `QA-004` started (security coverage slice): canary smoke now supports optional webhook HMAC verification (`--run-webhook-hmac-check` / `CATSCAN_CANARY_RUN_WEBHOOK_HMAC=1`) for generic conversion postbacks (200 valid signature, 401 invalid signature), with `make v1-canary-webhook-hmac` convenience target.
 - `QA-004` started (ops hardening slice): `make phase0-gate` now runs reliably in restricted environments by building dashboard with webpack mode (`npm --prefix dashboard run build -- --webpack`), avoiding Turbopack sandbox port-binding failures.
 
 ---
