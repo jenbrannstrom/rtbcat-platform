@@ -398,3 +398,32 @@ async def test_update_publisher_status_invalidates_pending_changes_cache() -> No
     assert repo.update_publisher_status_calls == 1
     assert repo.list_pending_publisher_changes_calls == 2
     assert refreshed[0]["publisher_id"] == "pub-9"
+
+
+@pytest.mark.asyncio
+async def test_check_publisher_in_opposite_mode_reuses_cached_publishers() -> None:
+    _clear_service_caches()
+    repo = _StubPretargetingRepo()
+    service = PretargetingService(repo=repo)
+
+    first = await service.check_publisher_in_opposite_mode("1001", "pub-1", "BLACKLIST")
+    second = await service.check_publisher_in_opposite_mode("1001", "pub-1", "BLACKLIST")
+
+    assert repo.list_publishers_calls == 1
+    assert first == {"mode": "WHITELIST"}
+    assert second == {"mode": "WHITELIST"}
+
+
+@pytest.mark.asyncio
+async def test_get_publisher_rows_reuses_cached_publishers_list() -> None:
+    _clear_service_caches()
+    repo = _StubPretargetingRepo()
+    service = PretargetingService(repo=repo)
+
+    first = await service.get_publisher_rows("1001", "pub-1")
+    second = await service.get_publisher_rows("1001", "pub-1")
+
+    assert repo.list_publishers_calls == 1
+    assert len(first) == 1
+    assert len(second) == 1
+    assert first[0]["publisher_id"] == "pub-1"

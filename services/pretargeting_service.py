@@ -341,9 +341,15 @@ class PretargetingService:
     ) -> dict[str, Any] | None:
         if not billing_id or not publisher_id or not mode:
             raise ValueError("billing_id, publisher_id, and mode are required")
-        return await self._repo.check_publisher_in_opposite_mode(
-            billing_id, publisher_id, mode
-        )
+        rows = await self.list_publishers(billing_id=billing_id)
+        requested_mode = mode.strip().upper()
+        for row in rows:
+            if str(row.get("publisher_id")) != str(publisher_id):
+                continue
+            row_mode = str(row.get("mode") or "").upper()
+            if row_mode and row_mode != requested_mode:
+                return {"mode": row_mode}
+        return None
 
     async def list_pending_publisher_changes(self, billing_id: str) -> list[dict[str, Any]]:
         if not billing_id:
@@ -363,4 +369,9 @@ class PretargetingService:
     async def get_publisher_rows(self, billing_id: str, publisher_id: str) -> list[dict[str, Any]]:
         if not billing_id or not publisher_id:
             raise ValueError("billing_id and publisher_id are required")
-        return await self._repo.get_publisher_rows(billing_id, publisher_id)
+        rows = await self.list_publishers(billing_id=billing_id)
+        return [
+            dict(row)
+            for row in rows
+            if str(row.get("publisher_id")) == str(publisher_id)
+        ]
