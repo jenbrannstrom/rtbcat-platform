@@ -30,6 +30,8 @@ const INITIAL_VISIBLE_CONFIG_ROWS = 60;
 const CONFIG_ROWS_CHUNK_SIZE = 120;
 const PRETARGETING_CONFIG_CACHE_PREFIX = "catscan:qps:pretargeting-configs:v1";
 const PRETARGETING_CONFIG_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
+const PRETARGETING_CONFIG_CACHE_MAX_ROWS = 500;
+const PRETARGETING_CONFIG_CACHE_FALLBACK_ROWS = 200;
 const CONFIG_PERFORMANCE_CACHE_PREFIX = "catscan:qps:config-performance:v1";
 const CONFIG_PERFORMANCE_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 const SPEND_STATS_CACHE_PREFIX = "catscan:qps:spend-stats:v1";
@@ -128,14 +130,23 @@ function readPretargetingConfigCache(buyerId: string | null): PretargetingConfig
 
 function writePretargetingConfigCache(buyerId: string | null, rows: PretargetingConfigResponse[] | undefined): void {
   if (!buyerId || typeof window === "undefined" || !rows) return;
-  try {
+  const writeRows = (candidateRows: PretargetingConfigResponse[]): void => {
     const payload: PretargetingConfigCachePayload = {
       cached_at_iso: new Date().toISOString(),
-      rows,
+      rows: candidateRows,
     };
     window.localStorage.setItem(getPretargetingConfigCacheKey(buyerId), JSON.stringify(payload));
+  };
+
+  const boundedRows = rows.slice(0, PRETARGETING_CONFIG_CACHE_MAX_ROWS);
+  try {
+    writeRows(boundedRows);
   } catch {
-    // Ignore localStorage failures (quota/private browsing).
+    try {
+      writeRows(boundedRows.slice(0, PRETARGETING_CONFIG_CACHE_FALLBACK_ROWS));
+    } catch {
+      // Ignore localStorage failures (quota/private browsing).
+    }
   }
 }
 
