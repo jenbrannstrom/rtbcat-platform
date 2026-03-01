@@ -513,7 +513,7 @@ async def remove_pretargeting_publisher(
 
         pretargeting_service = PretargetingService()
         publisher_rows_task = (
-            pretargeting_service.get_publisher_rows(billing_id, publisher_id)
+            pretargeting_service.list_publishers(billing_id=billing_id)
             if not resolved_mode
             else asyncio.sleep(0, result=None)
         )
@@ -526,9 +526,12 @@ async def remove_pretargeting_publisher(
 
         if not resolved_mode:
             assert isinstance(rows, list)
-            if not rows:
+            publisher_rows = [
+                row for row in rows if str(row.get("publisher_id")) == str(publisher_id)
+            ]
+            if not publisher_rows:
                 raise HTTPException(status_code=404, detail=f"Publisher {publisher_id} not found in config")
-            modes = {row["mode"] for row in rows if row.get("mode")}
+            modes = {row["mode"] for row in publisher_rows if row.get("mode")}
             if len(modes) == 1:
                 resolved_mode = next(iter(modes))
             else:
