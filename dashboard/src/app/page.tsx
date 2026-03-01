@@ -695,10 +695,24 @@ function WasteAnalysisContent() {
     if (pretargetingBootstrapLimit === null) return;
     if (!Array.isArray(pretargetingConfigs)) return;
     if (!useSummaryBootstrap && pretargetingConfigs.length < pretargetingBootstrapLimit) return;
-    const timer = window.setTimeout(() => {
+    const browserWindow = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback, opts?: IdleRequestOptions) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (
+      typeof browserWindow.requestIdleCallback === "function"
+      && typeof browserWindow.cancelIdleCallback === "function"
+    ) {
+      const idleId = browserWindow.requestIdleCallback(
+        () => setPretargetingBootstrapLimit(null),
+        { timeout: 2000 }
+      );
+      return () => browserWindow.cancelIdleCallback?.(idleId);
+    }
+    const timer = setTimeout(() => {
       setPretargetingBootstrapLimit(null);
-    }, 0);
-    return () => window.clearTimeout(timer);
+    }, 750);
+    return () => clearTimeout(timer);
   }, [pretargetingBootstrapLimit, pretargetingConfigs, seatReady, useSummaryBootstrap]);
 
   useEffect(() => {
