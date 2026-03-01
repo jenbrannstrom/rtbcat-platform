@@ -270,6 +270,34 @@ def build_webhook_hmac_signature(
     ).hexdigest()
 
 
+def build_webhook_security_headers(
+    *,
+    webhook_secret: str | None,
+    webhook_hmac_secret: str | None,
+    payload: dict[str, Any],
+    timestamp: int | None = None,
+    force_invalid_signature: bool = False,
+) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    if webhook_secret:
+        headers["X-Webhook-Secret"] = webhook_secret
+    if not webhook_hmac_secret:
+        return headers
+
+    unix_ts = int(timestamp if timestamp is not None else datetime.now(timezone.utc).timestamp())
+    headers["X-Webhook-Timestamp"] = str(unix_ts)
+    if force_invalid_signature:
+        signature = "invalid-signature"
+    else:
+        signature = build_webhook_hmac_signature(
+            secret=webhook_hmac_secret,
+            payload=payload,
+            timestamp=unix_ts,
+        )
+    headers["X-Signature"] = f"sha256={signature}"
+    return headers
+
+
 def build_conversion_readiness_params(
     *,
     buyer_id: str | None,
@@ -334,6 +362,16 @@ def main() -> int:
         help="Run optional webhook HMAC signature check on generic conversion postback.",
     )
     parser.add_argument(
+        "--run-webhook-freshness-check",
+        action="store_true",
+        help="Run optional webhook freshness enforcement check on generic conversion postback.",
+    )
+    parser.add_argument(
+        "--run-webhook-rate-limit-check",
+        action="store_true",
+        help="Run optional webhook rate-limit enforcement check on generic conversion postback.",
+    )
+    parser.add_argument(
         "--pixel-source-type",
         default=os.getenv("CATSCAN_CANARY_PIXEL_SOURCE_TYPE", "pixel"),
         help="Source type sent to /conversions/pixel (default: pixel).",
@@ -378,6 +416,32 @@ def main() -> int:
         or os.getenv("CATSCAN_GENERIC_CONVERSION_WEBHOOK_HMAC_SECRET")
         or os.getenv("CATSCAN_CONVERSIONS_SHARED_HMAC_SECRET"),
         help="HMAC secret used for webhook signature check.",
+    )
+    parser.add_argument(
+        "--webhook-freshness-max-skew-seconds",
+        type=int,
+        default=int(
+            os.getenv("CATSCAN_CANARY_WEBHOOK_FRESHNESS_MAX_SKEW_SECONDS")
+            or os.getenv("CATSCAN_CONVERSIONS_MAX_SKEW_SECONDS")
+            or "900"
+        ),
+        help="Max allowed skew for freshness canary check (default: 900).",
+    )
+    parser.add_argument(
+        "--webhook-rate-limit-per-window",
+        type=int,
+        default=int(os.getenv("CATSCAN_CANARY_WEBHOOK_RATE_LIMIT_PER_WINDOW", "0")),
+        help="Expected allowed requests per window for webhook rate-limit check; required when enabled.",
+    )
+    parser.add_argument(
+        "--webhook-rate-limit-window-seconds",
+        type=int,
+        default=int(
+            os.getenv("CATSCAN_CANARY_WEBHOOK_RATE_LIMIT_WINDOW_SECONDS")
+            or os.getenv("CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_WINDOW_SECONDS")
+            or "60"
+        ),
+        help="Expected window size for webhook rate-limit check metadata (default: 60).",
     )
     parser.add_argument(
         "--conversion-readiness-days",
@@ -454,6 +518,18 @@ def main() -> int:
             "CATSCAN_CANARY_WEBHOOK_HMAC_SECRET/CATSCAN_GENERIC_CONVERSION_WEBHOOK_HMAC_SECRET/"
             "CATSCAN_CONVERSIONS_SHARED_HMAC_SECRET"
         )
+    if args.run_webhook_freshness_check and not args.webhook_hmac_secret:
+        parser.error(
+            "--run-webhook-freshness-check requires --webhook-hmac-secret or "
+            "CATSCAN_CANARY_WEBHOOK_HMAC_SECRET/CATSCAN_GENERIC_CONVERSION_WEBHOOK_HMAC_SECRET/"
+            "CATSCAN_CONVERSIONS_SHARED_HMAC_SECRET"
+        )
+    if args.run_webhook_rate_limit_check and args.webhook_rate_limit_per_window < 1:
+        parser.error("--run-webhook-rate-limit-check requires --webhook-rate-limit-per-window >= 1")
+    if args.webhook_freshness_max_skew_seconds < 1:
+        parser.error("--webhook-freshness-max-skew-seconds must be >= 1")
+    if args.webhook_rate_limit_window_seconds < 1:
+        parser.error("--webhook-rate-limit-window-seconds must be >= 1")
 
     client = SmokeClient(
         base_url=args.base_url,
@@ -555,17 +631,25 @@ def main() -> int:
         if not args.run_webhook_auth_check:
             return
         now_ts = datetime.now(timezone.utc)
-        payload = build_webhook_postback_payload(
+        unix_ts = int(now_ts.timestamp())
+        payload_without_secret = build_webhook_postback_payload(
             buyer_id=args.buyer_id,
-            source_type=args.webhook_source_type,
+            source_type=f"{args.webhook_source_type}-auth-missing-{unix_ts}",
             event_name=args.webhook_event_name,
             event_ts=now_ts.isoformat(),
-            event_id=f"canary-webhook-{int(now_ts.timestamp())}",
+            event_id=f"canary-webhook-auth-missing-{unix_ts}",
+        )
+        headers_without_secret = build_webhook_security_headers(
+            webhook_secret=None,
+            webhook_hmac_secret=args.webhook_hmac_secret,
+            payload=payload_without_secret,
+            timestamp=unix_ts,
         )
         status_without_secret, _, _ = client.request_status_bytes(
             "POST",
             "/conversions/generic/postback",
-            json_body=payload,
+            json_body=payload_without_secret,
+            extra_headers=headers_without_secret or None,
         )
         if args.webhook_secret:
             _assert(
@@ -575,11 +659,24 @@ def main() -> int:
                     f"secret is configured, got HTTP {status_without_secret}"
                 ),
             )
+            payload_with_secret = build_webhook_postback_payload(
+                buyer_id=args.buyer_id,
+                source_type=f"{args.webhook_source_type}-auth-valid-{unix_ts}",
+                event_name=args.webhook_event_name,
+                event_ts=now_ts.isoformat(),
+                event_id=f"canary-webhook-auth-valid-{unix_ts}",
+            )
+            headers_with_secret = build_webhook_security_headers(
+                webhook_secret=args.webhook_secret,
+                webhook_hmac_secret=args.webhook_hmac_secret,
+                payload=payload_with_secret,
+                timestamp=unix_ts,
+            )
             status_with_secret, _, _ = client.request_status_bytes(
                 "POST",
                 "/conversions/generic/postback",
-                json_body=payload,
-                extra_headers={"X-Webhook-Secret": args.webhook_secret},
+                json_body=payload_with_secret,
+                extra_headers=headers_with_secret,
             )
             _assert(
                 status_with_secret == 200,
@@ -602,44 +699,157 @@ def main() -> int:
         unix_ts = int(now_ts.timestamp())
         payload = build_webhook_postback_payload(
             buyer_id=args.buyer_id,
-            source_type=args.webhook_source_type,
+            source_type=f"{args.webhook_source_type}-hmac-valid-{unix_ts}",
             event_name=args.webhook_event_name,
             event_ts=now_ts.isoformat(),
             event_id=f"canary-webhook-hmac-{unix_ts}",
         )
-        valid_signature = build_webhook_hmac_signature(
-            secret=str(args.webhook_hmac_secret),
+        valid_headers = build_webhook_security_headers(
+            webhook_secret=args.webhook_secret,
+            webhook_hmac_secret=str(args.webhook_hmac_secret),
             payload=payload,
             timestamp=unix_ts,
         )
-        base_headers = {
-            "X-Webhook-Timestamp": str(unix_ts),
-            "X-Signature": f"sha256={valid_signature}",
-        }
-        if args.webhook_secret:
-            base_headers["X-Webhook-Secret"] = str(args.webhook_secret)
         valid_status, _, _ = client.request_status_bytes(
             "POST",
             "/conversions/generic/postback",
             json_body=payload,
-            extra_headers=base_headers,
+            extra_headers=valid_headers,
         )
         _assert(
             valid_status == 200,
             f"generic webhook HMAC check expected HTTP 200 with valid signature, got HTTP {valid_status}",
         )
 
-        invalid_headers = dict(base_headers)
-        invalid_headers["X-Signature"] = "sha256=invalid-signature"
+        invalid_payload = build_webhook_postback_payload(
+            buyer_id=args.buyer_id,
+            source_type=f"{args.webhook_source_type}-hmac-invalid-{unix_ts}",
+            event_name=args.webhook_event_name,
+            event_ts=now_ts.isoformat(),
+            event_id=f"canary-webhook-hmac-invalid-{unix_ts}",
+        )
+        invalid_headers = build_webhook_security_headers(
+            webhook_secret=args.webhook_secret,
+            webhook_hmac_secret=str(args.webhook_hmac_secret),
+            payload=invalid_payload,
+            timestamp=unix_ts + 1,
+            force_invalid_signature=True,
+        )
         invalid_status, _, _ = client.request_status_bytes(
             "POST",
             "/conversions/generic/postback",
-            json_body=payload,
+            json_body=invalid_payload,
             extra_headers=invalid_headers,
         )
         _assert(
             invalid_status == 401,
             f"generic webhook HMAC check expected HTTP 401 with invalid signature, got HTTP {invalid_status}",
+        )
+
+    def check_conversion_webhook_freshness() -> None:
+        if not args.run_webhook_freshness_check:
+            return
+        now_ts = datetime.now(timezone.utc)
+        unix_ts = int(now_ts.timestamp())
+        fresh_payload = build_webhook_postback_payload(
+            buyer_id=args.buyer_id,
+            source_type=f"{args.webhook_source_type}-freshness-fresh-{unix_ts}",
+            event_name=args.webhook_event_name,
+            event_ts=now_ts.isoformat(),
+            event_id=f"canary-webhook-freshness-fresh-{unix_ts}",
+        )
+        fresh_headers = build_webhook_security_headers(
+            webhook_secret=args.webhook_secret,
+            webhook_hmac_secret=str(args.webhook_hmac_secret),
+            payload=fresh_payload,
+            timestamp=unix_ts,
+        )
+        fresh_status, _, _ = client.request_status_bytes(
+            "POST",
+            "/conversions/generic/postback",
+            json_body=fresh_payload,
+            extra_headers=fresh_headers,
+        )
+        _assert(
+            fresh_status == 200,
+            f"generic webhook freshness check expected HTTP 200 for fresh timestamp, got HTTP {fresh_status}",
+        )
+
+        stale_ts = unix_ts - args.webhook_freshness_max_skew_seconds - 120
+        stale_payload = build_webhook_postback_payload(
+            buyer_id=args.buyer_id,
+            source_type=f"{args.webhook_source_type}-freshness-stale-{unix_ts}",
+            event_name=args.webhook_event_name,
+            event_ts=now_ts.isoformat(),
+            event_id=f"canary-webhook-freshness-stale-{unix_ts}",
+        )
+        stale_headers = build_webhook_security_headers(
+            webhook_secret=args.webhook_secret,
+            webhook_hmac_secret=str(args.webhook_hmac_secret),
+            payload=stale_payload,
+            timestamp=stale_ts,
+        )
+        stale_status, _, _ = client.request_status_bytes(
+            "POST",
+            "/conversions/generic/postback",
+            json_body=stale_payload,
+            extra_headers=stale_headers,
+        )
+        _assert(
+            stale_status == 401,
+            (
+                "generic webhook freshness check expected HTTP 401 for stale timestamp "
+                f"(max_skew={args.webhook_freshness_max_skew_seconds}s), got HTTP {stale_status}"
+            ),
+        )
+
+    def check_conversion_webhook_rate_limit() -> None:
+        if not args.run_webhook_rate_limit_check:
+            return
+        now_ts = datetime.now(timezone.utc)
+        unix_ts = int(now_ts.timestamp())
+        source_type = f"{args.webhook_source_type}-ratelimit-{unix_ts}"
+        statuses: list[int] = []
+        total_requests = args.webhook_rate_limit_per_window + 1
+
+        for idx in range(total_requests):
+            payload = build_webhook_postback_payload(
+                buyer_id=args.buyer_id,
+                source_type=source_type,
+                event_name=args.webhook_event_name,
+                event_ts=now_ts.isoformat(),
+                event_id=f"canary-webhook-ratelimit-{unix_ts}-{idx}",
+            )
+            headers = build_webhook_security_headers(
+                webhook_secret=args.webhook_secret,
+                webhook_hmac_secret=args.webhook_hmac_secret,
+                payload=payload,
+                timestamp=unix_ts + idx,
+            )
+            status, _, _ = client.request_status_bytes(
+                "POST",
+                "/conversions/generic/postback",
+                json_body=payload,
+                extra_headers=headers or None,
+            )
+            statuses.append(status)
+
+        expected_ok = statuses[: args.webhook_rate_limit_per_window]
+        _assert(
+            all(code == 200 for code in expected_ok),
+            (
+                "webhook rate-limit check expected HTTP 200 before threshold but got "
+                f"{expected_ok}. Ensure webhook auth/HMAC headers are configured for this environment."
+            ),
+        )
+        throttled = statuses[-1]
+        _assert(
+            throttled == 429,
+            (
+                "webhook rate-limit check expected HTTP 429 after "
+                f"{args.webhook_rate_limit_per_window} requests in {args.webhook_rate_limit_window_seconds}s "
+                f"window, got HTTP {throttled}. Ensure endpoint rate limiting is enabled/configured."
+            ),
         )
 
     def check_optimizer_economics() -> None:
@@ -783,6 +993,8 @@ def main() -> int:
         ("Conversion pixel (optional)", check_conversion_pixel),
         ("Conversion webhook auth (optional)", check_conversion_webhook_auth),
         ("Conversion webhook HMAC (optional)", check_conversion_webhook_hmac),
+        ("Conversion webhook freshness (optional)", check_conversion_webhook_freshness),
+        ("Conversion webhook rate-limit (optional)", check_conversion_webhook_rate_limit),
         ("Optimizer economics", check_optimizer_economics),
         ("Optimizer models", check_models_and_resolve),
         ("Model endpoint validation", check_model_validation),

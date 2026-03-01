@@ -112,6 +112,39 @@ Equivalent convenience target:
 make v1-canary-webhook-hmac
 ```
 
+Optional webhook freshness gate:
+
+```bash
+CATSCAN_CANARY_RUN_WEBHOOK_FRESHNESS=1 \
+CATSCAN_CANARY_WEBHOOK_HMAC_SECRET=<generic_or_shared_hmac_secret> \
+CATSCAN_CANARY_WEBHOOK_SECRET=<webhook_secret_if_plain_secret_also_enabled> \
+CATSCAN_CANARY_WEBHOOK_FRESHNESS_MAX_SKEW_SECONDS=900 \
+make v1-canary-smoke
+```
+
+Equivalent convenience target:
+
+```bash
+make v1-canary-webhook-freshness
+```
+
+Optional webhook rate-limit gate:
+
+```bash
+CATSCAN_CANARY_RUN_WEBHOOK_RATE_LIMIT=1 \
+CATSCAN_CANARY_WEBHOOK_RATE_LIMIT_PER_WINDOW=1 \
+CATSCAN_CANARY_WEBHOOK_RATE_LIMIT_WINDOW_SECONDS=60 \
+CATSCAN_CANARY_WEBHOOK_SECRET=<webhook_secret_if_enabled> \
+CATSCAN_CANARY_WEBHOOK_HMAC_SECRET=<hmac_secret_if_enabled> \
+make v1-canary-smoke
+```
+
+Equivalent convenience target:
+
+```bash
+make v1-canary-webhook-rate-limit
+```
+
 Optional workflow tuning for canary:
 
 ```bash
@@ -189,7 +222,7 @@ make v1-conversion-regression
 1. `/conversions/health` returns non-error response.
 2. `/conversions/ingestion/stats?days=7` returns accepted/rejected counters.
 3. DLQ list/replay/discard endpoints respond as expected.
-4. If webhook security is enabled, HMAC/freshness controls pass fixture validation and optional canary webhook auth gate.
+4. If webhook security is enabled, auth/HMAC/freshness/rate-limit controls pass fixture validation and optional canary webhook security gates.
 
 ## 4. Optimizer Workflow Gate
 

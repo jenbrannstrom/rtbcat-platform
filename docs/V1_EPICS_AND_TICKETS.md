@@ -81,6 +81,8 @@
 - `QA-004` started (connector coverage slice): canary smoke now validates `/conversions/readiness` and supports strict readiness enforcement (`--require-conversion-ready` / `CATSCAN_CANARY_REQUIRE_CONVERSION_READY=1`).
 - `QA-004` started (security coverage slice): canary smoke now supports optional webhook auth verification (`--run-webhook-auth-check` / `CATSCAN_CANARY_RUN_WEBHOOK_AUTH=1`) for generic conversion postbacks (401 without secret, 200 with secret), with `make v1-canary-webhook-auth` convenience target.
 - `QA-004` started (security coverage slice): canary smoke now supports optional webhook HMAC verification (`--run-webhook-hmac-check` / `CATSCAN_CANARY_RUN_WEBHOOK_HMAC=1`) for generic conversion postbacks (200 valid signature, 401 invalid signature), with `make v1-canary-webhook-hmac` convenience target.
+- `QA-004` started (security coverage slice): canary smoke now supports optional webhook freshness enforcement verification (`--run-webhook-freshness-check` / `CATSCAN_CANARY_RUN_WEBHOOK_FRESHNESS=1`) for generic conversion postbacks (200 fresh timestamp, 401 stale timestamp), with `make v1-canary-webhook-freshness` convenience target.
+- `QA-004` started (security coverage slice): canary smoke now supports optional webhook rate-limit enforcement verification (`--run-webhook-rate-limit-check` / `CATSCAN_CANARY_RUN_WEBHOOK_RATE_LIMIT=1`) for generic conversion postbacks (200 until threshold, 429 after threshold), with `make v1-canary-webhook-rate-limit` convenience target.
 - `QA-004` started (ops hardening slice): `make phase0-gate` now runs reliably in restricted environments by building dashboard with webpack mode (`npm --prefix dashboard run build -- --webpack`), avoiding Turbopack sandbox port-binding failures.
 
 ---
