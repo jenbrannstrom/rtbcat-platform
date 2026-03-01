@@ -11,7 +11,10 @@ import { ConfigBreakdownPanel } from "@/components/rtb/config-breakdown-panel";
 import {
   getRTBFunnel, getSpendStats, getEndpointEfficiency,
   getPretargetingConfigs, getRTBFunnelConfigs, getSeats,
-  type PretargetingConfigResponse, type ConfigPerformanceResponse
+  type PretargetingConfigResponse,
+  type ConfigPerformanceResponse,
+  type SpendStatsResponse,
+  type EndpointEfficiencyResponse,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAccount } from "@/contexts/account-context";
@@ -29,6 +32,10 @@ const PRETARGETING_CONFIG_CACHE_PREFIX = "catscan:qps:pretargeting-configs:v1";
 const PRETARGETING_CONFIG_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 const CONFIG_PERFORMANCE_CACHE_PREFIX = "catscan:qps:config-performance:v1";
 const CONFIG_PERFORMANCE_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
+const SPEND_STATS_CACHE_PREFIX = "catscan:qps:spend-stats:v1";
+const SPEND_STATS_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
+const ENDPOINT_EFFICIENCY_CACHE_PREFIX = "catscan:qps:endpoint-efficiency:v1";
+const ENDPOINT_EFFICIENCY_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 const ACTIVE_SEATS_CACHE_KEY = "catscan:qps:active-seats:v1";
 const ACTIVE_SEATS_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 
@@ -45,6 +52,16 @@ interface ConfigPerformanceCachePayload {
 interface ActiveSeatsCachePayload {
   cached_at_iso: string;
   rows: BuyerSeat[];
+}
+
+interface SpendStatsCachePayload {
+  cached_at_iso: string;
+  data: SpendStatsResponse;
+}
+
+interface EndpointEfficiencyCachePayload {
+  cached_at_iso: string;
+  data: EndpointEfficiencyResponse;
 }
 
 function getRetryDelay(attemptIndex: number): number {
@@ -76,6 +93,18 @@ function getPretargetingConfigCacheKey(buyerId: string): string {
 
 function getConfigPerformanceCacheKey(buyerId: string, days: number): string {
   return `${CONFIG_PERFORMANCE_CACHE_PREFIX}:${buyerId}:${days}`;
+}
+
+function getSpendStatsCacheKey(
+  buyerId: string,
+  days: number,
+  billingId: string | null
+): string {
+  return `${SPEND_STATS_CACHE_PREFIX}:${buyerId}:${days}:${billingId || "__all__"}`;
+}
+
+function getEndpointEfficiencyCacheKey(buyerId: string, days: number): string {
+  return `${ENDPOINT_EFFICIENCY_CACHE_PREFIX}:${buyerId}:${days}`;
 }
 
 function readPretargetingConfigCache(buyerId: string | null): PretargetingConfigResponse[] | undefined {
@@ -144,6 +173,89 @@ function writeConfigPerformanceCache(
       data,
     };
     window.localStorage.setItem(getConfigPerformanceCacheKey(buyerId, days), JSON.stringify(payload));
+  } catch {
+    // Ignore localStorage failures (quota/private browsing).
+  }
+}
+
+function readSpendStatsCache(
+  buyerId: string | null,
+  days: number,
+  billingId: string | null
+): SpendStatsResponse | undefined {
+  if (!buyerId || typeof window === "undefined") return undefined;
+  try {
+    const raw = window.localStorage.getItem(getSpendStatsCacheKey(buyerId, days, billingId));
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as SpendStatsCachePayload;
+    const cachedAtMs = Date.parse(parsed.cached_at_iso);
+    if (!Number.isFinite(cachedAtMs)) return undefined;
+    if ((Date.now() - cachedAtMs) > SPEND_STATS_CACHE_MAX_AGE_MS) {
+      window.localStorage.removeItem(getSpendStatsCacheKey(buyerId, days, billingId));
+      return undefined;
+    }
+    if (!parsed.data || typeof parsed.data !== "object") return undefined;
+    return parsed.data;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeSpendStatsCache(
+  buyerId: string | null,
+  days: number,
+  billingId: string | null,
+  data: SpendStatsResponse | undefined
+): void {
+  if (!buyerId || typeof window === "undefined" || !data) return;
+  try {
+    const payload: SpendStatsCachePayload = {
+      cached_at_iso: new Date().toISOString(),
+      data,
+    };
+    window.localStorage.setItem(
+      getSpendStatsCacheKey(buyerId, days, billingId),
+      JSON.stringify(payload),
+    );
+  } catch {
+    // Ignore localStorage failures (quota/private browsing).
+  }
+}
+
+function readEndpointEfficiencyCache(
+  buyerId: string | null,
+  days: number
+): EndpointEfficiencyResponse | undefined {
+  if (!buyerId || typeof window === "undefined") return undefined;
+  try {
+    const raw = window.localStorage.getItem(getEndpointEfficiencyCacheKey(buyerId, days));
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as EndpointEfficiencyCachePayload;
+    const cachedAtMs = Date.parse(parsed.cached_at_iso);
+    if (!Number.isFinite(cachedAtMs)) return undefined;
+    if ((Date.now() - cachedAtMs) > ENDPOINT_EFFICIENCY_CACHE_MAX_AGE_MS) {
+      window.localStorage.removeItem(getEndpointEfficiencyCacheKey(buyerId, days));
+      return undefined;
+    }
+    if (!parsed.data || typeof parsed.data !== "object") return undefined;
+    return parsed.data;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeEndpointEfficiencyCache(
+  buyerId: string | null,
+  days: number,
+  data: EndpointEfficiencyResponse | undefined
+): void {
+  if (!buyerId || typeof window === "undefined" || !data) return;
+  try {
+    const payload: EndpointEfficiencyCachePayload = {
+      cached_at_iso: new Date().toISOString(),
+      data,
+    };
+    window.localStorage.setItem(getEndpointEfficiencyCacheKey(buyerId, days), JSON.stringify(payload));
   } catch {
     // Ignore localStorage failures (quota/private browsing).
   }
@@ -496,11 +608,18 @@ function WasteAnalysisContent() {
   const {
     data: spendStats,
     refetch: refetchSpend,
+    isFetchedAfterMount: spendStatsFetchedAfterMount,
   } = useQuery({
     queryKey: ["spend-stats", days, selectedBuyerId, expandedConfigId],
     queryFn: () => getSpendStats(days, expandedConfigId || undefined),
+    initialData: () => readSpendStatsCache(selectedBuyerId, days, expandedConfigId),
     enabled: false,
   });
+
+  useEffect(() => {
+    if (!spendStatsFetchedAfterMount) return;
+    writeSpendStatsCache(selectedBuyerId, days, expandedConfigId, spendStats);
+  }, [days, expandedConfigId, selectedBuyerId, spendStats, spendStatsFetchedAfterMount]);
 
   // Fetch pretargeting configs
   const {
@@ -566,11 +685,18 @@ function WasteAnalysisContent() {
     data: endpointEfficiency,
     isLoading: endpointEfficiencyLoading,
     refetch: refetchEndpointEfficiency,
+    isFetchedAfterMount: endpointEfficiencyFetchedAfterMount,
   } = useQuery({
     queryKey: ["endpoint-efficiency", days, selectedBuyerId],
     queryFn: fetchMeasuredEndpointEfficiency,
+    initialData: () => readEndpointEfficiencyCache(selectedBuyerId, days),
     enabled: false,
   });
+
+  useEffect(() => {
+    if (!endpointEfficiencyFetchedAfterMount) return;
+    writeEndpointEfficiencyCache(selectedBuyerId, days, endpointEfficiency);
+  }, [days, endpointEfficiency, endpointEfficiencyFetchedAfterMount, selectedBuyerId]);
 
   const handleRefresh = () => {
     refetchFunnel();
