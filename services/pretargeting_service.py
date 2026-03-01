@@ -15,6 +15,8 @@ class PretargetingService:
     _LIST_CONFIGS_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
     _HISTORY_CACHE_TTL_SECONDS = 15.0
     _HISTORY_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+    _CONFIG_CACHE_TTL_SECONDS = 15.0
+    _CONFIG_CACHE: dict[str, tuple[float, dict[str, Any] | None]] = {}
 
     def __init__(self, repo: PretargetingRepository | None = None) -> None:
         self._repo = repo or PretargetingRepository()
@@ -107,6 +109,10 @@ class PretargetingService:
         cls._HISTORY_CACHE.clear()
 
     @classmethod
+    def clear_config_cache(cls) -> None:
+        cls._CONFIG_CACHE.clear()
+
+    @classmethod
     def _invalidate_list_configs_cache(cls, bidder_id: str | None = None) -> None:
         cls._LIST_CONFIGS_CACHE.clear()
 
@@ -114,10 +120,29 @@ class PretargetingService:
     def _invalidate_history_cache(cls) -> None:
         cls._HISTORY_CACHE.clear()
 
+    @classmethod
+    def _invalidate_config_cache(cls, billing_id: str | None = None) -> None:
+        if billing_id is None:
+            cls._CONFIG_CACHE.clear()
+            return
+        cls._CONFIG_CACHE.pop(billing_id, None)
+
     async def get_config(self, billing_id: str) -> dict[str, Any] | None:
         if not billing_id:
             raise ValueError("billing_id is required")
-        return await self._repo.get_config_by_billing_id(billing_id)
+        now = time.monotonic()
+        cached_entry = self._CONFIG_CACHE.get(billing_id)
+        if cached_entry and cached_entry[0] > now:
+            cached_value = cached_entry[1]
+            return dict(cached_value) if cached_value else None
+
+        row = await self._repo.get_config_by_billing_id(billing_id)
+        cached_row = dict(row) if row else None
+        self._CONFIG_CACHE[billing_id] = (
+            now + self._CONFIG_CACHE_TTL_SECONDS,
+            cached_row,
+        )
+        return dict(cached_row) if cached_row else None
 
     async def save_config(self, config: dict[str, Any]) -> None:
         if not config.get("config_id"):
@@ -126,12 +151,14 @@ class PretargetingService:
             raise ValueError("bidder_id is required")
         await self._repo.save_config(config)
         self._invalidate_list_configs_cache(str(config.get("bidder_id")))
+        self._invalidate_config_cache(str(config.get("billing_id")) if config.get("billing_id") else None)
 
     async def update_user_name(self, billing_id: str, user_name: str | None) -> int:
         if not billing_id:
             raise ValueError("billing_id is required")
         updated = await self._repo.update_user_name(billing_id, user_name)
         self._invalidate_list_configs_cache()
+        self._invalidate_config_cache(billing_id)
         return updated
 
     async def update_state(self, billing_id: str, state: str) -> int:
@@ -141,6 +168,7 @@ class PretargetingService:
             raise ValueError("state is required")
         updated = await self._repo.update_state(billing_id, state)
         self._invalidate_list_configs_cache()
+        self._invalidate_config_cache(billing_id)
         return updated
 
     async def list_history(

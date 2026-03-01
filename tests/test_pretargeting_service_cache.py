@@ -13,8 +13,10 @@ class _StubPretargetingRepo:
         self.list_by_buyer_calls = 0
         self.list_history_calls = 0
         self.add_history_calls = 0
+        self.get_config_calls = 0
         self.rows: list[dict[str, object]] = [{"billing_id": "1001"}]
         self.history_rows: list[dict[str, object]] = [{"config_id": "cfg-1", "change_type": "update"}]
+        self.config_row: dict[str, object] | None = {"billing_id": "1001", "state": "ACTIVE"}
 
     async def list_configs(
         self,
@@ -36,6 +38,10 @@ class _StubPretargetingRepo:
 
     async def save_config(self, _config: dict[str, object]) -> None:
         return None
+
+    async def get_config_by_billing_id(self, _billing_id: str) -> dict[str, object] | None:
+        self.get_config_calls += 1
+        return dict(self.config_row) if self.config_row else None
 
     async def update_user_name(self, _billing_id: str, _user_name: str | None) -> int:
         return 1
@@ -73,6 +79,7 @@ class _StubPretargetingRepo:
 async def test_list_configs_uses_ttl_cache_per_bidder() -> None:
     PretargetingService.clear_list_configs_cache()
     PretargetingService.clear_history_cache()
+    PretargetingService.clear_config_cache()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -88,6 +95,7 @@ async def test_list_configs_uses_ttl_cache_per_bidder() -> None:
 async def test_save_config_invalidates_list_cache() -> None:
     PretargetingService.clear_list_configs_cache()
     PretargetingService.clear_history_cache()
+    PretargetingService.clear_config_cache()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -106,6 +114,7 @@ async def test_save_config_invalidates_list_cache() -> None:
 async def test_list_configs_for_buyer_uses_ttl_cache() -> None:
     PretargetingService.clear_list_configs_cache()
     PretargetingService.clear_history_cache()
+    PretargetingService.clear_config_cache()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -121,6 +130,7 @@ async def test_list_configs_for_buyer_uses_ttl_cache() -> None:
 async def test_list_configs_cache_is_scoped_by_limit() -> None:
     PretargetingService.clear_list_configs_cache()
     PretargetingService.clear_history_cache()
+    PretargetingService.clear_config_cache()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -134,6 +144,7 @@ async def test_list_configs_cache_is_scoped_by_limit() -> None:
 async def test_list_configs_cache_is_scoped_by_summary_shape() -> None:
     PretargetingService.clear_list_configs_cache()
     PretargetingService.clear_history_cache()
+    PretargetingService.clear_config_cache()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -147,6 +158,7 @@ async def test_list_configs_cache_is_scoped_by_summary_shape() -> None:
 async def test_save_config_invalidates_buyer_scoped_list_cache() -> None:
     PretargetingService.clear_list_configs_cache()
     PretargetingService.clear_history_cache()
+    PretargetingService.clear_config_cache()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -165,6 +177,7 @@ async def test_save_config_invalidates_buyer_scoped_list_cache() -> None:
 async def test_list_history_uses_ttl_cache() -> None:
     PretargetingService.clear_list_configs_cache()
     PretargetingService.clear_history_cache()
+    PretargetingService.clear_config_cache()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -180,6 +193,7 @@ async def test_list_history_uses_ttl_cache() -> None:
 async def test_add_history_invalidates_history_cache() -> None:
     PretargetingService.clear_list_configs_cache()
     PretargetingService.clear_history_cache()
+    PretargetingService.clear_config_cache()
     repo = _StubPretargetingRepo()
     service = PretargetingService(repo=repo)
 
@@ -201,3 +215,38 @@ async def test_add_history_invalidates_history_cache() -> None:
     assert repo.add_history_calls == 1
     assert repo.list_history_calls == 2
     assert refreshed[0]["change_type"] == "set_maximum_qps"
+
+
+@pytest.mark.asyncio
+async def test_get_config_uses_ttl_cache() -> None:
+    PretargetingService.clear_list_configs_cache()
+    PretargetingService.clear_history_cache()
+    PretargetingService.clear_config_cache()
+    repo = _StubPretargetingRepo()
+    service = PretargetingService(repo=repo)
+
+    first = await service.get_config("1001")
+    first["state"] = "mutated-locally"
+    second = await service.get_config("1001")
+
+    assert repo.get_config_calls == 1
+    assert second["state"] == "ACTIVE"
+
+
+@pytest.mark.asyncio
+async def test_update_user_name_invalidates_get_config_cache() -> None:
+    PretargetingService.clear_list_configs_cache()
+    PretargetingService.clear_history_cache()
+    PretargetingService.clear_config_cache()
+    repo = _StubPretargetingRepo()
+    service = PretargetingService(repo=repo)
+
+    await service.get_config("1001")
+    assert repo.get_config_calls == 1
+
+    repo.config_row = {"billing_id": "1001", "state": "SUSPENDED"}
+    await service.update_user_name("1001", "Renamed")
+    refreshed = await service.get_config("1001")
+
+    assert repo.get_config_calls == 2
+    assert refreshed["state"] == "SUSPENDED"
