@@ -128,6 +128,12 @@ Phase 0 local gate command:
 make phase0-gate
 ```
 
+Combined v1 local gate command (matches CI):
+
+```bash
+make v1-gate
+```
+
 Conversion/readiness regression quick command:
 
 ```bash
