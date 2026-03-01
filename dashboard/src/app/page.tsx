@@ -29,6 +29,10 @@ const PERIOD_OPTIONS = [
 ];
 const PRETARGETING_BOOTSTRAP_LIMIT_WARM = 300;
 const PRETARGETING_BOOTSTRAP_LIMIT_COLD = 150;
+const PRETARGETING_FULL_HYDRATION_IDLE_TIMEOUT_MS_WARM = 2000;
+const PRETARGETING_FULL_HYDRATION_IDLE_TIMEOUT_MS_COLD = 5000;
+const PRETARGETING_FULL_HYDRATION_FALLBACK_DELAY_MS_WARM = 750;
+const PRETARGETING_FULL_HYDRATION_FALLBACK_DELAY_MS_COLD = 2000;
 const INITIAL_VISIBLE_CONFIG_ROWS_WARM = 60;
 const INITIAL_VISIBLE_CONFIG_ROWS_COLD = 40;
 const CONFIG_ROWS_CHUNK_SIZE = 120;
@@ -760,6 +764,12 @@ function WasteAnalysisContent() {
     if (pretargetingBootstrapLimit === null) return;
     if (!Array.isArray(pretargetingConfigs)) return;
     if (!useSummaryBootstrap && pretargetingConfigs.length < (pretargetingRequestLimit ?? 0)) return;
+    const hydrationIdleTimeoutMs = useSummaryBootstrap
+      ? PRETARGETING_FULL_HYDRATION_IDLE_TIMEOUT_MS_COLD
+      : PRETARGETING_FULL_HYDRATION_IDLE_TIMEOUT_MS_WARM;
+    const hydrationFallbackDelayMs = useSummaryBootstrap
+      ? PRETARGETING_FULL_HYDRATION_FALLBACK_DELAY_MS_COLD
+      : PRETARGETING_FULL_HYDRATION_FALLBACK_DELAY_MS_WARM;
     const browserWindow = window as Window & {
       requestIdleCallback?: (callback: IdleRequestCallback, opts?: IdleRequestOptions) => number;
       cancelIdleCallback?: (id: number) => void;
@@ -770,13 +780,13 @@ function WasteAnalysisContent() {
     ) {
       const idleId = browserWindow.requestIdleCallback(
         () => setPretargetingBootstrapLimit(null),
-        { timeout: 2000 }
+        { timeout: hydrationIdleTimeoutMs }
       );
       return () => browserWindow.cancelIdleCallback?.(idleId);
     }
     const timer = setTimeout(() => {
       setPretargetingBootstrapLimit(null);
-    }, 750);
+    }, hydrationFallbackDelayMs);
     return () => clearTimeout(timer);
   }, [
     pretargetingBootstrapLimit,
