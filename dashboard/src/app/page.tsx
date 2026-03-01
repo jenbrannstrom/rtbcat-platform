@@ -38,8 +38,8 @@ const INITIAL_VISIBLE_CONFIG_ROWS_COLD = 40;
 const CONFIG_ROWS_CHUNK_SIZE = 120;
 const PRETARGETING_CONFIG_CACHE_PREFIX = "catscan:qps:pretargeting-configs:v1";
 const PRETARGETING_CONFIG_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
-const PRETARGETING_CONFIG_CACHE_MAX_ROWS = 500;
-const PRETARGETING_CONFIG_CACHE_FALLBACK_ROWS = 200;
+const PRETARGETING_CONFIG_CACHE_MAX_ROWS = 300;
+const PRETARGETING_CONFIG_CACHE_FALLBACK_ROWS = 150;
 const RTB_FUNNEL_CACHE_PREFIX = "catscan:qps:rtb-funnel:v1";
 const RTB_FUNNEL_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 const CONFIG_PERFORMANCE_CACHE_PREFIX = "catscan:qps:config-performance:v1";
@@ -141,7 +141,7 @@ function readPretargetingConfigCache(buyerId: string | null): PretargetingConfig
       return undefined;
     }
     if (!Array.isArray(parsed.rows)) return undefined;
-    return parsed.rows;
+    return parsed.rows.slice(0, PRETARGETING_CONFIG_CACHE_MAX_ROWS);
   } catch {
     return undefined;
   }
