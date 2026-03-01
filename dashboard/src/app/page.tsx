@@ -550,6 +550,7 @@ function WasteAnalysisContent() {
   }, [days, postQpsLoadMetricPayload, selectedBuyerId]);
 
   // Fetch seats to auto-select first one if none selected
+  const activeSeatsCacheSeed = useMemo(() => readActiveSeatsCache(), []);
   const {
     data: seats,
     isLoading: seatsLoading,
@@ -559,13 +560,36 @@ function WasteAnalysisContent() {
   } = useQuery({
     queryKey: ["seats"],
     queryFn: () => getSeats({ active_only: true }),
-    initialData: () => readActiveSeatsCache(),
+    initialData: () => activeSeatsCacheSeed,
     initialDataUpdatedAt: () => 0,
     retry: 5,
     retryDelay: getRetryDelay,
     staleTime: 60_000,
-    refetchOnMount: true,
+    refetchOnMount: !activeSeatsCacheSeed,
+    refetchOnWindowFocus: false,
   });
+
+  useEffect(() => {
+    if (!activeSeatsCacheSeed || activeSeatsCacheSeed.length === 0) return;
+    const browserWindow = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback, opts?: IdleRequestOptions) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (
+      typeof browserWindow.requestIdleCallback === "function"
+      && typeof browserWindow.cancelIdleCallback === "function"
+    ) {
+      const idleId = browserWindow.requestIdleCallback(
+        () => void refetchSeats(),
+        { timeout: DEFERRED_QUERY_REFRESH_IDLE_TIMEOUT_MS }
+      );
+      return () => browserWindow.cancelIdleCallback?.(idleId);
+    }
+    const timer = setTimeout(() => {
+      void refetchSeats();
+    }, DEFERRED_QUERY_REFRESH_DELAY_MS_SEEDED);
+    return () => clearTimeout(timer);
+  }, [activeSeatsCacheSeed, refetchSeats]);
 
   useEffect(() => {
     if (!seatsFetchedAfterMount) return;
