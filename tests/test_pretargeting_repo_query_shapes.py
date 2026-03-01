@@ -25,6 +25,8 @@ async def test_list_configs_uses_distinct_on_for_bidder_scope(monkeypatch: pytes
     sql_upper = sql.upper()
     assert "DISTINCT ON" in sql_upper
     assert "ROW_NUMBER()" not in sql_upper
+    assert "PC.*" not in sql_upper
+    assert "AS MAXIMUM_QPS" in sql_upper
     assert captured["params"] == ("6574658621",)
 
 
@@ -45,6 +47,8 @@ async def test_list_configs_uses_distinct_on_for_global_scope(monkeypatch: pytes
     sql = str(captured["sql"]).upper()
     assert "DISTINCT ON" in sql
     assert "ROW_NUMBER()" not in sql
+    assert "PC.*" not in sql
+    assert "AS MAXIMUM_QPS" in sql
     assert captured["params"] == ()
 
 
