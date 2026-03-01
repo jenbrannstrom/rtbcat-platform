@@ -41,6 +41,7 @@ Current roadmap execution status (implemented in code, pending environment-by-en
 5. **Webhook security hardening now supports secret rotation windows**:
    - provider/shared webhook secret and HMAC envs can carry multiple active secrets (comma/semicolon/newline-separated) for zero-downtime rotations.
    - `/conversions/security/status` now exposes non-secret security posture (enabled controls + rotation counts + freshness/rate-limit config) for operator verification.
+   - operator runbook includes bundled webhook security canary execution (`make v1-canary-webhook-security`) for repeatable controls validation.
 6. **Known UX/runtime gap (planned, not yet executed): QPS page/table hydration latency**:
    - observed on reload: prolonged `Data freshness pending...` and skeleton rows before pretargeting tables render.
    - scope is performance hardening (query/runtime + API fan-out + frontend hydration), not data-accuracy semantics.
