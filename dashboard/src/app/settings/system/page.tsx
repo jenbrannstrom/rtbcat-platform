@@ -761,6 +761,7 @@ export default function SystemStatusPage() {
         : conversionReadinessState === "not_ready" || conversionReadinessState === "unavailable"
           ? "bg-red-50 text-red-700"
           : "bg-slate-100 text-slate-700";
+  const conversionReadinessReasons = (conversionReadiness?.reasons || []).filter((reason) => !!reason);
 
   if (healthLoading) {
     return <LoadingPage />;
@@ -1339,9 +1340,11 @@ export default function SystemStatusPage() {
                       </div>
                     </div>
 
-                    {conversionReadiness?.reasons?.length ? (
-                      <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-                        {conversionReadiness.reasons[0]}
+                    {conversionReadinessReasons.length ? (
+                      <div className="space-y-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                        {conversionReadinessReasons.slice(0, 3).map((reason) => (
+                          <div key={reason}>- {reason}</div>
+                        ))}
                       </div>
                     ) : null}
 

@@ -167,6 +167,8 @@ export default function SetupPage() {
   const conversionActiveSources = conversionReadiness?.active_sources ?? 0;
   const conversionLagHours = conversionReadiness?.ingestion_lag_hours ?? null;
   const conversionLagDisplay = conversionLagHours !== null ? `${conversionLagHours.toFixed(1)}h` : "unknown";
+  const conversionReadinessReasons = (conversionReadiness?.reasons || []).filter((reason) => !!reason);
+  const conversionReadinessReasonSummary = conversionReadinessReasons.join("; ");
   const conversionSourcesReady =
     buyerContextReady &&
     !conversionReadinessUnavailable &&
@@ -178,8 +180,8 @@ export default function SetupPage() {
         ? "Conversion readiness check unavailable right now. Verify webhook or pixel setup in System."
         : conversionReadiness?.state === "ready"
           ? `Healthy conversion flow: ${conversionActiveSources} active source(s), ${conversionAcceptedTotal} accepted in last ${conversionWindowDays} days, lag ${conversionLagDisplay}.`
-          : conversionReadiness?.reasons?.length
-            ? conversionReadiness.reasons[0]
+          : conversionReadinessReasonSummary
+            ? `Conversion readiness issues: ${conversionReadinessReasonSummary}.`
             : "Conversion source readiness is not complete yet.";
 
   const items: SetupItem[] = [
