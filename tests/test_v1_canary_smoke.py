@@ -8,6 +8,7 @@ from scripts.v1_canary_smoke import (
     SmokeFailure,
     build_conversion_readiness_params,
     build_webhook_hmac_signature,
+    build_webhook_security_headers,
     build_pixel_request_params,
     build_webhook_postback_payload,
     build_workflow_request_params,
@@ -186,3 +187,59 @@ def test_build_webhook_hmac_signature_changes_with_timestamp():
     sig_a = build_webhook_hmac_signature(secret="test-secret", payload=payload, timestamp=1709251200)
     sig_b = build_webhook_hmac_signature(secret="test-secret", payload=payload, timestamp=1709251201)
     assert sig_a != sig_b
+
+
+def test_build_webhook_security_headers_with_secret_only():
+    payload = {
+        "source_type": "generic",
+        "event_name": "purchase",
+        "event_ts": "2026-03-01T00:00:00+00:00",
+        "event_id": "evt-123",
+    }
+    headers = build_webhook_security_headers(
+        webhook_secret="secret-1",
+        webhook_hmac_secret=None,
+        payload=payload,
+    )
+    assert headers == {"X-Webhook-Secret": "secret-1"}
+
+
+def test_build_webhook_security_headers_with_hmac_signature():
+    payload = {
+        "source_type": "generic",
+        "event_name": "purchase",
+        "event_ts": "2026-03-01T00:00:00+00:00",
+        "event_id": "evt-123",
+    }
+    headers = build_webhook_security_headers(
+        webhook_secret=None,
+        webhook_hmac_secret="hmac-secret",
+        payload=payload,
+        timestamp=1709251200,
+    )
+    expected = build_webhook_hmac_signature(
+        secret="hmac-secret",
+        payload=payload,
+        timestamp=1709251200,
+    )
+    assert headers["X-Webhook-Timestamp"] == "1709251200"
+    assert headers["X-Signature"] == f"sha256={expected}"
+
+
+def test_build_webhook_security_headers_can_force_invalid_signature():
+    payload = {
+        "source_type": "generic",
+        "event_name": "purchase",
+        "event_ts": "2026-03-01T00:00:00+00:00",
+        "event_id": "evt-123",
+    }
+    headers = build_webhook_security_headers(
+        webhook_secret="secret-1",
+        webhook_hmac_secret="hmac-secret",
+        payload=payload,
+        timestamp=1709251200,
+        force_invalid_signature=True,
+    )
+    assert headers["X-Webhook-Secret"] == "secret-1"
+    assert headers["X-Webhook-Timestamp"] == "1709251200"
+    assert headers["X-Signature"] == "sha256=invalid-signature"

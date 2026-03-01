@@ -30,6 +30,7 @@ Current roadmap execution status (implemented in code, pending environment-by-en
    - canary includes workflow profile controls, optional pixel checks, strict conversion-ready checks, and strict go/no-go target.
    - canary now includes optional generic webhook auth verification (401 without secret, 200 with secret) for security go/no-go runs.
    - canary now includes optional generic webhook HMAC verification (200 valid signature, 401 invalid signature) for security go/no-go runs.
+   - canary now includes optional generic webhook freshness verification (200 fresh timestamp, 401 stale timestamp) and optional rate-limit verification (200 until threshold, 429 after threshold).
    - root `make v1-gate` now combines phase0 + conversion/readiness regression, and CI uses it.
 4. **BYOM workflow controls are now operationally consistent**:
    - workflow preset/profile handling is aligned across backend API, dashboard UI, and canary wrappers.
