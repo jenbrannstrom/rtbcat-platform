@@ -353,12 +353,14 @@ def build_qps_page_slo_params(
     buyer_id: str | None,
     since_hours: int,
     latest_limit: int = 5,
+    api_rollup_limit: int = 10,
 ) -> dict[str, Any]:
     return {
         "page": "qps_home",
         "buyer_id": buyer_id,
         "since_hours": since_hours,
         "latest_limit": latest_limit,
+        "api_rollup_limit": api_rollup_limit,
     }
 
 
@@ -496,6 +498,16 @@ def main() -> int:
         type=float,
         default=float(os.getenv("CATSCAN_CANARY_MAX_QPS_PAGE_P95_HYDRATED_MS", "8000")),
         help="Max p95 budget for time_to_table_hydrated (default: 8000ms).",
+    )
+    parser.add_argument(
+        "--qps-page-slo-require-api-rollup",
+        action="store_true",
+        default=str(os.getenv("CATSCAN_CANARY_QPS_PAGE_REQUIRE_API_ROLLUP", "0")).strip().lower()
+        in {"1", "true", "yes", "on"},
+        help=(
+            "Require startup API paths to appear in /system/ui-metrics/page-load/summary "
+            "api_latency_rollup and enforce p95 budgets when present."
+        ),
     )
     parser.add_argument(
         "--pixel-source-type",
@@ -1083,6 +1095,7 @@ def main() -> int:
                 buyer_id=args.buyer_id,
                 since_hours=args.qps_page_slo_since_hours,
                 latest_limit=5,
+                api_rollup_limit=50,
             ),
         )
         sample_count = int(payload.get("sample_count") or 0)
@@ -1114,12 +1127,65 @@ def main() -> int:
             ),
         )
 
+        raw_rollup = payload.get("api_latency_rollup") or []
+        _assert(isinstance(raw_rollup, list), "api_latency_rollup missing from QPS page SLO summary")
+        rollup_p95_by_path: dict[str, float] = {}
+        for row in raw_rollup:
+            if not isinstance(row, dict):
+                continue
+            api_path = str(row.get("api_path") or "").strip()
+            if not api_path:
+                continue
+            p95_value = row.get("p95_latency_ms")
+            if p95_value is None:
+                continue
+            try:
+                rollup_p95_by_path[api_path] = float(p95_value)
+            except (TypeError, ValueError):
+                continue
+
+        api_rollup_budgets = {
+            "/settings/endpoints": float(args.max_settings_endpoints_latency_ms),
+            "/settings/pretargeting": float(args.max_settings_pretargeting_latency_ms),
+            "/analytics/home/configs": float(args.max_home_configs_latency_ms),
+            "/analytics/home/endpoint-efficiency": float(args.max_home_endpoint_efficiency_latency_ms),
+        }
+        missing_rollup_paths: list[str] = []
+        observed_rollup_summary: list[str] = []
+        for api_path, budget_ms in api_rollup_budgets.items():
+            p95_api_latency = rollup_p95_by_path.get(api_path)
+            if p95_api_latency is None:
+                missing_rollup_paths.append(api_path)
+                continue
+            _assert(
+                p95_api_latency <= budget_ms,
+                (
+                    f"QPS page API rollup p95 {api_path}={p95_api_latency:.1f}ms exceeds "
+                    f"budget {budget_ms:.1f}ms"
+                ),
+            )
+            observed_rollup_summary.append(f"{api_path}={p95_api_latency:.1f}ms")
+
+        if args.qps_page_slo_require_api_rollup:
+            _assert(
+                not missing_rollup_paths,
+                (
+                    "QPS page API rollup missing required paths: "
+                    + ", ".join(missing_rollup_paths)
+                ),
+            )
+
         print(
             "INFO  QPS page SLO summary -> "
             f"samples={sample_count}, "
             f"p95_first={float(p95_first):.1f}ms, "
             f"p95_hydrated={float(p95_hydrated):.1f}ms"
         )
+        if observed_rollup_summary:
+            print(
+                "INFO  QPS page API rollup p95 -> "
+                + ", ".join(observed_rollup_summary)
+            )
 
     def check_optimizer_economics() -> None:
         payload = client.request(

@@ -169,11 +169,13 @@ def test_build_qps_page_slo_params_includes_expected_fields():
         buyer_id="buyer-1",
         since_hours=24,
         latest_limit=7,
+        api_rollup_limit=15,
     )
     assert params["page"] == "qps_home"
     assert params["buyer_id"] == "buyer-1"
     assert params["since_hours"] == 24
     assert params["latest_limit"] == 7
+    assert params["api_rollup_limit"] == 15
 
 
 def test_build_webhook_postback_payload_includes_expected_fields():
