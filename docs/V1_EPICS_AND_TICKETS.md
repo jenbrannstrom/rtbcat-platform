@@ -44,6 +44,7 @@
 - `E3-005` started: `/optimizer/workflows/score-and-propose` now supports optional `profile=safe|balanced|aggressive` defaults, with explicit params still able to override profile values.
 - `E4-004` (security hardening slice) started: conversion webhook endpoints now support optional HMAC verification, configurable timestamp-freshness checks for replay-risk reduction, and optional per-source/IP ingress rate limiting.
 - `E4-004` (security hardening slice) started: webhook auth now supports zero-downtime secret rotation windows by accepting multiple active plain/HMAC secrets per env var (comma/semicolon/newline-separated), with tests and setup/runbook guidance updated.
+- `E4-005` planned (stabilization slice): QPS Optimizer screen performance hardening is queued to reduce long pending/skeleton states on reload; scope includes API fan-out parallelization, backend query profiling for pretargeting/history paths, and screen-level latency SLO instrumentation.
 - `E4-002` started (backend slice): optimizer setup API now supports persisted monthly hosting cost under `/settings/optimizer/setup` for effective-CPM context and setup-flow readiness.
 - `E4-002` started (frontend slice): Optimizer Control Plane now includes monthly hosting cost save controls wired to `/settings/optimizer/setup` with effective-CPM enabled/disabled state feedback, one-click active-model endpoint validation, and model lifecycle controls (create/update + activate/deactivate + select).
 - `E4-002` started (frontend slice): endpoint validation now supports optional custom JSON payload input in System Settings for contract checks against realistic model request bodies.
@@ -300,6 +301,17 @@
   - replay/rate-limit verification
 - **Acceptance:** no open high-severity security findings at GA.
 
+## E4-Story-005 (Sprint 7)
+
+- **Title:** QPS Optimizer load-performance hardening
+- **Owner:** Frontend + Backend + QA
+- **Tasks:**
+  - instrument page timings (`navigation -> first table row -> hydrated table`) for QPS Optimizer.
+  - profile/optimize initial-load API paths (`/settings/endpoints`, `/settings/pretargeting`, history/snapshot dependencies).
+  - reduce client-side startup critical path with parallel fetches and non-blocking progressive rendering.
+  - add canary/QA performance reporting for table readiness latency.
+- **Acceptance:** `time_to_first_table_row` p95 <= 6s and `time_to_table_hydrated` p95 <= 8s for canary buyers.
+
 ---
 
 ## Cross-Cutting QA Tickets
@@ -330,7 +342,7 @@
 - **Sprint 4:** E1-003 (finish), E1-004, E2-001, E2-004 (start)
 - **Sprint 5:** E2-002, E2-003, E2-004 (finish), E2-005, E3-001 (start)
 - **Sprint 6:** E3-001 (finish), E3-002, E3-003, E3-004, E3-005, E4-001/002
-- **Sprint 7:** E4-003, E4-004, QA-004, stabilization + GA
+- **Sprint 7:** E4-003, E4-004, E4-005, QA-004, stabilization + GA
 
 ---
 
