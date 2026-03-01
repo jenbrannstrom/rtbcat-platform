@@ -11,7 +11,7 @@ import { ConfigBreakdownPanel } from "@/components/rtb/config-breakdown-panel";
 import {
   getRTBFunnel, getSpendStats, getEndpointEfficiency,
   getPretargetingConfigs, getRTBFunnelConfigs, getSeats,
-  type PretargetingConfigResponse
+  type PretargetingConfigResponse, type ConfigPerformanceResponse
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAccount } from "@/contexts/account-context";
@@ -26,10 +26,17 @@ const INITIAL_VISIBLE_CONFIG_ROWS = 60;
 const CONFIG_ROWS_CHUNK_SIZE = 120;
 const PRETARGETING_CONFIG_CACHE_PREFIX = "catscan:qps:pretargeting-configs:v1";
 const PRETARGETING_CONFIG_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
+const CONFIG_PERFORMANCE_CACHE_PREFIX = "catscan:qps:config-performance:v1";
+const CONFIG_PERFORMANCE_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 
 interface PretargetingConfigCachePayload {
   cached_at_iso: string;
   rows: PretargetingConfigResponse[];
+}
+
+interface ConfigPerformanceCachePayload {
+  cached_at_iso: string;
+  data: ConfigPerformanceResponse;
 }
 
 function getRetryDelay(attemptIndex: number): number {
@@ -59,6 +66,10 @@ function getPretargetingConfigCacheKey(buyerId: string): string {
   return `${PRETARGETING_CONFIG_CACHE_PREFIX}:${buyerId}`;
 }
 
+function getConfigPerformanceCacheKey(buyerId: string, days: number): string {
+  return `${CONFIG_PERFORMANCE_CACHE_PREFIX}:${buyerId}:${days}`;
+}
+
 function readPretargetingConfigCache(buyerId: string | null): PretargetingConfigResponse[] | undefined {
   if (!buyerId || typeof window === "undefined") return undefined;
   try {
@@ -86,6 +97,45 @@ function writePretargetingConfigCache(buyerId: string | null, rows: Pretargeting
       rows,
     };
     window.localStorage.setItem(getPretargetingConfigCacheKey(buyerId), JSON.stringify(payload));
+  } catch {
+    // Ignore localStorage failures (quota/private browsing).
+  }
+}
+
+function readConfigPerformanceCache(
+  buyerId: string | null,
+  days: number
+): ConfigPerformanceResponse | undefined {
+  if (!buyerId || typeof window === "undefined") return undefined;
+  try {
+    const raw = window.localStorage.getItem(getConfigPerformanceCacheKey(buyerId, days));
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as ConfigPerformanceCachePayload;
+    const cachedAtMs = Date.parse(parsed.cached_at_iso);
+    if (!Number.isFinite(cachedAtMs)) return undefined;
+    if ((Date.now() - cachedAtMs) > CONFIG_PERFORMANCE_CACHE_MAX_AGE_MS) {
+      window.localStorage.removeItem(getConfigPerformanceCacheKey(buyerId, days));
+      return undefined;
+    }
+    if (!parsed.data || typeof parsed.data !== "object") return undefined;
+    return parsed.data;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeConfigPerformanceCache(
+  buyerId: string | null,
+  days: number,
+  data: ConfigPerformanceResponse | undefined
+): void {
+  if (!buyerId || typeof window === "undefined" || !data) return;
+  try {
+    const payload: ConfigPerformanceCachePayload = {
+      cached_at_iso: new Date().toISOString(),
+      data,
+    };
+    window.localStorage.setItem(getConfigPerformanceCacheKey(buyerId, days), JSON.stringify(payload));
   } catch {
     // Ignore localStorage failures (quota/private browsing).
   }
@@ -440,10 +490,12 @@ function WasteAnalysisContent() {
     refetch: refetchConfigPerf,
     isError: configPerformanceError,
     isFetching: configPerformanceFetching,
+    isFetchedAfterMount: configPerformanceFetchedAfterMount,
   } = useQuery({
     queryKey: ["rtb-funnel-configs", days, selectedBuyerId],
     queryFn: fetchMeasuredConfigPerformance,
     enabled: seatReady,
+    initialData: () => readConfigPerformanceCache(selectedBuyerId, days),
     retry: shouldRetryAnalyticsQuery,
     retryDelay: getRetryDelay,
     retryOnMount: true,
@@ -455,6 +507,11 @@ function WasteAnalysisContent() {
       return false;
     },
   });
+
+  useEffect(() => {
+    if (!configPerformanceFetchedAfterMount) return;
+    writeConfigPerformanceCache(selectedBuyerId, days, configPerformance);
+  }, [configPerformance, configPerformanceFetchedAfterMount, days, selectedBuyerId]);
 
   const {
     data: endpointEfficiency,
