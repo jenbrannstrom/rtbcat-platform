@@ -1127,6 +1127,20 @@ def main() -> int:
             ),
         )
 
+        raw_buckets = payload.get("time_buckets")
+        _assert(isinstance(raw_buckets, list), "time_buckets missing from QPS page SLO summary")
+        if sample_count > 0:
+            _assert(
+                len(raw_buckets) > 0,
+                "time_buckets must include at least one bucket when samples exist",
+            )
+            first_bucket = raw_buckets[0]
+            _assert(isinstance(first_bucket, dict), "time_buckets entry must be an object")
+            _assert(
+                "sample_count" in first_bucket,
+                "time_buckets entry missing sample_count",
+            )
+
         raw_rollup = payload.get("api_latency_rollup") or []
         _assert(isinstance(raw_rollup, list), "api_latency_rollup missing from QPS page SLO summary")
         rollup_p95_by_path: dict[str, float] = {}
@@ -1179,7 +1193,8 @@ def main() -> int:
             "INFO  QPS page SLO summary -> "
             f"samples={sample_count}, "
             f"p95_first={float(p95_first):.1f}ms, "
-            f"p95_hydrated={float(p95_hydrated):.1f}ms"
+            f"p95_hydrated={float(p95_hydrated):.1f}ms, "
+            f"buckets={len(raw_buckets)}"
         )
         if observed_rollup_summary:
             print(
