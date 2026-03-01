@@ -28,6 +28,7 @@ import {
   getOptimizerEffectiveCpm,
   getOptimizerEfficiencySummary,
   getConversionHealth,
+  getConversionReadiness,
   getConversionIngestionStats,
   getSnapshots,
   rollbackSnapshot,
@@ -282,6 +283,21 @@ export default function SystemStatusPage() {
         buyer_id: selectedBuyerId || undefined,
         days: 7,
     }),
+    retry: false,
+  });
+
+  const {
+    data: conversionReadiness,
+    isLoading: conversionReadinessLoading,
+    error: conversionReadinessError,
+  } = useQuery({
+    queryKey: ["conversionReadiness", selectedBuyerId],
+    queryFn: () =>
+      getConversionReadiness({
+        buyer_id: selectedBuyerId || undefined,
+        days: 14,
+        freshness_hours: 72,
+      }),
     retry: false,
   });
 
@@ -732,8 +748,19 @@ export default function SystemStatusPage() {
     }
     return `${(value * 100).toFixed(2)}%`;
   };
-  const conversionSignalsLoading = conversionHealthLoading || conversionIngestionStatsLoading;
-  const conversionSignalsError = conversionHealthError || conversionIngestionStatsError;
+  const conversionSignalsLoading =
+    conversionHealthLoading || conversionIngestionStatsLoading || conversionReadinessLoading;
+  const conversionSignalsError =
+    conversionHealthError || conversionIngestionStatsError || conversionReadinessError;
+  const conversionReadinessState = String(conversionReadiness?.state || "").toLowerCase();
+  const conversionReadinessTone =
+    conversionReadinessState === "ready"
+      ? "bg-green-50 text-green-700"
+      : conversionReadinessState === "degraded"
+        ? "bg-amber-50 text-amber-700"
+        : conversionReadinessState === "not_ready" || conversionReadinessState === "unavailable"
+          ? "bg-red-50 text-red-700"
+          : "bg-slate-100 text-slate-700";
 
   if (healthLoading) {
     return <LoadingPage />;
@@ -1279,7 +1306,7 @@ export default function SystemStatusPage() {
                   </div>
                 ) : (
                   <div className="space-y-3 p-3">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                       <div className="rounded-lg border border-gray-200 p-2">
                         <div className="text-[11px] text-gray-500">Health State</div>
                         <div className="mt-1 text-sm font-semibold text-gray-900">
@@ -1287,6 +1314,17 @@ export default function SystemStatusPage() {
                         </div>
                         <div className="text-[11px] text-gray-500">
                           lag {conversionHealth?.ingestion?.lag_hours ?? "-"}h
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-gray-200 p-2">
+                        <div className="text-[11px] text-gray-500">Readiness (14d)</div>
+                        <div className="mt-1">
+                          <span className={cn("rounded px-2 py-0.5 text-xs font-medium", conversionReadinessTone)}>
+                            {conversionReadiness?.state || "-"}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-[11px] text-gray-500">
+                          active sources {(conversionReadiness?.active_sources ?? 0).toLocaleString()}
                         </div>
                       </div>
                       <div className="rounded-lg border border-gray-200 p-2">
@@ -1300,6 +1338,12 @@ export default function SystemStatusPage() {
                         </div>
                       </div>
                     </div>
+
+                    {conversionReadiness?.reasons?.length ? (
+                      <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                        {conversionReadiness.reasons[0]}
+                      </div>
+                    ) : null}
 
                     {conversionIngestionStats?.rows?.length ? (
                       <div className="max-h-40 overflow-auto">
