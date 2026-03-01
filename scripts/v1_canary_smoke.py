@@ -210,6 +210,19 @@ def build_pixel_request_params(
     }
 
 
+def build_conversion_readiness_params(
+    *,
+    buyer_id: str | None,
+    days: int,
+    freshness_hours: int,
+) -> dict[str, Any]:
+    return {
+        "buyer_id": buyer_id,
+        "days": days,
+        "freshness_hours": freshness_hours,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run v1 canary smoke checks against API.")
     parser.add_argument(
@@ -272,6 +285,23 @@ def main() -> int:
         default=os.getenv("CATSCAN_CANARY_PIXEL_EXPECTED_STATUS", "accepted"),
         help="Expected X-CatScan-Conversion-Status for pixel check (default: accepted).",
     )
+    parser.add_argument(
+        "--conversion-readiness-days",
+        type=int,
+        default=int(os.getenv("CATSCAN_CANARY_CONVERSION_DAYS", "14")),
+        help="Days window for /conversions/readiness check (default: 14).",
+    )
+    parser.add_argument(
+        "--conversion-readiness-freshness-hours",
+        type=int,
+        default=int(os.getenv("CATSCAN_CANARY_CONVERSION_FRESHNESS_HOURS", "72")),
+        help="Freshness threshold hours for /conversions/readiness check (default: 72).",
+    )
+    parser.add_argument(
+        "--require-conversion-ready",
+        action="store_true",
+        help="Fail if /conversions/readiness state is not ready.",
+    )
     default_workflow_profile = (
         os.getenv("CATSCAN_CANARY_WORKFLOW_PROFILE")
         or os.getenv("CATSCAN_CANARY_PROFILE")
@@ -317,6 +347,13 @@ def main() -> int:
         parser.error("--workflow-min-confidence must be between 0 and 1")
     if args.workflow_max_delta_pct < 0.05 or args.workflow_max_delta_pct > 1:
         parser.error("--workflow-max-delta-pct must be between 0.05 and 1")
+    if args.conversion_readiness_days < 1 or args.conversion_readiness_days > 365:
+        parser.error("--conversion-readiness-days must be between 1 and 365")
+    if (
+        args.conversion_readiness_freshness_hours < 1
+        or args.conversion_readiness_freshness_hours > 720
+    ):
+        parser.error("--conversion-readiness-freshness-hours must be between 1 and 720")
 
     client = SmokeClient(
         base_url=args.base_url,
@@ -350,6 +387,27 @@ def main() -> int:
         payload = client.request("GET", "/conversions/health", params={"buyer_id": args.buyer_id})
         _assert("state" in payload, "state missing from /conversions/health")
         _assert("ingestion" in payload, "ingestion missing from /conversions/health")
+
+    def check_conversion_readiness() -> None:
+        payload = client.request(
+            "GET",
+            "/conversions/readiness",
+            params=build_conversion_readiness_params(
+                buyer_id=args.buyer_id,
+                days=args.conversion_readiness_days,
+                freshness_hours=args.conversion_readiness_freshness_hours,
+            ),
+        )
+        _assert("state" in payload, "state missing from /conversions/readiness")
+        _assert("accepted_total" in payload, "accepted_total missing from /conversions/readiness")
+        _assert("active_sources" in payload, "active_sources missing from /conversions/readiness")
+        _assert(isinstance(payload.get("reasons"), list), "reasons missing from /conversions/readiness")
+        if args.require_conversion_ready:
+            state = str(payload.get("state", "")).lower()
+            _assert(
+                state == "ready",
+                f"/conversions/readiness state is {state!r}, expected 'ready'",
+            )
 
     def check_conversion_stats() -> None:
         payload = client.request(
@@ -529,6 +587,7 @@ def main() -> int:
         ("API health", check_health),
         ("Data health", check_data_health),
         ("Conversion health", check_conversion_health),
+        ("Conversion readiness", check_conversion_readiness),
         ("Conversion ingestion stats", check_conversion_stats),
         ("Conversion pixel (optional)", check_conversion_pixel),
         ("Optimizer economics", check_optimizer_economics),

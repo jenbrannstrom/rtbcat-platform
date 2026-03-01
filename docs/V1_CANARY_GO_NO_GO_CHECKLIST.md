@@ -34,6 +34,21 @@ CATSCAN_MAX_DIMENSION_MISSING_PCT=20 \
 make v1-canary-smoke
 ```
 
+Optional strict conversion-readiness gate:
+
+```bash
+CATSCAN_CANARY_REQUIRE_CONVERSION_READY=1 \
+CATSCAN_CANARY_CONVERSION_DAYS=14 \
+CATSCAN_CANARY_CONVERSION_FRESHNESS_HOURS=72 \
+make v1-canary-smoke
+```
+
+Equivalent convenience target:
+
+```bash
+make v1-canary-conversion-ready
+```
+
 Optional full proposal lifecycle gate:
 
 ```bash

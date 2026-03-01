@@ -10,6 +10,8 @@ set -euo pipefail
 #   CATSCAN_CANARY_RUN_PIXEL=1, CATSCAN_CANARY_PIXEL_SOURCE_TYPE=pixel,
 #   CATSCAN_CANARY_PIXEL_EVENT_NAME=purchase, CATSCAN_CANARY_PIXEL_SECRET=<secret>,
 #   CATSCAN_CANARY_PIXEL_EXPECTED_STATUS=accepted|rejected,
+#   CATSCAN_CANARY_REQUIRE_CONVERSION_READY=1,
+#   CATSCAN_CANARY_CONVERSION_DAYS=14, CATSCAN_CANARY_CONVERSION_FRESHNESS_HOURS=72,
 #   CATSCAN_ROLLBACK_BILLING_ID, CATSCAN_ROLLBACK_SNAPSHOT_ID,
 #   CATSCAN_CANARY_REQUIRE_HEALTHY_READINESS=1, CATSCAN_MAX_DIMENSION_MISSING_PCT=99.9,
 #   CATSCAN_CANARY_PROFILE=safe|balanced|aggressive,
@@ -94,8 +96,20 @@ if [[ "${CATSCAN_CANARY_RUN_LIFECYCLE:-0}" == "1" ]]; then
   args+=("--run-lifecycle")
 fi
 
+if [[ "${CATSCAN_CANARY_REQUIRE_CONVERSION_READY:-0}" == "1" ]]; then
+  args+=("--require-conversion-ready")
+fi
+
 if [[ "${CATSCAN_CANARY_RUN_PIXEL:-0}" == "1" ]]; then
   args+=("--run-pixel")
+fi
+
+if [[ -n "${CATSCAN_CANARY_CONVERSION_DAYS:-}" ]]; then
+  args+=("--conversion-readiness-days" "$CATSCAN_CANARY_CONVERSION_DAYS")
+fi
+
+if [[ -n "${CATSCAN_CANARY_CONVERSION_FRESHNESS_HOURS:-}" ]]; then
+  args+=("--conversion-readiness-freshness-hours" "$CATSCAN_CANARY_CONVERSION_FRESHNESS_HOURS")
 fi
 
 if [[ -n "${CATSCAN_CANARY_PIXEL_SOURCE_TYPE:-}" ]]; then
