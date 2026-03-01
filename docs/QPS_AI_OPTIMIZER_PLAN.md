@@ -838,6 +838,8 @@ ALSO PROVIDE:
   - extended API contract coverage for trend-bucket controls (`bucket_hours`, `bucket_limit`) in `tests/test_system_ui_metrics_api.py`.
   - hardened canary SLO contract checks to require `time_buckets` payload presence/non-empty behavior when QPS page samples exist.
 
+- Plan closeout status and verification evidence are tracked in [V1_PLAN_CLOSEOUT_MATRIX.md](/home/x1-7/Documents/rtbcat-platform/docs/V1_PLAN_CLOSEOUT_MATRIX.md).
+
 - Add end-to-end timing instrumentation for QPS Optimizer page:
   - page-level timing marks (navigation -> first table row -> full table hydration),
   - API-level latency for `/settings/endpoints`, `/settings/pretargeting`, and dependent history/snapshot calls.
