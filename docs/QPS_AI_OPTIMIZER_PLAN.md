@@ -28,6 +28,7 @@ Current roadmap execution status (implemented in code, pending environment-by-en
    - Setup/System UI now consume readiness and show buyer-scoped status + troubleshooting reasons.
 3. **Operator/QA gates hardened**:
    - canary includes workflow profile controls, optional pixel checks, strict conversion-ready checks, and strict go/no-go target.
+   - canary now includes optional generic webhook auth verification (401 without secret, 200 with secret) for security go/no-go runs.
    - root `make v1-gate` now combines phase0 + conversion/readiness regression, and CI uses it.
 4. **BYOM workflow controls are now operationally consistent**:
    - workflow preset/profile handling is aligned across backend API, dashboard UI, and canary wrappers.

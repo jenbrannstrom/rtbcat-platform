@@ -8,6 +8,7 @@ from scripts.v1_canary_smoke import (
     SmokeFailure,
     build_conversion_readiness_params,
     build_pixel_request_params,
+    build_webhook_postback_payload,
     build_workflow_request_params,
     validate_data_health_payload,
 )
@@ -143,3 +144,17 @@ def test_build_conversion_readiness_params_includes_fields():
     assert params["buyer_id"] == "buyer-1"
     assert params["days"] == 14
     assert params["freshness_hours"] == 72
+
+
+def test_build_webhook_postback_payload_includes_expected_fields():
+    payload = build_webhook_postback_payload(
+        buyer_id="buyer-1",
+        source_type="generic",
+        event_name="purchase",
+        event_ts="2026-03-01T00:00:00+00:00",
+        event_id="evt-123",
+    )
+    assert payload["buyer_id"] == "buyer-1"
+    assert payload["source_type"] == "generic"
+    assert payload["event_name"] == "purchase"
+    assert payload["event_id"] == "evt-123"

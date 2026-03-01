@@ -10,6 +10,8 @@ set -euo pipefail
 #   CATSCAN_CANARY_RUN_PIXEL=1, CATSCAN_CANARY_PIXEL_SOURCE_TYPE=pixel,
 #   CATSCAN_CANARY_PIXEL_EVENT_NAME=purchase, CATSCAN_CANARY_PIXEL_SECRET=<secret>,
 #   CATSCAN_CANARY_PIXEL_EXPECTED_STATUS=accepted|rejected,
+#   CATSCAN_CANARY_RUN_WEBHOOK_AUTH=1, CATSCAN_CANARY_WEBHOOK_SOURCE_TYPE=generic,
+#   CATSCAN_CANARY_WEBHOOK_EVENT_NAME=purchase, CATSCAN_CANARY_WEBHOOK_SECRET=<secret>,
 #   CATSCAN_CANARY_REQUIRE_CONVERSION_READY=1,
 #   CATSCAN_CANARY_CONVERSION_DAYS=14, CATSCAN_CANARY_CONVERSION_FRESHNESS_HOURS=72,
 #   CATSCAN_ROLLBACK_BILLING_ID, CATSCAN_ROLLBACK_SNAPSHOT_ID,
@@ -104,6 +106,10 @@ if [[ "${CATSCAN_CANARY_RUN_PIXEL:-0}" == "1" ]]; then
   args+=("--run-pixel")
 fi
 
+if [[ "${CATSCAN_CANARY_RUN_WEBHOOK_AUTH:-0}" == "1" ]]; then
+  args+=("--run-webhook-auth-check")
+fi
+
 if [[ -n "${CATSCAN_CANARY_CONVERSION_DAYS:-}" ]]; then
   args+=("--conversion-readiness-days" "$CATSCAN_CANARY_CONVERSION_DAYS")
 fi
@@ -126,6 +132,18 @@ fi
 
 if [[ -n "${CATSCAN_CANARY_PIXEL_EXPECTED_STATUS:-}" ]]; then
   args+=("--pixel-expected-status" "$CATSCAN_CANARY_PIXEL_EXPECTED_STATUS")
+fi
+
+if [[ -n "${CATSCAN_CANARY_WEBHOOK_SOURCE_TYPE:-}" ]]; then
+  args+=("--webhook-source-type" "$CATSCAN_CANARY_WEBHOOK_SOURCE_TYPE")
+fi
+
+if [[ -n "${CATSCAN_CANARY_WEBHOOK_EVENT_NAME:-}" ]]; then
+  args+=("--webhook-event-name" "$CATSCAN_CANARY_WEBHOOK_EVENT_NAME")
+fi
+
+if [[ -n "${CATSCAN_CANARY_WEBHOOK_SECRET:-}" ]]; then
+  args+=("--webhook-secret" "$CATSCAN_CANARY_WEBHOOK_SECRET")
 fi
 
 if [[ -n "${WORKFLOW_PROFILE:-}" ]]; then

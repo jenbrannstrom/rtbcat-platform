@@ -67,6 +67,27 @@ class SmokeClient:
         json_body: dict[str, Any] | None = None,
         extra_headers: dict[str, str] | None = None,
     ) -> tuple[dict[str, str], bytes]:
+        status_code, response_headers, body = self.request_status_bytes(
+            method,
+            path,
+            params=params,
+            json_body=json_body,
+            extra_headers=extra_headers,
+        )
+        if status_code >= 400:
+            detail = body.decode("utf-8", errors="replace")
+            raise SmokeFailure(f"{method} {path}: HTTP {status_code} {detail[:240]}")
+        return response_headers, body
+
+    def request_status_bytes(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        json_body: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
+    ) -> tuple[int, dict[str, str], bytes]:
         url = _join_url(self.base_url, path)
         if params:
             query = urllib.parse.urlencode(
@@ -93,10 +114,14 @@ class SmokeClient:
                     for key, value in resp.headers.items()
                     if key and value
                 }
-                return response_headers, resp.read()
+                return int(resp.getcode()), response_headers, resp.read()
         except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise SmokeFailure(f"{method} {path}: HTTP {exc.code} {detail[:240]}") from exc
+            response_headers = {
+                key.lower(): value
+                for key, value in exc.headers.items()
+                if key and value
+            }
+            return int(exc.code), response_headers, exc.read()
         except urllib.error.URLError as exc:
             raise SmokeFailure(f"{method} {path}: {exc}") from exc
 
@@ -210,6 +235,23 @@ def build_pixel_request_params(
     }
 
 
+def build_webhook_postback_payload(
+    *,
+    buyer_id: str | None,
+    source_type: str,
+    event_name: str,
+    event_ts: str,
+    event_id: str,
+) -> dict[str, Any]:
+    return {
+        "buyer_id": buyer_id,
+        "source_type": source_type,
+        "event_name": event_name,
+        "event_ts": event_ts,
+        "event_id": event_id,
+    }
+
+
 def build_conversion_readiness_params(
     *,
     buyer_id: str | None,
@@ -264,6 +306,11 @@ def main() -> int:
         help="Run lightweight conversion pixel ingestion check.",
     )
     parser.add_argument(
+        "--run-webhook-auth-check",
+        action="store_true",
+        help="Run optional webhook auth enforcement check on generic conversion postback.",
+    )
+    parser.add_argument(
         "--pixel-source-type",
         default=os.getenv("CATSCAN_CANARY_PIXEL_SOURCE_TYPE", "pixel"),
         help="Source type sent to /conversions/pixel (default: pixel).",
@@ -284,6 +331,23 @@ def main() -> int:
         choices=("accepted", "rejected"),
         default=os.getenv("CATSCAN_CANARY_PIXEL_EXPECTED_STATUS", "accepted"),
         help="Expected X-CatScan-Conversion-Status for pixel check (default: accepted).",
+    )
+    parser.add_argument(
+        "--webhook-source-type",
+        default=os.getenv("CATSCAN_CANARY_WEBHOOK_SOURCE_TYPE", "generic"),
+        help="Source type sent to /conversions/generic/postback for auth check.",
+    )
+    parser.add_argument(
+        "--webhook-event-name",
+        default=os.getenv("CATSCAN_CANARY_WEBHOOK_EVENT_NAME", "purchase"),
+        help="Event name sent to /conversions/generic/postback for auth check.",
+    )
+    parser.add_argument(
+        "--webhook-secret",
+        default=os.getenv("CATSCAN_CANARY_WEBHOOK_SECRET")
+        or os.getenv("CATSCAN_GENERIC_CONVERSION_WEBHOOK_SECRET")
+        or os.getenv("CATSCAN_CONVERSIONS_SHARED_SECRET"),
+        help="Secret used for webhook auth check (X-Webhook-Secret header).",
     )
     parser.add_argument(
         "--conversion-readiness-days",
@@ -451,6 +515,50 @@ def main() -> int:
         cache_control = str(response_headers.get("cache-control", "")).lower()
         _assert("no-store" in cache_control, "pixel response missing no-store cache-control")
 
+    def check_conversion_webhook_auth() -> None:
+        if not args.run_webhook_auth_check:
+            return
+        now_ts = datetime.now(timezone.utc)
+        payload = build_webhook_postback_payload(
+            buyer_id=args.buyer_id,
+            source_type=args.webhook_source_type,
+            event_name=args.webhook_event_name,
+            event_ts=now_ts.isoformat(),
+            event_id=f"canary-webhook-{int(now_ts.timestamp())}",
+        )
+        status_without_secret, _, _ = client.request_status_bytes(
+            "POST",
+            "/conversions/generic/postback",
+            json_body=payload,
+        )
+        if args.webhook_secret:
+            _assert(
+                status_without_secret == 401,
+                (
+                    "generic webhook auth check expected HTTP 401 without secret when "
+                    f"secret is configured, got HTTP {status_without_secret}"
+                ),
+            )
+            status_with_secret, _, _ = client.request_status_bytes(
+                "POST",
+                "/conversions/generic/postback",
+                json_body=payload,
+                extra_headers={"X-Webhook-Secret": args.webhook_secret},
+            )
+            _assert(
+                status_with_secret == 200,
+                f"generic webhook auth check expected HTTP 200 with secret, got HTTP {status_with_secret}",
+            )
+            return
+
+        _assert(
+            status_without_secret == 200,
+            (
+                "generic webhook auth check expected HTTP 200 without secret because no canary webhook secret "
+                f"is configured, got HTTP {status_without_secret}"
+            ),
+        )
+
     def check_optimizer_economics() -> None:
         payload = client.request(
             "GET",
@@ -590,6 +698,7 @@ def main() -> int:
         ("Conversion readiness", check_conversion_readiness),
         ("Conversion ingestion stats", check_conversion_stats),
         ("Conversion pixel (optional)", check_conversion_pixel),
+        ("Conversion webhook auth (optional)", check_conversion_webhook_auth),
         ("Optimizer economics", check_optimizer_economics),
         ("Optimizer models", check_models_and_resolve),
         ("Model endpoint validation", check_model_validation),
