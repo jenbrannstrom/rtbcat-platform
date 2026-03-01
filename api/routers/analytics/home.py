@@ -115,4 +115,6 @@ async def refresh_home_cache(
         refresh_kwargs["end_date"] = end_date
     else:
         refresh_kwargs["days"] = days
-    return await refresh_home_summaries(**refresh_kwargs)
+    result = await refresh_home_summaries(**refresh_kwargs)
+    HomeAnalyticsService.clear_payload_caches()
+    return result
