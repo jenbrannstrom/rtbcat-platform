@@ -58,6 +58,7 @@ class PretargetingRepository:
         limit: int | None = None,
         summary_only: bool = False,
     ) -> list[dict[str, Any]]:
+        dedupe_expr = "COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id)"
         limit_sql = ""
         query_params = params
         if limit is not None:
@@ -82,6 +83,7 @@ class PretargetingRepository:
                 deduped.synced_at
             """
             inner_projection = """
+                COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id) AS dedupe_key,
                 pc.config_id,
                 pc.bidder_id,
                 pc.billing_id,
@@ -114,6 +116,7 @@ class PretargetingRepository:
                 deduped.synced_at
             """
             inner_projection = """
+                COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id) AS dedupe_key,
                 pc.config_id,
                 pc.bidder_id,
                 pc.billing_id,
@@ -139,16 +142,16 @@ class PretargetingRepository:
             SELECT
                 {outer_projection}
             FROM (
-                SELECT DISTINCT ON (COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id))
+                SELECT DISTINCT ON ({dedupe_expr})
                     {inner_projection}
                 FROM pretargeting_configs pc
                 {where_sql}
                 ORDER BY
-                    COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id),
+                    {dedupe_expr},
                     pc.synced_at DESC NULLS LAST,
                     pc.id DESC
             ) deduped
-            ORDER BY deduped.billing_id NULLS LAST, deduped.config_id
+            ORDER BY deduped.dedupe_key
             {limit_sql}
         """
         return await pg_query(sql, query_params)
