@@ -7,6 +7,7 @@ import pytest
 from scripts.v1_canary_smoke import (
     SmokeFailure,
     build_conversion_readiness_params,
+    build_webhook_hmac_signature,
     build_pixel_request_params,
     build_webhook_postback_payload,
     build_workflow_request_params,
@@ -158,3 +159,30 @@ def test_build_webhook_postback_payload_includes_expected_fields():
     assert payload["source_type"] == "generic"
     assert payload["event_name"] == "purchase"
     assert payload["event_id"] == "evt-123"
+
+
+def test_build_webhook_hmac_signature_is_deterministic_with_timestamp():
+    payload = {
+        "buyer_id": "buyer-1",
+        "source_type": "generic",
+        "event_name": "purchase",
+        "event_ts": "2026-03-01T00:00:00+00:00",
+        "event_id": "evt-123",
+    }
+    sig_a = build_webhook_hmac_signature(secret="test-secret", payload=payload, timestamp=1709251200)
+    sig_b = build_webhook_hmac_signature(secret="test-secret", payload=payload, timestamp=1709251200)
+    assert sig_a == sig_b
+    assert len(sig_a) == 64
+
+
+def test_build_webhook_hmac_signature_changes_with_timestamp():
+    payload = {
+        "buyer_id": "buyer-1",
+        "source_type": "generic",
+        "event_name": "purchase",
+        "event_ts": "2026-03-01T00:00:00+00:00",
+        "event_id": "evt-123",
+    }
+    sig_a = build_webhook_hmac_signature(secret="test-secret", payload=payload, timestamp=1709251200)
+    sig_b = build_webhook_hmac_signature(secret="test-secret", payload=payload, timestamp=1709251201)
+    assert sig_a != sig_b

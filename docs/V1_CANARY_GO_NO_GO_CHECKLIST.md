@@ -97,6 +97,21 @@ Equivalent convenience target:
 make v1-canary-webhook-auth
 ```
 
+Optional webhook HMAC gate:
+
+```bash
+CATSCAN_CANARY_RUN_WEBHOOK_HMAC=1 \
+CATSCAN_CANARY_WEBHOOK_HMAC_SECRET=<generic_or_shared_hmac_secret> \
+CATSCAN_CANARY_WEBHOOK_SECRET=<webhook_secret_if_plain_secret_also_enabled> \
+make v1-canary-smoke
+```
+
+Equivalent convenience target:
+
+```bash
+make v1-canary-webhook-hmac
+```
+
 Optional workflow tuning for canary:
 
 ```bash
