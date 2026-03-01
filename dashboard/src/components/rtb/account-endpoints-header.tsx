@@ -9,7 +9,7 @@ import { useTranslation } from '@/contexts/i18n-context';
 import type { Translations } from '@/lib/i18n/types';
 
 const ENDPOINTS_CACHE_PREFIX = 'catscan:qps:rtb-endpoints:v1';
-const ENDPOINTS_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
+const ENDPOINTS_CACHE_MAX_AGE_MS = 30 * 60 * 1000;
 const ENDPOINTS_DEFERRED_REFETCH_IDLE_TIMEOUT_MS = 5000;
 const ENDPOINTS_DEFERRED_REFETCH_DELAY_MS_SEEDED = 1500;
 
