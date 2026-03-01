@@ -402,6 +402,7 @@ function WasteAnalysisContent() {
     refetchSpend();
     refetchConfigs();
     refetchConfigPerf();
+    refetchEndpointEfficiency();
   };
 
   // Build a map of billing_id to performance data from config performance API
