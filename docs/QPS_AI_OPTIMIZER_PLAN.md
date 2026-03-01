@@ -1,6 +1,6 @@
 # QPS AI Optimizer — Reconciled Data Model & Roadmap
 
-**Version:** 0.6 | **Date:** 2026-03-01
+**Version:** 0.7 | **Date:** 2026-03-01
 
 ---
 
@@ -35,6 +35,9 @@ Current roadmap execution status (implemented in code, pending environment-by-en
    - workflow preset/profile handling is aligned across backend API, dashboard UI, and canary wrappers.
 5. **Webhook security hardening now supports secret rotation windows**:
    - provider/shared webhook secret and HMAC envs can carry multiple active secrets (comma/semicolon/newline-separated) for zero-downtime rotations.
+6. **Known UX/runtime gap (planned, not yet executed): QPS page/table hydration latency**:
+   - observed on reload: prolonged `Data freshness pending...` and skeleton rows before pretargeting tables render.
+   - scope is performance hardening (query/runtime + API fan-out + frontend hydration), not data-accuracy semantics.
 
 ---
 
@@ -731,6 +734,22 @@ ALSO PROVIDE:
 - Example BYOM prompt templates for customers.
 - Assumed-Value scoring as default model (upgraded to conversion-based scoring when data is available).
 
+### Phase 4 (planned): QPS page load and table hydration performance
+
+- Add end-to-end timing instrumentation for QPS Optimizer page:
+  - page-level timing marks (navigation -> first table row -> full table hydration),
+  - API-level latency for `/settings/endpoints`, `/settings/pretargeting`, and dependent history/snapshot calls.
+- Reduce startup API critical-path depth:
+  - parallelize independent fetches,
+  - keep progressive rendering so endpoint card does not block table hydration.
+- Harden backend query paths used by initial QPS screen load:
+  - profile and optimize slow pretargeting/history reads,
+  - ensure appropriate indexes and bounded query shapes (limit/window filters).
+- Define and monitor a screen-level SLO for this page:
+  - target `time_to_first_table_row`: p50 <= 2.5s, p95 <= 6s,
+  - target `time_to_table_hydrated`: p50 <= 4s, p95 <= 8s.
+- Add canary performance assertion/reporting for this screen before GA.
+
 ---
 
 ## 10. Success Metrics
@@ -744,6 +763,7 @@ ALSO PROVIDE:
 | QPS reallocation quality | Manual guesswork | Data-driven proposals that shift QPS toward higher-converting segments |
 | Time to actionable recommendation | Daily batch | Sub-daily where conversion signals exist |
 | Advertiser value visibility | Proxy-heavy (Assumed-Value) | Outcome-centric (CPA per event type, deposit rate, LTV where integrated) |
+| QPS screen table readiness latency | Variable; prolonged pending/skeleton states observed on reload | `time_to_first_table_row` p95 <= 6s and `time_to_table_hydrated` p95 <= 8s for canary buyers |
 
 ---
 
