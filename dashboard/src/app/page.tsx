@@ -9,7 +9,7 @@ import { EndpointEfficiencyPanel } from "@/components/rtb/endpoint-efficiency-pa
 import { PretargetingConfigCard, type PretargetingConfig } from "@/components/rtb/pretargeting-config-card";
 import { ConfigBreakdownPanel } from "@/components/rtb/config-breakdown-panel";
 import {
-  getQPSSummary, getRTBFunnel, getSpendStats, getEndpointEfficiency,
+  getRTBFunnel, getSpendStats, getEndpointEfficiency,
   getPretargetingConfigs, getRTBFunnelConfigs, getSeats,
   type PretargetingConfigResponse
 } from "@/lib/api";
@@ -226,17 +226,6 @@ function WasteAnalysisContent() {
     writeQpsLoadMetricsSnapshot();
   }, [writeQpsLoadMetricsSnapshot]);
 
-  // Fetch QPS summary
-  const {
-    data: qpsSummary,
-    isLoading: summaryLoading,
-    refetch: refetchSummary,
-  } = useQuery({
-    queryKey: ["qps-summary", days, selectedBuyerId],
-    queryFn: () => getQPSSummary(days, selectedBuyerId || undefined),
-    enabled: seatReady,
-  });
-
   // Fetch RTB funnel data from CSV files
   const {
     data: rtbFunnel,
@@ -311,7 +300,6 @@ function WasteAnalysisContent() {
   });
 
   const handleRefresh = () => {
-    refetchSummary();
     refetchFunnel();
     refetchSpend();
     refetchConfigs();
@@ -510,7 +498,7 @@ function WasteAnalysisContent() {
           {/* Refresh button - icon only */}
           <button
             onClick={handleRefresh}
-            disabled={summaryLoading}
+            disabled={funnelLoading || configsLoading || configPerformanceLoading}
             className={cn(
               "p-1.5 rounded border border-gray-300",
               "hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500",
@@ -518,7 +506,7 @@ function WasteAnalysisContent() {
             )}
             title={t.common.refresh}
           >
-            <RefreshCw className={cn("h-3.5 w-3.5 text-gray-600", (summaryLoading || funnelLoading) && "animate-spin")} />
+            <RefreshCw className={cn("h-3.5 w-3.5 text-gray-600", (funnelLoading || configsLoading || configPerformanceLoading) && "animate-spin")} />
           </button>
           </div>
         </div>
