@@ -36,6 +36,7 @@ Current roadmap execution status (implemented in code, pending environment-by-en
    - workflow preset/profile handling is aligned across backend API, dashboard UI, and canary wrappers.
 5. **Webhook security hardening now supports secret rotation windows**:
    - provider/shared webhook secret and HMAC envs can carry multiple active secrets (comma/semicolon/newline-separated) for zero-downtime rotations.
+   - `/conversions/security/status` now exposes non-secret security posture (enabled controls + rotation counts + freshness/rate-limit config) for operator verification.
 6. **Known UX/runtime gap (planned, not yet executed): QPS page/table hydration latency**:
    - observed on reload: prolonged `Data freshness pending...` and skeleton rows before pretargeting tables render.
    - scope is performance hardening (query/runtime + API fan-out + frontend hydration), not data-accuracy semantics.
@@ -775,6 +776,7 @@ ALSO PROVIDE:
 - `services/data_health_service.py` computes optimizer-readiness checks for completeness/freshness/dimension coverage.
 - `api/routers/system.py` exposes readiness via `GET /system/data-health`.
 - `api/routers/conversions.py` exposes conversion readiness via `GET /conversions/readiness`.
+- `api/routers/conversions.py` exposes webhook security posture via `GET /conversions/security/status` (non-secret operational state).
 - `services/conversion_readiness.py` centralizes readiness state logic; `tests/test_conversion_readiness.py` covers state transitions.
 - `tests/test_import_foundation_contracts.py`, `tests/test_data_health_service.py`, and `tests/test_system_data_health_api.py` cover core Phase 0 behaviors.
 - `scripts/v1_canary_smoke.py` and `scripts/run_v1_canary_smoke.sh` provide operational canary checks (including strict conversion-readiness/pixel gates); root `make` targets wrap execution.

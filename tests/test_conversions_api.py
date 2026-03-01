@@ -355,6 +355,56 @@ def test_get_conversion_readiness(monkeypatch: pytest.MonkeyPatch):
     assert payload["reasons"] == []
 
 
+def test_get_conversion_webhook_security_status(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    client = _build_client(stub, ingestion_stub, monkeypatch)
+
+    monkeypatch.setenv("CATSCAN_CONVERSIONS_SHARED_SECRET", "shared-a,shared-b")
+    monkeypatch.setenv("CATSCAN_APPSFLYER_WEBHOOK_SECRET", "appsflyer-only")
+    monkeypatch.setenv("CATSCAN_CONVERSIONS_SHARED_HMAC_SECRET", "shared-hmac")
+    monkeypatch.setenv("CATSCAN_GENERIC_CONVERSION_WEBHOOK_HMAC_SECRET", "generic-hmac-a;generic-hmac-b")
+    monkeypatch.setenv("CATSCAN_CONVERSIONS_ENFORCE_FRESHNESS", "1")
+    monkeypatch.setenv("CATSCAN_CONVERSIONS_MAX_SKEW_SECONDS", "120")
+    monkeypatch.setenv("CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_ENABLED", "1")
+    monkeypatch.setenv("CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_PER_MINUTE", "9")
+    monkeypatch.setenv("CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_WINDOW_SECONDS", "30")
+
+    response = client.get("/api/conversions/security/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["shared_secret_enabled"] is True
+    assert payload["shared_secret_values_configured"] == 2
+    assert payload["shared_hmac_enabled"] is True
+    assert payload["shared_hmac_values_configured"] == 1
+    assert payload["freshness_enforced"] is True
+    assert payload["max_skew_seconds"] == 120
+    assert payload["rate_limit_enabled"] is True
+    assert payload["rate_limit_per_window"] == 9
+    assert payload["rate_limit_window_seconds"] == 30
+    assert isinstance(payload["checked_at"], str) and payload["checked_at"]
+
+    sources = {row["source_type"]: row for row in payload["sources"]}
+    assert set(sources.keys()) == {"adjust", "appsflyer", "branch", "generic"}
+
+    appsflyer = sources["appsflyer"]
+    assert appsflyer["secret_enabled"] is True
+    assert appsflyer["secret_values_configured"] == 1
+    assert appsflyer["using_shared_secret"] is False
+    assert appsflyer["hmac_enabled"] is True
+    assert appsflyer["hmac_values_configured"] == 1
+    assert appsflyer["using_shared_hmac"] is True
+
+    generic = sources["generic"]
+    assert generic["secret_enabled"] is True
+    assert generic["secret_values_configured"] == 2
+    assert generic["using_shared_secret"] is True
+    assert generic["hmac_enabled"] is True
+    assert generic["hmac_values_configured"] == 2
+    assert generic["using_shared_hmac"] is False
+
+
 def test_ingest_generic_postback_forwards_payload(monkeypatch: pytest.MonkeyPatch):
     stub = _StubConversionsService()
     ingestion_stub = _StubConversionIngestionService()

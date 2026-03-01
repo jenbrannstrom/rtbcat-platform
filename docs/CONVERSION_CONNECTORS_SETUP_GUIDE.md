@@ -79,6 +79,10 @@ Supported signature headers:
 4. Validate accepted traffic and no auth failures in `/conversions/ingestion/error-taxonomy`.
 5. Remove `old_secret` from env once all senders are on the new value.
 
+Operational visibility endpoint:
+
+- `GET /conversions/security/status` returns non-secret webhook security posture (plain/HMAC enabled, rotation-counts, freshness/rate-limit toggles and thresholds).
+
 ## 3. Provider Payload Mapping Notes
 
 Cat-Scan normalizes common provider fields automatically.
