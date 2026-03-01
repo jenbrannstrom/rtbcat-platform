@@ -159,6 +159,17 @@ Equivalent convenience target:
 make v1-canary-webhook-security-status
 ```
 
+Bundled webhook security suite (auth + HMAC + freshness + rate-limit + security-status):
+
+```bash
+CATSCAN_CANARY_WEBHOOK_SECRET=<generic_or_shared_secret_if_enabled> \
+CATSCAN_CANARY_WEBHOOK_HMAC_SECRET=<generic_or_shared_hmac_secret> \
+CATSCAN_CANARY_WEBHOOK_RATE_LIMIT_PER_WINDOW=1 \
+CATSCAN_CANARY_WEBHOOK_RATE_LIMIT_WINDOW_SECONDS=60 \
+CATSCAN_CANARY_MIN_SECURED_WEBHOOK_SOURCES=1 \
+make v1-canary-webhook-security
+```
+
 Optional workflow tuning for canary:
 
 ```bash

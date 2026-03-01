@@ -87,6 +87,7 @@
 - `QA-004` started (security coverage slice): canary smoke now supports optional webhook freshness enforcement verification (`--run-webhook-freshness-check` / `CATSCAN_CANARY_RUN_WEBHOOK_FRESHNESS=1`) for generic conversion postbacks (200 fresh timestamp, 401 stale timestamp), with `make v1-canary-webhook-freshness` convenience target.
 - `QA-004` started (security coverage slice): canary smoke now supports optional webhook rate-limit enforcement verification (`--run-webhook-rate-limit-check` / `CATSCAN_CANARY_RUN_WEBHOOK_RATE_LIMIT=1`) for generic conversion postbacks (200 until threshold, 429 after threshold), with `make v1-canary-webhook-rate-limit` convenience target.
 - `QA-004` started (security coverage slice): canary smoke now supports optional webhook security-status contract verification (`--run-webhook-security-status-check` / `CATSCAN_CANARY_RUN_WEBHOOK_SECURITY_STATUS=1`) for `/conversions/security/status`, including minimum secured-source thresholds, with `make v1-canary-webhook-security-status` convenience target.
+- `QA-004` started (security coverage slice): root `make` now includes bundled webhook security suite target `v1-canary-webhook-security` (auth + HMAC + freshness + rate-limit + security-status) with sane default thresholds for repeatable ops validation.
 - `QA-004` started (ops hardening slice): `make phase0-gate` now runs reliably in restricted environments by building dashboard with webpack mode (`npm --prefix dashboard run build -- --webpack`), avoiding Turbopack sandbox port-binding failures.
 
 ---
