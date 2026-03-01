@@ -627,8 +627,16 @@ function WasteAnalysisContent() {
     () => readPretargetingConfigCache(selectedBuyerId),
     [selectedBuyerId]
   );
+  const hasPretargetingCacheSeed = Array.isArray(pretargetingCacheSeed)
+    && pretargetingCacheSeed.length > 0;
+  const pretargetingSeedSummaryOnly = hasPretargetingCacheSeed && pretargetingCacheSeed.every(
+    (row) =>
+      row.included_formats === null
+      && row.included_platforms === null
+      && row.included_sizes === null
+  );
   const useSummaryBootstrap = pretargetingBootstrapLimit !== null
-    && !(Array.isArray(pretargetingCacheSeed) && pretargetingCacheSeed.length > 0);
+    && (!hasPretargetingCacheSeed || pretargetingSeedSummaryOnly);
   const pretargetingRequestLimit = pretargetingBootstrapLimit === null
     ? null
     : (useSummaryBootstrap
