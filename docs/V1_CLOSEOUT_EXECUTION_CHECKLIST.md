@@ -13,6 +13,18 @@ Use this template to execute and capture final closeout evidence for v1.
 
 ## 2. Dispatch Payloads (Exact)
 
+Fast path (recommended, avoids CLI quoting mistakes):
+
+```bash
+scripts/run_v1_closeout_deployed_dispatch.sh --buyer-id <BUYER_ID> --run-byom
+```
+
+Equivalent via `make`:
+
+```bash
+CATSCAN_BUYER_ID=<BUYER_ID> make v1-closeout-dispatch
+```
+
 ### 2.1 Deployed closeout (strict/prod)
 
 Workflow: `.github/workflows/v1-closeout-deployed.yml`
