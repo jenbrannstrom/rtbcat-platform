@@ -151,7 +151,8 @@ function readPretargetingConfigCache(buyerId: string | null): PretargetingConfig
 
 function writePretargetingConfigCache(buyerId: string | null, rows: PretargetingConfigResponse[] | undefined): void {
   if (!buyerId || typeof window === "undefined" || !rows) return;
-  const summaryRows = rows.map((row) => ({
+  const boundedSourceRows = rows.slice(0, PRETARGETING_CONFIG_CACHE_MAX_ROWS);
+  const summaryRows = boundedSourceRows.map((row) => ({
     ...row,
     included_formats: null,
     included_platforms: null,
@@ -168,12 +169,11 @@ function writePretargetingConfigCache(buyerId: string | null, rows: Pretargeting
     window.localStorage.setItem(getPretargetingConfigCacheKey(buyerId), JSON.stringify(payload));
   };
 
-  const boundedRows = summaryRows.slice(0, PRETARGETING_CONFIG_CACHE_MAX_ROWS);
   try {
-    writeRows(boundedRows);
+    writeRows(summaryRows);
   } catch {
     try {
-      writeRows(boundedRows.slice(0, PRETARGETING_CONFIG_CACHE_FALLBACK_ROWS));
+      writeRows(summaryRows.slice(0, PRETARGETING_CONFIG_CACHE_FALLBACK_ROWS));
     } catch {
       // Ignore localStorage failures (quota/private browsing).
     }
