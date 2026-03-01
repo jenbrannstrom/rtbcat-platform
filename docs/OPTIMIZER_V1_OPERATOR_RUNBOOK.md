@@ -116,6 +116,8 @@ make v1-canary-webhook-security
 
 ## 7. CI-Driven Closeout (GitHub Actions)
 
+Execution worksheet: [V1_CLOSEOUT_EXECUTION_CHECKLIST.md](/home/x1-7/Documents/rtbcat-platform/docs/V1_CLOSEOUT_EXECUTION_CHECKLIST.md)
+
 ### 7.1 Required repository secrets
 
 At least one of these must be configured for deployed canary auth:

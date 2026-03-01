@@ -51,7 +51,7 @@ Latest workflow/report entry points:
    - `.github/workflows/v1-closeout-quick.yml` runs `CATSCAN_CLOSEOUT_PROFILE=quick make v1-closeout-local`, publishes a GitHub job summary from `/tmp/v1_closeout_last_run.json`, and uploads both `/tmp/v1_closeout_last_run.md` and `/tmp/v1_closeout_last_run.json` as artifacts on matching push/PR changes.
    - `.github/workflows/v1-closeout-deployed.yml` adds manual (`workflow_dispatch`) deployed closeout execution using `make v1-closeout-deployed-only`, with summary + md/json artifacts for attachable canary evidence (repo secrets: `CATSCAN_CANARY_BEARER_TOKEN` and/or `CATSCAN_CANARY_SESSION_COOKIE`).
    - both closeout workflows render their summary via shared helper `scripts/render_v1_closeout_summary.py` to keep report formatting consistent.
-   - `.github/workflows/v1-byom-api-regression.yml` runs `make v1-byom-api-regression` on optimizer API/service/test changes so BYOM API/e2e coverage is validated in a dependency-provisioned CI runner.
+   - `.github/workflows/v1-byom-api-regression.yml` runs `make v1-byom-api-regression` on optimizer API/service/test changes so BYOM API/e2e coverage is validated in a dependency-provisioned CI runner, and now also supports manual `workflow_dispatch`.
 
 ## Closeout Matrix
 
@@ -76,6 +76,10 @@ Implementation is largely complete across Phases 0-4, but final plan closure req
 3. Run BYOM API/e2e suites in provisioned test env with API deps installed (or confirm pass in `.github/workflows/v1-byom-api-regression.yml`).
 4. Record buyer-scoped SLO outcomes for the agreed lookback window.
 5. Mark remaining `Operational Pending` rows as `Complete` once evidence is attached.
+
+Execution template:
+
+1. Use [V1_CLOSEOUT_EXECUTION_CHECKLIST.md](/home/x1-7/Documents/rtbcat-platform/docs/V1_CLOSEOUT_EXECUTION_CHECKLIST.md) for copy/paste dispatch payloads, run capture, and sign-off fields.
 
 ## Closeout Runner Notes
 
