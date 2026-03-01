@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, Suspense, useEffect } from "react";
+import { useState, useCallback, Suspense, useEffect, useRef } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, AlertTriangle, ArrowUp, ArrowDown, ChevronsUpDown, Loader2 } from "lucide-react";
@@ -32,6 +32,21 @@ function normalizeDateString(value: string | null | undefined): string | null {
   return value.slice(0, 10);
 }
 
+interface QpsPageLoadMetricsSnapshot {
+  started_at_iso: string;
+  buyer_id: string | null;
+  days: number;
+  time_to_first_table_row_ms: number | null;
+  time_to_table_hydrated_ms: number | null;
+  api_latency_ms: Record<string, number>;
+}
+
+declare global {
+  interface Window {
+    __CATSCAN_QPS_LOAD_METRICS?: QpsPageLoadMetricsSnapshot;
+  }
+}
+
 /**
  * Helper to transform API response to component props.
  */
@@ -53,6 +68,7 @@ function transformConfigToProps(
     display_name: apiConfig.display_name,
     user_name: apiConfig.user_name,
     state: (apiConfig.state as 'ACTIVE' | 'SUSPENDED') || 'ACTIVE',
+    maximum_qps: apiConfig.maximum_qps ?? null,
     formats: apiConfig.included_formats || [],
     platforms: apiConfig.included_platforms || [],
     sizes: apiConfig.included_sizes || [],
@@ -76,6 +92,30 @@ function WasteAnalysisContent() {
   const initialDays = parseInt(searchParams.get("days") || "7", 10);
   const [days, setDays] = useState<number>(initialDays);
   const [dashboardLoadStartedAt] = useState<number>(() => Date.now());
+  const perfMarkPrefixRef = useRef<string>(`catscan:qps:${dashboardLoadStartedAt}`);
+  const firstTableRowMsRef = useRef<number | null>(null);
+  const tableHydratedMsRef = useRef<number | null>(null);
+  const startupApiLatencyMsRef = useRef<Record<string, number>>({});
+
+  const setStartupApiLatency = useCallback((name: string, startedAtMs: number) => {
+    const endedAtMs = typeof window !== "undefined" && window.performance
+      ? window.performance.now()
+      : Date.now();
+    startupApiLatencyMsRef.current[name] = Math.round(Math.max(0, endedAtMs - startedAtMs));
+  }, []);
+
+  const writeQpsLoadMetricsSnapshot = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const snapshot: QpsPageLoadMetricsSnapshot = {
+      started_at_iso: new Date(dashboardLoadStartedAt).toISOString(),
+      buyer_id: selectedBuyerId || null,
+      days,
+      time_to_first_table_row_ms: firstTableRowMsRef.current,
+      time_to_table_hydrated_ms: tableHydratedMsRef.current,
+      api_latency_ms: { ...startupApiLatencyMsRef.current },
+    };
+    window.__CATSCAN_QPS_LOAD_METRICS = snapshot;
+  }, [dashboardLoadStartedAt, days, selectedBuyerId]);
 
   // Fetch seats to auto-select first one if none selected
   const {
@@ -145,6 +185,47 @@ function WasteAnalysisContent() {
   // but localStorage still holds the old buyer_id.
   const seatReady = !!selectedBuyerId && !!seats && seats.some((s) => s.buyer_id === selectedBuyerId);
 
+  const fetchMeasuredPretargetingConfigs = useCallback(async () => {
+    const startedAtMs = typeof window !== "undefined" && window.performance
+      ? window.performance.now()
+      : Date.now();
+    try {
+      return await getPretargetingConfigs({ buyer_id: selectedBuyerId || undefined });
+    } finally {
+      setStartupApiLatency("/settings/pretargeting", startedAtMs);
+      writeQpsLoadMetricsSnapshot();
+    }
+  }, [selectedBuyerId, setStartupApiLatency, writeQpsLoadMetricsSnapshot]);
+
+  const fetchMeasuredConfigPerformance = useCallback(async () => {
+    const startedAtMs = typeof window !== "undefined" && window.performance
+      ? window.performance.now()
+      : Date.now();
+    try {
+      return await getRTBFunnelConfigs(days, selectedBuyerId || undefined);
+    } finally {
+      setStartupApiLatency("/analytics/home/configs", startedAtMs);
+      writeQpsLoadMetricsSnapshot();
+    }
+  }, [days, selectedBuyerId, setStartupApiLatency, writeQpsLoadMetricsSnapshot]);
+
+  const fetchMeasuredEndpointEfficiency = useCallback(async () => {
+    const startedAtMs = typeof window !== "undefined" && window.performance
+      ? window.performance.now()
+      : Date.now();
+    try {
+      return await getEndpointEfficiency(days, selectedBuyerId || undefined);
+    } finally {
+      setStartupApiLatency("/analytics/home/endpoint-efficiency", startedAtMs);
+      writeQpsLoadMetricsSnapshot();
+    }
+  }, [days, selectedBuyerId, setStartupApiLatency, writeQpsLoadMetricsSnapshot]);
+
+  const handleApiLatencyMeasured = useCallback((apiPath: string, latencyMs: number) => {
+    startupApiLatencyMsRef.current[apiPath] = Math.round(Math.max(0, latencyMs));
+    writeQpsLoadMetricsSnapshot();
+  }, [writeQpsLoadMetricsSnapshot]);
+
   // Fetch QPS summary
   const {
     data: qpsSummary,
@@ -174,6 +255,7 @@ function WasteAnalysisContent() {
   } = useQuery({
     queryKey: ["spend-stats", days, selectedBuyerId, expandedConfigId],
     queryFn: () => getSpendStats(days, expandedConfigId || undefined),
+    enabled: seatReady,
   });
 
   // Fetch pretargeting configs
@@ -183,7 +265,7 @@ function WasteAnalysisContent() {
     refetch: refetchConfigs,
   } = useQuery({
     queryKey: ["pretargeting-configs", selectedBuyerId],
-    queryFn: () => getPretargetingConfigs({ buyer_id: selectedBuyerId || undefined }),
+    queryFn: fetchMeasuredPretargetingConfigs,
     enabled: seatReady,
     retry: 5,
     retryDelay: getRetryDelay,
@@ -208,7 +290,7 @@ function WasteAnalysisContent() {
     isFetching: configPerformanceFetching,
   } = useQuery({
     queryKey: ["rtb-funnel-configs", days, selectedBuyerId],
-    queryFn: () => getRTBFunnelConfigs(days, selectedBuyerId || undefined),
+    queryFn: fetchMeasuredConfigPerformance,
     enabled: seatReady,
     retry: 5,
     retryDelay: getRetryDelay,
@@ -224,7 +306,7 @@ function WasteAnalysisContent() {
 
   const { data: endpointEfficiency, isLoading: endpointEfficiencyLoading } = useQuery({
     queryKey: ["endpoint-efficiency", days, selectedBuyerId],
-    queryFn: () => getEndpointEfficiency(days, selectedBuyerId || undefined),
+    queryFn: fetchMeasuredEndpointEfficiency,
     enabled: seatReady,
   });
 
@@ -296,6 +378,54 @@ function WasteAnalysisContent() {
   });
 
   const activeConfigsCount = displayConfigs.filter(c => c.state === 'ACTIVE').length;
+  const hasTableRows = !configsLoading && displayConfigs.length > 0;
+  const tableHydrated = hasTableRows && !configPerformanceLoading && !configPerformanceFetching;
+
+  useEffect(() => {
+    writeQpsLoadMetricsSnapshot();
+  }, [writeQpsLoadMetricsSnapshot]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.performance?.mark) return;
+    const startMark = `${perfMarkPrefixRef.current}:navigation-start`;
+    window.performance.mark(startMark);
+  }, []);
+
+  useEffect(() => {
+    if (!hasTableRows || firstTableRowMsRef.current !== null) return;
+    const elapsedMs = Math.max(0, Date.now() - dashboardLoadStartedAt);
+    firstTableRowMsRef.current = elapsedMs;
+    if (typeof window !== "undefined" && window.performance?.mark && window.performance?.measure) {
+      try {
+        const startMark = `${perfMarkPrefixRef.current}:navigation-start`;
+        const endMark = `${perfMarkPrefixRef.current}:first-table-row`;
+        const measureName = `${perfMarkPrefixRef.current}:time_to_first_table_row`;
+        window.performance.mark(endMark);
+        window.performance.measure(measureName, startMark, endMark);
+      } catch {
+        // Best-effort mark/measure for operator diagnostics.
+      }
+    }
+    writeQpsLoadMetricsSnapshot();
+  }, [dashboardLoadStartedAt, hasTableRows, writeQpsLoadMetricsSnapshot]);
+
+  useEffect(() => {
+    if (!tableHydrated || tableHydratedMsRef.current !== null) return;
+    const elapsedMs = Math.max(0, Date.now() - dashboardLoadStartedAt);
+    tableHydratedMsRef.current = elapsedMs;
+    if (typeof window !== "undefined" && window.performance?.mark && window.performance?.measure) {
+      try {
+        const startMark = `${perfMarkPrefixRef.current}:navigation-start`;
+        const endMark = `${perfMarkPrefixRef.current}:table-hydrated`;
+        const measureName = `${perfMarkPrefixRef.current}:time_to_table_hydrated`;
+        window.performance.mark(endMark);
+        window.performance.measure(measureName, startMark, endMark);
+      } catch {
+        // Best-effort mark/measure for operator diagnostics.
+      }
+    }
+    writeQpsLoadMetricsSnapshot();
+  }, [dashboardLoadStartedAt, tableHydrated, writeQpsLoadMetricsSnapshot]);
 
   // Observed QPS by endpoint for endpoints header
   const coverage = endpointEfficiency?.data_coverage;
@@ -430,6 +560,7 @@ function WasteAnalysisContent() {
       {/* Account Endpoints Header - config only, no delivery duplication */}
       <AccountEndpointsHeader
         observedQpsByEndpointId={observedQpsByEndpointId}
+        onApiLatencyMeasured={handleApiLatencyMeasured}
       />
 
       {endpointEfficiency && !endpointEfficiencyLoading && (
@@ -539,11 +670,13 @@ function WasteAnalysisContent() {
                     prev => prev === config.billing_id ? null : config.billing_id
                   )}
                 />
-                <ConfigBreakdownPanel
-                  billing_id={config.billing_id}
-                  days={days}
-                  isExpanded={expandedConfigId === config.billing_id}
-                />
+                {expandedConfigId === config.billing_id && (
+                  <ConfigBreakdownPanel
+                    billing_id={config.billing_id}
+                    days={days}
+                    isExpanded={true}
+                  />
+                )}
               </div>
             ))}
           </div>

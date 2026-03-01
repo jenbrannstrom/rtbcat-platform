@@ -741,7 +741,12 @@ ALSO PROVIDE:
 - Example BYOM prompt templates for customers.
 - Assumed-Value scoring as default model (upgraded to conversion-based scoring when data is available).
 
-### Phase 4 (planned): QPS page load and table hydration performance
+### Phase 4 (in progress): QPS page load and table hydration performance
+
+- Delivered slice (2026-03-01):
+  - removed startup N+1 detail fan-out by lazy-loading pretargeting detail only for expanded/QPS-edit rows,
+  - reduced initial render work by mounting `ConfigBreakdownPanel` only for the expanded row,
+  - added startup timing instrumentation to expose `time_to_first_table_row`, `time_to_table_hydrated`, and key API latencies on `window.__CATSCAN_QPS_LOAD_METRICS`.
 
 - Add end-to-end timing instrumentation for QPS Optimizer page:
   - page-level timing marks (navigation -> first table row -> full table hydration),

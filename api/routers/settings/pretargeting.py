@@ -235,6 +235,13 @@ async def get_pretargeting_configs(
                 # Map known OS IDs to human-readable names
                 os_map = {"30001": "iOS", "30002": "Android"}
                 os_names = [os_map.get(str(os_id), str(os_id)) for os_id in os_ids]
+            raw_config = _parse_json_field(row.get("raw_config")) or {}
+            maximum_qps = raw_config.get("maximumQps")
+            if maximum_qps is not None:
+                try:
+                    maximum_qps = int(maximum_qps)
+                except (TypeError, ValueError):
+                    maximum_qps = None
 
             results.append(
                 PretargetingConfigResponse(
@@ -249,6 +256,7 @@ async def get_pretargeting_configs(
                     included_sizes=_parse_json_field(row["included_sizes"]),
                     included_geos=_parse_json_field(row["included_geos"]),
                     excluded_geos=_parse_json_field(row["excluded_geos"]),
+                    maximum_qps=maximum_qps,
                     included_operating_systems=os_names,
                     synced_at=str(row["synced_at"]) if row["synced_at"] else None,
                 )

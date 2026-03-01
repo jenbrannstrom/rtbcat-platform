@@ -44,6 +44,7 @@ export interface PretargetingConfigResponse {
   display_name: string | null;
   user_name: string | null;
   state: string;
+  maximum_qps?: number | null;
   included_formats: string[] | null;
   included_platforms: string[] | null;
   included_sizes: string[] | null;
