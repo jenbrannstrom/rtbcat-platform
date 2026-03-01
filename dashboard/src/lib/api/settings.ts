@@ -165,6 +165,7 @@ export async function getPretargetingConfigs(params?: {
   buyer_id?: string;
   service_account_id?: string;
   limit?: number;
+  summary_only?: boolean;
 }): Promise<PretargetingConfigResponse[]> {
   const searchParams = new URLSearchParams();
   if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
@@ -172,6 +173,7 @@ export async function getPretargetingConfigs(params?: {
     searchParams.set("service_account_id", params.service_account_id);
   }
   if (params?.limit !== undefined) searchParams.set("limit", String(params.limit));
+  if (params?.summary_only) searchParams.set("summary_only", "true");
   const query = searchParams.toString();
   return fetchApi<PretargetingConfigResponse[]>(
     `/settings/pretargeting${query ? `?${query}` : ""}`,

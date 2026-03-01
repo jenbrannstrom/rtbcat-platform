@@ -566,6 +566,12 @@ function WasteAnalysisContent() {
   // but localStorage still holds the old buyer_id.
   const selectedBuyerKnownValid = !!selectedBuyerId && !!seats && seats.some((s) => s.buyer_id === selectedBuyerId);
   const seatReady = !!selectedBuyerId && (seatsLoading || selectedBuyerKnownValid);
+  const pretargetingCacheSeed = useMemo(
+    () => readPretargetingConfigCache(selectedBuyerId),
+    [selectedBuyerId]
+  );
+  const useSummaryBootstrap = pretargetingBootstrapLimit !== null
+    && !(Array.isArray(pretargetingCacheSeed) && pretargetingCacheSeed.length > 0);
 
   const fetchMeasuredPretargetingConfigs = useCallback(async () => {
     const shouldMeasureStartup = pretargetingBootstrapLimit !== null;
@@ -576,6 +582,7 @@ function WasteAnalysisContent() {
       return await getPretargetingConfigs({
         buyer_id: selectedBuyerId || undefined,
         limit: pretargetingBootstrapLimit ?? undefined,
+        summary_only: useSummaryBootstrap,
       });
     } finally {
       if (shouldMeasureStartup) {
@@ -587,6 +594,7 @@ function WasteAnalysisContent() {
     pretargetingBootstrapLimit,
     selectedBuyerId,
     setStartupApiLatency,
+    useSummaryBootstrap,
     writeQpsLoadMetricsSnapshot,
   ]);
 
@@ -658,10 +666,15 @@ function WasteAnalysisContent() {
     refetch: refetchConfigs,
     isFetchedAfterMount: configsFetchedAfterMount,
   } = useQuery({
-    queryKey: ["pretargeting-configs", selectedBuyerId, pretargetingBootstrapLimit ?? "all"],
+    queryKey: [
+      "pretargeting-configs",
+      selectedBuyerId,
+      pretargetingBootstrapLimit ?? "all",
+      useSummaryBootstrap ? "summary" : "full",
+    ],
     queryFn: fetchMeasuredPretargetingConfigs,
     enabled: seatReady,
-    initialData: () => readPretargetingConfigCache(selectedBuyerId),
+    initialData: () => pretargetingCacheSeed,
     placeholderData: (previousData) => previousData,
     retry: shouldRetryAnalyticsQuery,
     retryDelay: getRetryDelay,
@@ -681,12 +694,12 @@ function WasteAnalysisContent() {
     if (!seatReady) return;
     if (pretargetingBootstrapLimit === null) return;
     if (!Array.isArray(pretargetingConfigs)) return;
-    if (pretargetingConfigs.length < pretargetingBootstrapLimit) return;
+    if (!useSummaryBootstrap && pretargetingConfigs.length < pretargetingBootstrapLimit) return;
     const timer = window.setTimeout(() => {
       setPretargetingBootstrapLimit(null);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [pretargetingBootstrapLimit, pretargetingConfigs, seatReady]);
+  }, [pretargetingBootstrapLimit, pretargetingConfigs, seatReady, useSummaryBootstrap]);
 
   useEffect(() => {
     if (!configsFetchedAfterMount) return;

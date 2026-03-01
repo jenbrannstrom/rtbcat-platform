@@ -97,6 +97,30 @@ async def test_list_configs_applies_limit_when_requested(
 
 
 @pytest.mark.asyncio
+async def test_list_configs_summary_shape_omits_large_targeting_arrays(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict[str, object] = {}
+
+    async def _stub_query(sql: str, params: tuple = ()):
+        captured["sql"] = sql
+        captured["params"] = params
+        return []
+
+    monkeypatch.setattr("storage.postgres_repositories.pretargeting_repo.pg_query", _stub_query)
+    repo = PretargetingRepository()
+    rows = await repo.list_configs(bidder_id="6574658621", limit=100, summary_only=True)
+
+    assert rows == []
+    sql_upper = str(captured["sql"]).upper()
+    assert "NULL::JSONB AS INCLUDED_FORMATS" in sql_upper
+    assert "NULL::JSONB AS INCLUDED_PLATFORMS" in sql_upper
+    assert "PC.INCLUDED_FORMATS" not in sql_upper
+    assert "PC.INCLUDED_PLATFORMS" not in sql_upper
+    assert captured["params"] == ("6574658621", 100)
+
+
+@pytest.mark.asyncio
 async def test_list_history_billing_filter_uses_exists_not_join(monkeypatch: pytest.MonkeyPatch):
     captured: dict[str, object] = {}
 

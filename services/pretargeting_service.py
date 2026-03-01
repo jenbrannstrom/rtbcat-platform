@@ -18,22 +18,36 @@ class PretargetingService:
         self._repo = repo or PretargetingRepository()
 
     @staticmethod
-    def _list_cache_key(scope: str, limit: int | None = None) -> str:
+    def _list_cache_key(
+        scope: str,
+        limit: int | None = None,
+        summary_only: bool = False,
+    ) -> str:
         limit_key = "all" if limit is None else str(limit)
-        return f"{scope}:limit:{limit_key}"
+        summary_key = "summary" if summary_only else "full"
+        return f"{scope}:limit:{limit_key}:shape:{summary_key}"
 
     async def list_configs(
         self,
         bidder_id: str | None = None,
         limit: int | None = None,
+        summary_only: bool = False,
     ) -> list[dict[str, Any]]:
-        cache_key = self._list_cache_key(bidder_id or "__all__", limit=limit)
+        cache_key = self._list_cache_key(
+            bidder_id or "__all__",
+            limit=limit,
+            summary_only=summary_only,
+        )
         now = time.monotonic()
         cached_entry = self._LIST_CONFIGS_CACHE.get(cache_key)
         if cached_entry and cached_entry[0] > now:
             return [dict(row) for row in cached_entry[1]]
 
-        rows = await self._repo.list_configs(bidder_id=bidder_id, limit=limit)
+        rows = await self._repo.list_configs(
+            bidder_id=bidder_id,
+            limit=limit,
+            summary_only=summary_only,
+        )
         self._LIST_CONFIGS_CACHE[cache_key] = (
             now + self._LIST_CONFIGS_CACHE_TTL_SECONDS,
             [dict(row) for row in rows],
@@ -44,10 +58,15 @@ class PretargetingService:
         self,
         buyer_id: str,
         limit: int | None = None,
+        summary_only: bool = False,
     ) -> list[dict[str, Any]]:
         if not buyer_id:
             raise ValueError("buyer_id is required")
-        cache_key = self._list_cache_key(f"buyer:{buyer_id}", limit=limit)
+        cache_key = self._list_cache_key(
+            f"buyer:{buyer_id}",
+            limit=limit,
+            summary_only=summary_only,
+        )
         now = time.monotonic()
         cached_entry = self._LIST_CONFIGS_CACHE.get(cache_key)
         if cached_entry and cached_entry[0] > now:
@@ -56,6 +75,7 @@ class PretargetingService:
         rows = await self._repo.list_configs_for_buyer(
             buyer_id=buyer_id,
             limit=limit,
+            summary_only=summary_only,
         )
         self._LIST_CONFIGS_CACHE[cache_key] = (
             now + self._LIST_CONFIGS_CACHE_TTL_SECONDS,
