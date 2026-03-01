@@ -102,6 +102,7 @@ export default function SystemStatusPage() {
   const [workflowMinConfidenceInput, setWorkflowMinConfidenceInput] = useState<string>("0.3");
   const [workflowMaxDeltaInput, setWorkflowMaxDeltaInput] = useState<string>("0.3");
   const [workflowPreset, setWorkflowPreset] = useState<WorkflowPresetId>("balanced");
+  const [qpsPageSloSinceHours, setQpsPageSloSinceHours] = useState<number>(24);
   const [selectedProposalHistoryId, setSelectedProposalHistoryId] = useState<string>("");
   const [optimizerNotice, setOptimizerNotice] = useState<string>("");
   const [newModelName, setNewModelName] = useState<string>("");
@@ -321,12 +322,12 @@ export default function SystemStatusPage() {
     isLoading: qpsPageLoadSummaryLoading,
     error: qpsPageLoadSummaryError,
   } = useQuery({
-    queryKey: ["qpsPageLoadSummary", selectedBuyerId],
+    queryKey: ["qpsPageLoadSummary", selectedBuyerId, qpsPageSloSinceHours],
     queryFn: () =>
       getUiPageLoadMetricSummary({
         page: "qps_home",
         buyer_id: selectedBuyerId || undefined,
-        since_hours: 24,
+        since_hours: qpsPageSloSinceHours,
         latest_limit: 5,
       }),
     enabled: !!selectedBuyerId,
@@ -1787,8 +1788,20 @@ export default function SystemStatusPage() {
               </div>
 
               <div className="rounded-lg border border-gray-200 overflow-hidden">
-                <div className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50">
-                  QPS Page-Load SLO (last 24h)
+                <div className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50 flex items-center justify-between gap-3">
+                  <span>QPS Page-Load SLO</span>
+                  <label className="flex items-center gap-2 text-[11px] font-medium text-gray-600">
+                    Window
+                    <select
+                      value={qpsPageSloSinceHours}
+                      onChange={(e) => setQpsPageSloSinceHours(Number(e.target.value))}
+                      className="rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[11px] text-gray-700"
+                    >
+                      <option value={24}>24h</option>
+                      <option value={72}>72h</option>
+                      <option value={168}>7d</option>
+                    </select>
+                  </label>
                 </div>
                 {!selectedBuyerId ? (
                   <div className="px-3 py-4 text-xs text-amber-700">
