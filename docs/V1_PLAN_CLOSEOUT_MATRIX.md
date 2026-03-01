@@ -1,6 +1,6 @@
 # V1 Plan Closeout Matrix
 
-**Last updated:** 2026-03-01 19:18:31 UTC  
+**Last updated:** 2026-03-01 19:20:09 UTC  
 **Branch checkpoint:** `unified-platform` @ `7ee55f1`
 
 ## Status Legend
@@ -14,10 +14,10 @@
 1. `make v1-closeout-local` (new consolidated local closeout runner)
    - includes `v1-gate`, Phase 4 targeted suites, BYOM service suites, optimizer syntax compile checks
    - result: passed
-2. `make v1-gate`
-   - `phase0-regression`: `26 passed, 1 skipped`
+2. `make v1-gate` (latest rerun after canary-test update)
+   - `phase0-regression`: `28 passed, 1 skipped`
    - dashboard production build (`webpack`): passed
-   - `v1-conversion-regression`: `39 passed, 1 skipped`
+   - `v1-conversion-regression`: `41 passed, 1 skipped`
 3. Targeted Phase 4 suites:
    - `pytest -q tests/test_system_ui_metrics_api.py tests/test_pretargeting_repo_query_shapes.py tests/test_pretargeting_service_cache.py tests/test_endpoints_service_cache.py tests/test_analytics_service_cache.py`
    - result: `30 passed, 1 skipped`
