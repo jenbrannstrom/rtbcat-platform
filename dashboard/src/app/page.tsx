@@ -22,6 +22,7 @@ const PERIOD_OPTIONS = [
   { value: 14, label: "14 days" },
   { value: 30, label: "30 days" },
 ];
+const INITIAL_VISIBLE_CONFIG_ROWS = 60;
 
 function getRetryDelay(attemptIndex: number): number {
   return Math.min(1000 * 2 ** attemptIndex, 5000);
@@ -430,10 +431,25 @@ function WasteAnalysisContent() {
     if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
     return 0;
   });
+  const [visibleConfigCount, setVisibleConfigCount] = useState<number>(INITIAL_VISIBLE_CONFIG_ROWS);
+  const visibleConfigs = displayConfigs.slice(0, Math.min(visibleConfigCount, displayConfigs.length));
 
   const activeConfigsCount = displayConfigs.filter(c => c.state === 'ACTIVE').length;
   const hasTableRows = !configsLoading && displayConfigs.length > 0;
   const tableHydrated = hasTableRows && !configPerformanceLoading && !configPerformanceFetching;
+
+  useEffect(() => {
+    const totalRows = displayConfigs.length;
+    if (totalRows <= INITIAL_VISIBLE_CONFIG_ROWS) {
+      setVisibleConfigCount(totalRows);
+      return;
+    }
+    setVisibleConfigCount(INITIAL_VISIBLE_CONFIG_ROWS);
+    const timer = window.setTimeout(() => {
+      setVisibleConfigCount(totalRows);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [displayConfigs.length, days, selectedBuyerId, sortColumn, sortDirection]);
 
   useEffect(() => {
     if (!seatReady || !tableHydrated) return;
@@ -721,7 +737,7 @@ function WasteAnalysisContent() {
               </button>
               <div className="w-8" /> {/* Spacer for expand button */}
             </div>
-            {displayConfigs.map(config => (
+            {visibleConfigs.map(config => (
               <div key={config.billing_id}>
                 <PretargetingConfigCard
                   config={config}
