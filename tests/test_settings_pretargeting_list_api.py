@@ -22,8 +22,9 @@ from api.routers.settings import pretargeting as pretargeting_router
 
 
 class _StubPretargetingService:
-    async def list_configs_for_buyer(self, buyer_id: str):
+    async def list_configs_for_buyer(self, buyer_id: str, limit: int | None = None):
         assert buyer_id == "buyer-1"
+        assert limit is None
         return [
             {
                 "config_id": "cfg-1",
@@ -59,8 +60,9 @@ class _StubPretargetingService:
             },
         ]
 
-    async def list_configs(self, bidder_id: str | None = None):
+    async def list_configs(self, bidder_id: str | None = None, limit: int | None = None):
         assert bidder_id == "bidder-1"
+        assert limit is None
         return []
 
 

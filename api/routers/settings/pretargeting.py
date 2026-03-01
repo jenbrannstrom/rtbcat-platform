@@ -180,6 +180,7 @@ async def sync_pretargeting_configs(
 async def get_pretargeting_configs(
     buyer_id: Optional[str] = Query(None, description="Buyer/seat ID to get configs for"),
     service_account_id: Optional[str] = Query(None, description="Service account ID (deprecated, use buyer_id)"),
+    limit: Optional[int] = Query(None, description="Optional max rows for startup/bootstrap views", ge=1, le=5000),
     seats_service: SeatsService = Depends(get_seats_service),
 ):
     """Get stored pretargeting configs for the current account.
@@ -198,7 +199,10 @@ async def get_pretargeting_configs(
 
         # Buyer-scoped requests can resolve configs in one SQL query.
         if buyer_id:
-            rows = await pretargeting_service.list_configs_for_buyer(buyer_id)
+            rows = await pretargeting_service.list_configs_for_buyer(
+                buyer_id,
+                limit=limit,
+            )
         else:
             # Get the current account's bidder_id
             current_bidder_id = None
@@ -222,7 +226,10 @@ async def get_pretargeting_configs(
                     logger.info(f"Using fallback bidder_id: {current_bidder_id} for pretargeting list")
 
             # Get configs filtered by bidder_id
-            rows = await pretargeting_service.list_configs(bidder_id=current_bidder_id)
+            rows = await pretargeting_service.list_configs(
+                bidder_id=current_bidder_id,
+                limit=limit,
+            )
 
         results = []
         for row in rows:

@@ -13,11 +13,19 @@ class _StubPretargetingRepo:
         self.list_by_buyer_calls = 0
         self.rows: list[dict[str, object]] = [{"billing_id": "1001"}]
 
-    async def list_configs(self, bidder_id: str | None = None) -> list[dict[str, object]]:
+    async def list_configs(
+        self,
+        bidder_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, object]]:
         self.list_calls += 1
         return [dict(row) for row in self.rows]
 
-    async def list_configs_for_buyer(self, buyer_id: str) -> list[dict[str, object]]:
+    async def list_configs_for_buyer(
+        self,
+        buyer_id: str,
+        limit: int | None = None,
+    ) -> list[dict[str, object]]:
         self.list_by_buyer_calls += 1
         return [dict(row) for row in self.rows]
 
@@ -74,6 +82,18 @@ async def test_list_configs_for_buyer_uses_ttl_cache() -> None:
 
     assert repo.list_by_buyer_calls == 1
     assert second[0]["billing_id"] == "1001"
+
+
+@pytest.mark.asyncio
+async def test_list_configs_cache_is_scoped_by_limit() -> None:
+    PretargetingService.clear_list_configs_cache()
+    repo = _StubPretargetingRepo()
+    service = PretargetingService(repo=repo)
+
+    await service.list_configs(bidder_id="bidder-1", limit=100)
+    await service.list_configs(bidder_id="bidder-1", limit=200)
+
+    assert repo.list_calls == 2
 
 
 @pytest.mark.asyncio

@@ -15,15 +15,27 @@ from storage.postgres_database import (
 class PretargetingRepository:
     """SQL-only repository for pretargeting configs and publishers."""
 
-    async def list_configs(self, bidder_id: str | None = None) -> list[dict[str, Any]]:
+    async def list_configs(
+        self,
+        bidder_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
         where_sql = ""
         params: tuple[Any, ...] = ()
         if bidder_id:
             where_sql = "WHERE pc.bidder_id = %s"
             params = (bidder_id,)
-        return await self._list_configs_with_where_clause(where_sql=where_sql, params=params)
+        return await self._list_configs_with_where_clause(
+            where_sql=where_sql,
+            params=params,
+            limit=limit,
+        )
 
-    async def list_configs_for_buyer(self, buyer_id: str) -> list[dict[str, Any]]:
+    async def list_configs_for_buyer(
+        self,
+        buyer_id: str,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
         """List pretargeting configs for a specific buyer_id in one SQL query."""
         where_sql = """
             JOIN buyer_seats bs ON bs.bidder_id = pc.bidder_id
@@ -32,13 +44,20 @@ class PretargetingRepository:
         return await self._list_configs_with_where_clause(
             where_sql=where_sql,
             params=(buyer_id,),
+            limit=limit,
         )
 
     async def _list_configs_with_where_clause(
         self,
         where_sql: str,
         params: tuple[Any, ...],
+        limit: int | None = None,
     ) -> list[dict[str, Any]]:
+        limit_sql = ""
+        query_params = params
+        if limit is not None:
+            limit_sql = "LIMIT %s"
+            query_params = params + (limit,)
         
         sql = f"""
             SELECT
@@ -85,8 +104,9 @@ class PretargetingRepository:
                     pc.id DESC
             ) deduped
             ORDER BY deduped.billing_id NULLS LAST, deduped.config_id
+            {limit_sql}
         """
-        return await pg_query(sql, params)
+        return await pg_query(sql, query_params)
 
     async def get_config_by_billing_id(self, billing_id: str) -> dict[str, Any] | None:
         return await pg_query_one(
