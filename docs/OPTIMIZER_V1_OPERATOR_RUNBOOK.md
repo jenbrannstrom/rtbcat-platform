@@ -83,6 +83,7 @@ Reference setup guide: `docs/CONVERSION_CONNECTORS_SETUP_GUIDE.md`
 
 1. HMAC validation:
    - `CATSCAN_*_WEBHOOK_HMAC_SECRET`
+   - Rotation windows supported via multiple values in one env var (`old,new` or `old;new`).
 2. Freshness guard:
    - `CATSCAN_CONVERSIONS_ENFORCE_FRESHNESS=1`
    - `CATSCAN_CONVERSIONS_MAX_SKEW_SECONDS=900`

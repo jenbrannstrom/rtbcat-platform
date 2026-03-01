@@ -521,6 +521,28 @@ def test_ingest_appsflyer_requires_secret_when_configured(monkeypatch: pytest.Mo
     assert ingestion_stub.provider_calls[0]["source_type"] == "appsflyer"
 
 
+def test_ingest_appsflyer_accepts_rotating_provider_secrets(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    client = _build_client(stub, ingestion_stub, monkeypatch)
+    monkeypatch.setenv("CATSCAN_APPSFLYER_WEBHOOK_SECRET", "old-secret, new-secret")
+
+    old_secret = client.post(
+        "/api/conversions/appsflyer/postback",
+        headers={"X-Webhook-Secret": "old-secret"},
+        json={"eventName": "af_purchase"},
+    )
+    new_secret = client.post(
+        "/api/conversions/appsflyer/postback",
+        headers={"X-Webhook-Secret": "new-secret"},
+        json={"eventName": "af_purchase"},
+    )
+
+    assert old_secret.status_code == 200
+    assert new_secret.status_code == 200
+    assert len(ingestion_stub.provider_calls) == 2
+
+
 def test_ingest_appsflyer_requires_valid_hmac_when_configured(monkeypatch: pytest.MonkeyPatch):
     stub = _StubConversionsService()
     ingestion_stub = _StubConversionIngestionService()
@@ -546,6 +568,33 @@ def test_ingest_appsflyer_requires_valid_hmac_when_configured(monkeypatch: pytes
     assert valid.status_code == 200
     assert len(ingestion_stub.provider_calls) == 1
     assert ingestion_stub.provider_calls[0]["source_type"] == "appsflyer"
+
+
+def test_ingest_appsflyer_accepts_rotating_hmac_secrets(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    client = _build_client(stub, ingestion_stub, monkeypatch)
+    monkeypatch.setenv("CATSCAN_APPSFLYER_WEBHOOK_HMAC_SECRET", "old-hmac;new-hmac")
+
+    payload = {"eventName": "af_purchase", "eventTime": "2026-02-28T00:00:00Z"}
+    normalized = conversions_router.normalize_appsflyer_payload(payload)
+    old_signature = _hmac_sig("old-hmac", normalized)
+    new_signature = _hmac_sig("new-hmac", normalized)
+
+    with_old = client.post(
+        "/api/conversions/appsflyer/postback",
+        headers={"X-Signature": f"sha256={old_signature}"},
+        json=payload,
+    )
+    with_new = client.post(
+        "/api/conversions/appsflyer/postback",
+        headers={"X-Signature": f"sha256={new_signature}"},
+        json=payload,
+    )
+
+    assert with_old.status_code == 200
+    assert with_new.status_code == 200
+    assert len(ingestion_stub.provider_calls) == 2
 
 
 def test_ingest_appsflyer_rejects_stale_timestamp_when_enforced(monkeypatch: pytest.MonkeyPatch):

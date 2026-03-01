@@ -241,24 +241,34 @@ def _clear_webhook_rate_limit_state() -> None:
         _WEBHOOK_RATE_LIMIT_STATE.clear()
 
 
-def _get_expected_webhook_secret(source_type: str) -> Optional[str]:
-    source_secret = os.getenv(_SECRET_ENV_BY_SOURCE.get(source_type, ""), "").strip()
-    if source_secret:
-        return source_secret
-    shared = os.getenv("CATSCAN_CONVERSIONS_SHARED_SECRET", "").strip()
-    if shared:
-        return shared
-    return None
+def _parse_env_secret_list(env_name: str) -> list[str]:
+    raw = os.getenv(env_name, "")
+    if not raw:
+        return []
+    # Allow rotation windows with multiple active secrets in one env value.
+    candidates = raw.replace("\n", ",").replace(";", ",").split(",")
+    secrets_list: list[str] = []
+    for candidate in candidates:
+        token = candidate.strip()
+        if token and token not in secrets_list:
+            secrets_list.append(token)
+    return secrets_list
 
 
-def _get_expected_hmac_secret(source_type: str) -> Optional[str]:
-    source_secret = os.getenv(_HMAC_SECRET_ENV_BY_SOURCE.get(source_type, ""), "").strip()
-    if source_secret:
-        return source_secret
-    shared = os.getenv("CATSCAN_CONVERSIONS_SHARED_HMAC_SECRET", "").strip()
-    if shared:
-        return shared
-    return None
+def _get_expected_webhook_secrets(source_type: str) -> list[str]:
+    source_env = _SECRET_ENV_BY_SOURCE.get(source_type, "")
+    source_secrets = _parse_env_secret_list(source_env) if source_env else []
+    if source_secrets:
+        return source_secrets
+    return _parse_env_secret_list("CATSCAN_CONVERSIONS_SHARED_SECRET")
+
+
+def _get_expected_hmac_secrets(source_type: str) -> list[str]:
+    source_env = _HMAC_SECRET_ENV_BY_SOURCE.get(source_type, "")
+    source_secrets = _parse_env_secret_list(source_env) if source_env else []
+    if source_secrets:
+        return source_secrets
+    return _parse_env_secret_list("CATSCAN_CONVERSIONS_SHARED_HMAC_SECRET")
 
 
 def _canonical_payload(payload: dict) -> str:
@@ -333,8 +343,8 @@ def _extract_request_timestamp(request: Request, payload: dict) -> Optional[int]
 
 def _verify_webhook_secret(source_type: str, request: Request, payload: dict) -> None:
     """Optional per-provider/shared secret check for inbound conversion webhooks."""
-    expected = _get_expected_webhook_secret(source_type)
-    if not expected:
+    expected_secrets = _get_expected_webhook_secrets(source_type)
+    if not expected_secrets:
         return
 
     candidates = [
@@ -348,16 +358,22 @@ def _verify_webhook_secret(source_type: str, request: Request, payload: dict) ->
         str(payload.get("signature", "")).strip(),
     ]
 
-    if any(secrets.compare_digest(candidate, expected) for candidate in candidates if candidate):
-        return
+    for candidate in candidates:
+        if not candidate:
+            continue
+        if any(
+            secrets.compare_digest(candidate, expected_secret)
+            for expected_secret in expected_secrets
+        ):
+            return
 
     raise HTTPException(status_code=401, detail="Invalid or missing webhook secret")
 
 
 def _verify_webhook_signature(source_type: str, request: Request, payload: dict) -> None:
     """Optional HMAC verification with freshness gate for replay protection."""
-    secret = _get_expected_hmac_secret(source_type)
-    if not secret:
+    secrets_list = _get_expected_hmac_secrets(source_type)
+    if not secrets_list:
         return
 
     message = _canonical_payload(payload)
@@ -366,18 +382,20 @@ def _verify_webhook_signature(source_type: str, request: Request, payload: dict)
     if not candidates:
         raise HTTPException(status_code=401, detail="Missing webhook signature")
 
-    digests = [
-        hmac.new(secret.encode("utf-8"), message.encode("utf-8"), hashlib.sha256).hexdigest()
-    ]
-    if timestamp is not None:
-        timestamp_message = f"{timestamp}.{message}"
+    digests: list[str] = []
+    timestamp_message = f"{timestamp}.{message}" if timestamp is not None else None
+    for secret in secrets_list:
         digests.append(
-            hmac.new(
-                secret.encode("utf-8"),
-                timestamp_message.encode("utf-8"),
-                hashlib.sha256,
-            ).hexdigest()
+            hmac.new(secret.encode("utf-8"), message.encode("utf-8"), hashlib.sha256).hexdigest()
         )
+        if timestamp_message is not None:
+            digests.append(
+                hmac.new(
+                    secret.encode("utf-8"),
+                    timestamp_message.encode("utf-8"),
+                    hashlib.sha256,
+                ).hexdigest()
+            )
 
     for raw_signature in candidates:
         for candidate_hex in _extract_signature_hexes(raw_signature):

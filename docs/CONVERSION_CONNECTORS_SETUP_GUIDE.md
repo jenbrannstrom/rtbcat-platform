@@ -1,6 +1,6 @@
 # Conversion Connectors Setup Guide
 
-**Last updated:** 2026-02-28  
+**Last updated:** 2026-03-01  
 **Scope:** AppsFlyer, Adjust, Branch, generic postback, agency-tracker aliases, lightweight pixel, and CSV upload ingestion for Cat-Scan v1.
 
 ## 1. Endpoint Map
@@ -34,6 +34,8 @@ Configure at least one of the secret mechanisms before exposing endpoints public
   - `CATSCAN_BRANCH_WEBHOOK_SECRET`
   - `CATSCAN_GENERIC_CONVERSION_WEBHOOK_SECRET`
 
+Each secret env var supports a rotation window by accepting multiple active values separated by `,`, `;`, or newline.
+
 Accepted secret carriers:
 
 - Header: `X-Webhook-Secret`, `X-Provider-Secret`, `X-Signature`
@@ -49,6 +51,8 @@ Accepted secret carriers:
   - `CATSCAN_ADJUST_WEBHOOK_HMAC_SECRET`
   - `CATSCAN_BRANCH_WEBHOOK_HMAC_SECRET`
   - `CATSCAN_GENERIC_CONVERSION_WEBHOOK_HMAC_SECRET`
+
+Each HMAC secret env var also supports rotation windows with multiple active values separated by `,`, `;`, or newline.
 
 Supported signature headers:
 
@@ -66,6 +70,14 @@ Supported signature headers:
 - `CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_ENABLED=1`
 - `CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_PER_MINUTE=240`
 - `CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_WINDOW_SECONDS=60`
+
+### 2.5 Secret rotation playbook (zero downtime)
+
+1. Add `new_secret` while keeping `old_secret` active in the same env var (for example: `old_secret,new_secret`).
+2. Deploy Cat-Scan with both values accepted.
+3. Rotate provider/tracker signing or webhook config to `new_secret`.
+4. Validate accepted traffic and no auth failures in `/conversions/ingestion/error-taxonomy`.
+5. Remove `old_secret` from env once all senders are on the new value.
 
 ## 3. Provider Payload Mapping Notes
 
