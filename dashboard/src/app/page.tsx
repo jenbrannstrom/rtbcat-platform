@@ -41,6 +41,16 @@ interface QpsPageLoadMetricsSnapshot {
   api_latency_ms: Record<string, number>;
 }
 
+interface QpsPageLoadMetricPostPayload {
+  page: "qps_home";
+  buyer_id?: string | null;
+  selected_days?: number;
+  time_to_first_table_row_ms?: number | null;
+  time_to_table_hydrated_ms?: number | null;
+  api_latency_ms?: Record<string, number>;
+  sampled_at?: string;
+}
+
 declare global {
   interface Window {
     __CATSCAN_QPS_LOAD_METRICS?: QpsPageLoadMetricsSnapshot;
@@ -119,19 +129,7 @@ function WasteAnalysisContent() {
     return snapshot;
   }, [dashboardLoadStartedAt, days, selectedBuyerId]);
 
-  const submitQpsLoadMetrics = useCallback((snapshot: QpsPageLoadMetricsSnapshot | null) => {
-    if (!snapshot || qpsLoadMetricsPostedRef.current) return;
-    if (snapshot.time_to_table_hydrated_ms === null) return;
-
-    const payload = {
-      page: "qps_home" as const,
-      buyer_id: snapshot.buyer_id,
-      selected_days: snapshot.days,
-      time_to_first_table_row_ms: snapshot.time_to_first_table_row_ms,
-      time_to_table_hydrated_ms: snapshot.time_to_table_hydrated_ms,
-      api_latency_ms: snapshot.api_latency_ms,
-      sampled_at: snapshot.started_at_iso,
-    };
+  const postQpsLoadMetricPayload = useCallback((payload: QpsPageLoadMetricPostPayload) => {
     const body = JSON.stringify(payload);
     let queued = false;
     if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
@@ -153,8 +151,33 @@ function WasteAnalysisContent() {
         keepalive: true,
       }).catch(() => undefined);
     }
-    qpsLoadMetricsPostedRef.current = true;
   }, []);
+
+  const submitQpsLoadMetrics = useCallback((snapshot: QpsPageLoadMetricsSnapshot | null) => {
+    if (!snapshot || qpsLoadMetricsPostedRef.current) return;
+    if (snapshot.time_to_table_hydrated_ms === null) return;
+
+    postQpsLoadMetricPayload({
+      page: "qps_home",
+      buyer_id: snapshot.buyer_id,
+      selected_days: snapshot.days,
+      time_to_first_table_row_ms: snapshot.time_to_first_table_row_ms,
+      time_to_table_hydrated_ms: snapshot.time_to_table_hydrated_ms,
+      api_latency_ms: snapshot.api_latency_ms,
+      sampled_at: snapshot.started_at_iso,
+    });
+    qpsLoadMetricsPostedRef.current = true;
+  }, [postQpsLoadMetricPayload]);
+
+  const submitQpsApiLatencySample = useCallback((apiPath: string, latencyMs: number) => {
+    postQpsLoadMetricPayload({
+      page: "qps_home",
+      buyer_id: selectedBuyerId || null,
+      selected_days: days,
+      api_latency_ms: { [apiPath]: latencyMs },
+      sampled_at: new Date().toISOString(),
+    });
+  }, [days, postQpsLoadMetricPayload, selectedBuyerId]);
 
   // Fetch seats to auto-select first one if none selected
   const {
@@ -261,9 +284,13 @@ function WasteAnalysisContent() {
   }, [days, selectedBuyerId, setStartupApiLatency, writeQpsLoadMetricsSnapshot]);
 
   const handleApiLatencyMeasured = useCallback((apiPath: string, latencyMs: number) => {
-    startupApiLatencyMsRef.current[apiPath] = Math.round(Math.max(0, latencyMs));
+    const normalizedLatency = Math.round(Math.max(0, latencyMs));
+    startupApiLatencyMsRef.current[apiPath] = normalizedLatency;
     writeQpsLoadMetricsSnapshot();
-  }, [writeQpsLoadMetricsSnapshot]);
+    if (qpsLoadMetricsPostedRef.current) {
+      submitQpsApiLatencySample(apiPath, normalizedLatency);
+    }
+  }, [submitQpsApiLatencySample, writeQpsLoadMetricsSnapshot]);
 
   // Fetch RTB funnel data from CSV files
   const {
@@ -703,6 +730,7 @@ function WasteAnalysisContent() {
                     billing_id={config.billing_id}
                     days={days}
                     isExpanded={true}
+                    onApiLatencyMeasured={handleApiLatencyMeasured}
                   />
                 )}
               </div>
