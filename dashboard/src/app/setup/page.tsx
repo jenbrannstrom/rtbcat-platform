@@ -134,7 +134,18 @@ export default function SetupPage() {
     return <ErrorPage message={firstError.message} />;
   }
 
-  const seatsReady = (seats?.length || 0) > 0;
+  const activeSeatRows = seats || [];
+  const hasAnyActiveSeat = activeSeatRows.length > 0;
+  const selectedBuyerConnected =
+    !!selectedBuyerId && activeSeatRows.some((row) => row.buyer_id === selectedBuyerId);
+  const seatsReady = hasAnyActiveSeat && selectedBuyerConnected;
+  const accountsStepDescription = !hasAnyActiveSeat
+    ? "Add and validate at least one active buyer seat."
+    : !buyerContextReady
+      ? "Active seats found. Select a buyer context in the header to continue setup."
+      : !selectedBuyerConnected
+        ? "Selected buyer is not an active seat. Choose an active buyer or activate it."
+        : "Active buyer seat is connected and selected.";
   const reportCompletenessHealthy =
     dataHealth?.optimizer_readiness?.report_completeness?.availability_state === "healthy";
   const qualityFreshnessHealthy =
@@ -175,7 +186,7 @@ export default function SetupPage() {
     {
       key: "accounts",
       title: "Connect Buyer Accounts",
-      description: "Add and validate at least one active buyer seat.",
+      description: accountsStepDescription,
       href: "/settings/accounts",
       done: seatsReady,
     },
