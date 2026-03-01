@@ -26,6 +26,7 @@ const PERIOD_OPTIONS = [
   { value: 14, label: "14 days" },
   { value: 30, label: "30 days" },
 ];
+const PRETARGETING_BOOTSTRAP_LIMIT = 300;
 const INITIAL_VISIBLE_CONFIG_ROWS = 60;
 const CONFIG_ROWS_CHUNK_SIZE = 120;
 const PRETARGETING_CONFIG_CACHE_PREFIX = "catscan:qps:pretargeting-configs:v1";
@@ -514,10 +515,17 @@ function WasteAnalysisContent() {
   }, [selectedBuyerId, seats, setSelectedBuyerId]);
 
   const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
+  const [pretargetingBootstrapLimit, setPretargetingBootstrapLimit] = useState<number | null>(
+    PRETARGETING_BOOTSTRAP_LIMIT
+  );
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setExpandedConfigId(null);
+  }, [selectedBuyerId]);
+
+  useEffect(() => {
+    setPretargetingBootstrapLimit(PRETARGETING_BOOTSTRAP_LIMIT);
   }, [selectedBuyerId]);
 
   // Sorting state for pretargeting configs
@@ -560,16 +568,27 @@ function WasteAnalysisContent() {
   const seatReady = !!selectedBuyerId && (seatsLoading || selectedBuyerKnownValid);
 
   const fetchMeasuredPretargetingConfigs = useCallback(async () => {
+    const shouldMeasureStartup = pretargetingBootstrapLimit !== null;
     const startedAtMs = typeof window !== "undefined" && window.performance
       ? window.performance.now()
       : Date.now();
     try {
-      return await getPretargetingConfigs({ buyer_id: selectedBuyerId || undefined });
+      return await getPretargetingConfigs({
+        buyer_id: selectedBuyerId || undefined,
+        limit: pretargetingBootstrapLimit ?? undefined,
+      });
     } finally {
-      setStartupApiLatency("/settings/pretargeting", startedAtMs);
-      writeQpsLoadMetricsSnapshot();
+      if (shouldMeasureStartup) {
+        setStartupApiLatency("/settings/pretargeting", startedAtMs);
+        writeQpsLoadMetricsSnapshot();
+      }
     }
-  }, [selectedBuyerId, setStartupApiLatency, writeQpsLoadMetricsSnapshot]);
+  }, [
+    pretargetingBootstrapLimit,
+    selectedBuyerId,
+    setStartupApiLatency,
+    writeQpsLoadMetricsSnapshot,
+  ]);
 
   const fetchMeasuredConfigPerformance = useCallback(async () => {
     const startedAtMs = typeof window !== "undefined" && window.performance
@@ -639,10 +658,11 @@ function WasteAnalysisContent() {
     refetch: refetchConfigs,
     isFetchedAfterMount: configsFetchedAfterMount,
   } = useQuery({
-    queryKey: ["pretargeting-configs", selectedBuyerId],
+    queryKey: ["pretargeting-configs", selectedBuyerId, pretargetingBootstrapLimit ?? "all"],
     queryFn: fetchMeasuredPretargetingConfigs,
     enabled: seatReady,
     initialData: () => readPretargetingConfigCache(selectedBuyerId),
+    placeholderData: (previousData) => previousData,
     retry: shouldRetryAnalyticsQuery,
     retryDelay: getRetryDelay,
     retryOnMount: true,
@@ -656,6 +676,17 @@ function WasteAnalysisContent() {
       return false;
     },
   });
+
+  useEffect(() => {
+    if (!seatReady) return;
+    if (pretargetingBootstrapLimit === null) return;
+    if (!Array.isArray(pretargetingConfigs)) return;
+    if (pretargetingConfigs.length < pretargetingBootstrapLimit) return;
+    const timer = window.setTimeout(() => {
+      setPretargetingBootstrapLimit(null);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [pretargetingBootstrapLimit, pretargetingConfigs, seatReady]);
 
   useEffect(() => {
     if (!configsFetchedAfterMount) return;

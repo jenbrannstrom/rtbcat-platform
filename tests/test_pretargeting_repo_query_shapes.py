@@ -76,6 +76,27 @@ async def test_list_configs_for_buyer_uses_single_joined_query(
 
 
 @pytest.mark.asyncio
+async def test_list_configs_applies_limit_when_requested(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict[str, object] = {}
+
+    async def _stub_query(sql: str, params: tuple = ()):
+        captured["sql"] = sql
+        captured["params"] = params
+        return []
+
+    monkeypatch.setattr("storage.postgres_repositories.pretargeting_repo.pg_query", _stub_query)
+    repo = PretargetingRepository()
+    rows = await repo.list_configs(bidder_id="6574658621", limit=250)
+
+    assert rows == []
+    sql_upper = str(captured["sql"]).upper()
+    assert "LIMIT %S" in sql_upper
+    assert captured["params"] == ("6574658621", 250)
+
+
+@pytest.mark.asyncio
 async def test_list_history_billing_filter_uses_exists_not_join(monkeypatch: pytest.MonkeyPatch):
     captured: dict[str, object] = {}
 

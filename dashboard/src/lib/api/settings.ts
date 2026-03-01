@@ -164,12 +164,14 @@ export async function syncRTBEndpoints(params?: {
 export async function getPretargetingConfigs(params?: {
   buyer_id?: string;
   service_account_id?: string;
+  limit?: number;
 }): Promise<PretargetingConfigResponse[]> {
   const searchParams = new URLSearchParams();
   if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
   if (params?.service_account_id) {
     searchParams.set("service_account_id", params.service_account_id);
   }
+  if (params?.limit !== undefined) searchParams.set("limit", String(params.limit));
   const query = searchParams.toString();
   return fetchApi<PretargetingConfigResponse[]>(
     `/settings/pretargeting${query ? `?${query}` : ""}`,
