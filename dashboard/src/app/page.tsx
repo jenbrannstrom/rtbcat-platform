@@ -27,7 +27,8 @@ const PERIOD_OPTIONS = [
   { value: 30, label: "30 days" },
 ];
 const PRETARGETING_BOOTSTRAP_LIMIT = 300;
-const INITIAL_VISIBLE_CONFIG_ROWS = 60;
+const INITIAL_VISIBLE_CONFIG_ROWS_WARM = 60;
+const INITIAL_VISIBLE_CONFIG_ROWS_COLD = 40;
 const CONFIG_ROWS_CHUNK_SIZE = 120;
 const PRETARGETING_CONFIG_CACHE_PREFIX = "catscan:qps:pretargeting-configs:v1";
 const PRETARGETING_CONFIG_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
@@ -844,7 +845,10 @@ function WasteAnalysisContent() {
       return 0;
     });
   }, [sortColumn, sortDirection, unsortedConfigs]);
-  const [visibleConfigCount, setVisibleConfigCount] = useState<number>(INITIAL_VISIBLE_CONFIG_ROWS);
+  const initialVisibleConfigRows = useSummaryBootstrap
+    ? INITIAL_VISIBLE_CONFIG_ROWS_COLD
+    : INITIAL_VISIBLE_CONFIG_ROWS_WARM;
+  const [visibleConfigCount, setVisibleConfigCount] = useState<number>(initialVisibleConfigRows);
   const visibleConfigs = displayConfigs.slice(0, Math.min(visibleConfigCount, displayConfigs.length));
 
   const activeConfigsCount = displayConfigs.filter(c => c.state === 'ACTIVE').length;
@@ -857,12 +861,12 @@ function WasteAnalysisContent() {
 
   useEffect(() => {
     const totalRows = displayConfigs.length;
-    if (totalRows <= INITIAL_VISIBLE_CONFIG_ROWS) {
+    if (totalRows <= initialVisibleConfigRows) {
       setVisibleConfigCount(totalRows);
       return;
     }
-    setVisibleConfigCount(INITIAL_VISIBLE_CONFIG_ROWS);
-  }, [displayConfigs.length, days, selectedBuyerId, sortColumn, sortDirection]);
+    setVisibleConfigCount(initialVisibleConfigRows);
+  }, [displayConfigs.length, days, initialVisibleConfigRows, selectedBuyerId, sortColumn, sortDirection]);
 
   useEffect(() => {
     if (!expandedConfigId) return;
