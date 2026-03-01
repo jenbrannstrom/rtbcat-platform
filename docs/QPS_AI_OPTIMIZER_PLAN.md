@@ -763,6 +763,7 @@ ALSO PROVIDE:
   - added short TTL in-process caching for bidder-scoped `list_configs` reads in `PretargetingService` with explicit invalidation on config/name/state updates, reducing repeated reload latency for `/settings/pretargeting`.
   - added short TTL in-process caching for `PretargetingService.list_history` (keyed by config/billing/day/limit) with invalidation on `add_history`, reducing repeated expanded-row history query latency for `/settings/pretargeting/history`.
   - added short TTL in-process caching for `SnapshotsService` list reads (`list_snapshots`, `list_comparisons`) with invalidation on create operations, reducing repeated expanded-row snapshot/comparison panel query latency.
+  - added short TTL in-process caching for `ChangesService.list_pending_changes` (keyed by billing/status/limit) with invalidation on create/cancel/mark-applied operations, reducing repeated pretargeting detail/pending-change query latency.
   - optimized `/analytics/home/configs` query shape to compute overall totals via SQL window sums and return only top-20 rows in SQL (instead of fetching all grouped configs then truncating in Python), reducing backend work on large seats.
   - parallelized `/analytics/home/configs` precompute-status + config-row reads (requested and fallback windows) via `asyncio.gather`, reducing endpoint latency from sequential DB round trips.
   - parallelized `/analytics/home/funnel` status checks and downstream aggregate/list/count queries via `asyncio.gather`, reducing deferred post-hydration panel latency.
