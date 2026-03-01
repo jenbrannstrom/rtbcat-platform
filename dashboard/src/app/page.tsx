@@ -27,7 +27,8 @@ const PERIOD_OPTIONS = [
   { value: 14, label: "14 days" },
   { value: 30, label: "30 days" },
 ];
-const PRETARGETING_BOOTSTRAP_LIMIT = 300;
+const PRETARGETING_BOOTSTRAP_LIMIT_WARM = 300;
+const PRETARGETING_BOOTSTRAP_LIMIT_COLD = 150;
 const INITIAL_VISIBLE_CONFIG_ROWS_WARM = 60;
 const INITIAL_VISIBLE_CONFIG_ROWS_COLD = 40;
 const CONFIG_ROWS_CHUNK_SIZE = 120;
@@ -568,7 +569,7 @@ function WasteAnalysisContent() {
 
   const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
   const [pretargetingBootstrapLimit, setPretargetingBootstrapLimit] = useState<number | null>(
-    PRETARGETING_BOOTSTRAP_LIMIT
+    PRETARGETING_BOOTSTRAP_LIMIT_WARM
   );
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -577,7 +578,7 @@ function WasteAnalysisContent() {
   }, [selectedBuyerId]);
 
   useEffect(() => {
-    setPretargetingBootstrapLimit(PRETARGETING_BOOTSTRAP_LIMIT);
+    setPretargetingBootstrapLimit(PRETARGETING_BOOTSTRAP_LIMIT_WARM);
   }, [selectedBuyerId]);
 
   // Sorting state for pretargeting configs
@@ -624,16 +625,21 @@ function WasteAnalysisContent() {
   );
   const useSummaryBootstrap = pretargetingBootstrapLimit !== null
     && !(Array.isArray(pretargetingCacheSeed) && pretargetingCacheSeed.length > 0);
+  const pretargetingRequestLimit = pretargetingBootstrapLimit === null
+    ? null
+    : (useSummaryBootstrap
+      ? PRETARGETING_BOOTSTRAP_LIMIT_COLD
+      : pretargetingBootstrapLimit);
 
   const fetchMeasuredPretargetingConfigs = useCallback(async () => {
-    const shouldMeasureStartup = pretargetingBootstrapLimit !== null;
+    const shouldMeasureStartup = pretargetingRequestLimit !== null;
     const startedAtMs = typeof window !== "undefined" && window.performance
       ? window.performance.now()
       : Date.now();
     try {
       return await getPretargetingConfigs({
         buyer_id: selectedBuyerId || undefined,
-        limit: pretargetingBootstrapLimit ?? undefined,
+        limit: pretargetingRequestLimit ?? undefined,
         summary_only: useSummaryBootstrap,
       });
     } finally {
@@ -643,7 +649,7 @@ function WasteAnalysisContent() {
       }
     }
   }, [
-    pretargetingBootstrapLimit,
+    pretargetingRequestLimit,
     selectedBuyerId,
     setStartupApiLatency,
     useSummaryBootstrap,
@@ -728,7 +734,7 @@ function WasteAnalysisContent() {
     queryKey: [
       "pretargeting-configs",
       selectedBuyerId,
-      pretargetingBootstrapLimit ?? "all",
+      pretargetingRequestLimit ?? "all",
       useSummaryBootstrap ? "summary" : "full",
     ],
     queryFn: fetchMeasuredPretargetingConfigs,
@@ -753,7 +759,7 @@ function WasteAnalysisContent() {
     if (!seatReady) return;
     if (pretargetingBootstrapLimit === null) return;
     if (!Array.isArray(pretargetingConfigs)) return;
-    if (!useSummaryBootstrap && pretargetingConfigs.length < pretargetingBootstrapLimit) return;
+    if (!useSummaryBootstrap && pretargetingConfigs.length < (pretargetingRequestLimit ?? 0)) return;
     const browserWindow = window as Window & {
       requestIdleCallback?: (callback: IdleRequestCallback, opts?: IdleRequestOptions) => number;
       cancelIdleCallback?: (id: number) => void;
@@ -772,7 +778,13 @@ function WasteAnalysisContent() {
       setPretargetingBootstrapLimit(null);
     }, 750);
     return () => clearTimeout(timer);
-  }, [pretargetingBootstrapLimit, pretargetingConfigs, seatReady, useSummaryBootstrap]);
+  }, [
+    pretargetingBootstrapLimit,
+    pretargetingConfigs,
+    pretargetingRequestLimit,
+    seatReady,
+    useSummaryBootstrap,
+  ]);
 
   useEffect(() => {
     if (!configsFetchedAfterMount) return;
