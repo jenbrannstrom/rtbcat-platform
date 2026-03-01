@@ -20,6 +20,7 @@
 - `E1-003` started: daily conversion aggregation service implemented (`services/conversions_service.py`) with RTB join and upsert refresh flow.
 - `E1-004` started: conversion aggregate read API and lag health endpoints added under `/conversions/*` with router wiring in `api/main.py`.
 - `QA-002` (Phase 1/2 slice) started: conversion taxonomy/service/API coverage plus provider fixture suite (`tests/fixtures/conversions/*`, `tests/test_conversion_connector_fixtures.py`) are passing in local regression runs.
+- `QA-002` (Phase 1/2 slice) started: conversion readiness state logic is unit-tested in `tests/test_conversion_readiness.py` (ready/degraded/not_ready/unavailable paths).
 - `QA-003` started: BYOM workflow integration coverage now includes a single-flow API test (`tests/test_optimizer_e2e_api.py`) covering score-and-propose orchestration, proposal approval/apply, sync, and audit-history retrieval.
 - `E2-001` started: `/conversions/appsflyer/postback` endpoint added with provider secret validation and idempotent event ingestion.
 - `E2-002` started: `/conversions/adjust/callback` endpoint added with provider secret validation and idempotent event ingestion.
