@@ -1,4 +1,4 @@
-.PHONY: help v1-canary-smoke v1-canary-workflow v1-canary-lifecycle v1-canary-go-no-go v1-canary-conversion-ready v1-canary-pixel v1-canary-safe v1-canary-balanced v1-canary-aggressive v1-conversion-regression phase0-regression phase0-dashboard-build phase0-gate
+.PHONY: help v1-canary-smoke v1-canary-workflow v1-canary-lifecycle v1-canary-go-no-go v1-canary-conversion-ready v1-canary-pixel v1-canary-safe v1-canary-balanced v1-canary-aggressive v1-conversion-regression v1-gate phase0-regression phase0-dashboard-build phase0-gate
 
 help:
 	@echo "Targets:"
@@ -12,6 +12,7 @@ help:
 	@echo "  make v1-canary-balanced  # Run workflow canary with balanced preset"
 	@echo "  make v1-canary-aggressive # Run workflow canary with aggressive preset"
 	@echo "  make v1-conversion-regression # Run conversion/readiness regression tests"
+	@echo "  make v1-gate             # Run phase0 gate + conversion regression"
 	@echo "  make phase0-regression   # Run core Phase 0 regression tests"
 	@echo "  make phase0-dashboard-build  # Build dashboard production bundle"
 	@echo "  make phase0-gate         # Run regression tests + dashboard build"
@@ -66,3 +67,5 @@ phase0-dashboard-build:
 	npm --prefix dashboard run build -- --webpack
 
 phase0-gate: phase0-regression phase0-dashboard-build
+
+v1-gate: phase0-gate v1-conversion-regression
