@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from storage.postgres_repositories.pretargeting_repo import PretargetingRepository
@@ -10,11 +11,37 @@ from storage.postgres_repositories.pretargeting_repo import PretargetingReposito
 class PretargetingService:
     """Service layer for pretargeting configs + publishers."""
 
+    _LIST_CONFIGS_CACHE_TTL_SECONDS = 15.0
+    _LIST_CONFIGS_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+
     def __init__(self, repo: PretargetingRepository | None = None) -> None:
         self._repo = repo or PretargetingRepository()
 
     async def list_configs(self, bidder_id: str | None = None) -> list[dict[str, Any]]:
-        return await self._repo.list_configs(bidder_id=bidder_id)
+        cache_key = bidder_id or "__all__"
+        now = time.monotonic()
+        cached_entry = self._LIST_CONFIGS_CACHE.get(cache_key)
+        if cached_entry and cached_entry[0] > now:
+            return [dict(row) for row in cached_entry[1]]
+
+        rows = await self._repo.list_configs(bidder_id=bidder_id)
+        self._LIST_CONFIGS_CACHE[cache_key] = (
+            now + self._LIST_CONFIGS_CACHE_TTL_SECONDS,
+            [dict(row) for row in rows],
+        )
+        return rows
+
+    @classmethod
+    def clear_list_configs_cache(cls) -> None:
+        cls._LIST_CONFIGS_CACHE.clear()
+
+    @classmethod
+    def _invalidate_list_configs_cache(cls, bidder_id: str | None = None) -> None:
+        cls._LIST_CONFIGS_CACHE.pop("__all__", None)
+        if bidder_id:
+            cls._LIST_CONFIGS_CACHE.pop(bidder_id, None)
+            return
+        cls._LIST_CONFIGS_CACHE.clear()
 
     async def get_config(self, billing_id: str) -> dict[str, Any] | None:
         if not billing_id:
@@ -27,18 +54,23 @@ class PretargetingService:
         if not config.get("bidder_id"):
             raise ValueError("bidder_id is required")
         await self._repo.save_config(config)
+        self._invalidate_list_configs_cache(str(config.get("bidder_id")))
 
     async def update_user_name(self, billing_id: str, user_name: str | None) -> int:
         if not billing_id:
             raise ValueError("billing_id is required")
-        return await self._repo.update_user_name(billing_id, user_name)
+        updated = await self._repo.update_user_name(billing_id, user_name)
+        self._invalidate_list_configs_cache()
+        return updated
 
     async def update_state(self, billing_id: str, state: str) -> int:
         if not billing_id:
             raise ValueError("billing_id is required")
         if not state:
             raise ValueError("state is required")
-        return await self._repo.update_state(billing_id, state)
+        updated = await self._repo.update_state(billing_id, state)
+        self._invalidate_list_configs_cache()
+        return updated
 
     async def list_history(
         self,
