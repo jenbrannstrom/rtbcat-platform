@@ -11,6 +11,12 @@ class _StubCachedHomeRepo:
     def __init__(self) -> None:
         self.config_calls = 0
         self.funnel_calls = 0
+        self.bidstream_summary_calls = 0
+        self.endpoints_for_bidder_calls = 0
+        self.observed_endpoint_rows_calls = 0
+        self.home_seat_coverage_calls = 0
+        self.bidstream_coverage_calls = 0
+        self.bidder_lookup_calls = 0
         self.publisher_rows_calls = 0
         self.geo_rows_calls = 0
         self.publisher_count_calls = 0
@@ -75,6 +81,53 @@ class _StubCachedHomeRepo:
         self.country_count_calls += 1
         return 3
 
+    def get_window_bounds(self, days: int):
+        del days
+        return ("2026-02-23", "2026-03-01")
+
+    async def get_bidstream_summary(self, _days: int, _buyer_id: str | None):
+        self.bidstream_summary_calls += 1
+        return {
+            "total_bids": 100,
+            "total_bids_in_auction": 60,
+            "total_auctions_won": 30,
+        }
+
+    async def get_bidder_id_for_buyer(self, _buyer_id: str):
+        self.bidder_lookup_calls += 1
+        return "bidder-1"
+
+    async def get_endpoints_for_bidder(self, _bidder_id: str | None):
+        self.endpoints_for_bidder_calls += 1
+        return [
+            {
+                "endpoint_id": "ep-1",
+                "url": "https://ep1.example",
+                "trading_location": "US_WEST",
+                "maximum_qps": 100,
+            }
+        ]
+
+    async def get_observed_endpoint_rows(self, _bidder_id: str | None):
+        self.observed_endpoint_rows_calls += 1
+        return [
+            {
+                "endpoint_id": "ep-1",
+                "url": "https://ep1.example",
+                "trading_location": "US_WEST",
+                "current_qps": 40,
+                "observed_at": None,
+            }
+        ]
+
+    async def get_home_seat_coverage(self, _days: int, _buyer_id: str | None):
+        self.home_seat_coverage_calls += 1
+        return {"min_date": "2026-02-23", "max_date": "2026-03-01", "days_with_data": 7, "row_count": 7}
+
+    async def get_bidstream_coverage(self, _days: int, _buyer_id: str | None):
+        self.bidstream_coverage_calls += 1
+        return {"min_date": "2026-02-23", "max_date": "2026-03-01", "days_with_data": 7, "row_count": 7}
+
 
 @pytest.mark.asyncio
 async def test_config_payload_uses_ttl_cache_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -130,3 +183,23 @@ async def test_funnel_payload_uses_ttl_cache_when_enabled(monkeypatch: pytest.Mo
     assert repo.publisher_count_calls == 0
     assert repo.country_count_calls == 0
     assert second["funnel"]["total_reached_queries"] == 1000
+
+
+@pytest.mark.asyncio
+async def test_endpoint_efficiency_payload_uses_ttl_cache_when_enabled() -> None:
+    HomeAnalyticsService.clear_payload_caches()
+    repo = _StubCachedHomeRepo()
+    service = HomeAnalyticsService(repo=repo)
+    service._cache_enabled = True
+
+    first = await service.get_endpoint_efficiency_payload(days=7, buyer_id="buyer-1")
+    first["summary"]["allocated_qps"] = 1
+    second = await service.get_endpoint_efficiency_payload(days=7, buyer_id="buyer-1")
+
+    assert repo.funnel_calls == 1
+    assert repo.bidstream_summary_calls == 1
+    assert repo.endpoints_for_bidder_calls == 1
+    assert repo.observed_endpoint_rows_calls == 1
+    assert repo.home_seat_coverage_calls == 1
+    assert repo.bidstream_coverage_calls == 1
+    assert second["summary"]["allocated_qps"] == 100

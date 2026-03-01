@@ -763,6 +763,7 @@ ALSO PROVIDE:
   - parallelized `/analytics/home/funnel` status checks and downstream aggregate/list/count queries via `asyncio.gather`, reducing deferred post-hydration panel latency.
   - optimized `/analytics/home/funnel` query shape to embed publisher/country total counts in the same grouped row queries via window counts, removing separate count queries.
   - added short TTL in-process payload caching in `HomeAnalyticsService` for `/analytics/home/configs` and `/analytics/home/funnel` (real Postgres repo path), reducing repeated reload latency and duplicate hot-query execution.
+  - extended `HomeAnalyticsService` short TTL payload caching to `/analytics/home/endpoint-efficiency`, reducing repeated deferred panel query load on reloads and manual revisits.
   - wired `/analytics/home/refresh` to clear HomeAnalyticsService payload caches after refresh completion so operator refreshes do not serve stale cached summaries.
   - added migration `060_home_precompute_query_indexes.sql` to add buyer/date composite indexes for `home_seat_daily`, `home_publisher_daily`, `home_geo_daily`, and `home_config_daily`, aligning DB access paths with Home funnel/config endpoint filters.
   - persisted QPS screen-level load telemetry via `POST /system/ui-metrics/page-load` with percentile reporting from `GET /system/ui-metrics/page-load/summary` (migration `059_ui_page_load_metrics.sql`).
