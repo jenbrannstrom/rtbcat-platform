@@ -1,6 +1,6 @@
 # V1 Plan Closeout Matrix
 
-**Last updated:** 2026-03-01 20:16:39 UTC  
+**Last updated:** 2026-03-01 21:45:00 UTC  
 **Branch checkpoint:** `unified-platform` (rolling checkpoint)
 
 ## CI Status & Report Links
@@ -52,6 +52,10 @@ Latest workflow/report entry points:
    - `.github/workflows/v1-closeout-deployed.yml` adds manual (`workflow_dispatch`) deployed closeout execution using `make v1-closeout-deployed-only`, with summary + md/json artifacts for attachable canary evidence (repo secrets: `CATSCAN_CANARY_BEARER_TOKEN` and/or `CATSCAN_CANARY_SESSION_COOKIE`).
    - both closeout workflows render their summary via shared helper `scripts/render_v1_closeout_summary.py` to keep report formatting consistent.
    - `.github/workflows/v1-byom-api-regression.yml` runs `make v1-byom-api-regression` on optimizer API/service/test changes so BYOM API/e2e coverage is validated in a dependency-provisioned CI runner, and now also supports manual `workflow_dispatch`.
+9. Latest deployed/BYOM evidence runs (buyer `1487810529`):
+   - deployed strict run `22553179141` failed with `Deployed canary go/no-go: FAIL (exit 1)` due to auth failures (`401 Session expired or invalid`), not code-level assertion regressions.
+   - deployed evidence-mode run `22553342553` (`allow_blocked=true`) showed the same auth-expired failure pattern; at that point auth failures still exited as hard fail.
+   - BYOM regression run `22553379186` passed (`27 passed`, workflow conclusion `success`).
 
 ## Closeout Matrix
 
@@ -62,7 +66,7 @@ Latest workflow/report entry points:
 | Phase 2 Conversion Connectors | Implemented baseline, rollout in progress | Operational Pending | Connector/readiness/security code + tests are present and passing | Customer-by-customer production certification and sustained ingestion/SLO checks |
 | Phase 3 BYOM Platform | Implemented in code | Operational Pending | Optimizer service/regression suites pass locally (`44 passed`); optimizer routers/services compile cleanly; API/e2e suites are env-blocked in this workspace (missing `fastapi` with network-restricted install), with CI regression path now available via `.github/workflows/v1-byom-api-regression.yml` | Production model onboarding + runbook-driven operator acceptance + successful BYOM API/e2e CI evidence for target environments |
 | Phase 4 QPS Performance | In progress | Operational Pending | Extensive query/cache/render improvements committed; local QPS contract/cache suites pass | Deployed canary SLO attainment (`p95 first row <= 6s`, `p95 hydrated <= 8s`) and strict rollup gate pass |
-| QA/Canary Tooling | Implemented | Blocked (Env) for deployed execution | Canary scripts/targets exist, but deployed canary commands are blocked in this sandbox by outbound API restriction (`Operation not permitted`) | Run full canary/go-no-go and strict QPS SLO from a network-enabled environment (or CI runner with API reachability) |
+| QA/Canary Tooling | Implemented | Blocked (Env/Auth) for deployed execution | Canary scripts/targets exist; latest deployed CI failures were caused by expired `CATSCAN_SESSION_COOKIE` secret (`401 Session expired or invalid`) | Refresh deployed canary auth secret(s), rerun deployed closeout, and attach passing artifacts |
 
 ## Is The Plan Finished?
 
@@ -71,7 +75,7 @@ Implementation is largely complete across Phases 0-4, but final plan closure req
 
 ## Immediate Final-Close Actions (Ops)
 
-1. Ensure deployed canary auth is configured (`CATSCAN_CANARY_BEARER_TOKEN` and/or `CATSCAN_CANARY_SESSION_COOKIE`), then run deployed canary profile: `make v1-canary-go-no-go` (from network-enabled runner) or dispatch `.github/workflows/v1-closeout-deployed.yml`.
+1. Ensure deployed canary auth is configured and fresh (`CATSCAN_CANARY_BEARER_TOKEN` and/or `CATSCAN_CANARY_SESSION_COOKIE`), then run deployed canary profile: `make v1-canary-go-no-go` (from network-enabled runner) or dispatch `.github/workflows/v1-closeout-deployed.yml`.
 2. Run deployed strict QPS SLO gate: `make v1-canary-qps-page-slo-strict` (or via the same deployed closeout workflow).
 3. Run BYOM API/e2e suites in provisioned test env with API deps installed (or confirm pass in `.github/workflows/v1-byom-api-regression.yml`).
 4. Record buyer-scoped SLO outcomes for the agreed lookback window.
