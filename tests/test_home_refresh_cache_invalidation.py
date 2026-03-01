@@ -14,6 +14,7 @@ from services.auth_service import User
 async def test_refresh_home_cache_clears_home_payload_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     refresh_calls: dict[str, object] = {}
     cache_clear_calls = {"count": 0}
+    spend_cache_clear_calls = {"count": 0}
 
     async def _stub_resolve_buyer_id(
         _buyer_id: str | None,
@@ -30,12 +31,20 @@ async def test_refresh_home_cache_clears_home_payload_cache(monkeypatch: pytest.
     def _stub_clear_payload_caches() -> None:
         cache_clear_calls["count"] += 1
 
+    def _stub_clear_spend_cache() -> None:
+        spend_cache_clear_calls["count"] += 1
+
     monkeypatch.setattr(home_router, "resolve_buyer_id", _stub_resolve_buyer_id)
     monkeypatch.setattr(home_router, "refresh_home_summaries", _stub_refresh_home_summaries)
     monkeypatch.setattr(
         home_router.HomeAnalyticsService,
         "clear_payload_caches",
         staticmethod(_stub_clear_payload_caches),
+    )
+    monkeypatch.setattr(
+        home_router.AnalyticsService,
+        "clear_spend_stats_cache",
+        staticmethod(_stub_clear_spend_cache),
     )
 
     result = await home_router.refresh_home_cache(
@@ -52,3 +61,4 @@ async def test_refresh_home_cache_clears_home_payload_cache(monkeypatch: pytest.
     assert refresh_calls["buyer_account_id"] == "buyer-resolved"
     assert refresh_calls["days"] == 14
     assert cache_clear_calls["count"] == 1
+    assert spend_cache_clear_calls["count"] == 1
