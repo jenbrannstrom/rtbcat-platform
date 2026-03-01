@@ -26,6 +26,7 @@ class _StubHomeFunnelRepo:
                 "impressions": 100,
                 "total_bids": 250,
                 "auctions_won": 90,
+                "total_publishers": 12,
             }
         ]
 
@@ -37,6 +38,7 @@ class _StubHomeFunnelRepo:
                 "impressions": 150,
                 "total_bids": 450,
                 "auctions_won": 130,
+                "total_countries": 5,
             }
         ]
 
