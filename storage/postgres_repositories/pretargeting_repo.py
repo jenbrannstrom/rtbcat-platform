@@ -20,33 +20,31 @@ class PretargetingRepository:
             return await pg_query(
                 """
                 SELECT * FROM (
-                    SELECT
-                        pc.*,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id)
-                            ORDER BY pc.synced_at DESC NULLS LAST, pc.id DESC
-                        ) AS rn
+                    SELECT DISTINCT ON (COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id))
+                        pc.*
                     FROM pretargeting_configs pc
                     WHERE pc.bidder_id = %s
+                    ORDER BY
+                        COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id),
+                        pc.synced_at DESC NULLS LAST,
+                        pc.id DESC
                 ) deduped
-                WHERE rn = 1
-                ORDER BY billing_id
+                ORDER BY billing_id NULLS LAST, config_id
                 """,
                 (bidder_id,),
             )
         return await pg_query(
             """
             SELECT * FROM (
-                SELECT
-                    pc.*,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id)
-                        ORDER BY pc.synced_at DESC NULLS LAST, pc.id DESC
-                    ) AS rn
+                SELECT DISTINCT ON (COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id))
+                    pc.*
                 FROM pretargeting_configs pc
+                ORDER BY
+                    COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id),
+                    pc.synced_at DESC NULLS LAST,
+                    pc.id DESC
             ) deduped
-            WHERE rn = 1
-            ORDER BY billing_id
+            ORDER BY billing_id NULLS LAST, config_id
             """
         )
 
@@ -131,7 +129,16 @@ class PretargetingRepository:
             conditions.append("ph.config_id = %s")
             params.append(config_id)
         if billing_id:
-            conditions.append("pc.billing_id = %s")
+            conditions.append(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM pretargeting_configs pc
+                    WHERE pc.config_id = ph.config_id
+                      AND pc.billing_id = %s
+                )
+                """
+            )
             params.append(billing_id)
 
         params.append(limit)
@@ -140,9 +147,8 @@ class PretargetingRepository:
         rows = await pg_query(
             f"""
             SELECT ph.* FROM pretargeting_history ph
-            LEFT JOIN pretargeting_configs pc ON ph.config_id = pc.config_id
             WHERE {where_clause}
-            ORDER BY ph.changed_at DESC LIMIT %s
+            ORDER BY ph.changed_at DESC, ph.id DESC LIMIT %s
             """,
             tuple(params),
         )
