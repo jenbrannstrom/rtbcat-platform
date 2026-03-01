@@ -319,7 +319,7 @@ For at least one canary buyer:
 1. Error rates remain within normal range during canary window.
 2. Conversion webhook reject spike alerts are clear/understood.
 3. No sustained 5xx from optimizer/conversion routes.
-4. QPS page-load summary endpoint (`/system/ui-metrics/page-load/summary`) reports expected p50/p95 trends for canary buyers, and API latency rollups are available for startup endpoints when strict rollup gating is enabled.
+4. QPS page-load summary endpoint (`/system/ui-metrics/page-load/summary`) reports expected p50/p95 trends for canary buyers, includes non-empty trend buckets when samples exist, and exposes API latency rollups for startup endpoints when strict rollup gating is enabled.
 5. Audit trail entries appear for optimizer setup and proposal actions.
 
 ## 7. Go/No-Go Decision
