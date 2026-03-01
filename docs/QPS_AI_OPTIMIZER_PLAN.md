@@ -767,6 +767,7 @@ ALSO PROVIDE:
   - added buffered-telemetry flush on buyer/day context switch and unmount so in-flight API latency samples are not dropped between load cycles.
   - introduced optimistic seat readiness (fire buyer-scoped queries while seat list is still loading) with 403-aware retry suppression, reducing startup wait for users with valid cached buyer context while avoiding stale-seat retry storms.
   - removed `/analytics/home/endpoint-efficiency` from startup critical path by deferring it until pretargeting table hydration.
+  - removed `/settings/endpoints` from startup critical path by deferring Account Endpoints header fetch until pretargeting table data settles (hydrated or empty-state), while keeping a loading placeholder to avoid premature "no endpoints" messaging.
   - preserved manual operator refresh parity by wiring the top-level QPS refresh action to also refetch endpoint-efficiency after its deferral.
   - added optional canary SLO verification for recorded UI telemetry (`make v1-canary-qps-page-slo`) with p95 first-row and hydrated latency thresholds.
   - enhanced QPS page SLO canary with optional strict API-rollup gating (`CATSCAN_CANARY_QPS_PAGE_REQUIRE_API_ROLLUP=1`) to enforce per-endpoint p95 budgets from `/system/ui-metrics/page-load/summary`.

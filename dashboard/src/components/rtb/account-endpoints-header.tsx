@@ -85,6 +85,7 @@ export function AccountEndpointsHeader({
     queryFn: fetchMeasuredEndpoints,
     enabled: !!selectedBuyerId && enabled,
   });
+  const waitingForHydration = !!selectedBuyerId && !enabled;
 
   const hasPendingEdits = Object.keys(pendingQpsEdits).length > 0;
   const pendingCount = Object.keys(pendingQpsEdits).length;
@@ -243,7 +244,7 @@ export function AccountEndpointsHeader({
     );
   }
 
-  if (isLoading) {
+  if (isLoading || waitingForHydration) {
     return (
       <div className="bg-white rounded-lg border p-3">
         <div className="animate-pulse space-y-2">
