@@ -336,6 +336,14 @@ class UiPageLoadMetricSummaryResponse(BaseModel):
     p95_table_hydrated_ms: Optional[float] = None
     last_sampled_at: Optional[str] = None
     latest_samples: list[UiPageLoadMetricSample] = Field(default_factory=list)
+    api_latency_rollup: list["UiPageLoadApiLatencyRollup"] = Field(default_factory=list)
+
+
+class UiPageLoadApiLatencyRollup(BaseModel):
+    api_path: str
+    sample_count: int
+    p50_latency_ms: Optional[float] = None
+    p95_latency_ms: Optional[float] = None
 
 
 # =============================================================================
@@ -561,6 +569,7 @@ async def get_ui_page_load_metric_summary(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     since_hours: int = Query(24, ge=1, le=168),
     latest_limit: int = Query(20, ge=1, le=100),
+    api_rollup_limit: int = Query(10, ge=1, le=50),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
 ):
@@ -613,6 +622,24 @@ async def get_ui_page_load_metric_summary(
         tuple(params + [latest_limit]),
     )
 
+    api_rollup_rows = await pg_query(
+        f"""
+        SELECT
+            kv.key AS api_path,
+            COUNT(*)::bigint AS sample_count,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY (kv.value)::double precision) AS p50_latency_ms,
+            percentile_cont(0.95) WITHIN GROUP (ORDER BY (kv.value)::double precision) AS p95_latency_ms
+        FROM ui_page_load_metrics m
+        CROSS JOIN LATERAL jsonb_each_text(COALESCE(m.api_latency_ms, '{{}}'::jsonb)) AS kv(key, value)
+        WHERE {where_clause}
+          AND kv.value ~ '^[0-9]+(\\.[0-9]+)?$'
+        GROUP BY kv.key
+        ORDER BY p95_latency_ms DESC NULLS LAST, sample_count DESC, kv.key ASC
+        LIMIT %s
+        """,
+        tuple(params + [api_rollup_limit]),
+    )
+
     samples = [
         UiPageLoadMetricSample(
             sampled_at=str(row["sampled_at"]),
@@ -623,6 +650,16 @@ async def get_ui_page_load_metric_summary(
             api_latency_ms=row.get("api_latency_ms") or {},
         )
         for row in latest_rows
+    ]
+    api_rollup = [
+        UiPageLoadApiLatencyRollup(
+            api_path=str(row.get("api_path") or ""),
+            sample_count=int(row.get("sample_count") or 0),
+            p50_latency_ms=row.get("p50_latency_ms"),
+            p95_latency_ms=row.get("p95_latency_ms"),
+        )
+        for row in api_rollup_rows
+        if row.get("api_path")
     ]
 
     return UiPageLoadMetricSummaryResponse(
@@ -636,6 +673,7 @@ async def get_ui_page_load_metric_summary(
         p95_table_hydrated_ms=summary_row.get("p95_table_hydrated_ms"),
         last_sampled_at=str(summary_row["last_sampled_at"]) if summary_row.get("last_sampled_at") else None,
         latest_samples=samples,
+        api_latency_rollup=api_rollup,
     )
 
 

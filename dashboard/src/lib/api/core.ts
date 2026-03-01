@@ -153,6 +153,13 @@ export interface UiPageLoadMetricSample {
   api_latency_ms: Record<string, number>;
 }
 
+export interface UiPageLoadApiLatencyRollup {
+  api_path: string;
+  sample_count: number;
+  p50_latency_ms: number | null;
+  p95_latency_ms: number | null;
+}
+
 export interface UiPageLoadMetricSummaryResponse {
   page: "qps_home";
   buyer_id: string | null;
@@ -164,6 +171,7 @@ export interface UiPageLoadMetricSummaryResponse {
   p95_table_hydrated_ms: number | null;
   last_sampled_at: string | null;
   latest_samples: UiPageLoadMetricSample[];
+  api_latency_rollup: UiPageLoadApiLatencyRollup[];
 }
 
 export interface UiPageLoadMetricSummaryQuery {

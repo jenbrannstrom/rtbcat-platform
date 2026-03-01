@@ -109,16 +109,26 @@ def test_ui_page_load_metric_summary_returns_percentiles(monkeypatch: pytest.Mon
         }
 
     async def _stub_query(sql: str, params: tuple = ()):
-        assert "ORDER BY sampled_at DESC" in sql
-        assert params == ("qps_home", 24, "1111111111", 5)
+        if "ORDER BY sampled_at DESC" in sql:
+            assert params == ("qps_home", 24, "1111111111", 5)
+            return [
+                {
+                    "sampled_at": "2026-03-01T00:00:00+00:00",
+                    "buyer_id": "1111111111",
+                    "selected_days": 14,
+                    "time_to_first_table_row_ms": 2200.0,
+                    "time_to_table_hydrated_ms": 4300.0,
+                    "api_latency_ms": {"/settings/pretargeting": 1800.0},
+                }
+            ]
+        assert "jsonb_each_text" in sql
+        assert params == ("qps_home", 24, "1111111111", 10)
         return [
             {
-                "sampled_at": "2026-03-01T00:00:00+00:00",
-                "buyer_id": "1111111111",
-                "selected_days": 14,
-                "time_to_first_table_row_ms": 2200.0,
-                "time_to_table_hydrated_ms": 4300.0,
-                "api_latency_ms": {"/settings/pretargeting": 1800.0},
+                "api_path": "/settings/pretargeting",
+                "sample_count": 4,
+                "p50_latency_ms": 1200.0,
+                "p95_latency_ms": 1800.0,
             }
         ]
 
@@ -143,3 +153,5 @@ def test_ui_page_load_metric_summary_returns_percentiles(monkeypatch: pytest.Mon
     assert payload["p95_first_table_row_ms"] == 5900.0
     assert payload["p95_table_hydrated_ms"] == 7700.0
     assert payload["latest_samples"][0]["api_latency_ms"]["/settings/pretargeting"] == 1800.0
+    assert payload["api_latency_rollup"][0]["api_path"] == "/settings/pretargeting"
+    assert payload["api_latency_rollup"][0]["p95_latency_ms"] == 1800.0

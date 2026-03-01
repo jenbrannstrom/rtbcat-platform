@@ -814,12 +814,7 @@ export default function SystemStatusPage() {
     qpsPageLoadSummary &&
     qpsPageLoadSummary.sample_count > 0 &&
     !qpsPageLoadSummarySloPass;
-  const latestQpsApiLatencyRows = qpsPageLoadSummary?.latest_samples?.[0]?.api_latency_ms
-    ? Object.entries(qpsPageLoadSummary.latest_samples[0].api_latency_ms)
-      .filter(([, value]) => Number.isFinite(value))
-      .sort((a, b) => Number(b[1]) - Number(a[1]))
-      .slice(0, 8)
-    : [];
+  const qpsApiLatencyRollupRows = qpsPageLoadSummary?.api_latency_rollup || [];
   const formatLatencyMs = (value: number | null | undefined) => {
     if (value === null || value === undefined || !Number.isFinite(value)) {
       return "-";
@@ -1897,25 +1892,33 @@ export default function SystemStatusPage() {
                       </div>
                     )}
 
-                    {latestQpsApiLatencyRows.length ? (
+                    {qpsApiLatencyRollupRows.length ? (
                       <div className="space-y-2 rounded border border-gray-200 p-2">
                         <div className="text-[11px] font-semibold text-gray-600">
-                          Latest sample API latency map
+                          API latency rollup (last 24h)
                         </div>
                         <div className="max-h-32 overflow-auto">
                           <table className="min-w-full text-xs">
                             <thead className="bg-gray-50 text-gray-600">
                               <tr>
                                 <th className="text-left px-2 py-1">API</th>
-                                <th className="text-left px-2 py-1">Latency</th>
+                                <th className="text-left px-2 py-1">Samples</th>
+                                <th className="text-left px-2 py-1">p50</th>
+                                <th className="text-left px-2 py-1">p95</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {latestQpsApiLatencyRows.map(([apiPath, latency]) => (
-                                <tr key={apiPath} className="border-t border-gray-100">
-                                  <td className="px-2 py-1 font-mono text-gray-700">{apiPath}</td>
+                              {qpsApiLatencyRollupRows.map((row) => (
+                                <tr key={row.api_path} className="border-t border-gray-100">
+                                  <td className="px-2 py-1 font-mono text-gray-700">{row.api_path}</td>
                                   <td className="px-2 py-1 text-gray-700">
-                                    {formatLatencyMs(Number(latency))}
+                                    {row.sample_count.toLocaleString()}
+                                  </td>
+                                  <td className="px-2 py-1 text-gray-700">
+                                    {formatLatencyMs(row.p50_latency_ms)}
+                                  </td>
+                                  <td className="px-2 py-1 text-gray-700">
+                                    {formatLatencyMs(row.p95_latency_ms)}
                                   </td>
                                 </tr>
                               ))}
