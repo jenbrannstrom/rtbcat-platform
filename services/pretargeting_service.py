@@ -17,6 +17,10 @@ class PretargetingService:
     _HISTORY_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
     _CONFIG_CACHE_TTL_SECONDS = 15.0
     _CONFIG_CACHE: dict[str, tuple[float, dict[str, Any] | None]] = {}
+    _PUBLISHERS_CACHE_TTL_SECONDS = 15.0
+    _PUBLISHERS_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+    _PENDING_PUBLISHER_CHANGES_CACHE_TTL_SECONDS = 15.0
+    _PENDING_PUBLISHER_CHANGES_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
     def __init__(self, repo: PretargetingRepository | None = None) -> None:
         self._repo = repo or PretargetingRepository()
@@ -42,6 +46,18 @@ class PretargetingService:
             f"config:{config_id or '__all__'}:"
             f"billing:{billing_id or '__all__'}:"
             f"days:{days}:limit:{limit}"
+        )
+
+    @staticmethod
+    def _publishers_cache_key(
+        billing_id: str,
+        mode: str | None,
+        status: str | None,
+    ) -> str:
+        return (
+            f"billing:{billing_id}:"
+            f"mode:{mode or '__all__'}:"
+            f"status:{status or '__all__'}"
         )
 
     async def list_configs(
@@ -113,6 +129,11 @@ class PretargetingService:
         cls._CONFIG_CACHE.clear()
 
     @classmethod
+    def clear_publishers_cache(cls) -> None:
+        cls._PUBLISHERS_CACHE.clear()
+        cls._PENDING_PUBLISHER_CHANGES_CACHE.clear()
+
+    @classmethod
     def _invalidate_list_configs_cache(cls, bidder_id: str | None = None) -> None:
         cls._LIST_CONFIGS_CACHE.clear()
 
@@ -126,6 +147,20 @@ class PretargetingService:
             cls._CONFIG_CACHE.clear()
             return
         cls._CONFIG_CACHE.pop(billing_id, None)
+
+    @classmethod
+    def _invalidate_publishers_cache(cls, billing_id: str | None = None) -> None:
+        if billing_id is None:
+            cls._PUBLISHERS_CACHE.clear()
+            cls._PENDING_PUBLISHER_CHANGES_CACHE.clear()
+            return
+
+        cls._PUBLISHERS_CACHE = {
+            key: value
+            for key, value in cls._PUBLISHERS_CACHE.items()
+            if not key.startswith(f"billing:{billing_id}:")
+        }
+        cls._PENDING_PUBLISHER_CHANGES_CACHE.pop(billing_id, None)
 
     async def get_config(self, billing_id: str) -> dict[str, Any] | None:
         if not billing_id:
@@ -236,7 +271,22 @@ class PretargetingService:
     ) -> list[dict[str, Any]]:
         if not billing_id:
             raise ValueError("billing_id is required")
-        return await self._repo.list_publishers(billing_id, mode=mode, status=status)
+        cache_key = self._publishers_cache_key(
+            billing_id=billing_id,
+            mode=mode,
+            status=status,
+        )
+        now = time.monotonic()
+        cached_entry = self._PUBLISHERS_CACHE.get(cache_key)
+        if cached_entry and cached_entry[0] > now:
+            return [dict(row) for row in cached_entry[1]]
+
+        rows = await self._repo.list_publishers(billing_id, mode=mode, status=status)
+        self._PUBLISHERS_CACHE[cache_key] = (
+            now + self._PUBLISHERS_CACHE_TTL_SECONDS,
+            [dict(row) for row in rows],
+        )
+        return rows
 
     async def add_publisher(
         self,
@@ -248,35 +298,43 @@ class PretargetingService:
     ) -> int:
         if not billing_id or not publisher_id or not mode:
             raise ValueError("billing_id, publisher_id, and mode are required")
-        return await self._repo.add_publisher(
+        updated = await self._repo.add_publisher(
             billing_id=billing_id,
             publisher_id=publisher_id,
             mode=mode,
             status=status,
             source=source,
         )
+        self._invalidate_publishers_cache(billing_id)
+        return updated
 
     async def update_publisher_status(
         self, billing_id: str, publisher_id: str, mode: str, status: str
     ) -> int:
         if not billing_id or not publisher_id or not mode:
             raise ValueError("billing_id, publisher_id, and mode are required")
-        return await self._repo.update_publisher_status(
+        updated = await self._repo.update_publisher_status(
             billing_id=billing_id,
             publisher_id=publisher_id,
             mode=mode,
             status=status,
         )
+        self._invalidate_publishers_cache(billing_id)
+        return updated
 
     async def delete_publisher(self, billing_id: str, publisher_id: str, mode: str) -> int:
         if not billing_id or not publisher_id or not mode:
             raise ValueError("billing_id, publisher_id, and mode are required")
-        return await self._repo.delete_publisher(billing_id, publisher_id, mode)
+        deleted = await self._repo.delete_publisher(billing_id, publisher_id, mode)
+        self._invalidate_publishers_cache(billing_id)
+        return deleted
 
     async def clear_sync_publishers(self, billing_id: str) -> int:
         if not billing_id:
             raise ValueError("billing_id is required")
-        return await self._repo.clear_sync_publishers(billing_id)
+        cleared = await self._repo.clear_sync_publishers(billing_id)
+        self._invalidate_publishers_cache(billing_id)
+        return cleared
 
     async def check_publisher_in_opposite_mode(
         self, billing_id: str, publisher_id: str, mode: str
@@ -290,7 +348,17 @@ class PretargetingService:
     async def list_pending_publisher_changes(self, billing_id: str) -> list[dict[str, Any]]:
         if not billing_id:
             raise ValueError("billing_id is required")
-        return await self._repo.list_pending_publisher_changes(billing_id)
+        now = time.monotonic()
+        cached_entry = self._PENDING_PUBLISHER_CHANGES_CACHE.get(billing_id)
+        if cached_entry and cached_entry[0] > now:
+            return [dict(row) for row in cached_entry[1]]
+
+        rows = await self._repo.list_pending_publisher_changes(billing_id)
+        self._PENDING_PUBLISHER_CHANGES_CACHE[billing_id] = (
+            now + self._PENDING_PUBLISHER_CHANGES_CACHE_TTL_SECONDS,
+            [dict(row) for row in rows],
+        )
+        return rows
 
     async def get_publisher_rows(self, billing_id: str, publisher_id: str) -> list[dict[str, Any]]:
         if not billing_id or not publisher_id:
