@@ -35,6 +35,8 @@
 7. Optimizer API syntax checks:
    - `python3 -m py_compile api/routers/optimizer_models.py api/routers/optimizer_scoring.py api/routers/optimizer_proposals.py api/routers/optimizer_workflows.py api/routers/optimizer_economics.py services/optimizer_models_service.py services/optimizer_scoring_service.py services/optimizer_proposals_service.py services/optimizer_economics_service.py`
    - result: passed
+8. CI automation:
+   - `.github/workflows/v1-closeout-quick.yml` runs `CATSCAN_CLOSEOUT_PROFILE=quick make v1-closeout-local` and uploads `/tmp/v1_closeout_last_run.md` as an artifact on matching push/PR changes.
 
 ## Closeout Matrix
 
