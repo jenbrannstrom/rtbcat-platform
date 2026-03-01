@@ -832,6 +832,13 @@ export default function SystemStatusPage() {
     }
     return `${Math.round(value)} ms`;
   };
+  const latencyToneClass = (value: number | null | undefined, targetMs: number) => {
+    if (value === null || value === undefined || !Number.isFinite(value)) {
+      return "text-gray-700";
+    }
+    if (value > targetMs) return "text-red-700";
+    return "text-green-700";
+  };
 
   if (healthLoading) {
     return <LoadingPage />;
@@ -1973,10 +1980,26 @@ export default function SystemStatusPage() {
                                   <td className="px-2 py-1 text-gray-700">
                                     {bucket.sample_count.toLocaleString()}
                                   </td>
-                                  <td className="px-2 py-1 text-gray-700">
+                                  <td
+                                    className={cn(
+                                      "px-2 py-1",
+                                      latencyToneClass(
+                                        bucket.p95_first_table_row_ms,
+                                        QPS_PAGE_P95_FIRST_ROW_SLO_MS,
+                                      ),
+                                    )}
+                                  >
                                     {formatLatencyMs(bucket.p95_first_table_row_ms)}
                                   </td>
-                                  <td className="px-2 py-1 text-gray-700">
+                                  <td
+                                    className={cn(
+                                      "px-2 py-1",
+                                      latencyToneClass(
+                                        bucket.p95_table_hydrated_ms,
+                                        QPS_PAGE_P95_HYDRATED_SLO_MS,
+                                      ),
+                                    )}
+                                  >
                                     {formatLatencyMs(bucket.p95_table_hydrated_ms)}
                                   </td>
                                 </tr>

@@ -756,6 +756,7 @@ ALSO PROVIDE:
   - added selectable SLO lookback windows (24h/72h/7d) in System -> QPS Page-Load SLO panel for broader trend inspection.
   - aligned frontend summary client with backend rollup controls by wiring `api_rollup_limit` in `/system/ui-metrics/page-load/summary` requests.
   - added bucketed latency trends (hourly/multi-hour p95 series) to summary API + System panel for at-a-glance regression tracking over the selected window.
+  - added SLO-threshold color highlighting for bucketed p95 trend values in System UI to speed up breach detection.
   - extended QPS telemetry capture into post-expansion dependent calls by measuring `/settings/pretargeting/:billing_id/detail`, `/settings/pretargeting/history`, and `/settings/pretargeting/snapshots`, and persistently posting those API latency samples after initial page hydration.
   - removed `/analytics/rtb-funnel` from startup critical path by deferring it until after pretargeting table hydration, preserving buyer-filter messaging without blocking first table readiness.
   - upgraded pretargeting list rendering to chunked infinite loading (first 60 rows, then +120 rows as scroll approaches sentinel) to keep DOM/render cost bounded on very large buyer seats.
