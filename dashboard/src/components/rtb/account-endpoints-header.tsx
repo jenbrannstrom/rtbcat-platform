@@ -4,9 +4,56 @@ import { useQuery } from '@tanstack/react-query';
 import { getRTBEndpoints, updateEndpointQps } from '@/lib/api';
 import { Server, Globe, Info, Loader2, RefreshCw, X, Pencil, Undo2 } from 'lucide-react';
 import { useAccount } from '@/contexts/account-context';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useTranslation } from '@/contexts/i18n-context';
 import type { Translations } from '@/lib/i18n/types';
+
+const ENDPOINTS_CACHE_PREFIX = 'catscan:qps:rtb-endpoints:v1';
+const ENDPOINTS_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
+
+interface EndpointsCachePayload {
+  cached_at_iso: string;
+  data: Awaited<ReturnType<typeof getRTBEndpoints>>;
+}
+
+function getEndpointsCacheKey(buyerId: string): string {
+  return `${ENDPOINTS_CACHE_PREFIX}:${buyerId}`;
+}
+
+function readEndpointsCache(buyerId: string | null): EndpointsCachePayload['data'] | undefined {
+  if (!buyerId || typeof window === 'undefined') return undefined;
+  try {
+    const raw = window.localStorage.getItem(getEndpointsCacheKey(buyerId));
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as EndpointsCachePayload;
+    const cachedAtMs = Date.parse(parsed.cached_at_iso);
+    if (!Number.isFinite(cachedAtMs)) return undefined;
+    if ((Date.now() - cachedAtMs) > ENDPOINTS_CACHE_MAX_AGE_MS) {
+      window.localStorage.removeItem(getEndpointsCacheKey(buyerId));
+      return undefined;
+    }
+    if (!parsed.data || typeof parsed.data !== 'object') return undefined;
+    return parsed.data;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeEndpointsCache(
+  buyerId: string | null,
+  data: EndpointsCachePayload['data'] | undefined,
+): void {
+  if (!buyerId || typeof window === 'undefined' || !data) return;
+  try {
+    const payload: EndpointsCachePayload = {
+      cached_at_iso: new Date().toISOString(),
+      data,
+    };
+    window.localStorage.setItem(getEndpointsCacheKey(buyerId), JSON.stringify(payload));
+  } catch {
+    // Ignore localStorage failures (quota/private browsing).
+  }
+}
 
 function formatLocation(location: string | null, t: Translations): string {
   if (!location) return t.pretargeting.endpointsHeaderLocationUnknown;
@@ -80,12 +127,20 @@ export function AccountEndpointsHeader({
     }
   }, [onApiLatencyMeasured, selectedBuyerId]);
 
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, error, refetch, isFetchedAfterMount } = useQuery({
     queryKey: ['rtb-endpoints', selectedBuyerId],
     queryFn: fetchMeasuredEndpoints,
     enabled: !!selectedBuyerId && enabled,
+    initialData: () => readEndpointsCache(selectedBuyerId),
+    initialDataUpdatedAt: () => 0,
+    refetchOnMount: true,
   });
   const waitingForHydration = !!selectedBuyerId && !enabled;
+
+  useEffect(() => {
+    if (!isFetchedAfterMount) return;
+    writeEndpointsCache(selectedBuyerId, data);
+  }, [data, isFetchedAfterMount, selectedBuyerId]);
 
   const hasPendingEdits = Object.keys(pendingQpsEdits).length > 0;
   const pendingCount = Object.keys(pendingQpsEdits).length;
