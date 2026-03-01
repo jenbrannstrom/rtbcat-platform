@@ -31,6 +31,7 @@ import {
   getConversionReadiness,
   getConversionIngestionStats,
   getConversionWebhookSecurityStatus,
+  getUiPageLoadMetricSummary,
   getSnapshots,
   rollbackSnapshot,
   type PretargetingSnapshot,
@@ -79,6 +80,9 @@ const WORKFLOW_PRESETS: Record<
     maxDelta: "0.50",
   },
 };
+
+const QPS_PAGE_P95_FIRST_ROW_SLO_MS = 6000;
+const QPS_PAGE_P95_HYDRATED_SLO_MS = 8000;
 
 export default function SystemStatusPage() {
   const queryClient = useQueryClient();
@@ -309,6 +313,23 @@ export default function SystemStatusPage() {
   } = useQuery({
     queryKey: ["conversionWebhookSecurityStatus"],
     queryFn: getConversionWebhookSecurityStatus,
+    retry: false,
+  });
+
+  const {
+    data: qpsPageLoadSummary,
+    isLoading: qpsPageLoadSummaryLoading,
+    error: qpsPageLoadSummaryError,
+  } = useQuery({
+    queryKey: ["qpsPageLoadSummary", selectedBuyerId],
+    queryFn: () =>
+      getUiPageLoadMetricSummary({
+        page: "qps_home",
+        buyer_id: selectedBuyerId || undefined,
+        since_hours: 24,
+        latest_limit: 5,
+      }),
+    enabled: !!selectedBuyerId,
     retry: false,
   });
 
@@ -782,6 +803,23 @@ export default function SystemStatusPage() {
   const securityEnabledSources = (conversionWebhookSecurityStatus?.sources || []).filter(
     (row) => row.secret_enabled || row.hmac_enabled,
   ).length;
+  const qpsPageLoadSummarySloPass =
+    qpsPageLoadSummary &&
+    qpsPageLoadSummary.sample_count > 0 &&
+    qpsPageLoadSummary.p95_first_table_row_ms !== null &&
+    qpsPageLoadSummary.p95_table_hydrated_ms !== null &&
+    qpsPageLoadSummary.p95_first_table_row_ms <= QPS_PAGE_P95_FIRST_ROW_SLO_MS &&
+    qpsPageLoadSummary.p95_table_hydrated_ms <= QPS_PAGE_P95_HYDRATED_SLO_MS;
+  const qpsPageLoadSummarySloDegraded =
+    qpsPageLoadSummary &&
+    qpsPageLoadSummary.sample_count > 0 &&
+    !qpsPageLoadSummarySloPass;
+  const formatLatencyMs = (value: number | null | undefined) => {
+    if (value === null || value === undefined || !Number.isFinite(value)) {
+      return "-";
+    }
+    return `${Math.round(value)} ms`;
+  };
 
   if (healthLoading) {
     return <LoadingPage />;
@@ -1745,6 +1783,119 @@ export default function SystemStatusPage() {
                     {optimizerNotice}
                   </div>
                 ) : null}
+              </div>
+
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50">
+                  QPS Page-Load SLO (last 24h)
+                </div>
+                {!selectedBuyerId ? (
+                  <div className="px-3 py-4 text-xs text-amber-700">
+                    Select a buyer to view buyer-scoped QPS page-load SLO telemetry.
+                  </div>
+                ) : qpsPageLoadSummaryLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                  </div>
+                ) : qpsPageLoadSummaryError ? (
+                  <div className="px-3 py-4 text-xs text-red-600">
+                    {qpsPageLoadSummaryError instanceof Error
+                      ? qpsPageLoadSummaryError.message
+                      : "Failed to load QPS page-load telemetry summary."}
+                  </div>
+                ) : qpsPageLoadSummary ? (
+                  <div className="space-y-3 p-3">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                      <div className="rounded-lg border border-gray-200 p-2">
+                        <div className="text-[11px] text-gray-500">Samples</div>
+                        <div className="mt-1 text-sm font-semibold text-gray-900">
+                          {(qpsPageLoadSummary.sample_count || 0).toLocaleString()}
+                        </div>
+                        <div className="text-[11px] text-gray-500">
+                          latest {qpsPageLoadSummary.last_sampled_at || "-"}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-gray-200 p-2">
+                        <div className="text-[11px] text-gray-500">First Row</div>
+                        <div className="mt-1 text-sm font-semibold text-gray-900">
+                          p50 {formatLatencyMs(qpsPageLoadSummary.p50_first_table_row_ms)}
+                        </div>
+                        <div className="text-[11px] text-gray-500">
+                          p95 {formatLatencyMs(qpsPageLoadSummary.p95_first_table_row_ms)} target{" "}
+                          {QPS_PAGE_P95_FIRST_ROW_SLO_MS} ms
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-gray-200 p-2">
+                        <div className="text-[11px] text-gray-500">Table Hydrated</div>
+                        <div className="mt-1 text-sm font-semibold text-gray-900">
+                          p50 {formatLatencyMs(qpsPageLoadSummary.p50_table_hydrated_ms)}
+                        </div>
+                        <div className="text-[11px] text-gray-500">
+                          p95 {formatLatencyMs(qpsPageLoadSummary.p95_table_hydrated_ms)} target{" "}
+                          {QPS_PAGE_P95_HYDRATED_SLO_MS} ms
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-gray-200 p-2">
+                        <div className="text-[11px] text-gray-500">SLO Status</div>
+                        <div className="mt-1">
+                          <span
+                            className={cn(
+                              "rounded px-2 py-0.5 text-xs font-medium",
+                              qpsPageLoadSummarySloPass
+                                ? "bg-green-50 text-green-700"
+                                : qpsPageLoadSummarySloDegraded
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "bg-slate-100 text-slate-700",
+                            )}
+                          >
+                            {qpsPageLoadSummarySloPass
+                              ? "within target"
+                              : qpsPageLoadSummarySloDegraded
+                                ? "above target"
+                                : "insufficient data"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {qpsPageLoadSummary.latest_samples.length ? (
+                      <div className="max-h-36 overflow-auto">
+                        <table className="min-w-full text-xs">
+                          <thead className="bg-gray-50 text-gray-600">
+                            <tr>
+                              <th className="text-left px-2 py-1">Sampled</th>
+                              <th className="text-left px-2 py-1">Days</th>
+                              <th className="text-left px-2 py-1">First Row</th>
+                              <th className="text-left px-2 py-1">Hydrated</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {qpsPageLoadSummary.latest_samples.slice(0, 5).map((row) => (
+                              <tr key={`${row.sampled_at}-${row.selected_days || 0}`} className="border-t border-gray-100">
+                                <td className="px-2 py-1 text-gray-700">{row.sampled_at}</td>
+                                <td className="px-2 py-1 text-gray-700">{row.selected_days ?? "-"}</td>
+                                <td className="px-2 py-1 text-gray-700">
+                                  {formatLatencyMs(row.time_to_first_table_row_ms)}
+                                </td>
+                                <td className="px-2 py-1 text-gray-700">
+                                  {formatLatencyMs(row.time_to_table_hydrated_ms)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-gray-500">
+                        No recorded QPS page-load samples in the selected window.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="px-3 py-4 text-xs text-gray-500">
+                    QPS page-load telemetry summary unavailable.
+                  </div>
+                )}
               </div>
 
               <div className="rounded-lg border border-gray-200 overflow-hidden">
