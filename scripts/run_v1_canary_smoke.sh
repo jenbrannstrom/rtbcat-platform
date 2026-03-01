@@ -7,6 +7,9 @@ set -euo pipefail
 # Optional env:
 #   CATSCAN_BUYER_ID, CATSCAN_MODEL_ID, CATSCAN_PROPOSAL_ID, CATSCAN_BEARER_TOKEN, CATSCAN_SESSION_COOKIE,
 #   CATSCAN_CANARY_RUN_WORKFLOW=1, CATSCAN_CANARY_RUN_LIFECYCLE=1, CATSCAN_ALLOW_NO_ACTIVE_MODEL=1,
+#   CATSCAN_CANARY_RUN_PIXEL=1, CATSCAN_CANARY_PIXEL_SOURCE_TYPE=pixel,
+#   CATSCAN_CANARY_PIXEL_EVENT_NAME=purchase, CATSCAN_CANARY_PIXEL_SECRET=<secret>,
+#   CATSCAN_CANARY_PIXEL_EXPECTED_STATUS=accepted|rejected,
 #   CATSCAN_ROLLBACK_BILLING_ID, CATSCAN_ROLLBACK_SNAPSHOT_ID,
 #   CATSCAN_CANARY_REQUIRE_HEALTHY_READINESS=1, CATSCAN_MAX_DIMENSION_MISSING_PCT=99.9,
 #   CATSCAN_CANARY_PROFILE=safe|balanced|aggressive,
@@ -89,6 +92,26 @@ fi
 
 if [[ "${CATSCAN_CANARY_RUN_LIFECYCLE:-0}" == "1" ]]; then
   args+=("--run-lifecycle")
+fi
+
+if [[ "${CATSCAN_CANARY_RUN_PIXEL:-0}" == "1" ]]; then
+  args+=("--run-pixel")
+fi
+
+if [[ -n "${CATSCAN_CANARY_PIXEL_SOURCE_TYPE:-}" ]]; then
+  args+=("--pixel-source-type" "$CATSCAN_CANARY_PIXEL_SOURCE_TYPE")
+fi
+
+if [[ -n "${CATSCAN_CANARY_PIXEL_EVENT_NAME:-}" ]]; then
+  args+=("--pixel-event-name" "$CATSCAN_CANARY_PIXEL_EVENT_NAME")
+fi
+
+if [[ -n "${CATSCAN_CANARY_PIXEL_SECRET:-}" ]]; then
+  args+=("--pixel-secret" "$CATSCAN_CANARY_PIXEL_SECRET")
+fi
+
+if [[ -n "${CATSCAN_CANARY_PIXEL_EXPECTED_STATUS:-}" ]]; then
+  args+=("--pixel-expected-status" "$CATSCAN_CANARY_PIXEL_EXPECTED_STATUS")
 fi
 
 if [[ -n "${WORKFLOW_PROFILE:-}" ]]; then

@@ -1,6 +1,6 @@
 # v1 Canary Go/No-Go Checklist
 
-**Last updated:** 2026-02-28  
+**Last updated:** 2026-03-01  
 **Owner:** QA + SRE + Backend  
 **Applies to:** Cat-Scan v1 candidate release
 
@@ -46,6 +46,20 @@ Equivalent convenience target:
 
 ```bash
 make v1-canary-lifecycle
+```
+
+Optional conversion pixel gate:
+
+```bash
+CATSCAN_CANARY_RUN_PIXEL=1 \
+CATSCAN_CANARY_PIXEL_SECRET=<generic_webhook_secret> \
+make v1-canary-smoke
+```
+
+Equivalent convenience target:
+
+```bash
+make v1-canary-pixel
 ```
 
 Optional workflow tuning for canary:
