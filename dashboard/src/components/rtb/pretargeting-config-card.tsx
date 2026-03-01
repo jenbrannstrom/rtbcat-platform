@@ -44,13 +44,21 @@ function formatNumber(n: number): string {
 }
 
 // Geo display component that fetches names from the database
-function GeoSettingPill({ geoIds, max = 5 }: { geoIds: string[]; max?: number }) {
+function GeoSettingPill({
+  geoIds,
+  max = 5,
+  resolveNames = false,
+}: {
+  geoIds: string[];
+  max?: number;
+  resolveNames?: boolean;
+}) {
   const { t } = useTranslation();
   const { data: geoNames } = useQuery({
     queryKey: ['geo-names', geoIds.join(',')],
     queryFn: () => lookupGeoNames(geoIds),
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-    enabled: geoIds.length > 0,
+    enabled: resolveNames && geoIds.length > 0,
   });
 
   if (!geoIds?.length) return null;
@@ -60,7 +68,7 @@ function GeoSettingPill({ geoIds, max = 5 }: { geoIds: string[]; max?: number })
 
   // Format display names - use looked up name or fall back to ID
   const displayNames = displayIds.map(id => {
-    if (geoNames?.[id]) return geoNames[id];
+    if (resolveNames && geoNames?.[id]) return geoNames[id];
     // If it's already a 2 or 3 letter code, return as-is
     if (/^[A-Z]{2,3}$/i.test(id)) return id.toUpperCase();
     return id;
@@ -545,7 +553,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
           {/* Sticky action header with Pause/Activate and History */}
           <div className="sticky top-0 z-10 bg-gray-50 border-b px-4 py-2 flex items-center justify-between gap-3">
             <div className="flex flex-wrap gap-1.5">
-              <GeoSettingPill geoIds={config.included_geos} max={5} />
+              <GeoSettingPill geoIds={config.included_geos} max={5} resolveNames={expanded} />
               <SettingPill label={t.pretargeting.cardPlatformsLabel} values={config.platforms} />
               <SettingPill label={t.pretargeting.cardSizesLabel} values={config.sizes} max={4} />
             </div>
