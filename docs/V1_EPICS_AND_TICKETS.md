@@ -14,6 +14,7 @@
 - Deployed canary checks now return explicit `Blocked` exit code (`2`) on network-policy restrictions, which `v1-closeout-local` can record via `CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED=1`.
 - `QA-004` started (ops automation slice): CI workflow `.github/workflows/v1-closeout-quick.yml` now runs `CATSCAN_CLOSEOUT_PROFILE=quick make v1-closeout-local` on push/PR for API/service/test/canary changes and uploads the generated closeout report artifact.
 - closeout command ergonomics improved with `make v1-closeout-quick` and `make v1-closeout-deployed` wrappers for common operator flows.
+- closeout runner artifacts now include both human-readable markdown and machine-readable JSON outputs (`CATSCAN_CLOSEOUT_REPORT_PATH`, `CATSCAN_CLOSEOUT_REPORT_JSON_PATH`), and CI uploads both for quick-profile runs.
 
 - `E0-001` completed: `rtb_quality` import route/table path is live and covered by importer contract tests.
 - `E0-002` completed: bidstream persistence includes `platform`, `environment`, `transaction_type` with mapper support for transaction-type headers.

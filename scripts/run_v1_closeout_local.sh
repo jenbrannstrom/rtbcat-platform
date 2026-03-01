@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 REPORT_PATH="${CATSCAN_CLOSEOUT_REPORT_PATH:-/tmp/v1_closeout_last_run.md}"
+REPORT_JSON_PATH="${CATSCAN_CLOSEOUT_REPORT_JSON_PATH:-/tmp/v1_closeout_last_run.json}"
 RUN_DEPLOYED="${CATSCAN_CLOSEOUT_RUN_DEPLOYED:-0}"
 ALLOW_DEPLOYED_BLOCKED="${CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED:-1}"
 CLOSEOUT_PROFILE="${CATSCAN_CLOSEOUT_PROFILE:-full}"
@@ -49,8 +50,63 @@ write_report() {
       echo "| ${STEP_NAMES[$i]} | ${STEP_STATUSES[$i]} | ${STEP_NOTES[$i]} |"
     done
   } > "$REPORT_PATH"
+
+  python3 - "$REPORT_JSON_PATH" "$timestamp" "$branch" "$commit" "$RUN_DEPLOYED" "$ALLOW_DEPLOYED_BLOCKED" "$CLOSEOUT_PROFILE" \
+    "${STEP_NAMES[@]}" -- "${STEP_STATUSES[@]}" -- "${STEP_NOTES[@]}" <<'PY'
+import json
+import sys
+
+args = sys.argv[1:]
+out_path = args[0]
+timestamp = args[1]
+branch = args[2]
+commit = args[3]
+run_deployed = args[4]
+allow_blocked = args[5]
+profile = args[6]
+
+cursor = 7
+names = []
+while cursor < len(args) and args[cursor] != "--":
+    names.append(args[cursor])
+    cursor += 1
+cursor += 1
+
+statuses = []
+while cursor < len(args) and args[cursor] != "--":
+    statuses.append(args[cursor])
+    cursor += 1
+cursor += 1
+
+notes = args[cursor:]
+
+steps = []
+for i, name in enumerate(names):
+    step = {
+        "step": name,
+        "status": statuses[i] if i < len(statuses) else "",
+        "notes": notes[i] if i < len(notes) else "",
+    }
+    steps.append(step)
+
+payload = {
+    "timestamp_utc": timestamp,
+    "branch": branch,
+    "commit": commit,
+    "run_deployed": run_deployed == "1",
+    "allow_deployed_blocked": allow_blocked == "1",
+    "profile": profile,
+    "steps": steps,
+}
+
+with open(out_path, "w", encoding="utf-8") as f:
+    json.dump(payload, f, indent=2, sort_keys=True)
+    f.write("\n")
+PY
+
   REPORT_WRITTEN=1
   echo "==> Wrote closeout report: ${REPORT_PATH}"
+  echo "==> Wrote closeout report JSON: ${REPORT_JSON_PATH}"
 }
 
 on_exit() {
