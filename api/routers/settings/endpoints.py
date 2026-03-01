@@ -1,5 +1,6 @@
 """RTB endpoints sync and management routes."""
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Optional
@@ -269,10 +270,12 @@ async def get_rtb_endpoints(
                 account_name = accounts[0].display_name
                 bidder_id = await seats_service.get_bidder_id_for_service_account(accounts[0].id) or ""
 
-        rows = await endpoint_service.list_endpoints(bidder_id if bidder_id else None)
+        effective_bidder_id = bidder_id if bidder_id else None
+        rows, qps_current = await asyncio.gather(
+            endpoint_service.list_endpoints(effective_bidder_id),
+            endpoint_service.get_current_qps(effective_bidder_id),
+        )
         endpoints, total_qps, synced_at_value = _build_endpoint_items(rows)
-
-        qps_current = await endpoint_service.get_current_qps(bidder_id if bidder_id else None)
 
         return RTBEndpointsResponse(
             bidder_id=bidder_id or "unknown",
