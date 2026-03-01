@@ -1,6 +1,6 @@
 # QPS AI Optimizer — Reconciled Data Model & Roadmap
 
-**Version:** 0.7 | **Date:** 2026-03-01
+**Version:** 0.8 | **Date:** 2026-03-01
 
 ---
 
@@ -12,10 +12,15 @@ Cat-Scan is a workaround to Google's lack of a reporting API, using CSVs. It see
 
 The path to advertiser-first optimization:
 
-1. **Phase 0 (completed)** — Data-plumbing gaps fixed so the foundation is trustworthy.
-2. **Phase 1** — Build the conversion schema. A universal database structure that can store conversion events of all types (installs, deposits, purchases, signups) regardless of where they come from.
-3. **Phase 2** — Connect to conversion data sources. MMP integrations (AppsFlyer, Adjust, Branch) are the primary path since most app advertisers already use them. Secondary: agency pixels (Redtrack, Voluum), our own pixel, or bidder data feeds.
-4. **Phase 3** — BYOM (Bring Your Own Model). Once we have real outcome data flowing in, let customers plug in their own AI to generate recommendations from Cat-Scan's compiled data.
+1. **Phase 0 (complete)** — Data-plumbing gaps fixed so the foundation is trustworthy.
+2. **Phase 1 (implemented, operational pending)** — Universal conversion schema is live (`conversion_events`, `conversion_aggregates_daily`), with production-volume and retention/certification still pending.
+3. **Phase 2 (implemented, rollout pending)** — Conversion connectors are live (AppsFlyer/Adjust/Branch/Redtrack/Voluum/generic/CSV/pixel), with per-customer production certification still pending.
+4. **Phase 3 (implemented, operational pending)** — BYOM platform is built (registry/scoring/proposals/workflows/UI/CI), with final operational sign-off dependent on deployed-canary closure.
+5. **Phase 4 (implemented, operational pending)** — QPS performance hardening and telemetry are implemented; final closure still depends on deployed strict SLO evidence.
+
+**One remaining gap:** Bidder-feed endpoint (`POST /bidder-feed/batch` and `/stream`) for ingesting bid prices and no-bid reasons directly from bidders. Low priority — most bidders will use the existing CSV upload path. Build when a customer requests it.
+
+**Current closeout state:** Not fully closed yet. Core implementation is in place, but operational closure still requires deployed canary/SLO pass evidence and rollout certification steps (tracked in `docs/V1_PLAN_CLOSEOUT_MATRIX.md`).
 
 ### Roadmap Tracking Update (2026-03-01)
 
@@ -42,9 +47,9 @@ Current roadmap execution status (implemented in code, pending environment-by-en
    - provider/shared webhook secret and HMAC envs can carry multiple active secrets (comma/semicolon/newline-separated) for zero-downtime rotations.
    - `/conversions/security/status` now exposes non-secret security posture (enabled controls + rotation counts + freshness/rate-limit config) for operator verification.
    - operator runbook includes bundled webhook security canary execution (`make v1-canary-webhook-security`) for repeatable controls validation.
-6. **Known UX/runtime gap (planned, not yet executed): QPS page/table hydration latency**:
-   - observed on reload: prolonged `Data freshness pending...` and skeleton rows before pretargeting tables render.
-   - scope is performance hardening (query/runtime + API fan-out + frontend hydration), not data-accuracy semantics.
+6. **Known UX/runtime risk (partially mitigated, still operationally monitored): QPS page/table hydration latency**:
+   - substantial performance-hardening slices are implemented (query/runtime + API fan-out + frontend hydration deferrals/caching).
+   - remaining closure requirement is sustained deployed SLO evidence for target buyers.
 7. **Closeout evidence automation is now machine-readable and reproducible**:
    - `scripts/run_v1_closeout_local.sh` emits both markdown and JSON reports.
    - `make v1-closeout-summary` renders standardized markdown from JSON for local/ops usage.
@@ -57,6 +62,9 @@ Current roadmap execution status (implemented in code, pending environment-by-en
    - `.github/workflows/v1-byom-api-regression.yml` executes this suite on optimizer API/service/test changes in a dependency-provisioned runner and now supports manual `workflow_dispatch`.
 10. **Closeout execution template now standardizes final sign-off operations**:
    - `docs/V1_CLOSEOUT_EXECUTION_CHECKLIST.md` provides exact workflow dispatch payloads (strict and blocked-mode), run-evidence capture fields, SLO evidence command template, and closeout sign-off sections.
+11. **Deployed canary auth-block handling is now explicit**:
+   - latest deployed closeout evidence runs reached canary execution but failed on expired session credentials (`401 Session expired or invalid`), not functional regressions.
+   - canary client now classifies auth/session-expired `401/403` responses as environment/auth blocked to align blocked-mode closeout behavior with operator expectations.
 
 ---
 
@@ -745,13 +753,19 @@ ALSO PROVIDE:
 - Conversion readiness endpoint + UI surfacing + strict canary gating implemented.
 - Remaining work: customer-by-customer production certification and sustained SLO checks.
 
-### Phase 3 (2-3 weeks): BYOM model platform
+### Phase 3 (completed): BYOM model platform
 
-- Model registry and scoring jobs.
-- Proposal generation and approval workflow.
-- Rules-based fallback model.
-- Example BYOM prompt templates for customers.
-- Assumed-Value scoring as default model (upgraded to conversion-based scoring when data is available).
+- Model registry (`optimization_models` table, migration 056) and CRUD APIs — done.
+- Scoring dispatch (`segment_scores` table, `/optimizer/scoring/run`) — done.
+- Proposal generation and approval workflow (`qps_allocation_proposals` + history tables, migrations 056-057) — done.
+- Rules-based fallback model (CSV model_type routes through rules scoring) — done.
+- Model endpoint validation (`/optimizer/models/{id}/validate` with crypto support) — done.
+- Control plane UI in Settings/System (model lifecycle, score-and-propose, proposal history, rollback) — done.
+- Setup onboarding checklist (model registration, endpoint validation, hosting cost, conversion source) — done.
+- Safe/balanced/aggressive workflow presets with configurable guardrails — done.
+- Example BYOM prompt template (`prompts/byom-qps-optimizer.example.md`) — done.
+- BYOM integration guide (`docs/BYOM_MODEL_INTEGRATION_GUIDE.md`) — done.
+- Dedicated CI regression (`make v1-byom-api-regression`, `.github/workflows/v1-byom-api-regression.yml`) — done.
 
 ### Phase 4 (in progress): QPS page load and table hydration performance
 
@@ -851,7 +865,7 @@ ALSO PROVIDE:
   - hardened canary SLO contract checks to require `time_buckets` payload presence/non-empty behavior when QPS page samples exist.
 
 - Plan closeout status and verification evidence are tracked in [V1_PLAN_CLOSEOUT_MATRIX.md](/home/x1-7/Documents/rtbcat-platform/docs/V1_PLAN_CLOSEOUT_MATRIX.md).
-- Note: strict deployed canary closeout gates are still operationally pending from this workspace because outbound API calls are sandbox-restricted (`Operation not permitted`); execute those commands from a network-enabled environment.
+- Note: deployed strict closeout gates are still operationally pending overall; latest CI evidence reached canary execution but failed due to expired session auth (`401 Session expired or invalid`) until secrets are refreshed.
 - Local non-env-blocked closeout validation is consolidated under `make v1-closeout-local`.
 - Deployed canary runs now surface explicit `Blocked` status (exit code `2`) under network-policy restrictions for clearer operational triage.
 
@@ -886,7 +900,7 @@ ALSO PROVIDE:
 
 ---
 
-## 11. Evidence Anchors (v0.6 state)
+## 11. Evidence Anchors (v0.8 state)
 
 - `importers/unified_importer.py` includes explicit `rtb_quality` routing + `import_to_rtb_quality(...)`.
 - `importers/unified_importer.py` persists bidstream optional dimensions (`platform`, `environment`, `transaction_type`).
