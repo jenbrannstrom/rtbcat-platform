@@ -8,6 +8,7 @@ from scripts.v1_canary_smoke import (
     SmokeFailure,
     build_conversion_readiness_params,
     build_qps_load_latency_requests,
+    build_qps_page_slo_params,
     build_webhook_hmac_signature,
     build_webhook_security_headers,
     build_pixel_request_params,
@@ -161,6 +162,18 @@ def test_build_qps_load_latency_requests_includes_buyer_and_days():
     assert by_path["/settings/pretargeting"]["buyer_id"] == "buyer-1"
     assert by_path["/analytics/home/configs"]["days"] == 21
     assert by_path["/analytics/home/endpoint-efficiency"]["days"] == 21
+
+
+def test_build_qps_page_slo_params_includes_expected_fields():
+    params = build_qps_page_slo_params(
+        buyer_id="buyer-1",
+        since_hours=24,
+        latest_limit=7,
+    )
+    assert params["page"] == "qps_home"
+    assert params["buyer_id"] == "buyer-1"
+    assert params["since_hours"] == 24
+    assert params["latest_limit"] == 7
 
 
 def test_build_webhook_postback_payload_includes_expected_fields():

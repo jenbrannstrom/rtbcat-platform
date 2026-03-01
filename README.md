@@ -38,6 +38,137 @@ Clustering means grouping creatives together based on deduced logic. It also all
 
 It works by automatically grouping creatives based on same/similar destination URL. This could be augmented with AI image recognition to identify creative language (image/HTML/Video/Native ads) and group them by language, or surface localization configuration issues.
 
+
+
+
+
+*The Logic:*
+
+The advertiser's profit = what they earn from ads − what they spend on ads − what it costs to 
+  run the operation.
+                                                                                                
+  We can't see their earnings. So the question becomes: from what we CAN see, which signals tell
+   us "this traffic is making them money" vs "this traffic is costing them money"?
+
+  Here's what we have today, ranked by how useful each actually is:
+
+  What we have and what it tells us:
+
+  Metric: Bids / Bid Rate
+  What it tells us: "The bidder chose to bid on this traffic." Their own system — which knows
+    their campaigns, budgets, and targeting — decided this was worth spending money on.
+  Usefulness for profit optimization: High. This is the strongest signal we have. If the bidder
+    bids on 80% of traffic from publisher X but only 2% from publisher Y, the bidder is telling
+    us publisher X is valuable. We should send more like X, less like Y.
+  ────────────────────────────────────────
+  Metric: Win Rate
+  What it tells us: "They bid AND won." They valued this traffic enough to outbid competitors.
+  Usefulness for profit optimization: High. High win rate = they're pricing aggressively = they
+    really want this inventory. Low win rate = either they're being outbid (price sensitivity)
+  or
+     the auction is too competitive (diminishing returns).
+  ────────────────────────────────────────
+  Metric: Spend concentration
+  What it tells us: Where the money actually goes. If 90% of spend lands on 3 out of 10 configs,
+
+    those 3 are where the bidder sees value.
+  Usefulness for profit optimization: High. Money doesn't lie. Follow the spend.
+  ────────────────────────────────────────
+  Metric: Bid-to-win ratio
+  What it tells us: They bid but lost. How often?
+  Usefulness for profit optimization: Medium-High. A segment where they bid 10,000 times but
+  only
+     win 100 means they want this traffic but can't afford it at market price. That's useful —
+  it
+     means they value it, they're just being outcompeted. Might be worth increasing QPS to give
+    them more shots.
+  ────────────────────────────────────────
+  Metric: Reached but not bid
+  What it tells us: Traffic reached the bidder, bidder said "no thanks."
+  Usefulness for profit optimization: Medium. Tells us the bidder doesn't want it, but not WHY.
+    Could be budget exhaustion (temporary), frequency cap (user-specific), or no matching
+    campaign (structural). Without the reason, we can only observe the pattern.
+  ────────────────────────────────────────
+  Metric: CTR
+  What it tells us: Users clicked.
+  Usefulness for profit optimization: Medium. Means the creative resonated in that placement.
+  But
+     as we discussed — clicks can be junk. Useful in combination with other signals, not alone.
+  ────────────────────────────────────────
+  Metric: Viewability
+  What it tells us: The ad was actually seen by a human.
+  Usefulness for profit optimization: Medium. A non-viewable impression has zero chance of
+    generating profit. Cutting non-viewable inventory is free money.
+  ────────────────────────────────────────
+  Metric: IVT / Fraud rate
+  What it tells us: Traffic is bots, not humans.
+  Usefulness for profit optimization: Medium. Obvious — zero bots will ever buy a product. But
+    fraud rates are usually low enough that this is a hygiene issue, not a primary optimization
+    lever.
+  ────────────────────────────────────────
+  Metric: Spend trend over time
+  What it tells us: Increasing or decreasing?
+  Usefulness for profit optimization: Medium. An advertiser ramping up spend is finding profit.
+    One pulling back is not. Useful for confidence scoring, not  for segment-level optimization.
+  ────────────────────────────────────────
+  Metric: Impressions without clicks
+  What it tells us: Ad shown, nobody cared.
+  Usefulness for profit optimization: Low-Medium. Could be brand awareness (intentional), could
+    be bad placement. Ambiguous without knowing campaign intent.
+
+  The gap — what we're missing that would actually change things:
+
+  Missing metric: No-bid reason
+  Why it matters: If we knew WHY the bidder passes on 99% of traffic, we could stop sending it.
+    "Floor too high" → target cheaper publishers. "Budget exhausted" → reduce QPS in late-day
+    hours. "No matching campaign for this geo" → exclude that geo from pretargeting. This single
+
+    data point would be more valuable than everything else combined.
+  Source: Bidder logs (CSV export)
+  ────────────────────────────────────────
+  Missing metric: Bid price per segment
+  Why it matters: The bidder's own assessment of what traffic is worth, in dollars. If they bid
+    $3 CPM on Philippines Android gaming apps but $0.05 on Brazil desktop news sites, we know
+    exactly where they see profit.
+  Source: Bidder logs (CSV export)
+  ────────────────────────────────────────
+  Missing metric: Post-click outcome
+  Why it matters: Did the click become money? An install, a deposit, a purchase? This is the
+    ultimate signal. Everything else is proxy.
+  Source: MMP postback (Phase 2 — built, needs customer to connect)
+
+  The honest answer:
+
+  With what we have TODAY (no bidder data, no MMP connection), the best optimization we can do
+  is:
+
+  1. Follow the bids. Shift QPS toward segments where the bidder actually bids. If they ignore
+    99% of traffic from a config, that config's QPS is wasted.
+  2. Follow the spend. Configs and geos where the advertiser spends the most are where they see
+    value. Protect those. Starve the ones with zero spend.
+  3. Kill the dead weight. Three configs with zero traffic, zero bids, zero impressions — those
+    are consuming QPS that could go to performing configs.
+  4. Cut fraud and non-viewable inventory. Not the biggest lever, but it's free improvement.
+
+  The moment a customer connects their MMP or gives us a bid-price CSV dump, everything changes
+  — we go from "follow the proxy signals" to "optimize for actual outcomes."
+
+
+
+*Missing Gold:*
+
+What data does the bidder have that we don't?
+
+  The bidder knows things Google never tells us in their CSV reports:
+  - "I bid $1.20 on this request" (we never see bid prices)
+  - "I declined this request because the floor was too high" (we never see no-bid reasons)
+  - "I've used 80% of today's budget" (we never see budget status)
+
+  This data would be gold for Cat-Scan's optimizer — if we knew why the bidder said no to 95% of
+   requests, we could tune pretargeting to stop sending those requests in the first place.
+
+We will build an ingestion part for anyone that sees the benefit of adding the bidder's metrics. Then CatScan can perform much better
+
 ---
 
 ## Quick Start

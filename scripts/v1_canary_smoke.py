@@ -348,6 +348,20 @@ def build_qps_load_latency_requests(
     ]
 
 
+def build_qps_page_slo_params(
+    *,
+    buyer_id: str | None,
+    since_hours: int,
+    latest_limit: int = 5,
+) -> dict[str, Any]:
+    return {
+        "page": "qps_home",
+        "buyer_id": buyer_id,
+        "since_hours": since_hours,
+        "latest_limit": latest_limit,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run v1 canary smoke checks against API.")
     parser.add_argument(
@@ -453,6 +467,35 @@ def main() -> int:
         type=float,
         default=float(os.getenv("CATSCAN_CANARY_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS", "12000")),
         help="Max latency budget for /analytics/home/endpoint-efficiency (default: 12000ms).",
+    )
+    parser.add_argument(
+        "--run-qps-page-slo-check",
+        action="store_true",
+        help="Run optional p95 SLO check against /system/ui-metrics/page-load/summary.",
+    )
+    parser.add_argument(
+        "--qps-page-slo-since-hours",
+        type=int,
+        default=int(os.getenv("CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS", "24")),
+        help="Summary lookback window in hours for QPS page SLO check (default: 24).",
+    )
+    parser.add_argument(
+        "--qps-page-slo-min-samples",
+        type=int,
+        default=int(os.getenv("CATSCAN_CANARY_QPS_PAGE_SLO_MIN_SAMPLES", "1")),
+        help="Minimum required samples for QPS page SLO check (default: 1).",
+    )
+    parser.add_argument(
+        "--max-qps-page-p95-first-row-ms",
+        type=float,
+        default=float(os.getenv("CATSCAN_CANARY_MAX_QPS_PAGE_P95_FIRST_ROW_MS", "6000")),
+        help="Max p95 budget for time_to_first_table_row (default: 6000ms).",
+    )
+    parser.add_argument(
+        "--max-qps-page-p95-hydrated-ms",
+        type=float,
+        default=float(os.getenv("CATSCAN_CANARY_MAX_QPS_PAGE_P95_HYDRATED_MS", "8000")),
+        help="Max p95 budget for time_to_table_hydrated (default: 8000ms).",
     )
     parser.add_argument(
         "--pixel-source-type",
@@ -625,6 +668,14 @@ def main() -> int:
         parser.error("--max-home-configs-latency-ms must be > 0")
     if args.max_home_endpoint_efficiency_latency_ms <= 0:
         parser.error("--max-home-endpoint-efficiency-latency-ms must be > 0")
+    if args.qps_page_slo_since_hours < 1 or args.qps_page_slo_since_hours > 168:
+        parser.error("--qps-page-slo-since-hours must be between 1 and 168")
+    if args.qps_page_slo_min_samples < 1:
+        parser.error("--qps-page-slo-min-samples must be >= 1")
+    if args.max_qps_page_p95_first_row_ms <= 0:
+        parser.error("--max-qps-page-p95-first-row-ms must be > 0")
+    if args.max_qps_page_p95_hydrated_ms <= 0:
+        parser.error("--max-qps-page-p95-hydrated-ms must be > 0")
 
     client = SmokeClient(
         base_url=args.base_url,
@@ -1022,6 +1073,54 @@ def main() -> int:
         observed_summary = ", ".join(f"{path}={latency}ms" for path, latency in observed.items())
         print(f"INFO  QPS startup API latencies -> {observed_summary}")
 
+    def check_qps_page_slo_summary() -> None:
+        if not args.run_qps_page_slo_check:
+            return
+        payload = client.request(
+            "GET",
+            "/system/ui-metrics/page-load/summary",
+            params=build_qps_page_slo_params(
+                buyer_id=args.buyer_id,
+                since_hours=args.qps_page_slo_since_hours,
+                latest_limit=5,
+            ),
+        )
+        sample_count = int(payload.get("sample_count") or 0)
+        _assert(
+            sample_count >= args.qps_page_slo_min_samples,
+            (
+                "QPS page SLO check requires at least "
+                f"{args.qps_page_slo_min_samples} sample(s), got {sample_count}"
+            ),
+        )
+
+        p95_first = payload.get("p95_first_table_row_ms")
+        _assert(p95_first is not None, "p95_first_table_row_ms missing from QPS page SLO summary")
+        _assert(
+            float(p95_first) <= args.max_qps_page_p95_first_row_ms,
+            (
+                f"QPS page p95 first-row latency {float(p95_first):.1f}ms exceeds "
+                f"budget {args.max_qps_page_p95_first_row_ms:.1f}ms"
+            ),
+        )
+
+        p95_hydrated = payload.get("p95_table_hydrated_ms")
+        _assert(p95_hydrated is not None, "p95_table_hydrated_ms missing from QPS page SLO summary")
+        _assert(
+            float(p95_hydrated) <= args.max_qps_page_p95_hydrated_ms,
+            (
+                f"QPS page p95 table-hydrated latency {float(p95_hydrated):.1f}ms exceeds "
+                f"budget {args.max_qps_page_p95_hydrated_ms:.1f}ms"
+            ),
+        )
+
+        print(
+            "INFO  QPS page SLO summary -> "
+            f"samples={sample_count}, "
+            f"p95_first={float(p95_first):.1f}ms, "
+            f"p95_hydrated={float(p95_hydrated):.1f}ms"
+        )
+
     def check_optimizer_economics() -> None:
         payload = client.request(
             "GET",
@@ -1167,6 +1266,7 @@ def main() -> int:
         ("Conversion webhook rate-limit (optional)", check_conversion_webhook_rate_limit),
         ("Conversion webhook security status (optional)", check_conversion_webhook_security_status),
         ("QPS startup API latency (optional)", check_qps_load_latency),
+        ("QPS page SLO summary (optional)", check_qps_page_slo_summary),
         ("Optimizer economics", check_optimizer_economics),
         ("Optimizer models", check_models_and_resolve),
         ("Model endpoint validation", check_model_validation),

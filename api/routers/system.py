@@ -5,9 +5,10 @@ This module provides system status and thumbnail management endpoints.
 
 import logging
 import os
+import json
 from pathlib import Path
 
-from storage.postgres_database import pg_query_one
+from storage.postgres_database import pg_execute, pg_query, pg_query_one
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -301,6 +302,42 @@ class DataHealthResponse(BaseModel):
     optimizer_readiness: OptimizerReadinessSummary
 
 
+class UiPageLoadMetricRecordRequest(BaseModel):
+    page: Literal["qps_home"]
+    buyer_id: Optional[str] = None
+    selected_days: Optional[int] = Field(None, ge=1, le=365)
+    time_to_first_table_row_ms: Optional[float] = Field(None, ge=0, le=600000)
+    time_to_table_hydrated_ms: Optional[float] = Field(None, ge=0, le=600000)
+    api_latency_ms: dict[str, float] = Field(default_factory=dict)
+    sampled_at: Optional[str] = None
+
+
+class UiPageLoadMetricRecordResponse(BaseModel):
+    status: str
+
+
+class UiPageLoadMetricSample(BaseModel):
+    sampled_at: str
+    buyer_id: Optional[str] = None
+    selected_days: Optional[int] = None
+    time_to_first_table_row_ms: Optional[float] = None
+    time_to_table_hydrated_ms: Optional[float] = None
+    api_latency_ms: dict[str, float] = Field(default_factory=dict)
+
+
+class UiPageLoadMetricSummaryResponse(BaseModel):
+    page: Literal["qps_home"]
+    buyer_id: Optional[str] = None
+    since_hours: int
+    sample_count: int
+    p50_first_table_row_ms: Optional[float] = None
+    p95_first_table_row_ms: Optional[float] = None
+    p50_table_hydrated_ms: Optional[float] = None
+    p95_table_hydrated_ms: Optional[float] = None
+    last_sampled_at: Optional[str] = None
+    latest_samples: list[UiPageLoadMetricSample] = Field(default_factory=list)
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -449,6 +486,156 @@ async def get_system_data_health(
             min_completeness_pct=min_completeness_pct,
             limit=limit,
         )
+    )
+
+
+@router.post("/system/ui-metrics/page-load", response_model=UiPageLoadMetricRecordResponse)
+async def record_ui_page_load_metric(
+    payload: UiPageLoadMetricRecordRequest,
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    """Record client-side UI page-load telemetry for SLO monitoring."""
+    buyer_id = await resolve_buyer_id(payload.buyer_id, store=store, user=user)
+    sanitized_api_latency: dict[str, float] = {}
+    for key, raw_value in (payload.api_latency_ms or {}).items():
+        if not key:
+            continue
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+        if value < 0 or value > 600000:
+            continue
+        sanitized_api_latency[str(key)] = round(value, 2)
+
+    has_primary_metric = (
+        payload.time_to_first_table_row_ms is not None
+        or payload.time_to_table_hydrated_ms is not None
+    )
+    if not has_primary_metric and not sanitized_api_latency:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one page-load metric or API latency value is required.",
+        )
+
+    await pg_execute(
+        """
+        INSERT INTO ui_page_load_metrics (
+            page_name,
+            buyer_id,
+            user_id,
+            selected_days,
+            time_to_first_table_row_ms,
+            time_to_table_hydrated_ms,
+            api_latency_ms,
+            sampled_at,
+            created_at
+        )
+        VALUES (
+            %s, %s, %s, %s, %s, %s, %s::jsonb,
+            COALESCE(%s::timestamptz, CURRENT_TIMESTAMP),
+            CURRENT_TIMESTAMP
+        )
+        """,
+        (
+            payload.page,
+            buyer_id,
+            str(user.id),
+            payload.selected_days,
+            payload.time_to_first_table_row_ms,
+            payload.time_to_table_hydrated_ms,
+            json.dumps(sanitized_api_latency, separators=(",", ":")),
+            payload.sampled_at,
+        ),
+    )
+    return UiPageLoadMetricRecordResponse(status="recorded")
+
+
+@router.get(
+    "/system/ui-metrics/page-load/summary",
+    response_model=UiPageLoadMetricSummaryResponse,
+)
+async def get_ui_page_load_metric_summary(
+    page: Literal["qps_home"] = Query("qps_home"),
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    since_hours: int = Query(24, ge=1, le=168),
+    latest_limit: int = Query(20, ge=1, le=100),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    """Get percentile summary and recent samples for UI page-load telemetry."""
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+
+    conditions = [
+        "page_name = %s",
+        "sampled_at >= CURRENT_TIMESTAMP - make_interval(hours => %s)",
+    ]
+    params: list[object] = [page, since_hours]
+    if buyer_id:
+        conditions.append("buyer_id = %s")
+        params.append(buyer_id)
+
+    where_clause = " AND ".join(conditions)
+    summary_row = await pg_query_one(
+        f"""
+        SELECT
+            COUNT(*)::bigint AS sample_count,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY time_to_first_table_row_ms)
+                FILTER (WHERE time_to_first_table_row_ms IS NOT NULL) AS p50_first_table_row_ms,
+            percentile_cont(0.95) WITHIN GROUP (ORDER BY time_to_first_table_row_ms)
+                FILTER (WHERE time_to_first_table_row_ms IS NOT NULL) AS p95_first_table_row_ms,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY time_to_table_hydrated_ms)
+                FILTER (WHERE time_to_table_hydrated_ms IS NOT NULL) AS p50_table_hydrated_ms,
+            percentile_cont(0.95) WITHIN GROUP (ORDER BY time_to_table_hydrated_ms)
+                FILTER (WHERE time_to_table_hydrated_ms IS NOT NULL) AS p95_table_hydrated_ms,
+            MAX(sampled_at) AS last_sampled_at
+        FROM ui_page_load_metrics
+        WHERE {where_clause}
+        """,
+        tuple(params),
+    ) or {}
+
+    latest_rows = await pg_query(
+        f"""
+        SELECT
+            sampled_at,
+            buyer_id,
+            selected_days,
+            time_to_first_table_row_ms,
+            time_to_table_hydrated_ms,
+            api_latency_ms
+        FROM ui_page_load_metrics
+        WHERE {where_clause}
+        ORDER BY sampled_at DESC, id DESC
+        LIMIT %s
+        """,
+        tuple(params + [latest_limit]),
+    )
+
+    samples = [
+        UiPageLoadMetricSample(
+            sampled_at=str(row["sampled_at"]),
+            buyer_id=row.get("buyer_id"),
+            selected_days=row.get("selected_days"),
+            time_to_first_table_row_ms=row.get("time_to_first_table_row_ms"),
+            time_to_table_hydrated_ms=row.get("time_to_table_hydrated_ms"),
+            api_latency_ms=row.get("api_latency_ms") or {},
+        )
+        for row in latest_rows
+    ]
+
+    return UiPageLoadMetricSummaryResponse(
+        page=page,
+        buyer_id=buyer_id,
+        since_hours=since_hours,
+        sample_count=int(summary_row.get("sample_count") or 0),
+        p50_first_table_row_ms=summary_row.get("p50_first_table_row_ms"),
+        p95_first_table_row_ms=summary_row.get("p95_first_table_row_ms"),
+        p50_table_hydrated_ms=summary_row.get("p50_table_hydrated_ms"),
+        p95_table_hydrated_ms=summary_row.get("p95_table_hydrated_ms"),
+        last_sampled_at=str(summary_row["last_sampled_at"]) if summary_row.get("last_sampled_at") else None,
+        latest_samples=samples,
     )
 
 
