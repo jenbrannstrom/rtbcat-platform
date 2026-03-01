@@ -426,7 +426,20 @@ class HomeAnalyticsService:
             if cached is not None:
                 return cached
 
-        funnel_row = await self._repo.get_funnel_row(days, buyer_id)
+        bidder_task = (
+            self._repo.get_bidder_id_for_buyer(buyer_id)
+            if buyer_id
+            else asyncio.sleep(0, result=None)
+        )
+        funnel_row, bidstream_summary, bidder_id, home_seat_coverage, bidstream_coverage = (
+            await asyncio.gather(
+                self._repo.get_funnel_row(days, buyer_id),
+                self._repo.get_bidstream_summary(days, buyer_id),
+                bidder_task,
+                self._repo.get_home_seat_coverage(days, buyer_id),
+                self._repo.get_bidstream_coverage(days, buyer_id),
+            )
+        )
         total_reached = int((funnel_row or {}).get("total_reached") or 0)
         total_impressions = int((funnel_row or {}).get("total_impressions") or 0)
         total_bid_requests = int((funnel_row or {}).get("total_bid_requests") or 0)
@@ -439,7 +452,6 @@ class HomeAnalyticsService:
             (total_impressions / total_reached * 100) if total_reached > 0 else 0.0
         )
 
-        bidstream_summary = await self._repo.get_bidstream_summary(days, buyer_id)
         total_bids = int((bidstream_summary or {}).get("total_bids") or 0)
         total_bids_in_auction = int((bidstream_summary or {}).get("total_bids_in_auction") or 0)
         total_auctions_won = int((bidstream_summary or {}).get("total_auctions_won") or 0)
@@ -457,12 +469,10 @@ class HomeAnalyticsService:
             (filtered_bids / total_bids * 100) if total_bids > 0 else None
         )
 
-        bidder_id = None
-        if buyer_id:
-            bidder_id = await self._repo.get_bidder_id_for_buyer(buyer_id)
-
-        endpoints = await self._repo.get_endpoints_for_bidder(bidder_id)
-        observed_rows = await self._repo.get_observed_endpoint_rows(bidder_id)
+        endpoints, observed_rows = await asyncio.gather(
+            self._repo.get_endpoints_for_bidder(bidder_id),
+            self._repo.get_observed_endpoint_rows(bidder_id),
+        )
         observed_rows = [r for r in observed_rows if float(r.get("current_qps") or 0) > 0]
 
         # observed_query_rate_qps from actual endpoint delivery data only
@@ -590,8 +600,6 @@ class HomeAnalyticsService:
         if missing or extra:
             status = "warning"
 
-        home_seat_coverage = await self._repo.get_home_seat_coverage(days, buyer_id)
-        bidstream_coverage = await self._repo.get_bidstream_coverage(days, buyer_id)
         latest_observed_at = max(
             (r.get("observed_at") for r in observed_rows if r.get("observed_at") is not None),
             default=None,
