@@ -763,6 +763,7 @@ function WasteAnalysisContent() {
     retry: shouldRetryAnalyticsQuery,
     retryDelay: getRetryDelay,
     retryOnMount: true,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
     refetchInterval: (query) => {
       if (!seatReady) return false;
@@ -840,6 +841,7 @@ function WasteAnalysisContent() {
     retryDelay: getRetryDelay,
     retryOnMount: !configPerformanceCacheSeed,
     refetchOnMount: !configPerformanceCacheSeed,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
     refetchInterval: (query) => {
       if (!configPerformanceEnabled) return false;
