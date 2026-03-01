@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getConfigBreakdown,
@@ -38,6 +38,7 @@ interface ConfigBreakdownPanelProps {
   billing_id: string;
   days: number;
   isExpanded: boolean;
+  onApiLatencyMeasured?: (apiPath: string, latencyMs: number) => void;
 }
 
 const TABS: ConfigBreakdownType[] = ['creative', 'size', 'geo', 'publisher'];
@@ -90,7 +91,12 @@ function describePendingChange(change: PendingChange, publisherMode: string, t: 
   }
 }
 
-export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBreakdownPanelProps) {
+export function ConfigBreakdownPanel({
+  billing_id,
+  days,
+  isExpanded,
+  onApiLatencyMeasured,
+}: ConfigBreakdownPanelProps) {
   const { t, language } = useTranslation();
   const [activeTab, setActiveTab] = useState<ConfigBreakdownType>('creative');
   const [sortKey, setSortKey] = useState<'name' | 'spend' | 'reached' | 'impressions' | 'win_rate'>('reached');
@@ -145,6 +151,25 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
     }
   };
 
+  const runMeasuredQuery = useCallback(
+    async <T,>(apiPath: string, queryFn: () => Promise<T>): Promise<T> => {
+      const startedAtMs = typeof window !== 'undefined' && window.performance
+        ? window.performance.now()
+        : Date.now();
+      try {
+        return await queryFn();
+      } finally {
+        if (onApiLatencyMeasured) {
+          const endedAtMs = typeof window !== 'undefined' && window.performance
+            ? window.performance.now()
+            : Date.now();
+          onApiLatencyMeasured(apiPath, Math.max(0, endedAtMs - startedAtMs));
+        }
+      }
+    },
+    [onApiLatencyMeasured],
+  );
+
   // Query for breakdown data
   const { data, isLoading, error } = useQuery({
     queryKey: ['config-breakdown', billing_id, activeTab, selectedBuyerId, days],
@@ -155,7 +180,10 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
 
   const { data: configDetail } = useQuery({
     queryKey: ['pretargeting-detail', billing_id],
-    queryFn: () => getPretargetingConfigDetail(billing_id),
+    queryFn: () =>
+      runMeasuredQuery('/settings/pretargeting/:billing_id/detail', () =>
+        getPretargetingConfigDetail(billing_id)
+      ),
     enabled: isExpanded,
   });
 
@@ -787,13 +815,19 @@ export function ConfigBreakdownPanel({ billing_id, days, isExpanded }: ConfigBre
   // ── Publisher history & rollback ───────────────────────────────
   const { data: publisherHistory } = useQuery({
     queryKey: ['pretargeting-history', billing_id, 30],
-    queryFn: () => getPretargetingHistory({ billing_id, days: 30 }),
+    queryFn: () =>
+      runMeasuredQuery('/settings/pretargeting/history', () =>
+        getPretargetingHistory({ billing_id, days: 30 })
+      ),
     enabled: isExpanded && activeTab === 'publisher',
   });
 
   const { data: historySnapshots } = useQuery({
     queryKey: ['pretargeting-snapshots', billing_id],
-    queryFn: () => getSnapshots({ billing_id }),
+    queryFn: () =>
+      runMeasuredQuery('/settings/pretargeting/snapshots', () =>
+        getSnapshots({ billing_id })
+      ),
     enabled: isExpanded && activeTab === 'publisher' && showPublisherHistory,
   });
 
