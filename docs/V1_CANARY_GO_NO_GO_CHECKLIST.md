@@ -83,6 +83,20 @@ Equivalent convenience target:
 make v1-canary-pixel
 ```
 
+Optional webhook auth gate:
+
+```bash
+CATSCAN_CANARY_RUN_WEBHOOK_AUTH=1 \
+CATSCAN_CANARY_WEBHOOK_SECRET=<generic_or_shared_webhook_secret> \
+make v1-canary-smoke
+```
+
+Equivalent convenience target:
+
+```bash
+make v1-canary-webhook-auth
+```
+
 Optional workflow tuning for canary:
 
 ```bash
@@ -160,7 +174,7 @@ make v1-conversion-regression
 1. `/conversions/health` returns non-error response.
 2. `/conversions/ingestion/stats?days=7` returns accepted/rejected counters.
 3. DLQ list/replay/discard endpoints respond as expected.
-4. If webhook security is enabled, HMAC + freshness checks pass fixture validation.
+4. If webhook security is enabled, HMAC/freshness controls pass fixture validation and optional canary webhook auth gate.
 
 ## 4. Optimizer Workflow Gate
 
