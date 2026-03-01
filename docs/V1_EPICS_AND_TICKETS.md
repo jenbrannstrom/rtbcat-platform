@@ -55,6 +55,7 @@
 - `E4-005` started (contract-alignment slice): dashboard API client now forwards `api_rollup_limit` to `/system/ui-metrics/page-load/summary` so operator UI can tune rollup depth explicitly.
 - `E4-005` started (trend slice): summary API now returns bucketed latency trends and System UI renders p95 first-row/hydrated bucket tables for regression monitoring across the selected lookback window.
 - `E4-005` started (trend slice): bucketed p95 trend cells are now color-coded against 6s/8s targets in System UI for faster SLO breach scanning.
+- `E4-005` started (summary-performance slice): `/system/ui-metrics/page-load/summary` now executes its four analytics reads in parallel (`asyncio.gather`) to reduce operator-panel fetch latency.
 - `E4-005` started (deep-path telemetry slice): QPS Home now measures expanded-panel dependent API latency for `/settings/pretargeting/:billing_id/detail`, `/settings/pretargeting/history`, and `/settings/pretargeting/snapshots`; once initial hydration telemetry is posted, additional latency samples are persisted as follow-up UI metric records.
 - `E4-005` started (startup critical-path slice): `/analytics/rtb-funnel` is now fetched only after table hydration (instead of startup) so buyer-filter messaging remains available without delaying first-row/table readiness.
 - `E4-005` started (render-cost slice): QPS Home now progressively renders pretargeting rows (first 60, then full list on next tick) to reduce initial DOM hydration work for large config sets.
