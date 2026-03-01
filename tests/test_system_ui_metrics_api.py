@@ -155,3 +155,42 @@ def test_ui_page_load_metric_summary_returns_percentiles(monkeypatch: pytest.Mon
     assert payload["latest_samples"][0]["api_latency_ms"]["/settings/pretargeting"] == 1800.0
     assert payload["api_latency_rollup"][0]["api_path"] == "/settings/pretargeting"
     assert payload["api_latency_rollup"][0]["p95_latency_ms"] == 1800.0
+
+
+def test_ui_page_load_metric_summary_respects_api_rollup_limit(monkeypatch: pytest.MonkeyPatch):
+    async def _resolve_buyer_id(buyer_id: str | None, store=None, user=None):
+        return buyer_id
+
+    async def _stub_query_one(sql: str, params: tuple = ()):
+        assert params == ("qps_home", 24, "1111111111")
+        return {"sample_count": 0}
+
+    async def _stub_query(sql: str, params: tuple = ()):
+        if "ORDER BY sampled_at DESC" in sql:
+            assert params == ("qps_home", 24, "1111111111", 2)
+            return []
+        assert "jsonb_each_text" in sql
+        assert params == ("qps_home", 24, "1111111111", 3)
+        return []
+
+    monkeypatch.setattr(system_router, "resolve_buyer_id", _resolve_buyer_id)
+    monkeypatch.setattr(system_router, "pg_query_one", _stub_query_one)
+    monkeypatch.setattr(system_router, "pg_query", _stub_query)
+    client = _build_client(monkeypatch)
+
+    response = client.get(
+        "/api/system/ui-metrics/page-load/summary",
+        params={
+            "page": "qps_home",
+            "buyer_id": "1111111111",
+            "since_hours": 24,
+            "latest_limit": 2,
+            "api_rollup_limit": 3,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["sample_count"] == 0
+    assert payload["latest_samples"] == []
+    assert payload["api_latency_rollup"] == []
