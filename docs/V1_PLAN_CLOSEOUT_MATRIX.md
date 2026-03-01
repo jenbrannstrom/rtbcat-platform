@@ -65,6 +65,7 @@ Implementation is largely complete across Phases 0-4, but final plan closure req
 ## Closeout Runner Notes
 
 - `make v1-closeout-local` runs all non-env-blocked checks.
+- convenience targets: `make v1-closeout-quick` (quick profile) and `make v1-closeout-deployed` (enables deployed canary gates).
 - Profiles: `CATSCAN_CLOSEOUT_PROFILE=full|quick` (`full` includes dashboard production build via `v1-gate`; `quick` skips build and runs regression suites only).
 - It writes a structured report to `/tmp/v1_closeout_last_run.md` by default (`CATSCAN_CLOSEOUT_REPORT_PATH` overrides).
 - For deployed gates: set `CATSCAN_CLOSEOUT_RUN_DEPLOYED=1`.
