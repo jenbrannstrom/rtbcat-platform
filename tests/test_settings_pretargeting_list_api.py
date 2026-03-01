@@ -22,8 +22,8 @@ from api.routers.settings import pretargeting as pretargeting_router
 
 
 class _StubPretargetingService:
-    async def list_configs(self, bidder_id: str | None = None):
-        assert bidder_id == "bidder-1"
+    async def list_configs_for_buyer(self, buyer_id: str):
+        assert buyer_id == "buyer-1"
         return [
             {
                 "config_id": "cfg-1",
@@ -59,12 +59,12 @@ class _StubPretargetingService:
             },
         ]
 
+    async def list_configs(self, bidder_id: str | None = None):
+        assert bidder_id == "bidder-1"
+        return []
+
 
 class _StubSeatsService:
-    async def get_buyer_seat_with_bidder(self, buyer_id: str):
-        assert buyer_id == "buyer-1"
-        return {"bidder_id": "bidder-1"}
-
     async def get_service_accounts(self, active_only: bool = True):
         return []
 

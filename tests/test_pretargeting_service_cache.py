@@ -10,10 +10,15 @@ from services.pretargeting_service import PretargetingService
 class _StubPretargetingRepo:
     def __init__(self) -> None:
         self.list_calls = 0
+        self.list_by_buyer_calls = 0
         self.rows: list[dict[str, object]] = [{"billing_id": "1001"}]
 
     async def list_configs(self, bidder_id: str | None = None) -> list[dict[str, object]]:
         self.list_calls += 1
+        return [dict(row) for row in self.rows]
+
+    async def list_configs_for_buyer(self, buyer_id: str) -> list[dict[str, object]]:
+        self.list_by_buyer_calls += 1
         return [dict(row) for row in self.rows]
 
     async def save_config(self, _config: dict[str, object]) -> None:
@@ -55,3 +60,34 @@ async def test_save_config_invalidates_list_cache() -> None:
 
     assert repo.list_calls == 2
     assert refreshed[0]["billing_id"] == "2002"
+
+
+@pytest.mark.asyncio
+async def test_list_configs_for_buyer_uses_ttl_cache() -> None:
+    PretargetingService.clear_list_configs_cache()
+    repo = _StubPretargetingRepo()
+    service = PretargetingService(repo=repo)
+
+    first = await service.list_configs_for_buyer("buyer-1")
+    first[0]["billing_id"] = "mutated-locally"
+    second = await service.list_configs_for_buyer("buyer-1")
+
+    assert repo.list_by_buyer_calls == 1
+    assert second[0]["billing_id"] == "1001"
+
+
+@pytest.mark.asyncio
+async def test_save_config_invalidates_buyer_scoped_list_cache() -> None:
+    PretargetingService.clear_list_configs_cache()
+    repo = _StubPretargetingRepo()
+    service = PretargetingService(repo=repo)
+
+    await service.list_configs_for_buyer("buyer-1")
+    assert repo.list_by_buyer_calls == 1
+
+    repo.rows = [{"billing_id": "3003"}]
+    await service.save_config({"config_id": "cfg-1", "bidder_id": "bidder-1"})
+    refreshed = await service.list_configs_for_buyer("buyer-1")
+
+    assert repo.list_by_buyer_calls == 2
+    assert refreshed[0]["billing_id"] == "3003"

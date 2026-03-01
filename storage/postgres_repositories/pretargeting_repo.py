@@ -21,7 +21,25 @@ class PretargetingRepository:
         if bidder_id:
             where_sql = "WHERE pc.bidder_id = %s"
             params = (bidder_id,)
+        return await self._list_configs_with_where_clause(where_sql=where_sql, params=params)
 
+    async def list_configs_for_buyer(self, buyer_id: str) -> list[dict[str, Any]]:
+        """List pretargeting configs for a specific buyer_id in one SQL query."""
+        where_sql = """
+            JOIN buyer_seats bs ON bs.bidder_id = pc.bidder_id
+            WHERE bs.buyer_id = %s
+        """
+        return await self._list_configs_with_where_clause(
+            where_sql=where_sql,
+            params=(buyer_id,),
+        )
+
+    async def _list_configs_with_where_clause(
+        self,
+        where_sql: str,
+        params: tuple[Any, ...],
+    ) -> list[dict[str, Any]]:
+        
         sql = f"""
             SELECT
                 deduped.config_id,

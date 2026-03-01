@@ -31,6 +31,22 @@ class PretargetingService:
         )
         return rows
 
+    async def list_configs_for_buyer(self, buyer_id: str) -> list[dict[str, Any]]:
+        if not buyer_id:
+            raise ValueError("buyer_id is required")
+        cache_key = f"buyer:{buyer_id}"
+        now = time.monotonic()
+        cached_entry = self._LIST_CONFIGS_CACHE.get(cache_key)
+        if cached_entry and cached_entry[0] > now:
+            return [dict(row) for row in cached_entry[1]]
+
+        rows = await self._repo.list_configs_for_buyer(buyer_id=buyer_id)
+        self._LIST_CONFIGS_CACHE[cache_key] = (
+            now + self._LIST_CONFIGS_CACHE_TTL_SECONDS,
+            [dict(row) for row in rows],
+        )
+        return rows
+
     @classmethod
     def clear_list_configs_cache(cls) -> None:
         cls._LIST_CONFIGS_CACHE.clear()
@@ -38,6 +54,9 @@ class PretargetingService:
     @classmethod
     def _invalidate_list_configs_cache(cls, bidder_id: str | None = None) -> None:
         cls._LIST_CONFIGS_CACHE.pop("__all__", None)
+        buyer_keys = [key for key in cls._LIST_CONFIGS_CACHE if key.startswith("buyer:")]
+        for key in buyer_keys:
+            cls._LIST_CONFIGS_CACHE.pop(key, None)
         if bidder_id:
             cls._LIST_CONFIGS_CACHE.pop(bidder_id, None)
             return
