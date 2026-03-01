@@ -75,7 +75,20 @@ jobs:
           if [[ "${{ inputs.allow_blocked }}" == "true" ]]; then
             allow_blocked="1"
           fi
+          set +e
           CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED="${allow_blocked}" make v1-closeout-deployed-only
+          closeout_status=$?
+          set -e
+          echo "closeout_status=${closeout_status}" >> "$GITHUB_OUTPUT"
+
+          if [[ "${closeout_status}" -eq 0 ]]; then
+            exit 0
+          fi
+          if [[ "${closeout_status}" -eq 2 && "${allow_blocked}" == "1" ]]; then
+            echo "Deployed closeout returned exit 2 (blocked) and allow_blocked=true; treating as blocked-pass."
+            exit 0
+          fi
+          exit "${closeout_status}"
 
       - name: Publish closeout summary
         if: always()
