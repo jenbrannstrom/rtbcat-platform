@@ -1,4 +1,4 @@
-.PHONY: help v1-closeout-local v1-closeout-quick v1-closeout-deployed v1-closeout-deployed-only v1-canary-smoke v1-canary-workflow v1-canary-lifecycle v1-canary-go-no-go v1-canary-conversion-ready v1-canary-pixel v1-canary-webhook-auth v1-canary-webhook-hmac v1-canary-webhook-freshness v1-canary-webhook-rate-limit v1-canary-webhook-security-status v1-canary-webhook-security v1-canary-qps-load-latency v1-canary-qps-page-slo v1-canary-qps-page-slo-strict v1-canary-safe v1-canary-balanced v1-canary-aggressive v1-conversion-regression v1-gate phase0-regression phase0-dashboard-build phase0-gate
+.PHONY: help v1-closeout-local v1-closeout-quick v1-closeout-deployed v1-closeout-deployed-only v1-byom-api-regression v1-canary-smoke v1-canary-workflow v1-canary-lifecycle v1-canary-go-no-go v1-canary-conversion-ready v1-canary-pixel v1-canary-webhook-auth v1-canary-webhook-hmac v1-canary-webhook-freshness v1-canary-webhook-rate-limit v1-canary-webhook-security-status v1-canary-webhook-security v1-canary-qps-load-latency v1-canary-qps-page-slo v1-canary-qps-page-slo-strict v1-canary-safe v1-canary-balanced v1-canary-aggressive v1-conversion-regression v1-gate phase0-regression phase0-dashboard-build phase0-gate
 
 help:
 	@echo "Targets:"
@@ -6,6 +6,7 @@ help:
 	@echo "  make v1-closeout-quick   # Run quick closeout profile (no dashboard production build)"
 	@echo "  make v1-closeout-deployed # Run closeout with deployed canary gates enabled"
 	@echo "  make v1-closeout-deployed-only # Run deployed canary gates only (skip local suites)"
+	@echo "  make v1-byom-api-regression # Run BYOM optimizer API/e2e regression suite"
 	@echo "  make v1-canary-smoke     # Run canary smoke wrapper (env-driven)"
 	@echo "  make v1-canary-workflow  # Run canary with score+propose workflow gate"
 	@echo "  make v1-canary-lifecycle # Run canary with workflow + proposal lifecycle gate"
@@ -43,6 +44,16 @@ v1-closeout-deployed:
 
 v1-closeout-deployed-only:
 	CATSCAN_CLOSEOUT_PROFILE=deployed_only CATSCAN_CLOSEOUT_RUN_DEPLOYED=1 CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED=$${CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED:-0} bash scripts/run_v1_closeout_local.sh
+
+v1-byom-api-regression:
+	pytest -q \
+	  tests/test_optimizer_models_api.py \
+	  tests/test_optimizer_scoring_api.py \
+	  tests/test_optimizer_proposals_api.py \
+	  tests/test_optimizer_workflows_api.py \
+	  tests/test_optimizer_economics_api.py \
+	  tests/test_optimizer_setup_settings_api.py \
+	  tests/test_optimizer_e2e_api.py
 
 v1-canary-smoke:
 	bash scripts/run_v1_canary_smoke.sh
