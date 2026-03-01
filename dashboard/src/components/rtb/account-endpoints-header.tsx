@@ -4,12 +4,14 @@ import { useQuery } from '@tanstack/react-query';
 import { getRTBEndpoints, updateEndpointQps } from '@/lib/api';
 import { Server, Globe, Info, Loader2, RefreshCw, X, Pencil, Undo2 } from 'lucide-react';
 import { useAccount } from '@/contexts/account-context';
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from '@/contexts/i18n-context';
 import type { Translations } from '@/lib/i18n/types';
 
 const ENDPOINTS_CACHE_PREFIX = 'catscan:qps:rtb-endpoints:v1';
 const ENDPOINTS_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
+const ENDPOINTS_DEFERRED_REFETCH_IDLE_TIMEOUT_MS = 5000;
+const ENDPOINTS_DEFERRED_REFETCH_DELAY_MS_SEEDED = 1500;
 
 interface EndpointsCachePayload {
   cached_at_iso: string;
@@ -127,15 +129,45 @@ export function AccountEndpointsHeader({
     }
   }, [onApiLatencyMeasured, selectedBuyerId]);
 
+  const endpointsCacheSeed = useMemo(
+    () => readEndpointsCache(selectedBuyerId),
+    [selectedBuyerId]
+  );
+
   const { data, isLoading, error, refetch, isFetchedAfterMount } = useQuery({
     queryKey: ['rtb-endpoints', selectedBuyerId],
     queryFn: fetchMeasuredEndpoints,
-    enabled: !!selectedBuyerId && enabled,
-    initialData: () => readEndpointsCache(selectedBuyerId),
+    enabled: false,
+    initialData: () => endpointsCacheSeed,
     initialDataUpdatedAt: () => 0,
-    refetchOnMount: true,
   });
   const waitingForHydration = !!selectedBuyerId && !enabled;
+
+  useEffect(() => {
+    if (!selectedBuyerId || !enabled) return;
+    if (!endpointsCacheSeed) {
+      void refetch();
+      return;
+    }
+    const browserWindow = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback, opts?: IdleRequestOptions) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (
+      typeof browserWindow.requestIdleCallback === 'function'
+      && typeof browserWindow.cancelIdleCallback === 'function'
+    ) {
+      const idleId = browserWindow.requestIdleCallback(
+        () => void refetch(),
+        { timeout: ENDPOINTS_DEFERRED_REFETCH_IDLE_TIMEOUT_MS }
+      );
+      return () => browserWindow.cancelIdleCallback?.(idleId);
+    }
+    const timer = setTimeout(() => {
+      void refetch();
+    }, ENDPOINTS_DEFERRED_REFETCH_DELAY_MS_SEEDED);
+    return () => clearTimeout(timer);
+  }, [enabled, endpointsCacheSeed, refetch, selectedBuyerId]);
 
   useEffect(() => {
     if (!isFetchedAfterMount) return;
