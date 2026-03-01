@@ -38,9 +38,13 @@ function HeaderInfoTip({ text, ariaLabel }: { text: string; ariaLabel: string })
 
 interface AccountEndpointsHeaderProps {
   observedQpsByEndpointId?: Record<string, number | null>;
+  onApiLatencyMeasured?: (apiPath: string, latencyMs: number) => void;
 }
 
-export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpointsHeaderProps) {
+export function AccountEndpointsHeader({
+  observedQpsByEndpointId,
+  onApiLatencyMeasured,
+}: AccountEndpointsHeaderProps) {
   const { t, language } = useTranslation();
   const { selectedBuyerId, selectedServiceAccountId } = useAccount();
   const [showQpsInfo, setShowQpsInfo] = useState(false);
@@ -58,9 +62,25 @@ export function AccountEndpointsHeader({ observedQpsByEndpointId }: AccountEndpo
   // Refresh state
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  const fetchMeasuredEndpoints = useCallback(async () => {
+    const startedAtMs = typeof window !== 'undefined' && window.performance
+      ? window.performance.now()
+      : Date.now();
+    try {
+      return await getRTBEndpoints({ buyer_id: selectedBuyerId || undefined, live: true });
+    } finally {
+      if (onApiLatencyMeasured) {
+        const endedAtMs = typeof window !== 'undefined' && window.performance
+          ? window.performance.now()
+          : Date.now();
+        onApiLatencyMeasured('/settings/endpoints', Math.max(0, endedAtMs - startedAtMs));
+      }
+    }
+  }, [onApiLatencyMeasured, selectedBuyerId]);
+
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['rtb-endpoints', selectedBuyerId],
-    queryFn: () => getRTBEndpoints({ buyer_id: selectedBuyerId || undefined, live: true }),
+    queryFn: fetchMeasuredEndpoints,
     enabled: !!selectedBuyerId,
   });
 

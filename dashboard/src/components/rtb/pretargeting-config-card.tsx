@@ -17,6 +17,7 @@ export interface PretargetingConfig {
   display_name: string | null;
   user_name: string | null;
   state: 'ACTIVE' | 'SUSPENDED';
+  maximum_qps: number | null;
   formats: string[];         // ['HTML', 'VAST']
   platforms: string[];       // ['PHONE', 'TABLET']
   sizes: string[];           // ['300x250', '320x50']
@@ -124,16 +125,18 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(config.name);
   const [showHistory, setShowHistory] = useState(false);
-  const [qpsInput, setQpsInput] = useState('');
+  const [qpsInput, setQpsInput] = useState(
+    config.maximum_qps === null || config.maximum_qps === undefined ? '' : String(config.maximum_qps)
+  );
   const [isEditingQps, setIsEditingQps] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const qpsInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
-  const { data: configDetail } = useQuery({
+  const { data: configDetail, isFetching: configDetailFetching } = useQuery({
     queryKey: ['pretargeting-detail', config.billing_id],
     queryFn: () => getPretargetingConfigDetail(config.billing_id),
-    enabled: true,
+    enabled: expanded || isEditingQps,
   });
 
   const nameMutation = useMutation({
@@ -195,9 +198,18 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
 
   // Sync QPS input with config detail
   useEffect(() => {
-    const qpsValue = configDetail?.effective_maximum_qps ?? configDetail?.maximum_qps;
+    if (isEditingQps) return;
+    const qpsValue =
+      configDetail?.effective_maximum_qps ??
+      configDetail?.maximum_qps ??
+      config.maximum_qps;
     setQpsInput(qpsValue === null || qpsValue === undefined ? '' : String(qpsValue));
-  }, [configDetail?.effective_maximum_qps, configDetail?.maximum_qps]);
+  }, [
+    configDetail?.effective_maximum_qps,
+    configDetail?.maximum_qps,
+    config.maximum_qps,
+    isEditingQps,
+  ]);
 
   const handleStartEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -232,7 +244,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   const latestPendingQpsChange = pendingQpsChanges.length > 0
     ? pendingQpsChanges[pendingQpsChanges.length - 1]
     : null;
-  const persistedQpsLimit = configDetail?.maximum_qps ?? null;
+  const persistedQpsLimit = configDetail?.maximum_qps ?? config.maximum_qps ?? null;
 
   const applyQpsChange = () => {
     if (!configDetail) return;
@@ -265,7 +277,9 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
 
   // Format controls
   const pendingChanges = configDetail?.pending_changes || [];
-  const effectiveFormats = new Set(configDetail?.effective_formats || configDetail?.included_formats || []);
+  const effectiveFormats = new Set(
+    configDetail?.effective_formats || configDetail?.included_formats || config.formats || []
+  );
   const isFormatEnabled = (format: string): boolean => effectiveFormats.has(format);
   const findPendingChange = (changeType: string, value: string) =>
     pendingChanges.find((c: { change_type: string; value: string }) => c.change_type === changeType && c.value === value);
@@ -418,15 +432,26 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                       value={qpsInput}
                       onChange={(e) => setQpsInput(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') { applyQpsChange(); setIsEditingQps(false); }
-                        if (e.key === 'Escape') { setIsEditingQps(false); const qpsValue = configDetail?.effective_maximum_qps ?? configDetail?.maximum_qps; setQpsInput(qpsValue === null || qpsValue === undefined ? '' : String(qpsValue)); }
+                        if (e.key === 'Enter' && configDetail) { applyQpsChange(); setIsEditingQps(false); }
+                        if (e.key === 'Escape') {
+                          setIsEditingQps(false);
+                          const qpsValue =
+                            configDetail?.effective_maximum_qps ??
+                            configDetail?.maximum_qps ??
+                            config.maximum_qps;
+                          setQpsInput(qpsValue === null || qpsValue === undefined ? '' : String(qpsValue));
+                        }
                       }}
                       className="w-20 rounded border border-gray-300 bg-white px-1.5 py-0.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
                       placeholder={t.pretargeting.cardQpsUnsetPlaceholder}
+                      disabled={!configDetail}
                     />
+                    {configDetailFetching && !configDetail && (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
+                    )}
                     <button
                       onClick={() => { applyQpsChange(); setIsEditingQps(false); }}
-                      disabled={qpsMutationPending}
+                      disabled={qpsMutationPending || !configDetail}
                       className="p-0.5 text-green-600 hover:bg-green-50 rounded"
                     >
                       <Check className="h-3.5 w-3.5" />
@@ -434,7 +459,10 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
                     <button
                       onClick={() => {
                         setIsEditingQps(false);
-                        const qpsValue = configDetail?.effective_maximum_qps ?? configDetail?.maximum_qps;
+                        const qpsValue =
+                          configDetail?.effective_maximum_qps ??
+                          configDetail?.maximum_qps ??
+                          config.maximum_qps;
                         setQpsInput(qpsValue === null || qpsValue === undefined ? '' : String(qpsValue));
                       }}
                       className="p-0.5 text-gray-400 hover:bg-gray-100 rounded"
