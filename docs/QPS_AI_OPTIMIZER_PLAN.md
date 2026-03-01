@@ -771,6 +771,7 @@ ALSO PROVIDE:
   - removed `/analytics/home/endpoint-efficiency` from startup critical path by deferring it until pretargeting table hydration.
   - removed `/settings/endpoints` from startup critical path by deferring Account Endpoints header fetch until pretargeting table data settles (hydrated or empty-state), while keeping a loading placeholder to avoid premature "no endpoints" messaging.
   - removed `/analytics/spend-stats` from startup critical path by deferring CPM badge fetch until pretargeting table data settles, preserving expanded-config CPM behavior via post-settle refetch.
+  - added short-lived browser cache hydration for `/settings/pretargeting` rows (buyer-scoped `localStorage` seed) so repeat reloads can render the config table immediately while live refresh runs.
   - preserved manual operator refresh parity by wiring the top-level QPS refresh action to also refetch endpoint-efficiency after its deferral.
   - added optional canary SLO verification for recorded UI telemetry (`make v1-canary-qps-page-slo`) with p95 first-row and hydrated latency thresholds.
   - enhanced QPS page SLO canary with optional strict API-rollup gating (`CATSCAN_CANARY_QPS_PAGE_REQUIRE_API_ROLLUP=1`) to enforce per-endpoint p95 budgets from `/system/ui-metrics/page-load/summary`.
