@@ -43,7 +43,7 @@ async def _get_precompute_status(
 class HomeAnalyticsService:
     """Orchestrates home analytics responses."""
 
-    _PAYLOAD_CACHE_TTL_SECONDS = 15.0
+    _PAYLOAD_CACHE_TTL_SECONDS = 30.0
     _FUNNEL_PAYLOAD_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
     _CONFIG_PAYLOAD_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
     _ENDPOINT_EFFICIENCY_PAYLOAD_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
