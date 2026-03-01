@@ -52,6 +52,8 @@ v1-canary-aggressive:
 v1-conversion-regression:
 	pytest -q \
 	  tests/test_conversion_readiness.py \
+	  tests/test_conversions_service.py \
+	  tests/test_conversions_api.py \
 	  tests/test_conversion_ingestion_service.py \
 	  tests/test_conversion_connector_fixtures.py \
 	  tests/test_v1_canary_smoke.py
