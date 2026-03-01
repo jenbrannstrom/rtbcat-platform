@@ -31,6 +31,8 @@ Current roadmap execution status (implemented in code, pending environment-by-en
    - root `make v1-gate` now combines phase0 + conversion/readiness regression, and CI uses it.
 4. **BYOM workflow controls are now operationally consistent**:
    - workflow preset/profile handling is aligned across backend API, dashboard UI, and canary wrappers.
+5. **Webhook security hardening now supports secret rotation windows**:
+   - provider/shared webhook secret and HMAC envs can carry multiple active secrets (comma/semicolon/newline-separated) for zero-downtime rotations.
 
 ---
 
