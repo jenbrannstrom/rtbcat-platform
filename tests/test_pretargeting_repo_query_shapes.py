@@ -53,6 +53,29 @@ async def test_list_configs_uses_distinct_on_for_global_scope(monkeypatch: pytes
 
 
 @pytest.mark.asyncio
+async def test_list_configs_for_buyer_uses_single_joined_query(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict[str, object] = {}
+
+    async def _stub_query(sql: str, params: tuple = ()):
+        captured["sql"] = sql
+        captured["params"] = params
+        return []
+
+    monkeypatch.setattr("storage.postgres_repositories.pretargeting_repo.pg_query", _stub_query)
+    repo = PretargetingRepository()
+    rows = await repo.list_configs_for_buyer("buyer-1")
+
+    assert rows == []
+    sql_upper = str(captured["sql"]).upper()
+    assert "JOIN BUYER_SEATS BS ON BS.BIDDER_ID = PC.BIDDER_ID" in sql_upper
+    assert "WHERE BS.BUYER_ID = %S" in sql_upper
+    assert "DISTINCT ON" in sql_upper
+    assert captured["params"] == ("buyer-1",)
+
+
+@pytest.mark.asyncio
 async def test_list_history_billing_filter_uses_exists_not_join(monkeypatch: pytest.MonkeyPatch):
     captured: dict[str, object] = {}
 

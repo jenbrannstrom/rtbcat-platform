@@ -194,37 +194,35 @@ async def get_pretargeting_configs(
     Includes user-defined names if set.
     """
     try:
-        # Get the current account's bidder_id
-        current_bidder_id = None
-
-        # Priority 1: Use buyer_id to look up bidder_id
-        if buyer_id:
-            seat_info = await seats_service.get_buyer_seat_with_bidder(buyer_id)
-            if seat_info:
-                current_bidder_id = seat_info["bidder_id"]
-                logger.debug(f"Found bidder_id {current_bidder_id} for buyer_id {buyer_id}")
-
-        # Priority 2: Fall back to service_account_id (legacy support)
-        if not current_bidder_id and service_account_id:
-            service_account = await seats_service.get_service_account(service_account_id)
-            if service_account:
-                current_bidder_id = await seats_service.get_bidder_id_for_service_account(service_account.id)
-
-        # Priority 3: Fall back to first active service account
-        if not current_bidder_id:
-            accounts = await seats_service.get_service_accounts(active_only=True)
-            if accounts:
-                current_bidder_id = await seats_service.get_bidder_id_for_service_account(accounts[0].id)
-
-        # Priority 4: Fallback to any buyer_seat
-        if not current_bidder_id:
-            current_bidder_id = await seats_service.get_first_bidder_id()
-            if current_bidder_id:
-                logger.info(f"Using fallback bidder_id: {current_bidder_id} for pretargeting list")
-
-        # Get configs filtered by bidder_id
         pretargeting_service = PretargetingService()
-        rows = await pretargeting_service.list_configs(bidder_id=current_bidder_id)
+
+        # Buyer-scoped requests can resolve configs in one SQL query.
+        if buyer_id:
+            rows = await pretargeting_service.list_configs_for_buyer(buyer_id)
+        else:
+            # Get the current account's bidder_id
+            current_bidder_id = None
+
+            # Priority 1: Fall back to service_account_id (legacy support)
+            if service_account_id:
+                service_account = await seats_service.get_service_account(service_account_id)
+                if service_account:
+                    current_bidder_id = await seats_service.get_bidder_id_for_service_account(service_account.id)
+
+            # Priority 2: Fall back to first active service account
+            if not current_bidder_id:
+                accounts = await seats_service.get_service_accounts(active_only=True)
+                if accounts:
+                    current_bidder_id = await seats_service.get_bidder_id_for_service_account(accounts[0].id)
+
+            # Priority 3: Fallback to any buyer_seat
+            if not current_bidder_id:
+                current_bidder_id = await seats_service.get_first_bidder_id()
+                if current_bidder_id:
+                    logger.info(f"Using fallback bidder_id: {current_bidder_id} for pretargeting list")
+
+            # Get configs filtered by bidder_id
+            rows = await pretargeting_service.list_configs(bidder_id=current_bidder_id)
 
         results = []
         for row in rows:
