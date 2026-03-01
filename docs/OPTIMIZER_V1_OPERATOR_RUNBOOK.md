@@ -1,6 +1,6 @@
 # Optimizer v1 Operator Runbook
 
-**Last updated:** 2026-02-28  
+**Last updated:** 2026-03-01  
 **Scope:** Score -> propose -> approve -> apply for QPS optimization with guarded rollback.
 
 ## 1. Preconditions
@@ -11,7 +11,7 @@ Before running optimizer actions, verify:
 2. `/system/data-health` shows acceptable readiness (report completeness, quality freshness).
 3. At least one active optimizer model exists (`/optimizer/models`).
 4. Monthly hosting cost is configured if Effective CPM is required (`/settings/optimizer/setup`).
-5. If conversion optimization is expected, `/conversions/health` is not stale.
+5. If conversion optimization is expected, `/conversions/readiness` is `ready` (or explicitly reviewed).
 
 ## 2. Health Checks (Read-Only)
 
@@ -20,10 +20,11 @@ Run these checks for the target buyer:
 1. `GET /optimizer/economics/effective-cpm?buyer_id={buyer_id}&days=14`
 2. `GET /optimizer/economics/efficiency?buyer_id={buyer_id}&days=14`
 3. `GET /optimizer/economics/assumed-value?buyer_id={buyer_id}&days=14`
-4. `GET /conversions/health?buyer_id={buyer_id}`
-5. `GET /conversions/ingestion/stats?buyer_id={buyer_id}&days=7`
+4. `GET /conversions/readiness?buyer_id={buyer_id}&days=14&freshness_hours=72`
+5. `GET /conversions/health?buyer_id={buyer_id}`
+6. `GET /conversions/ingestion/stats?buyer_id={buyer_id}&days=7`
 
-If health is degraded, do not apply live changes. Continue with score/proposal review only.
+If readiness is not `ready`, do not apply live changes. Continue with score/proposal review only.
 
 ## 3. Standard Workflow
 
@@ -96,3 +97,4 @@ Reference setup guide: `docs/CONVERSION_CONNECTORS_SETUP_GUIDE.md`
 2. Prefer queue apply mode for first pass on any new model.
 3. Treat high rejected conversion postbacks as a data-quality incident.
 4. If model validation is intermittent, pause applies and fallback to rules model.
+5. Use `GET /conversions/pixel` only for lightweight web-event instrumentation; treat repeated pixel rejections as connector incidents and inspect DLQ.
