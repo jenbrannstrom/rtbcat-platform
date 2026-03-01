@@ -16,37 +16,59 @@ class PretargetingRepository:
     """SQL-only repository for pretargeting configs and publishers."""
 
     async def list_configs(self, bidder_id: str | None = None) -> list[dict[str, Any]]:
+        where_sql = ""
+        params: tuple[Any, ...] = ()
         if bidder_id:
-            return await pg_query(
-                """
-                SELECT * FROM (
-                    SELECT DISTINCT ON (COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id))
-                        pc.*
-                    FROM pretargeting_configs pc
-                    WHERE pc.bidder_id = %s
-                    ORDER BY
-                        COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id),
-                        pc.synced_at DESC NULLS LAST,
-                        pc.id DESC
-                ) deduped
-                ORDER BY billing_id NULLS LAST, config_id
-                """,
-                (bidder_id,),
-            )
-        return await pg_query(
-            """
-            SELECT * FROM (
+            where_sql = "WHERE pc.bidder_id = %s"
+            params = (bidder_id,)
+
+        sql = f"""
+            SELECT
+                deduped.config_id,
+                deduped.bidder_id,
+                deduped.billing_id,
+                deduped.display_name,
+                deduped.user_name,
+                deduped.state,
+                deduped.included_formats,
+                deduped.included_platforms,
+                deduped.included_sizes,
+                deduped.included_geos,
+                deduped.excluded_geos,
+                deduped.included_operating_systems,
+                deduped.maximum_qps,
+                deduped.synced_at
+            FROM (
                 SELECT DISTINCT ON (COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id))
-                    pc.*
+                    pc.config_id,
+                    pc.bidder_id,
+                    pc.billing_id,
+                    pc.display_name,
+                    pc.user_name,
+                    pc.state,
+                    pc.included_formats,
+                    pc.included_platforms,
+                    pc.included_sizes,
+                    pc.included_geos,
+                    pc.excluded_geos,
+                    pc.included_operating_systems,
+                    CASE
+                        WHEN (pc.raw_config->>'maximumQps') ~ '^[0-9]+$'
+                            THEN (pc.raw_config->>'maximumQps')::integer
+                        ELSE NULL
+                    END AS maximum_qps,
+                    pc.synced_at,
+                    pc.id
                 FROM pretargeting_configs pc
+                {where_sql}
                 ORDER BY
                     COALESCE(NULLIF(TRIM(pc.billing_id), ''), pc.config_id),
                     pc.synced_at DESC NULLS LAST,
                     pc.id DESC
             ) deduped
-            ORDER BY billing_id NULLS LAST, config_id
-            """
-        )
+            ORDER BY deduped.billing_id NULLS LAST, deduped.config_id
+        """
+        return await pg_query(sql, params)
 
     async def get_config_by_billing_id(self, billing_id: str) -> dict[str, Any] | None:
         return await pg_query_one(
