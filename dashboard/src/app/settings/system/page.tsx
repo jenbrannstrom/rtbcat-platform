@@ -916,10 +916,25 @@ export default function SystemStatusPage() {
 
         {/* Optimizer Control Plane Panel */}
         <div className="card p-6">
-          <div className="flex items-center mb-4">
-            <BarChart3 className="h-5 w-5 text-gray-400 mr-2" />
-            <h2 className="text-lg font-medium text-gray-900">Optimizer Control Plane</h2>
+          <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center">
+              <BarChart3 className="mr-2 h-5 w-5 text-gray-400" />
+              <h2 className="text-lg font-medium text-gray-900">Optimizer Control Plane</h2>
+            </div>
+            <span
+              className={cn(
+                "inline-flex items-center rounded px-2 py-1 text-xs font-medium",
+                selectedBuyerId ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700",
+              )}
+            >
+              Buyer context: {selectedBuyerId || "Not selected"}
+            </span>
           </div>
+          {!selectedBuyerId ? (
+            <div className="mb-4 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Select a buyer context in the header for buyer-scoped optimizer actions and telemetry.
+            </div>
+          ) : null}
 
           {optimizerPanelLoading ? (
             <div className="flex items-center justify-center py-4">
