@@ -284,6 +284,11 @@ def test_is_network_blocked_urlerror_detects_operation_not_permitted():
     assert is_network_blocked_urlerror(exc) is True
 
 
+def test_is_network_blocked_urlerror_detects_temporary_dns_resolution_failure():
+    exc = urllib.error.URLError(OSError(-3, "Temporary failure in name resolution"))
+    assert is_network_blocked_urlerror(exc) is True
+
+
 def test_is_network_blocked_urlerror_ignores_connection_refused():
     exc = urllib.error.URLError(OSError(111, "Connection refused"))
     assert is_network_blocked_urlerror(exc) is False

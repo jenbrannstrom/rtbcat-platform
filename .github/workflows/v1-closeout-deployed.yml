@@ -1,0 +1,119 @@
+name: v1 Closeout Deployed
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "API base URL (include /api path)"
+        required: true
+        default: "https://scan.rtb.cat/api"
+      buyer_id:
+        description: "Optional buyer_id scope"
+        required: false
+        default: ""
+      model_id:
+        description: "Optional model_id override"
+        required: false
+        default: ""
+      canary_profile:
+        description: "Workflow guardrail profile for score+propose checks"
+        required: true
+        type: choice
+        default: "balanced"
+        options:
+          - safe
+          - balanced
+          - aggressive
+      qps_page_slo_since_hours:
+        description: "Lookback window for strict QPS page SLO canary"
+        required: true
+        default: "24"
+      allow_blocked:
+        description: "Treat exit code 2 as Blocked instead of failing run"
+        required: true
+        type: choice
+        default: "false"
+        options:
+          - "false"
+          - "true"
+
+concurrency:
+  group: v1-closeout-deployed-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  closeout-deployed:
+    name: Run deployed closeout canary gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CATSCAN_API_BASE_URL: ${{ inputs.api_base_url }}
+      CATSCAN_BUYER_ID: ${{ inputs.buyer_id }}
+      CATSCAN_MODEL_ID: ${{ inputs.model_id }}
+      CATSCAN_CANARY_PROFILE: ${{ inputs.canary_profile }}
+      CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS: ${{ inputs.qps_page_slo_since_hours }}
+      CATSCAN_BEARER_TOKEN: ${{ secrets.CATSCAN_CANARY_BEARER_TOKEN }}
+      CATSCAN_SESSION_COOKIE: ${{ secrets.CATSCAN_CANARY_SESSION_COOKIE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate canary auth inputs
+        run: |
+          if [[ -z "${CATSCAN_BEARER_TOKEN:-}" && -z "${CATSCAN_SESSION_COOKIE:-}" ]]; then
+            echo "Set CATSCAN_CANARY_BEARER_TOKEN or CATSCAN_CANARY_SESSION_COOKIE in repository secrets." >&2
+            exit 1
+          fi
+
+      - name: Run deployed-only closeout
+        id: deployed_closeout
+        run: |
+          allow_blocked="0"
+          if [[ "${{ inputs.allow_blocked }}" == "true" ]]; then
+            allow_blocked="1"
+          fi
+          CATSCAN_CLOSEOUT_ALLOW_DEPLOYED_BLOCKED="${allow_blocked}" make v1-closeout-deployed-only
+
+      - name: Publish closeout summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report_path = Path("/tmp/v1_closeout_last_run.json")
+          summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
+
+          with summary_path.open("a", encoding="utf-8") as summary:
+              summary.write("## V1 Closeout Deployed Report\n\n")
+              if not report_path.exists():
+                  summary.write(f"- report missing: `{report_path}`\n")
+                  raise SystemExit(0)
+
+              payload = json.loads(report_path.read_text(encoding="utf-8"))
+              summary.write(f"- branch: `{payload.get('branch', '')}`\n")
+              summary.write(f"- commit: `{payload.get('commit', '')}`\n")
+              summary.write(f"- profile: `{payload.get('profile', '')}`\n")
+              summary.write(f"- timestamp_utc: `{payload.get('timestamp_utc', '')}`\n\n")
+              summary.write("| Step | Status | Notes |\n")
+              summary.write("|---|---|---|\n")
+              for step in payload.get("steps", []):
+                  name = str(step.get("step", "")).replace("\n", " ").strip()
+                  status = str(step.get("status", "")).replace("\n", " ").strip()
+                  notes = str(step.get("notes", "")).replace("\n", " ").strip()
+                  summary.write(f"| {name} | {status} | {notes} |\n")
+          PY
+
+      - name: Upload closeout report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v1-closeout-deployed-report
+          path: |
+            /tmp/v1_closeout_last_run.md
+            /tmp/v1_closeout_last_run.json
+          if-no-files-found: error
