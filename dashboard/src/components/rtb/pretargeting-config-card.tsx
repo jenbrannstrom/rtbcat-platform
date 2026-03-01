@@ -145,6 +145,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
     queryKey: ['pretargeting-detail', config.billing_id],
     queryFn: () => getPretargetingConfigDetail(config.billing_id),
     enabled: expanded || isEditingQps,
+    staleTime: 30_000,
   });
 
   const nameMutation = useMutation({
