@@ -54,23 +54,27 @@ class HomeAnalyticsService:
         buyer_id: str | None,
         limit: int,
     ) -> dict[str, Any]:
-        seat_status = await _get_precompute_status(
-            "seat_daily",
-            days,
-            filters=["buyer_account_id = %s"] if buyer_id else None,
-            params=[buyer_id] if buyer_id else None,
-        )
-        publisher_status = await _get_precompute_status(
-            "seat_publisher_daily",
-            days,
-            filters=["buyer_account_id = %s"] if buyer_id else None,
-            params=[buyer_id] if buyer_id else None,
-        )
-        geo_status = await _get_precompute_status(
-            "seat_geo_daily",
-            days,
-            filters=["buyer_account_id = %s"] if buyer_id else None,
-            params=[buyer_id] if buyer_id else None,
+        filters = ["buyer_account_id = %s"] if buyer_id else None
+        params = [buyer_id] if buyer_id else None
+        seat_status, publisher_status, geo_status = await asyncio.gather(
+            _get_precompute_status(
+                "seat_daily",
+                days,
+                filters=filters,
+                params=params,
+            ),
+            _get_precompute_status(
+                "seat_publisher_daily",
+                days,
+                filters=filters,
+                params=params,
+            ),
+            _get_precompute_status(
+                "seat_geo_daily",
+                days,
+                filters=filters,
+                params=params,
+            ),
         )
 
         buyer_filter_applied = bool(buyer_id)
@@ -117,7 +121,13 @@ class HomeAnalyticsService:
                 },
             }
 
-        funnel_row = await self._repo.get_funnel_row(days, buyer_id)
+        funnel_row, publisher_rows, geo_rows, publisher_count, country_count = await asyncio.gather(
+            self._repo.get_funnel_row(days, buyer_id),
+            self._repo.get_publisher_rows(days, buyer_id, limit),
+            self._repo.get_geo_rows(days, buyer_id, limit),
+            self._repo.get_publisher_count(days, buyer_id),
+            self._repo.get_country_count(days, buyer_id),
+        )
 
         total_reached = (funnel_row["total_reached"] or 0) if funnel_row else 0
         total_impressions = (funnel_row["total_impressions"] or 0) if funnel_row else 0
@@ -131,7 +141,6 @@ class HomeAnalyticsService:
         win_rate = (total_impressions / effective_reached * 100) if effective_reached > 0 else 0
         waste_rate = 100 - win_rate
 
-        publisher_rows = await self._repo.get_publisher_rows(days, buyer_id, limit)
         publishers = []
         for row in publisher_rows:
             reached = row["reached"] or 0
@@ -153,7 +162,6 @@ class HomeAnalyticsService:
                 }
             )
 
-        geo_rows = await self._repo.get_geo_rows(days, buyer_id, limit)
         geos = []
         for row in geo_rows:
             reached = row["reached"] or 0
@@ -177,9 +185,6 @@ class HomeAnalyticsService:
             buyer_filter_message = (
                 "No precomputed data for this seat. Run a refresh after imports."
             )
-
-        publisher_count = await self._repo.get_publisher_count(days, buyer_id)
-        country_count = await self._repo.get_country_count(days, buyer_id)
 
         data_state = "healthy"
         fallback_reason = None
