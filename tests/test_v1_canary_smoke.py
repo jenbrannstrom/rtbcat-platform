@@ -7,6 +7,7 @@ import pytest
 from scripts.v1_canary_smoke import (
     SmokeFailure,
     build_conversion_readiness_params,
+    build_qps_load_latency_requests,
     build_webhook_hmac_signature,
     build_webhook_security_headers,
     build_pixel_request_params,
@@ -146,6 +147,20 @@ def test_build_conversion_readiness_params_includes_fields():
     assert params["buyer_id"] == "buyer-1"
     assert params["days"] == 14
     assert params["freshness_hours"] == 72
+
+
+def test_build_qps_load_latency_requests_includes_buyer_and_days():
+    requests = build_qps_load_latency_requests(
+        buyer_id="buyer-1",
+        days=21,
+    )
+    assert len(requests) == 4
+    by_path = {path: params for path, params in requests}
+    assert by_path["/settings/endpoints"]["buyer_id"] == "buyer-1"
+    assert by_path["/settings/endpoints"]["live"] == "true"
+    assert by_path["/settings/pretargeting"]["buyer_id"] == "buyer-1"
+    assert by_path["/analytics/home/configs"]["days"] == 21
+    assert by_path["/analytics/home/endpoint-efficiency"]["days"] == 21
 
 
 def test_build_webhook_postback_payload_includes_expected_fields():

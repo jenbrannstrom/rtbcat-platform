@@ -159,6 +159,24 @@ Equivalent convenience target:
 make v1-canary-webhook-security-status
 ```
 
+Optional QPS startup API latency gate:
+
+```bash
+CATSCAN_CANARY_RUN_QPS_LOAD_LATENCY=1 \
+CATSCAN_CANARY_QPS_LATENCY_DAYS=14 \
+CATSCAN_CANARY_MAX_SETTINGS_ENDPOINTS_LATENCY_MS=8000 \
+CATSCAN_CANARY_MAX_SETTINGS_PRETARGETING_LATENCY_MS=10000 \
+CATSCAN_CANARY_MAX_HOME_CONFIGS_LATENCY_MS=12000 \
+CATSCAN_CANARY_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS=12000 \
+make v1-canary-smoke
+```
+
+Equivalent convenience target:
+
+```bash
+make v1-canary-qps-load-latency
+```
+
 Bundled webhook security suite (auth + HMAC + freshness + rate-limit + security-status):
 
 ```bash

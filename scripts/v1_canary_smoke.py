@@ -9,6 +9,7 @@ import hmac
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -311,6 +312,42 @@ def build_conversion_readiness_params(
     }
 
 
+def build_qps_load_latency_requests(
+    *,
+    buyer_id: str | None,
+    days: int,
+) -> list[tuple[str, dict[str, Any]]]:
+    return [
+        (
+            "/settings/endpoints",
+            {
+                "buyer_id": buyer_id,
+                "live": "true",
+            },
+        ),
+        (
+            "/settings/pretargeting",
+            {
+                "buyer_id": buyer_id,
+            },
+        ),
+        (
+            "/analytics/home/configs",
+            {
+                "buyer_id": buyer_id,
+                "days": days,
+            },
+        ),
+        (
+            "/analytics/home/endpoint-efficiency",
+            {
+                "buyer_id": buyer_id,
+                "days": days,
+            },
+        ),
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run v1 canary smoke checks against API.")
     parser.add_argument(
@@ -381,6 +418,41 @@ def main() -> int:
         type=int,
         default=int(os.getenv("CATSCAN_CANARY_MIN_SECURED_WEBHOOK_SOURCES", "0")),
         help="Minimum number of webhook sources that must have secret or HMAC enabled (default: 0).",
+    )
+    parser.add_argument(
+        "--run-qps-load-latency-check",
+        action="store_true",
+        help="Run optional startup API latency checks for QPS Home dependencies.",
+    )
+    parser.add_argument(
+        "--qps-load-latency-days",
+        type=int,
+        default=int(os.getenv("CATSCAN_CANARY_QPS_LATENCY_DAYS", "14")),
+        help="Days window used for QPS startup latency checks (default: 14).",
+    )
+    parser.add_argument(
+        "--max-settings-endpoints-latency-ms",
+        type=float,
+        default=float(os.getenv("CATSCAN_CANARY_MAX_SETTINGS_ENDPOINTS_LATENCY_MS", "8000")),
+        help="Max latency budget for /settings/endpoints (default: 8000ms).",
+    )
+    parser.add_argument(
+        "--max-settings-pretargeting-latency-ms",
+        type=float,
+        default=float(os.getenv("CATSCAN_CANARY_MAX_SETTINGS_PRETARGETING_LATENCY_MS", "10000")),
+        help="Max latency budget for /settings/pretargeting (default: 10000ms).",
+    )
+    parser.add_argument(
+        "--max-home-configs-latency-ms",
+        type=float,
+        default=float(os.getenv("CATSCAN_CANARY_MAX_HOME_CONFIGS_LATENCY_MS", "12000")),
+        help="Max latency budget for /analytics/home/configs (default: 12000ms).",
+    )
+    parser.add_argument(
+        "--max-home-endpoint-efficiency-latency-ms",
+        type=float,
+        default=float(os.getenv("CATSCAN_CANARY_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS", "12000")),
+        help="Max latency budget for /analytics/home/endpoint-efficiency (default: 12000ms).",
     )
     parser.add_argument(
         "--pixel-source-type",
@@ -543,6 +615,16 @@ def main() -> int:
         parser.error("--webhook-rate-limit-window-seconds must be >= 1")
     if args.min_secured_webhook_sources < 0:
         parser.error("--min-secured-webhook-sources must be >= 0")
+    if args.qps_load_latency_days < 1 or args.qps_load_latency_days > 365:
+        parser.error("--qps-load-latency-days must be between 1 and 365")
+    if args.max_settings_endpoints_latency_ms <= 0:
+        parser.error("--max-settings-endpoints-latency-ms must be > 0")
+    if args.max_settings_pretargeting_latency_ms <= 0:
+        parser.error("--max-settings-pretargeting-latency-ms must be > 0")
+    if args.max_home_configs_latency_ms <= 0:
+        parser.error("--max-home-configs-latency-ms must be > 0")
+    if args.max_home_endpoint_efficiency_latency_ms <= 0:
+        parser.error("--max-home-endpoint-efficiency-latency-ms must be > 0")
 
     client = SmokeClient(
         base_url=args.base_url,
@@ -901,6 +983,45 @@ def main() -> int:
             ),
         )
 
+    def check_qps_load_latency() -> None:
+        if not args.run_qps_load_latency_check:
+            return
+
+        thresholds_ms = {
+            "/settings/endpoints": float(args.max_settings_endpoints_latency_ms),
+            "/settings/pretargeting": float(args.max_settings_pretargeting_latency_ms),
+            "/analytics/home/configs": float(args.max_home_configs_latency_ms),
+            "/analytics/home/endpoint-efficiency": float(args.max_home_endpoint_efficiency_latency_ms),
+        }
+        observed: dict[str, float] = {}
+        requests = build_qps_load_latency_requests(
+            buyer_id=args.buyer_id,
+            days=args.qps_load_latency_days,
+        )
+        for path, params in requests:
+            started_at = time.perf_counter()
+            status, _, body = client.request_status_bytes("GET", path, params=params)
+            elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+            _assert(status == 200, f"{path}: expected HTTP 200, got HTTP {status}")
+            _assert(body, f"{path}: empty response body")
+            try:
+                payload = json.loads(body.decode("utf-8"))
+            except json.JSONDecodeError as exc:
+                raise SmokeFailure(f"{path}: non-JSON response during latency check") from exc
+            _assert(isinstance(payload, dict), f"{path}: expected JSON object response")
+            budget_ms = thresholds_ms[path]
+            _assert(
+                elapsed_ms <= budget_ms,
+                (
+                    f"{path}: latency {elapsed_ms:.1f}ms exceeds budget {budget_ms:.1f}ms "
+                    f"(days={args.qps_load_latency_days}, buyer_id={args.buyer_id or 'none'})"
+                ),
+            )
+            observed[path] = round(elapsed_ms, 1)
+
+        observed_summary = ", ".join(f"{path}={latency}ms" for path, latency in observed.items())
+        print(f"INFO  QPS startup API latencies -> {observed_summary}")
+
     def check_optimizer_economics() -> None:
         payload = client.request(
             "GET",
@@ -1045,6 +1166,7 @@ def main() -> int:
         ("Conversion webhook freshness (optional)", check_conversion_webhook_freshness),
         ("Conversion webhook rate-limit (optional)", check_conversion_webhook_rate_limit),
         ("Conversion webhook security status (optional)", check_conversion_webhook_security_status),
+        ("QPS startup API latency (optional)", check_qps_load_latency),
         ("Optimizer economics", check_optimizer_economics),
         ("Optimizer models", check_models_and_resolve),
         ("Model endpoint validation", check_model_validation),
