@@ -101,6 +101,8 @@ class ServiceAccount:
 class SeatsService:
     """Service for buyer seat and service account management."""
 
+    _BUYER_SEATS_LIST_CACHE_TTL_SECONDS = 30.0
+    _BUYER_SEATS_LIST_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
     _BUYER_SEAT_WITH_BIDDER_CACHE_TTL_SECONDS = 60.0
     _BUYER_SEAT_WITH_BIDDER_CACHE: dict[str, tuple[float, Optional[dict[str, Any]]]] = {}
 
@@ -117,6 +119,28 @@ class SeatsService:
             return
         cls._BUYER_SEAT_WITH_BIDDER_CACHE.pop(buyer_id, None)
 
+    @classmethod
+    def _invalidate_buyer_seats_list_cache(cls) -> None:
+        cls._BUYER_SEATS_LIST_CACHE.clear()
+
+    @classmethod
+    def clear_caches(cls) -> None:
+        cls._invalidate_buyer_seat_with_bidder_cache()
+        cls._invalidate_buyer_seats_list_cache()
+
+    @staticmethod
+    def _buyer_seats_list_cache_key(
+        bidder_id: Optional[str],
+        active_only: bool,
+        buyer_ids: Optional[list[str]] = None,
+    ) -> str:
+        bidder_key = bidder_id or "__all__"
+        active_key = "active" if active_only else "all"
+        if buyer_ids is None:
+            return f"scope:all:bidder:{bidder_key}:state:{active_key}"
+        ids_key = ",".join(sorted(set(buyer_ids)))
+        return f"scope:allow:{ids_key}:bidder:{bidder_key}:state:{active_key}"
+
     # =========================================================================
     # Buyer Seats
     # =========================================================================
@@ -127,7 +151,17 @@ class SeatsService:
         active_only: bool = True,
     ) -> list[BuyerSeat]:
         """Get all buyer seats."""
+        cache_key = self._buyer_seats_list_cache_key(bidder_id, active_only)
+        now = time.monotonic()
+        cached = self._BUYER_SEATS_LIST_CACHE.get(cache_key)
+        if cached and cached[0] > now:
+            return [BuyerSeat.from_row(dict(row)) for row in cached[1]]
+
         rows = await self.repo.get_buyer_seats(bidder_id, active_only)
+        self._BUYER_SEATS_LIST_CACHE[cache_key] = (
+            now + self._BUYER_SEATS_LIST_CACHE_TTL_SECONDS,
+            [dict(row) for row in rows],
+        )
         return [BuyerSeat.from_row(row) for row in rows]
 
     async def get_buyer_seats_by_ids(
@@ -137,10 +171,26 @@ class SeatsService:
         active_only: bool = True,
     ) -> list[BuyerSeat]:
         """Get buyer seats constrained to a provided buyer_id allow-list."""
+        if not buyer_ids:
+            return []
+        cache_key = self._buyer_seats_list_cache_key(
+            bidder_id,
+            active_only,
+            buyer_ids=buyer_ids,
+        )
+        now = time.monotonic()
+        cached = self._BUYER_SEATS_LIST_CACHE.get(cache_key)
+        if cached and cached[0] > now:
+            return [BuyerSeat.from_row(dict(row)) for row in cached[1]]
+
         rows = await self.repo.get_buyer_seats_by_ids(
             buyer_ids=buyer_ids,
             bidder_id=bidder_id,
             active_only=active_only,
+        )
+        self._BUYER_SEATS_LIST_CACHE[cache_key] = (
+            now + self._BUYER_SEATS_LIST_CACHE_TTL_SECONDS,
+            [dict(row) for row in rows],
         )
         return [BuyerSeat.from_row(row) for row in rows]
 
@@ -171,18 +221,22 @@ class SeatsService:
             service_account_id=seat.service_account_id,
         )
         self._invalidate_buyer_seat_with_bidder_cache(seat.buyer_id)
+        self._invalidate_buyer_seats_list_cache()
 
     async def update_display_name(self, buyer_id: str, display_name: str) -> bool:
         """Update a buyer seat's display name."""
         updated = await self.repo.update_buyer_seat_display_name(buyer_id, display_name)
         if updated:
             self._invalidate_buyer_seat_with_bidder_cache(buyer_id)
+            self._invalidate_buyer_seats_list_cache()
         return updated
 
     async def update_seat_after_sync(self, buyer_id: str) -> None:
         """Update seat metadata after a sync operation."""
         await self.repo.update_seat_creative_count(buyer_id)
         await self.repo.update_seat_sync_time(buyer_id)
+        self._invalidate_buyer_seat_with_bidder_cache(buyer_id)
+        self._invalidate_buyer_seats_list_cache()
 
     async def link_to_service_account(
         self, buyer_id: str, service_account_id: str
@@ -190,6 +244,7 @@ class SeatsService:
         """Link a buyer seat to a service account."""
         await self.repo.link_buyer_seat_to_service_account(buyer_id, service_account_id)
         self._invalidate_buyer_seat_with_bidder_cache(buyer_id)
+        self._invalidate_buyer_seats_list_cache()
 
     async def get_distinct_bidder_ids(self) -> list[str]:
         """Get all unique bidder IDs."""
@@ -197,7 +252,11 @@ class SeatsService:
 
     async def populate_from_creatives(self) -> int:
         """Populate buyer seats from existing creatives."""
-        return await self.repo.populate_buyer_seats_from_creatives()
+        created = await self.repo.populate_buyer_seats_from_creatives()
+        if created > 0:
+            self._invalidate_buyer_seat_with_bidder_cache()
+            self._invalidate_buyer_seats_list_cache()
+        return created
 
     # =========================================================================
     # Service Accounts
