@@ -145,6 +145,20 @@ Equivalent convenience target:
 make v1-canary-webhook-rate-limit
 ```
 
+Optional webhook security-status gate:
+
+```bash
+CATSCAN_CANARY_RUN_WEBHOOK_SECURITY_STATUS=1 \
+CATSCAN_CANARY_MIN_SECURED_WEBHOOK_SOURCES=1 \
+make v1-canary-smoke
+```
+
+Equivalent convenience target:
+
+```bash
+make v1-canary-webhook-security-status
+```
+
 Optional workflow tuning for canary:
 
 ```bash

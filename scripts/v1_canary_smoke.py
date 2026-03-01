@@ -372,6 +372,17 @@ def main() -> int:
         help="Run optional webhook rate-limit enforcement check on generic conversion postback.",
     )
     parser.add_argument(
+        "--run-webhook-security-status-check",
+        action="store_true",
+        help="Run optional webhook security-status API contract check.",
+    )
+    parser.add_argument(
+        "--min-secured-webhook-sources",
+        type=int,
+        default=int(os.getenv("CATSCAN_CANARY_MIN_SECURED_WEBHOOK_SOURCES", "0")),
+        help="Minimum number of webhook sources that must have secret or HMAC enabled (default: 0).",
+    )
+    parser.add_argument(
         "--pixel-source-type",
         default=os.getenv("CATSCAN_CANARY_PIXEL_SOURCE_TYPE", "pixel"),
         help="Source type sent to /conversions/pixel (default: pixel).",
@@ -530,6 +541,8 @@ def main() -> int:
         parser.error("--webhook-freshness-max-skew-seconds must be >= 1")
     if args.webhook_rate_limit_window_seconds < 1:
         parser.error("--webhook-rate-limit-window-seconds must be >= 1")
+    if args.min_secured_webhook_sources < 0:
+        parser.error("--min-secured-webhook-sources must be >= 0")
 
     client = SmokeClient(
         base_url=args.base_url,
@@ -852,6 +865,42 @@ def main() -> int:
             ),
         )
 
+    def check_conversion_webhook_security_status() -> None:
+        if not args.run_webhook_security_status_check:
+            return
+        payload = client.request("GET", "/conversions/security/status")
+        for field in (
+            "shared_secret_enabled",
+            "shared_hmac_enabled",
+            "sources",
+            "freshness_enforced",
+            "rate_limit_enabled",
+            "rate_limit_per_window",
+            "rate_limit_window_seconds",
+        ):
+            _assert(field in payload, f"{field} missing from /conversions/security/status")
+
+        rows = payload.get("sources")
+        _assert(isinstance(rows, list), "sources must be a list in /conversions/security/status")
+        for row in rows:
+            _assert(isinstance(row, dict), "source row must be object in /conversions/security/status")
+            _assert("source_type" in row, "source_type missing in /conversions/security/status source row")
+            _assert("secret_enabled" in row, "secret_enabled missing in /conversions/security/status source row")
+            _assert("hmac_enabled" in row, "hmac_enabled missing in /conversions/security/status source row")
+
+        secured = [
+            row
+            for row in rows
+            if isinstance(row, dict) and (bool(row.get("secret_enabled")) or bool(row.get("hmac_enabled")))
+        ]
+        _assert(
+            len(secured) >= args.min_secured_webhook_sources,
+            (
+                "webhook security-status check expected at least "
+                f"{args.min_secured_webhook_sources} secured source(s), got {len(secured)}"
+            ),
+        )
+
     def check_optimizer_economics() -> None:
         payload = client.request(
             "GET",
@@ -995,6 +1044,7 @@ def main() -> int:
         ("Conversion webhook HMAC (optional)", check_conversion_webhook_hmac),
         ("Conversion webhook freshness (optional)", check_conversion_webhook_freshness),
         ("Conversion webhook rate-limit (optional)", check_conversion_webhook_rate_limit),
+        ("Conversion webhook security status (optional)", check_conversion_webhook_security_status),
         ("Optimizer economics", check_optimizer_economics),
         ("Optimizer models", check_models_and_resolve),
         ("Model endpoint validation", check_model_validation),

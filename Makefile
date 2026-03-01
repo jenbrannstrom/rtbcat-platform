@@ -1,4 +1,4 @@
-.PHONY: help v1-canary-smoke v1-canary-workflow v1-canary-lifecycle v1-canary-go-no-go v1-canary-conversion-ready v1-canary-pixel v1-canary-webhook-auth v1-canary-webhook-hmac v1-canary-webhook-freshness v1-canary-webhook-rate-limit v1-canary-safe v1-canary-balanced v1-canary-aggressive v1-conversion-regression v1-gate phase0-regression phase0-dashboard-build phase0-gate
+.PHONY: help v1-canary-smoke v1-canary-workflow v1-canary-lifecycle v1-canary-go-no-go v1-canary-conversion-ready v1-canary-pixel v1-canary-webhook-auth v1-canary-webhook-hmac v1-canary-webhook-freshness v1-canary-webhook-rate-limit v1-canary-webhook-security-status v1-canary-safe v1-canary-balanced v1-canary-aggressive v1-conversion-regression v1-gate phase0-regression phase0-dashboard-build phase0-gate
 
 help:
 	@echo "Targets:"
@@ -12,6 +12,7 @@ help:
 	@echo "  make v1-canary-webhook-hmac # Run canary with conversion webhook HMAC gate"
 	@echo "  make v1-canary-webhook-freshness # Run canary with conversion webhook freshness gate"
 	@echo "  make v1-canary-webhook-rate-limit # Run canary with conversion webhook rate-limit gate"
+	@echo "  make v1-canary-webhook-security-status # Run canary with webhook security-status gate"
 	@echo "  make v1-canary-safe      # Run workflow canary with safe preset"
 	@echo "  make v1-canary-balanced  # Run workflow canary with balanced preset"
 	@echo "  make v1-canary-aggressive # Run workflow canary with aggressive preset"
@@ -55,6 +56,9 @@ v1-canary-webhook-freshness:
 
 v1-canary-webhook-rate-limit:
 	CATSCAN_CANARY_RUN_WEBHOOK_RATE_LIMIT=1 bash scripts/run_v1_canary_smoke.sh
+
+v1-canary-webhook-security-status:
+	CATSCAN_CANARY_RUN_WEBHOOK_SECURITY_STATUS=1 bash scripts/run_v1_canary_smoke.sh
 
 v1-canary-safe:
 	CATSCAN_CANARY_RUN_WORKFLOW=1 CATSCAN_CANARY_PROFILE=safe bash scripts/run_v1_canary_smoke.sh
