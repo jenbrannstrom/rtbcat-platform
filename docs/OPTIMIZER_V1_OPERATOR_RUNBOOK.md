@@ -23,6 +23,7 @@ Run these checks for the target buyer:
 4. `GET /conversions/readiness?buyer_id={buyer_id}&days=14&freshness_hours=72`
 5. `GET /conversions/health?buyer_id={buyer_id}`
 6. `GET /conversions/ingestion/stats?buyer_id={buyer_id}&days=7`
+7. `GET /conversions/security/status`
 
 If readiness is not `ready`, do not apply live changes. Continue with score/proposal review only.
 
@@ -91,6 +92,19 @@ Reference setup guide: `docs/CONVERSION_CONNECTORS_SETUP_GUIDE.md`
    - `CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_ENABLED=1`
    - `CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_PER_MINUTE=240`
    - `CATSCAN_CONVERSIONS_WEBHOOK_RATE_LIMIT_WINDOW_SECONDS=60`
+4. Security posture visibility:
+   - `GET /conversions/security/status` (non-secret control state for auth/HMAC/freshness/rate-limit)
+
+Recommended canary command for full webhook security suite:
+
+```bash
+CATSCAN_CANARY_WEBHOOK_SECRET=<generic_or_shared_secret_if_enabled> \
+CATSCAN_CANARY_WEBHOOK_HMAC_SECRET=<generic_or_shared_hmac_secret> \
+CATSCAN_CANARY_WEBHOOK_RATE_LIMIT_PER_WINDOW=1 \
+CATSCAN_CANARY_WEBHOOK_RATE_LIMIT_WINDOW_SECONDS=60 \
+CATSCAN_CANARY_MIN_SECURED_WEBHOOK_SOURCES=1 \
+make v1-canary-webhook-security
+```
 
 ## 6. Operational Notes
 
