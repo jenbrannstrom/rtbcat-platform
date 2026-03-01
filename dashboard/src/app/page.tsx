@@ -375,10 +375,14 @@ function WasteAnalysisContent() {
     },
   });
 
-  const { data: endpointEfficiency, isLoading: endpointEfficiencyLoading } = useQuery({
+  const {
+    data: endpointEfficiency,
+    isLoading: endpointEfficiencyLoading,
+    refetch: refetchEndpointEfficiency,
+  } = useQuery({
     queryKey: ["endpoint-efficiency", days, selectedBuyerId],
     queryFn: fetchMeasuredEndpointEfficiency,
-    enabled: seatReady,
+    enabled: false,
   });
 
   const handleRefresh = () => {
@@ -477,6 +481,11 @@ function WasteAnalysisContent() {
     if (!seatReady || !tableHydrated) return;
     refetchFunnel();
   }, [refetchFunnel, seatReady, tableHydrated, selectedBuyerId, days]);
+
+  useEffect(() => {
+    if (!seatReady || !tableHydrated) return;
+    refetchEndpointEfficiency();
+  }, [refetchEndpointEfficiency, seatReady, tableHydrated, selectedBuyerId, days]);
 
   useEffect(() => {
     const startedAtMs = Date.now();
