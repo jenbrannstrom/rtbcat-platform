@@ -300,7 +300,7 @@ function WasteAnalysisContent() {
   } = useQuery({
     queryKey: ["rtb-funnel", days, selectedBuyerId],
     queryFn: () => getRTBFunnel(days, selectedBuyerId || undefined),
-    enabled: seatReady,
+    enabled: false,
   });
 
   // Fetch spend stats for CPM display (filtered by expanded config if selected)
@@ -434,6 +434,11 @@ function WasteAnalysisContent() {
   const activeConfigsCount = displayConfigs.filter(c => c.state === 'ACTIVE').length;
   const hasTableRows = !configsLoading && displayConfigs.length > 0;
   const tableHydrated = hasTableRows && !configPerformanceLoading && !configPerformanceFetching;
+
+  useEffect(() => {
+    if (!seatReady || !tableHydrated) return;
+    refetchFunnel();
+  }, [refetchFunnel, seatReady, tableHydrated, selectedBuyerId, days]);
 
   useEffect(() => {
     writeQpsLoadMetricsSnapshot();
