@@ -289,9 +289,6 @@ class HomeAnalyticsService:
             else:
                 win_rate = 0
 
-            total_reached += reached
-            total_impressions += impressions
-
             configs.append(
                 {
                     "billing_id": row["billing_id"],
@@ -312,6 +309,13 @@ class HomeAnalyticsService:
                 }
             )
 
+            total_reached += reached
+            total_impressions += impressions
+
+        if rows:
+            total_reached = int(rows[0].get("overall_total_reached") or total_reached)
+            total_impressions = int(rows[0].get("overall_total_impressions") or total_impressions)
+
         overall_win = (total_impressions / total_reached * 100) if total_reached > 0 else 0
 
         return {
@@ -322,7 +326,7 @@ class HomeAnalyticsService:
             "data_state": "degraded" if fallback_applied else "healthy",
             "fallback_applied": fallback_applied,
             "fallback_reason": fallback_reason,
-            "configs": configs[:20],
+            "configs": configs,
             "total_reached": total_reached,
             "total_impressions": total_impressions,
             "overall_win_rate_pct": round(overall_win, 1),

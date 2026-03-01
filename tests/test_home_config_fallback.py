@@ -101,3 +101,40 @@ async def test_home_configs_no_fallback_when_7d_has_rows(monkeypatch: pytest.Mon
     assert payload["effective_days"] == 7
     assert len(payload["configs"]) == 1
     assert payload["configs"][0]["billing_id"] == "cfg-2"
+
+
+@pytest.mark.asyncio
+async def test_home_configs_use_overall_totals_when_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = StubHomeConfigRepo(
+        rows_by_days={
+            7: [
+                {
+                    "billing_id": "cfg-3",
+                    "total_reached": 50,
+                    "total_impressions": 10,
+                    "total_bids_in_auction": 20,
+                    "total_auctions_won": 5,
+                    "overall_total_reached": 1000,
+                    "overall_total_impressions": 200,
+                }
+            ]
+        }
+    )
+    service = HomeAnalyticsService(repo=repo)
+
+    async def stub_status(
+        _table_name: str,
+        _days: int,
+        filters: list[str] | None = None,
+        params: list[str] | None = None,
+    ) -> dict:
+        del filters, params
+        return {"table": "pretarg_daily", "exists": True, "has_rows": True, "row_count": 4}
+
+    monkeypatch.setattr("services.home_analytics_service._get_precompute_status", stub_status)
+
+    payload = await service.get_config_payload(days=7, buyer_id="1487810529")
+
+    assert payload["total_reached"] == 1000
+    assert payload["total_impressions"] == 200
+    assert payload["overall_win_rate_pct"] == 20.0
