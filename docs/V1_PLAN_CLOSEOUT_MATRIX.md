@@ -1,7 +1,7 @@
 # V1 Plan Closeout Matrix
 
-**Last updated:** 2026-03-01 19:42:03 UTC  
-**Branch checkpoint:** `unified-platform` @ `ff918f8`
+**Last updated:** 2026-03-01 20:12:00 UTC  
+**Branch checkpoint:** `unified-platform` (rolling checkpoint)
 
 ## Status Legend
 
@@ -38,6 +38,7 @@
 8. CI automation:
    - `.github/workflows/v1-closeout-quick.yml` runs `CATSCAN_CLOSEOUT_PROFILE=quick make v1-closeout-local`, publishes a GitHub job summary from `/tmp/v1_closeout_last_run.json`, and uploads both `/tmp/v1_closeout_last_run.md` and `/tmp/v1_closeout_last_run.json` as artifacts on matching push/PR changes.
    - `.github/workflows/v1-closeout-deployed.yml` adds manual (`workflow_dispatch`) deployed closeout execution using `make v1-closeout-deployed-only`, with summary + md/json artifacts for attachable canary evidence.
+   - `.github/workflows/v1-byom-api-regression.yml` runs `make v1-byom-api-regression` on optimizer API/service/test changes so BYOM API/e2e coverage is validated in a dependency-provisioned CI runner.
 
 ## Closeout Matrix
 
@@ -46,7 +47,7 @@
 | Phase 0 Foundation Hardening | Completed | Complete | `v1-gate` + existing Phase 0 tests/API/UI coverage | None |
 | Phase 1 Conversion Schema | Implemented baseline | Operational Pending | Conversion schema/service/API tests pass in `v1-gate` | Production-volume validation, retention tuning, connector guardrail validation |
 | Phase 2 Conversion Connectors | Implemented baseline, rollout in progress | Operational Pending | Connector/readiness/security code + tests are present and passing | Customer-by-customer production certification and sustained ingestion/SLO checks |
-| Phase 3 BYOM Platform | Implemented in code | Operational Pending | Optimizer service/regression suites pass locally (`44 passed`); optimizer routers/services compile cleanly; API/e2e suites are env-blocked here (missing `fastapi` package with network-restricted install) | Production model onboarding + runbook-driven operator acceptance + API/e2e run in provisioned test env |
+| Phase 3 BYOM Platform | Implemented in code | Operational Pending | Optimizer service/regression suites pass locally (`44 passed`); optimizer routers/services compile cleanly; API/e2e suites are env-blocked in this workspace (missing `fastapi` with network-restricted install), with CI regression path now available via `.github/workflows/v1-byom-api-regression.yml` | Production model onboarding + runbook-driven operator acceptance + successful BYOM API/e2e CI evidence for target environments |
 | Phase 4 QPS Performance | In progress | Operational Pending | Extensive query/cache/render improvements committed; local QPS contract/cache suites pass | Deployed canary SLO attainment (`p95 first row <= 6s`, `p95 hydrated <= 8s`) and strict rollup gate pass |
 | QA/Canary Tooling | Implemented | Blocked (Env) for deployed execution | Canary scripts/targets exist, but deployed canary commands are blocked in this sandbox by outbound API restriction (`Operation not permitted`) | Run full canary/go-no-go and strict QPS SLO from a network-enabled environment (or CI runner with API reachability) |
 
@@ -59,7 +60,7 @@ Implementation is largely complete across Phases 0-4, but final plan closure req
 
 1. Run deployed canary profile: `make v1-canary-go-no-go` (from network-enabled runner) or dispatch `.github/workflows/v1-closeout-deployed.yml`.
 2. Run deployed strict QPS SLO gate: `make v1-canary-qps-page-slo-strict` (or via the same deployed closeout workflow).
-3. Run BYOM API/e2e suites in provisioned test env with API deps installed.
+3. Run BYOM API/e2e suites in provisioned test env with API deps installed (or confirm pass in `.github/workflows/v1-byom-api-regression.yml`).
 4. Record buyer-scoped SLO outcomes for the agreed lookback window.
 5. Mark remaining `Operational Pending` rows as `Complete` once evidence is attached.
 

@@ -1,0 +1,53 @@
+name: v1 BYOM API Regression
+
+on:
+  pull_request:
+    paths:
+      - "api/**"
+      - "services/**"
+      - "tests/test_optimizer*_api.py"
+      - "tests/test_optimizer_e2e_api.py"
+      - "tests/test_response_model_regressions.py"
+      - "Makefile"
+      - "requirements.txt"
+      - ".github/workflows/v1-byom-api-regression.yml"
+  push:
+    branches:
+      - unified-platform
+    paths:
+      - "api/**"
+      - "services/**"
+      - "tests/test_optimizer*_api.py"
+      - "tests/test_optimizer_e2e_api.py"
+      - "tests/test_response_model_regressions.py"
+      - "Makefile"
+      - "requirements.txt"
+      - ".github/workflows/v1-byom-api-regression.yml"
+
+concurrency:
+  group: v1-byom-api-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  byom-api-regression:
+    name: Run BYOM optimizer API/e2e regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt pytest pytest-asyncio
+
+      - name: Run BYOM optimizer API/e2e regression
+        run: make v1-byom-api-regression

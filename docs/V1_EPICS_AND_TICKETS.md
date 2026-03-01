@@ -16,6 +16,7 @@
 - closeout command ergonomics improved with `make v1-closeout-quick` and `make v1-closeout-deployed` wrappers for common operator flows.
 - closeout runner artifacts now include both human-readable markdown and machine-readable JSON outputs (`CATSCAN_CLOSEOUT_REPORT_PATH`, `CATSCAN_CLOSEOUT_REPORT_JSON_PATH`), and CI uploads both for quick-profile runs.
 - deployed closeout can now run as a manual GitHub workflow (`.github/workflows/v1-closeout-deployed.yml`) using `make v1-closeout-deployed-only` to execute only network-dependent canary gates and publish md/json evidence artifacts.
+- BYOM API/e2e coverage now has dedicated CI automation (`.github/workflows/v1-byom-api-regression.yml`) running `make v1-byom-api-regression` on optimizer API/service/test changes in a dependency-provisioned runner.
 
 - `E0-001` completed: `rtb_quality` import route/table path is live and covered by importer contract tests.
 - `E0-002` completed: bidstream persistence includes `platform`, `environment`, `transaction_type` with mapper support for transaction-type headers.
