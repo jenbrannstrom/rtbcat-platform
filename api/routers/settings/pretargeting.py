@@ -1,5 +1,6 @@
 """Pretargeting configuration routes."""
 
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -455,14 +456,20 @@ async def add_pretargeting_publisher(
         if mode not in ("WHITELIST", "BLACKLIST"):
             raise HTTPException(status_code=400, detail="Mode must be WHITELIST or BLACKLIST")
 
-        # Validate billing_id exists
         pretargeting_service = PretargetingService()
-        config = await pretargeting_service.get_config(billing_id)
+
+        config, existing = await asyncio.gather(
+            pretargeting_service.get_config(billing_id),
+            pretargeting_service.check_publisher_in_opposite_mode(
+                billing_id,
+                publisher_id,
+                mode,
+            ),
+        )
+
         if not config:
             raise HTTPException(status_code=404, detail=f"Pretargeting config {billing_id} not found")
 
-        # Check if publisher already exists in opposite mode
-        existing = await pretargeting_service.check_publisher_in_opposite_mode(billing_id, publisher_id, mode)
         if existing:
             raise HTTPException(
                 status_code=400,
@@ -504,14 +511,21 @@ async def remove_pretargeting_publisher(
             if resolved_mode not in ("WHITELIST", "BLACKLIST"):
                 raise HTTPException(status_code=400, detail="Mode must be WHITELIST or BLACKLIST")
 
-        # Validate billing_id exists
         pretargeting_service = PretargetingService()
-        config = await pretargeting_service.get_config(billing_id)
+        publisher_rows_task = (
+            pretargeting_service.get_publisher_rows(billing_id, publisher_id)
+            if not resolved_mode
+            else asyncio.sleep(0, result=None)
+        )
+        config, rows = await asyncio.gather(
+            pretargeting_service.get_config(billing_id),
+            publisher_rows_task,
+        )
         if not config:
             raise HTTPException(status_code=404, detail=f"Pretargeting config {billing_id} not found")
 
         if not resolved_mode:
-            rows = await pretargeting_service.get_publisher_rows(billing_id, publisher_id)
+            assert isinstance(rows, list)
             if not rows:
                 raise HTTPException(status_code=404, detail=f"Publisher {publisher_id} not found in config")
             modes = {row["mode"] for row in rows if row.get("mode")}
