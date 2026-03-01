@@ -63,6 +63,7 @@
 - `QA-004` started (workflow depth slice): canary smoke supports optional full proposal lifecycle validation (`CATSCAN_CANARY_RUN_LIFECYCLE=1`) for approve -> apply(queue) -> sync -> history verification after score/propose.
 - `QA-004` started (workflow depth slice): lifecycle canary can target either fresh workflow output or explicit existing `proposal_id` (`CATSCAN_PROPOSAL_ID`) for deterministic go/no-go validation.
 - `QA-004` started (workflow depth slice): root `make` now includes convenience targets `v1-canary-workflow` and `v1-canary-lifecycle` for deeper canary execution without manual env wiring.
+- `QA-004` started (workflow depth slice): root `make` now includes `v1-canary-go-no-go` strict profile target (workflow + lifecycle + healthy readiness + conversion-ready checks).
 - `QA-004` started (workflow depth slice): canary workflow execution now supports env/CLI tuning for days, score/proposal limits, min confidence, and max delta guardrails.
 - `QA-004` started (workflow depth slice): canary wrapper supports `CATSCAN_CANARY_PROFILE=safe|balanced|aggressive` preset mapping to workflow guardrail defaults.
 - `QA-004` started (workflow depth slice): root `make` now exposes `v1-canary-safe|balanced|aggressive` targets for one-command preset execution.
