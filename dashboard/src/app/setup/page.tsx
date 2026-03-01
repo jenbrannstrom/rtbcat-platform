@@ -11,6 +11,7 @@ import {
   getOptimizerSetup,
   validateOptimizerModelEndpoint,
   getConversionReadiness,
+  getConversionWebhookSecurityStatus,
 } from "@/lib/api";
 import { ErrorPage } from "@/components/error";
 import { LoadingPage } from "@/components/loading";
@@ -114,12 +115,23 @@ export default function SetupPage() {
     retry: false,
   });
 
+  const {
+    data: conversionWebhookSecurityStatus,
+    isLoading: conversionWebhookSecurityStatusLoading,
+    error: conversionWebhookSecurityStatusError,
+  } = useQuery({
+    queryKey: ["setupConversionWebhookSecurityStatus"],
+    queryFn: getConversionWebhookSecurityStatus,
+    retry: false,
+  });
+
   if (
     seatsLoading ||
     dataHealthLoading ||
     modelsLoading ||
     optimizerSetupLoading ||
     conversionReadinessLoading ||
+    conversionWebhookSecurityStatusLoading ||
     modelValidationLoading
   ) {
     return <LoadingPage />;
@@ -162,6 +174,7 @@ export default function SetupPage() {
   const modelValidationUnavailable = !!modelValidationError;
   const hostingCostReady = (optimizerSetup?.monthly_hosting_cost_usd || 0) > 0;
   const conversionReadinessUnavailable = !!conversionReadinessError;
+  const conversionWebhookSecurityUnavailable = !!conversionWebhookSecurityStatusError;
   const conversionWindowDays = conversionReadiness?.window_days ?? 14;
   const conversionAcceptedTotal = conversionReadiness?.accepted_total ?? 0;
   const conversionActiveSources = conversionReadiness?.active_sources ?? 0;
@@ -169,6 +182,16 @@ export default function SetupPage() {
   const conversionLagDisplay = conversionLagHours !== null ? `${conversionLagHours.toFixed(1)}h` : "unknown";
   const conversionReadinessReasons = (conversionReadiness?.reasons || []).filter((reason) => !!reason);
   const conversionReadinessReasonSummary = conversionReadinessReasons.join("; ");
+  const securedWebhookSources =
+    (conversionWebhookSecurityStatus?.sources || []).filter((row) => row.secret_enabled || row.hmac_enabled).length;
+  const webhookSourceTotal = conversionWebhookSecurityStatus?.sources.length || 0;
+  const conversionSecuritySummary = conversionWebhookSecurityUnavailable
+    ? "webhook security status unavailable"
+    : conversionWebhookSecurityStatus
+      ? `security ${securedWebhookSources}/${webhookSourceTotal} sources, freshness ${
+          conversionWebhookSecurityStatus.freshness_enforced ? "on" : "off"
+        }, rate limit ${conversionWebhookSecurityStatus.rate_limit_enabled ? "on" : "off"}`
+      : "webhook security status pending";
   const conversionSourcesReady =
     buyerContextReady &&
     !conversionReadinessUnavailable &&
@@ -177,12 +200,12 @@ export default function SetupPage() {
     !buyerContextReady
       ? buyerSelectionHint
       : conversionReadinessUnavailable
-        ? "Conversion readiness check unavailable right now. Verify webhook or pixel setup in System."
+        ? `Conversion readiness check unavailable right now. Verify webhook or pixel setup in System (${conversionSecuritySummary}).`
         : conversionReadiness?.state === "ready"
-          ? `Healthy conversion flow: ${conversionActiveSources} active source(s), ${conversionAcceptedTotal} accepted in last ${conversionWindowDays} days, lag ${conversionLagDisplay}.`
+          ? `Healthy conversion flow: ${conversionActiveSources} active source(s), ${conversionAcceptedTotal} accepted in last ${conversionWindowDays} days, lag ${conversionLagDisplay}; ${conversionSecuritySummary}.`
           : conversionReadinessReasonSummary
-            ? `Conversion readiness issues: ${conversionReadinessReasonSummary}.`
-            : "Conversion source readiness is not complete yet.";
+            ? `Conversion readiness issues: ${conversionReadinessReasonSummary}; ${conversionSecuritySummary}.`
+            : `Conversion source readiness is not complete yet (${conversionSecuritySummary}).`;
 
   const items: SetupItem[] = [
     {

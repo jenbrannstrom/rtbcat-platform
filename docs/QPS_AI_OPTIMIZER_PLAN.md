@@ -27,6 +27,7 @@ Current roadmap execution status (implemented in code, pending environment-by-en
    - `GET /conversions/readiness` aggregates health + ingestion volume + freshness with explicit reason strings.
    - Setup/System UI now consume readiness and show buyer-scoped status + troubleshooting reasons.
    - System UI now also surfaces webhook security posture from `GET /conversions/security/status` for faster operator verification.
+   - Setup checklist now includes webhook security posture summary alongside conversion readiness guidance.
 3. **Operator/QA gates hardened**:
    - canary includes workflow profile controls, optional pixel checks, strict conversion-ready checks, and strict go/no-go target.
    - canary now includes optional generic webhook auth verification (401 without secret, 200 with secret) for security go/no-go runs.
