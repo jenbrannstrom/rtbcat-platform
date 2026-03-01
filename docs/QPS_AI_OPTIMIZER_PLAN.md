@@ -757,6 +757,7 @@ ALSO PROVIDE:
   - removed `/analytics/rtb-funnel` from startup critical path by deferring it until after pretargeting table hydration, preserving buyer-filter messaging without blocking first table readiness.
   - added progressive pretargeting list rendering (first 60 rows, then full list on next tick) to cut initial DOM work on large buyer seats.
   - memoized QPS Home config transformation/sort pipeline to reduce repeated CPU work during rerenders on large config lists.
+  - fixed QPS telemetry cycle resets so buyer/day context changes start a fresh measurement window (new start mark, cleared latencies, fresh first-row/hydrated sample post), improving persisted SLO sample accuracy.
   - added optional canary SLO verification for recorded UI telemetry (`make v1-canary-qps-page-slo`) with p95 first-row and hydrated latency thresholds.
   - enhanced QPS page SLO canary with optional strict API-rollup gating (`CATSCAN_CANARY_QPS_PAGE_REQUIRE_API_ROLLUP=1`) to enforce per-endpoint p95 budgets from `/system/ui-metrics/page-load/summary`.
 
