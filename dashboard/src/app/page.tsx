@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, Suspense, useEffect, useRef } from "react";
+import { useState, useCallback, Suspense, useEffect, useRef, useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, AlertTriangle, ArrowUp, ArrowDown, ChevronsUpDown, Loader2 } from "lucide-react";
@@ -378,59 +378,66 @@ function WasteAnalysisContent() {
   const configFallbackApplied = configPerformance?.fallback_applied === true;
   const configRequestedDays = configPerformance?.requested_days ?? days;
   const configEffectiveDays = configPerformance?.effective_days ?? days;
-  const configPerformanceMap = new Map<string, { reached: number; impressions: number; win_rate: number; waste_rate: number }>();
-  if (configPerformance?.configs) {
-    for (const cfg of configPerformance.configs) {
-      configPerformanceMap.set(cfg.billing_id, {
-        reached: cfg.reached || 0,
-        impressions: cfg.impressions || 0,
-        win_rate: cfg.win_rate_pct || 0,
-        waste_rate: cfg.waste_pct || 0,
-      });
+  const configPerformanceMap = useMemo(() => {
+    const nextMap = new Map<string, { reached: number; impressions: number; win_rate: number; waste_rate: number }>();
+    if (configPerformance?.configs) {
+      for (const cfg of configPerformance.configs) {
+        nextMap.set(cfg.billing_id, {
+          reached: cfg.reached || 0,
+          impressions: cfg.impressions || 0,
+          win_rate: cfg.win_rate_pct || 0,
+          waste_rate: cfg.waste_pct || 0,
+        });
+      }
     }
-  }
+    return nextMap;
+  }, [configPerformance]);
 
-  // Transform configs for display and sort
-  const unsortedConfigs = (pretargetingConfigs || []).map(config =>
-    transformConfigToProps(
-      config,
-      configPerformanceMap.get(config.billing_id || config.config_id),
-      configMetricsDelayed
-    )
+  const unsortedConfigs = useMemo(
+    () =>
+      (pretargetingConfigs || []).map((config) =>
+        transformConfigToProps(
+          config,
+          configPerformanceMap.get(config.billing_id || config.config_id),
+          configMetricsDelayed
+        )
+      ),
+    [configMetricsDelayed, configPerformanceMap, pretargetingConfigs]
   );
 
-  // Sort configs based on current sort settings
-  const displayConfigs = [...unsortedConfigs].sort((a, b) => {
-    if (a.has_performance !== b.has_performance) {
-      return a.has_performance ? -1 : 1;
-    }
-    let aVal: number | string;
-    let bVal: number | string;
+  const displayConfigs = useMemo(() => {
+    return [...unsortedConfigs].sort((a, b) => {
+      if (a.has_performance !== b.has_performance) {
+        return a.has_performance ? -1 : 1;
+      }
+      let aVal: number | string;
+      let bVal: number | string;
 
-    switch (sortColumn) {
-      case 'name':
-        aVal = a.name.toLowerCase();
-        bVal = b.name.toLowerCase();
-        break;
-      case 'reached':
-        aVal = a.reached;
-        bVal = b.reached;
-        break;
-      case 'win_rate':
-        aVal = a.win_rate;
-        bVal = b.win_rate;
-        break;
-      case 'waste_rate':
-      default:
-        aVal = a.waste_rate;
-        bVal = b.waste_rate;
-        break;
-    }
+      switch (sortColumn) {
+        case 'name':
+          aVal = a.name.toLowerCase();
+          bVal = b.name.toLowerCase();
+          break;
+        case 'reached':
+          aVal = a.reached;
+          bVal = b.reached;
+          break;
+        case 'win_rate':
+          aVal = a.win_rate;
+          bVal = b.win_rate;
+          break;
+        case 'waste_rate':
+        default:
+          aVal = a.waste_rate;
+          bVal = b.waste_rate;
+          break;
+      }
 
-    if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-    if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-    return 0;
-  });
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [sortColumn, sortDirection, unsortedConfigs]);
   const [visibleConfigCount, setVisibleConfigCount] = useState<number>(INITIAL_VISIBLE_CONFIG_ROWS);
   const visibleConfigs = displayConfigs.slice(0, Math.min(visibleConfigCount, displayConfigs.length));
 
