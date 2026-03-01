@@ -25,6 +25,20 @@ export interface ConversionHealthResponse {
   checked_at: string;
 }
 
+export interface ConversionReadinessResponse {
+  state: string;
+  buyer_id: string | null;
+  window_days: number;
+  freshness_threshold_hours: number;
+  accepted_total: number;
+  rejected_total: number;
+  active_sources: number;
+  ingestion_lag_hours: number | null;
+  ingestion_fresh: boolean;
+  reasons: string[];
+  checked_at: string;
+}
+
 
 export interface ConversionIngestionStatsRow {
   metric_date: string | null;
@@ -51,6 +65,23 @@ export async function getConversionHealth(params?: {
   if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
   const query = searchParams.toString();
   return fetchApi<ConversionHealthResponse>(`/conversions/health${query ? `?${query}` : ""}`);
+}
+
+export async function getConversionReadiness(params?: {
+  buyer_id?: string;
+  days?: number;
+  freshness_hours?: number;
+}): Promise<ConversionReadinessResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  if (typeof params?.days === "number") searchParams.set("days", String(params.days));
+  if (typeof params?.freshness_hours === "number") {
+    searchParams.set("freshness_hours", String(params.freshness_hours));
+  }
+  const query = searchParams.toString();
+  return fetchApi<ConversionReadinessResponse>(
+    `/conversions/readiness${query ? `?${query}` : ""}`,
+  );
 }
 
 

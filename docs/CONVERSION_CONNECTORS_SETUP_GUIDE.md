@@ -261,10 +261,11 @@ curl -sS -X POST "https://<host>/api/conversions/csv/upload" \
 
 After enabling a connector, run:
 
-1. `GET /conversions/health?buyer_id=<buyer_id>`
-2. `GET /conversions/ingestion/stats?buyer_id=<buyer_id>&days=7`
-3. `GET /conversions/ingestion/error-taxonomy?buyer_id=<buyer_id>&days=7`
-4. `GET /conversions/ingestion/failures?buyer_id=<buyer_id>&status=pending`
+1. `GET /conversions/readiness?buyer_id=<buyer_id>&days=14&freshness_hours=72`
+2. `GET /conversions/health?buyer_id=<buyer_id>`
+3. `GET /conversions/ingestion/stats?buyer_id=<buyer_id>&days=7`
+4. `GET /conversions/ingestion/error-taxonomy?buyer_id=<buyer_id>&days=7`
+5. `GET /conversions/ingestion/failures?buyer_id=<buyer_id>&status=pending`
 
 If failures appear, use DLQ actions:
 

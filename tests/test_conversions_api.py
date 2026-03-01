@@ -330,6 +330,31 @@ def test_get_conversion_health(monkeypatch: pytest.MonkeyPatch):
     assert payload["ingestion"]["total_events"] == 10
 
 
+def test_get_conversion_readiness(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    client = _build_client(stub, ingestion_stub, monkeypatch)
+
+    response = client.get(
+        "/api/conversions/readiness",
+        params={"buyer_id": "1111111111", "days": 14, "freshness_hours": 72},
+    )
+
+    assert response.status_code == 200
+    assert len(stub.health_calls) == 1
+    assert len(ingestion_stub.stats_calls) == 1
+    assert ingestion_stub.stats_calls[0]["buyer_id"] == "1111111111"
+    assert ingestion_stub.stats_calls[0]["days"] == 14
+    payload = response.json()
+    assert payload["state"] == "ready"
+    assert payload["buyer_id"] == "1111111111"
+    assert payload["accepted_total"] == 10
+    assert payload["rejected_total"] == 2
+    assert payload["active_sources"] == 1
+    assert payload["ingestion_fresh"] is True
+    assert payload["reasons"] == []
+
+
 def test_ingest_generic_postback_forwards_payload(monkeypatch: pytest.MonkeyPatch):
     stub = _StubConversionsService()
     ingestion_stub = _StubConversionIngestionService()
