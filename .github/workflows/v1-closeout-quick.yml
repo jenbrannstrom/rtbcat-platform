@@ -49,6 +49,37 @@ jobs:
       - name: Run quick closeout
         run: CATSCAN_CLOSEOUT_PROFILE=quick make v1-closeout-local
 
+      - name: Publish closeout summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report_path = Path("/tmp/v1_closeout_last_run.json")
+          summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
+
+          with summary_path.open("a", encoding="utf-8") as summary:
+              summary.write("## V1 Closeout Quick Report\n\n")
+              if not report_path.exists():
+                  summary.write(f"- report missing: `{report_path}`\n")
+                  raise SystemExit(0)
+
+              payload = json.loads(report_path.read_text(encoding="utf-8"))
+              summary.write(f"- branch: `{payload.get('branch', '')}`\n")
+              summary.write(f"- commit: `{payload.get('commit', '')}`\n")
+              summary.write(f"- profile: `{payload.get('profile', '')}`\n")
+              summary.write(f"- timestamp_utc: `{payload.get('timestamp_utc', '')}`\n\n")
+              summary.write("| Step | Status | Notes |\n")
+              summary.write("|---|---|---|\n")
+              for step in payload.get("steps", []):
+                  name = str(step.get("step", "")).replace("\n", " ").strip()
+                  status = str(step.get("status", "")).replace("\n", " ").strip()
+                  notes = str(step.get("notes", "")).replace("\n", " ").strip()
+                  summary.write(f"| {name} | {status} | {notes} |\n")
+          PY
+
       - name: Upload closeout report
         uses: actions/upload-artifact@v4
         with:
