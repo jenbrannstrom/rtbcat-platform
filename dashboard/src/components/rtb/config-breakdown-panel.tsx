@@ -185,6 +185,7 @@ export function ConfigBreakdownPanel({
         getPretargetingConfigDetail(billing_id)
       ),
     enabled: isExpanded,
+    staleTime: 30_000,
   });
 
   const { data: sizeCreativeData, isLoading: sizeCreativesLoading } = useQuery({
@@ -820,6 +821,7 @@ export function ConfigBreakdownPanel({
         getPretargetingHistory({ billing_id, days: 30 })
       ),
     enabled: isExpanded && activeTab === 'publisher',
+    staleTime: 30_000,
   });
 
   const { data: historySnapshots } = useQuery({
@@ -829,6 +831,7 @@ export function ConfigBreakdownPanel({
         getSnapshots({ billing_id })
       ),
     enabled: isExpanded && activeTab === 'publisher' && showPublisherHistory,
+    staleTime: 30_000,
   });
 
   /** Group history entries by push event (same minute + same source). */

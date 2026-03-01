@@ -766,6 +766,7 @@ ALSO PROVIDE:
   - added short TTL in-process caching for `SnapshotsService` list reads (`list_snapshots`, `list_comparisons`) with invalidation on create operations, reducing repeated expanded-row snapshot/comparison panel query latency.
   - added short TTL in-process caching for `ChangesService.list_pending_changes` (keyed by billing/status/limit) with invalidation on create/cancel/mark-applied operations, reducing repeated pretargeting detail/pending-change query latency.
   - parallelized `/settings/pretargeting/{billing_id}/detail` backend reads (`get_config` + `list_pending_changes`) via `asyncio.gather`, reducing expanded-row detail-panel latency from serialized DB/service calls.
+  - added 30-second frontend query `staleTime` for pretargeting detail/history/snapshot reads in QPS config panels to avoid immediate refetch churn on quick collapse/re-expand and tab toggles.
   - optimized `/analytics/home/configs` query shape to compute overall totals via SQL window sums and return only top-20 rows in SQL (instead of fetching all grouped configs then truncating in Python), reducing backend work on large seats.
   - parallelized `/analytics/home/configs` precompute-status + config-row reads (requested and fallback windows) via `asyncio.gather`, reducing endpoint latency from sequential DB round trips.
   - parallelized `/analytics/home/funnel` status checks and downstream aggregate/list/count queries via `asyncio.gather`, reducing deferred post-hydration panel latency.

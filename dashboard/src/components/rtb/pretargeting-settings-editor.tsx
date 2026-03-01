@@ -989,12 +989,14 @@ export function PretargetingSettingsEditor({
   const { data: configDetail, isLoading: configLoading, refetch: refetchDetail } = useQuery({
     queryKey: ['pretargeting-detail', billing_id],
     queryFn: () => getPretargetingConfigDetail(billing_id),
+    staleTime: 30_000,
   });
 
   // Fetch publishers from dedicated endpoint
   const { data: publishersData, isLoading: publishersLoading, refetch: refetchPublishers } = useQuery({
     queryKey: ['pretargeting-publishers', billing_id],
     queryFn: () => getPretargetingPublishers(billing_id),
+    staleTime: 30_000,
   });
 
   // Fetch history
@@ -1002,12 +1004,14 @@ export function PretargetingSettingsEditor({
     queryKey: ['pretargeting-history', billing_id],
     queryFn: () => getPretargetingHistory({ billing_id, days: 90 }),
     enabled: showHistory && historyView === 'audit',
+    staleTime: 30_000,
   });
 
   const { data: snapshots, isLoading: snapshotsLoading } = useQuery({
     queryKey: ['pretargeting-snapshots', billing_id],
     queryFn: () => getSnapshots({ billing_id, limit: 50 }),
     enabled: showHistory && historyView === 'snapshots',
+    staleTime: 30_000,
   });
 
   // Mutations
