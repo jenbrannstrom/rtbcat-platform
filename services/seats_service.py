@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Optional, Any
@@ -100,8 +101,21 @@ class ServiceAccount:
 class SeatsService:
     """Service for buyer seat and service account management."""
 
+    _BUYER_SEAT_WITH_BIDDER_CACHE_TTL_SECONDS = 60.0
+    _BUYER_SEAT_WITH_BIDDER_CACHE: dict[str, tuple[float, Optional[dict[str, Any]]]] = {}
+
     def __init__(self, repo: Optional[SeatsRepository] = None):
         self.repo = repo or SeatsRepository()
+
+    @classmethod
+    def _invalidate_buyer_seat_with_bidder_cache(
+        cls,
+        buyer_id: Optional[str] = None,
+    ) -> None:
+        if buyer_id is None:
+            cls._BUYER_SEAT_WITH_BIDDER_CACHE.clear()
+            return
+        cls._BUYER_SEAT_WITH_BIDDER_CACHE.pop(buyer_id, None)
 
     # =========================================================================
     # Buyer Seats
@@ -156,10 +170,14 @@ class SeatsService:
             active=seat.active,
             service_account_id=seat.service_account_id,
         )
+        self._invalidate_buyer_seat_with_bidder_cache(seat.buyer_id)
 
     async def update_display_name(self, buyer_id: str, display_name: str) -> bool:
         """Update a buyer seat's display name."""
-        return await self.repo.update_buyer_seat_display_name(buyer_id, display_name)
+        updated = await self.repo.update_buyer_seat_display_name(buyer_id, display_name)
+        if updated:
+            self._invalidate_buyer_seat_with_bidder_cache(buyer_id)
+        return updated
 
     async def update_seat_after_sync(self, buyer_id: str) -> None:
         """Update seat metadata after a sync operation."""
@@ -171,6 +189,7 @@ class SeatsService:
     ) -> None:
         """Link a buyer seat to a service account."""
         await self.repo.link_buyer_seat_to_service_account(buyer_id, service_account_id)
+        self._invalidate_buyer_seat_with_bidder_cache(buyer_id)
 
     async def get_distinct_bidder_ids(self) -> list[str]:
         """Get all unique bidder IDs."""
@@ -212,7 +231,19 @@ class SeatsService:
 
     async def get_buyer_seat_with_bidder(self, buyer_id: str) -> Optional[dict]:
         """Get buyer seat info including bidder_id and display_name."""
-        return await self.repo.get_buyer_seat_with_bidder(buyer_id)
+        now = time.monotonic()
+        cached_entry = self._BUYER_SEAT_WITH_BIDDER_CACHE.get(buyer_id)
+        if cached_entry and cached_entry[0] > now:
+            cached_value = cached_entry[1]
+            return dict(cached_value) if cached_value else None
+
+        row = await self.repo.get_buyer_seat_with_bidder(buyer_id)
+        cached_row = dict(row) if row else None
+        self._BUYER_SEAT_WITH_BIDDER_CACHE[buyer_id] = (
+            now + self._BUYER_SEAT_WITH_BIDDER_CACHE_TTL_SECONDS,
+            cached_row,
+        )
+        return dict(cached_row) if cached_row else None
 
     # =========================================================================
     # Credential Resolution
