@@ -27,6 +27,8 @@ async def test_list_configs_uses_distinct_on_for_bidder_scope(monkeypatch: pytes
     assert "ROW_NUMBER()" not in sql_upper
     assert "PC.*" not in sql_upper
     assert "AS MAXIMUM_QPS" in sql_upper
+    assert "AS DEDUPE_KEY" in sql_upper
+    assert "ORDER BY DEDUPED.DEDUPE_KEY" in sql_upper
     assert captured["params"] == ("6574658621",)
 
 
