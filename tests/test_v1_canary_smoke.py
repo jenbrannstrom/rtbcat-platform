@@ -17,6 +17,7 @@ from scripts.v1_canary_smoke import (
     build_pixel_request_params,
     build_webhook_postback_payload,
     build_workflow_request_params,
+    is_auth_blocked_http_response,
     is_network_blocked_urlerror,
     validate_data_health_payload,
 )
@@ -294,6 +295,17 @@ def test_is_network_blocked_urlerror_ignores_connection_refused():
     assert is_network_blocked_urlerror(exc) is False
 
 
+def test_is_auth_blocked_http_response_detects_expired_session():
+    assert is_auth_blocked_http_response(
+        401,
+        '{"detail":"Session expired or invalid. Please log in again."}',
+    ) is True
+
+
+def test_is_auth_blocked_http_response_ignores_non_auth_status():
+    assert is_auth_blocked_http_response(500, '{"detail":"internal error"}') is False
+
+
 def test_smoke_client_raises_environment_blocked_for_permission_denied_urlerror(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -305,3 +317,16 @@ def test_smoke_client_raises_environment_blocked_for_permission_denied_urlerror(
 
     with pytest.raises(SmokeEnvironmentBlocked, match="outbound network blocked"):
         client.request("GET", "/health")
+
+
+def test_smoke_client_raises_environment_blocked_for_expired_session_http_response(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def _mock_request_status_bytes(self, *_args, **_kwargs):
+        return 401, {}, b'{"detail":"Session expired or invalid. Please log in again."}'
+
+    monkeypatch.setattr(SmokeClient, "request_status_bytes", _mock_request_status_bytes)
+    client = SmokeClient(base_url="http://127.0.0.1:8000", token=None, cookie=None, timeout=1.0)
+
+    with pytest.raises(SmokeEnvironmentBlocked, match="auth blocked"):
+        client.request("GET", "/system/data-health")

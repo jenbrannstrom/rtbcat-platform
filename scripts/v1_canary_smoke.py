@@ -45,6 +45,22 @@ def is_network_blocked_urlerror(exc: urllib.error.URLError) -> bool:
     )
 
 
+def is_auth_blocked_http_response(status_code: int, detail: str) -> bool:
+    """Detect auth/session failures that should be treated as environment-blocked."""
+    if status_code not in {401, 403}:
+        return False
+    text = (detail or "").lower()
+    auth_indicators = (
+        "session expired or invalid",
+        "authentication required",
+        "not authenticated",
+        "please log in again",
+        "invalid token",
+        "token expired",
+    )
+    return any(indicator in text for indicator in auth_indicators)
+
+
 class SmokeClient:
     def __init__(self, *, base_url: str, token: str | None, cookie: str | None, timeout: float):
         self.base_url = base_url
@@ -97,6 +113,10 @@ class SmokeClient:
         )
         if status_code >= 400:
             detail = body.decode("utf-8", errors="replace")
+            if is_auth_blocked_http_response(status_code, detail):
+                raise SmokeEnvironmentBlocked(
+                    f"{method} {path}: auth blocked (HTTP {status_code}: {detail[:240]})"
+                )
             raise SmokeFailure(f"{method} {path}: HTTP {status_code} {detail[:240]}")
         return response_headers, body
 

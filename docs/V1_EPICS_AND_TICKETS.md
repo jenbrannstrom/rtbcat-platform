@@ -19,6 +19,8 @@
 - BYOM API/e2e coverage now has dedicated CI automation (`.github/workflows/v1-byom-api-regression.yml`) running `make v1-byom-api-regression` on optimizer API/service/test changes in a dependency-provisioned runner.
 - BYOM API/e2e workflow now also supports manual dispatch (`workflow_dispatch`) for closeout-time evidence reruns without requiring a code change trigger.
 - closeout ops execution template is available at `docs/V1_CLOSEOUT_EXECUTION_CHECKLIST.md` with copy/paste dispatch payloads, run capture fields, and sign-off checklist.
+- closeout evidence run update: deployed workflow runs `22553179141` and `22553342553` reached canary execution but failed due to expired session secret (`401 Session expired or invalid`), while BYOM workflow run `22553379186` succeeded (`27 passed`).
+- canary auth-failure handling is now hardened so 401/403 session/token-expired responses classify as environment/auth blocked (exit `2`) for deployed closeout blocked-mode handling.
 
 - `E0-001` completed: `rtb_quality` import route/table path is live and covered by importer contract tests.
 - `E0-002` completed: bidstream persistence includes `platform`, `environment`, `transaction_type` with mapper support for transaction-type headers.

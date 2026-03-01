@@ -125,6 +125,8 @@ At least one of these must be configured for deployed canary auth:
 1. `CATSCAN_CANARY_BEARER_TOKEN`
 2. `CATSCAN_CANARY_SESSION_COOKIE`
 
+Note: session cookies expire. If deployed canary runs fail with `401 Session expired or invalid`, refresh `CATSCAN_CANARY_SESSION_COOKIE` (or switch to a stable bearer token secret).
+
 ### 7.2 Manual deployed closeout workflow
 
 Workflow: `.github/workflows/v1-closeout-deployed.yml`
