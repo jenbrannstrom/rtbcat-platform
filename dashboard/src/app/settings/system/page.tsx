@@ -30,6 +30,7 @@ import {
   getConversionHealth,
   getConversionReadiness,
   getConversionIngestionStats,
+  getConversionWebhookSecurityStatus,
   getSnapshots,
   rollbackSnapshot,
   type PretargetingSnapshot,
@@ -298,6 +299,16 @@ export default function SystemStatusPage() {
         days: 14,
         freshness_hours: 72,
       }),
+    retry: false,
+  });
+
+  const {
+    data: conversionWebhookSecurityStatus,
+    isLoading: conversionWebhookSecurityStatusLoading,
+    error: conversionWebhookSecurityStatusError,
+  } = useQuery({
+    queryKey: ["conversionWebhookSecurityStatus"],
+    queryFn: getConversionWebhookSecurityStatus,
     retry: false,
   });
 
@@ -749,9 +760,15 @@ export default function SystemStatusPage() {
     return `${(value * 100).toFixed(2)}%`;
   };
   const conversionSignalsLoading =
-    conversionHealthLoading || conversionIngestionStatsLoading || conversionReadinessLoading;
+    conversionHealthLoading ||
+    conversionIngestionStatsLoading ||
+    conversionReadinessLoading ||
+    conversionWebhookSecurityStatusLoading;
   const conversionSignalsError =
-    conversionHealthError || conversionIngestionStatsError || conversionReadinessError;
+    conversionHealthError ||
+    conversionIngestionStatsError ||
+    conversionReadinessError ||
+    conversionWebhookSecurityStatusError;
   const conversionReadinessState = String(conversionReadiness?.state || "").toLowerCase();
   const conversionReadinessTone =
     conversionReadinessState === "ready"
@@ -762,6 +779,9 @@ export default function SystemStatusPage() {
           ? "bg-red-50 text-red-700"
           : "bg-slate-100 text-slate-700";
   const conversionReadinessReasons = (conversionReadiness?.reasons || []).filter((reason) => !!reason);
+  const securityEnabledSources = (conversionWebhookSecurityStatus?.sources || []).filter(
+    (row) => row.secret_enabled || row.hmac_enabled,
+  ).length;
 
   if (healthLoading) {
     return <LoadingPage />;
@@ -1360,6 +1380,95 @@ export default function SystemStatusPage() {
                         {conversionReadinessReasons.slice(0, 3).map((reason) => (
                           <div key={reason}>- {reason}</div>
                         ))}
+                      </div>
+                    ) : null}
+
+                    {conversionWebhookSecurityStatus ? (
+                      <div className="space-y-2 rounded border border-gray-200 p-2">
+                        <div className="text-[11px] font-semibold text-gray-600">
+                          Webhook Security Posture
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                          <div className="rounded border border-gray-200 p-2">
+                            <div className="text-[11px] text-gray-500">Source Coverage</div>
+                            <div className="mt-1 text-sm font-semibold text-gray-900">
+                              {securityEnabledSources}/{conversionWebhookSecurityStatus.sources.length}
+                            </div>
+                            <div className="text-[11px] text-gray-500">
+                              sources with secret or HMAC enabled
+                            </div>
+                          </div>
+                          <div className="rounded border border-gray-200 p-2">
+                            <div className="text-[11px] text-gray-500">Freshness</div>
+                            <div className="mt-1">
+                              <span
+                                className={cn(
+                                  "rounded px-2 py-0.5 text-xs font-medium",
+                                  conversionWebhookSecurityStatus.freshness_enforced
+                                    ? "bg-green-50 text-green-700"
+                                    : "bg-slate-100 text-slate-700",
+                                )}
+                              >
+                                {conversionWebhookSecurityStatus.freshness_enforced ? "enforced" : "disabled"}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-gray-500">
+                              max skew {conversionWebhookSecurityStatus.max_skew_seconds}s
+                            </div>
+                          </div>
+                          <div className="rounded border border-gray-200 p-2">
+                            <div className="text-[11px] text-gray-500">Rate Limit</div>
+                            <div className="mt-1">
+                              <span
+                                className={cn(
+                                  "rounded px-2 py-0.5 text-xs font-medium",
+                                  conversionWebhookSecurityStatus.rate_limit_enabled
+                                    ? "bg-green-50 text-green-700"
+                                    : "bg-slate-100 text-slate-700",
+                                )}
+                              >
+                                {conversionWebhookSecurityStatus.rate_limit_enabled ? "enabled" : "disabled"}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-gray-500">
+                              {conversionWebhookSecurityStatus.rate_limit_per_window} /{" "}
+                              {conversionWebhookSecurityStatus.rate_limit_window_seconds}s
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="max-h-36 overflow-auto">
+                          <table className="min-w-full text-xs">
+                            <thead className="bg-gray-50 text-gray-600">
+                              <tr>
+                                <th className="text-left px-2 py-1">Source</th>
+                                <th className="text-left px-2 py-1">Plain Secret</th>
+                                <th className="text-left px-2 py-1">HMAC</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {conversionWebhookSecurityStatus.sources.map((row) => (
+                                <tr key={row.source_type} className="border-t border-gray-100">
+                                  <td className="px-2 py-1 text-gray-700">{row.source_type}</td>
+                                  <td className="px-2 py-1 text-gray-700">
+                                    {row.secret_enabled
+                                      ? `${row.secret_values_configured} key(s)${
+                                          row.using_shared_secret ? " (shared)" : ""
+                                        }`
+                                      : "off"}
+                                  </td>
+                                  <td className="px-2 py-1 text-gray-700">
+                                    {row.hmac_enabled
+                                      ? `${row.hmac_values_configured} key(s)${
+                                          row.using_shared_hmac ? " (shared)" : ""
+                                        }`
+                                      : "off"}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     ) : null}
 

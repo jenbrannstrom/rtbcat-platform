@@ -39,6 +39,30 @@ export interface ConversionReadinessResponse {
   checked_at: string;
 }
 
+export interface ConversionWebhookSecuritySourceStatus {
+  source_type: string;
+  secret_enabled: boolean;
+  secret_values_configured: number;
+  using_shared_secret: boolean;
+  hmac_enabled: boolean;
+  hmac_values_configured: number;
+  using_shared_hmac: boolean;
+}
+
+export interface ConversionWebhookSecurityStatusResponse {
+  shared_secret_enabled: boolean;
+  shared_secret_values_configured: number;
+  shared_hmac_enabled: boolean;
+  shared_hmac_values_configured: number;
+  sources: ConversionWebhookSecuritySourceStatus[];
+  freshness_enforced: boolean;
+  max_skew_seconds: number;
+  rate_limit_enabled: boolean;
+  rate_limit_per_window: number;
+  rate_limit_window_seconds: number;
+  checked_at: string;
+}
+
 
 export interface ConversionIngestionStatsRow {
   metric_date: string | null;
@@ -98,4 +122,8 @@ export async function getConversionIngestionStats(params?: {
   return fetchApi<ConversionIngestionStatsResponse>(
     `/conversions/ingestion/stats${query ? `?${query}` : ""}`,
   );
+}
+
+export async function getConversionWebhookSecurityStatus(): Promise<ConversionWebhookSecurityStatusResponse> {
+  return fetchApi<ConversionWebhookSecurityStatusResponse>("/conversions/security/status");
 }
