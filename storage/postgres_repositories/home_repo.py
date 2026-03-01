@@ -143,18 +143,30 @@ class HomeAnalyticsRepository:
             params.append(buyer_id)
         return await pg_query(
             f"""
+            WITH grouped AS (
+                SELECT
+                    billing_id,
+                    SUM(reached_queries) AS total_reached,
+                    SUM(impressions) AS total_impressions,
+                    SUM(bids_in_auction) AS total_bids_in_auction,
+                    SUM(auctions_won) AS total_auctions_won
+                FROM pretarg_daily
+                WHERE metric_date BETWEEN %s AND %s{buyer_filter}
+                  AND billing_id IS NOT NULL
+                  AND BTRIM(billing_id) <> ''
+                GROUP BY billing_id
+            )
             SELECT
                 billing_id,
-                SUM(reached_queries) as total_reached,
-                SUM(impressions) as total_impressions,
-                SUM(bids_in_auction) as total_bids_in_auction,
-                SUM(auctions_won) as total_auctions_won
-            FROM pretarg_daily
-            WHERE metric_date BETWEEN %s AND %s{buyer_filter}
-              AND billing_id IS NOT NULL
-              AND BTRIM(billing_id) <> ''
-            GROUP BY billing_id
+                total_reached,
+                total_impressions,
+                total_bids_in_auction,
+                total_auctions_won,
+                SUM(total_reached) OVER () AS overall_total_reached,
+                SUM(total_impressions) OVER () AS overall_total_impressions
+            FROM grouped
             ORDER BY total_reached DESC
+            LIMIT 20
             """,
             tuple(params),
         )
