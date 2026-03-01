@@ -581,7 +581,11 @@ function WasteAnalysisContent() {
   };
 
   // Build a map of billing_id to performance data from config performance API
-  const configMetricsDelayed = configPerformanceLoading || configPerformanceFetching || configPerformanceError;
+  const hasConfigPerformanceSeed = Array.isArray(configPerformance?.configs) && configPerformance.configs.length > 0;
+  const configMetricsDelayed = Boolean(
+    configPerformanceError
+    || ((!hasConfigPerformanceSeed) && (configPerformanceLoading || configPerformanceFetching))
+  );
   const configFallbackApplied = configPerformance?.fallback_applied === true;
   const configRequestedDays = configPerformance?.requested_days ?? days;
   const configEffectiveDays = configPerformance?.effective_days ?? days;
@@ -650,7 +654,9 @@ function WasteAnalysisContent() {
 
   const activeConfigsCount = displayConfigs.filter(c => c.state === 'ACTIVE').length;
   const hasTableRows = !configsLoading && displayConfigs.length > 0;
-  const tableDataSettled = !configsLoading && !configPerformanceLoading && !configPerformanceFetching;
+  const tableDataSettled = !configsLoading
+    && !configPerformanceLoading
+    && (!configPerformanceFetching || hasConfigPerformanceSeed);
   const tableHydrated = hasTableRows && tableDataSettled;
   const deferredStartupQueriesReady = seatReady && tableDataSettled;
 
