@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAccount } from "@/contexts/account-context";
 import { useTranslation } from "@/contexts/i18n-context";
+import type { BuyerSeat } from "@/types/api";
 
 const PERIOD_OPTIONS = [
   { value: 7, label: "7 days" },
@@ -28,6 +29,8 @@ const PRETARGETING_CONFIG_CACHE_PREFIX = "catscan:qps:pretargeting-configs:v1";
 const PRETARGETING_CONFIG_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 const CONFIG_PERFORMANCE_CACHE_PREFIX = "catscan:qps:config-performance:v1";
 const CONFIG_PERFORMANCE_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
+const ACTIVE_SEATS_CACHE_KEY = "catscan:qps:active-seats:v1";
+const ACTIVE_SEATS_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 
 interface PretargetingConfigCachePayload {
   cached_at_iso: string;
@@ -37,6 +40,11 @@ interface PretargetingConfigCachePayload {
 interface ConfigPerformanceCachePayload {
   cached_at_iso: string;
   data: ConfigPerformanceResponse;
+}
+
+interface ActiveSeatsCachePayload {
+  cached_at_iso: string;
+  rows: BuyerSeat[];
 }
 
 function getRetryDelay(attemptIndex: number): number {
@@ -136,6 +144,38 @@ function writeConfigPerformanceCache(
       data,
     };
     window.localStorage.setItem(getConfigPerformanceCacheKey(buyerId, days), JSON.stringify(payload));
+  } catch {
+    // Ignore localStorage failures (quota/private browsing).
+  }
+}
+
+function readActiveSeatsCache(): BuyerSeat[] | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const raw = window.localStorage.getItem(ACTIVE_SEATS_CACHE_KEY);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as ActiveSeatsCachePayload;
+    const cachedAtMs = Date.parse(parsed.cached_at_iso);
+    if (!Number.isFinite(cachedAtMs)) return undefined;
+    if ((Date.now() - cachedAtMs) > ACTIVE_SEATS_CACHE_MAX_AGE_MS) {
+      window.localStorage.removeItem(ACTIVE_SEATS_CACHE_KEY);
+      return undefined;
+    }
+    if (!Array.isArray(parsed.rows)) return undefined;
+    return parsed.rows;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeActiveSeatsCache(rows: BuyerSeat[] | undefined): void {
+  if (typeof window === "undefined" || !rows) return;
+  try {
+    const payload: ActiveSeatsCachePayload = {
+      cached_at_iso: new Date().toISOString(),
+      rows,
+    };
+    window.localStorage.setItem(ACTIVE_SEATS_CACHE_KEY, JSON.stringify(payload));
   } catch {
     // Ignore localStorage failures (quota/private browsing).
   }
@@ -323,13 +363,22 @@ function WasteAnalysisContent() {
     isLoading: seatsLoading,
     isError: seatsError,
     refetch: refetchSeats,
+    isFetchedAfterMount: seatsFetchedAfterMount,
   } = useQuery({
     queryKey: ["seats"],
     queryFn: () => getSeats({ active_only: true }),
+    initialData: () => readActiveSeatsCache(),
+    initialDataUpdatedAt: () => 0,
     retry: 5,
     retryDelay: getRetryDelay,
     staleTime: 60_000,
+    refetchOnMount: true,
   });
+
+  useEffect(() => {
+    if (!seatsFetchedAfterMount) return;
+    writeActiveSeatsCache(seats);
+  }, [seats, seatsFetchedAfterMount]);
 
   // Keep selected seat valid and deterministic once seats resolve.
   useEffect(() => {
