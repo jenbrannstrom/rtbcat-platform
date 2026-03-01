@@ -754,6 +754,7 @@ ALSO PROVIDE:
   - surfaced buyer-scoped QPS page-load SLO summary in Settings -> System (sample count, p50/p95 first-row + hydrated, latest samples, and target-status badge against p95 <= 6s/8s thresholds).
   - expanded that System SLO panel with API latency rollups (sample count + p50/p95 per API path over the last 24h) so operators can pinpoint recurring endpoint bottlenecks, not only single-sample spikes.
   - added selectable SLO lookback windows (24h/72h/7d) in System -> QPS Page-Load SLO panel for broader trend inspection.
+  - aligned frontend summary client with backend rollup controls by wiring `api_rollup_limit` in `/system/ui-metrics/page-load/summary` requests.
   - extended QPS telemetry capture into post-expansion dependent calls by measuring `/settings/pretargeting/:billing_id/detail`, `/settings/pretargeting/history`, and `/settings/pretargeting/snapshots`, and persistently posting those API latency samples after initial page hydration.
   - removed `/analytics/rtb-funnel` from startup critical path by deferring it until after pretargeting table hydration, preserving buyer-filter messaging without blocking first table readiness.
   - added progressive pretargeting list rendering (first 60 rows, then full list on next tick) to cut initial DOM work on large buyer seats.

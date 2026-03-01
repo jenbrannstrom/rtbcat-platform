@@ -329,6 +329,7 @@ export default function SystemStatusPage() {
         buyer_id: selectedBuyerId || undefined,
         since_hours: qpsPageSloSinceHours,
         latest_limit: 5,
+        api_rollup_limit: 20,
       }),
     enabled: !!selectedBuyerId,
     retry: false,
