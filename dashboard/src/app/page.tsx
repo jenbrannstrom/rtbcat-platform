@@ -494,7 +494,9 @@ function WasteAnalysisContent() {
 
   const activeConfigsCount = displayConfigs.filter(c => c.state === 'ACTIVE').length;
   const hasTableRows = !configsLoading && displayConfigs.length > 0;
-  const tableHydrated = hasTableRows && !configPerformanceLoading && !configPerformanceFetching;
+  const tableDataSettled = !configsLoading && !configPerformanceLoading && !configPerformanceFetching;
+  const tableHydrated = hasTableRows && tableDataSettled;
+  const deferredStartupQueriesReady = seatReady && tableDataSettled;
 
   useEffect(() => {
     const totalRows = displayConfigs.length;
@@ -535,14 +537,14 @@ function WasteAnalysisContent() {
   }, [displayConfigs.length, visibleConfigCount]);
 
   useEffect(() => {
-    if (!seatReady || !tableHydrated) return;
+    if (!deferredStartupQueriesReady) return;
     refetchFunnel();
-  }, [refetchFunnel, seatReady, tableHydrated, selectedBuyerId, days]);
+  }, [deferredStartupQueriesReady, refetchFunnel, selectedBuyerId, days]);
 
   useEffect(() => {
-    if (!seatReady || !tableHydrated) return;
+    if (!deferredStartupQueriesReady) return;
     refetchEndpointEfficiency();
-  }, [refetchEndpointEfficiency, seatReady, tableHydrated, selectedBuyerId, days]);
+  }, [deferredStartupQueriesReady, refetchEndpointEfficiency, selectedBuyerId, days]);
 
   useEffect(() => {
     const startedAtMs = Date.now();
@@ -735,6 +737,7 @@ function WasteAnalysisContent() {
       <AccountEndpointsHeader
         observedQpsByEndpointId={observedQpsByEndpointId}
         onApiLatencyMeasured={handleApiLatencyMeasured}
+        enabled={deferredStartupQueriesReady}
       />
 
       {endpointEfficiency && !endpointEfficiencyLoading && (
