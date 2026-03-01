@@ -763,6 +763,7 @@ ALSO PROVIDE:
   - upgraded pretargeting list rendering to chunked infinite loading (first 60 rows, then +120 rows as scroll approaches sentinel) to keep DOM/render cost bounded on very large buyer seats.
   - memoized QPS Home config transformation/sort pipeline to reduce repeated CPU work during rerenders on large config lists.
   - fixed QPS telemetry cycle resets so buyer/day context changes start a fresh measurement window (new start mark, cleared latencies, fresh first-row/hydrated sample post), improving persisted SLO sample accuracy.
+  - batched post-hydration API latency telemetry writes on QPS Home (short buffered flush) to reduce UI-metrics write amplification while preserving endpoint timing coverage.
   - introduced optimistic seat readiness (fire buyer-scoped queries while seat list is still loading) with 403-aware retry suppression, reducing startup wait for users with valid cached buyer context while avoiding stale-seat retry storms.
   - removed `/analytics/home/endpoint-efficiency` from startup critical path by deferring it until pretargeting table hydration.
   - added optional canary SLO verification for recorded UI telemetry (`make v1-canary-qps-page-slo`) with p95 first-row and hydrated latency thresholds.

@@ -62,6 +62,7 @@
 - `E4-005` started (render-cost slice): QPS Home row rendering now uses chunked infinite loading (first 60, then +120 on scroll sentinel) so large config sets no longer fully materialize in one render pass.
 - `E4-005` started (render-cost slice): QPS Home now memoizes config transformation/sorting to avoid repeated list recomputation on unrelated rerenders.
 - `E4-005` started (telemetry accuracy slice): QPS Home page-load telemetry now resets per buyer/day load cycle (new start mark + cleared latencies + fresh hydration post), preventing stale long-session timings from polluting SLO samples.
+- `E4-005` started (telemetry efficiency slice): post-hydration API latency samples are now buffered and flushed in short batches, reducing `ui_page_load_metrics` write amplification during active QPS sessions.
 - `E4-005` started (startup gating slice): buyer-scoped QPS queries can start while seat list is still loading when a buyer is already selected, and retries are now suppressed for 403/forbidden errors to avoid stale-seat retry storms.
 - `E4-005` started (startup critical-path slice): `/analytics/home/endpoint-efficiency` is now fetched after table hydration instead of startup, further reducing initial API fan-out before first row.
 - `E4-002` started (backend slice): optimizer setup API now supports persisted monthly hosting cost under `/settings/optimizer/setup` for effective-CPM context and setup-flow readiness.
