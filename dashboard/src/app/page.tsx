@@ -123,6 +123,8 @@ function WasteAnalysisContent() {
   const tableHydratedMsRef = useRef<number | null>(null);
   const startupApiLatencyMsRef = useRef<Record<string, number>>({});
   const qpsLoadMetricsPostedRef = useRef<boolean>(false);
+  const pendingApiLatencyBufferRef = useRef<Record<string, number>>({});
+  const pendingApiLatencyFlushTimerRef = useRef<number | null>(null);
 
   const setStartupApiLatency = useCallback((name: string, startedAtMs: number) => {
     const endedAtMs = typeof window !== "undefined" && window.performance
@@ -186,13 +188,21 @@ function WasteAnalysisContent() {
   }, [postQpsLoadMetricPayload]);
 
   const submitQpsApiLatencySample = useCallback((apiPath: string, latencyMs: number) => {
-    postQpsLoadMetricPayload({
-      page: "qps_home",
-      buyer_id: selectedBuyerId || null,
-      selected_days: days,
-      api_latency_ms: { [apiPath]: latencyMs },
-      sampled_at: new Date().toISOString(),
-    });
+    pendingApiLatencyBufferRef.current[apiPath] = latencyMs;
+    if (pendingApiLatencyFlushTimerRef.current !== null) return;
+    pendingApiLatencyFlushTimerRef.current = window.setTimeout(() => {
+      const buffered = { ...pendingApiLatencyBufferRef.current };
+      pendingApiLatencyBufferRef.current = {};
+      pendingApiLatencyFlushTimerRef.current = null;
+      if (Object.keys(buffered).length === 0) return;
+      postQpsLoadMetricPayload({
+        page: "qps_home",
+        buyer_id: selectedBuyerId || null,
+        selected_days: days,
+        api_latency_ms: buffered,
+        sampled_at: new Date().toISOString(),
+      });
+    }, 1500);
   }, [days, postQpsLoadMetricPayload, selectedBuyerId]);
 
   // Fetch seats to auto-select first one if none selected
@@ -522,6 +532,11 @@ function WasteAnalysisContent() {
     tableHydratedMsRef.current = null;
     startupApiLatencyMsRef.current = {};
     qpsLoadMetricsPostedRef.current = false;
+    pendingApiLatencyBufferRef.current = {};
+    if (pendingApiLatencyFlushTimerRef.current !== null) {
+      window.clearTimeout(pendingApiLatencyFlushTimerRef.current);
+      pendingApiLatencyFlushTimerRef.current = null;
+    }
     if (typeof window !== "undefined" && window.performance?.mark) {
       const startMark = `${perfMarkPrefixRef.current}:navigation-start`;
       window.performance.mark(startMark);
