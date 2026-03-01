@@ -780,6 +780,7 @@ ALSO PROVIDE:
   - added short-lived browser cache hydration for `/settings/pretargeting` rows (buyer-scoped `localStorage` seed) so repeat reloads can render the config table immediately while live refresh runs.
   - added short-lived browser cache hydration for `/analytics/home/configs` (buyer+day scoped seed) so repeat reloads can immediately reuse recent config performance rows while the live query refreshes in background.
   - added short-lived browser cache hydration for active seat list (`/seats?active_only=true`) with forced mount refetch, so repeat reloads can restore seat context and start buyer-scoped queries faster while still verifying seat validity from live API.
+  - added short-lived browser cache hydration for deferred `/analytics/spend-stats` and `/analytics/home/endpoint-efficiency` payloads, allowing CPM badge/endpoint panel to render immediately on repeat reloads while live refetches continue post-settle.
   - updated table-settle logic to treat cached config-performance seeds as hydrated-ready during background refetch, avoiding unnecessary delayed-state gating/banners when usable cached performance data is already present.
   - preserved manual operator refresh parity by wiring the top-level QPS refresh action to also refetch endpoint-efficiency after its deferral.
   - added optional canary SLO verification for recorded UI telemetry (`make v1-canary-qps-page-slo`) with p95 first-row and hydrated latency thresholds.
