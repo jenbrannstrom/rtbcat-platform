@@ -761,6 +761,7 @@ ALSO PROVIDE:
   - removed startup geo-name lookup fan-out by resolving pretargeting geo ID names only for the expanded row (collapsed rows render IDs directly), preventing dozens of concurrent `/geo-names` requests during initial table render.
   - tuned cold-start render budget to mount fewer pretargeting rows initially (40 vs 60 warm), reducing first-hydration DOM work while preserving warm/repeat row density and infinite-load behavior.
   - added short TTL in-process caching for bidder-scoped `list_configs` reads in `PretargetingService` with explicit invalidation on config/name/state updates, reducing repeated reload latency for `/settings/pretargeting`.
+  - added short TTL in-process caching for `PretargetingService.get_config` (billing_id scoped) with invalidation on config/name/state writes, reducing repeated expanded-row/detail-path config reads.
   - added short TTL in-process caching for `PretargetingService.list_history` (keyed by config/billing/day/limit) with invalidation on `add_history`, reducing repeated expanded-row history query latency for `/settings/pretargeting/history`.
   - added short TTL in-process caching for `SnapshotsService` list reads (`list_snapshots`, `list_comparisons`) with invalidation on create operations, reducing repeated expanded-row snapshot/comparison panel query latency.
   - added short TTL in-process caching for `ChangesService.list_pending_changes` (keyed by billing/status/limit) with invalidation on create/cancel/mark-applied operations, reducing repeated pretargeting detail/pending-change query latency.
