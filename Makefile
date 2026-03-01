@@ -1,4 +1,4 @@
-.PHONY: help v1-canary-smoke v1-canary-workflow v1-canary-lifecycle v1-canary-go-no-go v1-canary-conversion-ready v1-canary-pixel v1-canary-safe v1-canary-balanced v1-canary-aggressive phase0-regression phase0-dashboard-build phase0-gate
+.PHONY: help v1-canary-smoke v1-canary-workflow v1-canary-lifecycle v1-canary-go-no-go v1-canary-conversion-ready v1-canary-pixel v1-canary-safe v1-canary-balanced v1-canary-aggressive v1-conversion-regression phase0-regression phase0-dashboard-build phase0-gate
 
 help:
 	@echo "Targets:"
@@ -11,6 +11,7 @@ help:
 	@echo "  make v1-canary-safe      # Run workflow canary with safe preset"
 	@echo "  make v1-canary-balanced  # Run workflow canary with balanced preset"
 	@echo "  make v1-canary-aggressive # Run workflow canary with aggressive preset"
+	@echo "  make v1-conversion-regression # Run conversion/readiness regression tests"
 	@echo "  make phase0-regression   # Run core Phase 0 regression tests"
 	@echo "  make phase0-dashboard-build  # Build dashboard production bundle"
 	@echo "  make phase0-gate         # Run regression tests + dashboard build"
@@ -46,6 +47,13 @@ v1-canary-balanced:
 
 v1-canary-aggressive:
 	CATSCAN_CANARY_RUN_WORKFLOW=1 CATSCAN_CANARY_PROFILE=aggressive bash scripts/run_v1_canary_smoke.sh
+
+v1-conversion-regression:
+	pytest -q \
+	  tests/test_conversion_readiness.py \
+	  tests/test_conversion_ingestion_service.py \
+	  tests/test_conversion_connector_fixtures.py \
+	  tests/test_v1_canary_smoke.py
 
 phase0-regression:
 	pytest -q \
