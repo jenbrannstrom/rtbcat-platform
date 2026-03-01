@@ -11,15 +11,15 @@ from storage.postgres_repositories.pretargeting_repo import PretargetingReposito
 class PretargetingService:
     """Service layer for pretargeting configs + publishers."""
 
-    _LIST_CONFIGS_CACHE_TTL_SECONDS = 15.0
+    _LIST_CONFIGS_CACHE_TTL_SECONDS = 30.0
     _LIST_CONFIGS_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
-    _HISTORY_CACHE_TTL_SECONDS = 15.0
+    _HISTORY_CACHE_TTL_SECONDS = 30.0
     _HISTORY_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
-    _CONFIG_CACHE_TTL_SECONDS = 15.0
+    _CONFIG_CACHE_TTL_SECONDS = 30.0
     _CONFIG_CACHE: dict[str, tuple[float, dict[str, Any] | None]] = {}
-    _PUBLISHERS_CACHE_TTL_SECONDS = 15.0
+    _PUBLISHERS_CACHE_TTL_SECONDS = 30.0
     _PUBLISHERS_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
-    _PENDING_PUBLISHER_CHANGES_CACHE_TTL_SECONDS = 15.0
+    _PENDING_PUBLISHER_CHANGES_CACHE_TTL_SECONDS = 30.0
     _PENDING_PUBLISHER_CHANGES_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
     def __init__(self, repo: PretargetingRepository | None = None) -> None:

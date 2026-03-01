@@ -38,7 +38,7 @@ class SpendStats:
 class AnalyticsService:
     """Orchestrates analytics queries for common/spend endpoints."""
 
-    _SPEND_STATS_CACHE_TTL_SECONDS = 15.0
+    _SPEND_STATS_CACHE_TTL_SECONDS = 30.0
     _SPEND_STATS_CACHE: dict[str, tuple[float, SpendStats]] = {}
 
     # Canonical <-> legacy compatibility map for staged naming rollout.

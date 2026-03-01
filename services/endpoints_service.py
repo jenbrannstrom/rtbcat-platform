@@ -11,7 +11,7 @@ from storage.postgres_repositories.endpoints_repo import EndpointsRepository
 class EndpointsService:
     """Service layer for RTB endpoint workflows."""
 
-    _CACHE_TTL_SECONDS = 15.0
+    _CACHE_TTL_SECONDS = 30.0
     _LIST_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
     _CURRENT_QPS_CACHE: dict[str, tuple[float, float]] = {}
 
