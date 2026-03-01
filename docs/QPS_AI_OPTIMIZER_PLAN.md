@@ -757,6 +757,7 @@ ALSO PROVIDE:
   - reduced cold-start `summary_only` bootstrap cap for `/settings/pretargeting` from 300 to 150 rows (warm/cache-backed stays at 300), shrinking first-response payload on uncached loads while preserving eventual full hydration.
   - gated cold-start `/analytics/home/configs` fetch behind pretargeting bootstrap completion when no pretargeting seed is present, reducing first-load concurrent DB pressure while keeping warm/cache-backed paths parallel.
   - shifted bootstrap->full pretargeting hydration upgrade to browser-idle scheduling (`requestIdleCallback` fallback timeout) so first-render interaction remains prioritized before the full payload refetch starts.
+  - increased cold-path bootstrap->full hydration deferral window (longer idle timeout/fallback delay when using `summary_only`) so uncached first-load interaction/table rendering takes priority before full-row background hydration starts.
   - removed startup geo-name lookup fan-out by resolving pretargeting geo ID names only for the expanded row (collapsed rows render IDs directly), preventing dozens of concurrent `/geo-names` requests during initial table render.
   - tuned cold-start render budget to mount fewer pretargeting rows initially (40 vs 60 warm), reducing first-hydration DOM work while preserving warm/repeat row density and infinite-load behavior.
   - added short TTL in-process caching for bidder-scoped `list_configs` reads in `PretargetingService` with explicit invalidation on config/name/state updates, reducing repeated reload latency for `/settings/pretargeting`.
