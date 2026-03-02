@@ -15,6 +15,8 @@ import {
 } from "@/lib/api";
 import { ErrorPage } from "@/components/error";
 import { LoadingPage } from "@/components/loading";
+import { BuyerContextBanner } from "@/components/buyer-context-banner";
+import { deriveBuyerContextState } from "@/lib/buyer-context-state";
 import { cn } from "@/lib/utils";
 import { useAccount } from "@/contexts/account-context";
 
@@ -30,8 +32,6 @@ interface SetupItem {
 
 export default function SetupPage() {
   const { selectedBuyerId } = useAccount();
-  const buyerContextReady = !!selectedBuyerId;
-  const buyerSelectionHint = "Select a buyer context in the header to evaluate buyer-specific setup steps.";
 
   const {
     data: seats,
@@ -41,6 +41,9 @@ export default function SetupPage() {
     queryKey: ["setupSeats"],
     queryFn: () => getSeats({ active_only: true }),
   });
+
+  const buyerCtx = deriveBuyerContextState(selectedBuyerId, seats, seatsLoading);
+  const buyerContextReady = buyerCtx.canQuery;
 
   const {
     data: dataHealth,
@@ -146,18 +149,10 @@ export default function SetupPage() {
     return <ErrorPage message={firstError.message} />;
   }
 
-  const activeSeatRows = seats || [];
-  const hasAnyActiveSeat = activeSeatRows.length > 0;
-  const selectedBuyerConnected =
-    !!selectedBuyerId && activeSeatRows.some((row) => row.buyer_id === selectedBuyerId);
-  const seatsReady = hasAnyActiveSeat && selectedBuyerConnected;
-  const accountsStepDescription = !hasAnyActiveSeat
-    ? "Add and validate at least one active buyer seat."
-    : !buyerContextReady
-      ? "Active seats found. Select a buyer context in the header to continue setup."
-      : !selectedBuyerConnected
-        ? "Selected buyer is not an active seat. Choose an active buyer or activate it."
-        : "Active buyer seat is connected and selected.";
+  const seatsReady = buyerCtx.validity === "selected_buyer_valid";
+  const accountsStepDescription = seatsReady
+    ? "Active buyer seat is connected and selected."
+    : buyerCtx.message;
   const reportCompletenessHealthy =
     dataHealth?.optimizer_readiness?.report_completeness?.availability_state === "healthy";
   const qualityFreshnessHealthy =
@@ -198,7 +193,7 @@ export default function SetupPage() {
     conversionReadiness?.state === "ready";
   const conversionSourcesDescription =
     !buyerContextReady
-      ? buyerSelectionHint
+      ? buyerCtx.message
       : conversionReadinessUnavailable
         ? `Conversion readiness check unavailable right now. Verify webhook or pixel setup in System (${conversionSecuritySummary}).`
         : conversionReadiness?.state === "ready"
@@ -220,7 +215,7 @@ export default function SetupPage() {
       title: "Validate Optimizer Readiness",
       description: buyerContextReady
         ? "Ensure report completeness/freshness is healthy for decisioning."
-        : buyerSelectionHint,
+        : buyerCtx.message,
       href: "/settings/system",
       done: dataReadinessReady,
     },
@@ -229,7 +224,7 @@ export default function SetupPage() {
       title: "Register an Active Model",
       description: buyerContextReady
         ? "Create at least one active BYOM model for scoring and proposals."
-        : buyerSelectionHint,
+        : buyerCtx.message,
       href: "/settings/system",
       done: modelsReady,
     },
@@ -237,7 +232,7 @@ export default function SetupPage() {
       key: "model-validation",
       title: "Validate Model Endpoint",
       description: !buyerContextReady
-        ? buyerSelectionHint
+        ? buyerCtx.message
         : modelValidationUnavailable
           ? "Endpoint validation failed or unavailable. Re-check connectivity in System."
           : "Run endpoint validation for the active model before score/propose.",
@@ -271,15 +266,9 @@ export default function SetupPage() {
         <p className="mt-1 text-sm text-gray-500">
           Complete the core setup steps to run score, generate proposals, and apply changes safely.
         </p>
-        <div
-          className={cn(
-            "mt-2 inline-flex items-center rounded px-2 py-1 text-xs font-medium",
-            buyerContextReady ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700",
-          )}
-        >
-          Buyer context: {selectedBuyerId || "Not selected"}
-        </div>
       </div>
+
+      <BuyerContextBanner state={buyerCtx} />
 
       <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
         <div className="flex items-center justify-between text-sm">
