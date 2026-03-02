@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useAccount } from "@/contexts/account-context";
@@ -10,6 +10,7 @@ import {
   replaceBuyerInPath,
   splitBuyerPath,
 } from "@/lib/buyer-routes";
+import { resolveCanonicalBuyerId } from "@/lib/buyer-context-sync";
 
 export function BuyerRouteSync() {
   const pathname = usePathname() || "/";
@@ -29,39 +30,52 @@ export function BuyerRouteSync() {
     staleTime: 60_000,
   });
 
-  // URL -> context: only sync if the buyer_id in the URL is a valid seat
-  // (or if seats haven't loaded yet, allow it so initial nav still works)
+  const canonicalBuyerResolution = useMemo(
+    () =>
+      resolveCanonicalBuyerId({
+        buyerIdInPath,
+        selectedBuyerId,
+        seats,
+      }),
+    [buyerIdInPath, selectedBuyerId, seats]
+  );
+
+  // Keep account context aligned with canonical seat selection.
   useEffect(() => {
     if (!isScoped) return;
-    if (!buyerIdInPath) return;
-    if (buyerIdInPath === selectedBuyerId) return;
-    // Once seats are known, don't sync a revoked buyer_id into context
-    if (seats && !seats.some((s) => s.buyer_id === buyerIdInPath)) return;
-    setSelectedBuyerId(buyerIdInPath);
-  }, [buyerIdInPath, isScoped, selectedBuyerId, setSelectedBuyerId, seats]);
+    if (!canonicalBuyerResolution.seatsLoaded) {
+      // Before seats resolve, allow URL buyer to seed context optimistically.
+      if (!buyerIdInPath || buyerIdInPath === selectedBuyerId) return;
+      setSelectedBuyerId(buyerIdInPath);
+      return;
+    }
+    if (canonicalBuyerResolution.canonicalBuyerId === selectedBuyerId) return;
+    setSelectedBuyerId(canonicalBuyerResolution.canonicalBuyerId);
+  }, [
+    buyerIdInPath,
+    canonicalBuyerResolution.canonicalBuyerId,
+    canonicalBuyerResolution.seatsLoaded,
+    isScoped,
+    selectedBuyerId,
+    setSelectedBuyerId,
+  ]);
 
-  // context -> URL: update URL when context differs (e.g. after RBAC correction)
+  // Keep URL aligned with canonical seat selection.
   useEffect(() => {
     if (!isScoped) return;
-    if (!selectedBuyerId) return;
-    if (buyerIdInPath === selectedBuyerId) return;
 
-    // If the URL already has a buyer seat, prefer the URL as source-of-truth
-    // unless that buyer becomes invalid (e.g. RBAC revoked). This avoids a
-    // race where a seat switch navigation briefly lands on /<newBuyer>/... and
-    // the old context value immediately rewrites it back.
-    if (buyerIdInPath) {
-      if (!seats) return;
-      const buyerInPathIsValid = seats.some((s) => s.buyer_id === buyerIdInPath);
-      if (buyerInPathIsValid) return;
-
-      // If both URL buyer and selected buyer are invalid, wait for the pages
-      // that normalize selection to resolve a valid seat.
-      const selectedBuyerIsValid = seats.some((s) => s.buyer_id === selectedBuyerId);
-      if (!selectedBuyerIsValid) return;
+    if (!canonicalBuyerResolution.seatsLoaded) {
+      // Before seats resolve, do not override explicit buyer prefixes in URL.
+      if (!selectedBuyerId || buyerIdInPath) return;
+      const targetPath = replaceBuyerInPath(pathname, selectedBuyerId);
+      const targetUrl = queryString ? `${targetPath}?${queryString}` : targetPath;
+      if (targetUrl !== currentUrl) {
+        router.replace(targetUrl, { scroll: false });
+      }
+      return;
     }
 
-    const targetPath = replaceBuyerInPath(pathname, selectedBuyerId);
+    const targetPath = replaceBuyerInPath(pathname, canonicalBuyerResolution.canonicalBuyerId);
     const targetUrl = queryString ? `${targetPath}?${queryString}` : targetPath;
     if (targetUrl !== currentUrl) {
       router.replace(targetUrl, { scroll: false });
@@ -73,8 +87,9 @@ export function BuyerRouteSync() {
     pathname,
     queryString,
     router,
+    canonicalBuyerResolution.canonicalBuyerId,
+    canonicalBuyerResolution.seatsLoaded,
     selectedBuyerId,
-    seats,
   ]);
 
   // Clean accidental buyer prefix on non-scoped pages
