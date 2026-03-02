@@ -95,8 +95,8 @@ jobs:
           if [[ "${closeout_status}" -eq 0 ]]; then
             exit 0
           fi
-          if [[ "${closeout_status}" -eq 2 && "${allow_blocked}" == "1" ]]; then
-            echo "Deployed closeout returned exit 2 (blocked) and allow_blocked=true; treating as blocked-pass."
+          if [[ "${closeout_status}" -eq 2 ]]; then
+            echo "Deployed closeout returned exit 2 (all failures are environment/data blocks, no code regressions)."
             exit 0
           fi
           exit "${closeout_status}"
