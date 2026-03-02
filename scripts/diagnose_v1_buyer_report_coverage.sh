@@ -169,6 +169,9 @@ echo
 echo "[3/5] Data freshness grid for this buyer..."
 fresh_body="${TMP_DIR}/data_freshness.json"
 fresh_code="${TMP_DIR}/data_freshness.code"
+imported_count="-1"
+missing_count="-1"
+coverage_pct="-1"
 api_get "/uploads/data-freshness?days=14&buyer_id=${BUYER_ID}" "$fresh_body" "$fresh_code"
 code_fresh="$(cat "$fresh_code")"
 echo "data_freshness_http=${code_fresh}"
@@ -184,6 +187,7 @@ fi
 echo
 
 echo "[4/5] Recent import history for mapped bidder..."
+code_hist="skipped_no_bidder_id"
 if [[ -n "$bidder_id" ]]; then
   hist_body="${TMP_DIR}/import_history.json"
   hist_code="${TMP_DIR}/import_history.code"
@@ -246,5 +250,20 @@ if [[ "$total_cells" != "0" && "$all_not_imported" == "$total_cells" ]]; then
   exit 2
 fi
 
-echo "PASS: buyer has at least partial report coverage; investigate specific fail statuses above."
+if [[ "$code_fresh" != "200" || "$code_hist" != "200" || "$code_gmail" != "200" ]]; then
+  echo "BLOCKED: buyer has import coverage, but required diagnostics endpoints are failing."
+  echo "endpoint_statuses data_freshness=${code_fresh} import_history=${code_hist} gmail_status=${code_gmail}"
+  echo "Likely cause: runtime API/query instability (e.g., nginx 502/upstream timeout), not missing Google report scheduling."
+  echo "Result: BLOCKED"
+  exit 2
+fi
+
+if [[ "$imported_count" == "0" && "$pass_count" != "0" ]]; then
+  echo "BLOCKED: import matrix shows pass, but freshness grid has zero imported cells."
+  echo "Likely cause: importer-history vs serving-table inconsistency or stalled downstream write path."
+  echo "Result: BLOCKED"
+  exit 2
+fi
+
+echo "PASS: buyer has partial report coverage and diagnostics endpoints are responsive."
 echo "Result: PASS"
