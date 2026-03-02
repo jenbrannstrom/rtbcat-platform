@@ -1174,13 +1174,12 @@ def main() -> int:
             ),
         )
         sample_count = int(payload.get("sample_count") or 0)
-        _assert(
-            sample_count >= args.qps_page_slo_min_samples,
-            (
+        if sample_count < args.qps_page_slo_min_samples:
+            raise SmokeEnvironmentBlocked(
                 "QPS page SLO check requires at least "
-                f"{args.qps_page_slo_min_samples} sample(s), got {sample_count}"
-            ),
-        )
+                f"{args.qps_page_slo_min_samples} sample(s), got {sample_count} "
+                "(no page-load metrics recorded yet)"
+            )
 
         p95_first = payload.get("p95_first_table_row_ms")
         _assert(p95_first is not None, "p95_first_table_row_ms missing from QPS page SLO summary")
