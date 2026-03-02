@@ -16,7 +16,7 @@ export interface PretargetingConfig {
   name: string;              // resolved: user_name || display_name || 'Config {id}'
   display_name: string | null;
   user_name: string | null;
-  state: 'ACTIVE' | 'SUSPENDED';
+  state: 'ACTIVE' | 'SUSPENDED' | 'DELETED';
   maximum_qps: number | null;
   formats: string[];         // ['HTML', 'VAST']
   platforms: string[];       // ['PHONE', 'TABLET']
@@ -413,6 +413,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
       className={cn(
         'border rounded-lg transition-all',
         config.state === 'SUSPENDED' && 'opacity-60 bg-gray-50 border-gray-300',
+        config.state === 'DELETED' && 'opacity-40 bg-gray-100 border-gray-200 border-dashed',
         config.state === 'ACTIVE' && 'bg-green-50/50 border-green-300',
         config.state === 'ACTIVE' && isCriticalWaste && 'border-l-4 border-l-red-400',
         config.state === 'ACTIVE' && isHighWaste && !isCriticalWaste && 'border-l-4 border-l-orange-400'
@@ -570,6 +571,11 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
             {t.pretargeting.cardPausedBadge}
           </span>
         )}
+        {config.state === 'DELETED' && (
+          <span className="px-2 py-0.5 bg-red-100 text-red-500 text-xs rounded">
+            Deleted
+          </span>
+        )}
 
         {/* Metrics summary */}
         <div className="flex items-center gap-4 text-xs shrink-0">
@@ -627,46 +633,52 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
               <SettingPill label={t.pretargeting.cardSizesLabel} values={config.sizes} max={4} />
             </div>
             <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-              {/* Format checkboxes inline */}
-              <div className="flex items-center gap-2 text-xs text-slate-700">
-                <span className="text-[11px] text-gray-500 font-medium">{t.pretargeting.formats}</span>
-                {[
-                  { label: t.pretargeting.cardFormatBanner, value: 'HTML' },
-                  { label: t.pretargeting.cardFormatAudioVideo, value: 'VIDEO' },
-                  { label: t.pretargeting.cardFormatNative, value: 'NATIVE' },
-                ].map((formatOption) => (
-                  <label key={formatOption.value} className="inline-flex items-center gap-1">
-                    <input
-                      type="checkbox"
-                      checked={isFormatEnabled(formatOption.value)}
-                      disabled={formatMutationPending}
-                      onChange={(event) => setFormatEnabledState(formatOption.value, event.target.checked)}
-                      className="h-3.5 w-3.5 rounded border-gray-300"
-                    />
-                    <span className="text-[11px]">{formatOption.label}</span>
-                  </label>
-                ))}
-              </div>
-              <div className="w-px h-5 bg-gray-300" />
-              {/* Pause/Activate */}
-              {config.state === 'ACTIVE' ? (
-                <button
-                  onClick={() => suspendMutation.mutate()}
-                  disabled={stateMutationPending}
-                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200 disabled:opacity-50"
-                >
-                  {suspendMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Pause className="h-3 w-3" />}
-                  {t.pretargeting.suspendAction}
-                </button>
+              {config.state === 'DELETED' ? (
+                <span className="text-xs text-red-400 italic">Deleted from Google — no actions available</span>
               ) : (
-                <button
-                  onClick={() => activateMutation.mutate()}
-                  disabled={stateMutationPending}
-                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
-                >
-                  {activateMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
-                  {t.pretargeting.activateAction}
-                </button>
+                <>
+                  {/* Format checkboxes inline */}
+                  <div className="flex items-center gap-2 text-xs text-slate-700">
+                    <span className="text-[11px] text-gray-500 font-medium">{t.pretargeting.formats}</span>
+                    {[
+                      { label: t.pretargeting.cardFormatBanner, value: 'HTML' },
+                      { label: t.pretargeting.cardFormatAudioVideo, value: 'VIDEO' },
+                      { label: t.pretargeting.cardFormatNative, value: 'NATIVE' },
+                    ].map((formatOption) => (
+                      <label key={formatOption.value} className="inline-flex items-center gap-1">
+                        <input
+                          type="checkbox"
+                          checked={isFormatEnabled(formatOption.value)}
+                          disabled={formatMutationPending}
+                          onChange={(event) => setFormatEnabledState(formatOption.value, event.target.checked)}
+                          className="h-3.5 w-3.5 rounded border-gray-300"
+                        />
+                        <span className="text-[11px]">{formatOption.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="w-px h-5 bg-gray-300" />
+                  {/* Pause/Activate */}
+                  {config.state === 'ACTIVE' ? (
+                    <button
+                      onClick={() => suspendMutation.mutate()}
+                      disabled={stateMutationPending}
+                      className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200 disabled:opacity-50"
+                    >
+                      {suspendMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Pause className="h-3 w-3" />}
+                      {t.pretargeting.suspendAction}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => activateMutation.mutate()}
+                      disabled={stateMutationPending}
+                      className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
+                    >
+                      {activateMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                      {t.pretargeting.activateAction}
+                    </button>
+                  )}
+                </>
               )}
               {/* History toggle */}
               <button

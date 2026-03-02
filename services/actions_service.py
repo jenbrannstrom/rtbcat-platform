@@ -246,13 +246,13 @@ class ActionsService:
         except HttpError as ex:
             if ex.resp.status == 404:
                 logger.warning(
-                    "Google returned 404 for config %s (billing %s, bidder %s). "
-                    "The config_id mapping may be stale — run Sync to refresh.",
+                    "Google returned 404 for config %s (billing %s, bidder %s) — marking DELETED.",
                     config_id, billing_id, bidder_id,
                 )
+                await self._pretargeting.update_state(billing_id, "DELETED")
                 raise ValueError(
-                    f"Google returned 404 for config {config_id}. "
-                    f"The config may need to be re-synced. Run Sync to refresh."
+                    f"Config {config_id} no longer exists in Google (deleted). "
+                    f"Billing ID {billing_id} has been marked as deleted."
                 ) from ex
             raise
         await self._pretargeting.update_state(billing_id, "SUSPENDED")
@@ -280,13 +280,13 @@ class ActionsService:
         except HttpError as ex:
             if ex.resp.status == 404:
                 logger.warning(
-                    "Google returned 404 for config %s (billing %s, bidder %s). "
-                    "The config_id mapping may be stale — run Sync to refresh.",
+                    "Google returned 404 for config %s (billing %s, bidder %s) — marking DELETED.",
                     config_id, billing_id, bidder_id,
                 )
+                await self._pretargeting.update_state(billing_id, "DELETED")
                 raise ValueError(
-                    f"Google returned 404 for config {config_id}. "
-                    f"The config may need to be re-synced. Run Sync to refresh."
+                    f"Config {config_id} no longer exists in Google (deleted). "
+                    f"Billing ID {billing_id} has been marked as deleted."
                 ) from ex
             raise
         await self._pretargeting.update_state(billing_id, "ACTIVE")
