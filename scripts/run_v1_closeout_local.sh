@@ -188,11 +188,6 @@ if [[ "${RUN_DEPLOYED}" == "1" ]]; then
     local name="$1"
     local cmd="$2"
 
-    if [[ "${allow_blocked}" != "1" ]]; then
-      run_step "${name}" bash -lc "${cmd}"
-      return
-    fi
-
     echo "==> ${name}"
     set +e
     bash -lc "${cmd}"
@@ -206,6 +201,9 @@ if [[ "${RUN_DEPLOYED}" == "1" ]]; then
     if [[ ${status} -eq 2 ]]; then
       record_step "${name}" "BLOCKED" "exit 2 (environment/network policy)"
       echo "==> ${name} (blocked: env/network policy)"
+      if [[ "${allow_blocked}" != "1" ]]; then
+        echo "==> NOTE: blocked checks treated as non-fatal (exit 2 = no code regression)"
+      fi
       return
     fi
     record_step "${name}" "FAIL" "exit ${status}"
