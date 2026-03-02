@@ -7,10 +7,14 @@ import { useAccount } from "@/contexts/account-context";
 import { getSeats } from "@/lib/api";
 import {
   isBuyerScopedPath,
-  replaceBuyerInPath,
   splitBuyerPath,
 } from "@/lib/buyer-routes";
 import { resolveCanonicalBuyerId } from "@/lib/buyer-context-sync";
+import {
+  getBuyerContextUpdateTarget,
+  getBuyerScopedRouteReplaceTarget,
+  getNonScopedRouteCleanupTarget,
+} from "@/lib/buyer-route-sync-logic";
 
 export function BuyerRouteSync() {
   const pathname = usePathname() || "/";
@@ -42,15 +46,15 @@ export function BuyerRouteSync() {
 
   // Keep account context aligned with canonical seat selection.
   useEffect(() => {
-    if (!isScoped) return;
-    if (!canonicalBuyerResolution.seatsLoaded) {
-      // Before seats resolve, allow URL buyer to seed context optimistically.
-      if (!buyerIdInPath || buyerIdInPath === selectedBuyerId) return;
-      setSelectedBuyerId(buyerIdInPath);
-      return;
-    }
-    if (canonicalBuyerResolution.canonicalBuyerId === selectedBuyerId) return;
-    setSelectedBuyerId(canonicalBuyerResolution.canonicalBuyerId);
+    const targetBuyerId = getBuyerContextUpdateTarget({
+      isScoped,
+      seatsLoaded: canonicalBuyerResolution.seatsLoaded,
+      buyerIdInPath,
+      selectedBuyerId,
+      canonicalBuyerId: canonicalBuyerResolution.canonicalBuyerId,
+    });
+    if (targetBuyerId === null) return;
+    setSelectedBuyerId(targetBuyerId);
   }, [
     buyerIdInPath,
     canonicalBuyerResolution.canonicalBuyerId,
@@ -62,24 +66,18 @@ export function BuyerRouteSync() {
 
   // Keep URL aligned with canonical seat selection.
   useEffect(() => {
-    if (!isScoped) return;
-
-    if (!canonicalBuyerResolution.seatsLoaded) {
-      // Before seats resolve, do not override explicit buyer prefixes in URL.
-      if (!selectedBuyerId || buyerIdInPath) return;
-      const targetPath = replaceBuyerInPath(pathname, selectedBuyerId);
-      const targetUrl = queryString ? `${targetPath}?${queryString}` : targetPath;
-      if (targetUrl !== currentUrl) {
-        router.replace(targetUrl, { scroll: false });
-      }
-      return;
-    }
-
-    const targetPath = replaceBuyerInPath(pathname, canonicalBuyerResolution.canonicalBuyerId);
-    const targetUrl = queryString ? `${targetPath}?${queryString}` : targetPath;
-    if (targetUrl !== currentUrl) {
-      router.replace(targetUrl, { scroll: false });
-    }
+    const targetUrl = getBuyerScopedRouteReplaceTarget({
+      isScoped,
+      seatsLoaded: canonicalBuyerResolution.seatsLoaded,
+      buyerIdInPath,
+      selectedBuyerId,
+      pathname,
+      queryString,
+      currentUrl,
+      canonicalBuyerId: canonicalBuyerResolution.canonicalBuyerId,
+    });
+    if (targetUrl === null) return;
+    router.replace(targetUrl, { scroll: false });
   }, [
     buyerIdInPath,
     currentUrl,
@@ -94,11 +92,15 @@ export function BuyerRouteSync() {
 
   // Clean accidental buyer prefix on non-scoped pages
   useEffect(() => {
-    if (!buyerIdInPath || isScoped) return;
-    const targetUrl = queryString ? `${pathWithoutBuyer}?${queryString}` : pathWithoutBuyer;
-    if (targetUrl !== currentUrl) {
-      router.replace(targetUrl, { scroll: false });
-    }
+    const targetUrl = getNonScopedRouteCleanupTarget({
+      buyerIdInPath,
+      isScoped,
+      pathWithoutBuyer,
+      queryString,
+      currentUrl,
+    });
+    if (targetUrl === null) return;
+    router.replace(targetUrl, { scroll: false });
   }, [
     buyerIdInPath,
     currentUrl,
