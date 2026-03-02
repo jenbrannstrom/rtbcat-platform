@@ -90,7 +90,9 @@ class SmokeClient:
         self.timeout = timeout
         self.default_headers: dict[str, str] = {}
         if token:
-            self.default_headers["Authorization"] = f"Bearer {token}"
+            # Token is the trusted email identity passed via X-Email header
+            # (same mechanism the OAuth2 Proxy uses after authentication).
+            self.default_headers["X-Email"] = token
         if cookie:
             self.default_headers["Cookie"] = cookie
 
