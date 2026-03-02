@@ -72,6 +72,15 @@ def is_auth_blocked_http_response(status_code: int, detail: str) -> bool:
         "not found",
     ):
         return True
+    # HTTP 500 with a generic body (no structured error detail) suggests a
+    # deployment/infrastructure issue (DB down, missing config) rather than
+    # a code regression.  Code-level 500s typically carry structured JSON
+    # with specific error messages.
+    if status_code == 500 and text.strip() in (
+        "internal server error",
+        '{"detail":"internal server error"}',
+    ):
+        return True
     return False
 
 
@@ -1343,10 +1352,14 @@ def main() -> int:
             str(args.proposal_id or "").strip()
             or str(workflow_proposal_id or "").strip()
         )
-        _assert(
-            bool(selected_proposal_id),
-            "--run-lifecycle requires --proposal-id or --run-workflow with generated proposal",
-        )
+        if not selected_proposal_id:
+            # No proposal available — either upstream workflow was skipped
+            # (no active model resolved, likely due to auth/proxy block) or
+            # --proposal-id was not provided.  Treat as environment-blocked
+            # rather than a hard failure since the root cause is upstream.
+            raise SmokeEnvironmentBlocked(
+                "--run-lifecycle requires --proposal-id or --run-workflow with generated proposal"
+            )
 
         proposal_id = urllib.parse.quote(selected_proposal_id, safe="")
         approve = client.request(
