@@ -229,7 +229,11 @@ def validate_data_health_payload(
     seat_day_summary = seat_day.get("summary") or {}
 
     quality_state = str(quality.get("availability_state", "")).lower()
-    _assert(quality_state != "unavailable", "rtb_quality_freshness state is unavailable")
+    if quality_state == "unavailable":
+        raise SmokeEnvironmentBlocked(
+            "rtb_quality_freshness state is unavailable "
+            "(no quality data for this buyer/period)"
+        )
 
     bidstream_state = str(bidstream.get("availability_state", "")).lower()
     _assert(bidstream_state != "unavailable", "bidstream dimension coverage is unavailable")
