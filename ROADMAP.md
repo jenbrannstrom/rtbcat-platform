@@ -4,7 +4,7 @@
 
 ## Priority Buckets (2026-02-27)
 
-- [ ] **Now** - Objective: clear production-facing regressions and runtime blockers; Current: seat-switch/operator verification issues remain (language-persistence regression is closed in code); Acceptance: seat-switch/operator path is fixed and validated on production traffic, and runtime blocker follow-up is tracked to closure.
+- [ ] **Now** - Objective: clear production-facing regressions and runtime blockers; Current: seat-switch determinism and operator verification path complete; automation coverage remains; Acceptance: seat-switch/operator path is fixed and validated on production traffic, and runtime blocker follow-up is tracked to closure.
 - [ ] **Next** - Objective: complete Universal Precompute Epics A/B plus Home correctness/performance gates; Current: scope is defined but rollout is incomplete; Acceptance: serving-table path and validation gates are green.
 - [ ] **Later** - Objective: deliver optimization engine and external integrations after core reliability; Current: backlog/design items exist; Acceptance: features ship only after stability targets hold.
 
@@ -30,12 +30,14 @@
 
 - Progress (2026-03-02):
   - [x] Added canonical buyer-context resolver + unit coverage to prevent stale/invalid buyer IDs from bouncing scoped routes (`dashboard/src/lib/buyer-context-sync.ts`, `dashboard/src/__tests__/buyer-context-sync.test.ts`, `dashboard/src/components/buyer-route-sync.tsx`).
-- [ ] **Seat-switch determinism**
+- [x] **Seat-switch determinism**
   - Objective: selected buyer context must stay consistent across URL, in-memory context, localStorage/cookie, and active-seat RBAC validation.
   - Acceptance: no route bounce/revert during seat switch; invalid/revoked seat IDs are corrected deterministically without cross-seat data queries.
-- [ ] **Operator verification path**
+  - Done: canonical resolver (`buyer-context-sync.ts`) + route sync component refactored; 6 unit tests pass.
+- [x] **Operator verification path**
   - Objective: setup/system operator views must show seat-validity and readiness status with unambiguous pass/fail reasons.
   - Acceptance: operator can verify seat validity + readiness from one flow without manual query debugging.
+  - Done: `buyer-context-state.ts` (pure derivation of 4 validity states: loading, no_active_seats, selected_buyer_invalid, selected_buyer_valid), `BuyerContextBanner` reusable component, integrated into `/setup` and `/settings/system` pages with buyer-scoped query gating (`enabled: buyerCtx.canQuery`); 8 unit tests pass.
 - [ ] **Automation coverage**
   - Objective: add regression tests for seat-switch precedence and buyer-scoped query behavior on key routes.
   - Acceptance: CI tests fail on seat-context regressions before deploy.

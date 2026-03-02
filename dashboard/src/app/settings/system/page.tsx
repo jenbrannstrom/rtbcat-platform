@@ -6,6 +6,7 @@ import { Server, Database, Video, Loader2, CheckCircle, XCircle, AlertTriangle, 
 import {
   getHealth,
   getStats,
+  getSeats,
   getThumbnailStatus,
   generateThumbnailsBatch,
   getSystemStatus,
@@ -41,6 +42,8 @@ import { ErrorPage } from "@/components/error";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/contexts/i18n-context";
 import { useAccount } from "@/contexts/account-context";
+import { BuyerContextBanner } from "@/components/buyer-context-banner";
+import { deriveBuyerContextState } from "@/lib/buyer-context-state";
 
 type WorkflowPresetId = "safe" | "balanced" | "aggressive" | "custom";
 
@@ -88,6 +91,18 @@ export default function SystemStatusPage() {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
   const { selectedBuyerId } = useAccount();
+
+  const {
+    data: seats,
+    isLoading: seatsLoading,
+  } = useQuery({
+    queryKey: ["systemSeats"],
+    queryFn: () => getSeats({ active_only: true }),
+  });
+
+  const buyerCtx = deriveBuyerContextState(selectedBuyerId, seats, seatsLoading);
+  const buyerContextReady = buyerCtx.canQuery;
+
   const [batchLimit, setBatchLimit] = useState(50);
   const [forceRetry, setForceRetry] = useState(false);
   const [healthDays, setHealthDays] = useState(7);
@@ -173,6 +188,7 @@ export default function SystemStatusPage() {
         availability_state: healthStateFilter === "all" ? undefined : healthStateFilter,
         min_completeness_pct: normalizedMinCompleteness,
       }),
+    enabled: buyerContextReady,
   });
 
   const {
@@ -188,6 +204,7 @@ export default function SystemStatusPage() {
         limit: 200,
         offset: 0,
       }),
+    enabled: buyerContextReady,
   });
 
   const {
@@ -203,6 +220,7 @@ export default function SystemStatusPage() {
         limit: 20,
         offset: 0,
       }),
+    enabled: buyerContextReady,
   });
 
   const {
@@ -217,6 +235,7 @@ export default function SystemStatusPage() {
         limit: 100,
         offset: 0,
       }),
+    enabled: buyerContextReady,
   });
 
   const { data: optimizerSetup, isLoading: optimizerSetupLoading } = useQuery({
@@ -235,6 +254,7 @@ export default function SystemStatusPage() {
         buyer_id: selectedBuyerId || undefined,
         days: 14,
       }),
+    enabled: buyerContextReady,
   });
 
   const {
@@ -248,6 +268,7 @@ export default function SystemStatusPage() {
         buyer_id: selectedBuyerId || undefined,
         days: 14,
       }),
+    enabled: buyerContextReady,
   });
 
   const {
@@ -262,7 +283,7 @@ export default function SystemStatusPage() {
         limit: 100,
         offset: 0,
       }),
-    enabled: !!selectedProposalHistoryId,
+    enabled: buyerContextReady && !!selectedProposalHistoryId,
   });
 
   const {
@@ -275,6 +296,7 @@ export default function SystemStatusPage() {
       getConversionHealth({
         buyer_id: selectedBuyerId || undefined,
       }),
+    enabled: buyerContextReady,
     retry: false,
   });
 
@@ -289,6 +311,7 @@ export default function SystemStatusPage() {
         buyer_id: selectedBuyerId || undefined,
         days: 7,
     }),
+    enabled: buyerContextReady,
     retry: false,
   });
 
@@ -304,6 +327,7 @@ export default function SystemStatusPage() {
         days: 14,
         freshness_hours: 72,
       }),
+    enabled: buyerContextReady,
     retry: false,
   });
 
@@ -340,7 +364,7 @@ export default function SystemStatusPage() {
         bucket_hours: qpsPageSloBucketHours,
         bucket_limit: qpsPageSloBucketLimit,
       }),
-    enabled: !!selectedBuyerId,
+    enabled: buyerContextReady,
     retry: false,
   });
 
@@ -865,6 +889,8 @@ export default function SystemStatusPage() {
           {t.settings.systemConfiguration}
         </p>
       </div>
+
+      <BuyerContextBanner state={buyerCtx} />
 
       <div className="max-w-2xl space-y-6">
         {/* API Status */}
