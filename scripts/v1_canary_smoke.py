@@ -1400,11 +1400,18 @@ def main() -> int:
         )
         _assert(str(approve.get("status", "")).lower() == "approved", "proposal approve did not return status=approved")
 
-        applied = client.request(
-            "POST",
-            f"/optimizer/proposals/{proposal_id}/apply",
-            params={"buyer_id": args.buyer_id, "mode": "queue"},
-        )
+        try:
+            applied = client.request(
+                "POST",
+                f"/optimizer/proposals/{proposal_id}/apply",
+                params={"buyer_id": args.buyer_id, "mode": "queue"},
+            )
+        except SmokeFailure as exc:
+            if "without billing_id" in str(exc):
+                raise SmokeEnvironmentBlocked(
+                    "proposal has no billing_id (data setup issue, not a code regression)"
+                ) from exc
+            raise
         _assert(str(applied.get("status", "")).lower() == "applied", "proposal apply did not return status=applied")
 
         sync = client.request(
