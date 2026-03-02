@@ -4,11 +4,12 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from collectors import PretargetingClient
+from services.changes_service import ChangesService
 from services.pretargeting_service import PretargetingService
 from services.seats_service import SeatsService
 
@@ -23,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["RTB Settings"])
 
+MajorChangeType = Literal["targeting", "publisher", "qps", "mixed"]
+
 
 def _parse_json_field(value):
     """Parse JSON field - handles both JSONB (already parsed) and TEXT (needs parsing)."""
@@ -31,6 +34,32 @@ def _parse_json_field(value):
     if isinstance(value, (list, dict)):
         return value  # Already parsed by psycopg (JSONB column)
     return json.loads(value)  # TEXT column, needs parsing
+
+
+def _major_change_type_for_change(change_type: str) -> MajorChangeType:
+    publisher_change_types = {"add_publisher", "remove_publisher", "set_publisher_mode"}
+    if change_type == "set_maximum_qps":
+        return "qps"
+    if change_type in publisher_change_types:
+        return "publisher"
+    return "targeting"
+
+
+def _resolve_active_major_change_type(
+    pending_changes: list[dict],
+    has_pending_publisher_changes: bool,
+) -> MajorChangeType | None:
+    detected: set[MajorChangeType] = {
+        _major_change_type_for_change(str(change.get("change_type") or ""))
+        for change in pending_changes
+    }
+    if has_pending_publisher_changes:
+        detected.add("publisher")
+    if not detected:
+        return None
+    if len(detected) == 1:
+        return next(iter(detected))
+    return "mixed"
 
 
 def get_seats_service() -> SeatsService:
@@ -361,8 +390,9 @@ async def get_pretargeting_history(
         results = []
         for row in rows:
             rollback_context = None
+            commit_context = None
+            raw_context = row.get("raw_config_snapshot")
             if row.get("change_type") == "rollback":
-                raw_context = row.get("raw_config_snapshot")
                 if isinstance(raw_context, str):
                     try:
                         parsed = json.loads(raw_context)
@@ -372,6 +402,16 @@ async def get_pretargeting_history(
                         rollback_context = parsed
                 elif isinstance(raw_context, dict):
                     rollback_context = raw_context
+            elif row.get("change_type") == "major_commit":
+                if isinstance(raw_context, str):
+                    try:
+                        parsed = json.loads(raw_context)
+                    except json.JSONDecodeError:
+                        parsed = None
+                    if isinstance(parsed, dict):
+                        commit_context = parsed
+                elif isinstance(raw_context, dict):
+                    commit_context = raw_context
             results.append(
                 PretargetingHistoryResponse(
                     id=row["id"],
@@ -385,6 +425,7 @@ async def get_pretargeting_history(
                     changed_by=row["changed_by"],
                     change_source=row["change_source"] or "unknown",
                     rollback_context=rollback_context,
+                    commit_context=commit_context,
                 )
             )
 
@@ -457,18 +498,47 @@ async def add_pretargeting_publisher(
             raise HTTPException(status_code=400, detail="Mode must be WHITELIST or BLACKLIST")
 
         pretargeting_service = PretargetingService()
+        change_service = ChangesService()
 
-        config, existing = await asyncio.gather(
+        config, existing, pending_changes, pending_publisher_changes = await asyncio.gather(
             pretargeting_service.get_config(billing_id),
             pretargeting_service.check_publisher_in_opposite_mode(
                 billing_id,
                 publisher_id,
                 mode,
             ),
+            change_service.list_pending_changes(
+                billing_id=billing_id,
+                status="pending",
+                limit=500,
+            ),
+            pretargeting_service.list_pending_publisher_changes(billing_id),
         )
 
         if not config:
             raise HTTPException(status_code=404, detail=f"Pretargeting config {billing_id} not found")
+
+        active_major_type = _resolve_active_major_change_type(
+            pending_changes=pending_changes,
+            has_pending_publisher_changes=bool(pending_publisher_changes),
+        )
+        if active_major_type == "mixed":
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Pending changes already span multiple major change types. "
+                    "Commit or clear current pending changes before staging more."
+                ),
+            )
+        if active_major_type and active_major_type != "publisher":
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Only one major change type can be staged per commit "
+                    f"(current={active_major_type}, requested=publisher). "
+                    "Commit or clear pending changes first."
+                ),
+            )
 
         if existing:
             raise HTTPException(
@@ -512,17 +582,46 @@ async def remove_pretargeting_publisher(
                 raise HTTPException(status_code=400, detail="Mode must be WHITELIST or BLACKLIST")
 
         pretargeting_service = PretargetingService()
+        change_service = ChangesService()
         publisher_rows_task = (
             pretargeting_service.list_publishers(billing_id=billing_id)
             if not resolved_mode
             else asyncio.sleep(0, result=None)
         )
-        config, rows = await asyncio.gather(
+        config, rows, pending_changes, pending_publisher_changes = await asyncio.gather(
             pretargeting_service.get_config(billing_id),
             publisher_rows_task,
+            change_service.list_pending_changes(
+                billing_id=billing_id,
+                status="pending",
+                limit=500,
+            ),
+            pretargeting_service.list_pending_publisher_changes(billing_id),
         )
         if not config:
             raise HTTPException(status_code=404, detail=f"Pretargeting config {billing_id} not found")
+
+        active_major_type = _resolve_active_major_change_type(
+            pending_changes=pending_changes,
+            has_pending_publisher_changes=bool(pending_publisher_changes),
+        )
+        if active_major_type == "mixed":
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Pending changes already span multiple major change types. "
+                    "Commit or clear current pending changes before staging more."
+                ),
+            )
+        if active_major_type and active_major_type != "publisher":
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Only one major change type can be staged per commit "
+                    f"(current={active_major_type}, requested=publisher). "
+                    "Commit or clear pending changes first."
+                ),
+            )
 
         if not resolved_mode:
             assert isinstance(rows, list)
@@ -551,6 +650,8 @@ async def remove_pretargeting_publisher(
             "message": f"Publisher {publisher_id} queued for removal from {resolved_mode}",
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to remove publisher: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -36,6 +36,8 @@ interface PretargetingConfigCardProps {
   onToggleExpand?: () => void;
 }
 
+type MajorChangeType = 'targeting' | 'publisher' | 'qps' | 'mixed';
+
 // Format large numbers
 function formatNumber(n: number): string {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
@@ -123,6 +125,32 @@ function WasteMiniBar({ pct }: { pct: number }) {
   );
 }
 
+function getMajorChangeType(changeType: string): Exclude<MajorChangeType, 'mixed'> {
+  if (changeType === 'set_maximum_qps') {
+    return 'qps';
+  }
+  if (changeType === 'add_publisher' || changeType === 'remove_publisher' || changeType === 'set_publisher_mode') {
+    return 'publisher';
+  }
+  return 'targeting';
+}
+
+function resolveActiveMajorChangeType(
+  pendingChanges: Array<{ change_type: string }>
+): MajorChangeType | null {
+  const majorTypes = new Set<Exclude<MajorChangeType, 'mixed'>>();
+  pendingChanges.forEach((change) => {
+    majorTypes.add(getMajorChangeType(change.change_type));
+  });
+  if (majorTypes.size === 0) {
+    return null;
+  }
+  if (majorTypes.size === 1) {
+    return Array.from(majorTypes)[0];
+  }
+  return 'mixed';
+}
+
 export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: PretargetingConfigCardProps) {
   const { t } = useTranslation();
   const { selectedBuyerId } = useAccount();
@@ -133,6 +161,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(config.name);
   const [showHistory, setShowHistory] = useState(false);
+  const [changeError, setChangeError] = useState<string | null>(null);
   const [qpsInput, setQpsInput] = useState(
     config.maximum_qps === null || config.maximum_qps === undefined ? '' : String(config.maximum_qps)
   );
@@ -176,8 +205,12 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   const createChangeMutation = useMutation({
     mutationFn: createPendingChange,
     onSuccess: () => {
+      setChangeError(null);
       queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', config.billing_id] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
+    },
+    onError: (error: Error) => {
+      setChangeError(error.message);
     },
   });
 
@@ -254,6 +287,37 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
     ? pendingQpsChanges[pendingQpsChanges.length - 1]
     : null;
   const persistedQpsLimit = configDetail?.maximum_qps ?? config.maximum_qps ?? null;
+  const pendingChanges = configDetail?.pending_changes || [];
+  const activeMajorChangeType = resolveActiveMajorChangeType(pendingChanges);
+
+  const canStageChange = (nextChangeType: string): boolean => {
+    const nextMajorType = getMajorChangeType(nextChangeType);
+    if (activeMajorChangeType === null || activeMajorChangeType === nextMajorType) {
+      return true;
+    }
+    if (activeMajorChangeType === 'mixed') {
+      setChangeError('Pending changes already mix major types. Commit or clear them before staging more changes.');
+      return false;
+    }
+    setChangeError(
+      `Only one major change per commit is allowed (active=${activeMajorChangeType}, requested=${nextMajorType}).`
+    );
+    return false;
+  };
+
+  const stageChange = (payload: {
+    billing_id: string;
+    change_type: string;
+    field_name: string;
+    value: string;
+    reason?: string;
+    estimated_qps_impact?: number;
+  }) => {
+    if (!canStageChange(payload.change_type)) {
+      return;
+    }
+    createChangeMutation.mutate(payload);
+  };
 
   const applyQpsChange = () => {
     if (!configDetail) return;
@@ -272,10 +336,11 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
       pendingQpsChanges
         .filter((c) => c.value === desired)
         .forEach((c) => cancelChangeMutation.mutate(c.id));
+      setChangeError(null);
       return;
     }
     if (latestPendingQpsChange?.value === desired) return;
-    createChangeMutation.mutate({
+    stageChange({
       billing_id: config.billing_id,
       change_type: 'set_maximum_qps',
       field_name: 'maximum_qps',
@@ -285,7 +350,6 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   };
 
   // Format controls
-  const pendingChanges = configDetail?.pending_changes || [];
   const effectiveFormats = new Set(
     configDetail?.effective_formats || configDetail?.included_formats || config.formats || []
   );
@@ -304,7 +368,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
         return;
       }
       if (pendingAdd || currentlyEnabled) return;
-      createChangeMutation.mutate({
+      stageChange({
         billing_id: config.billing_id,
         change_type: 'add_format',
         field_name: 'included_formats',
@@ -319,7 +383,7 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
       return;
     }
     if (pendingRemove || !currentlyEnabled) return;
-    createChangeMutation.mutate({
+    stageChange({
       billing_id: config.billing_id,
       change_type: 'remove_format',
       field_name: 'included_formats',
@@ -547,6 +611,10 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
         </div>
 
       </div>
+
+      {changeError && (
+        <div className="px-4 pb-2 text-xs text-red-600">{changeError}</div>
+      )}
 
       {/* Expanded content */}
       {expanded && (

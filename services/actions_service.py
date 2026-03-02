@@ -47,6 +47,24 @@ class ActionsService:
                 return []
         return list(value)
 
+    @staticmethod
+    def _resolve_major_change_type(changes: list[dict[str, Any]]) -> str:
+        publisher_change_types = {"add_publisher", "remove_publisher", "set_publisher_mode"}
+        categories: set[str] = set()
+        for change in changes:
+            change_type = str(change.get("change_type") or "")
+            if change_type == "set_maximum_qps":
+                categories.add("qps")
+            elif change_type in publisher_change_types:
+                categories.add("publisher")
+            else:
+                categories.add("targeting")
+        if not categories:
+            return "none"
+        if len(categories) == 1:
+            return next(iter(categories))
+        return "mixed"
+
     async def _get_pretargeting_client(self, billing_id: str):
         config = await self._pretargeting.get_config(billing_id)
         if not config:
@@ -132,6 +150,10 @@ class ActionsService:
                 "message": "No pending changes to apply",
             }
 
+        # Service returns newest-first; apply oldest-first for deterministic batches.
+        changes = list(reversed(changes))
+        major_change_type = self._resolve_major_change_type(changes)
+
         if dry_run:
             change_list = [f"{c['change_type']}: {c['value']}" for c in changes]
             return {
@@ -151,8 +173,16 @@ class ActionsService:
 
         applied = 0
         failed = 0
+        commit_changes: list[dict[str, Any]] = []
 
         for change in changes:
+            change_record = {
+                "change_id": change.get("id"),
+                "change_type": change.get("change_type"),
+                "field_name": change.get("field_name"),
+                "value": change.get("value"),
+                "reason": change.get("reason"),
+            }
             try:
                 await self.apply_pending_change(
                     billing_id=billing_id,
@@ -160,8 +190,34 @@ class ActionsService:
                     dry_run=False,
                 )
                 applied += 1
-            except Exception:
+                change_record["status"] = "applied"
+            except Exception as exc:
                 failed += 1
+                change_record["status"] = "failed"
+                change_record["error"] = str(exc)
+            commit_changes.append(change_record)
+
+        config = await self._pretargeting.get_config(billing_id)
+        config_id = str(config.get("config_id")) if config and config.get("config_id") else None
+        bidder_id = str(config.get("bidder_id")) if config and config.get("bidder_id") else None
+        if config_id and bidder_id:
+            await self._pretargeting.add_history(
+                config_id=config_id,
+                bidder_id=bidder_id,
+                change_type="major_commit",
+                field_changed="batch",
+                old_value=None,
+                new_value=f"{major_change_type}:{applied}/{len(changes)}",
+                changed_by="system",
+                change_source="api",
+                raw_config_snapshot={
+                    "major_change_type": major_change_type,
+                    "total_changes": len(changes),
+                    "changes_applied": applied,
+                    "changes_failed": failed,
+                    "changes": commit_changes,
+                },
+            )
 
         return {
             "status": "completed",

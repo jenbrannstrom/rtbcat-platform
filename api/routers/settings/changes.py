@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -15,6 +15,34 @@ from .models import ConfigDetailResponse, PendingChangeCreate, PendingChangeResp
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["RTB Settings"])
+
+MajorChangeType = Literal["targeting", "publisher", "qps", "mixed"]
+
+
+def _major_change_type_for_change(change_type: str) -> MajorChangeType:
+    publisher_change_types = {"add_publisher", "remove_publisher", "set_publisher_mode"}
+    if change_type == "set_maximum_qps":
+        return "qps"
+    if change_type in publisher_change_types:
+        return "publisher"
+    return "targeting"
+
+
+def _resolve_active_major_change_type(
+    pending_changes: list[dict],
+    has_pending_publisher_changes: bool,
+) -> MajorChangeType | None:
+    detected: set[MajorChangeType] = {
+        _major_change_type_for_change(str(change.get("change_type") or ""))
+        for change in pending_changes
+    }
+    if has_pending_publisher_changes:
+        detected.add("publisher")
+    if not detected:
+        return None
+    if len(detected) == 1:
+        return next(iter(detected))
+    return "mixed"
 
 
 def _parse_json_field(value):
@@ -88,6 +116,37 @@ async def create_pending_change(
 
         config_id = config["config_id"]
         bidder_id = config.get("bidder_id")
+
+        pending_changes = await change_service.list_pending_changes(
+            billing_id=request.billing_id,
+            status="pending",
+            limit=500,
+        )
+        pending_publisher_changes = await pretargeting_service.list_pending_publisher_changes(
+            request.billing_id
+        )
+        active_major_type = _resolve_active_major_change_type(
+            pending_changes=pending_changes,
+            has_pending_publisher_changes=bool(pending_publisher_changes),
+        )
+        requested_major_type = _major_change_type_for_change(request.change_type)
+        if active_major_type == "mixed":
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Pending changes already span multiple major change types. "
+                    "Commit or clear current pending changes before staging more."
+                ),
+            )
+        if active_major_type and active_major_type != requested_major_type:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Only one major change type can be staged per commit "
+                    f"(current={active_major_type}, requested={requested_major_type}). "
+                    "Commit or clear pending changes first."
+                ),
+            )
 
         change_id = await change_service.create_pending_change(
             billing_id=request.billing_id,

@@ -8,7 +8,6 @@ import {
   createPendingChange,
   cancelPendingChange,
   markChangeApplied,
-  applyPendingChange,
   applyAllPendingChanges,
   suspendPretargeting,
   activatePretargeting,
@@ -58,6 +57,8 @@ interface PretargetingSettingsEditorProps {
   initialTab?: 'publishers' | 'settings';
   hideTabs?: boolean;
 }
+
+type MajorChangeType = 'targeting' | 'publisher' | 'qps' | 'mixed';
 
 function formatDate(dateStr: string, locale?: string): string {
   const date = new Date(dateStr);
@@ -167,8 +168,39 @@ function formatHistoryChangeTypeLabel(changeType: string, t: Translations): stri
     add_publisher: t.pretargeting.historyChangeTypeAddPublisher,
     remove_publisher: t.pretargeting.historyChangeTypeRemovePublisher,
     set_publisher_mode: t.pretargeting.historyChangeTypeSetPublisherMode,
+    major_commit: t.pretargeting.pushToGoogle,
   };
   return keyMap[changeType] || formatCodeLabel(changeType);
+}
+
+function getMajorChangeType(changeType: string): Exclude<MajorChangeType, 'mixed'> {
+  if (changeType === 'set_maximum_qps') {
+    return 'qps';
+  }
+  if (changeType === 'add_publisher' || changeType === 'remove_publisher' || changeType === 'set_publisher_mode') {
+    return 'publisher';
+  }
+  return 'targeting';
+}
+
+function resolveActiveMajorChangeType(
+  pendingChanges: PendingChange[],
+  hasPendingPublisherRows: boolean
+): MajorChangeType | null {
+  const majorTypes = new Set<Exclude<MajorChangeType, 'mixed'>>();
+  pendingChanges.forEach((change) => {
+    majorTypes.add(getMajorChangeType(change.change_type));
+  });
+  if (hasPendingPublisherRows) {
+    majorTypes.add('publisher');
+  }
+  if (majorTypes.size === 0) {
+    return null;
+  }
+  if (majorTypes.size === 1) {
+    return Array.from(majorTypes)[0];
+  }
+  return 'mixed';
 }
 
 // isValidPublisherId and detectPublisherType imported from @/lib/publisher-validation
@@ -457,7 +489,6 @@ function TargetingSection({
 }
 
 function PublisherTargetingSection({
-  billingId,
   baseMode,
   publishers,
   pendingModeChange,
@@ -471,7 +502,6 @@ function PublisherTargetingSection({
   onExportCsv,
   disabled = false,
 }: {
-  billingId: string;
   baseMode: string | null | undefined;
   publishers: PretargetingPublisher[];
   pendingModeChange: PendingChange | null;
@@ -486,7 +516,6 @@ function PublisherTargetingSection({
   disabled?: boolean;
 }) {
   const { t } = useTranslation();
-  const [isExpanded, setIsExpanded] = useState(false);
   const [filter, setFilter] = useState('');
   const [newPublisher, setNewPublisher] = useState('');
   const [inputError, setInputError] = useState<string | null>(null);
@@ -938,6 +967,7 @@ function PublisherTargetingSection({
 // History entry component
 function HistoryEntry({ entry }: { entry: PretargetingHistoryItem }) {
   const { t, language } = useTranslation();
+  const commitChanges = entry.commit_context?.changes || [];
   return (
     <div className="flex items-start gap-3 py-2 border-b last:border-0">
       <Clock className="h-4 w-4 text-gray-400 mt-0.5" />
@@ -952,6 +982,15 @@ function HistoryEntry({ entry }: { entry: PretargetingHistoryItem }) {
         </div>
         {entry.new_value && (
           <p className="text-xs text-gray-600 mt-0.5 truncate">{entry.new_value}</p>
+        )}
+        {commitChanges.length > 0 && (
+          <div className="mt-1 max-h-24 overflow-y-auto rounded bg-gray-50 p-2">
+            {commitChanges.map((change, index) => (
+              <div key={`${entry.id}-${change.change_id || index}`} className="text-xs text-gray-600">
+                • {formatCodeLabel(String(change.change_type || 'change'))}: {String(change.value || '')}
+              </div>
+            ))}
+          </div>
         )}
         <p className="text-xs text-gray-400 mt-1">
           {formatDate(entry.changed_at, language)} {t.pretargeting.historyMetaSeparator} {formatHistorySourceLabel(entry.change_source, t)}
@@ -976,7 +1015,7 @@ export function PretargetingSettingsEditor({
     snapshot: PretargetingSnapshot;
     changes: string[];
   } | null>(null);
-  const [showConfirmPush, setShowConfirmPush] = useState(false);
+  const [showCommitToast, setShowCommitToast] = useState(false);
   const [showConfirmSuspend, setShowConfirmSuspend] = useState(false);
   const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
   const queryClient = useQueryClient();
@@ -993,7 +1032,7 @@ export function PretargetingSettingsEditor({
   });
 
   // Fetch publishers from dedicated endpoint
-  const { data: publishersData, isLoading: publishersLoading, refetch: refetchPublishers } = useQuery({
+  const { data: publishersData, refetch: refetchPublishers } = useQuery({
     queryKey: ['pretargeting-publishers', billing_id],
     queryFn: () => getPretargetingPublishers(billing_id),
     staleTime: 30_000,
@@ -1020,6 +1059,9 @@ export function PretargetingSettingsEditor({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
     },
+    onError: (error: Error) => {
+      setPushResult({ success: false, message: error.message });
+    },
   });
 
   const cancelChangeMutation = useMutation({
@@ -1044,12 +1086,18 @@ export function PretargetingSettingsEditor({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', billing_id] });
     },
+    onError: (error: Error) => {
+      setPushResult({ success: false, message: error.message });
+    },
   });
 
   const removePublisherMutation = useMutation({
     mutationFn: (publisherId: string) => removePretargetingPublisher(billing_id, publisherId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pretargeting-publishers', billing_id] });
+    },
+    onError: (error: Error) => {
+      setPushResult({ success: false, message: error.message });
     },
   });
 
@@ -1063,7 +1111,7 @@ export function PretargetingSettingsEditor({
       queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-history', billing_id] });
-      setShowConfirmPush(false);
+      setShowCommitToast(false);
     },
     onError: (error: Error) => {
       setPushResult({ success: false, message: error.message });
@@ -1131,8 +1179,57 @@ export function PretargetingSettingsEditor({
     );
   };
 
+  const pendingPublisherRowsCount = (publishersData?.publishers || []).filter(
+    (publisher) => publisher.status === 'pending_add' || publisher.status === 'pending_remove'
+  ).length;
+  const activeMajorChangeType = resolveActiveMajorChangeType(
+    configDetail?.pending_changes || [],
+    pendingPublisherRowsCount > 0
+  );
+
+  const canStageChange = (nextChangeType: string): boolean => {
+    const nextMajorType = getMajorChangeType(nextChangeType);
+    if (activeMajorChangeType === null || activeMajorChangeType === nextMajorType) {
+      return true;
+    }
+    if (activeMajorChangeType === 'mixed') {
+      setPushResult({
+        success: false,
+        message:
+          'Pending changes already mix major types. Commit or clear them before staging more changes.',
+      });
+      return false;
+    }
+    setPushResult({
+      success: false,
+      message: `Only one major change per commit is allowed (active=${activeMajorChangeType}, requested=${nextMajorType}).`,
+    });
+    return false;
+  };
+
+  const stageChange = (payload: {
+    billing_id: string;
+    change_type: string;
+    field_name: string;
+    value: string;
+    reason?: string;
+    estimated_qps_impact?: number;
+  }) => {
+    if (!canStageChange(payload.change_type)) {
+      return;
+    }
+    createChangeMutation.mutate(payload);
+  };
+
+  const openCommitToast = () => {
+    if (!hasPendingChanges) {
+      return;
+    }
+    setShowCommitToast(true);
+  };
+
   const handleAddSize = (value: string) => {
-    createChangeMutation.mutate({
+    stageChange({
       billing_id,
       change_type: 'add_size',
       field_name: 'included_sizes',
@@ -1141,7 +1238,7 @@ export function PretargetingSettingsEditor({
   };
 
   const handleRemoveSize = (value: string) => {
-    createChangeMutation.mutate({
+    stageChange({
       billing_id,
       change_type: 'remove_size',
       field_name: 'included_sizes',
@@ -1151,7 +1248,7 @@ export function PretargetingSettingsEditor({
   };
 
   const handleAddGeo = (value: string) => {
-    createChangeMutation.mutate({
+    stageChange({
       billing_id,
       change_type: 'add_geo',
       field_name: 'included_geos',
@@ -1160,7 +1257,7 @@ export function PretargetingSettingsEditor({
   };
 
   const handleRemoveGeo = (value: string) => {
-    createChangeMutation.mutate({
+    stageChange({
       billing_id,
       change_type: 'remove_geo',
       field_name: 'included_geos',
@@ -1169,7 +1266,7 @@ export function PretargetingSettingsEditor({
   };
 
   const handleAddFormat = (value: string) => {
-    createChangeMutation.mutate({
+    stageChange({
       billing_id,
       change_type: 'add_format',
       field_name: 'included_formats',
@@ -1178,7 +1275,7 @@ export function PretargetingSettingsEditor({
   };
 
   const handleRemoveFormat = (value: string) => {
-    createChangeMutation.mutate({
+    stageChange({
       billing_id,
       change_type: 'remove_format',
       field_name: 'included_formats',
@@ -1187,7 +1284,7 @@ export function PretargetingSettingsEditor({
   };
 
   const handleAddPublisher = (value: string) => {
-    createChangeMutation.mutate({
+    stageChange({
       billing_id,
       change_type: 'add_publisher',
       field_name: 'publisher_targeting',
@@ -1196,7 +1293,7 @@ export function PretargetingSettingsEditor({
   };
 
   const handleRemovePublisher = (value: string) => {
-    createChangeMutation.mutate({
+    stageChange({
       billing_id,
       change_type: 'remove_publisher',
       field_name: 'publisher_targeting',
@@ -1205,11 +1302,54 @@ export function PretargetingSettingsEditor({
   };
 
   const handleSetPublisherMode = (mode: string) => {
-    createChangeMutation.mutate({
+    stageChange({
       billing_id,
       change_type: 'set_publisher_mode',
       field_name: 'publisher_targeting_mode',
       value: mode,
+    });
+  };
+
+  const queuePublisherAdd = (publisherId: string) => {
+    if (!canStageChange('add_publisher')) {
+      return;
+    }
+    const mode = (configDetail?.publisher_targeting_mode || 'EXCLUSIVE') === 'INCLUSIVE'
+      ? 'WHITELIST'
+      : 'BLACKLIST';
+    addPublisherMutation.mutate(
+      { publisherId, mode: mode as "BLACKLIST" | "WHITELIST" },
+      {
+        onSuccess: () => {
+          handleAddPublisher(publisherId);
+        },
+      }
+    );
+  };
+
+  const queuePublisherRemove = (publisherId: string) => {
+    if (!canStageChange('remove_publisher')) {
+      return;
+    }
+    removePublisherMutation.mutate(publisherId, {
+      onSuccess: () => {
+        handleRemovePublisher(publisherId);
+      },
+    });
+  };
+
+  const undoPublisherPending = (publisherId: string) => {
+    removePublisherMutation.mutate(publisherId, {
+      onSuccess: () => {
+        const pendingAdd = findPendingChange('add_publisher', publisherId);
+        if (pendingAdd) {
+          cancelChangeMutation.mutate(pendingAdd.id);
+        }
+        const pendingRemove = findPendingChange('remove_publisher', publisherId);
+        if (pendingRemove) {
+          cancelChangeMutation.mutate(pendingRemove.id);
+        }
+      },
     });
   };
 
@@ -1221,7 +1361,7 @@ export function PretargetingSettingsEditor({
     configDetail.included_sizes
       .filter(size => !pendingRemoves.includes(size))
       .forEach(size => {
-        createChangeMutation.mutate({
+        stageChange({
           billing_id,
           change_type: 'remove_size',
           field_name: 'included_sizes',
@@ -1246,7 +1386,7 @@ export function PretargetingSettingsEditor({
         }
       } else {
         // Add a pending removal
-        createChangeMutation.mutate({
+        stageChange({
           billing_id,
           change_type: 'remove_size',
           field_name: 'included_sizes',
@@ -1255,10 +1395,6 @@ export function PretargetingSettingsEditor({
         });
       }
     });
-  };
-
-  const handleBulkAddPublishers = (values: string[]) => {
-    values.forEach((value) => handleAddPublisher(value));
   };
 
   const handleExportPublishers = (values: string[]) => {
@@ -1310,8 +1446,6 @@ export function PretargetingSettingsEditor({
 
   const pendingChanges = configDetail.pending_changes || [];
   const hasPendingChanges = pendingChanges.length > 0;
-  const pendingPublisherAdds = getPendingByType('add_publisher');
-  const pendingPublisherRemoves = getPendingByType('remove_publisher');
   const pendingModeChange = [...pendingChanges]
     .reverse()
     .find((change) => change.change_type === 'set_publisher_mode') || null;
@@ -1476,52 +1610,6 @@ export function PretargetingSettingsEditor({
       )}
 
       {/* Confirmation dialogs */}
-      {showConfirmPush && (
-        <div className="px-4 py-3 bg-blue-50 border-b border-blue-200">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="h-5 w-5 text-blue-600 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-blue-900">
-                {t.pretargeting.pushPendingChangesToGoogleConfirm.replace('{count}', String(pendingChanges.length))}
-              </p>
-              <p className="text-xs text-blue-700 mt-1">
-                {t.pretargeting.pushConfirmLiveChangeWarning}
-              </p>
-              <div className="mt-3 space-y-1">
-                {pendingChanges.map((change) => (
-                  <div key={change.id} className="text-xs text-blue-800">
-                    • {describePendingChange(change, publisherMode, t)}
-                  </div>
-                ))}
-              </div>
-              <div className="mt-2 text-xs text-blue-700">
-                {t.pretargeting.pushConfirmSnapshotCreated}
-              </div>
-              <div className="flex gap-2 mt-3">
-                <button
-                  onClick={() => applyAllMutation.mutate()}
-                  disabled={applyAllMutation.isPending}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {applyAllMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Upload className="h-4 w-4" />
-                  )}
-                  {t.pretargeting.yesPushToGoogle}
-                </button>
-                <button
-                  onClick={() => setShowConfirmPush(false)}
-                  disabled={applyAllMutation.isPending}
-                  className="px-3 py-1.5 bg-white text-gray-700 text-sm rounded border hover:bg-gray-50 disabled:opacity-50"
-                >
-                  {t.common.cancel}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showConfirmSuspend && (
         <div className="px-4 py-3 bg-yellow-50 border-b border-yellow-200">
@@ -1572,7 +1660,7 @@ export function PretargetingSettingsEditor({
                 </h4>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setShowConfirmPush(true)}
+                  onClick={openCommitToast}
                   disabled={isPushing}
                   className="flex items-center gap-1 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 font-medium"
                 >
@@ -1609,34 +1697,23 @@ export function PretargetingSettingsEditor({
 
         {activeTab === 'publishers' ? (
           <PublisherTargetingSection
-            billingId={billing_id}
             baseMode={publisherMode}
             publishers={publishersData?.publishers || []}
             pendingModeChange={pendingModeChange}
-            onAddPublisher={(publisherId) => {
-              const mode = publisherMode === 'INCLUSIVE' ? 'WHITELIST' : 'BLACKLIST';
-              addPublisherMutation.mutate({ publisherId, mode: mode as "BLACKLIST" | "WHITELIST" });
-            }}
-            onRemovePublisher={(publisherId) => {
-              removePublisherMutation.mutate(publisherId);
-            }}
+            onAddPublisher={queuePublisherAdd}
+            onRemovePublisher={queuePublisherRemove}
             onUndoPublisher={(publisherId) => {
               // For undo, we just re-fetch after removing from pending
               // The API DELETE endpoint handles both pending_add (removes row) and pending_remove (resets to active)
-              removePublisherMutation.mutate(publisherId);
+              undoPublisherPending(publisherId);
             }}
             onSetMode={handleSetPublisherMode}
             onShowHistory={() => {
               setHistoryView('snapshots');
               setShowHistory(true);
             }}
-            onApplyPending={() => setShowConfirmPush(true)}
-            onBulkAdd={(values) => {
-              const mode = publisherMode === 'INCLUSIVE' ? 'WHITELIST' : 'BLACKLIST';
-              values.forEach(publisherId => {
-                addPublisherMutation.mutate({ publisherId, mode: mode as "BLACKLIST" | "WHITELIST" });
-              });
-            }}
+            onApplyPending={openCommitToast}
+            onBulkAdd={(values) => values.forEach((publisherId) => queuePublisherAdd(publisherId))}
             onExportCsv={handleExportPublishers}
             disabled={isPushing || addPublisherMutation.isPending || removePublisherMutation.isPending}
           />
@@ -1707,6 +1784,44 @@ export function PretargetingSettingsEditor({
           </>
         )}
       </div>
+
+      {showCommitToast && hasPendingChanges && (
+        <div className="fixed bottom-4 right-4 z-50 w-full max-w-md rounded-lg border border-blue-200 bg-white shadow-xl">
+          <div className="border-b border-blue-100 bg-blue-50 px-3 py-2">
+            <p className="text-sm font-medium text-blue-900">
+              {t.pretargeting.pushPendingChangesToGoogleConfirm.replace('{count}', String(pendingChanges.length))}
+            </p>
+            <p className="mt-1 text-xs text-blue-700">{t.pretargeting.pushConfirmLiveChangeWarning}</p>
+          </div>
+          <div className="max-h-40 overflow-y-auto px-3 py-2">
+            {pendingChanges.map((change) => (
+              <div key={`toast-${change.id}`} className="text-xs text-gray-700">
+                • {describePendingChange(change, publisherMode, t)}
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-gray-100 px-3 py-2 text-xs text-blue-700">
+            {t.pretargeting.pushConfirmSnapshotCreated}
+          </div>
+          <div className="flex items-center justify-end gap-2 px-3 py-2">
+            <button
+              onClick={() => setShowCommitToast(false)}
+              disabled={applyAllMutation.isPending}
+              className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {t.common.cancel}
+            </button>
+            <button
+              onClick={() => applyAllMutation.mutate()}
+              disabled={applyAllMutation.isPending}
+              className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {applyAllMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+              {t.pretargeting.yesPushToGoogle}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* History panel */}
       {showHistory && (
