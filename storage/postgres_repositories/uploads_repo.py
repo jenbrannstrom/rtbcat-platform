@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, Optional
 
-from storage.postgres_database import pg_query, pg_query_one, pg_execute
+from storage.postgres_database import (
+    pg_execute,
+    pg_query,
+    pg_query_one,
+    pg_query_with_timeout,
+)
 
 
 class UploadsRepository:
     """SQL-only repository for upload tracking and import history."""
+
+    _DEFAULT_DATA_FRESHNESS_QUERY_TIMEOUT_MS = 30_000
 
     REPORT_TYPE_CASE_SQL = """
         CASE
@@ -385,9 +393,11 @@ class UploadsRepository:
         if buyer_id:
             buyer_filter = " AND buyer_account_id = %s"
 
+        # Presence is all the UI needs ("imported" vs "missing"), so avoid
+        # expensive COUNT(*) scans over large fact tables.
         if "rtb_daily" in existing:
             subqueries.append(
-                f"SELECT metric_date, 'bidsinauction' AS csv_type, COUNT(*) AS row_count"
+                f"SELECT metric_date, 'bidsinauction' AS csv_type, 1 AS row_count"
                 f" FROM rtb_daily WHERE metric_date >= %s{buyer_filter} GROUP BY metric_date"
             )
             params.append(start_date)
@@ -396,7 +406,7 @@ class UploadsRepository:
 
         if "rtb_quality" in existing:
             subqueries.append(
-                f"SELECT metric_date, 'quality' AS csv_type, COUNT(*) AS row_count"
+                f"SELECT metric_date, 'quality' AS csv_type, 1 AS row_count"
                 f" FROM rtb_quality WHERE metric_date >= %s{buyer_filter} GROUP BY metric_date"
             )
             params.append(start_date)
@@ -405,18 +415,23 @@ class UploadsRepository:
 
         if "rtb_bidstream" in existing:
             subqueries.append(
-                f"SELECT metric_date, 'pipeline-geo' AS csv_type, COUNT(*) AS row_count"
-                f" FROM rtb_bidstream WHERE metric_date >= %s AND (publisher_id IS NULL OR publisher_id = '')"
-                f"{buyer_filter} GROUP BY metric_date"
-            )
-            params.append(start_date)
-            if buyer_id:
-                params.append(buyer_id)
-
-            subqueries.append(
-                f"SELECT metric_date, 'pipeline-publisher' AS csv_type, COUNT(*) AS row_count"
-                f" FROM rtb_bidstream WHERE metric_date >= %s AND publisher_id IS NOT NULL AND publisher_id != ''"
-                f"{buyer_filter} GROUP BY metric_date"
+                f"""
+                SELECT
+                    metric_date,
+                    CASE
+                        WHEN publisher_id IS NOT NULL AND publisher_id != '' THEN 'pipeline-publisher'
+                        ELSE 'pipeline-geo'
+                    END AS csv_type,
+                    1 AS row_count
+                FROM rtb_bidstream
+                WHERE metric_date >= %s{buyer_filter}
+                GROUP BY
+                    metric_date,
+                    CASE
+                        WHEN publisher_id IS NOT NULL AND publisher_id != '' THEN 'pipeline-publisher'
+                        ELSE 'pipeline-geo'
+                    END
+                """
             )
             params.append(start_date)
             if buyer_id:
@@ -424,7 +439,7 @@ class UploadsRepository:
 
         if "rtb_bid_filtering" in existing:
             subqueries.append(
-                f"SELECT metric_date, 'bid-filtering' AS csv_type, COUNT(*) AS row_count"
+                f"SELECT metric_date, 'bid-filtering' AS csv_type, 1 AS row_count"
                 f" FROM rtb_bid_filtering WHERE metric_date >= %s{buyer_filter} GROUP BY metric_date"
             )
             params.append(start_date)
@@ -435,7 +450,22 @@ class UploadsRepository:
             return []
 
         sql = " UNION ALL ".join(subqueries)
-        return await pg_query(sql, tuple(params))
+        timeout_ms = self._resolve_data_freshness_timeout_ms()
+        return await pg_query_with_timeout(
+            sql,
+            tuple(params),
+            statement_timeout_ms=timeout_ms,
+        )
+
+    @classmethod
+    def _resolve_data_freshness_timeout_ms(cls) -> int:
+        raw_value = os.getenv("UPLOADS_DATA_FRESHNESS_QUERY_TIMEOUT_MS")
+        if raw_value is None or raw_value.strip() == "":
+            return cls._DEFAULT_DATA_FRESHNESS_QUERY_TIMEOUT_MS
+        try:
+            return max(int(raw_value), 1_000)
+        except (TypeError, ValueError):
+            return cls._DEFAULT_DATA_FRESHNESS_QUERY_TIMEOUT_MS
 
     async def get_current_date(self) -> Optional[str]:
         """Get current date from database."""
