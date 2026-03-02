@@ -7,7 +7,7 @@ import os
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 
-from storage.postgres_database import pg_execute, pg_query, pg_query_one
+from storage.postgres_database import pg_execute, pg_query, pg_query_one_with_timeout
 
 
 def _to_iso(value: Any) -> Optional[str]:
@@ -27,6 +27,7 @@ class DataHealthService:
         self._refresh_seat_day_mv_on_read = self._is_truthy_env(
             "DATA_HEALTH_REFRESH_SEAT_DAY_MV_ON_READ"
         )
+        self._query_timeout_ms = self._resolve_query_timeout_ms()
 
     async def get_data_health(
         self,
@@ -101,7 +102,7 @@ class DataHealthService:
             buyer_filter = " AND buyer_account_id = %s"
             params.append(buyer_id)
 
-        row_daily = await pg_query_one(
+        row_daily = await self._query_one_with_timeout(
             f"""
             SELECT MAX(metric_date::date) AS max_metric_date, COUNT(*) AS rows
             FROM rtb_daily
@@ -109,7 +110,7 @@ class DataHealthService:
             """,
             tuple([days, *params]),
         )
-        row_geo = await pg_query_one(
+        row_geo = await self._query_one_with_timeout(
             f"""
             SELECT MAX(metric_date::date) AS max_metric_date, COUNT(*) AS rows
             FROM rtb_geo_daily
@@ -135,7 +136,7 @@ class DataHealthService:
             buyer_filter = " AND buyer_account_id = %s"
             params.append(buyer_id)
 
-        row_home_geo = await pg_query_one(
+        row_home_geo = await self._query_one_with_timeout(
             f"""
             SELECT MAX(metric_date::date) AS max_metric_date, COUNT(*) AS rows
             FROM seat_geo_daily
@@ -143,7 +144,7 @@ class DataHealthService:
             """,
             tuple([days, *params]),
         )
-        row_cfg_geo = await pg_query_one(
+        row_cfg_geo = await self._query_one_with_timeout(
             f"""
             SELECT MAX(metric_date::date) AS max_metric_date, COUNT(*) AS rows
             FROM pretarg_geo_daily
@@ -151,7 +152,7 @@ class DataHealthService:
             """,
             tuple([days, *params]),
         )
-        row_cfg_pub = await pg_query_one(
+        row_cfg_pub = await self._query_one_with_timeout(
             f"""
             SELECT MAX(metric_date::date) AS max_metric_date, COUNT(*) AS rows
             FROM pretarg_publisher_daily
@@ -181,7 +182,7 @@ class DataHealthService:
             buyer_filter = " AND buyer_account_id = %s"
             params.append(buyer_id)
 
-        row = await pg_query_one(
+        row = await self._query_one_with_timeout(
             f"""
             SELECT
                 COUNT(*) AS total_rows,
@@ -226,7 +227,7 @@ class DataHealthService:
             if buyer_id:
                 buyer_filter = " AND buyer_id = %s"
                 params.append(buyer_id)
-            row = await pg_query_one(
+            row = await self._query_one_with_timeout(
                 f"""
                 SELECT
                     COUNT(*) AS total_runs,
@@ -274,7 +275,7 @@ class DataHealthService:
                     buyer_filter = f" AND {buyer_column} = %s"
                     params.append(buyer_id)
 
-                row = await pg_query_one(
+                row = await self._query_one_with_timeout(
                     f"""
                     SELECT
                         COUNT(*) AS rows,
@@ -342,7 +343,7 @@ class DataHealthService:
             if buyer_id:
                 buyer_filter = " AND buyer_account_id = %s"
                 params.append(buyer_id)
-            row = await pg_query_one(
+            row = await self._query_one_with_timeout(
                 f"""
                 SELECT
                     COUNT(*) AS rows,
@@ -382,7 +383,7 @@ class DataHealthService:
             if buyer_id:
                 buyer_filter = " AND buyer_account_id = %s"
                 params.append(buyer_id)
-            row = await pg_query_one(
+            row = await self._query_one_with_timeout(
                 f"""
                 SELECT
                     COUNT(*) AS total_rows,
@@ -561,7 +562,7 @@ class DataHealthService:
 
     async def _refresh_seat_day_completeness_mv_if_stale(self, max_age_minutes: int = 30) -> None:
         try:
-            row = await pg_query_one(
+            row = await self._query_one_with_timeout(
                 "SELECT MAX(refreshed_at) AS refreshed_at FROM seat_report_completeness_daily"
             )
         except Exception:
@@ -653,6 +654,27 @@ class DataHealthService:
     def _is_truthy_env(name: str) -> bool:
         value = os.getenv(name, "").strip().lower()
         return value in {"1", "true", "yes", "on"}
+
+    @staticmethod
+    def _resolve_query_timeout_ms() -> int:
+        raw_value = os.getenv("DATA_HEALTH_QUERY_TIMEOUT_MS")
+        if raw_value is None or raw_value.strip() == "":
+            return 15_000
+        try:
+            return max(int(raw_value), 1_000)
+        except (TypeError, ValueError):
+            return 15_000
+
+    async def _query_one_with_timeout(
+        self,
+        sql: str,
+        params: tuple[Any, ...] = (),
+    ) -> Optional[dict[str, Any]]:
+        return await pg_query_one_with_timeout(
+            sql,
+            params,
+            statement_timeout_ms=self._query_timeout_ms,
+        )
 
     @staticmethod
     def _default_source_freshness() -> dict[str, Any]:

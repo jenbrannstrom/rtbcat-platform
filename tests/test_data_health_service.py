@@ -13,7 +13,11 @@ def _build_query_one_stub(stale_quality: bool = False):
     today = date.today()
     refreshed_at = datetime.now(timezone.utc)
 
-    async def _stub(sql: str, params: tuple = ()):
+    async def _stub(
+        sql: str,
+        params: tuple = (),
+        statement_timeout_ms: int | None = None,
+    ):
         if "SELECT MAX(refreshed_at) AS refreshed_at FROM seat_report_completeness_daily" in sql:
             return {"refreshed_at": refreshed_at}
 
@@ -132,7 +136,8 @@ async def _noop_execute(sql: str, params: tuple = ()) -> int:
 
 @pytest.mark.asyncio
 async def test_get_data_health_includes_optimizer_readiness(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr("services.data_health_service.pg_query_one", _build_query_one_stub())
+    query_one_stub = _build_query_one_stub()
+    monkeypatch.setattr("services.data_health_service.pg_query_one_with_timeout", query_one_stub)
     monkeypatch.setattr("services.data_health_service.pg_query", _build_query_rows_stub())
     monkeypatch.setattr("services.data_health_service.pg_execute", _noop_execute)
     service = DataHealthService()
@@ -151,7 +156,8 @@ async def test_get_data_health_includes_optimizer_readiness(monkeypatch: pytest.
 
 @pytest.mark.asyncio
 async def test_get_data_health_marks_stale_quality_as_degraded(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr("services.data_health_service.pg_query_one", _build_query_one_stub(stale_quality=True))
+    query_one_stub = _build_query_one_stub(stale_quality=True)
+    monkeypatch.setattr("services.data_health_service.pg_query_one_with_timeout", query_one_stub)
     monkeypatch.setattr("services.data_health_service.pg_query", _build_query_rows_stub())
     monkeypatch.setattr("services.data_health_service.pg_execute", _noop_execute)
     service = DataHealthService()
@@ -173,7 +179,8 @@ async def test_get_data_health_applies_seat_day_filters(monkeypatch: pytest.Monk
         captured["params"] = params
         return []
 
-    monkeypatch.setattr("services.data_health_service.pg_query_one", _build_query_one_stub())
+    query_one_stub = _build_query_one_stub()
+    monkeypatch.setattr("services.data_health_service.pg_query_one_with_timeout", query_one_stub)
     monkeypatch.setattr("services.data_health_service.pg_query", _capture_query)
     monkeypatch.setattr("services.data_health_service.pg_execute", _noop_execute)
     service = DataHealthService()
