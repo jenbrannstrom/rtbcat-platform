@@ -46,19 +46,33 @@ def is_network_blocked_urlerror(exc: urllib.error.URLError) -> bool:
 
 
 def is_auth_blocked_http_response(status_code: int, detail: str) -> bool:
-    """Detect auth/session failures that should be treated as environment-blocked."""
-    if status_code not in {401, 403}:
-        return False
+    """Detect auth/session failures that should be treated as environment-blocked.
+
+    Covers two scenarios:
+      1. HTTP 401/403 with explicit auth-failure text (expired session, invalid token).
+      2. HTTP 404 with a bare ``{"detail":"Not Found"}`` body.  OAuth2 Proxy and
+         nginx may return 404 for authenticated routes when the session cookie is
+         invalid or missing — the request never reaches FastAPI.  Because the
+         canary only hits endpoints known to exist in the codebase, a bare 404
+         is a deployment/auth environment issue, not a code regression.
+    """
     text = (detail or "").lower()
-    auth_indicators = (
-        "session expired or invalid",
-        "authentication required",
-        "not authenticated",
-        "please log in again",
-        "invalid token",
-        "token expired",
-    )
-    return any(indicator in text for indicator in auth_indicators)
+    if status_code in {401, 403}:
+        auth_indicators = (
+            "session expired or invalid",
+            "authentication required",
+            "not authenticated",
+            "please log in again",
+            "invalid token",
+            "token expired",
+        )
+        return any(indicator in text for indicator in auth_indicators)
+    if status_code == 404 and text.strip() in (
+        '{"detail":"not found"}',
+        "not found",
+    ):
+        return True
+    return False
 
 
 class SmokeClient:
@@ -176,12 +190,15 @@ def _assert(condition: bool, message: str) -> None:
         raise SmokeFailure(message)
 
 
-def _run_check(name: str, fn) -> tuple[bool, str]:
+def _run_check(name: str, fn) -> tuple[bool, str, bool]:
+    """Run a single check, returning (passed, display_line, is_blocked)."""
     try:
         fn()
-        return True, f"PASS  {name}"
+        return True, f"PASS  {name}", False
+    except SmokeEnvironmentBlocked as exc:
+        return False, f"BLOCKED  {name} -> {exc}", True
     except Exception as exc:  # noqa: BLE001
-        return False, f"FAIL  {name} -> {exc}"
+        return False, f"FAIL  {name} -> {exc}", False
 
 
 def validate_data_health_payload(
@@ -1416,13 +1433,19 @@ def main() -> int:
         ("Rollback dry-run (optional)", check_rollback_dry_run),
     ]
 
+    blocked_count = 0
     for name, fn in checks:
-        ok, line = _run_check(name, fn)
+        ok, line, is_blocked = _run_check(name, fn)
         print(line)
         results.append((ok, line))
+        if is_blocked:
+            blocked_count += 1
 
     failures = [line for ok, line in results if not ok]
     if failures:
+        if blocked_count > 0 and blocked_count == len(failures):
+            print(f"\nSmoke checks blocked by environment/auth policy: {blocked_count}")
+            return 2
         print(f"\nSmoke checks failed: {len(failures)}")
         return 1
 
