@@ -100,6 +100,7 @@ api_get() {
   local path="$1"
   local out_file="$2"
   local code_file="$3"
+  : > "$out_file"
   set +e
   curl -sS -m "$TIMEOUT_SECONDS" \
     -H "X-Email: ${CANARY_EMAIL}" \
@@ -110,6 +111,9 @@ api_get() {
   set -e
   if [[ "$rc" -ne 0 ]]; then
     echo "curl_exit_${rc}" > "$code_file"
+    if [[ ! -s "$out_file" ]]; then
+      echo "curl failed for ${path} (exit ${rc})" > "$out_file"
+    fi
     if [[ -s "${code_file}.stderr" ]]; then
       cat "${code_file}.stderr" >&2
     fi
