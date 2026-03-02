@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
-from storage.postgres_database import pg_query_one
+from storage.postgres_database import pg_query_one, pg_query_one_with_timeout
 
 
 _MONTHLY_HOSTING_COST_KEY = "optimizer_monthly_hosting_cost_usd"
+_DEFAULT_QUALITY_QUERY_TIMEOUT_MS = 10_000
 
 
 def _parse_date(value: str, field_name: str) -> date:
@@ -37,6 +40,9 @@ def _round_or_none(value: Optional[float], places: int = 6) -> Optional[float]:
 
 class OptimizerEconomicsService:
     """Computes spend + infra cost context for optimizer decisions."""
+
+    def __init__(self) -> None:
+        self._quality_query_timeout_ms = self._resolve_quality_timeout_ms()
 
     async def get_effective_cpm(
         self,
@@ -121,31 +127,17 @@ class OptimizerEconomicsService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         billing_id: Optional[str] = None,
+        precomputed_totals: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         start, end = self._resolve_date_range(days=days, start_date=start_date, end_date=end_date)
         num_days = (end - start).days + 1
 
-        clauses = ["metric_date BETWEEN %s AND %s", "buyer_account_id = %s"]
-        params: list[Any] = [start, end, buyer_id]
-        if billing_id:
-            clauses.append("billing_id = %s")
-            params.append(billing_id)
-        where_sql = " AND ".join(clauses)
-
-        totals = await pg_query_one(
-            f"""
-            SELECT
-                COALESCE(SUM(spend_micros), 0)::bigint AS spend_micros,
-                COALESCE(SUM(impressions), 0)::bigint AS impressions,
-                COALESCE(SUM(clicks), 0)::bigint AS clicks,
-                COALESCE(SUM(reached_queries), 0)::bigint AS reached_queries,
-                COALESCE(SUM(bids_in_auction), 0)::bigint AS bids_in_auction,
-                COALESCE(SUM(auctions_won), 0)::bigint AS auctions_won
-            FROM rtb_daily
-            WHERE {where_sql}
-            """,
-            tuple(params),
-        ) or {}
+        totals = precomputed_totals or await self._fetch_daily_totals(
+            buyer_id=buyer_id,
+            billing_id=billing_id,
+            start=start,
+            end=end,
+        )
 
         recent_days = min(7, num_days)
         recent_start = end - timedelta(days=recent_days - 1)
@@ -170,33 +162,16 @@ class OptimizerEconomicsService:
             tuple([*trend_case_params, *trend_where_params]),
         ) or {}
 
-        age_clauses = ["buyer_account_id = %s"]
-        age_params: list[Any] = [buyer_id]
-        if billing_id:
-            age_clauses.append("billing_id = %s")
-            age_params.append(billing_id)
-        age_where_sql = " AND ".join(age_clauses)
-        age_row = await pg_query_one(
-            f"""
-            SELECT MIN(metric_date) AS first_metric_date
-            FROM rtb_daily
-            WHERE {age_where_sql}
-            """,
-            tuple(age_params),
-        ) or {}
-
-        quality_clauses = ["metric_date BETWEEN %s AND %s", "buyer_account_id = %s"]
-        quality_params: list[Any] = [start, end, buyer_id]
-        quality = await pg_query_one(
-            f"""
-            SELECT
-                COALESCE(SUM(viewable_impressions), 0)::bigint AS viewable_impressions,
-                COALESCE(SUM(measurable_impressions), 0)::bigint AS measurable_impressions
-            FROM rtb_quality
-            WHERE {" AND ".join(quality_clauses)}
-            """,
-            tuple(quality_params),
-        ) or {}
+        age_task = self._fetch_first_metric_date(
+            buyer_id=buyer_id,
+            billing_id=billing_id,
+        )
+        quality_task = self._fetch_quality_totals(
+            buyer_id=buyer_id,
+            start=start,
+            end=end,
+        )
+        age_row, quality = await asyncio.gather(age_task, quality_task)
 
         spend_usd = int(totals.get("spend_micros") or 0) / 1_000_000.0
         avg_daily_spend = spend_usd / max(num_days, 1)
@@ -290,25 +265,12 @@ class OptimizerEconomicsService:
         start, end = self._resolve_date_range(days=days, start_date=start_date, end_date=end_date)
         num_days = (end - start).days + 1
 
-        clauses = ["metric_date BETWEEN %s AND %s", "buyer_account_id = %s"]
-        params: list[Any] = [start, end, buyer_id]
-        if billing_id:
-            clauses.append("billing_id = %s")
-            params.append(billing_id)
-        where_sql = " AND ".join(clauses)
-
-        totals = await pg_query_one(
-            f"""
-            SELECT
-                COALESCE(SUM(spend_micros), 0)::bigint AS spend_micros,
-                COALESCE(SUM(impressions), 0)::bigint AS impressions,
-                COALESCE(SUM(bid_requests), 0)::bigint AS bid_requests,
-                COALESCE(SUM(reached_queries), 0)::bigint AS reached_queries
-            FROM rtb_daily
-            WHERE {where_sql}
-            """,
-            tuple(params),
-        ) or {}
+        totals = await self._fetch_daily_totals(
+            buyer_id=buyer_id,
+            billing_id=billing_id,
+            start=start,
+            end=end,
+        )
 
         spend_usd = int(totals.get("spend_micros") or 0) / 1_000_000.0
         impressions = int(totals.get("impressions") or 0)
@@ -329,6 +291,7 @@ class OptimizerEconomicsService:
             start_date=start.isoformat(),
             end_date=end.isoformat(),
             days=num_days,
+            precomputed_totals=totals,
         )
         assumed_value_score = _to_float(assumed.get("assumed_value_score"), default=0.0)
         assumed_value_per_qps = None
@@ -371,6 +334,105 @@ class OptimizerEconomicsService:
         trend_ratio = (recent_spend - previous_spend) / max(previous_spend, 1e-9)
         normalized = max(-1.0, min(trend_ratio, 1.0))
         return (normalized + 1.0) / 2.0
+
+    async def _fetch_daily_totals(
+        self,
+        *,
+        buyer_id: str,
+        start: date,
+        end: date,
+        billing_id: Optional[str],
+    ) -> dict[str, Any]:
+        where_sql, params = self._build_daily_where(
+            buyer_id=buyer_id,
+            billing_id=billing_id,
+            start=start,
+            end=end,
+        )
+        return await pg_query_one(
+            f"""
+            SELECT
+                COALESCE(SUM(spend_micros), 0)::bigint AS spend_micros,
+                COALESCE(SUM(impressions), 0)::bigint AS impressions,
+                COALESCE(SUM(clicks), 0)::bigint AS clicks,
+                COALESCE(SUM(reached_queries), 0)::bigint AS reached_queries,
+                COALESCE(SUM(bid_requests), 0)::bigint AS bid_requests,
+                COALESCE(SUM(bids_in_auction), 0)::bigint AS bids_in_auction,
+                COALESCE(SUM(auctions_won), 0)::bigint AS auctions_won
+            FROM rtb_daily
+            WHERE {where_sql}
+            """,
+            tuple(params),
+        ) or {}
+
+    async def _fetch_first_metric_date(
+        self,
+        *,
+        buyer_id: str,
+        billing_id: Optional[str],
+    ) -> dict[str, Any]:
+        clauses = ["buyer_account_id = %s"]
+        params: list[Any] = [buyer_id]
+        if billing_id:
+            clauses.append("billing_id = %s")
+            params.append(billing_id)
+        where_sql = " AND ".join(clauses)
+        return await pg_query_one(
+            f"""
+            SELECT MIN(metric_date) AS first_metric_date
+            FROM rtb_daily
+            WHERE {where_sql}
+            """,
+            tuple(params),
+        ) or {}
+
+    async def _fetch_quality_totals(
+        self,
+        *,
+        buyer_id: str,
+        start: date,
+        end: date,
+    ) -> dict[str, Any]:
+        try:
+            return await pg_query_one_with_timeout(
+                """
+                SELECT
+                    COALESCE(SUM(viewable_impressions), 0)::bigint AS viewable_impressions,
+                    COALESCE(SUM(measurable_impressions), 0)::bigint AS measurable_impressions
+                FROM rtb_quality
+                WHERE metric_date BETWEEN %s AND %s
+                  AND buyer_account_id = %s
+                """,
+                (start, end, buyer_id),
+                statement_timeout_ms=self._quality_query_timeout_ms,
+            ) or {}
+        except Exception:
+            return {}
+
+    @staticmethod
+    def _resolve_quality_timeout_ms() -> int:
+        raw_value = os.getenv("OPTIMIZER_QUALITY_QUERY_TIMEOUT_MS")
+        if raw_value is None or raw_value.strip() == "":
+            return _DEFAULT_QUALITY_QUERY_TIMEOUT_MS
+        try:
+            return max(int(raw_value), 1000)
+        except (TypeError, ValueError):
+            return _DEFAULT_QUALITY_QUERY_TIMEOUT_MS
+
+    @staticmethod
+    def _build_daily_where(
+        *,
+        buyer_id: str,
+        start: date,
+        end: date,
+        billing_id: Optional[str],
+    ) -> tuple[str, list[Any]]:
+        clauses = ["metric_date BETWEEN %s AND %s", "buyer_account_id = %s"]
+        params: list[Any] = [start, end, buyer_id]
+        if billing_id:
+            clauses.append("billing_id = %s")
+            params.append(billing_id)
+        return " AND ".join(clauses), params
 
     def _resolve_date_range(
         self,

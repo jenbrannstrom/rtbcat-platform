@@ -76,6 +76,13 @@ async def test_get_assumed_value_returns_score(monkeypatch: pytest.MonkeyPatch):
             }
         if "MIN(metric_date)" in sql:
             return {"first_metric_date": "2025-08-01"}
+        return None
+
+    async def _stub_query_one_with_timeout(
+        sql: str,
+        params: tuple = (),
+        statement_timeout_ms: int | None = None,
+    ):
         if "FROM rtb_quality" in sql:
             return {
                 "viewable_impressions": 500_000,
@@ -84,6 +91,10 @@ async def test_get_assumed_value_returns_score(monkeypatch: pytest.MonkeyPatch):
         return None
 
     monkeypatch.setattr("services.optimizer_economics_service.pg_query_one", _stub_query_one)
+    monkeypatch.setattr(
+        "services.optimizer_economics_service.pg_query_one_with_timeout",
+        _stub_query_one_with_timeout,
+    )
     service = OptimizerEconomicsService()
     payload = await service.get_assumed_value(
         buyer_id="1111111111",

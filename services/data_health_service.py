@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 
@@ -21,6 +23,11 @@ def _to_iso(value: Any) -> Optional[str]:
 class DataHealthService:
     """Computes non-sensitive reliability and freshness status."""
 
+    def __init__(self) -> None:
+        self._refresh_seat_day_mv_on_read = self._is_truthy_env(
+            "DATA_HEALTH_REFRESH_SEAT_DAY_MV_ON_READ"
+        )
+
     async def get_data_health(
         self,
         days: int = 7,
@@ -29,19 +36,36 @@ class DataHealthService:
         min_completeness_pct: Optional[float] = None,
         limit: int = 200,
     ) -> dict[str, Any]:
-        source = await self._get_source_freshness(days=days, buyer_id=buyer_id)
-        serving = await self._get_serving_freshness(days=days, buyer_id=buyer_id)
-        coverage = await self._get_dimension_coverage(days=days, buyer_id=buyer_id)
-        ingestion = await self._get_ingestion_summary(days=days, buyer_id=buyer_id)
-        report_completeness = await self._get_report_completeness(days=days, buyer_id=buyer_id)
-        quality_freshness = await self._get_quality_freshness(days=days, buyer_id=buyer_id)
-        bidstream_coverage = await self._get_bidstream_dimension_coverage(days=days, buyer_id=buyer_id)
-        seat_day_completeness = await self._get_seat_day_completeness(
-            days=days,
-            buyer_id=buyer_id,
-            availability_state=availability_state,
-            min_completeness_pct=min_completeness_pct,
-            limit=limit,
+        results = await asyncio.gather(
+            self._get_source_freshness(days=days, buyer_id=buyer_id),
+            self._get_serving_freshness(days=days, buyer_id=buyer_id),
+            self._get_dimension_coverage(days=days, buyer_id=buyer_id),
+            self._get_ingestion_summary(days=days, buyer_id=buyer_id),
+            self._get_report_completeness(days=days, buyer_id=buyer_id),
+            self._get_quality_freshness(days=days, buyer_id=buyer_id),
+            self._get_bidstream_dimension_coverage(days=days, buyer_id=buyer_id),
+            self._get_seat_day_completeness(
+                days=days,
+                buyer_id=buyer_id,
+                availability_state=availability_state,
+                min_completeness_pct=min_completeness_pct,
+                limit=limit,
+            ),
+            return_exceptions=True,
+        )
+        source = self._result_or_default(results[0], self._default_source_freshness())
+        serving = self._result_or_default(results[1], self._default_serving_freshness())
+        coverage = self._result_or_default(results[2], self._default_coverage())
+        ingestion = self._result_or_default(results[3], self._default_ingestion_summary())
+        report_completeness = self._result_or_default(
+            results[4],
+            self._default_report_completeness(days=days),
+        )
+        quality_freshness = self._result_or_default(results[5], self._default_quality_freshness())
+        bidstream_coverage = self._result_or_default(results[6], self._default_bidstream_coverage())
+        seat_day_completeness = self._result_or_default(
+            results[7],
+            self._default_seat_day_completeness(),
         )
 
         state = self._compute_state(
@@ -74,7 +98,7 @@ class DataHealthService:
         buyer_filter = ""
         params: list[Any] = []
         if buyer_id:
-            buyer_filter = " AND buyer_id = %s"
+            buyer_filter = " AND buyer_account_id = %s"
             params.append(buyer_id)
 
         row_daily = await pg_query_one(
@@ -154,7 +178,7 @@ class DataHealthService:
         buyer_filter = ""
         params: list[Any] = []
         if buyer_id:
-            buyer_filter = " AND buyer_id = %s"
+            buyer_filter = " AND buyer_account_id = %s"
             params.append(buyer_id)
 
         row = await pg_query_one(
@@ -411,7 +435,8 @@ class DataHealthService:
         min_completeness_pct: Optional[float],
         limit: int,
     ) -> dict[str, Any]:
-        await self._refresh_seat_day_completeness_mv_if_stale()
+        if self._refresh_seat_day_mv_on_read:
+            await self._refresh_seat_day_completeness_mv_if_stale()
 
         clauses = ["metric_date >= CURRENT_DATE - %s::int"]
         params: list[Any] = [days]
@@ -615,3 +640,117 @@ class DataHealthService:
             return parsed.astimezone(timezone.utc)
         except (TypeError, ValueError):
             return None
+
+    @staticmethod
+    def _result_or_default(result: Any, default: dict[str, Any]) -> dict[str, Any]:
+        if isinstance(result, Exception):
+            return default
+        if isinstance(result, dict):
+            return result
+        return default
+
+    @staticmethod
+    def _is_truthy_env(name: str) -> bool:
+        value = os.getenv(name, "").strip().lower()
+        return value in {"1", "true", "yes", "on"}
+
+    @staticmethod
+    def _default_source_freshness() -> dict[str, Any]:
+        return {
+            "rtb_daily": {"rows": 0, "max_metric_date": None},
+            "rtb_geo_daily": {"rows": 0, "max_metric_date": None},
+        }
+
+    @staticmethod
+    def _default_serving_freshness() -> dict[str, Any]:
+        return {
+            "home_geo_daily": {"rows": 0, "max_metric_date": None},
+            "config_geo_daily": {"rows": 0, "max_metric_date": None},
+            "config_publisher_daily": {"rows": 0, "max_metric_date": None},
+        }
+
+    @staticmethod
+    def _default_coverage() -> dict[str, Any]:
+        return {
+            "total_rows": 0,
+            "country_missing_pct": 100.0,
+            "publisher_missing_pct": 100.0,
+            "billing_missing_pct": 100.0,
+            "availability_state": "unavailable",
+        }
+
+    @staticmethod
+    def _default_ingestion_summary() -> dict[str, Any]:
+        return {
+            "total_runs": 0,
+            "successful_runs": 0,
+            "failed_runs": 0,
+            "last_started_at": None,
+            "last_finished_at": None,
+        }
+
+    @staticmethod
+    def _default_report_completeness(days: int) -> dict[str, Any]:
+        expected_days = max(days, 1)
+        tables = {
+            table_name: {
+                "rows": 0,
+                "active_days": 0,
+                "expected_days": expected_days,
+                "coverage_pct": 0.0,
+                "max_metric_date": None,
+                "availability_state": "unavailable",
+            }
+            for table_name in (
+                "rtb_daily",
+                "rtb_bidstream",
+                "rtb_bid_filtering",
+                "rtb_quality",
+                "web_domain_daily",
+            )
+        }
+        return {
+            "expected_report_types": 5,
+            "available_report_types": 0,
+            "coverage_pct": 0.0,
+            "missing_report_types": list(tables.keys()),
+            "availability_state": "unavailable",
+            "tables": tables,
+        }
+
+    @staticmethod
+    def _default_quality_freshness() -> dict[str, Any]:
+        return {
+            "rows": 0,
+            "max_metric_date": None,
+            "age_days": None,
+            "fresh_within_days": 2,
+            "availability_state": "unavailable",
+        }
+
+    @staticmethod
+    def _default_bidstream_coverage() -> dict[str, Any]:
+        return {
+            "total_rows": 0,
+            "platform_missing_pct": 100.0,
+            "environment_missing_pct": 100.0,
+            "transaction_type_missing_pct": 100.0,
+            "availability_state": "unavailable",
+        }
+
+    @staticmethod
+    def _default_seat_day_completeness() -> dict[str, Any]:
+        return {
+            "rows": [],
+            "summary": {
+                "total_seat_days": 0,
+                "healthy_seat_days": 0,
+                "degraded_seat_days": 0,
+                "unavailable_seat_days": 0,
+                "avg_completeness_pct": 0.0,
+                "min_completeness_pct": 0.0,
+                "max_completeness_pct": 0.0,
+            },
+            "availability_state": "unavailable",
+            "refreshed_at": None,
+        }
