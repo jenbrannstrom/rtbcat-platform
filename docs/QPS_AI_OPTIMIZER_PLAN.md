@@ -1,6 +1,6 @@
 # QPS AI Optimizer — Reconciled Data Model & Roadmap
 
-**Version:** 0.8 | **Date:** 2026-03-01
+**Version:** 0.9 | **Date:** 2026-03-02
 
 ---
 
@@ -22,7 +22,7 @@ The path to advertiser-first optimization:
 
 **Current closeout state:** Not fully closed yet. Core implementation is in place, but operational closure still requires deployed canary/SLO pass evidence and rollout certification steps (tracked in `docs/V1_PLAN_CLOSEOUT_MATRIX.md`).
 
-### Roadmap Tracking Update (2026-03-01)
+### Roadmap Tracking Update (2026-03-02)
 
 Current roadmap execution status (implemented in code, pending environment-by-environment rollout validation):
 
@@ -56,15 +56,16 @@ Current roadmap execution status (implemented in code, pending environment-by-en
    - shared renderer `scripts/render_v1_closeout_summary.py` is used by CI workflows for consistent output.
 8. **Deployed canary closeout execution is now CI-operable**:
    - manual workflow `.github/workflows/v1-closeout-deployed.yml` runs deployed-only closeout gates and publishes md/json artifacts plus job summary.
-   - supports explicit blocked-mode handling for restricted environments and auth via repo secrets (`CATSCAN_CANARY_BEARER_TOKEN` and/or `CATSCAN_CANARY_SESSION_COOKIE`).
+   - supports explicit blocked-mode handling for restricted environments and auth via repo secrets (`CATSCAN_CANARY_BEARER_TOKEN` as `X-Email` identity and/or `CATSCAN_CANARY_SESSION_COOKIE`).
 9. **BYOM API/e2e validation now has dedicated CI coverage path**:
    - `make v1-byom-api-regression` runs optimizer API/e2e suites.
    - `.github/workflows/v1-byom-api-regression.yml` executes this suite on optimizer API/service/test changes in a dependency-provisioned runner and now supports manual `workflow_dispatch`.
 10. **Closeout execution template now standardizes final sign-off operations**:
    - `docs/V1_CLOSEOUT_EXECUTION_CHECKLIST.md` provides exact workflow dispatch payloads (strict and blocked-mode), run-evidence capture fields, SLO evidence command template, and closeout sign-off sections.
-11. **Deployed canary auth-block handling is now explicit**:
-   - latest deployed closeout evidence runs reached canary execution but failed on expired session credentials (`401 Session expired or invalid`), not functional regressions.
-   - canary client now classifies auth/session-expired `401/403` responses as environment/auth blocked to align blocked-mode closeout behavior with operator expectations.
+11. **Deployed strict-vs-evidence behavior is now operationally clear**:
+   - strict and evidence runs now preserve exit semantics correctly (`1=fail`, `2=blocked`) after bypassing Make-level exit masking.
+   - canary classifies auth/environment/runtime blockers (`401/403`, bare `404/500`, and lifecycle cascades) as blocked when appropriate, so strict/evidence outcomes are consistent.
+   - current strict blocker set is runtime preconditions (endpoint timeout `500`, conversion readiness, active model) rather than code regressions.
 
 ---
 
@@ -865,7 +866,8 @@ ALSO PROVIDE:
   - hardened canary SLO contract checks to require `time_buckets` payload presence/non-empty behavior when QPS page samples exist.
 
 - Plan closeout status and verification evidence are tracked in [V1_PLAN_CLOSEOUT_MATRIX.md](/home/x1-7/Documents/rtbcat-platform/docs/V1_PLAN_CLOSEOUT_MATRIX.md).
-- Note: deployed strict closeout gates are still operationally pending overall; latest CI evidence reached canary execution but failed due to expired session auth (`401 Session expired or invalid`) until secrets are refreshed.
+- Note: deployed strict closeout gates remain operationally pending; latest strict evidence run (`22558379655`) is `15 PASS / 0 FAIL / 5 BLOCKED` with blockers tied to runtime preconditions (endpoint timeouts + buyer data/model state), not code regressions.
+- Strict remediation steps are tracked in [V1_STRICT_EXIT0_REMEDIATION_RUNBOOK.md](/home/x1-7/Documents/rtbcat-platform/docs/V1_STRICT_EXIT0_REMEDIATION_RUNBOOK.md).
 - Local non-env-blocked closeout validation is consolidated under `make v1-closeout-local`.
 - Deployed canary runs now surface explicit `Blocked` status (exit code `2`) under network-policy restrictions for clearer operational triage.
 

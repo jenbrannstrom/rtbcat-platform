@@ -7,6 +7,7 @@ Use this template to execute and capture final closeout evidence for v1.
 - [ ] Repository secrets configured (at least one):
   - `CATSCAN_CANARY_BEARER_TOKEN`
   - `CATSCAN_CANARY_SESSION_COOKIE`
+- [ ] If using `CATSCAN_CANARY_BEARER_TOKEN`, set it to trusted canary email identity (used as `X-Email` header by canary scripts)
 - [ ] Target branch confirmed (default: `unified-platform`)
 - [ ] Target environment/API URL confirmed (default: `https://scan.rtb.cat/api`)
 - [ ] Buyer scope confirmed (`buyer_id`) for evidence runs
@@ -136,11 +137,11 @@ gh api repos/jenbrannstrom/rtbcat-platform/actions/workflows/v1-byom-api-regress
 
 ### 3.3 Buyer-scoped QPS SLO evidence
 
-Collect API evidence snapshot (replace token mode as needed):
+Collect API evidence snapshot (`CATSCAN_CANARY_BEARER_TOKEN` is used as `X-Email` identity in canary tooling):
 
 ```bash
 curl -sS \
-  -H "Authorization: Bearer ${CATSCAN_CANARY_BEARER_TOKEN}" \
+  -H "X-Email: ${CATSCAN_CANARY_BEARER_TOKEN}" \
   "https://scan.rtb.cat/api/system/ui-metrics/page-load/summary?buyer_id=<BUYER_ID>&since_hours=24&min_samples=1&api_rollup_limit=10&bucket_hours=6&bucket_limit=8" \
   | tee /tmp/v1_qps_slo_summary_<BUYER_ID>.json
 ```
@@ -167,3 +168,16 @@ curl -sS \
 - [ ] Open/append issue with blocking evidence
 - [ ] Link affected workflow run URLs
 - [ ] Define owner + ETA for rerun
+
+## 6. Strict Exit-0 Remediation (When Strict Reports `BLOCKED`)
+
+If strict deployed closeout fails with exit `2` (`BLOCKED`), use:
+
+1. [V1_STRICT_EXIT0_REMEDIATION_RUNBOOK.md](/home/x1-7/Documents/rtbcat-platform/docs/V1_STRICT_EXIT0_REMEDIATION_RUNBOOK.md)
+
+Checklist from that runbook:
+
+- [ ] Resolve `/system/data-health` and `/optimizer/economics/efficiency` timeout/500 conditions.
+- [ ] Make conversion readiness return `state=ready` for target buyer.
+- [ ] Ensure at least one active optimizer model exists for target buyer.
+- [ ] Re-run strict closeout and capture run URL + artifact JSON.

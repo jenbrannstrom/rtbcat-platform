@@ -116,7 +116,8 @@ make v1-canary-webhook-security
 
 ## 7. CI-Driven Closeout (GitHub Actions)
 
-Execution worksheet: [V1_CLOSEOUT_EXECUTION_CHECKLIST.md](/home/x1-7/Documents/rtbcat-platform/docs/V1_CLOSEOUT_EXECUTION_CHECKLIST.md)
+Execution worksheet: [V1_CLOSEOUT_EXECUTION_CHECKLIST.md](/home/x1-7/Documents/rtbcat-platform/docs/V1_CLOSEOUT_EXECUTION_CHECKLIST.md)  
+Strict remediation worksheet: [V1_STRICT_EXIT0_REMEDIATION_RUNBOOK.md](/home/x1-7/Documents/rtbcat-platform/docs/V1_STRICT_EXIT0_REMEDIATION_RUNBOOK.md)
 
 ### 7.1 Required repository secrets
 
@@ -125,7 +126,12 @@ At least one of these must be configured for deployed canary auth:
 1. `CATSCAN_CANARY_BEARER_TOKEN`
 2. `CATSCAN_CANARY_SESSION_COOKIE`
 
-Note: session cookies expire. If deployed canary runs fail with `401 Session expired or invalid`, refresh `CATSCAN_CANARY_SESSION_COOKIE` (or switch to a stable bearer token secret).
+Auth behavior in canary tooling:
+
+1. `CATSCAN_CANARY_BEARER_TOKEN` is sent as `X-Email` identity for API requests.
+2. `CATSCAN_CANARY_SESSION_COOKIE` is sent as `Cookie` header when provided.
+
+Note: session cookies expire. If deployed canary runs fail with `401 Session expired or invalid`, refresh `CATSCAN_CANARY_SESSION_COOKIE` or prefer the `X-Email` auth path.
 
 ### 7.2 Manual deployed closeout workflow
 
