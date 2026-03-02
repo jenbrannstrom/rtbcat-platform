@@ -36,6 +36,10 @@ on:
         options:
           - "false"
           - "true"
+      canary_timeout_seconds:
+        description: "Per-request timeout for canary HTTP calls (seconds)"
+        required: false
+        default: "240"
 
 concurrency:
   group: v1-closeout-deployed-${{ github.ref }}
@@ -55,6 +59,7 @@ jobs:
       CATSCAN_MODEL_ID: ${{ inputs.model_id }}
       CATSCAN_CANARY_PROFILE: ${{ inputs.canary_profile }}
       CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS: ${{ inputs.qps_page_slo_since_hours }}
+      CATSCAN_CANARY_TIMEOUT_SECONDS: ${{ inputs.canary_timeout_seconds }}
       CATSCAN_BEARER_TOKEN: ${{ secrets.CATSCAN_CANARY_BEARER_TOKEN }}
       CATSCAN_SESSION_COOKIE: ${{ secrets.CATSCAN_CANARY_SESSION_COOKIE }}
     steps:
