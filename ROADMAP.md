@@ -23,6 +23,11 @@
   - `/optimizer/economics/efficiency` intermittent high latency/timeouts (especially assumed-value path).
   - proposal lifecycle data completeness (`billing_id` missing in generated proposals for some buyer states).
   - QPS page rollup completeness gaps (`/analytics/home/endpoint-efficiency` missing in rollup on some windows).
+  - Progress (2026-03-02): backend mitigation patch staged on `unified-platform` (pending deploy + validation):
+    - `DataHealthService`: parallelized sub-checks, fixed RTB buyer filters to `buyer_account_id`, disabled MV refresh-on-read by default (opt-in via `DATA_HEALTH_REFRESH_SEAT_DAY_MV_ON_READ`).
+    - `OptimizerEconomicsService`: reuse shared `rtb_daily` aggregates across efficiency/assumed-value path; bound `rtb_quality` aggregate with statement timeout (`OPTIMIZER_QUALITY_QUERY_TIMEOUT_MS`, default `10000`).
+    - DB: added migration `062_rtb_fact_query_indexes` for buyer/date composite indexes on `rtb_daily`, `rtb_quality`, `rtb_bidstream`, and `rtb_bid_filtering`.
+  - [ ] Apply migration `062_rtb_fact_query_indexes` on production and rerun strict closeout to confirm timeout reduction.
 
 ---
 
