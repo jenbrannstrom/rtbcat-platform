@@ -43,12 +43,12 @@
   - Objective: setup/system operator views must show seat-validity and readiness status with unambiguous pass/fail reasons.
   - Acceptance: operator can verify seat validity + readiness from one flow without manual query debugging.
   - Done: `buyer-context-state.ts` (pure derivation of 4 validity states: loading, no_active_seats, selected_buyer_invalid, selected_buyer_valid), `BuyerContextBanner` reusable component, integrated into `/setup` and `/settings/system` pages with buyer-scoped query gating (`enabled: buyerCtx.canQuery`); 8 unit tests pass.
-- [ ] **Automation coverage**
+- [x] **Automation coverage**
   - Objective: add regression tests for seat-switch precedence and buyer-scoped query behavior on key routes.
   - Acceptance: CI tests fail on seat-context regressions before deploy.
   - Progress (2026-03-02):
     - [x] Added deterministic seat-switch route-sync decision tests (`dashboard/src/__tests__/buyer-route-sync-logic.test.ts`) and extracted pure sync decision logic (`dashboard/src/lib/buyer-route-sync-logic.ts`) used by `BuyerRouteSync`.
-    - [ ] Add direct route-level query-gating assertions for `/setup` and `/settings/system` query enablement paths.
+    - [x] Added direct route-level query-gating assertions for `/setup` and `/settings/system` query enablement paths (`dashboard/src/lib/setup-query-gating.ts`, `dashboard/src/lib/system-query-gating.ts`, `dashboard/src/__tests__/setup-query-gating.test.ts`, `dashboard/src/__tests__/system-query-gating.test.ts`).
 
 ---
 
