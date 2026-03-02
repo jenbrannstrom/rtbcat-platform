@@ -15,9 +15,10 @@
 - [x] **Release decision:** proceed with deployment under current strict gate semantics.
   - Evidence: strict closeout success (`22585753222`) and BYOM regression success (`22586377963`) on `unified-platform`.
 - [x] **Current strict meaning (explicit):** gate is regression-focused; canary `exit 2` (all checks blocked by environment/data) is treated as non-regression pass.
-- [ ] **Mandatory follow-up (do not drop):** add a separate runtime-health strict gate that fails on blocked checks.
+- [x] **Mandatory follow-up (do not drop):** add a separate runtime-health strict gate that fails on blocked checks.
   - Objective: restore hard production-health enforcement independent of regression signal.
   - Acceptance: blocked checks fail runtime gate until remediated.
+  - Implemented (2026-03-02): added workflow `v1-runtime-health-strict.yml` backed by `scripts/run_v1_runtime_health_local.sh` (treats both `FAIL` and `BLOCKED` as gate-failing outcomes), plus dispatcher helper `scripts/run_v1_runtime_health_strict_dispatch.sh`.
 - [ ] **Runtime blocker backlog to resolve before enabling runtime strict gate**
   - `/system/data-health` intermittent high latency/timeouts.
   - `/optimizer/economics/efficiency` intermittent high latency/timeouts (especially assumed-value path).
