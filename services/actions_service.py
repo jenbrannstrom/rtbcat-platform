@@ -246,13 +246,13 @@ class ActionsService:
         except HttpError as ex:
             if ex.resp.status == 404:
                 logger.warning(
-                    "Config %s (billing %s) no longer exists in Google — removing stale DB row",
-                    config_id, billing_id,
+                    "Google returned 404 for config %s (billing %s, bidder %s). "
+                    "The config_id mapping may be stale — run Sync to refresh.",
+                    config_id, billing_id, bidder_id,
                 )
-                await self._pretargeting.delete_config(bidder_id, config_id)
                 raise ValueError(
-                    f"Config {config_id} no longer exists in Google (404). "
-                    f"Stale row removed. Run Sync to refresh."
+                    f"Google returned 404 for config {config_id}. "
+                    f"The config may need to be re-synced. Run Sync to refresh."
                 ) from ex
             raise
         await self._pretargeting.update_state(billing_id, "SUSPENDED")
@@ -280,13 +280,13 @@ class ActionsService:
         except HttpError as ex:
             if ex.resp.status == 404:
                 logger.warning(
-                    "Config %s (billing %s) no longer exists in Google — removing stale DB row",
-                    config_id, billing_id,
+                    "Google returned 404 for config %s (billing %s, bidder %s). "
+                    "The config_id mapping may be stale — run Sync to refresh.",
+                    config_id, billing_id, bidder_id,
                 )
-                await self._pretargeting.delete_config(bidder_id, config_id)
                 raise ValueError(
-                    f"Config {config_id} no longer exists in Google (404). "
-                    f"Stale row removed. Run Sync to refresh."
+                    f"Google returned 404 for config {config_id}. "
+                    f"The config may need to be re-synced. Run Sync to refresh."
                 ) from ex
             raise
         await self._pretargeting.update_state(billing_id, "ACTIVE")

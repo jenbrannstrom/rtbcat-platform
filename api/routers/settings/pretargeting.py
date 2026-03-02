@@ -195,12 +195,6 @@ async def sync_pretargeting_configs(
 
         logger.info(f"Synced {publishers_synced} publisher targeting entries")
 
-        # Prune local configs that Google no longer returns for this bidder.
-        live_config_ids = [cfg["configId"] for cfg in configs]
-        pruned = await pretargeting_service.delete_stale_configs(account_id, live_config_ids)
-        if pruned:
-            logger.info(f"Pruned {pruned} stale pretargeting config(s) for bidder {account_id}")
-
         return SyncPretargetingResponse(
             status="success",
             configs_synced=len(configs),
