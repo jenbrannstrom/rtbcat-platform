@@ -1,0 +1,88 @@
+name: v1 Runtime Health Strict
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "API base URL (include /api path)"
+        required: true
+        default: "https://scan.rtb.cat/api"
+      buyer_id:
+        description: "Optional buyer_id scope"
+        required: false
+        default: ""
+      model_id:
+        description: "Optional model_id override"
+        required: false
+        default: ""
+      canary_profile:
+        description: "Workflow guardrail profile for score+propose checks"
+        required: true
+        type: choice
+        default: "balanced"
+        options:
+          - safe
+          - balanced
+          - aggressive
+      qps_page_slo_since_hours:
+        description: "Lookback window for strict QPS page SLO canary"
+        required: true
+        default: "24"
+      canary_timeout_seconds:
+        description: "Per-request timeout for canary HTTP calls (seconds)"
+        required: false
+        default: "240"
+
+concurrency:
+  group: v1-runtime-health-strict-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-health-strict:
+    name: Run runtime-health strict canary gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CATSCAN_API_BASE_URL: ${{ inputs.api_base_url }}
+      CATSCAN_BUYER_ID: ${{ inputs.buyer_id }}
+      CATSCAN_MODEL_ID: ${{ inputs.model_id }}
+      CATSCAN_CANARY_PROFILE: ${{ inputs.canary_profile }}
+      CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS: ${{ inputs.qps_page_slo_since_hours }}
+      CATSCAN_CANARY_TIMEOUT_SECONDS: ${{ inputs.canary_timeout_seconds }}
+      CATSCAN_BEARER_TOKEN: ${{ secrets.CATSCAN_CANARY_BEARER_TOKEN }}
+      CATSCAN_SESSION_COOKIE: ${{ secrets.CATSCAN_CANARY_SESSION_COOKIE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate canary auth inputs
+        run: |
+          if [[ -z "${CATSCAN_BEARER_TOKEN:-}" && -z "${CATSCAN_SESSION_COOKIE:-}" ]]; then
+            echo "Set CATSCAN_CANARY_BEARER_TOKEN or CATSCAN_CANARY_SESSION_COOKIE in repository secrets." >&2
+            exit 1
+          fi
+
+      - name: Run runtime-health strict gate
+        run: bash scripts/run_v1_runtime_health_local.sh
+
+      - name: Publish runtime-health summary
+        if: always()
+        run: |
+          if [[ -f /tmp/v1_runtime_health_last_run.md ]]; then
+            cat /tmp/v1_runtime_health_last_run.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Runtime-health report file missing: /tmp/v1_runtime_health_last_run.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload runtime-health report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v1-runtime-health-strict-report
+          path: |
+            /tmp/v1_runtime_health_last_run.md
+            /tmp/v1_runtime_health_last_run.json
+          if-no-files-found: error
