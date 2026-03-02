@@ -246,13 +246,13 @@ class ActionsService:
         except HttpError as ex:
             if ex.resp.status == 404:
                 logger.warning(
-                    "Google returned 404 for config %s (billing %s, bidder %s) — marking DELETED.",
+                    "Google returned 404 for config %s (billing %s, bidder %s) — marking inactive.",
                     config_id, billing_id, bidder_id,
                 )
                 await self._pretargeting.update_state(billing_id, "DELETED")
                 raise ValueError(
-                    f"Config {config_id} no longer exists in Google (deleted). "
-                    f"Billing ID {billing_id} has been marked as deleted."
+                    f"This pretargeting config is no longer available in Google. "
+                    f"Run Sync to refresh your settings."
                 ) from ex
             raise
         await self._pretargeting.update_state(billing_id, "SUSPENDED")
@@ -280,13 +280,13 @@ class ActionsService:
         except HttpError as ex:
             if ex.resp.status == 404:
                 logger.warning(
-                    "Google returned 404 for config %s (billing %s, bidder %s) — marking DELETED.",
+                    "Google returned 404 for config %s (billing %s, bidder %s) — marking inactive.",
                     config_id, billing_id, bidder_id,
                 )
                 await self._pretargeting.update_state(billing_id, "DELETED")
                 raise ValueError(
-                    f"Config {config_id} no longer exists in Google (deleted). "
-                    f"Billing ID {billing_id} has been marked as deleted."
+                    f"This pretargeting config is no longer available in Google. "
+                    f"Run Sync to refresh your settings."
                 ) from ex
             raise
         await self._pretargeting.update_state(billing_id, "ACTIVE")

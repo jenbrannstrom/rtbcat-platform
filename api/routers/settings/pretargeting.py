@@ -285,6 +285,9 @@ async def get_pretargeting_configs(
 
         results = []
         for row in rows:
+            # Skip configs that no longer exist in Google (kept in DB for billing audit)
+            if row.get("state") == "DELETED":
+                continue
             # Parse OS targeting and convert IDs to names if possible
             os_ids = _parse_json_field(row["included_operating_systems"])
             os_names = None
