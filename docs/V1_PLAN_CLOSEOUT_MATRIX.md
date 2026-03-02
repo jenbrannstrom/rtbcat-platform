@@ -1,6 +1,6 @@
 # V1 Plan Closeout Matrix
 
-**Last updated:** 2026-03-01 21:45:00 UTC  
+**Last updated:** 2026-03-02 00:50:00 UTC  
 **Branch checkpoint:** `unified-platform` (rolling checkpoint)
 
 ## CI Status & Report Links
@@ -49,13 +49,15 @@ Latest workflow/report entry points:
    - result: passed
 8. CI automation:
    - `.github/workflows/v1-closeout-quick.yml` runs `CATSCAN_CLOSEOUT_PROFILE=quick make v1-closeout-local`, publishes a GitHub job summary from `/tmp/v1_closeout_last_run.json`, and uploads both `/tmp/v1_closeout_last_run.md` and `/tmp/v1_closeout_last_run.json` as artifacts on matching push/PR changes.
-   - `.github/workflows/v1-closeout-deployed.yml` adds manual (`workflow_dispatch`) deployed closeout execution using `make v1-closeout-deployed-only`, with summary + md/json artifacts for attachable canary evidence (repo secrets: `CATSCAN_CANARY_BEARER_TOKEN` and/or `CATSCAN_CANARY_SESSION_COOKIE`).
+   - `.github/workflows/v1-closeout-deployed.yml` runs deployed closeout via `bash scripts/run_v1_closeout_local.sh` (not `make`) so exit codes remain accurate (`1=fail`, `2=blocked`), with summary + md/json artifacts for attachable canary evidence (auth via `CATSCAN_CANARY_BEARER_TOKEN` mapped to `X-Email`, and/or `CATSCAN_CANARY_SESSION_COOKIE`).
    - both closeout workflows render their summary via shared helper `scripts/render_v1_closeout_summary.py` to keep report formatting consistent.
    - `.github/workflows/v1-byom-api-regression.yml` runs `make v1-byom-api-regression` on optimizer API/service/test changes so BYOM API/e2e coverage is validated in a dependency-provisioned CI runner, and now also supports manual `workflow_dispatch`.
 9. Latest deployed/BYOM evidence runs (buyer `1487810529`):
-   - deployed strict run `22553179141` failed with `Deployed canary go/no-go: FAIL (exit 1)` due to auth failures (`401 Session expired or invalid`), not code-level assertion regressions.
-   - deployed evidence-mode run `22553342553` (`allow_blocked=true`) showed the same auth-expired failure pattern; at that point auth failures still exited as hard fail.
-   - BYOM regression run `22553379186` passed (`27 passed`, workflow conclusion `success`).
+   - strict run `22556345700` (pre-fix chain) demonstrated masked exit handling problems; fixed by commits `078add5` and `29b031d`.
+   - strict run `22556713621` correctly ended as blocked (`exit 2`) after blocked-classification fixes.
+   - evidence run `22557907589` passed (`success`) with blocked-mode reporting (`13 PASS / 7 BLOCKED`).
+   - strict run after deploy `22558379655` failed with `exit 2` but **0 FAIL** (`15 PASS / 5 BLOCKED`), indicating runtime preconditions (endpoint timeouts + missing buyer business state), not code regressions.
+   - BYOM regression runs remain green (example: `22553931703`, `27 passed`, workflow conclusion `success`).
 
 ## Closeout Matrix
 
@@ -66,7 +68,7 @@ Latest workflow/report entry points:
 | Phase 2 Conversion Connectors | Implemented baseline, rollout in progress | Operational Pending | Connector/readiness/security code + tests are present and passing | Customer-by-customer production certification and sustained ingestion/SLO checks |
 | Phase 3 BYOM Platform | Implemented in code | Operational Pending | Optimizer service/regression suites pass locally (`44 passed`); optimizer routers/services compile cleanly; API/e2e suites are env-blocked in this workspace (missing `fastapi` with network-restricted install), with CI regression path now available via `.github/workflows/v1-byom-api-regression.yml` | Production model onboarding + runbook-driven operator acceptance + successful BYOM API/e2e CI evidence for target environments |
 | Phase 4 QPS Performance | In progress | Operational Pending | Extensive query/cache/render improvements committed; local QPS contract/cache suites pass | Deployed canary SLO attainment (`p95 first row <= 6s`, `p95 hydrated <= 8s`) and strict rollup gate pass |
-| QA/Canary Tooling | Implemented | Blocked (Env/Auth) for deployed execution | Canary scripts/targets exist; latest deployed CI failures were caused by expired `CATSCAN_SESSION_COOKIE` secret (`401 Session expired or invalid`) | Refresh deployed canary auth secret(s), rerun deployed closeout, and attach passing artifacts |
+| QA/Canary Tooling | Implemented | Operational Pending | Canary scripts/targets are stable; exit semantics + blocked classification + CI auth path are fixed (`078add5`, `29b031d`, `5c5b007`, `3ec37dd`, `0d2b83e`) | Resolve strict runtime blockers (data-health/economics endpoint 500-timeouts, conversion readiness, active model precondition), then rerun strict closeout to exit `0` |
 
 ## Is The Plan Finished?
 
@@ -75,11 +77,11 @@ Implementation is largely complete across Phases 0-4, but final plan closure req
 
 ## Immediate Final-Close Actions (Ops)
 
-1. Ensure deployed canary auth is configured and fresh (`CATSCAN_CANARY_BEARER_TOKEN` and/or `CATSCAN_CANARY_SESSION_COOKIE`), then run deployed canary profile: `make v1-canary-go-no-go` (from network-enabled runner) or dispatch `.github/workflows/v1-closeout-deployed.yml`.
-2. Run deployed strict QPS SLO gate: `make v1-canary-qps-page-slo-strict` (or via the same deployed closeout workflow).
+1. Execute strict remediation runbook for buyer preconditions and endpoint timeouts: [V1_STRICT_EXIT0_REMEDIATION_RUNBOOK.md](/home/x1-7/Documents/rtbcat-platform/docs/V1_STRICT_EXIT0_REMEDIATION_RUNBOOK.md).
+2. Re-run strict deployed closeout (`allow_blocked=false`) and confirm deployed report has no `BLOCKED` or `FAIL`.
 3. Run BYOM API/e2e suites in provisioned test env with API deps installed (or confirm pass in `.github/workflows/v1-byom-api-regression.yml`).
 4. Record buyer-scoped SLO outcomes for the agreed lookback window.
-5. Mark remaining `Operational Pending` rows as `Complete` once evidence is attached.
+5. Mark remaining `Operational Pending` rows as `Complete` once strict evidence is attached.
 
 Execution template:
 
