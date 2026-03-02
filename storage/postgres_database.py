@@ -93,6 +93,37 @@ async def pg_query(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
     return await loop.run_in_executor(None, _execute)
 
 
+async def pg_query_with_timeout(
+    sql: str,
+    params: tuple = (),
+    statement_timeout_ms: Optional[int] = None,
+) -> list[dict[str, Any]]:
+    """Execute a SELECT query with an optional PostgreSQL statement timeout.
+
+    Args:
+        sql: SELECT statement (use %s placeholders)
+        params: Query parameters
+        statement_timeout_ms: Per-statement timeout in milliseconds. If None,
+            behavior matches ``pg_query``.
+    """
+    if statement_timeout_ms is None:
+        return await pg_query(sql, params)
+
+    timeout_ms = max(int(statement_timeout_ms), 1)
+    loop = asyncio.get_event_loop()
+
+    def _execute():
+        with _get_connection() as conn:
+            conn.execute("SET statement_timeout = %s", (timeout_ms,))
+            try:
+                cursor = conn.execute(sql, params)
+                return [dict(row) for row in cursor.fetchall()]
+            finally:
+                conn.execute("RESET statement_timeout")
+
+    return await loop.run_in_executor(None, _execute)
+
+
 async def pg_query_one(sql: str, params: tuple = ()) -> Optional[dict[str, Any]]:
     """Execute a SELECT query and return first row or None.
 
