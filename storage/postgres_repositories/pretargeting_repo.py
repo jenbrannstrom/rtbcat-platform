@@ -220,6 +220,22 @@ class PretargetingRepository:
             (user_name, billing_id),
         )
 
+    async def delete_config(self, bidder_id: str, config_id: str) -> int:
+        """Remove a pretargeting config row (e.g. stale 404 from Google)."""
+        return await pg_execute(
+            "DELETE FROM pretargeting_configs WHERE bidder_id = %s AND config_id = %s",
+            (bidder_id, config_id),
+        )
+
+    async def delete_stale_configs(self, bidder_id: str, live_config_ids: list[str]) -> int:
+        """Remove local configs for a bidder that are no longer in Google."""
+        if not live_config_ids:
+            return 0
+        return await pg_execute(
+            "DELETE FROM pretargeting_configs WHERE bidder_id = %s AND config_id != ALL(%s)",
+            (bidder_id, live_config_ids),
+        )
+
     async def update_state(self, billing_id: str, state: str) -> int:
         return await pg_execute(
             "UPDATE pretargeting_configs SET state = %s WHERE billing_id = %s",

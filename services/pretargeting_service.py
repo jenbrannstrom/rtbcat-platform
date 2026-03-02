@@ -196,6 +196,19 @@ class PretargetingService:
         self._invalidate_config_cache(billing_id)
         return updated
 
+    async def delete_config(self, bidder_id: str, config_id: str) -> int:
+        """Remove a stale pretargeting config that no longer exists in Google."""
+        deleted = await self._repo.delete_config(bidder_id, config_id)
+        self._invalidate_list_configs_cache(bidder_id)
+        return deleted
+
+    async def delete_stale_configs(self, bidder_id: str, live_config_ids: list[str]) -> int:
+        """Prune local configs not returned by Google for this bidder."""
+        deleted = await self._repo.delete_stale_configs(bidder_id, live_config_ids)
+        if deleted:
+            self._invalidate_list_configs_cache(bidder_id)
+        return deleted
+
     async def update_state(self, billing_id: str, state: str) -> int:
         if not billing_id:
             raise ValueError("billing_id is required")
