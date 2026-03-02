@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from services.creative_destination_resolver import resolve_creative_destination_url
+from services.creative_destination_resolver import (
+    build_creative_destination_diagnostics,
+    resolve_creative_destination_url,
+)
 
 
 def test_resolve_destination_prefers_valid_final_url() -> None:
@@ -56,3 +59,32 @@ def test_resolve_destination_returns_none_when_only_assets_exist() -> None:
     )
 
     assert resolve_creative_destination_url(creative) is None
+
+
+def test_destination_diagnostics_classifies_rejected_candidates() -> None:
+    creative = SimpleNamespace(
+        final_url="%%CLICK_URL_UNESC%%",
+        display_url="javascript:alert(1)",
+        raw_data={
+            "declaredClickThroughUrls": [
+                "https://cdn.example.com/banner.png",
+                "https://example.com/final",
+            ],
+            "html": {"snippet": "<a href='https://example.com/final'>Open</a>"},
+        },
+    )
+
+    diagnostics = build_creative_destination_diagnostics(creative)
+    assert diagnostics["resolved_destination_url"] == "https://example.com/final"
+    assert diagnostics["candidate_count"] >= 4
+    assert diagnostics["eligible_count"] == 1
+
+    reasons = {
+        (row["source"], row["reason"])
+        for row in diagnostics["candidates"]
+        if not row["eligible"]
+    }
+    assert ("final_url", "contains_click_macro") in reasons
+    assert ("display_url", "unsupported_scheme") in reasons
+    assert ("declared_click_through_url", "asset_url") in reasons
+    assert ("html_snippet", "duplicate") in reasons

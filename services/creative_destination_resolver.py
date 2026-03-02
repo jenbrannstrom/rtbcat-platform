@@ -54,48 +54,93 @@ def extract_click_destinations_from_html(html_snippet: str) -> list[str]:
     return candidates
 
 
-def is_probably_click_destination(url: Optional[str]) -> bool:
+def classify_click_destination(url: Optional[str]) -> tuple[bool, Optional[str]]:
     if not url:
-        return False
+        return False, "empty"
     value = str(url).strip()
     if not value:
-        return False
+        return False, "empty"
     if _CLICK_MACRO_PATTERN.search(value):
-        return False
+        return False, "contains_click_macro"
     if not value.startswith(("http://", "https://")):
-        return False
+        return False, "unsupported_scheme"
     try:
         parsed = urlparse(value)
         if not parsed.netloc:
-            return False
-        return not parsed.path.lower().endswith(_ASSET_EXTENSIONS)
+            return False, "missing_host"
+        if parsed.path.lower().endswith(_ASSET_EXTENSIONS):
+            return False, "asset_url"
+        return True, None
     except Exception:
-        return False
+        return False, "invalid_url"
+
+
+def is_probably_click_destination(url: Optional[str]) -> bool:
+    is_valid, _ = classify_click_destination(url)
+    return is_valid
+
+
+def build_creative_destination_diagnostics(creative: Any) -> dict[str, Any]:
+    raw_data = getattr(creative, "raw_data", {}) or {}
+    declared_urls_raw = raw_data.get("declaredClickThroughUrls", [])
+    declared_urls = declared_urls_raw if isinstance(declared_urls_raw, list) else []
+    html_payload = raw_data.get("html")
+    html_snippet = str(html_payload.get("snippet") or "") if isinstance(html_payload, dict) else ""
+    html_click_destinations = extract_click_destinations_from_html(html_snippet)
+
+    candidate_rows: list[dict[str, Any]] = []
+    eligible: list[str] = []
+    seen_eligible: set[str] = set()
+
+    def add_candidate(url: Optional[str], source: str) -> None:
+        value = "" if url is None else str(url).strip()
+        is_valid, reason = classify_click_destination(value)
+        if is_valid:
+            if value in seen_eligible:
+                candidate_rows.append(
+                    {
+                        "source": source,
+                        "url": value,
+                        "eligible": False,
+                        "reason": "duplicate",
+                    }
+                )
+                return
+            seen_eligible.add(value)
+            eligible.append(value)
+            candidate_rows.append(
+                {
+                    "source": source,
+                    "url": value,
+                    "eligible": True,
+                    "reason": None,
+                }
+            )
+            return
+        candidate_rows.append(
+            {
+                "source": source,
+                "url": value,
+                "eligible": False,
+                "reason": reason,
+            }
+        )
+
+    add_candidate(getattr(creative, "final_url", None), "final_url")
+    add_candidate(getattr(creative, "display_url", None), "display_url")
+    for url in declared_urls:
+        add_candidate(url, "declared_click_through_url")
+    for url in html_click_destinations:
+        add_candidate(url, "html_snippet")
+
+    return {
+        "resolved_destination_url": eligible[0] if eligible else None,
+        "candidate_count": len(candidate_rows),
+        "eligible_count": len(eligible),
+        "candidates": candidate_rows,
+    }
 
 
 def resolve_creative_destination_url(creative: Any) -> Optional[str]:
-    candidates: list[str] = []
-    if is_probably_click_destination(getattr(creative, "final_url", None)):
-        candidates.append(str(getattr(creative, "final_url")))
-    if is_probably_click_destination(getattr(creative, "display_url", None)):
-        candidates.append(str(getattr(creative, "display_url")))
-
-    raw_data = getattr(creative, "raw_data", {}) or {}
-    declared_urls = raw_data.get("declaredClickThroughUrls", [])
-    if isinstance(declared_urls, list):
-        for url in declared_urls:
-            if is_probably_click_destination(url):
-                candidates.append(str(url))
-
-    html_snippet = ""
-    html_payload = raw_data.get("html")
-    if isinstance(html_payload, dict):
-        html_snippet = str(html_payload.get("snippet") or "")
-    for url in extract_click_destinations_from_html(html_snippet):
-        if is_probably_click_destination(url):
-            candidates.append(url)
-
-    if not candidates:
-        return None
-    return candidates[0]
-
+    diagnostics = build_creative_destination_diagnostics(creative)
+    return diagnostics.get("resolved_destination_url")
