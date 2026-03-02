@@ -119,7 +119,7 @@ run_runtime_check() {
   set -e
 
   cat "$output_file"
-  reason_line="$(rg -m1 '^(FAIL|BLOCKED)[[:space:]]{2,}' "$output_file" || true)"
+  reason_line="$(grep -Em1 '^(FAIL|BLOCKED)[[:space:]]{2,}' "$output_file" || true)"
   if [[ -n "$reason_line" ]]; then
     note="${reason_line}"
   else
