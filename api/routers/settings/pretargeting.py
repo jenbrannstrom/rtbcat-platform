@@ -195,6 +195,25 @@ async def sync_pretargeting_configs(
 
         logger.info(f"Synced {publishers_synced} publisher targeting entries")
 
+        # Mark configs not returned by Google as DELETED (after confirming via GET).
+        live_config_ids = {cfg["configId"] for cfg in configs}
+        db_configs = await pretargeting_service.list_configs(bidder_id=account_id)
+        deleted_count = 0
+        for db_cfg in db_configs:
+            if db_cfg["config_id"] in live_config_ids:
+                continue
+            if db_cfg.get("state") == "DELETED":
+                continue
+            # Double-check with a GET before marking deleted
+            verify = await client.get_pretargeting_config_by_id(db_cfg["config_id"])
+            if verify is None:
+                await pretargeting_service.update_state(db_cfg["billing_id"], "DELETED")
+                logger.info(
+                    "Marked config %s (billing %s) as DELETED — not found in Google",
+                    db_cfg["config_id"], db_cfg["billing_id"],
+                )
+                deleted_count += 1
+
         return SyncPretargetingResponse(
             status="success",
             configs_synced=len(configs),
