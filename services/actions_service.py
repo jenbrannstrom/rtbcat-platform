@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
+from googleapiclient.errors import HttpError
+
 from collectors import PretargetingClient
 from services.changes_service import ChangesService
+
+logger = logging.getLogger(__name__)
 from services.pretargeting_service import PretargetingService
 from services.snapshots_service import SnapshotsService
 
@@ -236,7 +241,20 @@ class ActionsService:
         )
 
         client, config_id, bidder_id = await self._get_pretargeting_client(billing_id)
-        await client.suspend_pretargeting_config(config_id)
+        try:
+            await client.suspend_pretargeting_config(config_id)
+        except HttpError as ex:
+            if ex.resp.status == 404:
+                logger.warning(
+                    "Config %s (billing %s) no longer exists in Google — removing stale DB row",
+                    config_id, billing_id,
+                )
+                await self._pretargeting.delete_config(bidder_id, config_id)
+                raise ValueError(
+                    f"Config {config_id} no longer exists in Google (404). "
+                    f"Stale row removed. Run Sync to refresh."
+                ) from ex
+            raise
         await self._pretargeting.update_state(billing_id, "SUSPENDED")
         await self._pretargeting.add_history(
             config_id=str(config_id),
@@ -257,7 +275,20 @@ class ActionsService:
 
     async def activate_config(self, billing_id: str) -> dict[str, Any]:
         client, config_id, bidder_id = await self._get_pretargeting_client(billing_id)
-        await client.activate_pretargeting_config(config_id)
+        try:
+            await client.activate_pretargeting_config(config_id)
+        except HttpError as ex:
+            if ex.resp.status == 404:
+                logger.warning(
+                    "Config %s (billing %s) no longer exists in Google — removing stale DB row",
+                    config_id, billing_id,
+                )
+                await self._pretargeting.delete_config(bidder_id, config_id)
+                raise ValueError(
+                    f"Config {config_id} no longer exists in Google (404). "
+                    f"Stale row removed. Run Sync to refresh."
+                ) from ex
+            raise
         await self._pretargeting.update_state(billing_id, "ACTIVE")
         await self._pretargeting.add_history(
             config_id=str(config_id),

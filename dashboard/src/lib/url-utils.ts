@@ -103,6 +103,27 @@ const URL_PATTERNS: Array<{
   },
 ];
 
+const ASSET_EXTENSIONS = [
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".svg",
+  ".bmp",
+  ".ico",
+  ".mp4",
+  ".webm",
+  ".m4v",
+  ".mov",
+  ".js",
+  ".css",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".otf",
+];
+
 // Common ad server macros to clean from URLs
 const MACRO_PATTERNS = [
   /%%[A-Z_]+%%/g, // %%CLICK_URL_UNESC%%
@@ -186,6 +207,62 @@ export function extractUrlsFromChain(rawUrl: string): string[] {
     seen.add(normalized);
     return true;
   });
+}
+
+function isLikelyAssetUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname.toLowerCase();
+    return ASSET_EXTENSIONS.some((ext) => path.endsWith(ext));
+  } catch {
+    const lower = url.toLowerCase();
+    return ASSET_EXTENSIONS.some((ext) => lower.includes(ext));
+  }
+}
+
+/**
+ * Extract likely click destination URLs from HTML snippets.
+ * Prefers href/window.open/location.assign-style destinations, not asset src URLs.
+ */
+export function extractClickDestinationsFromHtmlSnippet(
+  htmlSnippet: string | null | undefined,
+): string[] {
+  if (!htmlSnippet) return [];
+
+  const candidates: string[] = [];
+  const pushCandidate = (value: string | undefined) => {
+    if (!value) return;
+    const extracted = extractUrlsFromChain(value);
+    for (const url of extracted) {
+      if (!isLikelyAssetUrl(url)) {
+        candidates.push(url);
+      }
+    }
+  };
+
+  const hrefQuotedRegex = /\bhref\s*=\s*(['"])(.*?)\1/gi;
+  let match: RegExpExecArray | null;
+  while ((match = hrefQuotedRegex.exec(htmlSnippet)) !== null) {
+    pushCandidate(match[2]);
+  }
+
+  const hrefUnquotedRegex = /\bhref\s*=\s*([^\s"'<>]+)/gi;
+  while ((match = hrefUnquotedRegex.exec(htmlSnippet)) !== null) {
+    pushCandidate(match[1]);
+  }
+
+  const macroWithUrlRegex = /%%[A-Z_]+%%\s*(https?:\/\/[^\s"'<>]+)/gi;
+  while ((match = macroWithUrlRegex.exec(htmlSnippet)) !== null) {
+    pushCandidate(match[1]);
+  }
+
+  const jsClickRegex =
+    /(?:window\.open|location\.href\s*=|location\.assign\()\s*['"]([^'"]+)['"]/gi;
+  while ((match = jsClickRegex.exec(htmlSnippet)) !== null) {
+    pushCandidate(match[1]);
+  }
+
+  return [...new Set(candidates)];
 }
 
 /**
@@ -338,6 +415,10 @@ export function parseDestinationUrls(rawUrl: string | null | undefined, localize
 
   // Filter out tracking pixels and simple domain landing pages if we have better URLs
   let displayUrls = categorized.filter((u) => u.type !== "tracking_pixel");
+  const nonAssetUrls = displayUrls.filter((u) => !isLikelyAssetUrl(u.url));
+  if (nonAssetUrls.length > 0) {
+    displayUrls = nonAssetUrls;
+  }
 
   // Check if we have an AppsFlyer link with a package ID but no Play Store URL
   const hasPlayStore = displayUrls.some((u) => u.type === "play_store");

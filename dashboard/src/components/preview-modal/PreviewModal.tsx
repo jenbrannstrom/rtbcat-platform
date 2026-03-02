@@ -7,6 +7,7 @@ import { cn, getStatusColor, getFormatLabel } from "@/lib/utils";
 import { getCreative, getCreativeLive } from "@/lib/api";
 import {
   parseDestinationUrls,
+  extractClickDestinationsFromHtmlSnippet,
   getGoogleAuthBuyersUrl,
   extractBuyerIdFromName,
   type UrlLabelLocalizer,
@@ -101,7 +102,11 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
 
   // Parse URLs and tracking params
   const htmlSnippet = creative.html?.snippet || "";
-  const allRawUrls = [creative.final_url, ...(declaredUrls || []), htmlSnippet].filter(Boolean).join(" ");
+  const htmlClickDestinations = extractClickDestinationsFromHtmlSnippet(htmlSnippet);
+  const destinationCandidates = [creative.final_url, ...(declaredUrls || []), ...htmlClickDestinations]
+    .filter(Boolean)
+    .join(" ");
+  const allRawUrls = [destinationCandidates, htmlSnippet].filter(Boolean).join(" ");
   const urlLabelLocalizer: UrlLabelLocalizer = {
     labels: {
       play_store: t.previewModal.urlLabelGooglePlayStore,
@@ -126,7 +131,12 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
       landing_page: t.previewModal.urlTooltipLandingPage,
     },
   };
-  const parsedUrls = parseDestinationUrls(allRawUrls, urlLabelLocalizer);
+  const destinationUrls = parseDestinationUrls(destinationCandidates, urlLabelLocalizer);
+  const parsedUrls =
+    destinationUrls.length > 0
+      ? destinationUrls
+      : parseDestinationUrls(allRawUrls, urlLabelLocalizer);
+  const primaryDestinationUrl = destinationUrls.find((u) => u.isPrimary)?.url;
   const trackingParams = extractTrackingParams(creative.final_url);
   const hasTrackingParams = Object.keys(trackingParams).length > 0;
   const effectiveSource = (creative.data_source?.source || previewSource || "cache") as "live" | "cache";
@@ -207,7 +217,7 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
               ) : (
                 <HtmlPreviewFrame
                   creative={creative}
-                  destinationUrl={parsedUrls.find(u => u.isPrimary)?.url}
+                  destinationUrl={primaryDestinationUrl}
                 />
               ))}
             {creative.format === "NATIVE" && (
