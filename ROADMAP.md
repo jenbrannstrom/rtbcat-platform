@@ -1,12 +1,44 @@
 # Cat-Scan Roadmap
 
-**Last Updated:** February 27, 2026
+**Last Updated:** March 2, 2026
 
 ## Priority Buckets (2026-02-27)
 
-- [ ] **Now** - Objective: clear production-facing regressions and runtime blockers; Current: language-persistence regression and seat-switch/operator verification issues remain; Acceptance: both are fixed and validated on production traffic.
+- [ ] **Now** - Objective: clear production-facing regressions and runtime blockers; Current: seat-switch/operator verification issues remain (language-persistence regression is closed in code); Acceptance: seat-switch/operator path is fixed and validated on production traffic, and runtime blocker follow-up is tracked to closure.
 - [ ] **Next** - Objective: complete Universal Precompute Epics A/B plus Home correctness/performance gates; Current: scope is defined but rollout is incomplete; Acceptance: serving-table path and validation gates are green.
 - [ ] **Later** - Objective: deliver optimization engine and external integrations after core reliability; Current: backlog/design items exist; Acceptance: features ship only after stability targets hold.
+
+---
+
+## V1 Closeout Gate Decision (2026-03-02)
+
+- [x] **Release decision:** proceed with deployment under current strict gate semantics.
+  - Evidence: strict closeout success (`22585753222`) and BYOM regression success (`22586377963`) on `unified-platform`.
+- [x] **Current strict meaning (explicit):** gate is regression-focused; canary `exit 2` (all checks blocked by environment/data) is treated as non-regression pass.
+- [ ] **Mandatory follow-up (do not drop):** add a separate runtime-health strict gate that fails on blocked checks.
+  - Objective: restore hard production-health enforcement independent of regression signal.
+  - Acceptance: blocked checks fail runtime gate until remediated.
+- [ ] **Runtime blocker backlog to resolve before enabling runtime strict gate**
+  - `/system/data-health` intermittent high latency/timeouts.
+  - `/optimizer/economics/efficiency` intermittent high latency/timeouts (especially assumed-value path).
+  - proposal lifecycle data completeness (`billing_id` missing in generated proposals for some buyer states).
+  - QPS page rollup completeness gaps (`/analytics/home/endpoint-efficiency` missing in rollup on some windows).
+
+---
+
+## Next Active Workstream (2026-03-02): Seat-Switch + Operator Verification
+
+- Progress (2026-03-02):
+  - [x] Added canonical buyer-context resolver + unit coverage to prevent stale/invalid buyer IDs from bouncing scoped routes (`dashboard/src/lib/buyer-context-sync.ts`, `dashboard/src/__tests__/buyer-context-sync.test.ts`, `dashboard/src/components/buyer-route-sync.tsx`).
+- [ ] **Seat-switch determinism**
+  - Objective: selected buyer context must stay consistent across URL, in-memory context, localStorage/cookie, and active-seat RBAC validation.
+  - Acceptance: no route bounce/revert during seat switch; invalid/revoked seat IDs are corrected deterministically without cross-seat data queries.
+- [ ] **Operator verification path**
+  - Objective: setup/system operator views must show seat-validity and readiness status with unambiguous pass/fail reasons.
+  - Acceptance: operator can verify seat validity + readiness from one flow without manual query debugging.
+- [ ] **Automation coverage**
+  - Objective: add regression tests for seat-switch precedence and buyer-scoped query behavior on key routes.
+  - Acceptance: CI tests fail on seat-context regressions before deploy.
 
 ---
 
@@ -198,7 +230,7 @@ Runtime-verified bug checks have been moved to **Runtime Verification Queue (Pro
 
 ## Reopened Regressions (Code-Verified)
 
-- [ ] **Creative language persistence path regression** - Objective: restore deterministic language-write persistence; Current: language-analysis paths call `store.creative_repository.*` while `PostgresStore` exposes no `creative_repository` attribute (`api/routers/seats.py`, `services/creative_language_service.py`, `storage/postgres_store.py`); Acceptance: persistence is routed through a valid repo/service interface with tests.
+- [x] **Creative language persistence path regression (closed in code)** - Resolution: `PostgresStore` now exposes a compatibility shim (`self.creative_repository = self`) and implements `get_creatives_needing_language_analysis` + `update_language_detection`, restoring valid persistence routing for language-analysis paths (`api/routers/seats.py`, `services/creative_language_service.py`, `storage/postgres_store.py`). Residual risk: runtime verification still required on production traffic.
 
 ---
 
