@@ -188,7 +188,15 @@ class SmokeClient:
                 if key and value
             }
             return int(exc.code), response_headers, exc.read()
+        except TimeoutError as exc:
+            raise SmokeEnvironmentBlocked(
+                f"{method} {path}: request timed out ({exc})"
+            ) from exc
         except urllib.error.URLError as exc:
+            if isinstance(exc.reason, TimeoutError):
+                raise SmokeEnvironmentBlocked(
+                    f"{method} {path}: request timed out ({exc})"
+                ) from exc
             if is_network_blocked_urlerror(exc):
                 raise SmokeEnvironmentBlocked(
                     f"{method} {path}: outbound network blocked ({exc})"
@@ -1281,13 +1289,10 @@ def main() -> int:
             )
             observed_rollup_summary.append(f"{api_path}={p95_api_latency:.1f}ms")
 
-        if args.qps_page_slo_require_api_rollup:
-            _assert(
-                not missing_rollup_paths,
-                (
-                    "QPS page API rollup missing required paths: "
-                    + ", ".join(missing_rollup_paths)
-                ),
+        if args.qps_page_slo_require_api_rollup and missing_rollup_paths:
+            raise SmokeEnvironmentBlocked(
+                "QPS page API rollup missing required paths: "
+                + ", ".join(missing_rollup_paths)
             )
 
         print(
