@@ -119,3 +119,19 @@ class CreativeCountryBreakdownResponse(BaseModel):
     countries: list[CreativeCountryMetrics]
     total_countries: int
     period_days: int
+
+
+class CreativeDestinationCandidate(BaseModel):
+    source: str
+    url: str
+    eligible: bool
+    reason: Optional[str] = None
+
+
+class CreativeDestinationDiagnosticsResponse(BaseModel):
+    creative_id: str
+    buyer_id: Optional[str] = None
+    resolved_destination_url: Optional[str] = None
+    candidate_count: int
+    eligible_count: int
+    candidates: list[CreativeDestinationCandidate]

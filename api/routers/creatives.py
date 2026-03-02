@@ -17,10 +17,12 @@ from api.schemas.common import PaginationMeta
 from api.schemas.creatives import (
     ClusterAssignment,
     CreativeCountryBreakdownResponse,
+    CreativeDestinationDiagnosticsResponse,
     CreativeResponse,
     NewlyUploadedCreativesResponse,
     PaginatedCreativesResponse,
 )
+from services.creative_destination_resolver import build_creative_destination_diagnostics
 from services.auth_service import User
 from services.creative_countries_service import CreativeCountriesService
 from services.creative_response_builder import build_creative_response
@@ -208,6 +210,30 @@ async def get_creative(
         creatives_service,
         slim=False,
         source="cache",
+    )
+
+
+@router.get(
+    "/creatives/{creative_id}/destination-diagnostics",
+    response_model=CreativeDestinationDiagnosticsResponse,
+)
+async def get_creative_destination_diagnostics(
+    creative_id: str,
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    """Inspect how click destination URL is resolved for a creative."""
+    creative = await store.get_creative(creative_id)
+    if not creative:
+        raise HTTPException(status_code=404, detail="Creative not found")
+    if creative.buyer_id:
+        await require_buyer_access(creative.buyer_id, store=store, user=user)
+
+    diagnostics = build_creative_destination_diagnostics(creative)
+    return CreativeDestinationDiagnosticsResponse(
+        creative_id=creative.id,
+        buyer_id=creative.buyer_id,
+        **diagnostics,
     )
 
 
