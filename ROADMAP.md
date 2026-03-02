@@ -46,6 +46,9 @@
 - [ ] **Automation coverage**
   - Objective: add regression tests for seat-switch precedence and buyer-scoped query behavior on key routes.
   - Acceptance: CI tests fail on seat-context regressions before deploy.
+  - Progress (2026-03-02):
+    - [x] Added deterministic seat-switch route-sync decision tests (`dashboard/src/__tests__/buyer-route-sync-logic.test.ts`) and extracted pure sync decision logic (`dashboard/src/lib/buyer-route-sync-logic.ts`) used by `BuyerRouteSync`.
+    - [ ] Add direct route-level query-gating assertions for `/setup` and `/settings/system` query enablement paths.
 
 ---
 
