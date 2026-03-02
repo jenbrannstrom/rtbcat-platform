@@ -446,7 +446,12 @@ def main() -> int:
     parser.add_argument("--proposal-id", default=os.getenv("CATSCAN_PROPOSAL_ID"))
     parser.add_argument("--token", default=os.getenv("CATSCAN_BEARER_TOKEN"))
     parser.add_argument("--cookie", default=os.getenv("CATSCAN_SESSION_COOKIE"))
-    parser.add_argument("--timeout", type=float, default=20.0)
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=float(os.getenv("CATSCAN_CANARY_TIMEOUT_SECONDS", "20")),
+        help="HTTP timeout per request in seconds (default: 20).",
+    )
     parser.add_argument("--run-workflow", action="store_true", help="Run score+propose workflow check.")
     parser.add_argument(
         "--run-lifecycle",
@@ -681,6 +686,18 @@ def main() -> int:
     )
     parser.add_argument("--workflow-days", type=int, default=int(os.getenv("CATSCAN_CANARY_WORKFLOW_DAYS", "14")))
     parser.add_argument(
+        "--data-health-days",
+        type=int,
+        default=int(os.getenv("CATSCAN_CANARY_DATA_HEALTH_DAYS", "14")),
+        help="Days lookback for /system/data-health (default: 14).",
+    )
+    parser.add_argument(
+        "--optimizer-economics-days",
+        type=int,
+        default=int(os.getenv("CATSCAN_CANARY_OPTIMIZER_ECONOMICS_DAYS", "14")),
+        help="Days lookback for /optimizer/economics/efficiency (default: 14).",
+    )
+    parser.add_argument(
         "--workflow-score-limit",
         type=int,
         default=int(os.getenv("CATSCAN_CANARY_WORKFLOW_SCORE_LIMIT", "1000")),
@@ -705,6 +722,12 @@ def main() -> int:
     args = parser.parse_args()
     if args.workflow_days < 1 or args.workflow_days > 365:
         parser.error("--workflow-days must be between 1 and 365")
+    if args.data_health_days < 1 or args.data_health_days > 365:
+        parser.error("--data-health-days must be between 1 and 365")
+    if args.optimizer_economics_days < 1 or args.optimizer_economics_days > 365:
+        parser.error("--optimizer-economics-days must be between 1 and 365")
+    if args.timeout <= 0:
+        parser.error("--timeout must be > 0")
     if args.workflow_score_limit < 1 or args.workflow_score_limit > 5000:
         parser.error("--workflow-score-limit must be between 1 and 5000")
     if args.workflow_proposal_limit < 1 or args.workflow_proposal_limit > 2000:
@@ -779,7 +802,7 @@ def main() -> int:
         payload = client.request(
             "GET",
             "/system/data-health",
-            params={"buyer_id": args.buyer_id, "days": 14, "limit": 10},
+            params={"buyer_id": args.buyer_id, "days": args.data_health_days, "limit": 10},
         )
         validate_data_health_payload(
             payload,
@@ -1280,7 +1303,7 @@ def main() -> int:
         payload = client.request(
             "GET",
             "/optimizer/economics/efficiency",
-            params={"buyer_id": args.buyer_id, "days": 14},
+            params={"buyer_id": args.buyer_id, "days": args.optimizer_economics_days},
         )
         _assert("qps_efficiency" in payload, "qps_efficiency missing from /optimizer/economics/efficiency")
 

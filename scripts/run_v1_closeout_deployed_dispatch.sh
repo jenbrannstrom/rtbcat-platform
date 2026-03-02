@@ -18,6 +18,10 @@ DOWNLOAD_ARTIFACT=1
 RUN_BYOM=0
 POLL_TIMEOUT_SECONDS="${CATSCAN_CLOSEOUT_POLL_TIMEOUT_SECONDS:-180}"
 ARTIFACT_ROOT="${CATSCAN_CLOSEOUT_ARTIFACT_ROOT:-/tmp}"
+RUN_COMPLETE_TIMEOUT_SECONDS="${CATSCAN_CLOSEOUT_RUN_COMPLETE_TIMEOUT_SECONDS:-1800}"
+RUN_COMPLETE_POLL_SECONDS="${CATSCAN_CLOSEOUT_RUN_COMPLETE_POLL_SECONDS:-8}"
+GH_VIEW_RETRY_ATTEMPTS="${CATSCAN_CLOSEOUT_GH_VIEW_RETRY_ATTEMPTS:-8}"
+GH_VIEW_RETRY_DELAY_SECONDS="${CATSCAN_CLOSEOUT_GH_VIEW_RETRY_DELAY_SECONDS:-5}"
 
 usage() {
   cat <<'EOF'
@@ -92,32 +96,85 @@ wait_for_new_run_id() {
   return 1
 }
 
+gh_run_view_json_retry() {
+  local run_id="$1"
+  local fields="$2"
+  local attempts="${GH_VIEW_RETRY_ATTEMPTS}"
+  local delay="${GH_VIEW_RETRY_DELAY_SECONDS}"
+  local try=1
+  local out_file err_file
+  out_file="$(mktemp)"
+  err_file="$(mktemp)"
+  while (( try <= attempts )); do
+    if gh run view "$run_id" --repo "$REPO" --json "$fields" >"$out_file" 2>"$err_file"; then
+      cat "$out_file"
+      rm -f "$out_file" "$err_file"
+      return 0
+    fi
+    if (( try == attempts )); then
+      cat "$err_file" >&2
+      rm -f "$out_file" "$err_file"
+      return 1
+    fi
+    echo "Warning: gh run view failed for run ${run_id} (attempt ${try}/${attempts}). Retrying in ${delay}s..." >&2
+    sleep "$delay"
+    try=$((try + 1))
+  done
+}
+
+wait_for_run_completion() {
+  local run_id="$1"
+  local deadline=$((SECONDS + RUN_COMPLETE_TIMEOUT_SECONDS))
+  local payload status conclusion
+  while (( SECONDS < deadline )); do
+    payload="$(gh_run_view_json_retry "$run_id" "status,conclusion" )" || return 1
+    status="$(jq -r '.status // ""' <<<"$payload")"
+    conclusion="$(jq -r '.conclusion // ""' <<<"$payload")"
+    if [[ "$status" == "completed" ]]; then
+      echo "$conclusion"
+      return 0
+    fi
+    sleep "$RUN_COMPLETE_POLL_SECONDS"
+  done
+  echo "Timed out waiting for run completion: ${run_id}" >&2
+  return 1
+}
+
 print_run_summary() {
   local run_id="$1"
-  gh run view \
-    "$run_id" \
-    --repo "$REPO" \
-    --json url,workflowName,status,conclusion,createdAt,updatedAt,displayTitle \
-    --jq '"Run summary:\n  workflow:   \(.workflowName // "")\n  title:      \(.displayTitle // "")\n  status:     \(.status // "")\n  conclusion: \(.conclusion // "")\n  createdAt:  \(.createdAt // "")\n  updatedAt:  \(.updatedAt // "")\n  url:        \(.url // "")"'
+  local payload
+  payload="$(gh_run_view_json_retry "$run_id" "url,workflowName,status,conclusion,createdAt,updatedAt,displayTitle")"
+  jq -r '"Run summary:\n  workflow:   \(.workflowName // "")\n  title:      \(.displayTitle // "")\n  status:     \(.status // "")\n  conclusion: \(.conclusion // "")\n  createdAt:  \(.createdAt // "")\n  updatedAt:  \(.updatedAt // "")\n  url:        \(.url // "")"' <<<"$payload"
 }
 
 get_run_conclusion() {
   local run_id="$1"
-  gh run view "$run_id" --repo "$REPO" --json conclusion --jq '.conclusion // ""'
+  local payload
+  payload="$(gh_run_view_json_retry "$run_id" "conclusion")"
+  jq -r '.conclusion // ""' <<<"$payload"
 }
 
 download_deployed_artifact() {
   local run_id="$1"
   local out_dir="${ARTIFACT_ROOT%/}/v1-closeout-${run_id}"
+  local report_json="${out_dir}/v1_closeout_last_run.json"
   mkdir -p "$out_dir"
+
+  set +e
   gh run download \
     "$run_id" \
     --repo "$REPO" \
     -n v1-closeout-deployed-report \
     -D "$out_dir"
+  local download_status=$?
+  set -e
+  if [[ "$download_status" -ne 0 ]]; then
+    echo "Artifact download failed for run ${run_id} (artifact=v1-closeout-deployed-report)." >&2
+    return "$download_status"
+  fi
+
   echo "Downloaded deployed closeout artifact to: ${out_dir}"
 
-  local report_json="${out_dir}/v1_closeout_last_run.json"
   if [[ -f "$report_json" ]]; then
     python3 - "$report_json" <<'PY'
 import json
@@ -132,6 +189,22 @@ for step in payload.get("steps", []):
     status = str(step.get("status", "")).strip()
     notes = str(step.get("notes", "")).strip()
     print(f"  - {name}: {status} ({notes})")
+
+fail_like = []
+for step in payload.get("steps", []):
+    status = str(step.get("status", "")).strip().upper()
+    if status in {"FAIL", "BLOCKED"}:
+        fail_like.append(
+            (
+                str(step.get("step", "")).strip(),
+                status,
+                str(step.get("notes", "")).strip(),
+            )
+        )
+if fail_like:
+    print("  failing_or_blocked_steps:")
+    for name, status, notes in fail_like:
+        print(f"    - {status}: {name} ({notes})")
 PY
   fi
 }
@@ -166,27 +239,32 @@ dispatch_deployed_workflow() {
     fi
   fi
 
+  local conclusion=""
+  if ! conclusion="$(wait_for_run_completion "$run_id")"; then
+    echo "Warning: unable to confirm run completion; attempting summary fetch anyway." >&2
+  fi
   print_run_summary "$run_id"
-  local conclusion
-  conclusion="$(get_run_conclusion "$run_id")"
+  if [[ -z "$conclusion" ]]; then
+    conclusion="$(get_run_conclusion "$run_id")"
+  fi
 
+  local artifact_status=0
   if [[ "$DOWNLOAD_ARTIFACT" == "1" ]]; then
-    if [[ "$conclusion" == "success" ]]; then
-      set +e
-      download_deployed_artifact "$run_id"
-      local artifact_status=$?
-      set -e
-      if [[ "$artifact_status" -ne 0 ]]; then
-        echo "Warning: artifact download failed with exit ${artifact_status}." >&2
-      fi
-    else
-      echo "Skipping artifact download because run conclusion='${conclusion}'." >&2
+    set +e
+    download_deployed_artifact "$run_id"
+    artifact_status=$?
+    set -e
+    if [[ "$artifact_status" -ne 0 ]]; then
+      echo "Warning: artifact download failed with exit ${artifact_status}." >&2
     fi
   fi
 
   if [[ "$conclusion" != "success" ]]; then
     echo "Deployed closeout workflow failed (conclusion='${conclusion}')." >&2
-    echo "Common cause: missing repo secrets CATSCAN_CANARY_BEARER_TOKEN or CATSCAN_CANARY_SESSION_COOKIE." >&2
+    if [[ "$artifact_status" -ne 0 ]]; then
+      echo "Closeout artifact unavailable; inspect workflow logs for the exact failing step." >&2
+    fi
+    echo "Diagnostic helper: scripts/fetch_v1_closeout_run_evidence.sh --run-id ${run_id} --full-log" >&2
     return 1
   fi
 }
@@ -215,9 +293,14 @@ dispatch_byom_workflow() {
     fi
   fi
 
+  local conclusion=""
+  if ! conclusion="$(wait_for_run_completion "$run_id")"; then
+    echo "Warning: unable to confirm run completion; attempting summary fetch anyway." >&2
+  fi
   print_run_summary "$run_id"
-  local conclusion
-  conclusion="$(get_run_conclusion "$run_id")"
+  if [[ -z "$conclusion" ]]; then
+    conclusion="$(get_run_conclusion "$run_id")"
+  fi
   if [[ "$conclusion" != "success" ]]; then
     echo "BYOM workflow failed (conclusion='${conclusion}')." >&2
     return 1
@@ -312,6 +395,11 @@ fi
 
 if ! command -v gh >/dev/null 2>&1; then
   echo "'gh' CLI is required. Install GitHub CLI first." >&2
+  exit 2
+fi
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "'jq' is required. Install jq first." >&2
   exit 2
 fi
 
