@@ -109,28 +109,43 @@ trap on_exit EXIT
 run_runtime_check() {
   local name="$1"
   local cmd="$2"
+  local output_file note reason_line
+  output_file="$(mktemp)"
 
   echo "==> ${name}"
   set +e
-  bash -lc "${cmd}"
+  bash -lc "${cmd}" >"$output_file" 2>&1
   local status=$?
   set -e
 
+  cat "$output_file"
+  reason_line="$(rg -m1 '^(FAIL|BLOCKED)[[:space:]]{2,}' "$output_file" || true)"
+  if [[ -n "$reason_line" ]]; then
+    note="${reason_line}"
+  else
+    note="exit ${status}"
+  fi
+  # Keep markdown report rows reasonably short.
+  if (( ${#note} > 220 )); then
+    note="${note:0:217}..."
+  fi
+  rm -f "$output_file"
+
   if [[ "${status}" -eq 0 ]]; then
-    record_step "${name}" "PASS" "command succeeded"
+    record_step "${name}" "PASS" "${note}"
     echo "==> ${name} (ok)"
     return
   fi
 
   if [[ "${status}" -eq 2 ]]; then
     HAS_BLOCKED=1
-    record_step "${name}" "BLOCKED" "exit 2 (environment/data blocked)"
+    record_step "${name}" "BLOCKED" "${note}"
     echo "==> ${name} (blocked: environment/data)" >&2
     return
   fi
 
   HAS_FAIL=1
-  record_step "${name}" "FAIL" "exit ${status}"
+  record_step "${name}" "FAIL" "${note}"
   echo "==> ${name} (failed: exit ${status})" >&2
 }
 
