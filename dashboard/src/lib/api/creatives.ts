@@ -6,6 +6,7 @@
 import { fetchApi } from "./core";
 import type {
   Creative,
+  CreativeDestinationDiagnostics,
   CreativeLiveResponse,
   CreativeCountryBreakdown,
   LanguageDetectionResponse,
@@ -84,6 +85,14 @@ export async function getCreativeLive(
   const query = searchParams.toString();
   return fetchApi<CreativeLiveResponse>(
     `/creatives/${encodeURIComponent(id)}/live${query ? `?${query}` : ""}`
+  );
+}
+
+export async function getCreativeDestinationDiagnostics(
+  id: string
+): Promise<CreativeDestinationDiagnostics> {
+  return fetchApi<CreativeDestinationDiagnostics>(
+    `/creatives/${encodeURIComponent(id)}/destination-diagnostics`
   );
 }
 
