@@ -17,6 +17,7 @@ import { ErrorPage } from "@/components/error";
 import { LoadingPage } from "@/components/loading";
 import { BuyerContextBanner } from "@/components/buyer-context-banner";
 import { deriveBuyerContextState } from "@/lib/buyer-context-state";
+import { getSetupQueryEnablement } from "@/lib/setup-query-gating";
 import { cn } from "@/lib/utils";
 import { useAccount } from "@/contexts/account-context";
 
@@ -44,6 +45,10 @@ export default function SetupPage() {
 
   const buyerCtx = deriveBuyerContextState(selectedBuyerId, seats, seatsLoading);
   const buyerContextReady = buyerCtx.canQuery;
+  const setupQueryEnablement = getSetupQueryEnablement({
+    buyerContextReady,
+    firstActiveModelId: "",
+  });
 
   const {
     data: dataHealth,
@@ -57,7 +62,7 @@ export default function SetupPage() {
         limit: 5,
         buyer_id: selectedBuyerId || undefined,
       }),
-    enabled: buyerContextReady,
+    enabled: setupQueryEnablement.dataHealth,
   });
 
   const {
@@ -73,10 +78,14 @@ export default function SetupPage() {
         limit: 200,
         offset: 0,
       }),
-    enabled: buyerContextReady,
+    enabled: setupQueryEnablement.optimizerModels,
   });
   const firstActiveModelId =
     (optimizerModels?.rows || []).find((row) => row.is_active)?.model_id || "";
+  const setupQueryEnablementWithModel = getSetupQueryEnablement({
+    buyerContextReady,
+    firstActiveModelId,
+  });
 
   const {
     data: modelValidation,
@@ -89,7 +98,7 @@ export default function SetupPage() {
         buyer_id: selectedBuyerId || undefined,
         timeout_seconds: 10,
       }),
-    enabled: buyerContextReady && !!firstActiveModelId,
+    enabled: setupQueryEnablementWithModel.modelValidation,
     retry: false,
   });
 
@@ -114,7 +123,7 @@ export default function SetupPage() {
         freshness_hours: 72,
         buyer_id: selectedBuyerId || undefined,
       }),
-    enabled: buyerContextReady,
+    enabled: setupQueryEnablementWithModel.conversionReadiness,
     retry: false,
   });
 

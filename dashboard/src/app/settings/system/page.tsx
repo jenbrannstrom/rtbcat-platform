@@ -44,6 +44,7 @@ import { useTranslation } from "@/contexts/i18n-context";
 import { useAccount } from "@/contexts/account-context";
 import { BuyerContextBanner } from "@/components/buyer-context-banner";
 import { deriveBuyerContextState } from "@/lib/buyer-context-state";
+import { getSystemQueryEnablement } from "@/lib/system-query-gating";
 
 type WorkflowPresetId = "safe" | "balanced" | "aggressive" | "custom";
 
@@ -145,6 +146,11 @@ export default function SystemStatusPage() {
     minCompleteness.trim() === "" || !Number.isFinite(parsedMinCompleteness)
       ? undefined
       : Math.min(100, Math.max(0, parsedMinCompleteness));
+  const systemQueryEnablement = getSystemQueryEnablement({
+    buyerContextReady,
+    selectedProposalHistoryId,
+    rollbackBillingId: rollbackProposal?.billingId,
+  });
 
   const {
     data: health,
@@ -188,7 +194,7 @@ export default function SystemStatusPage() {
         availability_state: healthStateFilter === "all" ? undefined : healthStateFilter,
         min_completeness_pct: normalizedMinCompleteness,
       }),
-    enabled: buyerContextReady,
+    enabled: systemQueryEnablement.dataHealth,
   });
 
   const {
@@ -204,7 +210,7 @@ export default function SystemStatusPage() {
         limit: 200,
         offset: 0,
       }),
-    enabled: buyerContextReady,
+    enabled: systemQueryEnablement.optimizerModels,
   });
 
   const {
@@ -220,7 +226,7 @@ export default function SystemStatusPage() {
         limit: 20,
         offset: 0,
       }),
-    enabled: buyerContextReady,
+    enabled: systemQueryEnablement.optimizerScores,
   });
 
   const {
@@ -235,7 +241,7 @@ export default function SystemStatusPage() {
         limit: 100,
         offset: 0,
       }),
-    enabled: buyerContextReady,
+    enabled: systemQueryEnablement.optimizerProposals,
   });
 
   const { data: optimizerSetup, isLoading: optimizerSetupLoading } = useQuery({
@@ -254,7 +260,7 @@ export default function SystemStatusPage() {
         buyer_id: selectedBuyerId || undefined,
         days: 14,
       }),
-    enabled: buyerContextReady,
+    enabled: systemQueryEnablement.optimizerEffectiveCpm,
   });
 
   const {
@@ -268,7 +274,7 @@ export default function SystemStatusPage() {
         buyer_id: selectedBuyerId || undefined,
         days: 14,
       }),
-    enabled: buyerContextReady,
+    enabled: systemQueryEnablement.optimizerEfficiencySummary,
   });
 
   const {
@@ -283,7 +289,7 @@ export default function SystemStatusPage() {
         limit: 100,
         offset: 0,
       }),
-    enabled: buyerContextReady && !!selectedProposalHistoryId,
+    enabled: systemQueryEnablement.optimizerProposalHistory,
   });
 
   const {
@@ -296,7 +302,7 @@ export default function SystemStatusPage() {
       getConversionHealth({
         buyer_id: selectedBuyerId || undefined,
       }),
-    enabled: buyerContextReady,
+    enabled: systemQueryEnablement.conversionHealth,
     retry: false,
   });
 
@@ -311,7 +317,7 @@ export default function SystemStatusPage() {
         buyer_id: selectedBuyerId || undefined,
         days: 7,
     }),
-    enabled: buyerContextReady,
+    enabled: systemQueryEnablement.conversionIngestionStats,
     retry: false,
   });
 
@@ -327,7 +333,7 @@ export default function SystemStatusPage() {
         days: 14,
         freshness_hours: 72,
       }),
-    enabled: buyerContextReady,
+    enabled: systemQueryEnablement.conversionReadiness,
     retry: false,
   });
 
@@ -364,7 +370,7 @@ export default function SystemStatusPage() {
         bucket_hours: qpsPageSloBucketHours,
         bucket_limit: qpsPageSloBucketLimit,
       }),
-    enabled: buyerContextReady,
+    enabled: systemQueryEnablement.qpsPageLoadSummary,
     retry: false,
   });
 
@@ -379,7 +385,7 @@ export default function SystemStatusPage() {
         billing_id: rollbackProposal?.billingId,
         limit: 25,
       }),
-    enabled: !!rollbackProposal?.billingId,
+    enabled: systemQueryEnablement.rollbackSnapshots,
   });
 
   useEffect(() => {
