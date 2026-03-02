@@ -37,6 +37,7 @@ class CreativeResponse(BaseModel):
     height: Optional[int] = None
     final_url: Optional[str] = None
     display_url: Optional[str] = None
+    resolved_destination_url: Optional[str] = None
     utm_source: Optional[str] = None
     utm_medium: Optional[str] = None
     utm_campaign: Optional[str] = None

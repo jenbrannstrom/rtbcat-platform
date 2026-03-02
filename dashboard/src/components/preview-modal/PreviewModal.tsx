@@ -103,7 +103,11 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
   // Parse URLs and tracking params
   const htmlSnippet = creative.html?.snippet || "";
   const htmlClickDestinations = extractClickDestinationsFromHtmlSnippet(htmlSnippet);
-  const destinationCandidates = [creative.final_url, ...(declaredUrls || []), ...htmlClickDestinations]
+  const destinationCandidates = [
+    creative.resolved_destination_url || creative.final_url,
+    ...(declaredUrls || []),
+    ...htmlClickDestinations,
+  ]
     .filter(Boolean)
     .join(" ");
   const allRawUrls = [destinationCandidates, htmlSnippet].filter(Boolean).join(" ");

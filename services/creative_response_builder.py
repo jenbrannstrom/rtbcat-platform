@@ -11,6 +11,7 @@ from api.schemas.creatives import (
     CreativeResponse,
 )
 from api.schemas.common import ThumbnailStatusResponse, WasteFlagsResponse
+from services.creative_destination_resolver import resolve_creative_destination_url
 from services.creatives_service import CreativesService
 
 
@@ -120,6 +121,7 @@ def build_creative_response(
         height=creative.height,
         final_url=creative.final_url,
         display_url=creative.display_url,
+        resolved_destination_url=resolve_creative_destination_url(creative),
         utm_source=creative.utm_source,
         utm_medium=creative.utm_medium,
         utm_campaign=creative.utm_campaign,
@@ -156,4 +158,3 @@ def build_creative_response(
             html_thumbnail_url=html_thumbnail_url,
         ),
     )
-
