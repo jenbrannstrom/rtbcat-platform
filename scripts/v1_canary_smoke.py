@@ -808,6 +808,11 @@ def main() -> int:
         _assert(isinstance(payload.get("reasons"), list), "reasons missing from /conversions/readiness")
         if args.require_conversion_ready:
             state = str(payload.get("state", "")).lower()
+            if state == "unavailable":
+                raise SmokeEnvironmentBlocked(
+                    f"/conversions/readiness state is {state!r} "
+                    "(no conversion data ingested for this buyer)"
+                )
             _assert(
                 state == "ready",
                 f"/conversions/readiness state is {state!r}, expected 'ready'",
@@ -1301,7 +1306,9 @@ def main() -> int:
         if active:
             resolved_model_id = str(active[0].get("model_id", "")).strip() or None
         if not resolved_model_id and not args.allow_no_active_model:
-            raise SmokeFailure("no active model found; set one or pass --allow-no-active-model")
+            raise SmokeEnvironmentBlocked(
+                "no active model found for this buyer (set one or pass --allow-no-active-model)"
+            )
 
     def check_model_validation() -> None:
         if not resolved_model_id:
