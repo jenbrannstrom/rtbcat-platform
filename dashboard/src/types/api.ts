@@ -82,6 +82,22 @@ export interface CreativeLiveResponse {
   message: string | null;
 }
 
+export interface CreativeDestinationCandidate {
+  source: string;
+  url: string;
+  eligible: boolean;
+  reason: string | null;
+}
+
+export interface CreativeDestinationDiagnostics {
+  creative_id: string;
+  buyer_id: string | null;
+  resolved_destination_url: string | null;
+  candidate_count: number;
+  eligible_count: number;
+  candidates: CreativeDestinationCandidate[];
+}
+
 export interface Campaign {
   id: string;
   name: string;
