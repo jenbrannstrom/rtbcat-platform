@@ -89,6 +89,7 @@ class PretargetingHistoryResponse(BaseModel):
     changed_by: Optional[str] = None
     change_source: str
     rollback_context: Optional[dict[str, Any]] = None
+    commit_context: Optional[dict[str, Any]] = None
 
 
 # =============================================================================

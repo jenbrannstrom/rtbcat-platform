@@ -42,6 +42,7 @@ interface ConfigBreakdownPanelProps {
 }
 
 const TABS: ConfigBreakdownType[] = ['creative', 'size', 'geo', 'publisher'];
+type MajorChangeType = 'targeting' | 'publisher' | 'qps' | 'mixed';
 
 // Format large numbers with K/M suffix
 function formatNumber(n: number): string {
@@ -91,6 +92,22 @@ function describePendingChange(change: PendingChange, publisherMode: string, t: 
   }
 }
 
+function getMajorChangeType(changeType: string): Exclude<MajorChangeType, 'mixed'> {
+  if (changeType === 'set_maximum_qps') return 'qps';
+  if (changeType === 'add_publisher' || changeType === 'remove_publisher' || changeType === 'set_publisher_mode') {
+    return 'publisher';
+  }
+  return 'targeting';
+}
+
+function resolveActiveMajorChangeType(pendingChanges: PendingChange[]): MajorChangeType | null {
+  const majorTypes = new Set<Exclude<MajorChangeType, 'mixed'>>();
+  pendingChanges.forEach((change) => majorTypes.add(getMajorChangeType(change.change_type)));
+  if (majorTypes.size === 0) return null;
+  if (majorTypes.size === 1) return Array.from(majorTypes)[0];
+  return 'mixed';
+}
+
 export function ConfigBreakdownPanel({
   billing_id,
   days,
@@ -113,7 +130,7 @@ export function ConfigBreakdownPanel({
   const [creativeLoadError, setCreativeLoadError] = useState<string | null>(null);
   const [fullCreative, setFullCreative] = useState<Creative | null>(null);
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
-  const [showConfirmPush, setShowConfirmPush] = useState(false);
+  const [showCommitToast, setShowCommitToast] = useState(false);
   const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
   const [showLowVolumeSizes, setShowLowVolumeSizes] = useState(false);
   const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set());
@@ -202,6 +219,9 @@ export function ConfigBreakdownPanel({
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
       queryClient.invalidateQueries({ queryKey: ['config-breakdown', billing_id] });
     },
+    onError: (error: Error) => {
+      setPushResult({ success: false, message: error.message });
+    },
   });
 
   const cancelChangeMutation = useMutation({
@@ -218,7 +238,7 @@ export function ConfigBreakdownPanel({
     onSuccess: async (result) => {
       await syncPretargetingConfigs();
       setPushResult({ success: true, message: result.message });
-      setShowConfirmPush(false);
+      setShowCommitToast(false);
       queryClient.invalidateQueries({ queryKey: ['pretargeting-detail', billing_id] });
       queryClient.invalidateQueries({ queryKey: ['pretargeting-configs'] });
       queryClient.invalidateQueries({ queryKey: ['config-breakdown', billing_id] });
@@ -394,6 +414,46 @@ export function ConfigBreakdownPanel({
     (change) => change.change_type === 'add_size' || change.change_type === 'remove_size'
   );
   const hasPendingChanges = pendingChanges.length > 0;
+  const activeMajorChangeType = resolveActiveMajorChangeType(pendingChanges);
+
+  const canStageChange = (nextChangeType: string): boolean => {
+    const nextMajorType = getMajorChangeType(nextChangeType);
+    if (activeMajorChangeType === null || activeMajorChangeType === nextMajorType) {
+      return true;
+    }
+    if (activeMajorChangeType === 'mixed') {
+      setPushResult({
+        success: false,
+        message:
+          'Pending changes already mix major types. Commit or clear them before staging more changes.',
+      });
+      return false;
+    }
+    setPushResult({
+      success: false,
+      message: `Only one major change per commit is allowed (active=${activeMajorChangeType}, requested=${nextMajorType}).`,
+    });
+    return false;
+  };
+
+  const stageChange = (payload: {
+    billing_id: string;
+    change_type: string;
+    field_name: string;
+    value: string;
+    reason?: string;
+    estimated_qps_impact?: number;
+  }) => {
+    if (!canStageChange(payload.change_type)) {
+      return;
+    }
+    createChangeMutation.mutate(payload);
+  };
+
+  const openCommitToast = () => {
+    if (!hasPendingChanges) return;
+    setShowCommitToast(true);
+  };
 
   const findPendingChange = (changeType: string, value: string): PendingChange | undefined =>
     pendingChanges.find((change) => change.change_type === changeType && change.value === value);
@@ -486,7 +546,7 @@ export function ConfigBreakdownPanel({
         return;
       }
       if (pendingAdd || currentlyIncluded) return;
-      createChangeMutation.mutate({
+      stageChange({
         billing_id,
         change_type: 'add_size',
         field_name: 'included_sizes',
@@ -501,7 +561,7 @@ export function ConfigBreakdownPanel({
       return;
     }
     if (pendingRemove || !currentlyIncluded) return;
-    createChangeMutation.mutate({
+    stageChange({
       billing_id,
       change_type: 'remove_size',
       field_name: 'included_sizes',
@@ -563,7 +623,7 @@ export function ConfigBreakdownPanel({
         return;
       }
       if (pendingAdd || currentlyEnabled) return;
-      createChangeMutation.mutate({
+      stageChange({
         billing_id,
         change_type: 'add_format',
         field_name: 'included_formats',
@@ -578,7 +638,7 @@ export function ConfigBreakdownPanel({
       return;
     }
     if (pendingRemove || !currentlyEnabled) return;
-    createChangeMutation.mutate({
+    stageChange({
       billing_id,
       change_type: 'remove_format',
       field_name: 'included_formats',
@@ -601,7 +661,7 @@ export function ConfigBreakdownPanel({
           return;
         }
         if (!currentlyListed || pendingRemove) return;
-        createChangeMutation.mutate({
+        stageChange({
           billing_id,
           change_type: 'remove_publisher',
           field_name: 'publisher_targeting',
@@ -616,7 +676,7 @@ export function ConfigBreakdownPanel({
         return;
       }
       if (currentlyListed || pendingAdd) return;
-      createChangeMutation.mutate({
+      stageChange({
         billing_id,
         change_type: 'add_publisher',
         field_name: 'publisher_targeting',
@@ -633,7 +693,7 @@ export function ConfigBreakdownPanel({
         return;
       }
       if (currentlyListed || pendingAdd) return;
-      createChangeMutation.mutate({
+      stageChange({
         billing_id,
         change_type: 'add_publisher',
         field_name: 'publisher_targeting',
@@ -648,7 +708,7 @@ export function ConfigBreakdownPanel({
       return;
     }
     if (!currentlyListed || pendingRemove) return;
-    createChangeMutation.mutate({
+    stageChange({
       billing_id,
       change_type: 'remove_publisher',
       field_name: 'publisher_targeting',
@@ -669,7 +729,7 @@ export function ConfigBreakdownPanel({
     }
     if (pendingAdd || currentlyIncluded) return;
 
-    createChangeMutation.mutate({
+    stageChange({
       billing_id,
       change_type: 'add_geo',
       field_name: 'included_geos',
@@ -703,7 +763,7 @@ export function ConfigBreakdownPanel({
         // Undo the pending unblock instead
         cancelChangeMutation.mutate(pendingRemove.id);
       } else {
-        createChangeMutation.mutate({
+        stageChange({
           billing_id,
           change_type: 'add_publisher',
           field_name: 'publisher_targeting',
@@ -724,7 +784,7 @@ export function ConfigBreakdownPanel({
       if (pendingAdd) {
         cancelChangeMutation.mutate(pendingAdd.id);
       } else {
-        createChangeMutation.mutate({
+        stageChange({
           billing_id,
           change_type: 'remove_publisher',
           field_name: 'publisher_targeting',
@@ -764,7 +824,7 @@ export function ConfigBreakdownPanel({
       if (pendingRemove) {
         cancelChangeMutation.mutate(pendingRemove.id);
       } else {
-        createChangeMutation.mutate({
+        stageChange({
           billing_id,
           change_type: 'add_publisher',
           field_name: 'publisher_targeting',
@@ -777,7 +837,7 @@ export function ConfigBreakdownPanel({
       if (pendingAdd) {
         cancelChangeMutation.mutate(pendingAdd.id);
       } else if (effectivePublisherValues.has(pid)) {
-        createChangeMutation.mutate({
+        stageChange({
           billing_id,
           change_type: 'remove_publisher',
           field_name: 'publisher_targeting',
@@ -1993,7 +2053,7 @@ export function ConfigBreakdownPanel({
                     {t.pretargeting.discardAll}
                   </button>
                   <button
-                    onClick={() => setShowConfirmPush(true)}
+                    onClick={openCommitToast}
                     disabled={changeActionBusy}
                     className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                   >
@@ -2007,44 +2067,45 @@ export function ConfigBreakdownPanel({
           </>
         )}
 
-        {showConfirmPush && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/40" onClick={() => setShowConfirmPush(false)} />
-            <div className="relative mx-4 w-full max-w-lg rounded-lg border bg-white p-4 shadow-xl">
-              <h3 className="text-sm font-semibold text-gray-900">{t.pretargeting.confirmPushTitle}</h3>
-              <p className="mt-1 text-xs text-gray-600">
+        {showCommitToast && hasPendingChanges && (
+          <div className="fixed bottom-4 right-4 z-50 w-full max-w-md rounded-lg border border-blue-200 bg-white shadow-xl">
+            <div className="border-b border-blue-100 bg-blue-50 px-3 py-2">
+              <h3 className="text-sm font-semibold text-blue-900">{t.pretargeting.confirmPushTitle}</h3>
+              <p className="mt-1 text-xs text-blue-700">
                 {t.pretargeting.confirmPushChangesApplied
                   .replace('{count}', String(pendingChanges.length))
                   .replace('{billingId}', billing_id)}
               </p>
-              <div className="mt-3 max-h-40 overflow-y-auto space-y-1 rounded border bg-gray-50 p-2 text-xs font-mono">
-                {pendingChanges.map((change) => (
-                  <div key={`confirm-${change.id}`}>
-                    {describePendingChange(change, effectivePublisherMode, t)}
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 flex items-start gap-2 rounded bg-blue-50 border border-blue-200 px-2 py-1.5 text-xs text-blue-700">
+            </div>
+            <div className="max-h-40 overflow-y-auto px-3 py-2">
+              {pendingChanges.map((change) => (
+                <div key={`confirm-${change.id}`} className="text-xs text-gray-700">
+                  • {describePendingChange(change, effectivePublisherMode, t)}
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-gray-100 px-3 py-2">
+              <div className="flex items-start gap-2 text-xs text-blue-700">
                 <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
                 <span>{t.pretargeting.snapshotSavedUndoHint}</span>
               </div>
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  onClick={() => setShowConfirmPush(false)}
-                  disabled={applyAllMutation.isPending}
-                  className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  {t.common.cancel}
-                </button>
-                <button
-                  onClick={() => applyAllMutation.mutate()}
-                  disabled={applyAllMutation.isPending}
-                  className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {applyAllMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-                  {t.pretargeting.pushToGoogle}
-                </button>
-              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-3 py-2">
+              <button
+                onClick={() => setShowCommitToast(false)}
+                disabled={applyAllMutation.isPending}
+                className="rounded border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {t.common.cancel}
+              </button>
+              <button
+                onClick={() => applyAllMutation.mutate()}
+                disabled={applyAllMutation.isPending}
+                className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {applyAllMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                {t.pretargeting.pushToGoogle}
+              </button>
             </div>
           </div>
         )}

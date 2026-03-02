@@ -85,6 +85,21 @@ export interface PretargetingHistoryItem {
     initiated_by?: string | null;
     changes_made?: string[];
   } | null;
+  commit_context?: {
+    major_change_type?: string;
+    total_changes?: number;
+    changes_applied?: number;
+    changes_failed?: number;
+    changes?: Array<{
+      change_id?: number;
+      change_type?: string;
+      field_name?: string;
+      value?: string;
+      reason?: string | null;
+      status?: string;
+      error?: string;
+    }>;
+  } | null;
 }
 
 export interface NewlyUploadedCreative {
