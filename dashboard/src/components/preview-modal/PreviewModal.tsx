@@ -2,9 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { X, ExternalLink, Loader2, FileCode, RefreshCw, AlertTriangle } from "lucide-react";
-import type { Creative, CreativePerformanceSummary } from "@/types/api";
+import type {
+  Creative,
+  CreativeDestinationCandidate,
+  CreativeDestinationDiagnostics,
+  CreativePerformanceSummary,
+} from "@/types/api";
 import { cn, getStatusColor, getFormatLabel } from "@/lib/utils";
-import { getCreative, getCreativeLive } from "@/lib/api";
+import { getCreative, getCreativeDestinationDiagnostics, getCreativeLive } from "@/lib/api";
 import {
   parseDestinationUrls,
   extractClickDestinationsFromHtmlSnippet,
@@ -33,6 +38,9 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
   const { t } = useTranslation();
   const [creative, setCreative] = useState<Creative>(initialCreative);
   const [isLoadingFull, setIsLoadingFull] = useState(false);
+  const [isLoadingDestinationDiagnostics, setIsLoadingDestinationDiagnostics] = useState(false);
+  const [destinationDiagnostics, setDestinationDiagnostics] = useState<CreativeDestinationDiagnostics | null>(null);
+  const [destinationDiagnosticsError, setDestinationDiagnosticsError] = useState<string | null>(null);
   const [previewSource, setPreviewSource] = useState<"live" | "cache" | null>(null);
   const [previewMessage, setPreviewMessage] = useState<string | null>(null);
   const [showHtmlCode, setShowHtmlCode] = useState(false);
@@ -64,6 +72,31 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
         setPreviewMessage(t.previewModal.liveFetchUnavailableShowingCached);
       })
       .finally(() => setIsLoadingFull(false));
+  }, [initialCreative.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoadingDestinationDiagnostics(true);
+    setDestinationDiagnosticsError(null);
+    getCreativeDestinationDiagnostics(initialCreative.id)
+      .then((diagnostics) => {
+        if (!cancelled) {
+          setDestinationDiagnostics(diagnostics);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load destination diagnostics:", err);
+        if (!cancelled) {
+          setDestinationDiagnostics(null);
+          setDestinationDiagnosticsError("Destination diagnostics unavailable");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingDestinationDiagnostics(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [initialCreative.id]);
 
   const refetchLive = async () => {
@@ -163,6 +196,42 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
         return t.previewModal.approvalNotReviewed;
       default:
         return status.replace(/_/g, " ");
+    }
+  };
+
+  const formatDestinationSource = (source: string): string => {
+    switch (source) {
+      case "final_url":
+        return "Final URL";
+      case "display_url":
+        return "Display URL";
+      case "declared_click_through_url":
+        return "Declared click URL";
+      case "html_snippet":
+        return "HTML snippet";
+      default:
+        return source.replace(/_/g, " ");
+    }
+  };
+
+  const formatDestinationReason = (reason?: string | null): string => {
+    switch (reason) {
+      case "contains_click_macro":
+        return "Contains unresolved click macro";
+      case "asset_url":
+        return "Asset URL (image/video/script)";
+      case "unsupported_scheme":
+        return "Unsupported URL scheme";
+      case "missing_host":
+        return "Missing host";
+      case "invalid_url":
+        return "Invalid URL";
+      case "empty":
+        return "Empty";
+      case "duplicate":
+        return "Duplicate of earlier eligible destination";
+      default:
+        return reason || "Unknown";
     }
   };
 
@@ -491,6 +560,67 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                 ) : (
                   <p className="text-sm text-gray-400 italic">{t.previewModal.noUrlsFound}</p>
                 )}
+
+                <div className="mt-4 border-t border-gray-200 pt-3">
+                  <div className="flex items-center justify-between">
+                    <h5 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                      Destination Diagnostics
+                    </h5>
+                    {destinationDiagnostics && (
+                      <span className="text-[10px] text-gray-500">
+                        Eligible {destinationDiagnostics.eligible_count}/{destinationDiagnostics.candidate_count}
+                      </span>
+                    )}
+                  </div>
+
+                  {isLoadingDestinationDiagnostics ? (
+                    <div className="mt-2 inline-flex items-center gap-1 text-xs text-gray-500">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Loading diagnostics...
+                    </div>
+                  ) : destinationDiagnosticsError ? (
+                    <p className="mt-2 text-xs text-amber-700">{destinationDiagnosticsError}</p>
+                  ) : destinationDiagnostics ? (
+                    <div className="mt-2 space-y-2">
+                      <div className="text-[11px] text-gray-700 break-all">
+                        <span className="font-medium text-gray-500">Resolved:</span>{" "}
+                        {destinationDiagnostics.resolved_destination_url || "(none)"}
+                      </div>
+                      <div className="max-h-40 overflow-y-auto space-y-1">
+                        {destinationDiagnostics.candidates.map((candidate: CreativeDestinationCandidate, idx: number) => (
+                          <div
+                            key={`${candidate.source}-${idx}`}
+                            className="rounded border border-gray-200 bg-white px-2 py-1.5"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[10px] font-medium text-gray-600">
+                                {formatDestinationSource(candidate.source)}
+                              </span>
+                              <span
+                                className={cn(
+                                  "text-[10px] px-1.5 py-0.5 rounded",
+                                  candidate.eligible
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-gray-100 text-gray-600"
+                                )}
+                              >
+                                {candidate.eligible ? "eligible" : "rejected"}
+                              </span>
+                            </div>
+                            <div className="mt-1 text-[10px] font-mono break-all text-gray-700">{candidate.url || "(empty)"}</div>
+                            {!candidate.eligible && candidate.reason && (
+                              <div className="mt-1 text-[10px] text-gray-500">
+                                {formatDestinationReason(candidate.reason)}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-gray-400 italic">No diagnostics available</p>
+                  )}
+                </div>
               </div>
 
               {/* Tracking Parameters */}
