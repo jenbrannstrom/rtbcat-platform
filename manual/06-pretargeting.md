@@ -26,7 +26,7 @@ that match these criteria." You get **10 configs per seat**.
 On the home page and in the settings, each config appears as a card showing
 its current state.
 
-![Pretargeting config cards showing active and paused states](/docs/screenshot-pretargeting-configs.png)
+![Pretargeting config cards showing active and paused states](images/screenshot-pretargeting-configs.png)
 
 Key things to look at:
 
@@ -66,7 +66,7 @@ Buyers UI.
 
 Every pretargeting change is recorded in a timeline at `/history`.
 
-![Change history timeline with filters and export](/docs/screenshot-change-history.png)
+![Change history timeline with filters and export](images/screenshot-change-history.png)
 
 For each entry, you see:
 - **When**: timestamp of the change

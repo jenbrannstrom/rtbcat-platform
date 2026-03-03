@@ -9,7 +9,7 @@ This is the home page of Cat-Scan (`/`). Everything starts here.
 The QPS Waste Optimizer page shows your RTB funnel (the journey from bid
 request to spend) and highlights where volume drops off.
 
-![QPS Waste Optimizer home page](/docs/screenshot-qps-home.png)
+![QPS Waste Optimizer home page](images/screenshot-qps-home.png)
 
 ### The funnel
 

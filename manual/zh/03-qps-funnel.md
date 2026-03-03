@@ -9,7 +9,7 @@
 QPS 浪费优化器页面展示你的 RTB 漏斗（从竞价请求到花费的过程），并高亮
 流量流失的位置。
 
-![QPS 浪费优化器首页](/docs/screenshot-qps-home.png)
+![QPS 浪费优化器首页](../images/screenshot-qps-home.png)
 
 ### 漏斗
 

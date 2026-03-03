@@ -25,7 +25,7 @@
 
 在首页和设置中，每个配置以卡片形式显示当前状态。
 
-![预定向配置卡片，展示激活和暂停状态](/docs/screenshot-pretargeting-configs.png)
+![预定向配置卡片，展示激活和暂停状态](../images/screenshot-pretargeting-configs.png)
 
 重点关注：
 
@@ -61,7 +61,7 @@
 
 每个预定向变更都记录在 `/history` 的时间线中。
 
-![变更历史时间线，含筛选器和导出功能](/docs/screenshot-change-history.png)
+![变更历史时间线，含筛选器和导出功能](../images/screenshot-change-history.png)
 
 每个条目显示：
 - **时间**：变更时间戳

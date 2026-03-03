@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -146,6 +147,21 @@ def _rewrite_reference_links(content: str) -> str:
     return content
 
 
+def _rewrite_image_paths(content: str) -> str:
+    """Rewrite relative image paths to the API image endpoint."""
+    content = re.sub(
+        r"\(\.\./images/([^)]+)\)",
+        r"(/api/docs/images/\1)",
+        content,
+    )
+    content = re.sub(
+        r"\(images/([^)]+)\)",
+        r"(/api/docs/images/\1)",
+        content,
+    )
+    return content
+
+
 # ── Response models ──────────────────────────────────────────────────
 
 class TocEntry(BaseModel):
@@ -250,6 +266,7 @@ async def get_docs_content(
     title = _extract_title(content)
     content = _rewrite_md_links(content)
     content = _rewrite_reference_links(content)
+    content = _rewrite_image_paths(content)
 
     # Redact sensitive data for public requests
     if not internal:
@@ -289,3 +306,20 @@ def _get_ordered_slugs(directory: Path, include_internal: bool = False) -> List[
         slugs.append(slug)
     slugs.sort(key=lambda s: _parse_order(s + ".md"))
     return slugs
+
+
+_IMAGES_DIR = _MANUAL_DIR / "images"
+_ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
+
+
+@router.get("/docs/images/{filename}")
+async def get_docs_image(filename: str):
+    """Serve an image from manual/images/."""
+    path = (_IMAGES_DIR / filename).resolve()
+    if not str(path).startswith(str(_IMAGES_DIR.resolve())):
+        raise HTTPException(status_code=403, detail="Invalid path")
+    if path.suffix.lower() not in _ALLOWED_IMAGE_EXT:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Image not found")
+    return FileResponse(path)

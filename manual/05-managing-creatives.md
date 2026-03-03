@@ -6,7 +6,7 @@
 
 The gallery shows all creatives associated with your selected seat.
 
-![Creatives gallery with format badges and performance tiers](/docs/screenshot-creatives.png)
+![Creatives gallery with format badges and performance tiers](images/screenshot-creatives.png)
 
 ### What you see
 
