@@ -1,0 +1,102 @@
+name: v1 Tuky AppsFlyer Pilot Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      buyer_id:
+        description: "Buyer ID to check"
+        required: true
+        default: "299038253"
+      api_base_url:
+        description: "API base URL (include /api path)"
+        required: true
+        default: "https://scan.rtb.cat/api"
+      timeout_seconds:
+        description: "Per-request timeout for API calls (seconds)"
+        required: false
+        default: "90"
+  schedule:
+    - cron: "30 3 * * *"
+
+concurrency:
+  group: v1-tuky-appsflyer-pilot-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  tuky-pilot-check:
+    name: Run Tuky AppsFlyer pilot readiness check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CATSCAN_API_BASE_URL: ${{ github.event.inputs.api_base_url || 'https://scan.rtb.cat/api' }}
+      CATSCAN_BUYER_ID: ${{ github.event.inputs.buyer_id || '299038253' }}
+      CATSCAN_CANARY_EMAIL: ${{ secrets.CATSCAN_CANARY_BEARER_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate canary auth input
+        run: |
+          if [[ -z "${CATSCAN_CANARY_EMAIL:-}" ]]; then
+            echo "Set CATSCAN_CANARY_BEARER_TOKEN (email value) in repository secrets." >&2
+            exit 1
+          fi
+
+      - name: Run Tuky pilot checker
+        id: pilot
+        run: |
+          timeout_val="${{ github.event.inputs.timeout_seconds || '90' }}"
+
+          set +e
+          bash scripts/run_tuky_appsflyer_pilot_check.sh \
+            --buyer-id "${CATSCAN_BUYER_ID}" \
+            --timeout "${timeout_val}" \
+            | tee /tmp/v1_tuky_pilot.log
+          pilot_status=${PIPESTATUS[0]}
+          set -e
+
+          report_path="$(grep -E '^report_md=' /tmp/v1_tuky_pilot.log | tail -n1 | cut -d= -f2-)"
+          if [[ -z "${report_path}" ]]; then
+            latest_dir="$(ls -1dt /tmp/tuky-appsflyer-pilot-check-* 2>/dev/null | head -n1 || true)"
+            if [[ -n "${latest_dir}" && -f "${latest_dir}/pilot_check_report.md" ]]; then
+              report_path="${latest_dir}/pilot_check_report.md"
+            fi
+          fi
+
+          if [[ -n "${report_path}" ]]; then
+            echo "report_path=${report_path}" >> "$GITHUB_OUTPUT"
+            echo "run_dir=$(dirname "${report_path}")" >> "$GITHUB_OUTPUT"
+          else
+            echo "report_path=" >> "$GITHUB_OUTPUT"
+            echo "run_dir=" >> "$GITHUB_OUTPUT"
+          fi
+
+          exit "${pilot_status}"
+
+      - name: Publish pilot summary
+        if: always()
+        run: |
+          report_path="${{ steps.pilot.outputs.report_path }}"
+          if [[ -n "${report_path}" && -f "${report_path}" ]]; then
+            cat "${report_path}" >> "$GITHUB_STEP_SUMMARY"
+          elif [[ -f /tmp/v1_tuky_pilot.log ]]; then
+            echo "Pilot markdown report missing; log tail:" >> "$GITHUB_STEP_SUMMARY"
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 80 /tmp/v1_tuky_pilot.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Pilot report/log missing." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload pilot artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v1-tuky-appsflyer-pilot-report
+          path: |
+            /tmp/v1_tuky_pilot.log
+            ${{ steps.pilot.outputs.run_dir }}
+          if-no-files-found: warn
