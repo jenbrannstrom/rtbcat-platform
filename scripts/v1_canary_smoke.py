@@ -243,10 +243,18 @@ def validate_data_health_payload(
     # (rtb_daily, bidstream, bid-filtering) are sufficient for the canary.
 
     bidstream_state = str(bidstream.get("availability_state", "")).lower()
-    _assert(bidstream_state != "unavailable", "bidstream dimension coverage is unavailable")
+    if bidstream_state == "unavailable":
+        raise SmokeEnvironmentBlocked(
+            "bidstream dimension coverage is unavailable "
+            "(no rtb_bidstream data for this buyer/time window)"
+        )
 
     total_rows = int(bidstream.get("total_rows") or 0)
-    _assert(total_rows > 0, "bidstream dimension coverage has zero rows")
+    if total_rows <= 0:
+        raise SmokeEnvironmentBlocked(
+            "bidstream dimension coverage has zero rows "
+            "(no rtb_bidstream data for this buyer/time window)"
+        )
 
     for field in ("platform_missing_pct", "environment_missing_pct", "transaction_type_missing_pct"):
         raw_value = bidstream.get(field)
