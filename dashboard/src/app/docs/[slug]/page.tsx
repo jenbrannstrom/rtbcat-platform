@@ -37,7 +37,7 @@ const mdComponents: Components = {
   ),
   a: ({ href, children }) => {
     const isInternal = href?.startsWith("/");
-    return isInternal ? (
+    return isInternal && href ? (
       <Link href={href} className="text-primary-600 hover:text-primary-800 underline underline-offset-2">
         {children}
       </Link>
