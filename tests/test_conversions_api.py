@@ -1031,3 +1031,37 @@ def test_ingest_appsflyer_postback_applies_buyer_mapping_profile(monkeypatch: py
     payload = ingestion_stub.provider_calls[0]["payload"]
     assert payload["buyer_id"] == "1111111111"
     assert payload["creative_id"] == "creative-99"
+
+
+def test_ingest_appsflyer_postback_infers_buyer_from_default_mapping_profile(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    store = _StubSettingsStore(
+        values={
+            "conversion_mapping_profile:appsflyer:default": json.dumps(
+                {"field_map": {"buyer_id": ["af_sub2"]}}
+            ),
+            "conversion_mapping_profile:appsflyer:buyer:1111111111": json.dumps(
+                {"field_map": {"buyer_id": ["af_sub2"], "creative_id": ["af_sub1"]}}
+            ),
+        }
+    )
+    client = _build_client(stub, ingestion_stub, monkeypatch, store=store)
+
+    response = client.post(
+        "/api/conversions/appsflyer/postback",
+        json={
+            "eventName": "af_purchase",
+            "eventTime": "2026-02-28T00:00:00Z",
+            "af_sub1": "creative-88",
+            "af_sub2": "1111111111",
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(ingestion_stub.provider_calls) == 1
+    payload = ingestion_stub.provider_calls[0]["payload"]
+    assert payload["buyer_id"] == "1111111111"
+    assert payload["creative_id"] == "creative-88"
