@@ -42,8 +42,18 @@ async def test_refresh_aggregates_applies_buyer_filter(monkeypatch: pytest.Monke
     assert "AND buyer_id = %s" in delete_sql
     assert delete_params == ("2026-02-20", "2026-02-26", "1111111111")
     assert "FROM conversion_events" in insert_sql
+    assert "LEFT JOIN LATERAL" in insert_sql
+    assert "FROM conversion_attribution_joins" in insert_sql
+    assert "aj.matched_billing_id" in insert_sql
     assert "FROM rtb_daily" in insert_sql
-    assert insert_params[0:3] == ("2026-02-20", "2026-02-26", "1111111111")
+    assert insert_params == (
+        "2026-02-20",
+        "2026-02-26",
+        "1111111111",
+        "2026-02-20",
+        "2026-02-26",
+        "1111111111",
+    )
 
 
 @pytest.mark.asyncio
