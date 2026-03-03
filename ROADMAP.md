@@ -36,6 +36,7 @@
 - [ ] **Phase B - Data model and ingestion**
   - [x] Add attribution join evidence storage (`conversion_attribution_joins`) with exact/fallback mode, status, and confidence fields.
   - [x] Add attribution API surface (`/conversions/attribution/refresh|summary|joins`) for buyer-scoped observability and diagnostics.
+  - [x] Add operator report script (`scripts/run_conversion_attribution_phase_b_report.sh`) to capture refresh+summary+sample joins in one artifact.
   - [ ] Add AppsFlyer raw ingestion tables + normalization pipeline with buyer-specific mapping profile.
   - [ ] Persist ingestion lineage and quality counters (accepted/rejected/unknown mappings).
   - Acceptance: deterministic ingest for pilot buyer with replay-safe idempotency.
