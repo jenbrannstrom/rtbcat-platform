@@ -45,7 +45,15 @@ async def test_generate_from_scores_creates_rows(monkeypatch: pytest.MonkeyPatch
         inserts.append((sql, params))
         return 1
 
+    async def _stub_query_one(sql: str, params: tuple = ()):
+        assert "FROM segment_scores" in sql
+        return {
+            "total_scores": 2,
+            "missing_billing_id_scores": 0,
+        }
+
     monkeypatch.setattr("services.optimizer_proposals_service.pg_query", _stub_query)
+    monkeypatch.setattr("services.optimizer_proposals_service.pg_query_one", _stub_query_one)
     monkeypatch.setattr("services.optimizer_proposals_service.pg_execute", _stub_execute)
     service = OptimizerProposalsService()
     payload = await service.generate_from_scores(
@@ -60,11 +68,59 @@ async def test_generate_from_scores_creates_rows(monkeypatch: pytest.MonkeyPatch
     assert payload["model_id"] == "mdl_rules"
     assert payload["buyer_id"] == "1111111111"
     assert payload["scores_considered"] == 2
+    assert payload["scores_considered_total"] == 2
+    assert payload["billing_id_eligible_scores"] == 2
+    assert payload["missing_billing_id_scores"] == 0
     assert payload["proposals_created"] == 2
     assert len(payload["top_proposals"]) == 2
     assert inserts
     assert any("INSERT INTO qps_allocation_proposals" in sql for sql, _ in inserts)
     assert any("INSERT INTO qps_allocation_proposal_history" in sql for sql, _ in inserts)
+
+
+@pytest.mark.asyncio
+async def test_generate_from_scores_reports_missing_billing_id_segments(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    inserts: list[tuple[str, tuple]] = []
+
+    async def _stub_query(sql: str, params: tuple = ()):
+        assert "FROM segment_scores" in sql
+        return []
+
+    async def _stub_query_one(sql: str, params: tuple = ()):
+        assert "FROM segment_scores" in sql
+        return {
+            "total_scores": 5,
+            "missing_billing_id_scores": 5,
+        }
+
+    async def _stub_execute(sql: str, params: tuple = ()) -> int:
+        inserts.append((sql, params))
+        return 1
+
+    monkeypatch.setattr("services.optimizer_proposals_service.pg_query", _stub_query)
+    monkeypatch.setattr("services.optimizer_proposals_service.pg_query_one", _stub_query_one)
+    monkeypatch.setattr("services.optimizer_proposals_service.pg_execute", _stub_execute)
+
+    service = OptimizerProposalsService()
+    payload = await service.generate_from_scores(
+        model_id="mdl_rules",
+        buyer_id="1111111111",
+        days=7,
+        min_confidence=0.3,
+        max_delta_pct=0.25,
+        limit=100,
+    )
+
+    assert payload["scores_considered"] == 0
+    assert payload["scores_considered_total"] == 5
+    assert payload["billing_id_eligible_scores"] == 0
+    assert payload["missing_billing_id_scores"] == 5
+    assert payload["proposals_created"] == 0
+    assert payload["skip_reason"] == "no_scores_with_billing_id"
+    assert payload["top_proposals"] == []
+    assert not inserts
 
 
 @pytest.mark.asyncio

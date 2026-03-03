@@ -95,6 +95,27 @@ class OptimizerProposalsService:
         safe_delta = max(0.05, min(max_delta_pct, 1.0))
         safe_limit = max(1, min(limit, 2000))
 
+        count_row = await pg_query_one(
+            """
+            SELECT
+                COUNT(*) AS total_scores,
+                SUM(
+                    CASE
+                        WHEN NULLIF(BTRIM(COALESCE(billing_id, '')), '') IS NULL THEN 1
+                        ELSE 0
+                    END
+                ) AS missing_billing_id_scores
+            FROM segment_scores
+            WHERE model_id = %s
+                AND buyer_id = %s
+                AND score_date >= CURRENT_DATE - %s::int
+                AND COALESCE(confidence, 0) >= %s
+            """,
+            (model_id, buyer_id, safe_days, safe_confidence),
+        )
+        total_scores = int((count_row or {}).get("total_scores") or 0)
+        missing_billing_scores = int((count_row or {}).get("missing_billing_id_scores") or 0)
+
         score_rows = await pg_query(
             """
             SELECT
@@ -112,6 +133,7 @@ class OptimizerProposalsService:
                 AND buyer_id = %s
                 AND score_date >= CURRENT_DATE - %s::int
                 AND COALESCE(confidence, 0) >= %s
+                AND NULLIF(BTRIM(COALESCE(billing_id, '')), '') IS NOT NULL
             ORDER BY score_date DESC, value_score DESC
             LIMIT %s
             """,
@@ -145,6 +167,12 @@ class OptimizerProposalsService:
                 )
 
         top = sorted(proposals, key=lambda item: abs(item["delta_qps"]), reverse=True)[:10]
+        skip_reason: Optional[str] = None
+        if total_scores == 0:
+            skip_reason = "no_scores_meet_threshold"
+        elif len(score_rows) == 0 and missing_billing_scores > 0:
+            skip_reason = "no_scores_with_billing_id"
+
         return {
             "model_id": model_id,
             "buyer_id": buyer_id,
@@ -152,7 +180,11 @@ class OptimizerProposalsService:
             "min_confidence": safe_confidence,
             "max_delta_pct": safe_delta,
             "scores_considered": len(score_rows),
+            "scores_considered_total": total_scores,
+            "billing_id_eligible_scores": len(score_rows),
+            "missing_billing_id_scores": missing_billing_scores,
             "proposals_created": created,
+            "skip_reason": skip_reason,
             "top_proposals": [
                 {
                     "proposal_id": row["proposal_id"],

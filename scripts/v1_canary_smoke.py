@@ -1378,10 +1378,29 @@ def main() -> int:
         )
         if args.run_lifecycle:
             top_proposals = proposal_run.get("top_proposals") or []
-            _assert(
-                isinstance(top_proposals, list) and len(top_proposals) > 0,
-                "workflow produced no top_proposals for lifecycle check",
-            )
+            if not (isinstance(top_proposals, list) and len(top_proposals) > 0):
+                eligible_scores = int(
+                    proposal_run.get("billing_id_eligible_scores")
+                    or proposal_run.get("scores_considered")
+                    or 0
+                )
+                missing_billing_scores = int(proposal_run.get("missing_billing_id_scores") or 0)
+                skip_reason = str(proposal_run.get("skip_reason") or "").strip().lower()
+                if (
+                    eligible_scores == 0
+                    and (
+                        missing_billing_scores > 0
+                        or skip_reason == "no_scores_with_billing_id"
+                    )
+                ):
+                    raise SmokeEnvironmentBlocked(
+                        "workflow produced no lifecycle-eligible proposals "
+                        "(scores missing billing_id)"
+                    )
+                _assert(
+                    False,
+                    "workflow produced no top_proposals for lifecycle check",
+                )
             proposal_id = str((top_proposals[0] or {}).get("proposal_id") or "").strip()
             _assert(bool(proposal_id), "workflow top proposal missing proposal_id")
             workflow_proposal_id = proposal_id
