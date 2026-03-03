@@ -126,7 +126,7 @@ export default function DocsChapterPage() {
   const [error, setError] = useState<string | null>(null);
   const [restricted, setRestricted] = useState(false);
 
-  const DOCS_LANG_CODES = ["en", "zh", "es", "nl", "ru"];
+  const DOCS_LANG_CODES = ["en", "zh", "es", "nl", "ru", "pl", "uk", "da", "fr", "he", "ar"];
   const lang = DOCS_LANG_CODES.includes(language) ? language : "en";
   const showInternal = !!isAuthenticated;
 

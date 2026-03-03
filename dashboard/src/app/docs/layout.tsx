@@ -23,6 +23,12 @@ const DOCS_LANGS = [
   { code: "es", flag: "\u{1F1EA}\u{1F1F8}", label: "Espa\u00F1ol" },
   { code: "nl", flag: "\u{1F1F3}\u{1F1F1}", label: "Nederlands" },
   { code: "ru", flag: "\u{1F1F7}\u{1F1FA}", label: "\u0420\u0443\u0441\u0441\u043A\u0438\u0439" },
+  { code: "pl", flag: "\u{1F1F5}\u{1F1F1}", label: "Polski" },
+  { code: "uk", flag: "\u{1F1FA}\u{1F1E6}", label: "\u0423\u043A\u0440\u0430\u0457\u043D\u0441\u044C\u043A\u0430" },
+  { code: "da", flag: "\u{1F1E9}\u{1F1F0}", label: "Dansk" },
+  { code: "fr", flag: "\u{1F1EB}\u{1F1F7}", label: "Fran\u00E7ais" },
+  { code: "he", flag: "\u{1F1EE}\u{1F1F1}", label: "\u05E2\u05D1\u05E8\u05D9\u05EA" },
+  { code: "ar", flag: "\u{1F1F8}\u{1F1E6}", label: "\u0627\u0644\u0639\u0631\u0628\u064A\u0629" },
 ] as const;
 
 const DOCS_LANG_CODES = DOCS_LANGS.map((l) => l.code);

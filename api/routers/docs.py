@@ -192,7 +192,7 @@ class ChapterResponse(BaseModel):
 
 @router.get("/docs/toc", response_model=TocResponse)
 async def get_docs_toc(
-    lang: str = Query("en", pattern="^(en|zh|es|nl|ru)$"),
+    lang: str = Query("en", pattern="^(en|zh|es|nl|ru|pl|uk|da|fr|he|ar)$"),
     internal: bool = Query(False, description="Include internal (DevOps) chapters"),
 ):
     """Return the table of contents as a sorted chapter list."""
@@ -236,7 +236,7 @@ async def get_docs_toc(
 @router.get("/docs/content/{slug}", response_model=ChapterResponse)
 async def get_docs_content(
     slug: str,
-    lang: str = Query("en", pattern="^(en|zh|es|nl|ru)$"),
+    lang: str = Query("en", pattern="^(en|zh|es|nl|ru|pl|uk|da|fr|he|ar)$"),
     internal: bool = Query(False, description="Allow internal chapters"),
 ):
     """Return the markdown content for a chapter."""
