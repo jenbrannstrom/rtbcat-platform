@@ -21,6 +21,15 @@ on:
         description: "Reason for this deployment (ticket/incident/context)."
         required: false
         default: ""
+      health_wait_seconds:
+        description: "Max wait for API health after deploy (seconds)."
+        required: false
+        default: "120"
+      run_contract_check:
+        description: "Run post-deploy contract check gate."
+        required: false
+        type: boolean
+        default: true
 
 # Prevent concurrent deployments to the same VM
 concurrency:
@@ -104,21 +113,44 @@ jobs:
 
       - name: Verify deployment
         run: |
-          # Wait for services to start
-          sleep 60
+          MAX_WAIT_SECONDS="${{ github.event.inputs.health_wait_seconds }}"
+          if ! [[ "$MAX_WAIT_SECONDS" =~ ^[0-9]+$ ]] || [ "$MAX_WAIT_SECONDS" -lt 10 ]; then
+            MAX_WAIT_SECONDS=120
+          fi
+          POLL_SECONDS=5
+          ATTEMPTS=$(( (MAX_WAIT_SECONDS + POLL_SECONDS - 1) / POLL_SECONDS ))
 
-          # Health check
+          # Health check with early-exit polling.
           gcloud compute ssh ${{ env.VM_NAME }} \
             --zone=${{ env.GCP_ZONE }} \
             --tunnel-through-iap \
             --quiet \
             --ssh-flag="-o StrictHostKeyChecking=no" \
             --command="
-              curl -sf http://localhost:8000/health || { echo 'FAIL: API not responding'; exit 1; }
+              MAX_ATTEMPTS=${ATTEMPTS}
+              POLL_SECONDS=${POLL_SECONDS}
+              success=0
+              for i in \$(seq 1 \${MAX_ATTEMPTS}); do
+                if curl -sf http://localhost:8000/health >/tmp/catscan_health.json; then
+                  echo \"API healthy after attempt \${i}/\${MAX_ATTEMPTS}\"
+                  cat /tmp/catscan_health.json
+                  success=1
+                  break
+                fi
+                echo \"Waiting for API health... attempt \${i}/\${MAX_ATTEMPTS}\"
+                sleep \${POLL_SECONDS}
+              done
+
+              if [ \${success} -ne 1 ]; then
+                echo \"FAIL: API not responding within ${MAX_WAIT_SECONDS}s\"
+                sudo docker ps
+                exit 1
+              fi
               sudo docker ps
             "
 
       - name: Post-deploy contract check
+        if: ${{ github.event.inputs.run_contract_check != 'false' }}
         id: contracts
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
@@ -185,7 +217,7 @@ jobs:
           fi
 
       - name: Upload contract check artifact
-        if: always()
+        if: ${{ always() && github.event.inputs.run_contract_check != 'false' }}
         uses: actions/upload-artifact@v4
         with:
           name: contracts-${{ env.VM_NAME }}-${{ github.sha }}

@@ -57,9 +57,19 @@ jobs:
           path: test-results.xml
 
   build-and-push:
-    name: Build and Push API + Dashboard Images
+    name: Build and Push ${{ matrix.image_name }} image
     needs: test
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image_name: catscan-api
+            dockerfile: Dockerfile
+            context: .
+          - image_name: catscan-dashboard
+            dockerfile: dashboard/Dockerfile
+            context: dashboard
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -75,30 +85,44 @@ jobs:
       - name: Configure Docker auth
         run: gcloud auth configure-docker $REGISTRY_HOST --quiet
 
-      - name: Set image tags
+      - name: Set image metadata
+        id: vars
         run: |
-          echo "IMAGE_TAG=sha-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-          echo "IMAGE_REGISTRY=${REGISTRY_HOST}/${PROJECT_ID}/${REPOSITORY}" >> "$GITHUB_ENV"
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "image_registry=${REGISTRY_HOST}/${PROJECT_ID}/${REPOSITORY}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Build and push API image
-        run: |
-          docker build \
-            -t "$IMAGE_REGISTRY/catscan-api:$IMAGE_TAG" \
-            -t "$IMAGE_REGISTRY/catscan-api:latest" \
-            --build-arg APP_VERSION="sha-${GITHUB_SHA::7}" \
-            --build-arg GIT_SHA="${GITHUB_SHA::7}" \
-            -f Dockerfile .
-          docker push "$IMAGE_REGISTRY/catscan-api:$IMAGE_TAG"
-          docker push "$IMAGE_REGISTRY/catscan-api:latest"
+        if: ${{ matrix.image_name == 'catscan-api' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ steps.vars.outputs.image_registry }}/${{ matrix.image_name }}:sha-${{ steps.vars.outputs.short_sha }}
+            ${{ steps.vars.outputs.image_registry }}/${{ matrix.image_name }}:latest
+          build-args: |
+            APP_VERSION=sha-${{ steps.vars.outputs.short_sha }}
+            GIT_SHA=${{ steps.vars.outputs.short_sha }}
+          cache-from: type=gha,scope=${{ matrix.image_name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image_name }}
 
-      - name: Build and push dashboard image
-        run: |
-          docker build \
-            -t "$IMAGE_REGISTRY/catscan-dashboard:$IMAGE_TAG" \
-            -t "$IMAGE_REGISTRY/catscan-dashboard:latest" \
-            --build-arg APP_VERSION="sha-${GITHUB_SHA::7}" \
-            --build-arg GIT_SHA="${GITHUB_SHA::7}" \
-            --build-arg OAUTH2_PROXY_MODE=true \
-            -f dashboard/Dockerfile dashboard
-          docker push "$IMAGE_REGISTRY/catscan-dashboard:$IMAGE_TAG"
-          docker push "$IMAGE_REGISTRY/catscan-dashboard:latest"
+      - name: Build and push Dashboard image
+        if: ${{ matrix.image_name == 'catscan-dashboard' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ steps.vars.outputs.image_registry }}/${{ matrix.image_name }}:sha-${{ steps.vars.outputs.short_sha }}
+            ${{ steps.vars.outputs.image_registry }}/${{ matrix.image_name }}:latest
+          build-args: |
+            APP_VERSION=sha-${{ steps.vars.outputs.short_sha }}
+            GIT_SHA=${{ steps.vars.outputs.short_sha }}
+            OAUTH2_PROXY_MODE=true
+          cache-from: type=gha,scope=${{ matrix.image_name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image_name }}
