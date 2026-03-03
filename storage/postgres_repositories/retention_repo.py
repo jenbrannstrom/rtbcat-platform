@@ -59,12 +59,12 @@ class RetentionRepository:
     async def get_summary_stats(self, seat_id: str | None = None) -> dict[str, Any]:
         if seat_id:
             row = await pg_query_one(
-                "SELECT COUNT(*) as cnt, MIN(summary_date) as earliest, MAX(summary_date) as latest FROM daily_creative_summary WHERE seat_id = %s",
+                "SELECT COUNT(*) as cnt, MIN(date) as earliest, MAX(date) as latest FROM daily_creative_summary WHERE seat_id = %s",
                 (seat_id,),
             )
         else:
             row = await pg_query_one(
-                "SELECT COUNT(*) as cnt, MIN(summary_date) as earliest, MAX(summary_date) as latest FROM daily_creative_summary"
+                "SELECT COUNT(*) as cnt, MIN(date) as earliest, MAX(date) as latest FROM daily_creative_summary"
             )
         return dict(row) if row else {}
 
@@ -111,7 +111,7 @@ class RetentionRepository:
         await pg_execute(
             f"""
             INSERT INTO daily_creative_summary
-            (seat_id, creative_id, summary_date, total_queries, total_impressions, total_clicks, total_spend, win_rate, ctr, cpm)
+            (seat_id, creative_id, date, total_queries, total_impressions, total_clicks, total_spend, win_rate, ctr, cpm)
             SELECT
                 seat_id,
                 creative_id,
@@ -132,7 +132,7 @@ class RetentionRepository:
             FROM performance_metrics
             WHERE metric_date < %s {seat_filter}
             GROUP BY seat_id, creative_id, metric_date
-            ON CONFLICT (seat_id, creative_id, summary_date) DO UPDATE SET
+            ON CONFLICT (seat_id, creative_id, date) DO UPDATE SET
                 total_queries = EXCLUDED.total_queries,
                 total_impressions = EXCLUDED.total_impressions,
                 total_clicks = EXCLUDED.total_clicks,
@@ -153,7 +153,7 @@ class RetentionRepository:
         seat_filter = "AND seat_id = %s" if seat_id else ""
         params: tuple = (cutoff_date, seat_id) if seat_id else (cutoff_date,)
         return await pg_execute(
-            f"DELETE FROM daily_creative_summary WHERE summary_date < %s {seat_filter}",
+            f"DELETE FROM daily_creative_summary WHERE date < %s {seat_filter}",
             params,
         )
 
