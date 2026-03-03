@@ -2,11 +2,13 @@ export type { Language, Translations, TranslationKey, PartialTranslations } from
 export { en } from './translations/en';
 export { es } from './translations/es';
 export { nl } from './translations/nl';
+export { ru } from './translations/ru';
 export { zh } from './translations/zh';
 
 import { en } from './translations/en';
 import { es } from './translations/es';
 import { nl } from './translations/nl';
+import { ru } from './translations/ru';
 import { zh } from './translations/zh';
 import type { Language, PartialTranslations, Translations } from './types';
 
@@ -50,7 +52,7 @@ export const translations: Record<Language, Translations> = {
   es: withEnglishFallback(es),
   pl: en,
   zh: withEnglishFallback(zh),
-  ru: en,
+  ru: withEnglishFallback(ru),
   uk: en,
   da: en,
   fr: en,
