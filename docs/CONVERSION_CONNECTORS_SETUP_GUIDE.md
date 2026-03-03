@@ -347,8 +347,9 @@ Script:
 What it does:
 
 1. Resolves mapping profile (`--mapping-profile` file, or API fetch).
-2. Runs `scripts/audit_appsflyer_export_coverage.py` on one or more export files.
-3. Writes:
+2. Optionally exports ingested AppsFlyer raw payloads from Postgres (`--from-db` path).
+3. Runs `scripts/audit_appsflyer_export_coverage.py` on one or more export files.
+4. Writes:
    - coverage markdown + JSON
    - contract-style markdown report with decision mode (`exact_ready|mixed_mode|fallback_only`)
 
@@ -371,4 +372,19 @@ scripts/run_appsflyer_phase_a_audit.sh \
   --buyer-id 1487810529 \
   --input ~/Downloads/appsflyer_raw_2026-03-01.csv \
   --mapping-profile /tmp/mapping_profile_1487810529.json
+```
+
+Example using already-ingested DB payloads (no local AppsFlyer file required):
+
+```bash
+export POSTGRES_DSN='postgresql://user:pass@host:5432/dbname'
+export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
+scripts/run_appsflyer_phase_a_audit.sh \
+  --buyer-id 1487810529 \
+  --from-db \
+  --db-since-days 14 \
+  --db-limit 200000 \
+  --fetch-mapping true \
+  --email "${CATSCAN_CANARY_EMAIL}" \
+  --doc-out docs/review/2026-03-03/APPSFLYER_PHASE_A_BUYER_1487810529.md
 ```
