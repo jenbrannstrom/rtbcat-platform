@@ -3,7 +3,7 @@
 import { useState, useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, ChevronLeft, ChevronRight, Lock, Menu, X } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Lock, Menu, X } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useTranslation } from "@/contexts/i18n-context";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,16 @@ interface TocEntry {
   part: string;
   internal: boolean;
 }
+
+const DOCS_LANGS = [
+  { code: "en", flag: "\u{1F1EC}\u{1F1E7}", label: "English" },
+  { code: "zh", flag: "\u{1F1E8}\u{1F1F3}", label: "\u4E2D\u6587" },
+  { code: "es", flag: "\u{1F1EA}\u{1F1F8}", label: "Espa\u00F1ol" },
+  { code: "nl", flag: "\u{1F1F3}\u{1F1F1}", label: "Nederlands" },
+  { code: "ru", flag: "\u{1F1F7}\u{1F1FA}", label: "\u0420\u0443\u0441\u0441\u043A\u0438\u0439" },
+] as const;
+
+const DOCS_LANG_CODES = DOCS_LANGS.map((l) => l.code);
 
 const PART_ORDER = [
   "Getting Started",
@@ -31,8 +41,10 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
   const [chapters, setChapters] = useState<TocEntry[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
 
-  const lang = language === "zh" ? "zh" : "en";
+  const lang = DOCS_LANG_CODES.includes(language as typeof DOCS_LANG_CODES[number]) ? language : "en";
+  const currentLang = DOCS_LANGS.find((l) => l.code === lang) ?? DOCS_LANGS[0];
   // Authenticated users see all chapters; public visitors see only public ones
   const showInternal = !!isAuthenticated;
 
@@ -164,12 +176,38 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
 
           <div className="flex-1" />
 
-          <button
-            onClick={() => setLanguage(lang === "en" ? "zh" : "en")}
-            className="px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-          >
-            {lang === "en" ? "中文" : "EN"}
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setLangOpen((v) => !v)}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+            >
+              <span>{currentLang.flag}</span>
+              <span>{currentLang.label}</span>
+              <ChevronDown className={cn("h-3 w-3 transition-transform", langOpen && "rotate-180")} />
+            </button>
+            {langOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setLangOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[160px]">
+                  {DOCS_LANGS.map((l) => (
+                    <button
+                      key={l.code}
+                      onClick={() => { setLanguage(l.code); setLangOpen(false); }}
+                      className={cn(
+                        "flex items-center gap-2 w-full px-3 py-1.5 text-sm text-left transition-colors",
+                        l.code === lang
+                          ? "bg-primary-50 text-primary-700 font-medium"
+                          : "text-gray-700 hover:bg-gray-50"
+                      )}
+                    >
+                      <span>{l.flag}</span>
+                      <span>{l.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
 
           {isAuthenticated ? (
             <Link
