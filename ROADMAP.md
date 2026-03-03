@@ -1,12 +1,65 @@
 # Cat-Scan Roadmap
 
-**Last Updated:** March 2, 2026
+**Last Updated:** March 3, 2026
 
 ## Priority Buckets (2026-02-27)
 
 - [ ] **Now** - Objective: clear production-facing regressions and runtime blockers; Current: seat-switch determinism and operator verification path complete; automation coverage remains; Acceptance: seat-switch/operator path is fixed and validated on production traffic, and runtime blocker follow-up is tracked to closure.
 - [ ] **Next** - Objective: complete Universal Precompute Epics A/B plus Home correctness/performance gates; Current: scope is defined but rollout is incomplete; Acceptance: serving-table path and validation gates are green.
 - [ ] **Later** - Objective: deliver optimization engine and external integrations after core reliability; Current: backlog/design items exist; Acceptance: features ship only after stability targets hold.
+
+---
+
+## AppsFlyer Attribution Plan (2026-03-03)
+
+- [ ] **Objective:** add post-click attribution signal into optimizer decisions without breaking existing buyers or requiring media buyers to know RTB-internal IDs.
+- [x] **Evidence baseline captured:** production click-URL audit across 4 seats shows AppsFlyer URLs in 1/4 seats (Tuky Display), with no AppsFlyer URLs observed in the other 3 seats' sampled recent creatives.
+- [x] **Measurement UX in code:** dedicated click-macro audit API/page + creative-modal macro compliance indicator implemented (pending/alongside deploy verification).
+
+### Integration principles (locked)
+
+- [x] **Do not require buyers to manually pass `billing_id` in AppsFlyer params.**
+- [x] **Primary join key is `clickid` when available; `creative_id + time window` is fallback only.**
+- [x] **Mappings must be buyer-configurable** (same `af_sub*` fields can mean different things per buyer).
+- [x] **No strict optimizer automation from fuzzy attribution joins** (fuzzy can inform diagnostics, not hard auto-actions).
+
+### Phase plan
+
+- [ ] **Phase A - Contract + reality check**
+  - [x] Freeze buyer-level mapping profile schema and API surface (`/conversions/mapping-profile`; buyer/default scopes in `system_settings`).
+  - [x] Add field-coverage audit tooling for raw AppsFlyer exports (`scripts/audit_appsflyer_export_coverage.py`).
+  - [ ] Run coverage audit on pilot-buyer real exports/API pulls and publish per-buyer contract docs.
+  - Acceptance: documented per-buyer contract + measured field coverage report.
+
+- [ ] **Phase B - Data model and ingestion**
+  - Add AppsFlyer raw ingestion tables + normalization pipeline with buyer-specific mapping profile.
+  - Persist ingestion lineage and quality counters (accepted/rejected/unknown mappings).
+  - Acceptance: deterministic ingest for pilot buyer with replay-safe idempotency.
+
+- [ ] **Phase C - Join engine (exact + fallback modes)**
+  - Exact mode: join by `clickid` (preferred).
+  - Fallback mode: probabilistic join by `creative_id` + app/site + timestamp window.
+  - Expose confidence scores and explicit join mode in API/UI.
+  - Acceptance: join quality report with exact-match rate and confidence distribution.
+
+- [ ] **Phase D - Optimizer integration**
+  - Feed conversion/value outcomes into optimizer economics/recommendation scoring.
+  - Gate automation: only enable hard actions where confidence and coverage thresholds are met.
+  - Acceptance: recommendation deltas are explainable with attribution evidence and confidence.
+
+- [ ] **Phase E - Customer enablement**
+  - Ship setup checklist for bidder + AppsFlyer owner (PID setup, link parameter policy, export cadence, QA checklist).
+  - Add seat-level readiness status in UI: `No AF`, `AF present/no clickid`, `AF exact-ready`.
+  - Acceptance: onboarding playbook can move a new seat from `No AF` to `Exact-ready`.
+
+### Essential dependency backlog (must stay prioritized)
+
+- [ ] Keep runtime-health strict blockers in front of attribution rollout:
+  - `/system/data-health` latency/timeout stability.
+  - `/optimizer/economics/efficiency` latency/timeout stability.
+  - Proposal lifecycle completeness (`billing_id` propagation and apply-path reliability).
+  - QPS rollup completeness gaps.
+- [ ] Enforce policy: attribution-driven automation is not considered production-ready until runtime-health strict gate reaches stable `exit 0` for pilot buyer windows.
 
 ---
 

@@ -233,17 +233,33 @@ class _StubConversionIngestionService:
         }
 
 
+class _StubSettingsStore:
+    def __init__(self, values: dict[str, str] | None = None):
+        self.values = dict(values or {})
+        self.set_calls: list[dict] = []
+
+    async def get_setting(self, key: str):
+        return self.values.get(key)
+
+    async def set_setting(self, key: str, value: str, updated_by: str | None = None):
+        self.values[key] = value
+        self.set_calls.append({"key": key, "value": value, "updated_by": updated_by})
+
+
 def _build_client(
     stub_service: _StubConversionsService,
     ingestion_stub: _StubConversionIngestionService,
     monkeypatch: pytest.MonkeyPatch,
+    *,
+    store: object | None = None,
+    user: object | None = None,
 ) -> TestClient:
     conversions_router._clear_webhook_rate_limit_state()
     app = FastAPI()
     app.include_router(conversions_router.router, prefix="/api")
-    app.dependency_overrides[conversions_router.get_store] = lambda: SimpleNamespace()
-    app.dependency_overrides[conversions_router.get_current_user] = lambda: SimpleNamespace(
-        id="u1", role="sudo", email="admin@example.com"
+    app.dependency_overrides[conversions_router.get_store] = lambda: (store or SimpleNamespace())
+    app.dependency_overrides[conversions_router.get_current_user] = lambda: (
+        user or SimpleNamespace(id="u1", role="sudo", email="admin@example.com")
     )
 
     async def _resolve_buyer_id(
@@ -895,3 +911,123 @@ def test_branch_webhook_accepts_query_payload(monkeypatch: pytest.MonkeyPatch):
     assert call["source_type"] == "branch"
     assert call["payload"]["event_name"] == "purchase"
     assert call["payload"]["event_ts"] == "2026-02-28T00:00:00Z"
+
+
+def test_get_conversion_mapping_profile_prefers_buyer_scope(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    store = _StubSettingsStore(
+        values={
+            "conversion_mapping_profile:appsflyer:default": json.dumps(
+                {"field_map": {"buyer_id": ["af_sub1"]}}
+            ),
+            "conversion_mapping_profile:appsflyer:buyer:1111111111": json.dumps(
+                {"field_map": {"buyer_id": ["af_sub2"], "creative_id": ["af_sub5"]}}
+            ),
+        }
+    )
+    client = _build_client(stub, ingestion_stub, monkeypatch, store=store)
+
+    response = client.get(
+        "/api/conversions/mapping-profile",
+        params={"source_type": "appsflyer", "buyer_id": "1111111111"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["scope"] == "buyer"
+    assert payload["setting_key"] == "conversion_mapping_profile:appsflyer:buyer:1111111111"
+    assert payload["fallback_setting_key"] == "conversion_mapping_profile:appsflyer:default"
+    assert payload["field_map"]["buyer_id"] == ["af_sub2"]
+    assert payload["field_map"]["creative_id"] == ["af_sub5"]
+
+
+def test_upsert_conversion_mapping_profile_default_requires_sudo(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    store = _StubSettingsStore()
+    user = SimpleNamespace(id="u2", role="buyer_admin", email="buyer-admin@example.com")
+    client = _build_client(stub, ingestion_stub, monkeypatch, store=store, user=user)
+
+    response = client.put(
+        "/api/conversions/mapping-profile",
+        json={
+            "source_type": "appsflyer",
+            "field_map": {"buyer_id": ["af_sub2"]},
+        },
+    )
+
+    assert response.status_code == 403
+    assert "sudo" in response.json()["detail"].lower()
+    assert store.set_calls == []
+
+
+def test_upsert_conversion_mapping_profile_buyer_scope_requires_admin_and_persists(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    store = _StubSettingsStore()
+    user = SimpleNamespace(id="u3", role="buyer_admin", email="buyer-admin@example.com")
+    access_calls: list[str] = []
+
+    async def _require_buyer_admin_access(buyer_id: str, user=None):
+        access_calls.append(buyer_id)
+
+    monkeypatch.setattr(
+        conversions_router,
+        "require_buyer_admin_access",
+        _require_buyer_admin_access,
+    )
+    client = _build_client(stub, ingestion_stub, monkeypatch, store=store, user=user)
+
+    response = client.put(
+        "/api/conversions/mapping-profile",
+        json={
+            "source_type": "appsflyer",
+            "buyer_id": "1111111111",
+            "field_map": {
+                "buyer_id": ["af_sub2", "af_sub2", " af_sub3 "],
+                "creative_id": "af_sub1",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert access_calls == ["1111111111"]
+    assert len(store.set_calls) == 1
+    assert store.set_calls[0]["key"] == "conversion_mapping_profile:appsflyer:buyer:1111111111"
+    payload = response.json()
+    assert payload["scope"] == "buyer"
+    assert payload["field_map"]["buyer_id"] == ["af_sub2", "af_sub3"]
+    assert payload["field_map"]["creative_id"] == ["af_sub1"]
+
+
+def test_ingest_appsflyer_postback_applies_buyer_mapping_profile(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    store = _StubSettingsStore(
+        values={
+            "conversion_mapping_profile:appsflyer:buyer:1111111111": json.dumps(
+                {"field_map": {"buyer_id": ["af_sub2"], "creative_id": ["af_sub1"]}}
+            )
+        }
+    )
+    client = _build_client(stub, ingestion_stub, monkeypatch, store=store)
+
+    response = client.post(
+        "/api/conversions/appsflyer/postback",
+        params={"buyer_id": "1111111111"},
+        json={
+            "eventName": "af_purchase",
+            "eventTime": "2026-02-28T00:00:00Z",
+            "af_sub1": "creative-99",
+            "af_sub2": "1111111111",
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(ingestion_stub.provider_calls) == 1
+    payload = ingestion_stub.provider_calls[0]["payload"]
+    assert payload["buyer_id"] == "1111111111"
+    assert payload["creative_id"] == "creative-99"

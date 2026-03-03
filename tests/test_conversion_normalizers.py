@@ -26,6 +26,44 @@ def test_normalize_appsflyer_payload_maps_core_fields():
     assert normalized["country"] == "US"
 
 
+def test_normalize_appsflyer_payload_allows_custom_mapping_profile():
+    payload = {
+        "eventName": "af_purchase",
+        "eventTime": "2026-02-28T00:00:00Z",
+        "af_sub1": "creative-1",
+        "af_sub2": "1111111111",
+        "clickid": "clk-2",
+    }
+    normalized = normalize_appsflyer_payload(
+        payload,
+        field_map={
+            "buyer_id": ["af_sub2"],
+            "creative_id": ["af_sub1"],
+        },
+    )
+    assert normalized["buyer_id"] == "1111111111"
+    assert normalized["creative_id"] == "creative-1"
+    assert normalized["click_id"] == "clk-2"
+
+
+def test_normalize_appsflyer_payload_keeps_existing_canonical_values():
+    payload = {
+        "buyer_id": "1111111111",
+        "creative_id": "cr-7",
+        "af_sub1": "should-not-overwrite",
+        "af_sub2": "also-ignore",
+    }
+    normalized = normalize_appsflyer_payload(
+        payload,
+        field_map={
+            "buyer_id": ["af_sub2"],
+            "creative_id": ["af_sub1"],
+        },
+    )
+    assert normalized["buyer_id"] == "1111111111"
+    assert normalized["creative_id"] == "cr-7"
+
+
 def test_normalize_adjust_payload_maps_core_fields():
     payload = {
         "event_token": "first_deposit",

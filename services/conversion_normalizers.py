@@ -5,28 +5,74 @@ from __future__ import annotations
 from typing import Any
 
 
-def normalize_appsflyer_payload(payload: dict[str, Any]) -> dict[str, Any]:
+DEFAULT_APPSFLYER_FIELD_MAP: dict[str, list[str]] = {
+    "event_name": ["event_name", "eventName"],
+    "event_ts": ["event_ts", "eventTime"],
+    "buyer_id": ["buyer_id", "af_sub1"],
+    "billing_id": ["billing_id", "af_sub2"],
+    "creative_id": ["creative_id", "af_sub3", "af_ad_id"],
+    "click_id": ["click_id", "af_click_id", "clickid"],
+    "impression_id": ["impression_id", "af_impression_id"],
+    "campaign_id": ["campaign_id", "campaign", "af_c_id"],
+    "platform": ["platform"],
+    "country": ["country", "country_code"],
+}
+
+
+def _normalize_field_map(field_map: dict[str, str | list[str] | tuple[str, ...]] | None) -> dict[str, list[str]]:
+    if not field_map:
+        return dict(DEFAULT_APPSFLYER_FIELD_MAP)
+
+    normalized: dict[str, list[str]] = {}
+    for canonical, candidates in field_map.items():
+        if isinstance(candidates, str):
+            candidate_list = [candidates]
+        elif isinstance(candidates, (list, tuple)):
+            candidate_list = [str(item) for item in candidates if item]
+        else:
+            continue
+
+        deduped: list[str] = []
+        for candidate in candidate_list:
+            name = candidate.strip()
+            if not name or name in deduped:
+                continue
+            deduped.append(name)
+        if deduped:
+            normalized[str(canonical)] = deduped
+
+    merged = dict(DEFAULT_APPSFLYER_FIELD_MAP)
+    merged.update(normalized)
+    return merged
+
+
+def _coalesce_from_payload(payload: dict[str, Any], candidates: list[str]) -> Any:
+    for key in candidates:
+        value = payload.get(key)
+        if value is not None and value != "":
+            return value
+    return None
+
+
+def normalize_appsflyer_payload(
+    payload: dict[str, Any],
+    field_map: dict[str, str | list[str] | tuple[str, ...]] | None = None,
+) -> dict[str, Any]:
+    """Normalize AppsFlyer payload fields into Cat-Scan canonical keys.
+
+    field_map is buyer/integration-specific and maps canonical keys -> source keys.
+    Example:
+      {"buyer_id": "af_sub3", "creative_id": ["af_sub2", "af_ad_id"]}
+    """
     normalized = dict(payload)
-    if "event_name" not in normalized and "eventName" in payload:
-        normalized["event_name"] = payload.get("eventName")
-    if "event_ts" not in normalized and "eventTime" in payload:
-        normalized["event_ts"] = payload.get("eventTime")
-    if "buyer_id" not in normalized and payload.get("af_sub1"):
-        normalized["buyer_id"] = payload.get("af_sub1")
-    if "billing_id" not in normalized and payload.get("af_sub2"):
-        normalized["billing_id"] = payload.get("af_sub2")
-    if "click_id" not in normalized and payload.get("af_click_id"):
-        normalized["click_id"] = payload.get("af_click_id")
-    if "impression_id" not in normalized and payload.get("af_impression_id"):
-        normalized["impression_id"] = payload.get("af_impression_id")
-    if "campaign_id" not in normalized and payload.get("campaign_id"):
-        normalized["campaign_id"] = payload.get("campaign_id")
-    if "campaign_id" not in normalized and payload.get("campaign"):
-        normalized["campaign_id"] = payload.get("campaign")
-    if "platform" not in normalized and payload.get("platform"):
-        normalized["platform"] = payload.get("platform")
-    if "country" not in normalized and payload.get("country_code"):
-        normalized["country"] = payload.get("country_code")
+    mapping = _normalize_field_map(field_map)
+
+    for canonical_key, source_candidates in mapping.items():
+        if normalized.get(canonical_key) not in (None, ""):
+            continue
+        value = _coalesce_from_payload(payload, source_candidates)
+        if value is not None and value != "":
+            normalized[canonical_key] = value
     return normalized
 
 
