@@ -218,11 +218,11 @@ fi
 
 echo "[4/4] Rendering report..."
 TOTAL_EVENTS="$(jq -r '.total_events // 0' "$SUMMARY_BODY")"
-EXACT_BLOCKED="$(jq -r '.modes[]? | select(.mode=="exact_clickid") | .blocked // 0' "$SUMMARY_BODY")"
-FALLBACK_MATCHED="$(jq -r '.modes[]? | select(.mode=="fallback_creative_time") | .matched // 0' "$SUMMARY_BODY")"
-FALLBACK_UNMATCHED="$(jq -r '.modes[]? | select(.mode=="fallback_creative_time") | .unmatched // 0' "$SUMMARY_BODY")"
-FALLBACK_MATCH_RATE="$(jq -r '.modes[]? | select(.mode=="fallback_creative_time") | .match_rate_pct // 0' "$SUMMARY_BODY")"
-FALLBACK_AVG_CONF="$(jq -r '.modes[]? | select(.mode=="fallback_creative_time") | .avg_confidence // 0' "$SUMMARY_BODY")"
+EXACT_BLOCKED="$(jq -r '([.modes[]? | select(.mode=="exact_clickid") | (.blocked // 0)] | first) // 0' "$SUMMARY_BODY")"
+FALLBACK_MATCHED="$(jq -r '([.modes[]? | select(.mode=="fallback_creative_time") | (.matched // 0)] | first) // 0' "$SUMMARY_BODY")"
+FALLBACK_UNMATCHED="$(jq -r '([.modes[]? | select(.mode=="fallback_creative_time") | (.unmatched // 0)] | first) // 0' "$SUMMARY_BODY")"
+FALLBACK_MATCH_RATE="$(jq -r '([.modes[]? | select(.mode=="fallback_creative_time") | (.match_rate_pct // 0)] | first) // 0' "$SUMMARY_BODY")"
+FALLBACK_AVG_CONF="$(jq -r '([.modes[]? | select(.mode=="fallback_creative_time") | (.avg_confidence // 0)] | first) // 0' "$SUMMARY_BODY")"
 TOP_UNMATCHED_REASONS="$(
   jq -r '.rows // [] | group_by(.reason) | map({reason: (.[0].reason // ""), count: length}) | sort_by(-.count) | .[:5] | .[] | "- \(.reason): \(.count)"' "$UNMATCHED_BODY"
 )"
