@@ -114,7 +114,9 @@ async def pg_query_with_timeout(
 
     def _execute():
         with _get_connection() as conn:
-            conn.execute("SET statement_timeout = %s", (timeout_ms,))
+            # SET does not support server-side parameter binding ($1),
+            # so we embed the validated integer directly.
+            conn.execute(f"SET statement_timeout = {timeout_ms}")
             try:
                 cursor = conn.execute(sql, params)
                 return [dict(row) for row in cursor.fetchall()]
@@ -167,7 +169,9 @@ async def pg_query_one_with_timeout(
 
     def _execute():
         with _get_connection() as conn:
-            conn.execute("SET statement_timeout = %s", (timeout_ms,))
+            # SET does not support server-side parameter binding ($1),
+            # so we embed the validated integer directly.
+            conn.execute(f"SET statement_timeout = {timeout_ms}")
             try:
                 cursor = conn.execute(sql, params)
                 row = cursor.fetchone()
