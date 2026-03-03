@@ -144,7 +144,7 @@
 | GET | `/conversions/health` | 摄入和聚合状态 |
 | GET | `/conversions/readiness` | 来源就绪检查 |
 | GET | `/conversions/ingestion-stats` | 按来源/时段的事件计数 |
-| GET | `/conversions/webhook/security-status` | Webhook 安全状态 |
+| GET | `/conversions/security/status` | Webhook 安全状态 |
 | GET | `/conversions/pixel` | 像素追踪端点 |
 
 ## 快照

@@ -85,7 +85,7 @@ External systems send conversion events to Cat-Scan via webhooks.
 | **Freshness monitoring** | Alerts when events stop arriving | Configurable staleness window |
 
 **Monitoring:**
-- `GET /conversions/webhook/security-status`: HMAC status, rate limit
+- `GET /conversions/security/status`: HMAC status, rate limit
   status, freshness status
 - `GET /conversions/health`: overall ingestion and aggregation health
 - `GET /conversions/readiness`: whether conversion data is fresh enough
