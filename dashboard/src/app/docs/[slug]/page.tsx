@@ -126,7 +126,8 @@ export default function DocsChapterPage() {
   const [error, setError] = useState<string | null>(null);
   const [restricted, setRestricted] = useState(false);
 
-  const lang = language === "zh" ? "zh" : "en";
+  const DOCS_LANG_CODES = ["en", "zh", "es", "nl", "ru"];
+  const lang = DOCS_LANG_CODES.includes(language) ? language : "en";
   const showInternal = !!isAuthenticated;
 
   useEffect(() => {

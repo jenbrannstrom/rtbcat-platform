@@ -102,8 +102,8 @@ def _get_part(order: int) -> str:
 
 
 def _lang_dir(lang: str) -> Path:
-    if lang == "zh":
-        d = _MANUAL_DIR / "zh"
+    if lang != "en":
+        d = _MANUAL_DIR / lang
         if d.is_dir():
             return d
     return _MANUAL_DIR
@@ -192,7 +192,7 @@ class ChapterResponse(BaseModel):
 
 @router.get("/docs/toc", response_model=TocResponse)
 async def get_docs_toc(
-    lang: str = Query("en", pattern="^(en|zh)$"),
+    lang: str = Query("en", pattern="^(en|zh|es|nl|ru)$"),
     internal: bool = Query(False, description="Include internal (DevOps) chapters"),
 ):
     """Return the table of contents as a sorted chapter list."""
@@ -236,7 +236,7 @@ async def get_docs_toc(
 @router.get("/docs/content/{slug}", response_model=ChapterResponse)
 async def get_docs_content(
     slug: str,
-    lang: str = Query("en", pattern="^(en|zh)$"),
+    lang: str = Query("en", pattern="^(en|zh|es|nl|ru)$"),
     internal: bool = Query(False, description="Allow internal chapters"),
 ):
     """Return the markdown content for a chapter."""
