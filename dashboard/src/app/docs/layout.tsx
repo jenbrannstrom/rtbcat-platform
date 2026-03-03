@@ -176,7 +176,7 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
               href="/"
               className="text-sm text-gray-500 hover:text-primary-600 transition-colors"
             >
-              {t.common?.backToApp ?? "Back to app"}
+              Back to app
             </Link>
           ) : (
             <Link
