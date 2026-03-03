@@ -7,9 +7,42 @@ Owner: Cat-Scan Ops
 
 - Share webhook secret separately (not in email body).
 - Ask for exactly 1 test event first.
+- Include UI navigation steps so the customer knows exactly where to configure this.
 - After customer confirms, validate with:
   - `scripts/run_appsflyer_phase_a_audit.sh --buyer-id <id> --from-db --db-since-days 30`
   - `scripts/run_conversion_attribution_phase_b_report.sh --buyer-id <id> --source-type appsflyer --days 14`
+
+## AppsFlyer UI Navigation (copy into each email)
+
+Use this block in customer instructions:
+
+### Preferred route: Push API endpoint screen
+
+1. Log in to AppsFlyer and select the target app.
+2. Open **Configuration**.
+3. Open **Push API** (sometimes shown under **Export** or **Raw Data Export** in some accounts).
+4. Add a new endpoint/subscription.
+5. Set:
+   - Endpoint URL: `https://scan.rtb.cat/api/conversions/appsflyer/postback?buyer_id=<BUYER_ID>`
+   - Method: `POST`
+   - Header: `X-Webhook-Secret: <SECRET>`
+   - Content-Type: `application/json`
+6. Save and send one test event.
+
+### Fallback route: Integrated Partner postback screen
+
+1. Log in to AppsFlyer and select the target app.
+2. Open **Configuration** -> **Integrated Partners**.
+3. Add/select the partner used for this media source setup.
+4. Go to the **Postbacks** tab.
+5. Set partner/default postback URL to:  
+   `https://scan.rtb.cat/api/conversions/appsflyer/postback?buyer_id=<BUYER_ID>`
+6. Add header `X-Webhook-Secret: <SECRET>` if the screen supports custom headers.
+7. Save and send one test event.
+
+Notes:
+- Repeat per app if they run multiple app IDs.
+- AppsFlyer menu labels can differ slightly by account tier; if they cannot find Push API, use the Integrated Partner route.
 
 ---
 
@@ -29,6 +62,12 @@ Request settings:
 - Method: `POST`
 - Header: `X-Webhook-Secret: {{SECRET_SHARED_SEPARATELY}}`
 - Content-Type: `application/json`
+
+Navigation in AppsFlyer:
+1. Select app (`com.drop.frenzy.bubbly`, `com.btools.bloods.statrs`).
+2. Preferred: **Configuration** -> **Push API** (or **Export/Raw Data Export** -> **Push API**).
+3. Fallback: **Configuration** -> **Integrated Partners** -> partner -> **Postbacks**.
+4. Add the endpoint URL above and secret header.
 
 Please send one test conversion first and reply with:
 - UTC timestamp
@@ -59,6 +98,12 @@ Request settings:
 - Header: `X-Webhook-Secret: {{SECRET_SHARED_SEPARATELY}}`
 - Content-Type: `application/json`
 
+Navigation in AppsFlyer:
+1. Select target app.
+2. Preferred: **Configuration** -> **Push API**.
+3. Fallback: **Configuration** -> **Integrated Partners** -> partner -> **Postbacks**.
+4. Add endpoint URL and secret header, then save.
+
 Please send one test conversion first and share:
 - UTC timestamp
 - App ID
@@ -88,6 +133,12 @@ Request settings:
 - Header: `X-Webhook-Secret: {{SECRET_SHARED_SEPARATELY}}`
 - Content-Type: `application/json`
 
+Navigation in AppsFlyer:
+1. Select target app.
+2. Preferred: **Configuration** -> **Push API**.
+3. Fallback: **Configuration** -> **Integrated Partners** -> partner -> **Postbacks**.
+4. Add endpoint URL and secret header, then save.
+
 Please send one test conversion and reply with timestamp/app/event so we can validate.
 
 If you do not use AppsFlyer today, reply "no AppsFlyer" and we will enroll you through alternate beta conversion input.
@@ -113,6 +164,12 @@ Request settings:
 - Method: `POST`
 - Header: `X-Webhook-Secret: {{SECRET_SHARED_SEPARATELY}}`
 - Content-Type: `application/json`
+
+Navigation in AppsFlyer:
+1. Select target app.
+2. Preferred: **Configuration** -> **Push API**.
+3. Fallback: **Configuration** -> **Integrated Partners** -> partner -> **Postbacks**.
+4. Add endpoint URL and secret header, then save.
 
 Please send one test conversion and share:
 - UTC timestamp
@@ -143,4 +200,3 @@ Once we receive your test event, we will validate and confirm seat activation.
 
 Thanks,  
 {{Your Name}}
-
