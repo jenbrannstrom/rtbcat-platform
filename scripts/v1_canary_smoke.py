@@ -237,11 +237,10 @@ def validate_data_health_payload(
     seat_day_summary = seat_day.get("summary") or {}
 
     quality_state = str(quality.get("availability_state", "")).lower()
-    if quality_state == "unavailable":
-        raise SmokeEnvironmentBlocked(
-            "rtb_quality_freshness state is unavailable "
-            "(no quality data for this buyer/period)"
-        )
+    # rtb_quality (IVT/viewability) is an optional report type — not all
+    # buyers have it configured in Google.  Treat missing quality data as
+    # degraded (non-blocking) rather than BLOCKED, since the core metrics
+    # (rtb_daily, bidstream, bid-filtering) are sufficient for the canary.
 
     bidstream_state = str(bidstream.get("availability_state", "")).lower()
     _assert(bidstream_state != "unavailable", "bidstream dimension coverage is unavailable")
@@ -267,7 +266,9 @@ def validate_data_health_payload(
         report_state = str(report.get("availability_state", "")).lower()
         seat_day_state = str(seat_day.get("availability_state", "")).lower()
         _assert(report_state == "healthy", f"report_completeness state is {report_state!r}, expected healthy")
-        _assert(quality_state == "healthy", f"rtb_quality_freshness state is {quality_state!r}, expected healthy")
+        # Quality (IVT) data is optional — skip assertion when unavailable.
+        if quality_state != "unavailable":
+            _assert(quality_state == "healthy", f"rtb_quality_freshness state is {quality_state!r}, expected healthy")
         _assert(
             bidstream_state == "healthy",
             f"bidstream dimension coverage state is {bidstream_state!r}, expected healthy",
