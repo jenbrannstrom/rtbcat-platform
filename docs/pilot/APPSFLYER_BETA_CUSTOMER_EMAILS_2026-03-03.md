@@ -12,6 +12,24 @@ Owner: Cat-Scan Ops
   - `scripts/run_appsflyer_phase_a_audit.sh --buyer-id <id> --from-db --db-since-days 30`
   - `scripts/run_conversion_attribution_phase_b_report.sh --buyer-id <id> --source-type appsflyer --days 14`
 
+## Internal: Create Local-Admin Users (Martin and Siu)
+
+Goal: grant seat-scoped local-admin only (not sudo).
+
+UI steps:
+1. Open `/admin/users` as a sudo operator.
+2. Create user:
+   - Email: (customer email)
+   - Display name: `Martin` or `Siu`
+   - Role: `admin` (local-admin role)
+   - Auth method: `oauth-precreate` (or local-password if requested)
+3. In the same user record, add Seat Permission:
+   - Martin -> buyer `6574658621`, access level `admin`
+   - Siu -> buyer `6634662463`, access level `admin`
+4. Ensure there are no extra seats assigned.
+5. Ensure no global sudo/admin escalation permissions are granted.
+6. Ask user to log in and verify they can manage only their assigned seat.
+
 ## AppsFlyer UI Navigation (copy into each email)
 
 Use this block in customer instructions:
@@ -193,6 +211,7 @@ Thanks,
 Hi Martin，
 
 我们正在为你们的席位开放 Cat-Scan 归因 Beta。  
+我们现在正式启动 `scan.rtb.cat` 的 Beta 阶段，目标是帮助你们提升投放效率、减少浪费并提高利润空间。  
 如果你们使用 AppsFlyer，请配置以下地址：
 
 `https://scan.rtb.cat/api/conversions/appsflyer/postback?buyer_id=6574658621`
@@ -221,6 +240,7 @@ Subject: Cat-Scan beta: optional AppsFlyer conversion feed setup
 Hi Martin,
 
 We are opening Cat-Scan attribution beta for your seat.
+We are now launching the `scan.rtb.cat` beta, designed to increase efficiency, reduce waste, and improve profitability.
 
 If you use AppsFlyer, please configure:
 
@@ -255,6 +275,7 @@ Thanks,
 Hi Siu，
 
 我们正在为你们的席位接入 Cat-Scan 转化归因 Beta。  
+我们现在正式启动 `scan.rtb.cat` 的 Beta 阶段，目标是帮助你们提升投放效率、减少浪费并提高利润空间。  
 如果你们使用 AppsFlyer，请配置以下地址：
 
 `https://scan.rtb.cat/api/conversions/appsflyer/postback?buyer_id=6634662463`
@@ -287,6 +308,7 @@ Subject: Cat-Scan beta onboarding: conversion attribution input
 Hi Siu,
 
 We are onboarding your seat to Cat-Scan conversion attribution beta.
+We are now launching the `scan.rtb.cat` beta, designed to increase efficiency, reduce waste, and improve profitability.
 
 If you use AppsFlyer, please configure:
 
