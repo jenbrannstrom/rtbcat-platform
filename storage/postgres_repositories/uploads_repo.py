@@ -389,59 +389,57 @@ class UploadsRepository:
         subqueries: list[str] = []
         params: list[Any] = []
 
-        buyer_filter = ""
-        if buyer_id:
-            buyer_filter = " AND buyer_account_id = %s"
-
-        # Presence is all the UI needs ("imported" vs "missing"), so avoid
-        # expensive COUNT(*) scans over large fact tables.
-        if "rtb_daily" in existing:
-            subqueries.append(
-                f"SELECT metric_date, 'bidsinauction' AS csv_type, 1 AS row_count"
-                f" FROM rtb_daily WHERE metric_date >= %s{buyer_filter} GROUP BY metric_date"
+        # Presence is all the UI needs ("imported" vs "missing").  Use
+        # generate_series + EXISTS so the planner does one index lookup per
+        # date instead of scanning millions of rows.
+        def _exists_per_date(table: str, csv_type: str, extra_where: str = "") -> str:
+            """Build a generate_series + EXISTS subquery for *table*."""
+            return (
+                f"SELECT d::date AS metric_date, '{csv_type}' AS csv_type, 1 AS row_count"
+                f" FROM generate_series(%s::date, CURRENT_DATE - 1, '1 day'::interval) AS d"
+                f" WHERE EXISTS ("
+                f"SELECT 1 FROM {table}"
+                f" WHERE metric_date = d::date{extra_where}"
+                f" LIMIT 1)"
             )
+
+        buyer_exists_filter = ""
+        if buyer_id:
+            buyer_exists_filter = " AND buyer_account_id = %s"
+
+        if "rtb_daily" in existing:
+            subqueries.append(_exists_per_date("rtb_daily", "bidsinauction", buyer_exists_filter))
             params.append(start_date)
             if buyer_id:
                 params.append(buyer_id)
 
         if "rtb_quality" in existing:
-            subqueries.append(
-                f"SELECT metric_date, 'quality' AS csv_type, 1 AS row_count"
-                f" FROM rtb_quality WHERE metric_date >= %s{buyer_filter} GROUP BY metric_date"
-            )
+            subqueries.append(_exists_per_date("rtb_quality", "quality", buyer_exists_filter))
             params.append(start_date)
             if buyer_id:
                 params.append(buyer_id)
 
         if "rtb_bidstream" in existing:
-            subqueries.append(
-                f"""
-                SELECT
-                    metric_date,
-                    CASE
-                        WHEN publisher_id IS NOT NULL AND publisher_id != '' THEN 'pipeline-publisher'
-                        ELSE 'pipeline-geo'
-                    END AS csv_type,
-                    1 AS row_count
-                FROM rtb_bidstream
-                WHERE metric_date >= %s{buyer_filter}
-                GROUP BY
-                    metric_date,
-                    CASE
-                        WHEN publisher_id IS NOT NULL AND publisher_id != '' THEN 'pipeline-publisher'
-                        ELSE 'pipeline-geo'
-                    END
-                """
-            )
+            # pipeline-geo: rows with NULL or empty publisher_id
+            subqueries.append(_exists_per_date(
+                "rtb_bidstream", "pipeline-geo",
+                buyer_exists_filter + " AND (publisher_id IS NULL OR publisher_id = '')",
+            ))
+            params.append(start_date)
+            if buyer_id:
+                params.append(buyer_id)
+
+            # pipeline-publisher: rows with non-empty publisher_id
+            subqueries.append(_exists_per_date(
+                "rtb_bidstream", "pipeline-publisher",
+                buyer_exists_filter + " AND publisher_id IS NOT NULL AND publisher_id != ''",
+            ))
             params.append(start_date)
             if buyer_id:
                 params.append(buyer_id)
 
         if "rtb_bid_filtering" in existing:
-            subqueries.append(
-                f"SELECT metric_date, 'bid-filtering' AS csv_type, 1 AS row_count"
-                f" FROM rtb_bid_filtering WHERE metric_date >= %s{buyer_filter} GROUP BY metric_date"
-            )
+            subqueries.append(_exists_per_date("rtb_bid_filtering", "bid-filtering", buyer_exists_filter))
             params.append(start_date)
             if buyer_id:
                 params.append(buyer_id)
