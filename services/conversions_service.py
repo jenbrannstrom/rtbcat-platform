@@ -66,36 +66,54 @@ class ConversionsService:
         buyer_clause = ""
         buyer_params: list[Any] = [start.isoformat(), end.isoformat()]
         if buyer_id:
-            buyer_clause = " AND buyer_id = %s"
+            buyer_clause = " AND e.buyer_id = %s"
             buyer_params.append(buyer_id)
+
+        rtb_buyer_clause = ""
+        rtb_params: list[Any] = [start.isoformat(), end.isoformat()]
+        if buyer_id:
+            rtb_buyer_clause = " AND buyer_account_id = %s"
+            rtb_params.append(buyer_id)
 
         insert_sql = f"""
             WITH conv AS (
                 SELECT
                     event_ts::date AS agg_date,
-                    buyer_id,
-                    COALESCE(billing_id, '') AS billing_id,
-                    COALESCE(country, '') AS country,
-                    COALESCE(publisher_id, '') AS publisher_id,
-                    COALESCE(creative_id, '') AS creative_id,
-                    COALESCE(app_id, '') AS app_id,
-                    source_type,
-                    event_type,
+                    e.buyer_id,
+                    COALESCE(NULLIF(BTRIM(e.billing_id), ''), aj.matched_billing_id, '') AS billing_id,
+                    COALESCE(NULLIF(BTRIM(e.country), ''), aj.matched_country, '') AS country,
+                    COALESCE(NULLIF(BTRIM(e.publisher_id), ''), aj.matched_publisher_id, '') AS publisher_id,
+                    COALESCE(NULLIF(BTRIM(e.creative_id), ''), aj.matched_creative_id, '') AS creative_id,
+                    COALESCE(NULLIF(BTRIM(e.app_id), ''), aj.matched_app_id, '') AS app_id,
+                    e.source_type,
+                    e.event_type,
                     COUNT(*)::bigint AS event_count,
-                    COALESCE(SUM(event_value), 0)::numeric(18,6) AS event_value_total
-                FROM conversion_events
-                WHERE event_ts::date BETWEEN %s::date AND %s::date
+                    COALESCE(SUM(e.event_value), 0)::numeric(18,6) AS event_value_total
+                FROM conversion_events e
+                LEFT JOIN LATERAL (
+                    SELECT
+                        NULLIF(BTRIM(COALESCE(j.matched_billing_id, '')), '') AS matched_billing_id,
+                        NULLIF(BTRIM(COALESCE(j.matched_country, '')), '') AS matched_country,
+                        NULLIF(BTRIM(COALESCE(j.matched_publisher_id, '')), '') AS matched_publisher_id,
+                        NULLIF(BTRIM(COALESCE(j.matched_creative_id, '')), '') AS matched_creative_id,
+                        NULLIF(BTRIM(COALESCE(j.matched_app_id, '')), '') AS matched_app_id
+                    FROM conversion_attribution_joins j
+                    WHERE j.conversion_event_id = e.id
+                      AND j.join_status = 'matched'
+                    ORDER BY
+                        CASE j.join_mode
+                            WHEN 'exact_clickid' THEN 0
+                            WHEN 'fallback_creative_time' THEN 1
+                            ELSE 2
+                        END,
+                        COALESCE(j.confidence, 0) DESC,
+                        j.updated_at DESC NULLS LAST,
+                        j.id DESC
+                    LIMIT 1
+                ) aj ON TRUE
+                WHERE e.event_ts::date BETWEEN %s::date AND %s::date
                     {buyer_clause}
-                GROUP BY
-                    event_ts::date,
-                    buyer_id,
-                    COALESCE(billing_id, ''),
-                    COALESCE(country, ''),
-                    COALESCE(publisher_id, ''),
-                    COALESCE(creative_id, ''),
-                    COALESCE(app_id, ''),
-                    source_type,
-                    event_type
+                GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9
             ),
             rtb AS (
                 SELECT
@@ -111,6 +129,7 @@ class ConversionsService:
                     (COALESCE(SUM(spend_micros), 0)::numeric / 1000000.0)::numeric(18,6) AS spend_usd
                 FROM rtb_daily
                 WHERE metric_date::date BETWEEN %s::date AND %s::date
+                    {rtb_buyer_clause}
                 GROUP BY
                     metric_date::date,
                     buyer_account_id,
@@ -191,7 +210,7 @@ class ConversionsService:
         """
         inserted_rows = await pg_execute(
             insert_sql,
-            tuple([*buyer_params, start.isoformat(), end.isoformat()]),
+            tuple([*buyer_params, *rtb_params]),
         )
 
         return {
