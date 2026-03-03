@@ -93,6 +93,7 @@ Goal: add conversion attribution signal for QPS optimization without relying on 
        - `POST /conversions/attribution/refresh`
        - `GET /conversions/attribution/summary`
        - `GET /conversions/attribution/joins`
+     - shipped operator helper (`scripts/run_conversion_attribution_phase_b_report.sh`) for one-command refresh+summary+sample diagnostics.
      - exposes exact-vs-fallback join mode, status (`matched|unmatched|blocked`), reason, and confidence.
      - remaining: raw AppsFlyer export ingestion pipeline + lineage/quality counters.
    - Phase C: dual-mode join engine (exact `clickid` mode + probabilistic fallback mode with confidence score).

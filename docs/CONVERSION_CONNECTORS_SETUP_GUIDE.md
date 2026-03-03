@@ -402,3 +402,20 @@ Design notes:
 - `exact_clickid` mode currently reports `blocked` when click IDs exist but RTB clickid dimension is not ingested.
 - `fallback_creative_time` mode attempts buyer+creative+time-window matching and returns confidence/reason fields.
 - Use this API to gate future automation: require exact coverage or high-confidence fallback thresholds before hard actions.
+
+Operational helper script:
+
+- `scripts/run_conversion_attribution_phase_b_report.sh`
+
+Example:
+
+```bash
+export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
+scripts/run_conversion_attribution_phase_b_report.sh \
+  --buyer-id 1487810529 \
+  --source-type appsflyer \
+  --days 14 \
+  --fallback-window-days 1 \
+  --email "${CATSCAN_CANARY_EMAIL}" \
+  --doc-out docs/review/2026-03-03/PHASE_B_ATTRIBUTION_REPORT_1487810529.md
+```
