@@ -24,6 +24,7 @@ from api.dependencies import (
     resolve_buyer_id,
 )
 from services.auth_service import User
+from services.conversion_attribution_service import ConversionAttributionService
 from services.conversion_ingestion_service import ConversionIngestionService
 from services.conversion_normalizers import (
     normalize_adjust_payload,
@@ -249,6 +250,79 @@ class ConversionFailureTaxonomyResponse(BaseModel):
     total_failures: int
     other_count: int
     rows: list[ConversionFailureTaxonomyRow]
+
+
+class ConversionAttributionModeSummary(BaseModel):
+    mode: str
+    matched: int
+    unmatched: int
+    blocked: int
+    total: int
+    match_rate_pct: float
+    avg_confidence: float
+    high_confidence_count: int
+
+
+class ConversionAttributionSummaryResponse(BaseModel):
+    buyer_id: str
+    source_type: str
+    start_date: str
+    end_date: str
+    total_events: int
+    modes: list[ConversionAttributionModeSummary]
+    checked_at: str
+
+
+class ConversionAttributionRefreshResponse(BaseModel):
+    buyer_id: str
+    source_type: str
+    start_date: str
+    end_date: str
+    deleted_rows: int
+    exact_rows_upserted: int
+    fallback_rows_upserted: int
+    fallback_window_days: int
+    summary: ConversionAttributionSummaryResponse
+
+
+class ConversionAttributionJoinRow(BaseModel):
+    id: int
+    conversion_event_id: int
+    conversion_event_ts: Optional[str] = None
+    buyer_id: str
+    source_type: str
+    join_mode: str
+    join_status: str
+    confidence: float
+    reason: str
+    matched_metric_date: Optional[str] = None
+    matched_billing_id: str
+    matched_creative_id: str
+    matched_app_id: str
+    matched_country: str
+    matched_publisher_id: str
+    matched_impressions: int
+    matched_clicks: int
+    matched_spend_usd: float
+    fallback_window_days: int
+    fallback_candidate_count: int
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class ConversionAttributionJoinsMeta(BaseModel):
+    start_date: str
+    end_date: str
+    total: int
+    returned: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
+class ConversionAttributionJoinsResponse(BaseModel):
+    rows: list[ConversionAttributionJoinRow]
+    meta: ConversionAttributionJoinsMeta
 
 
 _SECRET_ENV_BY_SOURCE = {
@@ -1171,6 +1245,98 @@ async def upsert_conversion_mapping_profile(
         setting_key=setting_key,
         fallback_setting_key=fallback_key,
     )
+
+
+@router.post("/attribution/refresh", response_model=ConversionAttributionRefreshResponse)
+async def refresh_conversion_attribution_joins(
+    buyer_id: Optional[str] = Query(None),
+    source_type: str = Query("appsflyer"),
+    days: int = Query(14, ge=1, le=365),
+    start_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    fallback_window_days: int = Query(1, ge=0, le=7),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    if not buyer_id:
+        raise HTTPException(status_code=400, detail="buyer_id is required")
+
+    service = ConversionAttributionService()
+    payload = await service.refresh_joins(
+        buyer_id=buyer_id,
+        source_type=source_type,
+        days=days,
+        start_date=start_date,
+        end_date=end_date,
+        fallback_window_days=fallback_window_days,
+    )
+    return ConversionAttributionRefreshResponse(**payload)
+
+
+@router.get("/attribution/summary", response_model=ConversionAttributionSummaryResponse)
+async def get_conversion_attribution_summary(
+    buyer_id: Optional[str] = Query(None),
+    source_type: str = Query("appsflyer"),
+    days: int = Query(14, ge=1, le=365),
+    start_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    if not buyer_id:
+        raise HTTPException(status_code=400, detail="buyer_id is required")
+
+    service = ConversionAttributionService()
+    payload = await service.get_summary(
+        buyer_id=buyer_id,
+        source_type=source_type,
+        days=days,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return ConversionAttributionSummaryResponse(**payload)
+
+
+@router.get("/attribution/joins", response_model=ConversionAttributionJoinsResponse)
+async def list_conversion_attribution_joins(
+    buyer_id: Optional[str] = Query(None),
+    source_type: str = Query("appsflyer"),
+    days: int = Query(14, ge=1, le=365),
+    start_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    join_mode: Optional[str] = Query(None, description="exact_clickid | fallback_creative_time"),
+    join_status: Optional[str] = Query(None, description="matched | unmatched | blocked"),
+    min_confidence: Optional[float] = Query(None, ge=0.0, le=1.0),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    if not buyer_id:
+        raise HTTPException(status_code=400, detail="buyer_id is required")
+
+    if join_mode and join_mode not in {"exact_clickid", "fallback_creative_time"}:
+        raise HTTPException(status_code=400, detail="Invalid join_mode")
+    if join_status and join_status not in {"matched", "unmatched", "blocked"}:
+        raise HTTPException(status_code=400, detail="Invalid join_status")
+
+    service = ConversionAttributionService()
+    payload = await service.list_joins(
+        buyer_id=buyer_id,
+        source_type=source_type,
+        days=days,
+        start_date=start_date,
+        end_date=end_date,
+        join_mode=join_mode,
+        join_status=join_status,
+        min_confidence=min_confidence,
+        limit=limit,
+        offset=offset,
+    )
+    return ConversionAttributionJoinsResponse(**payload)
 
 
 @router.get("/readiness", response_model=ConversionReadinessResponse)

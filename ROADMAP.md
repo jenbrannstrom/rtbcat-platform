@@ -34,8 +34,10 @@
   - Acceptance: documented per-buyer contract + measured field coverage report.
 
 - [ ] **Phase B - Data model and ingestion**
-  - Add AppsFlyer raw ingestion tables + normalization pipeline with buyer-specific mapping profile.
-  - Persist ingestion lineage and quality counters (accepted/rejected/unknown mappings).
+  - [x] Add attribution join evidence storage (`conversion_attribution_joins`) with exact/fallback mode, status, and confidence fields.
+  - [x] Add attribution API surface (`/conversions/attribution/refresh|summary|joins`) for buyer-scoped observability and diagnostics.
+  - [ ] Add AppsFlyer raw ingestion tables + normalization pipeline with buyer-specific mapping profile.
+  - [ ] Persist ingestion lineage and quality counters (accepted/rejected/unknown mappings).
   - Acceptance: deterministic ingest for pilot buyer with replay-safe idempotency.
 
 - [ ] **Phase C - Join engine (exact + fallback modes)**
