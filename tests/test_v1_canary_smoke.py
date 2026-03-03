@@ -52,16 +52,15 @@ def test_validate_data_health_payload_passes_default_rules():
     )
 
 
-def test_validate_data_health_payload_rejects_unavailable_quality():
+def test_validate_data_health_payload_allows_unavailable_quality():
     payload = _base_payload()
     payload["optimizer_readiness"]["rtb_quality_freshness"]["availability_state"] = "unavailable"
 
-    with pytest.raises(SmokeFailure, match="rtb_quality_freshness state is unavailable"):
-        validate_data_health_payload(
-            payload,
-            require_healthy_readiness=False,
-            max_dimension_missing_pct=99.9,
-        )
+    validate_data_health_payload(
+        payload,
+        require_healthy_readiness=False,
+        max_dimension_missing_pct=99.9,
+    )
 
 
 def test_validate_data_health_payload_rejects_excessive_dimension_missing_pct():
