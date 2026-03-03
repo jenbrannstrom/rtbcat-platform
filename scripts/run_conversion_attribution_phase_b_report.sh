@@ -11,6 +11,8 @@ OUT_DIR="${CATSCAN_OUTPUT_DIR:-/tmp}"
 DOC_OUT=""
 API_TOKEN="${CATSCAN_API_TOKEN:-${CATSCAN_CANARY_BEARER_TOKEN:-}}"
 API_EMAIL="${CATSCAN_CANARY_EMAIL:-}"
+SKIP_REFRESH=0
+ALLOW_REFRESH_FAILURE=1
 
 usage() {
   cat <<'EOF'
@@ -34,8 +36,23 @@ Options:
   --email <value>                 X-Email identity for API auth
   --out-dir <dir>                 Output root (default: /tmp)
   --doc-out <path>                Optional markdown copy path
+  --skip-refresh                  Skip POST refresh; report from existing joins
+  --strict-refresh                Fail immediately if refresh is non-200
+  --allow-refresh-failure <bool>  Continue when refresh fails (default: true)
   -h, --help                      Show this help
 EOF
+}
+
+parse_bool() {
+  local value="${1:-}"
+  case "${value,,}" in
+    1|true|yes|y|on) echo "1" ;;
+    0|false|no|n|off) echo "0" ;;
+    *)
+      echo "Invalid boolean '${value}' (expected true/false)." >&2
+      exit 2
+      ;;
+  esac
 }
 
 while [[ $# -gt 0 ]]; do
@@ -78,6 +95,18 @@ while [[ $# -gt 0 ]]; do
       ;;
     --doc-out)
       DOC_OUT="${2:-}"
+      shift 2
+      ;;
+    --skip-refresh)
+      SKIP_REFRESH=1
+      shift
+      ;;
+    --strict-refresh)
+      ALLOW_REFRESH_FAILURE=0
+      shift
+      ;;
+    --allow-refresh-failure)
+      ALLOW_REFRESH_FAILURE="$(parse_bool "${2:-}")"
       shift 2
       ;;
     -h|--help)
@@ -174,16 +203,38 @@ echo "Fallback window days: ${FALLBACK_WINDOW_DAYS}"
 echo
 
 echo "[1/4] Refreshing attribution joins..."
-do_request "POST" \
-  "/conversions/attribution/refresh?buyer_id=${BUYER_ID}&source_type=${SOURCE_TYPE}&days=${DAYS}&fallback_window_days=${FALLBACK_WINDOW_DAYS}" \
-  "$REFRESH_BODY" \
-  "$REFRESH_META"
-echo "refresh_http=$(cat "$REFRESH_META")"
-if [[ "$(cat "$REFRESH_META")" != "200" ]]; then
-  echo "Refresh failed. Response preview:"
-  head -c 600 "$REFRESH_BODY" || true
-  echo
-  exit 1
+REFRESH_NOTE="refresh_ok"
+if (( SKIP_REFRESH == 1 )); then
+  echo "refresh_http=skipped (--skip-refresh)"
+  echo "skipped" > "$REFRESH_META"
+  printf '{"status":"skipped","reason":"--skip-refresh"}\n' > "$REFRESH_BODY"
+  REFRESH_NOTE="skipped_by_flag"
+else
+  do_request "POST" \
+    "/conversions/attribution/refresh?buyer_id=${BUYER_ID}&source_type=${SOURCE_TYPE}&days=${DAYS}&fallback_window_days=${FALLBACK_WINDOW_DAYS}" \
+    "$REFRESH_BODY" \
+    "$REFRESH_META"
+  REFRESH_HTTP="$(cat "$REFRESH_META")"
+  echo "refresh_http=${REFRESH_HTTP}"
+  if [[ "$REFRESH_HTTP" != "200" ]]; then
+    echo "Refresh failed. Response preview:"
+    head -c 600 "$REFRESH_BODY" || true
+    echo
+    if (( ALLOW_REFRESH_FAILURE == 1 )); then
+      case "$REFRESH_HTTP" in
+        401|403)
+          echo "Continuing without refresh: refresh auth blocked (likely proxy/session context)."
+          REFRESH_NOTE="auth_blocked_${REFRESH_HTTP}"
+          ;;
+        *)
+          echo "Continuing without refresh: non-200 refresh response (${REFRESH_HTTP})."
+          REFRESH_NOTE="refresh_failed_${REFRESH_HTTP}"
+          ;;
+      esac
+    else
+      exit 1
+    fi
+  fi
 fi
 
 echo "[2/4] Fetching attribution summary..."
@@ -238,6 +289,9 @@ TOP_MATCHED_IDS="$(
   echo "- source_type: \`${SOURCE_TYPE}\`"
   echo "- window_days: \`${DAYS}\`"
   echo "- fallback_window_days: \`${FALLBACK_WINDOW_DAYS}\`"
+  echo "- refresh_mode: \`$([[ $SKIP_REFRESH -eq 1 ]] && echo skip || echo refresh)\`"
+  echo "- refresh_note: \`${REFRESH_NOTE}\`"
+  echo "- refresh_http: \`$(cat "$REFRESH_META")\`"
   echo
   echo "## Summary"
   echo
