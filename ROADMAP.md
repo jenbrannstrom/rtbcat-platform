@@ -55,7 +55,7 @@
 
 - [ ] **Phase E - Customer enablement**
   - Ship setup checklist for bidder + AppsFlyer owner (PID setup, link parameter policy, export cadence, QA checklist).
-  - Add seat-level readiness status in UI: `No AF`, `AF present/no clickid`, `AF exact-ready`.
+  - [x] Add seat-level readiness status in UI: `No AF`, `AF present/no clickid`, `AF exact-ready` (`/creatives/attribution-readiness`).
   - Acceptance: onboarding playbook can move a new seat from `No AF` to `Exact-ready`.
 
 ### Essential dependency backlog (must stay prioritized)

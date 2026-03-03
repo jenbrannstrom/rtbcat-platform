@@ -81,6 +81,27 @@ export interface ConversionIngestionStatsResponse {
   rows: ConversionIngestionStatsRow[];
 }
 
+export interface ConversionAttributionModeSummary {
+  mode: string;
+  matched: number;
+  unmatched: number;
+  blocked: number;
+  total: number;
+  match_rate_pct: number;
+  avg_confidence: number;
+  high_confidence_count: number;
+}
+
+export interface ConversionAttributionSummaryResponse {
+  buyer_id: string;
+  source_type: string;
+  start_date: string;
+  end_date: string;
+  total_events: number;
+  modes: ConversionAttributionModeSummary[];
+  checked_at: string;
+}
+
 
 export async function getConversionHealth(params?: {
   buyer_id?: string;
@@ -126,4 +147,19 @@ export async function getConversionIngestionStats(params?: {
 
 export async function getConversionWebhookSecurityStatus(): Promise<ConversionWebhookSecurityStatusResponse> {
   return fetchApi<ConversionWebhookSecurityStatusResponse>("/conversions/security/status");
+}
+
+export async function getConversionAttributionSummary(params?: {
+  buyer_id?: string;
+  source_type?: string;
+  days?: number;
+}): Promise<ConversionAttributionSummaryResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  if (params?.source_type) searchParams.set("source_type", params.source_type);
+  if (typeof params?.days === "number") searchParams.set("days", String(params.days));
+  const query = searchParams.toString();
+  return fetchApi<ConversionAttributionSummaryResponse>(
+    `/conversions/attribution/summary${query ? `?${query}` : ""}`,
+  );
 }
