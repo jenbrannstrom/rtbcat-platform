@@ -133,6 +133,8 @@ gh run watch "$run_id" --repo "$REPO"
 gh run view "$run_id" --repo "$REPO" --json url,workflowName,status,conclusion,createdAt,updatedAt,displayTitle \
   --jq '"Run summary:\n  workflow:   \(.workflowName // "")\n  title:      \(.displayTitle // "")\n  status:     \(.status // "")\n  conclusion: \(.conclusion // "")\n  createdAt:  \(.createdAt // "")\n  updatedAt:  \(.updatedAt // "")\n  url:        \(.url // "")"'
 
+conclusion="$(gh run view "$run_id" --repo "$REPO" --json conclusion --jq '.conclusion // ""' 2>/dev/null || true)"
+
 out_dir="/tmp/v1-runtime-health-${run_id}"
 mkdir -p "$out_dir"
 set +e
@@ -146,4 +148,10 @@ if [[ "$download_status" -eq 0 ]]; then
   fi
 else
   echo "Artifact download failed (run may still be in progress or report missing)." >&2
+fi
+
+if [[ "$conclusion" != "success" ]]; then
+  echo "Runtime-health strict workflow failed (conclusion='${conclusion}')." >&2
+  echo "Diagnostic helper: scripts/fetch_v1_runtime_health_run_evidence.sh --run-id ${run_id} --full-log" >&2
+  exit 1
 fi
