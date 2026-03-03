@@ -89,13 +89,52 @@ Cat-Scan normalizes common provider fields automatically.
 
 ### 3.1 AppsFlyer
 
+Default canonical mapping (used when no profile override is configured):
+
 - `eventName` -> `event_name`
 - `eventTime` -> `event_ts`
 - `af_sub1` -> `buyer_id`
 - `af_sub2` -> `billing_id`
-- `af_click_id` -> `click_id`
+- `af_sub3` -> `creative_id`
+- `af_click_id` or `clickid` -> `click_id`
 - `af_impression_id` -> `impression_id`
 - `country_code` -> `country`
+
+Mapping is now configurable by source (`appsflyer`) and scope:
+
+- Buyer scope key: `conversion_mapping_profile:appsflyer:buyer:{buyer_id}`
+- Default scope key: `conversion_mapping_profile:appsflyer:default`
+- Shape: `{"field_map":{"canonical_key":["source_key_a","source_key_b"]}}`
+
+Management endpoints:
+
+- `GET /conversions/mapping-profile?source_type=appsflyer&buyer_id=<buyer_id>`
+- `PUT /conversions/mapping-profile`
+  - buyer-scoped update requires buyer-admin access to that buyer.
+  - default/global update requires sudo access.
+
+Resolution rule at ingest time:
+
+- If `buyer_id` query override is present on `/conversions/appsflyer/postback`, Cat-Scan loads that buyer's profile first.
+- If no `buyer_id` override is present, Cat-Scan resolves using default mapping behavior, then applies default profile fallback.
+- Use buyer-scoped-only profiles when sender can include `buyer_id` override, otherwise keep the buyer key mapping in the default profile.
+
+Example profile update:
+
+```bash
+curl -sS -X PUT "https://<host>/api/conversions/mapping-profile" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "source_type":"appsflyer",
+    "buyer_id":"1111111111",
+    "field_map":{
+      "buyer_id":["af_sub2"],
+      "creative_id":["af_sub1","af_ad_id"],
+      "click_id":["clickid","af_click_id"]
+    }
+  }'
+```
 
 Example:
 

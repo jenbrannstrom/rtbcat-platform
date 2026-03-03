@@ -11,12 +11,18 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 from threading import Lock
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from pydantic import BaseModel
 
-from api.dependencies import get_current_user, get_store, resolve_buyer_id
+from api.dependencies import (
+    get_current_user,
+    get_store,
+    is_sudo,
+    require_buyer_admin_access,
+    resolve_buyer_id,
+)
 from services.auth_service import User
 from services.conversion_ingestion_service import ConversionIngestionService
 from services.conversion_normalizers import (
@@ -135,6 +141,21 @@ class ConversionWebhookSecurityStatusResponse(BaseModel):
     checked_at: str
 
 
+class ConversionFieldMappingProfileResponse(BaseModel):
+    source_type: str
+    buyer_id: Optional[str] = None
+    scope: str
+    field_map: dict[str, list[str]]
+    setting_key: Optional[str] = None
+    fallback_setting_key: Optional[str] = None
+
+
+class ConversionFieldMappingProfileUpsertRequest(BaseModel):
+    source_type: str = "appsflyer"
+    buyer_id: Optional[str] = None
+    field_map: dict[str, str | list[str]]
+
+
 class ConversionIngestResponse(BaseModel):
     accepted: bool
     duplicate: bool
@@ -250,6 +271,79 @@ _PIXEL_GIF_BYTES = (
     b"\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00"
     b"\x00\x02\x02D\x01\x00;"
 )
+
+_SUPPORTED_MAPPING_PROFILE_SOURCES = {"appsflyer"}
+
+
+def _mapping_profile_setting_key(source_type: str, buyer_id: Optional[str]) -> str:
+    if buyer_id:
+        return f"conversion_mapping_profile:{source_type}:buyer:{buyer_id}"
+    return f"conversion_mapping_profile:{source_type}:default"
+
+
+async def _load_field_mapping_profile(
+    *,
+    store,
+    source_type: str,
+    buyer_id: Optional[str],
+) -> tuple[dict[str, list[str]], str, Optional[str], Optional[str]]:
+    """Load buyer/default field mapping profile for a source type."""
+    if source_type != "appsflyer":
+        return {}, "unsupported_source", None, None
+
+    primary_key = _mapping_profile_setting_key(source_type, buyer_id)
+    fallback_key = _mapping_profile_setting_key(source_type, None)
+    raw_value: Optional[str] = None
+    setting_key: Optional[str] = None
+    scope = "builtin_default"
+
+    getter = getattr(store, "get_setting", None)
+    if callable(getter):
+        if buyer_id:
+            raw_value = await getter(primary_key)
+            if raw_value:
+                scope = "buyer"
+                setting_key = primary_key
+        if not raw_value:
+            raw_value = await getter(fallback_key)
+            if raw_value:
+                scope = "default"
+                setting_key = fallback_key
+
+    if not raw_value:
+        return {}, scope, setting_key, (fallback_key if buyer_id else None)
+
+    parsed: dict[str, Any]
+    try:
+        parsed = json.loads(raw_value)
+    except Exception:
+        return {}, "invalid_profile_json", setting_key, (fallback_key if buyer_id else None)
+
+    raw_field_map: dict[str, Any]
+    if isinstance(parsed, dict) and isinstance(parsed.get("field_map"), dict):
+        raw_field_map = parsed["field_map"]
+    elif isinstance(parsed, dict):
+        raw_field_map = parsed
+    else:
+        return {}, "invalid_profile_shape", setting_key, (fallback_key if buyer_id else None)
+
+    normalized: dict[str, list[str]] = {}
+    for canonical_key, sources in raw_field_map.items():
+        if isinstance(sources, str):
+            source_list = [sources]
+        elif isinstance(sources, list):
+            source_list = [str(item) for item in sources if item]
+        else:
+            continue
+        cleaned: list[str] = []
+        for source_field in source_list:
+            field_name = source_field.strip()
+            if not field_name or field_name in cleaned:
+                continue
+            cleaned.append(field_name)
+        if cleaned:
+            normalized[str(canonical_key)] = cleaned
+    return normalized, scope, setting_key, (fallback_key if buyer_id else None)
 
 
 def _extract_auth_bearer_token(request: Request) -> Optional[str]:
@@ -671,9 +765,17 @@ async def _ingest_generic_family_postback(
 async def ingest_appsflyer_postback(
     request: Request,
     buyer_id: Optional[str] = Query(None, description="Optional buyer override"),
+    store=Depends(get_store),
 ):
     payload = await _parse_payload(request)
-    payload = normalize_appsflyer_payload(payload)
+    baseline_payload = normalize_appsflyer_payload(payload)
+    inferred_buyer_id = buyer_id or baseline_payload.get("buyer_id")
+    field_map, _, _, _ = await _load_field_mapping_profile(
+        store=store,
+        source_type="appsflyer",
+        buyer_id=inferred_buyer_id if isinstance(inferred_buyer_id, str) else None,
+    )
+    payload = normalize_appsflyer_payload(payload, field_map=field_map or None)
     _verify_webhook_secret("appsflyer", request, payload)
     _verify_webhook_signature("appsflyer", request, payload)
     _enforce_webhook_rate_limit("appsflyer", request)
@@ -969,6 +1071,97 @@ async def get_conversion_webhook_security_status(
     user: User = Depends(get_current_user),
 ):
     return ConversionWebhookSecurityStatusResponse(**_webhook_security_status_payload())
+
+
+@router.get("/mapping-profile", response_model=ConversionFieldMappingProfileResponse)
+async def get_conversion_mapping_profile(
+    source_type: str = Query("appsflyer"),
+    buyer_id: Optional[str] = Query(None),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    source_type = (source_type or "").strip().lower()
+    if source_type not in _SUPPORTED_MAPPING_PROFILE_SOURCES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported source_type '{source_type}'. Supported: {sorted(_SUPPORTED_MAPPING_PROFILE_SOURCES)}",
+        )
+
+    resolved_buyer_id = buyer_id
+    if buyer_id:
+        resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+
+    field_map, scope, setting_key, fallback_key = await _load_field_mapping_profile(
+        store=store,
+        source_type=source_type,
+        buyer_id=resolved_buyer_id,
+    )
+
+    return ConversionFieldMappingProfileResponse(
+        source_type=source_type,
+        buyer_id=resolved_buyer_id,
+        scope=scope,
+        field_map=field_map,
+        setting_key=setting_key,
+        fallback_setting_key=fallback_key,
+    )
+
+
+@router.put("/mapping-profile", response_model=ConversionFieldMappingProfileResponse)
+async def upsert_conversion_mapping_profile(
+    body: ConversionFieldMappingProfileUpsertRequest,
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    source_type = (body.source_type or "").strip().lower()
+    if source_type not in _SUPPORTED_MAPPING_PROFILE_SOURCES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported source_type '{source_type}'. Supported: {sorted(_SUPPORTED_MAPPING_PROFILE_SOURCES)}",
+        )
+
+    buyer_id = body.buyer_id
+    if buyer_id:
+        buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+        await require_buyer_admin_access(buyer_id, user=user)
+    elif not is_sudo(user):
+        raise HTTPException(
+            status_code=403,
+            detail="Default mapping profile updates require sudo access.",
+        )
+
+    field_map: dict[str, list[str]] = {}
+    for canonical_key, sources in body.field_map.items():
+        source_list = [sources] if isinstance(sources, str) else list(sources or [])
+        normalized_sources: list[str] = []
+        for source_field in source_list:
+            name = str(source_field).strip()
+            if not name or name in normalized_sources:
+                continue
+            normalized_sources.append(name)
+        if normalized_sources:
+            field_map[str(canonical_key).strip()] = normalized_sources
+
+    if not field_map:
+        raise HTTPException(status_code=400, detail="field_map cannot be empty")
+
+    key = _mapping_profile_setting_key(source_type, buyer_id)
+    payload = json.dumps({"field_map": field_map}, sort_keys=True, separators=(",", ":"))
+    await store.set_setting(key, payload, updated_by=getattr(user, "id", None))
+
+    _, scope, setting_key, fallback_key = await _load_field_mapping_profile(
+        store=store,
+        source_type=source_type,
+        buyer_id=buyer_id,
+    )
+    return ConversionFieldMappingProfileResponse(
+        source_type=source_type,
+        buyer_id=buyer_id,
+        scope=scope,
+        field_map=field_map,
+        setting_key=setting_key,
+        fallback_setting_key=fallback_key,
+    )
 
 
 @router.get("/readiness", response_model=ConversionReadinessResponse)

@@ -1,6 +1,6 @@
 # QPS AI Optimizer — Reconciled Data Model & Roadmap
 
-**Version:** 0.9 | **Date:** 2026-03-02
+**Version:** 0.9 | **Date:** 2026-03-03
 
 ---
 
@@ -66,6 +66,37 @@ Current roadmap execution status (implemented in code, pending environment-by-en
    - strict and evidence runs now preserve exit semantics correctly (`1=fail`, `2=blocked`) after bypassing Make-level exit masking.
    - canary classifies auth/environment/runtime blockers (`401/403`, bare `404/500`, and lifecycle cascades) as blocked when appropriate, so strict/evidence outcomes are consistent.
    - current strict blocker set is runtime preconditions (endpoint timeout `500`, conversion readiness, active model) rather than code regressions.
+
+### AppsFlyer Attribution Execution Plan (2026-03-03)
+
+Goal: add conversion attribution signal for QPS optimization without relying on media-buyer knowledge of internal RTB IDs.
+
+1. **Locked principles**
+   - Do not require buyers to manually pass `billing_id` in AppsFlyer params.
+   - Use `clickid` as primary exact join key when available.
+   - Treat `creative_id + time window (+ app/site)` as fallback only, with explicit lower confidence.
+   - Keep AppsFlyer field mapping buyer-configurable (different buyers may use `af_sub*` differently).
+
+2. **Current evidence**
+   - Production 4-seat click URL audit shows AppsFlyer URLs in 1/4 seats (Tuky Display), not broadly present in the other sampled seats.
+   - Click macro compliance audit is now exposed in platform UX (dedicated page + creative modal diagnostics).
+
+3. **Implementation phases**
+   - Phase A (in progress):
+     - shipped buyer/default mapping-profile API surface (`GET/PUT /conversions/mapping-profile`) and AppsFlyer normalizer override support.
+     - shipped export coverage audit tool (`scripts/audit_appsflyer_export_coverage.py`) for real-file field validation.
+     - remaining: run pilot-buyer audits and publish finalized contracts.
+   - Phase B: raw ingestion + normalization pipeline with buyer-specific mapping profiles and lineage counters.
+   - Phase C: dual-mode join engine (exact `clickid` mode + probabilistic fallback mode with confidence score).
+   - Phase D: optimizer integration gated by confidence/coverage thresholds.
+   - Phase E: customer-facing onboarding/readiness checklist (`No AF`, `AF no clickid`, `AF exact-ready`).
+
+4. **Dependency gate**
+   - Keep runtime-health strict blockers as hard priority before attribution-driven strict automation:
+     - `/system/data-health` timeout stability
+     - `/optimizer/economics/efficiency` timeout stability
+     - proposal lifecycle completeness (`billing_id` propagation/apply reliability)
+     - QPS rollup completeness gaps
 
 ---
 
