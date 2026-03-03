@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, Optional
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 
 _ASSET_EXTENSIONS = (
@@ -34,6 +34,41 @@ _URL_PARAM_MACRO_PATTERN = re.compile(r"\{[a-zA-Z0-9_]+\}")
 def _is_click_url_macro(token: str) -> bool:
     normalized = token.upper()
     return normalized.startswith("%%CLICK_URL") and normalized.endswith("%%")
+
+
+def _extract_detection_urls(value: Optional[str]) -> list[str]:
+    if not value:
+        return []
+    raw = str(value).strip()
+    if not raw:
+        return []
+
+    variants = [raw]
+    current = raw
+    # Some creatives double-encode URL payloads; decode a small bounded number of times.
+    for _ in range(2):
+        decoded = unquote(current)
+        if decoded == current:
+            break
+        variants.append(decoded)
+        current = decoded
+
+    urls: list[str] = []
+    seen: set[str] = set()
+
+    def _add(url: str) -> None:
+        cleaned = url.rstrip(",;)}]>")
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            urls.append(cleaned)
+
+    for candidate in variants:
+        if candidate.startswith(("http://", "https://")):
+            _add(candidate)
+        for match in re.findall(r"https?://[^\s\"'<>]+", candidate):
+            _add(match)
+
+    return urls
 
 
 def extract_click_destinations_from_html(html_snippet: str) -> list[str]:
@@ -147,17 +182,15 @@ def build_creative_click_macro_summary(creative: Any) -> dict[str, Any]:
 
 
 def _is_appsflyer_url(value: Optional[str]) -> bool:
-    if not value:
-        return False
-    url = str(value).strip()
-    if not url.startswith(("http://", "https://")):
-        return False
-    try:
-        parsed = urlparse(url)
-    except Exception:
-        return False
-    host = (parsed.netloc or "").lower()
-    return host.endswith("app.appsflyer.com") or host.endswith("onelink.me")
+    for url in _extract_detection_urls(value):
+        try:
+            parsed = urlparse(url)
+        except Exception:
+            continue
+        host = (parsed.netloc or "").lower()
+        if host.endswith("app.appsflyer.com") or host.endswith("onelink.me"):
+            return True
+    return False
 
 
 def _url_has_clickid(value: Optional[str]) -> bool:
@@ -169,15 +202,25 @@ def _url_has_clickid(value: Optional[str]) -> bool:
     lowered = url.lower()
     if "clickid=" in lowered or "af_click_id=" in lowered:
         return True
+    if "clickid%3d" in lowered or "af_click_id%3d" in lowered:
+        return True
     # Buyers often use placeholder tokens that are replaced at click time.
     if "{dsp_params}" in lowered or "{clickid}" in lowered:
         return True
-    if _URL_PARAM_MACRO_PATTERN.search(url):
-        parsed = urlparse(url)
+
+    for detection_url in _extract_detection_urls(url):
+        parsed = urlparse(detection_url)
         params = parse_qs(parsed.query, keep_blank_values=True)
         clickid_value = params.get("clickid", [None])[0]
         if isinstance(clickid_value, str) and clickid_value.strip():
             return True
+        af_clickid_value = params.get("af_click_id", [None])[0]
+        if isinstance(af_clickid_value, str) and af_clickid_value.strip():
+            return True
+        if _URL_PARAM_MACRO_PATTERN.search(detection_url):
+            clickid_value = params.get("clickid", [None])[0]
+            if isinstance(clickid_value, str) and clickid_value.strip():
+                return True
     return False
 
 
