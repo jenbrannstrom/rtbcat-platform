@@ -28,6 +28,7 @@
 - [ ] **Phase A - Contract + reality check**
   - [x] Freeze buyer-level mapping profile schema and API surface (`/conversions/mapping-profile`; buyer/default scopes in `system_settings`).
   - [x] Add field-coverage audit tooling for raw AppsFlyer exports (`scripts/audit_appsflyer_export_coverage.py`).
+  - [x] Add one-command Phase-A orchestration script (`scripts/run_appsflyer_phase_a_audit.sh`) to produce buyer contract report artifacts.
   - [ ] Run coverage audit on pilot-buyer real exports/API pulls and publish per-buyer contract docs.
   - Acceptance: documented per-buyer contract + measured field coverage report.
 

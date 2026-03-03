@@ -335,3 +335,40 @@ Declare a connector production-ready only when:
 2. At least one end-to-end postback is accepted with expected `buyer_id`/`event_type`.
 3. Error taxonomy has no unresolved high-volume parsing/auth failures.
 4. Health endpoint does not show stale ingestion for the active buyer.
+
+## 6. AppsFlyer Phase-A Buyer Audit (Field Coverage Contract)
+
+Use the scripted path to verify real AppsFlyer exports are attribution-ready per buyer.
+
+Script:
+
+- `scripts/run_appsflyer_phase_a_audit.sh`
+
+What it does:
+
+1. Resolves mapping profile (`--mapping-profile` file, or API fetch).
+2. Runs `scripts/audit_appsflyer_export_coverage.py` on one or more export files.
+3. Writes:
+   - coverage markdown + JSON
+   - contract-style markdown report with decision mode (`exact_ready|mixed_mode|fallback_only`)
+
+Example using API mapping fetch via `X-Email`:
+
+```bash
+export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
+scripts/run_appsflyer_phase_a_audit.sh \
+  --buyer-id 1487810529 \
+  --input ~/Downloads/appsflyer_raw_2026-03-01.csv \
+  --fetch-mapping true \
+  --email "${CATSCAN_CANARY_EMAIL}" \
+  --doc-out docs/review/2026-03-03/APPSFLYER_PHASE_A_BUYER_1487810529.md
+```
+
+Example using explicit mapping profile file:
+
+```bash
+scripts/run_appsflyer_phase_a_audit.sh \
+  --buyer-id 1487810529 \
+  --input ~/Downloads/appsflyer_raw_2026-03-01.csv \
+  --mapping-profile /tmp/mapping_profile_1487810529.json
+```
