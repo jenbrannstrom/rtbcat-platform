@@ -88,7 +88,13 @@ Goal: add conversion attribution signal for QPS optimization without relying on 
      - shipped orchestration wrapper (`scripts/run_appsflyer_phase_a_audit.sh`) that fetches mapping profile + produces contract-style per-buyer report.
      - shipped DB-export helper (`scripts/export_appsflyer_events_jsonl.py`) so Phase-A audits can run from already-ingested AppsFlyer payloads when raw files are unavailable.
      - remaining: run pilot-buyer audits and publish finalized contracts.
-   - Phase B: raw ingestion + normalization pipeline with buyer-specific mapping profiles and lineage counters.
+   - Phase B (started):
+     - shipped attribution join evidence table (`conversion_attribution_joins`) and APIs:
+       - `POST /conversions/attribution/refresh`
+       - `GET /conversions/attribution/summary`
+       - `GET /conversions/attribution/joins`
+     - exposes exact-vs-fallback join mode, status (`matched|unmatched|blocked`), reason, and confidence.
+     - remaining: raw AppsFlyer export ingestion pipeline + lineage/quality counters.
    - Phase C: dual-mode join engine (exact `clickid` mode + probabilistic fallback mode with confidence score).
    - Phase D: optimizer integration gated by confidence/coverage thresholds.
    - Phase E: customer-facing onboarding/readiness checklist (`No AF`, `AF no clickid`, `AF exact-ready`).

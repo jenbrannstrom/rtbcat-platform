@@ -233,6 +233,119 @@ class _StubConversionIngestionService:
         }
 
 
+class _StubConversionAttributionService:
+    def __init__(self):
+        self.refresh_calls: list[dict] = []
+        self.summary_calls: list[dict] = []
+        self.list_calls: list[dict] = []
+
+    async def refresh_joins(self, **kwargs):
+        self.refresh_calls.append(kwargs)
+        return {
+            "buyer_id": kwargs.get("buyer_id", "1111111111"),
+            "source_type": kwargs.get("source_type", "appsflyer"),
+            "start_date": "2026-02-15",
+            "end_date": "2026-02-28",
+            "deleted_rows": 2,
+            "exact_rows_upserted": 4,
+            "fallback_rows_upserted": 4,
+            "fallback_window_days": kwargs.get("fallback_window_days", 1),
+            "summary": {
+                "buyer_id": kwargs.get("buyer_id", "1111111111"),
+                "source_type": kwargs.get("source_type", "appsflyer"),
+                "start_date": "2026-02-15",
+                "end_date": "2026-02-28",
+                "total_events": 4,
+                "modes": [
+                    {
+                        "mode": "exact_clickid",
+                        "matched": 0,
+                        "unmatched": 2,
+                        "blocked": 2,
+                        "total": 4,
+                        "match_rate_pct": 0.0,
+                        "avg_confidence": 0.0,
+                        "high_confidence_count": 0,
+                    },
+                    {
+                        "mode": "fallback_creative_time",
+                        "matched": 3,
+                        "unmatched": 1,
+                        "blocked": 0,
+                        "total": 4,
+                        "match_rate_pct": 75.0,
+                        "avg_confidence": 0.71,
+                        "high_confidence_count": 2,
+                    },
+                ],
+                "checked_at": "2026-02-28T00:00:00+00:00",
+            },
+        }
+
+    async def get_summary(self, **kwargs):
+        self.summary_calls.append(kwargs)
+        return {
+            "buyer_id": kwargs.get("buyer_id", "1111111111"),
+            "source_type": kwargs.get("source_type", "appsflyer"),
+            "start_date": "2026-02-15",
+            "end_date": "2026-02-28",
+            "total_events": 4,
+            "modes": [
+                {
+                    "mode": "exact_clickid",
+                    "matched": 0,
+                    "unmatched": 2,
+                    "blocked": 2,
+                    "total": 4,
+                    "match_rate_pct": 0.0,
+                    "avg_confidence": 0.0,
+                    "high_confidence_count": 0,
+                }
+            ],
+            "checked_at": "2026-02-28T00:00:00+00:00",
+        }
+
+    async def list_joins(self, **kwargs):
+        self.list_calls.append(kwargs)
+        return {
+            "rows": [
+                {
+                    "id": 1,
+                    "conversion_event_id": 101,
+                    "conversion_event_ts": "2026-02-28T00:00:00+00:00",
+                    "buyer_id": kwargs.get("buyer_id", "1111111111"),
+                    "source_type": kwargs.get("source_type", "appsflyer"),
+                    "join_mode": kwargs.get("join_mode") or "fallback_creative_time",
+                    "join_status": kwargs.get("join_status") or "matched",
+                    "confidence": 0.82,
+                    "reason": "matched_by_creative_and_time_window",
+                    "matched_metric_date": "2026-02-28",
+                    "matched_billing_id": "cfg-1",
+                    "matched_creative_id": "cr-1",
+                    "matched_app_id": "com.example.app",
+                    "matched_country": "US",
+                    "matched_publisher_id": "pub-1",
+                    "matched_impressions": 1000,
+                    "matched_clicks": 41,
+                    "matched_spend_usd": 82.0,
+                    "fallback_window_days": 1,
+                    "fallback_candidate_count": 1,
+                    "created_at": "2026-02-28T00:00:01+00:00",
+                    "updated_at": "2026-02-28T00:00:02+00:00",
+                }
+            ],
+            "meta": {
+                "start_date": "2026-02-15",
+                "end_date": "2026-02-28",
+                "total": 1,
+                "returned": 1,
+                "limit": kwargs.get("limit", 200),
+                "offset": kwargs.get("offset", 0),
+                "has_more": False,
+            },
+        }
+
+
 class _StubSettingsStore:
     def __init__(self, values: dict[str, str] | None = None):
         self.values = dict(values or {})
@@ -253,6 +366,7 @@ def _build_client(
     *,
     store: object | None = None,
     user: object | None = None,
+    attribution_stub: _StubConversionAttributionService | None = None,
 ) -> TestClient:
     conversions_router._clear_webhook_rate_limit_state()
     app = FastAPI()
@@ -272,6 +386,11 @@ def _build_client(
     monkeypatch.setattr(conversions_router, "resolve_buyer_id", _resolve_buyer_id)
     monkeypatch.setattr(conversions_router, "ConversionsService", lambda: stub_service)
     monkeypatch.setattr(conversions_router, "ConversionIngestionService", lambda: ingestion_stub)
+    monkeypatch.setattr(
+        conversions_router,
+        "ConversionAttributionService",
+        lambda: (attribution_stub or _StubConversionAttributionService()),
+    )
     return TestClient(app)
 
 
@@ -911,6 +1030,106 @@ def test_branch_webhook_accepts_query_payload(monkeypatch: pytest.MonkeyPatch):
     assert call["source_type"] == "branch"
     assert call["payload"]["event_name"] == "purchase"
     assert call["payload"]["event_ts"] == "2026-02-28T00:00:00Z"
+
+
+def test_refresh_conversion_attribution_joins(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    attribution_stub = _StubConversionAttributionService()
+    client = _build_client(stub, ingestion_stub, monkeypatch, attribution_stub=attribution_stub)
+
+    response = client.post(
+        "/api/conversions/attribution/refresh",
+        params={
+            "buyer_id": "1111111111",
+            "source_type": "appsflyer",
+            "days": 14,
+            "fallback_window_days": 1,
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(attribution_stub.refresh_calls) == 1
+    call = attribution_stub.refresh_calls[0]
+    assert call["buyer_id"] == "1111111111"
+    assert call["source_type"] == "appsflyer"
+    assert call["days"] == 14
+    assert call["fallback_window_days"] == 1
+    payload = response.json()
+    assert payload["fallback_rows_upserted"] == 4
+    assert payload["summary"]["modes"][0]["mode"] == "exact_clickid"
+
+
+def test_get_conversion_attribution_summary(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    attribution_stub = _StubConversionAttributionService()
+    client = _build_client(stub, ingestion_stub, monkeypatch, attribution_stub=attribution_stub)
+
+    response = client.get(
+        "/api/conversions/attribution/summary",
+        params={
+            "buyer_id": "1111111111",
+            "source_type": "appsflyer",
+            "days": 30,
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(attribution_stub.summary_calls) == 1
+    call = attribution_stub.summary_calls[0]
+    assert call["buyer_id"] == "1111111111"
+    assert call["source_type"] == "appsflyer"
+    assert call["days"] == 30
+    payload = response.json()
+    assert payload["total_events"] == 4
+    assert payload["modes"][0]["blocked"] == 2
+
+
+def test_list_conversion_attribution_joins(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    attribution_stub = _StubConversionAttributionService()
+    client = _build_client(stub, ingestion_stub, monkeypatch, attribution_stub=attribution_stub)
+
+    response = client.get(
+        "/api/conversions/attribution/joins",
+        params={
+            "buyer_id": "1111111111",
+            "source_type": "appsflyer",
+            "join_mode": "fallback_creative_time",
+            "join_status": "matched",
+            "min_confidence": 0.3,
+            "limit": 25,
+            "offset": 0,
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(attribution_stub.list_calls) == 1
+    call = attribution_stub.list_calls[0]
+    assert call["join_mode"] == "fallback_creative_time"
+    assert call["join_status"] == "matched"
+    assert call["min_confidence"] == 0.3
+    assert call["limit"] == 25
+    payload = response.json()
+    assert payload["meta"]["total"] == 1
+    assert payload["rows"][0]["confidence"] == 0.82
+
+
+def test_list_conversion_attribution_joins_rejects_invalid_mode(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    attribution_stub = _StubConversionAttributionService()
+    client = _build_client(stub, ingestion_stub, monkeypatch, attribution_stub=attribution_stub)
+
+    response = client.get(
+        "/api/conversions/attribution/joins",
+        params={"buyer_id": "1111111111", "join_mode": "bad_mode"},
+    )
+
+    assert response.status_code == 400
+    assert "join_mode" in response.json()["detail"]
 
 
 def test_get_conversion_mapping_profile_prefers_buyer_scope(monkeypatch: pytest.MonkeyPatch):

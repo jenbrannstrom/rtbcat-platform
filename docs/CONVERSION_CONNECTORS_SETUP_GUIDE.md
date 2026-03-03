@@ -388,3 +388,17 @@ scripts/run_appsflyer_phase_a_audit.sh \
   --email "${CATSCAN_CANARY_EMAIL}" \
   --doc-out docs/review/2026-03-03/APPSFLYER_PHASE_A_BUYER_1487810529.md
 ```
+
+## 7. Attribution Join Evidence API (Phase-B)
+
+These endpoints are analytics/diagnostics only (no auto-apply actions):
+
+- `POST /conversions/attribution/refresh`
+- `GET /conversions/attribution/summary`
+- `GET /conversions/attribution/joins`
+
+Design notes:
+
+- `exact_clickid` mode currently reports `blocked` when click IDs exist but RTB clickid dimension is not ingested.
+- `fallback_creative_time` mode attempts buyer+creative+time-window matching and returns confidence/reason fields.
+- Use this API to gate future automation: require exact coverage or high-confidence fallback thresholds before hard actions.
