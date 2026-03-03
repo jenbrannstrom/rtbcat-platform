@@ -6,7 +6,7 @@ about it. The right column is how a DevOps engineer finds it in the system.
 | Term | Media buyer definition | DevOps / system definition |
 |------|----------------------|---------------------------|
 | **Seat** | A buyer account on Google Authorized Buyers. You scope your analysis and targeting per seat. | `buyer_account_id` in Postgres. Stored in `seats` table. Synced via `GET /seats`. |
-| **QPS** | Queries Per Second: the rate of bid requests Google sends to your bidder. You pay for this capacity. | Inbound HTTP request rate to the bidder endpoint. Monitored via RTB funnel metrics in `rtb_daily`. |
+| **QPS** | Queries Per Second: the maximum rate of bid requests you ask Google to send. Google throttles the actual volume based on your account tier. | Configured cap per pretargeting config. Actual inbound rate monitored via RTB funnel metrics in `rtb_daily`. |
 | **Waste** | QPS consumed by bid requests your bidder rejects (wrong geos, wrong sizes, no matching creative). Money spent on nothing. | `(total_qps - bids_placed) / total_qps`. Computed from `rtb_daily` aggregates. Visible in funnel API. |
 | **Pretargeting config** | The rules that control which bid requests reach your bidder. You get 10 per seat. Controls geos, sizes, formats, platforms, publishers. | Mutable entity synced from Google AB API. Stored in `pretargeting_configs`. Managed via `/settings/pretargeting`. Snapshots enable rollback. |
 | **Funnel** | The progression from bid request to spend: QPS -> Bids -> Wins -> Impressions -> Clicks -> Spend. Each step has drop-off. | Computed from `rtb_daily` metrics. Served by `GET /analytics/rtb-funnel`. Frontend caches for 30 minutes. |

@@ -19,6 +19,8 @@ your data is stale, your decisions are based on old information.
 
 Drag and drop a CSV file exported from Google Authorized Buyers.
 
+![Data import page with upload zone and freshness grid](/docs/screenshot-import.png)
+
 **Workflow:**
 
 1. Export the report from your Google Authorized Buyers account.

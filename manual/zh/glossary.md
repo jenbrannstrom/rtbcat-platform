@@ -6,7 +6,7 @@
 | 术语 | 媒体买手定义 | 运维/系统定义 |
 |------|------------|-------------|
 | **席位** | Google Authorized Buyers 上的买方账户。你按席位来划分分析和定向。 | Postgres 中的 `buyer_account_id`。存储在 `seats` 表。通过 `GET /seats` 同步。 |
-| **QPS** | 每秒查询数，即 Google 发送到你的竞价器的出价请求速率。你为此容量付费。 | 竞价器端点的入站 HTTP 请求速率。通过 `rtb_daily` 中的 RTB 漏斗指标监控。 |
+| **QPS** | 每秒查询数，即你要求 Google 发送的最大竞价请求速率。Google 会根据账户等级节流实际量。 | 每个预定向配置的上限设置。实际入站速率通过 `rtb_daily` 中的 RTB 漏斗指标监控。 |
 | **浪费** | 被你的竞价器拒绝的出价请求所消耗的 QPS，包括错误的地区、错误的尺寸、没有匹配的素材。花了钱却什么都没得到。 | `(total_qps - bids_placed) / total_qps`。从 `rtb_daily` 聚合计算。在漏斗 API 中可见。 |
 | **预定向配置** | 控制哪些出价请求到达你的竞价器的规则。每个席位最多 10 个。控制地区、尺寸、格式、平台、发布商。 | 从 Google AB API 同步的可变实体。存储在 `pretargeting_configs`。通过 `/settings/pretargeting` 管理。快照支持回滚。 |
 | **漏斗** | 从出价请求到花费的递进：QPS -> 出价 -> 胜出 -> 展示 -> 点击 -> 花费。每一步都有衰减。 | 从 `rtb_daily` 指标计算。由 `GET /analytics/rtb-funnel` 提供。前端缓存 30 分钟。 |
