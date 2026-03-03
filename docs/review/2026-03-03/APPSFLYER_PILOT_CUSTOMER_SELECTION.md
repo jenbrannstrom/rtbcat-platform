@@ -105,7 +105,7 @@ What we need from you:
    - (any others?)
 
 2. Add our postback endpoint in your AppsFlyer dashboard:
-   URL: https://scan.rtb.cat/api/conversions/webhook/appsflyer
+   URL: https://scan.rtb.cat/api/conversions/appsflyer/postback?buyer_id=299038253
    Events: install, in-app events you care about (purchase, registration, etc.)
    Authentication: We'll provide a shared secret + HMAC key
 
@@ -154,7 +154,7 @@ Cat-Scan Team
 
 - [ ] **Contact Tuky Display** — send Email Template 1, confirm app IDs
 - [ ] **Share webhook credentials** — provide the AppsFlyer secret + HMAC key from production env vars
-- [ ] **Tuky Display configures postback** — they add `https://scan.rtb.cat/api/conversions/webhook/appsflyer` in their AppsFlyer dashboard for `com.drop.frenzy.bubbly` and `com.btools.bloods.statrs`
+- [ ] **Tuky Display configures postback** — they add `https://scan.rtb.cat/api/conversions/appsflyer/postback?buyer_id=299038253` in their AppsFlyer dashboard for `com.drop.frenzy.bubbly` and `com.btools.bloods.statrs`
 - [ ] **Send test postback** — use `scripts/run_conversion_attribution_phase_b_report.sh --buyer-id 299038253` to verify pipeline
 - [ ] **Verify first real postback** — check `GET /api/conversions/attribution/summary?buyer_id=299038253` shows `total_events > 0`
 - [ ] **Verify attribution join** — check `GET /api/conversions/attribution/joins?buyer_id=299038253&matched=true` returns rows
