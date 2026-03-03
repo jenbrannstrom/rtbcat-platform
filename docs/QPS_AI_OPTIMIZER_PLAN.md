@@ -86,6 +86,7 @@ Goal: add conversion attribution signal for QPS optimization without relying on 
      - shipped buyer/default mapping-profile API surface (`GET/PUT /conversions/mapping-profile`) and AppsFlyer normalizer override support.
      - shipped export coverage audit tool (`scripts/audit_appsflyer_export_coverage.py`) for real-file field validation.
      - shipped orchestration wrapper (`scripts/run_appsflyer_phase_a_audit.sh`) that fetches mapping profile + produces contract-style per-buyer report.
+     - shipped DB-export helper (`scripts/export_appsflyer_events_jsonl.py`) so Phase-A audits can run from already-ingested AppsFlyer payloads when raw files are unavailable.
      - remaining: run pilot-buyer audits and publish finalized contracts.
    - Phase B: raw ingestion + normalization pipeline with buyer-specific mapping profiles and lineage counters.
    - Phase C: dual-mode join engine (exact `clickid` mode + probabilistic fallback mode with confidence score).

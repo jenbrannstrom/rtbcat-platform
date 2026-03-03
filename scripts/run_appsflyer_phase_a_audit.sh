@@ -11,13 +11,17 @@ MAPPING_PROFILE_PATH=""
 FETCH_MAPPING="auto"
 API_TOKEN="${CATSCAN_API_TOKEN:-}"
 API_EMAIL="${CATSCAN_CANARY_EMAIL:-}"
+FROM_DB="false"
+DB_SINCE_DAYS="${CATSCAN_APPSFLYER_DB_SINCE_DAYS:-30}"
+DB_LIMIT="${CATSCAN_APPSFLYER_DB_LIMIT:-500000}"
+DB_DSN="${CATSCAN_POSTGRES_DSN:-}"
 
 declare -a INPUT_FILES=()
 
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/run_appsflyer_phase_a_audit.sh --buyer-id <id> --input <file> [--input <file> ...] [options]
+  scripts/run_appsflyer_phase_a_audit.sh --buyer-id <id> [--input <file> ...] [options]
 
 Purpose:
   Executes AppsFlyer Phase-A buyer audit in one command:
@@ -27,11 +31,17 @@ Purpose:
 
 Required:
   --buyer-id <id>                 Buyer ID
-  --input <path>                  AppsFlyer export file (CSV/JSONL); repeatable
+  One of:
+    --input <path>                AppsFlyer export file (CSV/JSONL); repeatable
+    --from-db                     Export raw AppsFlyer payloads from conversion_events first
 
 Options:
   --source-type <name>            Conversion source type (default: appsflyer)
   --input-format <auto|csv|jsonl> Input parser mode (default: auto)
+  --from-db                       Use conversion_events.raw_payload export as audit input
+  --db-since-days <n>             DB export lookback days (default: 30)
+  --db-limit <n>                  DB export row limit (default: 500000)
+  --db-dsn <dsn>                  Postgres DSN override for --from-db path
   --mapping-profile <path>        Mapping profile JSON file (skip API fetch)
   --fetch-mapping <auto|true|false>
                                   Fetch mapping via API when no --mapping-profile (default: auto)
@@ -46,6 +56,12 @@ Examples:
   scripts/run_appsflyer_phase_a_audit.sh \
     --buyer-id 1487810529 \
     --input ~/Downloads/appsflyer_raw_2026-03-01.csv
+
+  scripts/run_appsflyer_phase_a_audit.sh \
+    --buyer-id 1487810529 \
+    --from-db \
+    --db-since-days 14 \
+    --email cat-scan@rtb.cat
 
   scripts/run_appsflyer_phase_a_audit.sh \
     --buyer-id 1487810529 \
@@ -83,6 +99,22 @@ while [[ $# -gt 0 ]]; do
       ;;
     --input-format)
       INPUT_FORMAT="${2:-}"
+      shift 2
+      ;;
+    --from-db)
+      FROM_DB="true"
+      shift
+      ;;
+    --db-since-days)
+      DB_SINCE_DAYS="${2:-}"
+      shift 2
+      ;;
+    --db-limit)
+      DB_LIMIT="${2:-}"
+      shift 2
+      ;;
+    --db-dsn)
+      DB_DSN="${2:-}"
       shift 2
       ;;
     --mapping-profile)
@@ -129,8 +161,8 @@ if [[ -z "$BUYER_ID" ]]; then
   echo "--buyer-id is required." >&2
   exit 2
 fi
-if [[ "${#INPUT_FILES[@]}" -eq 0 ]]; then
-  echo "At least one --input is required." >&2
+if [[ "$FROM_DB" != "true" && "${#INPUT_FILES[@]}" -eq 0 ]]; then
+  echo "Provide at least one --input or use --from-db." >&2
   exit 2
 fi
 case "$INPUT_FORMAT" in
@@ -153,6 +185,14 @@ if ! command -v curl >/dev/null 2>&1; then
   echo "'curl' is required." >&2
   exit 2
 fi
+if [[ "$FROM_DB" == "true" && ! "$DB_SINCE_DAYS" =~ ^[0-9]+$ ]]; then
+  echo "Invalid --db-since-days '${DB_SINCE_DAYS}' (expected integer)." >&2
+  exit 2
+fi
+if [[ "$FROM_DB" == "true" && ! "$DB_LIMIT" =~ ^[0-9]+$ ]]; then
+  echo "Invalid --db-limit '${DB_LIMIT}' (expected integer)." >&2
+  exit 2
+fi
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_DIR="${OUT_DIR%/}/appsflyer-phase-a-${BUYER_ID}-${STAMP}"
@@ -162,6 +202,7 @@ BASE_URL="${BASE_URL%/}"
 MAPPING_SCOPE="builtin_default"
 MAPPING_SETTING_KEY=""
 MAPPING_FALLBACK_KEY=""
+DB_EXPORT_PATH=""
 
 if [[ -n "$MAPPING_PROFILE_PATH" ]]; then
   MAPPING_PROFILE_PATH="$(realpath "$MAPPING_PROFILE_PATH")"
@@ -225,6 +266,24 @@ else
   fi
 fi
 
+if [[ "$FROM_DB" == "true" ]]; then
+  DB_EXPORT_PATH="${RUN_DIR}/appsflyer_events_from_db.jsonl"
+  DB_EXPORT_CMD=(
+    python3 scripts/export_appsflyer_events_jsonl.py
+    --buyer-id "$BUYER_ID"
+    --source-type "$SOURCE_TYPE"
+    --since-days "$DB_SINCE_DAYS"
+    --limit "$DB_LIMIT"
+    --out "$DB_EXPORT_PATH"
+  )
+  if [[ -n "$DB_DSN" ]]; then
+    DB_EXPORT_CMD+=(--dsn "$DB_DSN")
+  fi
+  echo "Exporting AppsFlyer events from DB..."
+  "${DB_EXPORT_CMD[@]}"
+  INPUT_FILES+=("$DB_EXPORT_PATH")
+fi
+
 COVERAGE_MD="${RUN_DIR}/coverage.md"
 COVERAGE_JSON="${RUN_DIR}/coverage.json"
 CONTRACT_MD="${RUN_DIR}/phase_a_contract.md"
@@ -243,6 +302,9 @@ echo "Buyer: ${BUYER_ID}"
 echo "Source type: ${SOURCE_TYPE}"
 echo "Input files: ${#INPUT_FILES[@]}"
 echo "Mapping scope: ${MAPPING_SCOPE}"
+if [[ -n "$DB_EXPORT_PATH" ]]; then
+  echo "DB export: ${DB_EXPORT_PATH}"
+fi
 echo
 echo "Running coverage audit..."
 "${CMD[@]}"
@@ -291,6 +353,9 @@ DECISION_MESSAGE="$(jq -r '.decision.message // ""' "$COVERAGE_JSON")"
     echo "- mapping_profile_used: \`${MAPPING_PROFILE_PATH}\`"
   else
     echo "- mapping_profile_used: \`builtin default\`"
+  fi
+  if [[ -n "$DB_EXPORT_PATH" ]]; then
+    echo "- db_export_input: \`${DB_EXPORT_PATH}\`"
   fi
   echo
   echo "## Next Action Gate"
