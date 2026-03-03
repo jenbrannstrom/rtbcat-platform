@@ -1,0 +1,56 @@
+import type { PartialTranslations } from '../../types';
+
+const value: PartialTranslations['dashboard'] = {
+  title: 'Waste Optimizer',
+  subtitle: 'Begrijp je RTB-funnel en optimaliseer QPS-verspilling',
+  rtbFunnel: 'De RTB-funnel',
+  rtbFunnelDescription:
+    'Verkeer dat je bidder bereikt en converteert naar wins',
+  reachedYourBidder: 'Bereikte je bidder',
+  winRate: 'Winrate',
+  impressionsWon: 'Gewonnen impressies',
+  yourEfficiency: 'Je efficientie:',
+  thisIsHealthy: 'Dit is gezond!',
+  roomToImprove: 'Er kan ruimte zijn voor verbetering.',
+  ofReachedTraffic: 'van bereikt verkeer',
+  qps: 'QPS',
+  ips: 'IPS',
+  reached: 'Bereikt',
+  impressions: 'Impressies',
+  win: 'win',
+  needRtbReport: 'RTB-rapport nodig',
+  period: 'Periode:',
+  days: 'dagen',
+  dataAsOf: 'Data per',
+  dataFreshnessPending: 'Dataversheid in behandeling...',
+  homeLabel: 'home',
+  bidstreamLabel: 'bidstream',
+  configCpm: 'Config CPM',
+  avgCpm: 'Gem. CPM',
+  unableToLoadBuyerSeatsRetry:
+    'Buyer seats laden mislukt. Probeer opnieuw om door te gaan.',
+  loadingSeatAccess: 'Seat-toegang laden...',
+  noActiveBuyerSeatsSyncSettings:
+    'Geen actieve buyer seats gevonden. Synchroniseer seats in Instellingen om home-analytics te laden.',
+  selectSeatToLoadHomeAnalytics:
+    'Selecteer een seat om home-analytics te laden.',
+  failedToLoadQpsSummary: 'QPS-samenvatting laden mislukt',
+  qpsSummarySizeCoverage: 'Formaatdekking',
+  qpsSummaryGaps: '{count} gaps',
+  qpsSummarySizesCovered: '{count} formaten gedekt',
+  qpsSummaryGeoEfficiency: 'Geo-efficientie',
+  qpsSummaryGeosUnit: 'geos',
+  qpsSummaryGeosToExclude: '{count} uit te sluiten',
+  qpsSummaryAllPerformingWell: 'Alles presteert goed',
+  qpsSummaryWastedSpend: 'Verspilde spend',
+  qpsSummaryPeriodDays: '/ {days} dagen',
+  qpsSummaryWastePctOfTotal: '{pct}% van totaal',
+  qpsSummaryActionItems: 'Actiepunten',
+  qpsSummaryExcludeGeos: '{count} geos uitsluiten',
+  qpsSummaryBlockSizes: '{count} formaten blokkeren',
+  qpsSummaryConsiderSizes: '{count} formaten overwegen',
+  qpsSummaryNoImmediateActions: 'Geen directe acties nodig',
+  qpsSummarySaveMonthly: 'Bespaar ~${amount}/mnd',
+};
+
+export default value;
