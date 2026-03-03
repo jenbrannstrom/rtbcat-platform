@@ -7,6 +7,7 @@ import { GeoAnalysisSection } from "@/components/waste-analyzer";
 import { getRTBFunnel, getSeats } from "@/lib/api";
 import { useAccount } from "@/contexts/account-context";
 import { useTranslation } from "@/contexts/i18n-context";
+import { HelpLink } from "@/components/docs/help-link";
 
 const PERIOD_OPTIONS = [
   { value: 7, label: "7 days" },
@@ -55,7 +56,7 @@ export default function GeoQpsPage() {
     <div className="p-8 max-w-7xl mx-auto">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t.qpsNav.geo}</h1>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">{t.qpsNav.geo} <HelpLink chapter="04-analyzing-waste" /></h1>
           <p className="text-sm text-gray-500">
             {seatName ? `for ${seatName}` : t.common.loading}
           </p>

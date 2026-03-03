@@ -27,7 +27,12 @@ _ASSET_EXTENSIONS = (
     ".ttf",
     ".otf",
 )
-_CLICK_MACRO_PATTERN = re.compile(r"%%[A-Z_]+%%")
+_MACRO_TOKEN_PATTERN = re.compile(r"%%[A-Z0-9_]+%%")
+
+
+def _is_click_url_macro(token: str) -> bool:
+    normalized = token.upper()
+    return normalized.startswith("%%CLICK_URL") and normalized.endswith("%%")
 
 
 def extract_click_destinations_from_html(html_snippet: str) -> list[str]:
@@ -54,13 +59,85 @@ def extract_click_destinations_from_html(html_snippet: str) -> list[str]:
     return candidates
 
 
+def extract_creative_destination_candidates(creative: Any) -> list[dict[str, str]]:
+    raw_data = getattr(creative, "raw_data", {}) or {}
+    declared_urls_raw = raw_data.get("declaredClickThroughUrls", [])
+    declared_urls = declared_urls_raw if isinstance(declared_urls_raw, list) else []
+    html_payload = raw_data.get("html")
+    html_snippet = str(html_payload.get("snippet") or "") if isinstance(html_payload, dict) else ""
+    html_click_destinations = extract_click_destinations_from_html(html_snippet)
+
+    native_payload = raw_data.get("native")
+    native_click_url = (
+        str(native_payload.get("clickLinkUrl") or "").strip()
+        if isinstance(native_payload, dict)
+        else ""
+    )
+
+    rows: list[dict[str, str]] = []
+
+    def add(source: str, value: Optional[str]) -> None:
+        if value is None:
+            rows.append({"source": source, "url": ""})
+            return
+        rows.append({"source": source, "url": str(value).strip()})
+
+    add("final_url", getattr(creative, "final_url", None))
+    add("display_url", getattr(creative, "display_url", None))
+    for url in declared_urls:
+        add("declared_click_through_url", url)
+    if native_click_url:
+        add("native_click_link_url", native_click_url)
+    for url in html_click_destinations:
+        add("html_snippet", url)
+    return rows
+
+
+def extract_macro_tokens(value: Optional[str]) -> list[str]:
+    if not value:
+        return []
+    return sorted(set(_MACRO_TOKEN_PATTERN.findall(str(value))))
+
+
+def build_creative_click_macro_summary(creative: Any) -> dict[str, Any]:
+    candidates = extract_creative_destination_candidates(creative)
+    macro_tokens: set[str] = set()
+    click_macro_tokens: set[str] = set()
+    source_hints: set[str] = set()
+    sample_url: Optional[str] = None
+
+    for row in candidates:
+        url = row.get("url", "")
+        source = row.get("source", "")
+        tokens = extract_macro_tokens(url)
+        if not tokens:
+            continue
+        if sample_url is None:
+            sample_url = url
+        source_hints.add(source)
+        macro_tokens.update(tokens)
+        for token in tokens:
+            if _is_click_url_macro(token):
+                click_macro_tokens.add(token)
+
+    return {
+        "has_any_macro": bool(macro_tokens),
+        "has_click_macro": bool(click_macro_tokens),
+        "macro_tokens": sorted(macro_tokens),
+        "click_macro_tokens": sorted(click_macro_tokens),
+        "url_sources": sorted(source_hints),
+        "url_count": len(candidates),
+        "sample_url": sample_url,
+    }
+
+
 def classify_click_destination(url: Optional[str]) -> tuple[bool, Optional[str]]:
     if not url:
         return False, "empty"
     value = str(url).strip()
     if not value:
         return False, "empty"
-    if _CLICK_MACRO_PATTERN.search(value):
+    if _MACRO_TOKEN_PATTERN.search(value):
         return False, "contains_click_macro"
     if not value.startswith(("http://", "https://")):
         return False, "unsupported_scheme"
@@ -81,13 +158,6 @@ def is_probably_click_destination(url: Optional[str]) -> bool:
 
 
 def build_creative_destination_diagnostics(creative: Any) -> dict[str, Any]:
-    raw_data = getattr(creative, "raw_data", {}) or {}
-    declared_urls_raw = raw_data.get("declaredClickThroughUrls", [])
-    declared_urls = declared_urls_raw if isinstance(declared_urls_raw, list) else []
-    html_payload = raw_data.get("html")
-    html_snippet = str(html_payload.get("snippet") or "") if isinstance(html_payload, dict) else ""
-    html_click_destinations = extract_click_destinations_from_html(html_snippet)
-
     candidate_rows: list[dict[str, Any]] = []
     eligible: list[str] = []
     seen_eligible: set[str] = set()
@@ -126,18 +196,20 @@ def build_creative_destination_diagnostics(creative: Any) -> dict[str, Any]:
             }
         )
 
-    add_candidate(getattr(creative, "final_url", None), "final_url")
-    add_candidate(getattr(creative, "display_url", None), "display_url")
-    for url in declared_urls:
-        add_candidate(url, "declared_click_through_url")
-    for url in html_click_destinations:
-        add_candidate(url, "html_snippet")
+    for row in extract_creative_destination_candidates(creative):
+        add_candidate(row.get("url"), row.get("source", "unknown"))
+
+    macro_summary = build_creative_click_macro_summary(creative)
 
     return {
         "resolved_destination_url": eligible[0] if eligible else None,
         "candidate_count": len(candidate_rows),
         "eligible_count": len(eligible),
         "candidates": candidate_rows,
+        "has_any_macro": macro_summary["has_any_macro"],
+        "has_click_macro": macro_summary["has_click_macro"],
+        "macro_tokens": macro_summary["macro_tokens"],
+        "click_macro_tokens": macro_summary["click_macro_tokens"],
     }
 
 

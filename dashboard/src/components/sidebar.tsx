@@ -558,6 +558,31 @@ export function Sidebar() {
           );
         })}
 
+        {!restricted && (
+          <Link
+            href={getSeatScopedHref("/creatives/click-macros")}
+            className={cn(
+              "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
+              pathWithoutBuyer.startsWith("/creatives/click-macros")
+                ? "bg-primary-50 text-primary-700"
+                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
+              collapsed && "justify-center px-2"
+            )}
+            title={collapsed ? "Click Macro Audit" : undefined}
+          >
+            <Shield
+              className={cn(
+                "h-5 w-5 flex-shrink-0",
+                pathWithoutBuyer.startsWith("/creatives/click-macros")
+                  ? "text-primary-600"
+                  : "text-gray-400",
+                !collapsed && "mr-3"
+              )}
+            />
+            {!collapsed && "Click Macro Audit"}
+          </Link>
+        )}
+
         {/* Settings Section */}
         {!restricted && <div className="pt-4">
           {!collapsed && (
@@ -746,7 +771,7 @@ export function Sidebar() {
                 </span>
                 <span>·</span>
                 <a
-                  href="https://docs.rtb.cat"
+                  href="/docs"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-primary-600 transition-colors"

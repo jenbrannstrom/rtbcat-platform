@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Server, Database, Video, Loader2, CheckCircle, XCircle, AlertTriangle, Image, Cpu, BarChart3 } from "lucide-react";
+import { HelpLink } from "@/components/docs/help-link";
 import {
   getHealth,
   getStats,
@@ -890,7 +891,7 @@ export default function SystemStatusPage() {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">{t.settingsNav.systemStatus}</h1>
+        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">{t.settingsNav.systemStatus} <HelpLink chapter="13-health-monitoring" /></h1>
         <p className="mt-1 text-sm text-gray-500">
           {t.settings.systemConfiguration}
         </p>

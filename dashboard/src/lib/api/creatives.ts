@@ -6,6 +6,7 @@
 import { fetchApi } from "./core";
 import type {
   Creative,
+  CreativeClickMacroCoverageResponse,
   CreativeDestinationDiagnostics,
   CreativeLiveResponse,
   CreativeCountryBreakdown,
@@ -93,6 +94,28 @@ export async function getCreativeDestinationDiagnostics(
 ): Promise<CreativeDestinationDiagnostics> {
   return fetchApi<CreativeDestinationDiagnostics>(
     `/creatives/${encodeURIComponent(id)}/destination-diagnostics`
+  );
+}
+
+export async function getCreativeClickMacroCoverage(params?: {
+  buyer_id?: string;
+  search?: string;
+  macro_state?: "all" | "has_click_macro" | "missing_click_macro";
+  limit?: number;
+  offset?: number;
+  scan_limit?: number;
+}): Promise<CreativeClickMacroCoverageResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.buyer_id) searchParams.set("buyer_id", params.buyer_id);
+  if (params?.search) searchParams.set("search", params.search);
+  if (params?.macro_state) searchParams.set("macro_state", params.macro_state);
+  if (params?.limit !== undefined) searchParams.set("limit", String(params.limit));
+  if (params?.offset !== undefined) searchParams.set("offset", String(params.offset));
+  if (params?.scan_limit !== undefined) searchParams.set("scan_limit", String(params.scan_limit));
+
+  const query = searchParams.toString();
+  return fetchApi<CreativeClickMacroCoverageResponse>(
+    `/creatives/click-macro-coverage${query ? `?${query}` : ""}`
   );
 }
 

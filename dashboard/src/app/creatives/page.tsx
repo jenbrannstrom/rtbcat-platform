@@ -20,6 +20,8 @@ import type { Creative, PerformancePeriod, CreativePerformanceSummary } from "@/
 import { cn } from "@/lib/utils";
 import { useAccount } from "@/contexts/account-context";
 import { useTranslation } from "@/contexts/i18n-context";
+import { toBuyerScopedPath } from "@/lib/buyer-routes";
+import { HelpLink } from "@/components/docs/help-link";
 
 // Period options for date-range picker
 const PERIOD_OPTIONS = [
@@ -576,8 +578,15 @@ function CreativesContent() {
       {/* Compact Header with Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-4">
         {/* Title */}
-        <div className="flex-shrink-0">
+        <div className="flex items-center gap-3 flex-shrink-0">
           <h1 className="text-xl font-bold text-gray-900">{t.creatives.title}</h1>
+          <HelpLink chapter="05-managing-creatives" />
+          <Link
+            href={toBuyerScopedPath("/creatives/click-macros", selectedSeatId)}
+            className="rounded border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Click Macro Audit
+          </Link>
         </div>
 
         {/* Search - 35% width */}

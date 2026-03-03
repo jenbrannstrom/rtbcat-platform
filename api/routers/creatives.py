@@ -16,13 +16,19 @@ from api.dependencies import (
 from api.schemas.common import PaginationMeta
 from api.schemas.creatives import (
     ClusterAssignment,
+    CreativeClickMacroCoverageResponse,
+    CreativeClickMacroCoverageRow,
+    CreativeClickMacroCoverageSummary,
     CreativeCountryBreakdownResponse,
     CreativeDestinationDiagnosticsResponse,
     CreativeResponse,
     NewlyUploadedCreativesResponse,
     PaginatedCreativesResponse,
 )
-from services.creative_destination_resolver import build_creative_destination_diagnostics
+from services.creative_destination_resolver import (
+    build_creative_click_macro_summary,
+    build_creative_destination_diagnostics,
+)
 from services.auth_service import User
 from services.creative_countries_service import CreativeCountriesService
 from services.creative_response_builder import build_creative_response
@@ -186,6 +192,98 @@ async def get_newly_uploaded_creatives(
     except Exception as e:
         logger.error(f"Failed to get newly uploaded creatives: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get newly uploaded creatives: {str(e)}")
+
+
+@router.get(
+    "/creatives/click-macro-coverage",
+    response_model=CreativeClickMacroCoverageResponse,
+)
+async def get_creative_click_macro_coverage(
+    buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
+    search: Optional[str] = Query(
+        None, description="Filter by creative ID or creative name (case-insensitive)"
+    ),
+    macro_state: str = Query(
+        "all",
+        pattern="^(all|has_click_macro|missing_click_macro)$",
+        description="Filter rows by click macro state",
+    ),
+    limit: int = Query(200, ge=1, le=1000, description="Page size"),
+    offset: int = Query(0, ge=0, description="Rows to skip"),
+    scan_limit: int = Query(
+        3000,
+        ge=100,
+        le=10000,
+        description="Maximum creatives to inspect before applying filters and pagination",
+    ),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    """Return creative-level click macro coverage for compliance and auditing."""
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+
+    creatives = await store.list_creatives(
+        buyer_id=buyer_id,
+        limit=scan_limit,
+        offset=0,
+        include_raw_data=True,
+    )
+
+    search_term = (search or "").strip().lower()
+    rows: list[CreativeClickMacroCoverageRow] = []
+
+    for creative in creatives:
+        if search_term and search_term not in creative.id.lower() and search_term not in (creative.name or "").lower():
+            continue
+
+        macro_summary = build_creative_click_macro_summary(creative)
+        has_click_macro = bool(macro_summary["has_click_macro"])
+        if macro_state == "has_click_macro" and not has_click_macro:
+            continue
+        if macro_state == "missing_click_macro" and has_click_macro:
+            continue
+
+        rows.append(
+            CreativeClickMacroCoverageRow(
+                creative_id=creative.id,
+                creative_name=creative.name or "",
+                buyer_id=creative.buyer_id,
+                format=creative.format,
+                approval_status=creative.approval_status,
+                has_any_macro=bool(macro_summary["has_any_macro"]),
+                has_click_macro=has_click_macro,
+                macro_tokens=macro_summary["macro_tokens"],
+                click_macro_tokens=macro_summary["click_macro_tokens"],
+                url_sources=macro_summary["url_sources"],
+                url_count=macro_summary["url_count"],
+                sample_url=macro_summary["sample_url"],
+            )
+        )
+
+    rows.sort(
+        key=lambda item: (
+            item.has_click_macro,
+            item.creative_name.lower(),
+            item.creative_id,
+        )
+    )
+
+    total = len(rows)
+    paged_rows = rows[offset : offset + limit]
+    summary = CreativeClickMacroCoverageSummary(
+        creatives_with_click_macro=sum(1 for item in rows if item.has_click_macro),
+        creatives_without_click_macro=sum(1 for item in rows if not item.has_click_macro),
+        creatives_with_any_macro=sum(1 for item in rows if item.has_any_macro),
+    )
+
+    return CreativeClickMacroCoverageResponse(
+        rows=paged_rows,
+        total=total,
+        returned=len(paged_rows),
+        limit=limit,
+        offset=offset,
+        summary=summary,
+    )
 
 
 @router.get("/creatives/{creative_id}", response_model=CreativeResponse)
