@@ -12,6 +12,7 @@ SOURCE_TYPE="${CATSCAN_PRIME_SOURCE_TYPE:-pixel}"
 EVENT_VALUE="${CATSCAN_PRIME_EVENT_VALUE:-1}"
 CURRENCY="${CATSCAN_PRIME_CURRENCY:-USD}"
 BILLING_ID="${CATSCAN_PRIME_BILLING_ID:-}"
+AUTO_RESOLVE_BILLING_ID="${CATSCAN_PRIME_AUTO_RESOLVE_BILLING_ID:-1}"
 COUNTRY="${CATSCAN_PRIME_COUNTRY:-}"
 PUBLISHER_ID="${CATSCAN_PRIME_PUBLISHER_ID:-}"
 APP_ID="${CATSCAN_PRIME_APP_ID:-}"
@@ -54,6 +55,8 @@ Options:
   --event-value <value>           Event value (default: 1)
   --currency <code>               Currency code (default: USD)
   --billing-id <id>               Optional stable billing_id dimension
+  --auto-resolve-billing-id <bool>
+                                  Auto-pick billing_id from pretargeting config when missing (default: true)
   --country <code>                Optional stable country dimension
   --publisher-id <id>             Optional stable publisher_id dimension
   --app-id <id>                   Optional stable app_id dimension
@@ -91,6 +94,7 @@ while [[ $# -gt 0 ]]; do
     --event-value) EVENT_VALUE="${2:-}"; shift 2 ;;
     --currency) CURRENCY="${2:-}"; shift 2 ;;
     --billing-id) BILLING_ID="${2:-}"; shift 2 ;;
+    --auto-resolve-billing-id) AUTO_RESOLVE_BILLING_ID="${2:-}"; shift 2 ;;
     --country) COUNTRY="${2:-}"; shift 2 ;;
     --publisher-id) PUBLISHER_ID="${2:-}"; shift 2 ;;
     --app-id) APP_ID="${2:-}"; shift 2 ;;
@@ -114,6 +118,18 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+parse_bool() {
+  local value="${1:-}"
+  case "${value,,}" in
+    1|true|yes|y|on) echo "1" ;;
+    0|false|no|n|off) echo "0" ;;
+    *)
+      echo "Invalid boolean '${value}' (expected true/false)." >&2
+      exit 2
+      ;;
+  esac
+}
 
 if [[ -z "$BUYER_ID" ]]; then
   echo "--buyer-id is required." >&2
@@ -154,6 +170,7 @@ if ! [[ "$POST_REFRESH_WAIT_SECONDS" =~ ^[0-9]+$ ]] || (( POST_REFRESH_WAIT_SECO
   echo "Invalid --post-refresh-wait '${POST_REFRESH_WAIT_SECONDS}'." >&2
   exit 2
 fi
+AUTO_RESOLVE_BILLING_ID="$(parse_bool "$AUTO_RESOLVE_BILLING_ID")"
 if ! [[ "$POLL_INTERVAL_SECONDS" =~ ^[0-9]+$ ]] || (( POLL_INTERVAL_SECONDS < 1 )); then
   echo "Invalid --poll-interval '${POLL_INTERVAL_SECONDS}'." >&2
   exit 2
@@ -175,6 +192,32 @@ echo "Run dir: ${RUN_DIR}"
 echo "Buyer: ${BUYER_ID}"
 echo "Base URL: ${BASE_URL}"
 echo "X-Email: ${CANARY_EMAIL}"
+echo
+
+if [[ -z "$BILLING_ID" && "$AUTO_RESOLVE_BILLING_ID" == "1" ]]; then
+  pretargeting_body="${RUN_DIR}/pretargeting_configs.json"
+  pretargeting_http="$(curl -sS -m "$TIMEOUT_SECONDS" \
+    -H "X-Email: ${CANARY_EMAIL}" \
+    -o "$pretargeting_body" \
+    -w "%{http_code}" \
+    "${BASE_URL}/settings/pretargeting?buyer_id=${BUYER_ID}&limit=500&summary_only=true")"
+  if [[ "$pretargeting_http" == "200" ]]; then
+    BILLING_ID="$(jq -r '
+      (
+        [.[]? | select(((.billing_id // "") | tostring) != "" and (((.state // "ACTIVE") | tostring | ascii_upcase) == "ACTIVE"))]
+        | .[0].billing_id
+      ) // (
+        [.[]? | select(((.billing_id // "") | tostring) != "")]
+        | .[0].billing_id
+      ) // ""
+    ' "$pretargeting_body" 2>/dev/null || true)"
+  fi
+fi
+if [[ -n "$BILLING_ID" ]]; then
+  echo "seed_billing_id=${BILLING_ID}"
+else
+  echo "seed_billing_id=(none)"
+fi
 echo
 
 today_utc="$(date -u +%Y-%m-%d)"
@@ -333,6 +376,8 @@ echo "workflow_proposals_created=${proposals_created}"
 echo "top_proposals_count=${top_count}"
 if [[ -n "$first_proposal_id" ]]; then
   echo "first_proposal_id=${first_proposal_id}"
+else
+  echo "first_proposal_id=(none)"
 fi
 
 echo
@@ -343,6 +388,10 @@ if [[ "$top_count" =~ ^[0-9]+$ ]] && (( top_count > 0 )); then
 fi
 
 echo "Result: FAIL (no top proposals yet)"
+if [[ -z "$BILLING_ID" ]]; then
+  echo "Hint: no billing_id was seeded; proposals require billing_id-backed scores."
+  echo "      Re-run with --billing-id <active_config_billing_id> (or keep --auto-resolve-billing-id true)."
+fi
 if [[ "$refresh_timed_out" == "1" ]]; then
   echo "Hint: refresh timed out; if this persists, run with --refresh-days 1 and longer --refresh-timeout, or debug /conversions/aggregates/refresh query path."
 fi
