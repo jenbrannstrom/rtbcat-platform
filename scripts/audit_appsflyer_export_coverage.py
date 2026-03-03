@@ -140,6 +140,64 @@ def _pct(part: int, total: int) -> float:
     return (part / total) * 100.0
 
 
+def _decision(exact_ready_pct: float) -> tuple[str, str]:
+    if exact_ready_pct >= 80.0:
+        return "exact_ready", "Exact attribution join is viable for this dataset."
+    if exact_ready_pct >= 40.0:
+        return (
+            "mixed_mode",
+            "Mixed mode recommended: exact join where possible, fallback join with confidence scoring.",
+        )
+    return (
+        "fallback_only",
+        "Exact join is not yet viable; prioritize clickid propagation before strict optimizer automation.",
+    )
+
+
+def _stats_payload(stats: CoverageStats) -> dict[str, float | int]:
+    return {
+        "rows": stats.rows,
+        "click_id_present": stats.click_id_present,
+        "creative_id_present": stats.creative_id_present,
+        "buyer_hint_present": stats.buyer_hint_present,
+        "timestamp_present": stats.timestamp_present,
+        "site_id_present": stats.site_id_present,
+        "campaign_id_present": stats.campaign_id_present,
+        "exact_ready_rows": stats.exact_ready_rows,
+        "fallback_ready_rows": stats.fallback_ready_rows,
+        "click_id_present_pct": round(_pct(stats.click_id_present, stats.rows), 4),
+        "creative_id_present_pct": round(_pct(stats.creative_id_present, stats.rows), 4),
+        "buyer_hint_present_pct": round(_pct(stats.buyer_hint_present, stats.rows), 4),
+        "timestamp_present_pct": round(_pct(stats.timestamp_present, stats.rows), 4),
+        "site_id_present_pct": round(_pct(stats.site_id_present, stats.rows), 4),
+        "campaign_id_present_pct": round(_pct(stats.campaign_id_present, stats.rows), 4),
+        "exact_ready_pct": round(_pct(stats.exact_ready_rows, stats.rows), 4),
+        "fallback_ready_pct": round(_pct(stats.fallback_ready_rows, stats.rows), 4),
+    }
+
+
+def _summary_payload(
+    *,
+    stats_by_file: dict[str, CoverageStats],
+    combined: CoverageStats,
+    mapping_path: Path | None,
+    field_map: dict[str, list[str]],
+) -> dict[str, object]:
+    exact_pct = _pct(combined.exact_ready_rows, combined.rows)
+    decision_code, decision_message = _decision(exact_pct)
+    return {
+        "files_scanned": len(stats_by_file),
+        "mapping_profile": str(mapping_path) if mapping_path else None,
+        "field_map": field_map,
+        "combined": _stats_payload(combined),
+        "per_file": {name: _stats_payload(stats) for name, stats in stats_by_file.items()},
+        "decision": {
+            "mode": decision_code,
+            "message": decision_message,
+        },
+    }
+
+
 def _audit_rows(rows: Iterable[dict[str, str]], field_map: dict[str, list[str]]) -> CoverageStats:
     stats = CoverageStats()
     for row in rows:
@@ -220,12 +278,8 @@ def _render_markdown(
     lines.append("")
     lines.append("## Decision Hint")
     lines.append("")
-    if _pct(combined.exact_ready_rows, combined.rows) >= 80:
-        lines.append("- Exact attribution join is viable for this dataset.")
-    elif _pct(combined.exact_ready_rows, combined.rows) >= 40:
-        lines.append("- Mixed mode recommended: exact join where possible, fallback join with confidence scoring.")
-    else:
-        lines.append("- Exact join is not yet viable; prioritize clickid propagation before strict optimizer automation.")
+    _, decision_message = _decision(_pct(combined.exact_ready_rows, combined.rows))
+    lines.append(f"- {decision_message}")
     return "\n".join(lines) + "\n"
 
 
@@ -235,6 +289,7 @@ def main() -> int:
     parser.add_argument("--input-format", choices=["auto", "csv", "jsonl"], default="auto")
     parser.add_argument("--mapping-profile", help="Optional JSON mapping profile file")
     parser.add_argument("--out", help="Optional markdown output path")
+    parser.add_argument("--json-out", help="Optional JSON summary output path")
     args = parser.parse_args()
 
     mapping_path = Path(args.mapping_profile).expanduser().resolve() if args.mapping_profile else None
@@ -265,6 +320,12 @@ def main() -> int:
         mapping_path=mapping_path,
         field_map=field_map,
     )
+    summary = _summary_payload(
+        stats_by_file=stats_by_file,
+        combined=combined,
+        mapping_path=mapping_path,
+        field_map=field_map,
+    )
     print(output, end="")
 
     if args.out:
@@ -272,6 +333,11 @@ def main() -> int:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(output, encoding="utf-8")
         print(f"Wrote report: {out_path}")
+    if args.json_out:
+        json_path = Path(args.json_out).expanduser().resolve()
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        json_path.write_text(json.dumps(summary, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        print(f"Wrote summary JSON: {json_path}")
 
     return 0
 
