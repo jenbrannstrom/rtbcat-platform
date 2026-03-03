@@ -6,7 +6,7 @@
 
 素材库展示与所选席位关联的所有素材。
 
-![素材库，展示格式标签和表现层级](/docs/screenshot-creatives.png)
+![素材库，展示格式标签和表现层级](../images/screenshot-creatives.png)
 
 ### 你看到什么
 

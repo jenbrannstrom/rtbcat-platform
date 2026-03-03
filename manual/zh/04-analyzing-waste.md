@@ -9,7 +9,7 @@
 
 展示各国家和城市的 QPS 消耗和表现。
 
-![各国家 QPS 地理分布](/docs/screenshot-geo-qps.png)
+![各国家 QPS 地理分布](../images/screenshot-geo-qps.png)
 
 **关注什么：**
 - QPS 高但胜出为零或接近零的国家，说明 Google 向你发送了你的买手不定向的
@@ -25,7 +25,7 @@
 
 展示按发布商域名或应用拆分的表现。
 
-![发布商 QPS 与胜出率分析](/docs/screenshot-pub-qps.png)
+![发布商 QPS 与胜出率分析](../images/screenshot-pub-qps.png)
 
 **关注什么：**
 - 出价量高但展示为零的域名，说明你的竞价器在无法渲染的库存上花费了算力。
@@ -42,7 +42,7 @@
 
 展示哪些广告尺寸收到流量，以及你是否有对应素材。
 
-![尺寸 QPS 分布](/docs/screenshot-size-qps.png)
+![尺寸 QPS 分布](../images/screenshot-size-qps.png)
 
 **关注什么：**
 - QPS 高但**没有匹配素材**的尺寸。Google 发送约 400 种不同的广告尺寸。
