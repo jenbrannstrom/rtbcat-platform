@@ -12,6 +12,7 @@ from storage.postgres_database import pg_query_one, pg_query_one_with_timeout
 
 _MONTHLY_HOSTING_COST_KEY = "optimizer_monthly_hosting_cost_usd"
 _DEFAULT_QUALITY_QUERY_TIMEOUT_MS = 10_000
+_DEFAULT_DAILY_QUERY_TIMEOUT_MS = 15_000
 
 
 def _parse_date(value: str, field_name: str) -> date:
@@ -43,6 +44,7 @@ class OptimizerEconomicsService:
 
     def __init__(self) -> None:
         self._quality_query_timeout_ms = self._resolve_quality_timeout_ms()
+        self._daily_query_timeout_ms = self._resolve_daily_timeout_ms()
 
     async def get_effective_cpm(
         self,
@@ -144,23 +146,42 @@ class OptimizerEconomicsService:
         previous_end = recent_start - timedelta(days=1)
         previous_start = previous_end - timedelta(days=recent_days - 1)
 
-        trend_case_params: list[Any] = [recent_start, end, previous_start, previous_end]
-        trend_where_params: list[Any] = [previous_start, end, buyer_id]
-        trend_clauses = ["metric_date BETWEEN %s AND %s", "buyer_account_id = %s"]
+        # Split trend into 2 parallel queries (each scans ~7 days, not 14)
+        trend_clauses_base = ["buyer_account_id = %s"]
+        trend_base_params: list[Any] = [buyer_id]
         if billing_id:
-            trend_clauses.append("billing_id = %s")
-            trend_where_params.append(billing_id)
-        trend_where_sql = " AND ".join(trend_clauses)
-        trend = await pg_query_one(
-            f"""
-            SELECT
-                COALESCE(SUM(CASE WHEN metric_date BETWEEN %s AND %s THEN spend_micros ELSE 0 END), 0)::bigint AS recent_spend_micros,
-                COALESCE(SUM(CASE WHEN metric_date BETWEEN %s AND %s THEN spend_micros ELSE 0 END), 0)::bigint AS previous_spend_micros
-            FROM rtb_daily
-            WHERE {trend_where_sql}
-            """,
-            tuple([*trend_case_params, *trend_where_params]),
-        ) or {}
+            trend_clauses_base.append("billing_id = %s")
+            trend_base_params.append(billing_id)
+
+        async def _trend_recent():
+            clauses = ["metric_date BETWEEN %s AND %s"] + trend_clauses_base
+            params = [recent_start, end] + trend_base_params
+            try:
+                return await pg_query_one_with_timeout(
+                    f"""
+                    SELECT COALESCE(SUM(spend_micros), 0)::bigint AS spend_micros
+                    FROM rtb_daily WHERE {" AND ".join(clauses)}
+                    """,
+                    tuple(params),
+                    statement_timeout_ms=self._daily_query_timeout_ms,
+                ) or {}
+            except Exception:
+                return {}
+
+        async def _trend_previous():
+            clauses = ["metric_date BETWEEN %s AND %s"] + trend_clauses_base
+            params = [previous_start, previous_end] + trend_base_params
+            try:
+                return await pg_query_one_with_timeout(
+                    f"""
+                    SELECT COALESCE(SUM(spend_micros), 0)::bigint AS spend_micros
+                    FROM rtb_daily WHERE {" AND ".join(clauses)}
+                    """,
+                    tuple(params),
+                    statement_timeout_ms=self._daily_query_timeout_ms,
+                ) or {}
+            except Exception:
+                return {}
 
         age_task = self._fetch_first_metric_date(
             buyer_id=buyer_id,
@@ -171,7 +192,13 @@ class OptimizerEconomicsService:
             start=start,
             end=end,
         )
-        age_row, quality = await asyncio.gather(age_task, quality_task)
+        recent_trend, prev_trend, age_row, quality = await asyncio.gather(
+            _trend_recent(), _trend_previous(), age_task, quality_task,
+        )
+        trend = {
+            "recent_spend_micros": recent_trend.get("spend_micros", 0),
+            "previous_spend_micros": prev_trend.get("spend_micros", 0),
+        }
 
         spend_usd = int(totals.get("spend_micros") or 0) / 1_000_000.0
         avg_daily_spend = spend_usd / max(num_days, 1)
@@ -349,21 +376,25 @@ class OptimizerEconomicsService:
             start=start,
             end=end,
         )
-        return await pg_query_one(
-            f"""
-            SELECT
-                COALESCE(SUM(spend_micros), 0)::bigint AS spend_micros,
-                COALESCE(SUM(impressions), 0)::bigint AS impressions,
-                COALESCE(SUM(clicks), 0)::bigint AS clicks,
-                COALESCE(SUM(reached_queries), 0)::bigint AS reached_queries,
-                COALESCE(SUM(bid_requests), 0)::bigint AS bid_requests,
-                COALESCE(SUM(bids_in_auction), 0)::bigint AS bids_in_auction,
-                COALESCE(SUM(auctions_won), 0)::bigint AS auctions_won
-            FROM rtb_daily
-            WHERE {where_sql}
-            """,
-            tuple(params),
-        ) or {}
+        try:
+            return await pg_query_one_with_timeout(
+                f"""
+                SELECT
+                    COALESCE(SUM(spend_micros), 0)::bigint AS spend_micros,
+                    COALESCE(SUM(impressions), 0)::bigint AS impressions,
+                    COALESCE(SUM(clicks), 0)::bigint AS clicks,
+                    COALESCE(SUM(reached_queries), 0)::bigint AS reached_queries,
+                    COALESCE(SUM(bid_requests), 0)::bigint AS bid_requests,
+                    COALESCE(SUM(bids_in_auction), 0)::bigint AS bids_in_auction,
+                    COALESCE(SUM(auctions_won), 0)::bigint AS auctions_won
+                FROM rtb_daily
+                WHERE {where_sql}
+                """,
+                tuple(params),
+                statement_timeout_ms=self._daily_query_timeout_ms,
+            ) or {}
+        except Exception:
+            return {}
 
     async def _fetch_first_metric_date(
         self,
@@ -418,6 +449,16 @@ class OptimizerEconomicsService:
             return max(int(raw_value), 1000)
         except (TypeError, ValueError):
             return _DEFAULT_QUALITY_QUERY_TIMEOUT_MS
+
+    @staticmethod
+    def _resolve_daily_timeout_ms() -> int:
+        raw_value = os.getenv("OPTIMIZER_DAILY_QUERY_TIMEOUT_MS")
+        if raw_value is None or raw_value.strip() == "":
+            return _DEFAULT_DAILY_QUERY_TIMEOUT_MS
+        try:
+            return max(int(raw_value), 1000)
+        except (TypeError, ValueError):
+            return _DEFAULT_DAILY_QUERY_TIMEOUT_MS
 
     @staticmethod
     def _build_daily_where(
