@@ -1,0 +1,37 @@
+import type { PartialTranslations } from '../../types';
+
+const value: PartialTranslations['geo'] = {
+  title: 'Географическая эффективность',
+  subtitle: 'Какие регионы имеют наивысший процент побед?',
+  winRatesByCountry: 'Процент побед по странам',
+  avgWinRate: 'средний процент побед',
+  countries: 'Страны',
+  reached: 'Достигнуто',
+  bids: 'Ставки',
+  wins: 'Победы',
+  highWinRate: 'Высокий процент побед (>80%)',
+  lowerWinRate: 'Низкий процент побед (<50%)',
+  optimizeThese: 'Оптимизировать',
+  geoDataNotAvailable: 'Географические данные недоступны',
+  importCreativeBiddingReport: 'Импортируйте отчет по ставкам креативов, чтобы увидеть географические показатели побед.',
+  country: 'Страна',
+  geoWasteActionExclude: 'Исключить',
+  geoWasteActionMonitor: 'Наблюдать',
+  geoWasteActionOk: 'ОК',
+  geoWasteActionExpand: 'Расширить',
+  geoWasteFailedToLoad: 'Не удалось загрузить анализ потерь по гео',
+  geoWasteTitle: 'Географический анализ',
+  geoWasteSubtitle: 'Определите регионы с плохой эффективностью для исключения из претаргетинга',
+  geoWasteGeosAnalyzed: 'регионов проанализировано',
+  geoWastePerformingWell: 'Хорошая эффективность',
+  geoWasteWastedLabel: 'Потери',
+  geoWasteExcludeFromPretargetingCount: 'Исключить из претаргетинга ({count})',
+  geoWasteGeoBadgeTooltip: 'CTR: {ctr}%, Расход: ${spend}',
+  geoWasteClicks: 'Клики',
+  geoWasteCtr: 'CTR',
+  geoWasteSpend: 'Расход',
+  geoWasteCpm: 'CPM',
+  geoWasteActionHeader: 'Действие',
+};
+
+export default value;
