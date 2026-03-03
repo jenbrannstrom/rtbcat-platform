@@ -154,12 +154,17 @@ class CreativeClickMacroCoverageRow(BaseModel):
     url_sources: list[str] = Field(default_factory=list)
     url_count: int = 0
     sample_url: Optional[str] = None
+    has_appsflyer_url: bool = False
+    has_appsflyer_clickid: bool = False
+    sample_appsflyer_url: Optional[str] = None
 
 
 class CreativeClickMacroCoverageSummary(BaseModel):
     creatives_with_click_macro: int
     creatives_without_click_macro: int
     creatives_with_any_macro: int
+    creatives_with_appsflyer_url: int = 0
+    creatives_with_appsflyer_clickid: int = 0
 
 
 class CreativeClickMacroCoverageResponse(BaseModel):

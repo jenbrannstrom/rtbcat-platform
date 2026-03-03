@@ -115,12 +115,17 @@ export interface CreativeClickMacroCoverageRow {
   url_sources: string[];
   url_count: number;
   sample_url: string | null;
+  has_appsflyer_url?: boolean;
+  has_appsflyer_clickid?: boolean;
+  sample_appsflyer_url?: string | null;
 }
 
 export interface CreativeClickMacroCoverageSummary {
   creatives_with_click_macro: number;
   creatives_without_click_macro: number;
   creatives_with_any_macro: number;
+  creatives_with_appsflyer_url?: number;
+  creatives_with_appsflyer_clickid?: number;
 }
 
 export interface CreativeClickMacroCoverageResponse {

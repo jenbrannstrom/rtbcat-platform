@@ -583,6 +583,31 @@ export function Sidebar() {
           </Link>
         )}
 
+        {!restricted && (
+          <Link
+            href={getSeatScopedHref("/creatives/attribution-readiness")}
+            className={cn(
+              "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
+              pathWithoutBuyer.startsWith("/creatives/attribution-readiness")
+                ? "bg-primary-50 text-primary-700"
+                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
+              collapsed && "justify-center px-2"
+            )}
+            title={collapsed ? "Attribution Readiness" : undefined}
+          >
+            <Activity
+              className={cn(
+                "h-5 w-5 flex-shrink-0",
+                pathWithoutBuyer.startsWith("/creatives/attribution-readiness")
+                  ? "text-primary-600"
+                  : "text-gray-400",
+                !collapsed && "mr-3"
+              )}
+            />
+            {!collapsed && "Attribution Readiness"}
+          </Link>
+        )}
+
         {/* Settings Section */}
         {!restricted && <div className="pt-4">
           {!collapsed && (
