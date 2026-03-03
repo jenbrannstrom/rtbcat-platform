@@ -24,7 +24,11 @@ that match these criteria." You get **10 configs per seat**.
 ## Reading a config card
 
 On the home page and in the settings, each config appears as a card showing
-its current state. Key things to look at:
+its current state.
+
+![Pretargeting config cards showing active and paused states](/docs/screenshot-pretargeting-configs.png)
+
+Key things to look at:
 
 - **Active + high max QPS + broad geos** = this config is catching a lot of
   traffic. If it's also high-waste, it's your biggest optimization target.
@@ -61,6 +65,8 @@ Buyers UI.
 ## Change history (`/history`)
 
 Every pretargeting change is recorded in a timeline at `/history`.
+
+![Change history timeline with filters and export](/docs/screenshot-change-history.png)
 
 For each entry, you see:
 - **When**: timestamp of the change

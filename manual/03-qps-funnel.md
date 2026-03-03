@@ -9,11 +9,13 @@ This is the home page of Cat-Scan (`/`). Everything starts here.
 The QPS Waste Optimizer page shows your RTB funnel (the journey from bid
 request to spend) and highlights where volume drops off.
 
+![QPS Waste Optimizer home page](/docs/screenshot-qps-home.png)
+
 ### The funnel
 
 | Stage | What it means |
 |-------|---------------|
-| **QPS** | Bid requests per second that Google sends to your endpoint. This is the raw volume you receive. |
+| **QPS** | The maximum bid requests per second you ask Google to send. Google throttles the actual volume based on your account tier, so you typically receive less than your cap. |
 | **Bids** | How many of those requests your bidder chose to bid on. The rest were rejected (wrong inventory, no matching creative, below floor price). |
 | **Wins** | Auctions your bidder won. You only pay for wins. |
 | **Impressions** | Ads actually served to users after winning. |

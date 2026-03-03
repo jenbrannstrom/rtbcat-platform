@@ -9,6 +9,8 @@ these three views tell you *where* it comes from.
 
 Shows QPS consumption and performance by country and city.
 
+![Geographic QPS breakdown by country](/docs/screenshot-geo-qps.png)
+
 **What to look for:**
 - Countries with high QPS but zero or near-zero wins. Google is sending you
   traffic from regions your buyers don't target.
@@ -24,6 +26,8 @@ Shows QPS consumption and performance by country and city.
 ## Publisher waste (`/qps/publisher`)
 
 Shows performance broken down by publisher domain or app.
+
+![Publisher QPS with win rate analysis](/docs/screenshot-pub-qps.png)
 
 **What to look for:**
 - Domains with high bid volume but zero impressions. Your bidder spends
@@ -41,6 +45,8 @@ Shows performance broken down by publisher domain or app.
 ## Size waste (`/qps/size`)
 
 Shows which ad sizes receive traffic and whether you have creatives for them.
+
+![Size QPS breakdown](/docs/screenshot-size-qps.png)
 
 **What to look for:**
 - Sizes with high QPS but **no matching creative**. Google sends ~400 different

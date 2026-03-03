@@ -93,7 +93,7 @@ export default function DocsIndexPage() {
             </tr>
             <tr className="border-b border-gray-100">
               <td className="py-2.5 pr-4 font-medium text-gray-900 whitespace-nowrap">QPS</td>
-              <td className="py-2.5">Queries Per Second: the rate of bid requests Google sends to your bidder. You want to use it efficiently.</td>
+              <td className="py-2.5">Queries Per Second: the maximum rate of bid requests you ask Google to send. Google throttles the actual volume based on your account tier, so you want to use every request efficiently.</td>
             </tr>
             <tr className="border-b border-gray-100">
               <td className="py-2.5 pr-4 font-medium text-gray-900 whitespace-nowrap">Pretargeting</td>
@@ -111,29 +111,40 @@ export default function DocsIndexPage() {
         </table>
       </div>
 
-      {/* Get started */}
-      <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Get started</h2>
-        <div className="space-y-2">
-          <Link
-            href="/docs/01-logging-in"
-            className="flex items-center gap-2 text-primary-600 hover:text-primary-800 font-medium text-sm"
-          >
-            <ArrowRight className="h-4 w-4" /> Logging in
-          </Link>
-          <Link
-            href="/docs/02-navigating-the-dashboard"
-            className="flex items-center gap-2 text-primary-600 hover:text-primary-800 font-medium text-sm"
-          >
-            <ArrowRight className="h-4 w-4" /> Navigating the dashboard
-          </Link>
-          <Link
-            href="/docs/03-qps-funnel"
-            className="flex items-center gap-2 text-primary-600 hover:text-primary-800 font-medium text-sm"
-          >
-            <ArrowRight className="h-4 w-4" /> Understanding your QPS funnel
-          </Link>
-        </div>
+      {/* Track boxes */}
+      <h2 className="text-2xl font-semibold text-gray-900 mb-4">Documentation tracks</h2>
+      <div className="grid md:grid-cols-2 gap-4 mb-10">
+        <Link
+          href="/docs/01-logging-in"
+          className="block border border-gray-200 rounded-lg p-6 hover:border-primary-300 hover:shadow-sm transition-all group"
+        >
+          <h3 className="text-lg font-semibold text-gray-900 mb-2 group-hover:text-primary-600">
+            Media Buyer Docs
+          </h3>
+          <p className="text-sm text-gray-500 mb-4">
+            Logging in, reading the QPS funnel, analyzing waste by geo/publisher/size,
+            managing creatives, pretargeting, the optimizer, conversions, data import,
+            and reports.
+          </p>
+          <span className="flex items-center gap-1 text-sm font-medium text-primary-600">
+            Start reading <ArrowRight className="h-4 w-4" />
+          </span>
+        </Link>
+        <Link
+          href="/docs/11-architecture"
+          className="block border border-gray-200 rounded-lg p-6 hover:border-primary-300 hover:shadow-sm transition-all group"
+        >
+          <h3 className="text-lg font-semibold text-gray-900 mb-2 group-hover:text-primary-600">
+            DevOps Docs
+          </h3>
+          <p className="text-sm text-gray-500 mb-4">
+            Architecture overview, deployment, health monitoring, database operations,
+            troubleshooting, user administration, and integrations.
+          </p>
+          <span className="flex items-center gap-1 text-sm font-medium text-primary-600">
+            Start reading <ArrowRight className="h-4 w-4" />
+          </span>
+        </Link>
       </div>
     </div>
   );

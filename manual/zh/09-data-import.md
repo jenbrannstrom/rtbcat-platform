@@ -17,6 +17,8 @@ Cat-Scan 以及如何验证数据到达。
 
 拖放从 Google Authorized Buyers 导出的 CSV 文件。
 
+![数据导入页面，含上传区域和新鲜度网格](/docs/screenshot-import.png)
+
 **工作流程：**
 
 1. 从你的 Google Authorized Buyers 账户导出报告。

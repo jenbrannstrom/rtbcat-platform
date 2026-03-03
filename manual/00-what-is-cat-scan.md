@@ -6,6 +6,8 @@ Cat-Scan is a QPS optimization platform for Google Authorized Buyers. It gives
 you visibility into how your bidder's query-per-second allocation is being
 used (and wasted) and provides the tools to improve it.
 
+![QPS Funnel](/docs/qps-funnel.svg)
+
 ## The core problem
 
 When you operate a seat on Google's Authorized Buyers exchange, Google sends
@@ -59,7 +61,7 @@ Before you continue, make sure these terms are clear:
 | Concept | What it means |
 |---------|---------------|
 | **Seat** | A buyer account on Google Authorized Buyers, identified by a `buyer_account_id`. One organization can have multiple seats. |
-| **QPS** | Queries Per Second: the rate of bid requests Google sends to your bidder endpoint. You are allocated a maximum and want to use it efficiently. |
+| **QPS** | Queries Per Second: the maximum rate of bid requests you ask Google to send your bidder. Google throttles the actual volume based on your account tier, so you want to use every request efficiently. |
 | **Pretargeting** | Server-side filters that tell Google what bid requests to send you. Controls: geographies, ad sizes, formats, platforms, creative types. You get 10 per seat. |
 | **RTB Funnel** | The progression from bid request received, to bid placed, to auction won, to impression served, to click, to conversion. Each step has drop-off; Cat-Scan shows you where. |
 | **Waste** | QPS consumed by bid requests your bidder can't or won't use. The goal is to reduce waste without losing valuable traffic. |
