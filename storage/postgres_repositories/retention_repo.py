@@ -68,6 +68,42 @@ class RetentionRepository:
             )
         return dict(row) if row else {}
 
+    async def get_conversion_event_stats(self, seat_id: str | None = None) -> dict[str, Any]:
+        if seat_id:
+            row = await pg_query_one(
+                "SELECT COUNT(*) as cnt, MIN(event_ts) as earliest, MAX(event_ts) as latest FROM conversion_events WHERE buyer_id = %s",
+                (seat_id,),
+            )
+        else:
+            row = await pg_query_one(
+                "SELECT COUNT(*) as cnt, MIN(event_ts) as earliest, MAX(event_ts) as latest FROM conversion_events"
+            )
+        return dict(row) if row else {}
+
+    async def get_conversion_failure_stats(self, seat_id: str | None = None) -> dict[str, Any]:
+        if seat_id:
+            row = await pg_query_one(
+                "SELECT COUNT(*) as cnt, MIN(created_at) as earliest, MAX(created_at) as latest FROM conversion_ingestion_failures WHERE buyer_id = %s",
+                (seat_id,),
+            )
+        else:
+            row = await pg_query_one(
+                "SELECT COUNT(*) as cnt, MIN(created_at) as earliest, MAX(created_at) as latest FROM conversion_ingestion_failures"
+            )
+        return dict(row) if row else {}
+
+    async def get_conversion_join_stats(self, seat_id: str | None = None) -> dict[str, Any]:
+        if seat_id:
+            row = await pg_query_one(
+                "SELECT COUNT(*) as cnt, MIN(conversion_event_ts) as earliest, MAX(conversion_event_ts) as latest FROM conversion_attribution_joins WHERE buyer_id = %s",
+                (seat_id,),
+            )
+        else:
+            row = await pg_query_one(
+                "SELECT COUNT(*) as cnt, MIN(conversion_event_ts) as earliest, MAX(conversion_event_ts) as latest FROM conversion_attribution_joins"
+            )
+        return dict(row) if row else {}
+
     async def aggregate_old_data(self, cutoff_date: str, seat_id: str | None = None) -> None:
         seat_filter = "AND seat_id = %s" if seat_id else ""
         params: tuple = (cutoff_date, seat_id) if seat_id else (cutoff_date,)
@@ -118,5 +154,29 @@ class RetentionRepository:
         params: tuple = (cutoff_date, seat_id) if seat_id else (cutoff_date,)
         return await pg_execute(
             f"DELETE FROM daily_creative_summary WHERE summary_date < %s {seat_filter}",
+            params,
+        )
+
+    async def delete_conversion_joins_before(self, cutoff_date: str, seat_id: str | None = None) -> int:
+        seat_filter = "AND buyer_id = %s" if seat_id else ""
+        params: tuple = (cutoff_date, seat_id) if seat_id else (cutoff_date,)
+        return await pg_execute(
+            f"DELETE FROM conversion_attribution_joins WHERE conversion_event_ts < %s::date {seat_filter}",
+            params,
+        )
+
+    async def delete_conversion_events_before(self, cutoff_date: str, seat_id: str | None = None) -> int:
+        seat_filter = "AND buyer_id = %s" if seat_id else ""
+        params: tuple = (cutoff_date, seat_id) if seat_id else (cutoff_date,)
+        return await pg_execute(
+            f"DELETE FROM conversion_events WHERE event_ts < %s::date {seat_filter}",
+            params,
+        )
+
+    async def delete_conversion_failures_before(self, cutoff_date: str, seat_id: str | None = None) -> int:
+        seat_filter = "AND buyer_id = %s" if seat_id else ""
+        params: tuple = (cutoff_date, seat_id) if seat_id else (cutoff_date,)
+        return await pg_execute(
+            f"DELETE FROM conversion_ingestion_failures WHERE created_at < %s::date {seat_filter}",
             params,
         )
