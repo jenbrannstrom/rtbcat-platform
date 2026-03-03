@@ -1,0 +1,123 @@
+name: v1 Conversion Runtime Guardrails
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "API base URL (include /api path)"
+        required: true
+        default: "https://scan.rtb.cat/api"
+      strict_security:
+        description: "Fail run if webhook security posture is not fully hardened"
+        required: true
+        type: choice
+        default: "true"
+        options:
+          - "true"
+          - "false"
+      run_retention:
+        description: "Run retention cleanup during check"
+        required: true
+        type: choice
+        default: "true"
+        options:
+          - "true"
+          - "false"
+      timeout_seconds:
+        description: "Per-request timeout for API calls (seconds)"
+        required: false
+        default: "60"
+  schedule:
+    - cron: "20 2 * * *"
+
+concurrency:
+  group: v1-conversion-runtime-guardrails-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  conversion-runtime-guardrails:
+    name: Run conversion runtime guardrail checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CATSCAN_API_BASE_URL: ${{ github.event.inputs.api_base_url || 'https://scan.rtb.cat/api' }}
+      CATSCAN_GUARDRAIL_STRICT_SECURITY: ${{ github.event.inputs.strict_security || 'true' }}
+      CATSCAN_GUARDRAIL_RUN_RETENTION: ${{ github.event.inputs.run_retention || 'true' }}
+      CATSCAN_CANARY_TIMEOUT_SECONDS: ${{ github.event.inputs.timeout_seconds || '60' }}
+      CATSCAN_CANARY_EMAIL: ${{ secrets.CATSCAN_CANARY_BEARER_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate canary auth input
+        run: |
+          if [[ -z "${CATSCAN_CANARY_EMAIL:-}" ]]; then
+            echo "Set CATSCAN_CANARY_BEARER_TOKEN (email value) in repository secrets." >&2
+            exit 1
+          fi
+
+      - name: Run conversion runtime guardrail checks
+        id: guardrail
+        run: |
+          args=(
+            --base-url "${CATSCAN_API_BASE_URL}"
+            --email "${CATSCAN_CANARY_EMAIL}"
+            --timeout "${CATSCAN_CANARY_TIMEOUT_SECONDS}"
+          )
+          if [[ "${CATSCAN_GUARDRAIL_STRICT_SECURITY}" == "true" ]]; then
+            args+=(--strict-security)
+          fi
+          if [[ "${CATSCAN_GUARDRAIL_RUN_RETENTION}" != "true" ]]; then
+            args+=(--skip-retention-run)
+          fi
+
+          set +e
+          bash scripts/check_conversion_runtime_guardrails.sh "${args[@]}" | tee /tmp/v1_conversion_runtime_guardrails.log
+          guardrail_status=${PIPESTATUS[0]}
+          set -e
+
+          report_path="$(grep -E '^report_md=' /tmp/v1_conversion_runtime_guardrails.log | tail -n1 | cut -d= -f2-)"
+          if [[ -z "${report_path}" ]]; then
+            latest_dir="$(ls -1dt /tmp/conversion-runtime-guardrails-* 2>/dev/null | head -n1 || true)"
+            if [[ -n "${latest_dir}" && -f "${latest_dir}/guardrail_report.md" ]]; then
+              report_path="${latest_dir}/guardrail_report.md"
+            fi
+          fi
+
+          if [[ -n "${report_path}" ]]; then
+            echo "report_path=${report_path}" >> "$GITHUB_OUTPUT"
+            echo "run_dir=$(dirname "${report_path}")" >> "$GITHUB_OUTPUT"
+          else
+            echo "report_path=" >> "$GITHUB_OUTPUT"
+            echo "run_dir=" >> "$GITHUB_OUTPUT"
+          fi
+
+          exit "${guardrail_status}"
+
+      - name: Publish guardrail summary
+        if: always()
+        run: |
+          report_path="${{ steps.guardrail.outputs.report_path }}"
+          if [[ -n "${report_path}" && -f "${report_path}" ]]; then
+            cat "${report_path}" >> "$GITHUB_STEP_SUMMARY"
+          elif [[ -f /tmp/v1_conversion_runtime_guardrails.log ]]; then
+            echo "Guardrail markdown report missing; log tail:" >> "$GITHUB_STEP_SUMMARY"
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 80 /tmp/v1_conversion_runtime_guardrails.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Guardrail report/log missing." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload guardrail artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v1-conversion-runtime-guardrails-report
+          path: |
+            /tmp/v1_conversion_runtime_guardrails.log
+            ${{ steps.guardrail.outputs.run_dir }}
+          if-no-files-found: warn
