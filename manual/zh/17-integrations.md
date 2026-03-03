@@ -83,7 +83,7 @@ Cat-Scan 使用 AI 检测素材语言并标记地理-语言不匹配（如阿拉
 | **新鲜度监控** | 事件停止到达时告警 | 可配置的过期时间窗口 |
 
 **监控：**
-- `GET /conversions/webhook/security-status`：HMAC 状态、速率限制
+- `GET /conversions/security/status`：HMAC 状态、速率限制
   状态、新鲜度状态
 - `GET /conversions/health`：整体摄入和聚合健康
 - `GET /conversions/readiness`：转化数据是否足够新鲜可信

@@ -145,7 +145,7 @@ at `https://scan.rtb.cat/api/docs`.
 | GET | `/conversions/health` | Ingestion and aggregation status |
 | GET | `/conversions/readiness` | Source readiness check |
 | GET | `/conversions/ingestion-stats` | Event counts by source/period |
-| GET | `/conversions/webhook/security-status` | Webhook security status |
+| GET | `/conversions/security/status` | Webhook security status |
 | GET | `/conversions/pixel` | Pixel tracking endpoint |
 
 ## Snapshots
