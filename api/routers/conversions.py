@@ -768,13 +768,22 @@ async def ingest_appsflyer_postback(
     store=Depends(get_store),
 ):
     payload = await _parse_payload(request)
-    baseline_payload = normalize_appsflyer_payload(payload)
-    inferred_buyer_id = buyer_id or baseline_payload.get("buyer_id")
-    field_map, _, _, _ = await _load_field_mapping_profile(
+    default_field_map, _, _, _ = await _load_field_mapping_profile(
         store=store,
         source_type="appsflyer",
-        buyer_id=inferred_buyer_id if isinstance(inferred_buyer_id, str) else None,
+        buyer_id=None,
     )
+    baseline_payload = normalize_appsflyer_payload(payload, field_map=default_field_map or None)
+    inferred_buyer_id = buyer_id or baseline_payload.get("buyer_id")
+    field_map = default_field_map
+    if isinstance(inferred_buyer_id, str) and inferred_buyer_id.strip():
+        resolved_field_map, _, _, _ = await _load_field_mapping_profile(
+            store=store,
+            source_type="appsflyer",
+            buyer_id=inferred_buyer_id,
+        )
+        if resolved_field_map:
+            field_map = resolved_field_map
     payload = normalize_appsflyer_payload(payload, field_map=field_map or None)
     _verify_webhook_secret("appsflyer", request, payload)
     _verify_webhook_signature("appsflyer", request, payload)
