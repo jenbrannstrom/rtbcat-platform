@@ -135,3 +135,37 @@ class CreativeDestinationDiagnosticsResponse(BaseModel):
     candidate_count: int
     eligible_count: int
     candidates: list[CreativeDestinationCandidate]
+    has_any_macro: bool = False
+    has_click_macro: bool = False
+    macro_tokens: list[str] = Field(default_factory=list)
+    click_macro_tokens: list[str] = Field(default_factory=list)
+
+
+class CreativeClickMacroCoverageRow(BaseModel):
+    creative_id: str
+    creative_name: str
+    buyer_id: Optional[str] = None
+    format: Optional[str] = None
+    approval_status: Optional[str] = None
+    has_any_macro: bool = False
+    has_click_macro: bool = False
+    macro_tokens: list[str] = Field(default_factory=list)
+    click_macro_tokens: list[str] = Field(default_factory=list)
+    url_sources: list[str] = Field(default_factory=list)
+    url_count: int = 0
+    sample_url: Optional[str] = None
+
+
+class CreativeClickMacroCoverageSummary(BaseModel):
+    creatives_with_click_macro: int
+    creatives_without_click_macro: int
+    creatives_with_any_macro: int
+
+
+class CreativeClickMacroCoverageResponse(BaseModel):
+    rows: list[CreativeClickMacroCoverageRow]
+    total: int
+    returned: int
+    limit: int
+    offset: int
+    summary: CreativeClickMacroCoverageSummary

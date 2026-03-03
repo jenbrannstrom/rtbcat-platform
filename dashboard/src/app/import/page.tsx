@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   ChevronDown,
 } from "lucide-react";
+import { HelpLink } from "@/components/docs/help-link";
 import { ImportDropzone } from "@/components/import-dropzone";
 import { ImportPreview } from "@/components/import-preview";
 import { ImportProgress } from "@/components/import-progress";
@@ -275,10 +276,11 @@ export default function ImportPage() {
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <GmailReportsTab />
       {/* Header */}
-      <div>
+      <div className="flex items-center gap-3">
         <h1 className="text-2xl font-bold text-gray-900">
           {t.import.importReports}
         </h1>
+        <HelpLink chapter="09-data-import" />
       </div>
 
       {/* Upload Step */}

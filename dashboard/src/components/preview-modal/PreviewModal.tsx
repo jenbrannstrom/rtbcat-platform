@@ -207,6 +207,8 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
         return "Display URL";
       case "declared_click_through_url":
         return "Declared click URL";
+      case "native_click_link_url":
+        return "Native click URL";
       case "html_snippet":
         return "HTML snippet";
       default:
@@ -582,6 +584,29 @@ export function PreviewModal({ creative: initialCreative, performance, onClose }
                     <p className="mt-2 text-xs text-amber-700">{destinationDiagnosticsError}</p>
                   ) : destinationDiagnostics ? (
                     <div className="mt-2 space-y-2">
+                      <div className="rounded border border-gray-200 bg-white px-2 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-medium text-gray-600">
+                            Google click macro compliance
+                          </span>
+                          <span
+                            className={cn(
+                              "text-[10px] px-1.5 py-0.5 rounded",
+                              destinationDiagnostics.has_click_macro
+                                ? "bg-green-100 text-green-700"
+                                : "bg-red-100 text-red-700"
+                            )}
+                          >
+                            {destinationDiagnostics.has_click_macro ? "present" : "missing"}
+                          </span>
+                        </div>
+                        {destinationDiagnostics.click_macro_tokens.length > 0 && (
+                          <div className="mt-1 text-[10px] text-gray-600 break-all">
+                            Click macros: {destinationDiagnostics.click_macro_tokens.join(", ")}
+                          </div>
+                        )}
+                      </div>
+
                       <div className="text-[11px] text-gray-700 break-all">
                         <span className="font-medium text-gray-500">Resolved:</span>{" "}
                         {destinationDiagnostics.resolved_destination_url || "(none)"}

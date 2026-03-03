@@ -25,6 +25,7 @@ from .optimizer_economics import router as optimizer_economics_router
 from .optimizer_workflows import router as optimizer_workflows_router
 from .admin import router as admin_router
 from .seat_admin import router as seat_admin_router
+from .docs import router as docs_router
 
 # Analytics sub-routers (refactored from monolithic analytics.py)
 from .analytics import (
@@ -62,6 +63,7 @@ __all__ = [
     "optimizer_workflows_router",
     "admin_router",
     "seat_admin_router",
+    "docs_router",
     # Analytics sub-routers
     "waste_router",
     "rtb_bidstream_router",

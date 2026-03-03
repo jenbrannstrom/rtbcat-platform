@@ -41,10 +41,16 @@ export function AuthenticatedLayout({
 
   // Check if this is a public page
   const isPublicPage = PUBLIC_PAGES.includes(pathname);
+  const isDocsPage = pathname.startsWith("/docs");
 
   // For public pages, render children directly without layout
   if (isPublicPage) {
     return <>{children}</>;
+  }
+
+  // Docs are publicly accessible (no login required) with their own layout
+  if (isDocsPage) {
+    return <main className="h-screen overflow-auto bg-white">{children}</main>;
   }
 
   // Show loading spinner while checking auth

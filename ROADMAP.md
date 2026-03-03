@@ -30,6 +30,7 @@
   - [x] Add field-coverage audit tooling for raw AppsFlyer exports (`scripts/audit_appsflyer_export_coverage.py`).
   - [x] Add one-command Phase-A orchestration script (`scripts/run_appsflyer_phase_a_audit.sh`) to produce buyer contract report artifacts.
   - [x] Add DB-export helper (`scripts/export_appsflyer_events_jsonl.py`) and `--from-db` path in the Phase-A runner for buyers where local AppsFlyer exports are not yet available.
+  - [x] Publish 4-seat onboarding packet with buyer-scoped webhook URLs + customer email template (`docs/APPSFLYER_CUSTOMER_ONBOARDING_AND_ENDPOINTS_2026-03-03.md`).
   - [ ] Run coverage audit on pilot-buyer real exports/API pulls and publish per-buyer contract docs.
   - Acceptance: documented per-buyer contract + measured field coverage report.
 

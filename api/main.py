@@ -85,6 +85,7 @@ from api.routers import (
     optimizer_workflows_router,
     admin_router,
     seat_admin_router,
+    docs_router,
     # Analytics sub-routers (refactored from monolithic analytics.py)
     waste_router,
     rtb_bidstream_router,
@@ -272,3 +273,6 @@ app.include_router(troubleshooting_router)
 # Admin routes (user management, audit logs)
 app.include_router(admin_router)
 app.include_router(seat_admin_router)
+
+# Documentation routes (serves manual as in-app docs)
+app.include_router(docs_router)

@@ -96,6 +96,40 @@ export interface CreativeDestinationDiagnostics {
   candidate_count: number;
   eligible_count: number;
   candidates: CreativeDestinationCandidate[];
+  has_any_macro: boolean;
+  has_click_macro: boolean;
+  macro_tokens: string[];
+  click_macro_tokens: string[];
+}
+
+export interface CreativeClickMacroCoverageRow {
+  creative_id: string;
+  creative_name: string;
+  buyer_id: string | null;
+  format: string | null;
+  approval_status: string | null;
+  has_any_macro: boolean;
+  has_click_macro: boolean;
+  macro_tokens: string[];
+  click_macro_tokens: string[];
+  url_sources: string[];
+  url_count: number;
+  sample_url: string | null;
+}
+
+export interface CreativeClickMacroCoverageSummary {
+  creatives_with_click_macro: number;
+  creatives_without_click_macro: number;
+  creatives_with_any_macro: number;
+}
+
+export interface CreativeClickMacroCoverageResponse {
+  rows: CreativeClickMacroCoverageRow[];
+  total: number;
+  returned: number;
+  limit: number;
+  offset: number;
+  summary: CreativeClickMacroCoverageSummary;
 }
 
 export interface Campaign {

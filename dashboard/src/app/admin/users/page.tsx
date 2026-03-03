@@ -12,6 +12,7 @@ import {
   XCircle,
   AlertCircle,
 } from "lucide-react";
+import { HelpLink } from "@/components/docs/help-link";
 import {
   getAdminUsers,
   createUser,
@@ -215,7 +216,7 @@ function UsersPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t.admin.users}</h1>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">{t.admin.users} <HelpLink chapter="16-user-admin" /></h1>
           <p className="mt-1 text-gray-600">
             {users?.length !== 1
               ? t.admin.usersCountPlural.replace("{count}", String(users?.length ?? 0))

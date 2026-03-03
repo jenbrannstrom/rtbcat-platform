@@ -4,6 +4,7 @@ import { useState, useCallback, Suspense, useEffect, useRef, useMemo } from "rea
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, AlertTriangle, ArrowUp, ArrowDown, ChevronsUpDown, Loader2 } from "lucide-react";
+import { HelpLink } from "@/components/docs/help-link";
 import { AccountEndpointsHeader } from "@/components/rtb/account-endpoints-header";
 import { EndpointEfficiencyPanel } from "@/components/rtb/endpoint-efficiency-panel";
 import { PretargetingConfigCard, type PretargetingConfig } from "@/components/rtb/pretargeting-config-card";
@@ -1349,6 +1350,8 @@ function WasteAnalysisContent() {
               </button>
             ))}
           </div>
+
+          <HelpLink chapter="03-qps-funnel" />
 
           {/* Refresh button - icon only */}
           <button

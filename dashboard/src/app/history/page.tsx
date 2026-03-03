@@ -20,6 +20,7 @@ import {
 import { cn } from '@/lib/utils';
 import { getPretargetingHistory, type PretargetingHistoryItem, getSnapshots, rollbackSnapshot, type PretargetingSnapshot } from '@/lib/api';
 import { useTranslation } from '@/contexts/i18n-context';
+import { HelpLink } from '@/components/docs/help-link';
 
 /** Find the auto-snapshot created just before a push (within 30s). */
 function findAssociatedSnapshot(
@@ -415,6 +416,7 @@ export default function HistoryPage() {
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <History className="h-6 w-6 text-blue-600" />
             {t.history.changeHistory}
+            <HelpLink chapter="06-pretargeting" />
           </h1>
           <p className="mt-1 text-sm text-gray-500">
             {t.history.trackAndRollback}
