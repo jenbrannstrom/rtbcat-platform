@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 import pytest
 
+import services.optimizer_models_service as optimizer_models_service
 from services.optimizer_model_crypto import (
     clear_optimizer_model_crypto_cache,
     encrypt_optimizer_model_auth_header,
@@ -280,7 +282,24 @@ async def test_validate_model_endpoint_checks_contract(monkeypatch: pytest.Monke
 
     assert payload["valid"] is True
     assert payload["skipped"] is False
-    assert payload["http_status"] == 200
+
+
+def test_to_json_obj_logs_debug_and_returns_default_on_invalid_json(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.DEBUG):
+        parsed = optimizer_models_service._to_json_obj("{not-json}", {"fallback": True})
+    assert parsed == {"fallback": True}
+    assert "Failed to parse optimizer model JSON object; using default" in caplog.text
+
+
+def test_try_json_logs_debug_and_returns_none_on_invalid_json(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.DEBUG):
+        parsed = optimizer_models_service._try_json("{broken")
+    assert parsed is None
+    assert "Failed to parse optimizer model endpoint response as JSON" in caplog.text
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -18,6 +19,7 @@ from storage.postgres_database import pg_query, pg_query_one
 
 
 _ALLOWED_MODEL_TYPES = {"api", "rules", "csv"}
+logger = logging.getLogger(__name__)
 
 
 def _to_iso_ts(value: Any) -> Optional[str]:
@@ -39,6 +41,10 @@ def _to_json_obj(value: Any, default: dict[str, Any]) -> dict[str, Any]:
             if isinstance(parsed, dict):
                 return parsed
         except json.JSONDecodeError:
+            logger.debug(
+                "Failed to parse optimizer model JSON object; using default",
+                exc_info=True,
+            )
             return default
     return default
 
@@ -448,6 +454,10 @@ def _try_json(raw: str) -> Any:
     try:
         return json.loads(raw)
     except Exception:
+        logger.debug(
+            "Failed to parse optimizer model endpoint response as JSON; returning None",
+            exc_info=True,
+        )
         return None
 
 
