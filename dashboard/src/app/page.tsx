@@ -768,8 +768,14 @@ function WasteAnalysisContent() {
     } finally {
       setStartupApiLatency("/analytics/home/endpoint-efficiency", startedAtMs);
       writeQpsLoadMetricsSnapshot();
+      // Emit a separate telemetry sample so the API rollup always
+      // includes this path, even when the main snapshot was already posted.
+      const latencyMs = startupApiLatencyMsRef.current["/analytics/home/endpoint-efficiency"];
+      if (latencyMs != null) {
+        submitQpsApiLatencySample("/analytics/home/endpoint-efficiency", latencyMs);
+      }
     }
-  }, [days, selectedBuyerId, setStartupApiLatency, writeQpsLoadMetricsSnapshot]);
+  }, [days, selectedBuyerId, setStartupApiLatency, submitQpsApiLatencySample, writeQpsLoadMetricsSnapshot]);
 
   const handleApiLatencyMeasured = useCallback((apiPath: string, latencyMs: number) => {
     const normalizedLatency = Math.round(Math.max(0, latencyMs));
