@@ -10,8 +10,10 @@ This module provides endpoints for RTB troubleshooting and evaluation:
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Depends
 
+from api.dependencies import require_admin
+from services.auth_service import User
 from services.evaluation_service import EvaluationService, RecommendationType
 
 logger = logging.getLogger(__name__)
@@ -72,6 +74,7 @@ async def trigger_troubleshooting_collection(
     days: int = Query(7, ge=1, le=30, description="Days of data to collect"),
     environment: Optional[str] = Query(None, description="Filter by APP or WEB"),
     background_tasks: BackgroundTasks = None,
+    _user: User = Depends(require_admin),
 ):
     """
     Trigger troubleshooting data collection from Google API.
