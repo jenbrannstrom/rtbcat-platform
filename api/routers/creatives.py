@@ -54,7 +54,7 @@ async def list_creatives(
     active_only: bool = Query(False, description="Only return creatives with activity (impressions/clicks/spend) in timeframe"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> list[CreativeResponse]:
     """List creatives with optional filtering."""
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     creatives = await store.list_creatives(
@@ -107,7 +107,7 @@ async def list_creatives_paginated(
     active_only: bool = Query(False, description="Only return creatives with activity in timeframe"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> PaginatedCreativesResponse:
     """List creatives with pagination metadata."""
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
 
@@ -173,7 +173,7 @@ async def get_newly_uploaded_creatives(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> NewlyUploadedCreativesResponse:
     """Get creatives first seen within the specified period."""
     try:
         buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
@@ -189,6 +189,8 @@ async def get_newly_uploaded_creatives(
             period_start=result.period_start.strftime("%Y-%m-%d"),
             period_end=result.period_end.strftime("%Y-%m-%d"),
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get newly uploaded creatives: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get newly uploaded creatives: {str(e)}")
@@ -218,7 +220,7 @@ async def get_creative_click_macro_coverage(
     ),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> CreativeClickMacroCoverageResponse:
     """Return creative-level click macro coverage for compliance and auditing."""
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
 
@@ -297,7 +299,7 @@ async def get_creative(
     days: int = Query(7, ge=1, le=365, description="Timeframe for waste detection (default 7 days)"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> CreativeResponse:
     """Get a specific creative by ID with preview context."""
     creative = await store.get_creative(creative_id)
     if not creative:
@@ -324,7 +326,7 @@ async def get_creative_destination_diagnostics(
     creative_id: str,
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> CreativeDestinationDiagnosticsResponse:
     """Inspect how click destination URL is resolved for a creative."""
     creative = await store.get_creative(creative_id)
     if not creative:
@@ -345,7 +347,7 @@ async def delete_creative(
     creative_id: str,
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     """Delete a creative by ID."""
     creative = await store.get_creative(creative_id)
     if creative and creative.buyer_id:
@@ -361,7 +363,7 @@ async def assign_cluster(
     assignment: ClusterAssignment,
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     """Assign a creative to a cluster."""
     creative = await store.get_creative(assignment.creative_id)
     if not creative:
@@ -377,7 +379,7 @@ async def remove_from_campaign(
     creative_id: str,
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     """Remove a creative from its campaign."""
     creative = await store.get_creative(creative_id)
     if not creative:
@@ -395,7 +397,7 @@ async def get_creative_countries(
     days: int = Query(7, ge=1, le=90, description="Days to look back"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> CreativeCountryBreakdownResponse:
     """Get country breakdown for a specific creative."""
     creative = await store.get_creative(creative_id)
     if not creative:
