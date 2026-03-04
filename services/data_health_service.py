@@ -251,6 +251,11 @@ class DataHealthService:
                 "last_finished_at": _to_iso((row or {}).get("last_finished_at")),
             }
         except Exception:
+            logger.warning(
+                "Data health ingestion summary query failed; returning empty summary fallback",
+                extra={"days": days, "buyer_id": buyer_id},
+                exc_info=True,
+            )
             return {
                 "total_runs": 0,
                 "successful_runs": 0,
@@ -306,6 +311,11 @@ class DataHealthService:
                     "availability_state": state,
                 }
             except Exception:
+                logger.warning(
+                    "Data health report-completeness query failed for table; marking unavailable",
+                    extra={"table_name": table_name, "days": days, "buyer_id": buyer_id},
+                    exc_info=True,
+                )
                 table_states[table_name] = {
                     "rows": 0,
                     "active_days": 0,
@@ -357,6 +367,11 @@ class DataHealthService:
                 tuple(params),
             )
         except Exception:
+            logger.warning(
+                "Data health quality-freshness query failed; using unavailable fallback",
+                extra={"days": days, "buyer_id": buyer_id},
+                exc_info=True,
+            )
             row = None
 
         rows = int((row or {}).get("rows") or 0)
@@ -493,6 +508,17 @@ class DataHealthService:
                 tuple([*params, fetch_limit]),
             )
         except Exception:
+            logger.warning(
+                "Seat-day completeness query failed; returning unavailable fallback payload",
+                extra={
+                    "days": days,
+                    "buyer_id": buyer_id,
+                    "availability_state": availability_state,
+                    "min_completeness_pct": min_completeness_pct,
+                    "limit": fetch_limit,
+                },
+                exc_info=True,
+            )
             return {
                 "rows": [],
                 "summary": {
@@ -580,6 +606,11 @@ class DataHealthService:
                 "SELECT MAX(refreshed_at) AS refreshed_at FROM seat_report_completeness_daily"
             )
         except Exception:
+            logger.warning(
+                "Seat-day completeness freshness check failed; skipping MV refresh",
+                extra={"max_age_minutes": max_age_minutes},
+                exc_info=True,
+            )
             return
 
         refreshed_at = self._coerce_datetime((row or {}).get("refreshed_at"))
@@ -591,6 +622,11 @@ class DataHealthService:
         try:
             await pg_execute("REFRESH MATERIALIZED VIEW seat_report_completeness_daily")
         except Exception:
+            logger.warning(
+                "Seat-day completeness materialized view refresh failed",
+                extra={"max_age_minutes": max_age_minutes},
+                exc_info=True,
+            )
             return
 
     def _compute_state(
