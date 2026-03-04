@@ -52,6 +52,10 @@ def get_git_sha() -> str:
     try:
         repo_root = Path(__file__).resolve().parent.parent.parent
         git_dir = repo_root / ".git"
+        if not git_dir.exists():
+            if git_sha := os.environ.get("GIT_SHA"):
+                return git_sha
+            return "unknown"
         head = (git_dir / "HEAD").read_text().strip()
         if head.startswith("ref: "):
             ref_path = git_dir / head.replace("ref: ", "", 1)
@@ -59,7 +63,10 @@ def get_git_sha() -> str:
                 return ref_path.read_text().strip()[:8]
         return head[:8]
     except Exception:
-        pass
+        logger.warning(
+            "Failed to resolve git SHA from repository metadata; falling back to env/default",
+            exc_info=True,
+        )
 
     if git_sha := os.environ.get("GIT_SHA"):
         return git_sha
@@ -391,7 +398,10 @@ async def health_check(
                 acc.credentials_path for acc in service_accounts
             )
     except Exception:
-        pass
+        logger.warning(
+            "Health check failed to read service accounts; treating system as unconfigured",
+            exc_info=True,
+        )
 
     # Note: We intentionally do NOT fall back to legacy config.is_configured()
     # because the UI now uses the multi-account system exclusively.
@@ -406,6 +416,10 @@ async def health_check(
             row = await pg_query_one("SELECT 1 AS ok")
             database_exists = bool(row and row.get("ok") == 1)
         except Exception:
+            logger.warning(
+                "Health check database probe failed; marking database_exists=False",
+                exc_info=True,
+            )
             database_exists = False
 
     return HealthResponse(
