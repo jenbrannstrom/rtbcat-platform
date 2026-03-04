@@ -7,7 +7,7 @@ import type { GeoPerformance } from "@/lib/api";
 import { useAccount } from "@/contexts/account-context";
 import { useTranslation } from "@/contexts/i18n-context";
 import { toBuyerScopedPath } from "@/lib/buyer-routes";
-import { cn } from "@/lib/utils";
+import { cn, asNumber } from "@/lib/utils";
 import { formatNumber } from "./FunnelCard";
 
 interface GeoAnalysisSectionProps {
@@ -103,8 +103,8 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
   };
 
   const sortedGeos = [...geos].sort((a, b) => {
-    const aWins = a.auctions_won ?? a.impressions ?? 0;
-    const bWins = b.auctions_won ?? b.impressions ?? 0;
+    const aWins = asNumber(a.auctions_won ?? a.impressions);
+    const bWins = asNumber(b.auctions_won ?? b.impressions);
     let aVal: number | string;
     let bVal: number | string;
 
@@ -114,16 +114,16 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
         bVal = b.country || "";
         break;
       case "reached":
-        aVal = a.reached_queries;
-        bVal = b.reached_queries;
+        aVal = asNumber(a.reached_queries);
+        bVal = asNumber(b.reached_queries);
         break;
       case "bids":
-        aVal = a.bids ?? 0;
-        bVal = b.bids ?? 0;
+        aVal = asNumber(a.bids);
+        bVal = asNumber(b.bids);
         break;
       case "win_rate":
-        aVal = a.win_rate;
-        bVal = b.win_rate;
+        aVal = asNumber(a.win_rate);
+        bVal = asNumber(b.win_rate);
         break;
       case "wins":
       default:
@@ -138,8 +138,8 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
   });
 
   const displayGeos = sortedGeos.slice(0, 15);
-  const totalReached = displayGeos.reduce((sum, g) => sum + g.reached_queries, 0);
-  const totalWins = displayGeos.reduce((sum, g) => sum + (g.auctions_won ?? g.impressions ?? 0), 0);
+  const totalReached = displayGeos.reduce((sum, g) => sum + asNumber(g.reached_queries), 0);
+  const totalWins = displayGeos.reduce((sum, g) => sum + asNumber(g.auctions_won ?? g.impressions), 0);
   const overallWinRate = totalReached > 0
     ? Math.min(100, totalWins / totalReached * 100)
     : 0;
@@ -206,8 +206,8 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
           </thead>
           <tbody>
             {displayGeos.map((geo, index) => {
-              const wins = geo.auctions_won ?? geo.impressions ?? 0;
-              const safeWinRate = Math.min(100, Math.max(0, geo.win_rate));
+              const wins = asNumber(geo.auctions_won ?? geo.impressions);
+              const safeWinRate = Math.min(100, Math.max(0, asNumber(geo.win_rate)));
               const isLow = safeWinRate < 50 && wins > 0;
               const isTop = index === 0;
               return (
@@ -219,8 +219,8 @@ export function GeoAnalysisSection({ geos, seatName }: GeoAnalysisSectionProps) 
                     {geo.country}
                   </span>
                 </td>
-                <td className="py-2 text-right text-blue-600">{formatNumber(geo.reached_queries)}</td>
-                <td className="py-2 text-right text-gray-900">{formatNumber(geo.bids ?? 0)}</td>
+                <td className="py-2 text-right text-blue-600">{formatNumber(asNumber(geo.reached_queries))}</td>
+                <td className="py-2 text-right text-gray-900">{formatNumber(asNumber(geo.bids))}</td>
                 <td className="py-2 text-right text-green-600">{formatNumber(wins)}</td>
                 <td className={cn(
                   "py-2 text-right font-medium",
