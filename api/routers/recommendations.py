@@ -94,7 +94,7 @@ async def get_recommendations(
     min_severity: str = Query("low", description="Minimum severity: low, medium, high, critical"),
     _user: User = Depends(get_current_user),
     store=Depends(get_store),
-):
+) -> list[RecommendationResponse]:
     """
     Get actionable optimization recommendations.
 
@@ -116,7 +116,7 @@ async def get_recommendations_summary(
     days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
     _user: User = Depends(get_current_user),
     store=Depends(get_store),
-):
+) -> RecommendationSummaryResponse:
     """
     Get high-level waste summary with recommendation counts.
 
@@ -139,7 +139,7 @@ async def resolve_recommendation(
     notes: Optional[str] = Query(None, description="Resolution notes"),
     _user: User = Depends(require_seat_admin_or_sudo),
     store=Depends(get_store),
-):
+) -> dict[str, str]:
     """
     Mark a recommendation as resolved.
 
@@ -167,7 +167,7 @@ async def get_recommendations_by_type(
     days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
     _user: User = Depends(get_current_user),
     store=Depends(get_store),
-):
+) -> list[RecommendationResponse]:
     """
     Get recommendations filtered by type.
 

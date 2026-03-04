@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -47,7 +47,7 @@ def _resolve_active_major_change_type(
     return "mixed"
 
 
-def _parse_json_field(value):
+def _parse_json_field(value: Any) -> Any:
     """Parse JSON field - handles both JSONB (already parsed) and TEXT (needs parsing)."""
     if value is None:
         return None
@@ -60,7 +60,7 @@ def _parse_json_field(value):
 async def create_pending_change(
     request: PendingChangeCreate,
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> PendingChangeResponse:
     """
     Create a pending change to a pretargeting configuration.
 
@@ -207,7 +207,7 @@ async def list_pending_changes(
     ),
     status: str = Query("pending", description="Filter by status (pending, applied, cancelled)"),
     limit: int = Query(100, ge=1, le=500),
-):
+) -> list[PendingChangeResponse]:
     """List pending changes to pretargeting configurations."""
     try:
         change_service = ChangesService()
@@ -241,7 +241,7 @@ async def list_pending_changes(
 async def cancel_pending_change(
     change_id: int,
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> dict[str, str | int]:
     """Cancel a pending change (mark as cancelled, not deleted)."""
     try:
         change_service = ChangesService()
@@ -273,7 +273,7 @@ async def cancel_pending_change(
 async def mark_change_applied(
     change_id: int,
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> dict[str, str | int]:
     """
     Mark a pending change as applied (user has manually applied it in Google UI).
 
@@ -308,7 +308,7 @@ async def mark_change_applied(
 @router.get("/settings/pretargeting/{billing_id}/detail", response_model=ConfigDetailResponse)
 async def get_pretargeting_config_detail(
     billing_id: str,
-):
+) -> ConfigDetailResponse:
     """
     Get detailed pretargeting config including current state and pending changes.
 

@@ -27,7 +27,7 @@ async def apply_pending_change(
     billing_id: str,
     request: ApplyChangeRequest,
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> ApplyChangeResponse:
     """
     Apply a single pending change to Google Authorized Buyers.
 
@@ -64,7 +64,7 @@ async def apply_all_pending_changes(
     billing_id: str,
     dry_run: bool = Query(True, description="Preview changes without applying"),
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> ApplyAllResponse:
     """
     Apply all pending changes for a pretargeting config ID (`billing_id`) to Google.
 
@@ -92,7 +92,7 @@ async def apply_all_pending_changes(
 async def suspend_pretargeting_config(
     billing_id: str,
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> SuspendActivateResponse:
     """
     Suspend a pretargeting configuration.
 
@@ -118,7 +118,7 @@ async def suspend_pretargeting_config(
 async def activate_pretargeting_config(
     billing_id: str,
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> SuspendActivateResponse:
     """
     Activate a suspended pretargeting configuration.
 
@@ -144,7 +144,7 @@ async def rollback_to_snapshot(
     billing_id: str,
     request: RollbackRequest,
     user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> RollbackResponse:
     """
     Rollback a pretargeting config to a previous snapshot state.
 

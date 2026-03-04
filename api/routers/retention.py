@@ -75,7 +75,7 @@ class RetentionJobResponse(BaseModel):
 
 @router.get("/retention/config", response_model=RetentionConfigResponse)
 async def get_retention_config(
-):
+) -> RetentionConfigResponse:
     """Get current retention configuration."""
     try:
         service = RetentionService()
@@ -100,7 +100,7 @@ async def get_retention_config(
 async def set_retention_config(
     request: RetentionConfigRequest,
     _user: User = Depends(require_admin),
-):
+) -> RetentionConfigResponse:
     """Update retention configuration."""
     try:
         service = RetentionService()
@@ -124,7 +124,7 @@ async def set_retention_config(
 
 @router.get("/retention/stats", response_model=StorageStatsResponse)
 async def get_storage_stats(
-):
+) -> StorageStatsResponse:
     """Get storage statistics for performance data."""
     try:
         service = RetentionService()
@@ -157,7 +157,7 @@ async def get_storage_stats(
 @router.post("/retention/run", response_model=RetentionJobResponse)
 async def run_retention_job(
     _user: User = Depends(require_admin),
-):
+) -> RetentionJobResponse:
     """Run the retention job to aggregate and clean up old data."""
     try:
         service = RetentionService()

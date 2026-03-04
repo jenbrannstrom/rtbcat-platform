@@ -20,7 +20,7 @@ router = APIRouter(tags=["RTB Settings"])
 async def create_pretargeting_snapshot(
     request: SnapshotCreate,
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> SnapshotResponse:
     """
     Create a snapshot of a pretargeting config's current state and performance.
 
@@ -79,7 +79,7 @@ async def list_pretargeting_snapshots(
         description="Filter by pretargeting config ID (billing_id)",
     ),
     limit: int = Query(50, ge=1, le=200),
-):
+) -> list[SnapshotResponse]:
     """List pretargeting snapshots, optionally filtered by pretargeting config ID."""
     try:
         snapshot_service = SnapshotsService()
@@ -122,7 +122,7 @@ async def list_pretargeting_snapshots(
 async def create_comparison(
     request: ComparisonCreate,
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> ComparisonResponse:
     """
     Start a new A/B comparison for a pretargeting config.
 
@@ -179,7 +179,7 @@ async def list_comparisons(
     ),
     status: Optional[str] = Query(None, description="Filter by status (in_progress, completed)"),
     limit: int = Query(50, ge=1, le=200),
-):
+) -> list[ComparisonResponse]:
     """List A/B comparisons, optionally filtered by pretargeting config ID or status."""
     try:
         snapshot_service = SnapshotsService()
