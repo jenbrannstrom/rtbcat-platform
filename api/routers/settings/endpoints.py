@@ -8,7 +8,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from googleapiclient.errors import HttpError
 
+from api.dependencies import require_seat_admin_or_sudo
 from collectors import EndpointsClient
+from services.auth_service import User
 from services.endpoints_service import EndpointsService
 from services.seats_service import SeatsService, is_gcp_mode
 
@@ -170,6 +172,7 @@ def _build_endpoint_items(rows: list[dict]) -> tuple[list[RTBEndpointItem], int,
 @router.post("/settings/endpoints/sync", response_model=SyncEndpointsResponse)
 async def sync_rtb_endpoints(
     service_account_id: Optional[str] = Query(None, description="Service account ID to use"),
+    _user: User = Depends(require_seat_admin_or_sudo),
     seats_service: SeatsService = Depends(get_seats_service),
 ):
     """Sync RTB endpoints from Google Authorized Buyers API.
@@ -297,6 +300,7 @@ async def get_rtb_endpoints(
 async def update_endpoint_qps(
     endpoint_id: str,
     request: UpdateEndpointQpsRequest,
+    _user: User = Depends(require_seat_admin_or_sudo),
     seats_service: SeatsService = Depends(get_seats_service),
 ):
     """Update the allocated QPS for a single RTB endpoint.

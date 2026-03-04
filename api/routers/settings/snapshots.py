@@ -3,8 +3,10 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from api.dependencies import require_seat_admin_or_sudo
+from services.auth_service import User
 from services.snapshots_service import SnapshotsService
 
 from .models import ComparisonCreate, ComparisonResponse, SnapshotCreate, SnapshotResponse
@@ -17,6 +19,7 @@ router = APIRouter(tags=["RTB Settings"])
 @router.post("/settings/pretargeting/snapshot", response_model=SnapshotResponse)
 async def create_pretargeting_snapshot(
     request: SnapshotCreate,
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     """
     Create a snapshot of a pretargeting config's current state and performance.
@@ -114,6 +117,7 @@ async def list_pretargeting_snapshots(
 @router.post("/settings/pretargeting/comparison", response_model=ComparisonResponse)
 async def create_comparison(
     request: ComparisonCreate,
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     """
     Start a new A/B comparison for a pretargeting config.

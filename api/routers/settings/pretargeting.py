@@ -8,7 +8,9 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from api.dependencies import require_seat_admin_or_sudo
 from collectors import PretargetingClient
+from services.auth_service import User
 from services.changes_service import ChangesService
 from services.pretargeting_service import PretargetingService
 from services.seats_service import SeatsService
@@ -70,6 +72,7 @@ def get_seats_service() -> SeatsService:
 @router.post("/settings/pretargeting/sync", response_model=SyncPretargetingResponse)
 async def sync_pretargeting_configs(
     service_account_id: Optional[str] = Query(None, description="Service account ID to use"),
+    _user: User = Depends(require_seat_admin_or_sudo),
     seats_service: SeatsService = Depends(get_seats_service),
 ):
     """Sync pretargeting configs from Google Authorized Buyers API.
@@ -335,6 +338,7 @@ async def get_pretargeting_configs(
 async def set_pretargeting_name(
     billing_id: str,
     body: SetPretargetingNameRequest,
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     """Set a custom user-defined name for a pretargeting config.
 
@@ -507,6 +511,7 @@ async def add_pretargeting_publisher(
     billing_id: str,
     publisher_id: str = Query(..., description="Publisher ID to add"),
     mode: str = Query(..., description="WHITELIST or BLACKLIST"),
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     """Add a publisher to the targeting list with pending_add status.
 
@@ -590,6 +595,7 @@ async def remove_pretargeting_publisher(
     billing_id: str,
     publisher_id: str,
     mode: Optional[str] = Query(None, description="WHITELIST or BLACKLIST"),
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     """Mark a publisher for removal with pending_remove status.
 

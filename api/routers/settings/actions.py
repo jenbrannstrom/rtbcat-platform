@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.dependencies import get_current_user
+from api.dependencies import require_seat_admin_or_sudo
 from services.auth_service import User
 from services.actions_service import ActionsService
 
@@ -26,6 +26,7 @@ router = APIRouter(tags=["RTB Settings"])
 async def apply_pending_change(
     billing_id: str,
     request: ApplyChangeRequest,
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     """
     Apply a single pending change to Google Authorized Buyers.
@@ -60,6 +61,7 @@ async def apply_pending_change(
 async def apply_all_pending_changes(
     billing_id: str,
     dry_run: bool = Query(True, description="Preview changes without applying"),
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     """
     Apply all pending changes for a pretargeting config ID (`billing_id`) to Google.
@@ -85,6 +87,7 @@ async def apply_all_pending_changes(
 @router.post("/settings/pretargeting/{billing_id}/suspend", response_model=SuspendActivateResponse)
 async def suspend_pretargeting_config(
     billing_id: str,
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     """
     Suspend a pretargeting configuration.
@@ -108,6 +111,7 @@ async def suspend_pretargeting_config(
 @router.post("/settings/pretargeting/{billing_id}/activate", response_model=SuspendActivateResponse)
 async def activate_pretargeting_config(
     billing_id: str,
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     """
     Activate a suspended pretargeting configuration.
@@ -131,7 +135,7 @@ async def activate_pretargeting_config(
 async def rollback_to_snapshot(
     billing_id: str,
     request: RollbackRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_seat_admin_or_sudo),
 ):
     """
     Rollback a pretargeting config to a previous snapshot state.

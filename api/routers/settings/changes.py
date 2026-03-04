@@ -5,8 +5,10 @@ import json
 import logging
 from typing import Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from api.dependencies import require_seat_admin_or_sudo
+from services.auth_service import User
 from services.changes_service import ChangesService
 from services.pretargeting_service import PretargetingService
 
@@ -57,6 +59,7 @@ def _parse_json_field(value):
 @router.post("/settings/pretargeting/pending-change", response_model=PendingChangeResponse)
 async def create_pending_change(
     request: PendingChangeCreate,
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     """
     Create a pending change to a pretargeting configuration.
@@ -235,6 +238,7 @@ async def list_pending_changes(
 @router.delete("/settings/pretargeting/pending-change/{change_id}")
 async def cancel_pending_change(
     change_id: int,
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     """Cancel a pending change (mark as cancelled, not deleted)."""
     try:
@@ -264,6 +268,7 @@ async def cancel_pending_change(
 @router.post("/settings/pretargeting/pending-change/{change_id}/mark-applied")
 async def mark_change_applied(
     change_id: int,
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     """
     Mark a pending change as applied (user has manually applied it in Google UI).
