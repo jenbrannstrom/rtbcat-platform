@@ -295,7 +295,10 @@ class CreativeEvidenceService:
                     if url and url.startswith("http"):
                         return url
         except Exception:
-            pass
+            logger.debug(
+                "Failed to parse VAST XML for video URL extraction; falling back to regex",
+                exc_info=True,
+            )
 
         match = re.search(r"https?://[^\s<>\"]+\.mp4", vast_xml)
         return match.group(0) if match else None

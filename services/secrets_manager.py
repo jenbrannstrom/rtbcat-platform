@@ -218,6 +218,11 @@ class SecretsManager:
         try:
             return int(raw)
         except Exception:
+            logger.warning(
+                "Failed to parse integer secret/config value; using default",
+                extra={"key": key},
+                exc_info=True,
+            )
             return default
 
 
