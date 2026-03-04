@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 import types
 
@@ -12,6 +13,18 @@ if "collectors" not in sys.modules:
     fake_collectors = types.ModuleType("collectors")
     fake_collectors.PretargetingClient = object
     sys.modules["collectors"] = fake_collectors
+
+if "googleapiclient.errors" not in sys.modules:
+    fake_googleapiclient = types.ModuleType("googleapiclient")
+    fake_google_errors = types.ModuleType("googleapiclient.errors")
+
+    class _HttpError(Exception):
+        pass
+
+    fake_google_errors.HttpError = _HttpError
+    fake_googleapiclient.errors = fake_google_errors
+    sys.modules["googleapiclient"] = fake_googleapiclient
+    sys.modules["googleapiclient.errors"] = fake_google_errors
 
 from services.actions_service import ActionsService
 
@@ -158,3 +171,12 @@ async def test_rollback_to_snapshot_persists_optimizer_audit_context(monkeypatch
     assert context["reason"] == "Post-apply performance dropped"
     assert context["initiated_by"] == "u1"
     assert "add_size: 320x50" in context["changes_made"]
+
+
+def test_parse_json_list_logs_warning_and_defaults_on_invalid_json(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING):
+        parsed = ActionsService._parse_json_list("{not-json}")
+    assert parsed == []
+    assert "Failed to parse JSON list payload in ActionsService" in caplog.text
