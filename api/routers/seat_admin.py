@@ -68,7 +68,7 @@ class GrantSeatPermissionResponse(BaseModel):
 async def list_seat_users(
     buyer_id: str,
     user: User = Depends(get_current_user),
-):
+) -> List[SeatUserPermission]:
     """List users with access to a specific buyer seat.
 
     Caller must be sudo or local-admin for this buyer seat.
@@ -114,7 +114,7 @@ async def grant_seat_permission(
     body: GrantSeatPermissionRequest,
     request: Request,
     caller: User = Depends(get_current_user),
-):
+) -> GrantSeatPermissionResponse:
     """Grant or update a user's access to a buyer seat.
 
     Caller must be sudo or local-admin for this buyer seat.
@@ -158,7 +158,7 @@ async def revoke_seat_permission(
     user_id: str,
     request: Request,
     caller: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     """Revoke a user's access to a buyer seat.
 
     Caller must be sudo or local-admin for this buyer seat.

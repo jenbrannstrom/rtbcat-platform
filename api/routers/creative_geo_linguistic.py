@@ -61,7 +61,7 @@ async def analyze_geo_linguistic(
     force: bool = Query(False, description="Force re-analysis even if recent analysis exists"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> GeoLinguisticReportResponse:
     """Trigger geo-linguistic mismatch analysis for a creative."""
     creative = await store.get_creative(creative_id)
     if not creative:
@@ -88,7 +88,7 @@ async def get_geo_linguistic_report(
     creative_id: str,
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> GeoLinguisticReportResponse:
     """Get the latest geo-linguistic analysis report for a creative."""
     creative = await store.get_creative(creative_id)
     if not creative:

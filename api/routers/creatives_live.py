@@ -49,7 +49,7 @@ async def get_creative_live(
     store=Depends(get_store),
     config: ConfigManager = Depends(get_config),
     user: User = Depends(get_current_user),
-):
+) -> CreativeLiveResponse:
     creative = await store.get_creative(creative_id)
     if not creative:
         raise HTTPException(status_code=404, detail="Creative not found")

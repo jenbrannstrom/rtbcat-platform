@@ -70,7 +70,7 @@ class GmailImportResponse(BaseModel):
 # =============================================================================
 
 @router.get("/gmail/status", response_model=GmailStatusResponse)
-async def get_gmail_status():
+async def get_gmail_status() -> GmailStatusResponse:
     """
     Get the current Gmail import configuration and status.
 
@@ -88,7 +88,7 @@ async def get_gmail_status():
 @router.post("/gmail/import", response_model=GmailImportResponse)
 async def trigger_gmail_import(
     admin: User = Depends(require_admin),
-):
+) -> GmailImportResponse:
     """
     Trigger a manual Gmail import.
 
@@ -116,7 +116,7 @@ async def trigger_gmail_import(
 @router.post("/gmail/import/scheduled", response_model=GmailImportResponse)
 async def trigger_gmail_import_scheduled(
     request: Request,
-):
+) -> GmailImportResponse:
     """
     Trigger Gmail import for schedulers (Cloud Scheduler/systemd).
 

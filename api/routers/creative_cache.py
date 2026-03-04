@@ -33,7 +33,7 @@ async def refresh_creative_cache_scheduled(
     force_html_thumbnail_retry: bool = Query(False),
     store=Depends(get_store),
     config: ConfigManager = Depends(get_config),
-):
+) -> CreativeCacheRefreshResponse:
     """Refresh live creative cache for active creatives during off-hours."""
     secret = get_secrets_manager().get("CREATIVE_CACHE_REFRESH_SECRET")
     header_secret = request.headers.get("X-Creative-Cache-Refresh-Secret")

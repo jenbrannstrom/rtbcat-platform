@@ -85,7 +85,7 @@ async def run_scoring(
     limit: int = Query(1000, ge=1, le=5000),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ScoringRunResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerScoringService()
     try:
@@ -117,7 +117,7 @@ async def run_rules_scoring(
     limit: int = Query(1000, ge=1, le=5000),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ScoringRunResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerScoringService()
     try:
@@ -154,7 +154,7 @@ async def list_segment_scores(
     offset: int = Query(0, ge=0),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> SegmentScoresResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerScoringService()
     try:
