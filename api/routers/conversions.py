@@ -21,6 +21,7 @@ from api.dependencies import (
     get_store,
     is_sudo,
     require_buyer_admin_access,
+    require_seat_admin_or_sudo,
     resolve_buyer_id,
 )
 from services.auth_service import User
@@ -1087,6 +1088,7 @@ async def ingest_conversion_csv(
     file: UploadFile = File(...),
     source_type: str = Form("manual_csv"),
     buyer_id: Optional[str] = Form(None),
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     raw_bytes = await file.read()
     if not raw_bytes:
