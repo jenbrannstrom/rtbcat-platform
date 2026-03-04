@@ -11,9 +11,10 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
-from api.dependencies import get_store, get_config
+from api.dependencies import get_store, get_config, require_seat_admin_or_sudo
 from api.schemas.system import CollectRequest, CollectResponse
 from config import ConfigManager
+from services.auth_service import User
 from services.collect_service import CollectService
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,7 @@ async def collect_creatives_task(
 async def start_collection(
     request: CollectRequest,
     background_tasks: BackgroundTasks,
+    _user: User = Depends(require_seat_admin_or_sudo),
     config: ConfigManager = Depends(get_config),
     store=Depends(get_store),
 ):
@@ -92,6 +94,7 @@ async def start_collection(
 @router.post("/sync", response_model=CollectResponse)
 async def collect_sync(
     request: CollectRequest,
+    _user: User = Depends(require_seat_admin_or_sudo),
     config: ConfigManager = Depends(get_config),
     store=Depends(get_store),
 ):
