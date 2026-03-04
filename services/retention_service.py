@@ -44,6 +44,7 @@ class RetentionService:
         conversion_events = await self._repo.get_conversion_event_stats(seat_id)
         conversion_failures = await self._repo.get_conversion_failure_stats(seat_id)
         conversion_joins = await self._repo.get_conversion_join_stats(seat_id)
+        conversion_raw_events = await self._repo.get_conversion_raw_event_stats(seat_id)
         return {
             "raw_rows": raw.get("cnt", 0) or 0,
             "raw_earliest_date": str(raw.get("earliest")) if raw.get("earliest") else None,
@@ -72,6 +73,13 @@ class RetentionService:
             "conversion_join_latest_ts": (
                 str(conversion_joins.get("latest")) if conversion_joins.get("latest") else None
             ),
+            "conversion_raw_event_rows": conversion_raw_events.get("cnt", 0) or 0,
+            "conversion_raw_event_earliest_ts": (
+                str(conversion_raw_events.get("earliest")) if conversion_raw_events.get("earliest") else None
+            ),
+            "conversion_raw_event_latest_ts": (
+                str(conversion_raw_events.get("latest")) if conversion_raw_events.get("latest") else None
+            ),
         }
 
     async def run_retention_job(self, seat_id: str | None = None) -> dict[str, Any]:
@@ -83,6 +91,7 @@ class RetentionService:
             "deleted_conversion_event_rows": 0,
             "deleted_conversion_failure_rows": 0,
             "deleted_conversion_join_rows": 0,
+            "deleted_conversion_raw_event_rows": 0,
         }
 
         aggregate_cutoff = (
@@ -101,6 +110,9 @@ class RetentionService:
             delete_cutoff, seat_id
         )
         stats["deleted_conversion_failure_rows"] = await self._repo.delete_conversion_failures_before(
+            delete_cutoff, seat_id
+        )
+        stats["deleted_conversion_raw_event_rows"] = await self._repo.delete_conversion_raw_events_before(
             delete_cutoff, seat_id
         )
 

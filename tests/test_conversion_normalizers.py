@@ -3,6 +3,7 @@
 from services.conversion_normalizers import (
     normalize_adjust_payload,
     normalize_appsflyer_payload,
+    normalize_appsflyer_payload_with_diagnostics,
     normalize_branch_payload,
     normalize_generic_payload,
 )
@@ -62,6 +63,29 @@ def test_normalize_appsflyer_payload_keeps_existing_canonical_values():
     )
     assert normalized["buyer_id"] == "1111111111"
     assert normalized["creative_id"] == "cr-7"
+
+
+def test_normalize_appsflyer_payload_with_diagnostics_tracks_unresolved_fields():
+    payload = {
+        "eventName": "af_purchase",
+        "eventTime": "2026-02-28T00:00:00Z",
+        "af_sub2": "1111111111",
+    }
+    normalized, diagnostics = normalize_appsflyer_payload_with_diagnostics(
+        payload,
+        field_map={
+            "buyer_id": ["af_sub2"],
+            "creative_id": ["af_sub1"],
+            "click_id": ["clickid"],
+        },
+    )
+
+    assert normalized["buyer_id"] == "1111111111"
+    assert diagnostics["mapping_scope_fields_total"] == 3
+    assert diagnostics["resolved_fields_count"] == 1
+    assert diagnostics["unknown_mapping_count"] == 2
+    assert set(diagnostics["unresolved_fields"]) == {"creative_id", "click_id"}
+    assert diagnostics["field_hits"]["buyer_id"] == "af_sub2"
 
 
 def test_normalize_adjust_payload_maps_core_fields():

@@ -101,10 +101,14 @@ class _StubConversionIngestionService:
         self.provider_calls: list[dict] = []
         self.csv_calls: list[dict] = []
         self.failure_records: list[dict] = []
+        self.raw_event_records: list[dict] = []
+        self.raw_event_updates: list[dict] = []
+        self.lineage_counter_calls: list[dict] = []
         self.list_failures_calls: list[dict] = []
         self.replay_calls: list[int] = []
         self.discard_calls: list[int] = []
         self.stats_calls: list[dict] = []
+        self.lineage_calls: list[dict] = []
         self.taxonomy_calls: list[dict] = []
 
     async def ingest_provider_payload(self, **kwargs):
@@ -138,6 +142,18 @@ class _StubConversionIngestionService:
     async def record_failure(self, **kwargs):
         self.failure_records.append(kwargs)
         return 77
+
+    async def record_raw_event(self, **kwargs):
+        self.raw_event_records.append(kwargs)
+        return 991
+
+    async def update_raw_event_status(self, **kwargs):
+        self.raw_event_updates.append(kwargs)
+        return True
+
+    async def bump_lineage_daily_counter(self, **kwargs):
+        self.lineage_counter_calls.append(kwargs)
+        return None
 
     async def list_failures(self, **kwargs):
         self.list_failures_calls.append(kwargs)
@@ -206,6 +222,38 @@ class _StubConversionIngestionService:
                     "rejected_count": 2,
                 }
             ],
+        }
+
+    async def get_ingestion_lineage(self, **kwargs):
+        self.lineage_calls.append(kwargs)
+        return {
+            "days": kwargs.get("days", 14),
+            "source_type": kwargs.get("source_type"),
+            "buyer_id": kwargs.get("buyer_id"),
+            "mapping_scope": kwargs.get("mapping_scope"),
+            "accepted_total": 9,
+            "duplicate_total": 1,
+            "rejected_total": 2,
+            "unknown_mapping_total": 3,
+            "rows": [
+                {
+                    "metric_date": "2026-03-04",
+                    "source_type": kwargs.get("source_type") or "appsflyer",
+                    "buyer_id": kwargs.get("buyer_id") or "1111111111",
+                    "mapping_scope": kwargs.get("mapping_scope") or "buyer",
+                    "accepted_count": 9,
+                    "duplicate_count": 1,
+                    "rejected_count": 2,
+                    "unknown_mapping_count": 3,
+                    "last_event_ts": "2026-03-04T00:00:00+00:00",
+                }
+            ],
+            "meta": {
+                "total": 1,
+                "returned": 1,
+                "limit": kwargs.get("limit", 365),
+                "has_more": False,
+            },
         }
 
     async def get_failure_taxonomy(self, **kwargs):
@@ -957,6 +1005,38 @@ def test_get_ingestion_stats(monkeypatch: pytest.MonkeyPatch):
     payload = response.json()
     assert payload["accepted_total"] == 10
     assert payload["rejected_total"] == 2
+
+
+def test_get_ingestion_lineage(monkeypatch: pytest.MonkeyPatch):
+    stub = _StubConversionsService()
+    ingestion_stub = _StubConversionIngestionService()
+    client = _build_client(stub, ingestion_stub, monkeypatch)
+
+    response = client.get(
+        "/api/conversions/ingestion/lineage",
+        params={
+            "days": 14,
+            "source_type": "appsflyer",
+            "buyer_id": "1111111111",
+            "mapping_scope": "buyer",
+            "limit": 50,
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(ingestion_stub.lineage_calls) == 1
+    call = ingestion_stub.lineage_calls[0]
+    assert call["days"] == 14
+    assert call["source_type"] == "appsflyer"
+    assert call["buyer_id"] == "1111111111"
+    assert call["mapping_scope"] == "buyer"
+    assert call["limit"] == 50
+    payload = response.json()
+    assert payload["accepted_total"] == 9
+    assert payload["duplicate_total"] == 1
+    assert payload["rejected_total"] == 2
+    assert payload["unknown_mapping_total"] == 3
+    assert payload["rows"][0]["mapping_scope"] == "buyer"
 
 
 def test_get_ingestion_error_taxonomy(monkeypatch: pytest.MonkeyPatch):

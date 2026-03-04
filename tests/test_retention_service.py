@@ -33,6 +33,9 @@ class _StubRetentionRepo:
     async def get_conversion_join_stats(self, seat_id: str | None = None) -> dict:
         return {"cnt": 19, "earliest": "2026-02-10T00:00:00+00:00", "latest": "2026-03-03T00:00:00+00:00"}
 
+    async def get_conversion_raw_event_stats(self, seat_id: str | None = None) -> dict:
+        return {"cnt": 61, "earliest": "2026-02-20T00:00:00+00:00", "latest": "2026-03-03T00:00:00+00:00"}
+
     async def aggregate_old_data(self, cutoff_date: str, seat_id: str | None = None) -> None:
         self.calls.append(("aggregate_old_data", cutoff_date, seat_id))
 
@@ -52,6 +55,10 @@ class _StubRetentionRepo:
         self.calls.append(("delete_conversion_failures_before", cutoff_date, seat_id))
         return 2
 
+    async def delete_conversion_raw_events_before(self, cutoff_date: str, seat_id: str | None = None) -> int:
+        self.calls.append(("delete_conversion_raw_events_before", cutoff_date, seat_id))
+        return 5
+
     async def delete_summary_before(self, cutoff_date: str, seat_id: str | None = None) -> int:
         self.calls.append(("delete_summary_before", cutoff_date, seat_id))
         return 17
@@ -69,9 +76,11 @@ async def test_get_storage_stats_includes_conversion_tables() -> None:
     assert stats["conversion_event_rows"] == 42
     assert stats["conversion_failure_rows"] == 7
     assert stats["conversion_join_rows"] == 19
+    assert stats["conversion_raw_event_rows"] == 61
     assert stats["conversion_event_latest_ts"] == "2026-03-03T00:00:00+00:00"
     assert stats["conversion_failure_latest_ts"] == "2026-03-03T00:00:00+00:00"
     assert stats["conversion_join_latest_ts"] == "2026-03-03T00:00:00+00:00"
+    assert stats["conversion_raw_event_latest_ts"] == "2026-03-03T00:00:00+00:00"
 
 
 @pytest.mark.asyncio
@@ -86,8 +95,10 @@ async def test_run_retention_job_deletes_conversion_tables() -> None:
     assert result["deleted_conversion_event_rows"] == 13
     assert result["deleted_conversion_failure_rows"] == 2
     assert result["deleted_summary_rows"] == 17
+    assert result["deleted_conversion_raw_event_rows"] == 5
 
     called_names = [name for name, _, _ in repo.calls]
     assert "delete_conversion_joins_before" in called_names
     assert "delete_conversion_events_before" in called_names
     assert "delete_conversion_failures_before" in called_names
+    assert "delete_conversion_raw_events_before" in called_names

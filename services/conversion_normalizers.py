@@ -19,6 +19,10 @@ DEFAULT_APPSFLYER_FIELD_MAP: dict[str, list[str]] = {
 }
 
 
+def _is_missing(value: Any) -> bool:
+    return value is None or value == ""
+
+
 def _normalize_field_map(field_map: dict[str, str | list[str] | tuple[str, ...]] | None) -> dict[str, list[str]]:
     if not field_map:
         return dict(DEFAULT_APPSFLYER_FIELD_MAP)
@@ -46,12 +50,87 @@ def _normalize_field_map(field_map: dict[str, str | list[str] | tuple[str, ...]]
     return merged
 
 
+def _diagnostic_field_keys(
+    field_map: dict[str, str | list[str] | tuple[str, ...]] | None,
+) -> set[str]:
+    if field_map:
+        keys: set[str] = set()
+        for canonical, candidates in field_map.items():
+            if isinstance(candidates, str):
+                candidate_list = [candidates]
+            elif isinstance(candidates, (list, tuple)):
+                candidate_list = [str(item) for item in candidates if item]
+            else:
+                candidate_list = []
+            if candidate_list:
+                keys.add(str(canonical).strip())
+        if keys:
+            return keys
+    return {"buyer_id", "billing_id", "creative_id", "click_id"}
+
+
 def _coalesce_from_payload(payload: dict[str, Any], candidates: list[str]) -> Any:
     for key in candidates:
         value = payload.get(key)
         if value is not None and value != "":
             return value
     return None
+
+
+def normalize_appsflyer_payload_with_diagnostics(
+    payload: dict[str, Any],
+    field_map: dict[str, str | list[str] | tuple[str, ...]] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Normalize AppsFlyer payload fields and return mapping diagnostics.
+
+    Diagnostics include:
+      - mapping_scope_fields_total: number of canonical fields in the active map
+      - resolved_fields_count: number of canonical fields resolved in output
+      - unresolved_fields: canonical fields still missing
+      - field_hits: canonical field -> source field used (or "__already_present__")
+      - unknown_mapping_count: len(unresolved_fields)
+    """
+    normalized = dict(payload)
+    mapping = _normalize_field_map(field_map)
+    diagnostic_keys = _diagnostic_field_keys(field_map)
+    field_hits: dict[str, str] = {}
+    unresolved_fields_all: list[str] = []
+
+    for canonical_key, source_candidates in mapping.items():
+        existing_value = normalized.get(canonical_key)
+        if not _is_missing(existing_value):
+            field_hits[canonical_key] = "__already_present__"
+            continue
+
+        selected_source: str | None = None
+        selected_value: Any = None
+        for source_field in source_candidates:
+            candidate_value = payload.get(source_field)
+            if _is_missing(candidate_value):
+                continue
+            selected_source = source_field
+            selected_value = candidate_value
+            break
+
+        if selected_source is not None:
+            normalized[canonical_key] = selected_value
+            field_hits[canonical_key] = selected_source
+            continue
+
+        if _is_missing(normalized.get(canonical_key)):
+            unresolved_fields_all.append(canonical_key)
+
+    unresolved_fields = [key for key in unresolved_fields_all if key in diagnostic_keys]
+    resolved_fields_count = max(len(diagnostic_keys) - len(unresolved_fields), 0)
+
+    diagnostics = {
+        "mapping_scope_fields_total": len(diagnostic_keys),
+        "resolved_fields_count": resolved_fields_count,
+        "unresolved_fields": unresolved_fields,
+        "field_hits": field_hits,
+        "unknown_mapping_count": len(unresolved_fields),
+    }
+    return normalized, diagnostics
 
 
 def normalize_appsflyer_payload(
@@ -64,15 +143,7 @@ def normalize_appsflyer_payload(
     Example:
       {"buyer_id": "af_sub3", "creative_id": ["af_sub2", "af_ad_id"]}
     """
-    normalized = dict(payload)
-    mapping = _normalize_field_map(field_map)
-
-    for canonical_key, source_candidates in mapping.items():
-        if normalized.get(canonical_key) not in (None, ""):
-            continue
-        value = _coalesce_from_payload(payload, source_candidates)
-        if value is not None and value != "":
-            normalized[canonical_key] = value
+    normalized, _ = normalize_appsflyer_payload_with_diagnostics(payload, field_map=field_map)
     return normalized
 
 

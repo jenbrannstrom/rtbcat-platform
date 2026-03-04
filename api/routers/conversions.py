@@ -29,6 +29,7 @@ from services.conversion_ingestion_service import ConversionIngestionService
 from services.conversion_normalizers import (
     normalize_adjust_payload,
     normalize_appsflyer_payload,
+    normalize_appsflyer_payload_with_diagnostics,
     normalize_branch_payload,
     normalize_generic_payload,
 )
@@ -234,6 +235,38 @@ class ConversionIngestionStatsResponse(BaseModel):
     accepted_total: int
     rejected_total: int
     rows: list[ConversionIngestionStatsRow]
+
+
+class ConversionIngestionLineageRow(BaseModel):
+    metric_date: Optional[str] = None
+    source_type: str
+    buyer_id: str
+    mapping_scope: str
+    accepted_count: int
+    duplicate_count: int
+    rejected_count: int
+    unknown_mapping_count: int
+    last_event_ts: Optional[str] = None
+
+
+class ConversionIngestionLineageMeta(BaseModel):
+    total: int
+    returned: int
+    limit: int
+    has_more: bool
+
+
+class ConversionIngestionLineageResponse(BaseModel):
+    days: int
+    source_type: Optional[str] = None
+    buyer_id: Optional[str] = None
+    mapping_scope: Optional[str] = None
+    accepted_total: int
+    duplicate_total: int
+    rejected_total: int
+    unknown_mapping_total: int
+    rows: list[ConversionIngestionLineageRow]
+    meta: ConversionIngestionLineageMeta
 
 
 class ConversionFailureTaxonomyRow(BaseModel):
@@ -766,6 +799,17 @@ def _safe_request_headers(request: Request) -> dict[str, str]:
     }
 
 
+def _http_error_code(exc: HTTPException) -> str:
+    code = exc.status_code
+    if code == 401:
+        return "auth_failed"
+    if code == 429:
+        return "rate_limited"
+    if code == 400:
+        return "invalid_payload"
+    return f"http_{code}"
+
+
 def _pixel_response(*, ingest_status: str) -> Response:
     return Response(
         content=_PIXEL_GIF_BYTES,
@@ -842,32 +886,112 @@ async def ingest_appsflyer_postback(
     store=Depends(get_store),
 ):
     payload = await _parse_payload(request)
-    default_field_map, _, _, _ = await _load_field_mapping_profile(
+    raw_payload = dict(payload)
+    default_field_map, default_scope, default_setting_key, _ = await _load_field_mapping_profile(
         store=store,
         source_type="appsflyer",
         buyer_id=None,
     )
-    baseline_payload = normalize_appsflyer_payload(payload, field_map=default_field_map or None)
+    baseline_payload, _ = normalize_appsflyer_payload_with_diagnostics(
+        payload,
+        field_map=default_field_map or None,
+    )
     inferred_buyer_id = buyer_id or baseline_payload.get("buyer_id")
     field_map = default_field_map
+    mapping_scope = default_scope
+    mapping_setting_key = default_setting_key
     if isinstance(inferred_buyer_id, str) and inferred_buyer_id.strip():
-        resolved_field_map, _, _, _ = await _load_field_mapping_profile(
+        resolved_field_map, resolved_scope, resolved_setting_key, _ = await _load_field_mapping_profile(
             store=store,
             source_type="appsflyer",
             buyer_id=inferred_buyer_id,
         )
         if resolved_field_map:
             field_map = resolved_field_map
-    payload = normalize_appsflyer_payload(payload, field_map=field_map or None)
+            mapping_scope = resolved_scope
+            mapping_setting_key = resolved_setting_key
+    payload, mapping_diag = normalize_appsflyer_payload_with_diagnostics(
+        payload,
+        field_map=field_map or None,
+    )
     _verify_webhook_secret("appsflyer", request, payload)
     _verify_webhook_signature("appsflyer", request, payload)
     _enforce_webhook_rate_limit("appsflyer", request)
-    return await _ingest_with_dlq(
-        request=request,
+
+    ingestion_service = ConversionIngestionService()
+    raw_event_id = await ingestion_service.record_raw_event(
         source_type="appsflyer",
-        payload=payload,
-        buyer_id=buyer_id,
+        buyer_id=(buyer_id or str(payload.get("buyer_id") or "") or None),
+        endpoint_path=request.url.path,
+        raw_payload=raw_payload,
+        normalized_payload=payload,
+        mapping_scope=mapping_scope,
+        mapping_setting_key=mapping_setting_key,
+        mapping_field_hits=mapping_diag.get("field_hits") or {},
+        mapping_unresolved_fields=mapping_diag.get("unresolved_fields") or [],
+        unknown_mapping_count=int(mapping_diag.get("unknown_mapping_count") or 0),
+        idempotency_key=request.headers.get("X-Idempotency-Key"),
+        event_id=str(payload.get("event_id") or "") or None,
+        request_headers=_safe_request_headers(request),
     )
+    unknown_mapping_count = max(int(mapping_diag.get("unknown_mapping_count") or 0), 0)
+
+    try:
+        result = await _ingest_with_dlq(
+            request=request,
+            source_type="appsflyer",
+            payload=payload,
+            buyer_id=buyer_id,
+        )
+    except HTTPException as exc:
+        await ingestion_service.update_raw_event_status(
+            raw_event_id=raw_event_id,
+            ingestion_status="rejected",
+            error_code=_http_error_code(exc),
+            error_message=str(exc.detail)[:500],
+            event_id=str(payload.get("event_id") or "") or None,
+        )
+        lineage_buyer_id = str(payload.get("buyer_id") or buyer_id or "").strip()
+        if lineage_buyer_id:
+            await ingestion_service.bump_lineage_daily_counter(
+                source_type="appsflyer",
+                buyer_id=lineage_buyer_id,
+                mapping_scope=mapping_scope,
+                event_ts=None,
+                accepted_delta=0,
+                duplicate_delta=0,
+                rejected_delta=1,
+                unknown_mapping_delta=unknown_mapping_count,
+            )
+        raise
+
+    await ingestion_service.update_raw_event_status(
+        raw_event_id=raw_event_id,
+        ingestion_status="duplicate" if result.duplicate else "accepted",
+        error_code=None,
+        error_message=None,
+        import_batch_id=result.import_batch_id,
+        event_id=result.event_id,
+    )
+
+    event_ts: Optional[datetime] = None
+    try:
+        parsed_ts = datetime.fromisoformat((result.event_ts or "").replace("Z", "+00:00"))
+        event_ts = parsed_ts if parsed_ts.tzinfo else parsed_ts.replace(tzinfo=timezone.utc)
+    except Exception:
+        event_ts = None
+
+    await ingestion_service.bump_lineage_daily_counter(
+        source_type="appsflyer",
+        buyer_id=result.buyer_id,
+        mapping_scope=mapping_scope,
+        event_ts=event_ts,
+        accepted_delta=0 if result.duplicate else 1,
+        duplicate_delta=1 if result.duplicate else 0,
+        rejected_delta=0,
+        unknown_mapping_delta=unknown_mapping_count,
+    )
+    return result
 
 
 @router.post("/adjust/callback", response_model=ConversionIngestResponse)
@@ -1058,6 +1182,28 @@ async def get_conversion_ingestion_stats(
         buyer_id=buyer_id,
     )
     return ConversionIngestionStatsResponse(**payload)
+
+
+@router.get("/ingestion/lineage", response_model=ConversionIngestionLineageResponse)
+async def get_conversion_ingestion_lineage(
+    days: int = Query(14, ge=1, le=365),
+    source_type: Optional[str] = Query(None),
+    buyer_id: Optional[str] = Query(None),
+    mapping_scope: Optional[str] = Query(None),
+    limit: int = Query(365, ge=1, le=2000),
+    store=Depends(get_store),
+    user: User = Depends(get_current_user),
+):
+    buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
+    service = ConversionIngestionService()
+    payload = await service.get_ingestion_lineage(
+        days=days,
+        source_type=source_type,
+        buyer_id=buyer_id,
+        mapping_scope=mapping_scope,
+        limit=limit,
+    )
+    return ConversionIngestionLineageResponse(**payload)
 
 
 @router.get("/ingestion/error-taxonomy", response_model=ConversionFailureTaxonomyResponse)

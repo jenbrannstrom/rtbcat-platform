@@ -51,6 +51,9 @@ class StorageStatsResponse(BaseModel):
     conversion_join_rows: int = 0
     conversion_join_earliest_ts: Optional[str] = None
     conversion_join_latest_ts: Optional[str] = None
+    conversion_raw_event_rows: int = 0
+    conversion_raw_event_earliest_ts: Optional[str] = None
+    conversion_raw_event_latest_ts: Optional[str] = None
 
 
 class RetentionJobResponse(BaseModel):
@@ -61,6 +64,7 @@ class RetentionJobResponse(BaseModel):
     deleted_conversion_event_rows: int = 0
     deleted_conversion_failure_rows: int = 0
     deleted_conversion_join_rows: int = 0
+    deleted_conversion_raw_event_rows: int = 0
 
 
 # =============================================================================
@@ -139,6 +143,9 @@ async def get_storage_stats(
             conversion_join_rows=0,
             conversion_join_earliest_ts=None,
             conversion_join_latest_ts=None,
+            conversion_raw_event_rows=0,
+            conversion_raw_event_earliest_ts=None,
+            conversion_raw_event_latest_ts=None,
         )
 
 
