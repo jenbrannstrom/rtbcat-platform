@@ -318,3 +318,55 @@ async def test_get_failure_taxonomy_returns_breakdown(monkeypatch: pytest.Monkey
     assert payload["total_failures"] == 12
     assert payload["other_count"] == 0
     assert payload["rows"][0]["error_code"] == "invalid_payload"
+
+
+@pytest.mark.asyncio
+async def test_get_ingestion_lineage_returns_totals(monkeypatch: pytest.MonkeyPatch):
+    async def _stub_query(sql: str, params: tuple = ()):
+        assert "FROM conversion_ingestion_lineage_daily" in sql
+        return [
+            {
+                "metric_date": "2026-03-04",
+                "source_type": "appsflyer",
+                "buyer_id": "1111111111",
+                "mapping_scope": "buyer",
+                "accepted_count": 9,
+                "duplicate_count": 1,
+                "rejected_count": 2,
+                "unknown_mapping_count": 3,
+                "last_event_ts": "2026-03-04T00:00:00+00:00",
+            }
+        ]
+
+    async def _stub_query_one(sql: str, params: tuple = ()):
+        assert "SUM(accepted_count)" in sql
+        return {
+            "accepted_total": 9,
+            "duplicate_total": 1,
+            "rejected_total": 2,
+            "unknown_mapping_total": 3,
+            "total_rows": 1,
+        }
+
+    monkeypatch.setattr("services.conversion_ingestion_service.pg_query", _stub_query)
+    monkeypatch.setattr("services.conversion_ingestion_service.pg_query_one", _stub_query_one)
+    service = ConversionIngestionService()
+
+    payload = await service.get_ingestion_lineage(
+        days=14,
+        source_type="appsflyer",
+        buyer_id="1111111111",
+        mapping_scope="buyer",
+        limit=50,
+    )
+
+    assert payload["days"] == 14
+    assert payload["source_type"] == "appsflyer"
+    assert payload["buyer_id"] == "1111111111"
+    assert payload["mapping_scope"] == "buyer"
+    assert payload["accepted_total"] == 9
+    assert payload["duplicate_total"] == 1
+    assert payload["rejected_total"] == 2
+    assert payload["unknown_mapping_total"] == 3
+    assert payload["rows"][0]["mapping_scope"] == "buyer"
+    assert payload["meta"]["total"] == 1

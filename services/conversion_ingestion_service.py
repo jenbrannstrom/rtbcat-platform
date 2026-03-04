@@ -532,6 +532,258 @@ class ConversionIngestionService:
             ),
         )
 
+    async def record_raw_event(
+        self,
+        *,
+        source_type: str,
+        buyer_id: Optional[str],
+        endpoint_path: Optional[str],
+        raw_payload: dict[str, Any],
+        normalized_payload: dict[str, Any],
+        mapping_scope: str = "builtin_default",
+        mapping_setting_key: Optional[str] = None,
+        mapping_field_hits: Optional[dict[str, str]] = None,
+        mapping_unresolved_fields: Optional[list[str]] = None,
+        unknown_mapping_count: int = 0,
+        idempotency_key: Optional[str] = None,
+        event_id: Optional[str] = None,
+        request_headers: Optional[dict[str, str]] = None,
+    ) -> int:
+        source = normalize_source_type(source_type)
+        sql = """
+            INSERT INTO conversion_raw_events (
+                source_type,
+                buyer_id,
+                endpoint_path,
+                event_id,
+                idempotency_key,
+                request_headers,
+                raw_payload,
+                normalized_payload,
+                mapping_scope,
+                mapping_setting_key,
+                mapping_field_hits,
+                mapping_unresolved_fields,
+                unknown_mapping_count,
+                ingestion_status,
+                created_at,
+                updated_at
+            ) VALUES (
+                %s, %s, %s, %s, %s,
+                %s::jsonb, %s::jsonb, %s::jsonb,
+                %s, %s, %s::jsonb, %s::jsonb, %s,
+                'pending', NOW(), NOW()
+            )
+            RETURNING id
+        """
+        return await pg_insert_returning_id(
+            sql,
+            (
+                source,
+                buyer_id,
+                endpoint_path,
+                event_id,
+                idempotency_key,
+                json.dumps(request_headers or {}),
+                json.dumps(raw_payload),
+                json.dumps(normalized_payload),
+                str(mapping_scope or "builtin_default"),
+                mapping_setting_key,
+                json.dumps(mapping_field_hits or {}),
+                json.dumps(mapping_unresolved_fields or []),
+                max(int(unknown_mapping_count or 0), 0),
+            ),
+        )
+
+    async def update_raw_event_status(
+        self,
+        *,
+        raw_event_id: int,
+        ingestion_status: str,
+        error_code: Optional[str] = None,
+        error_message: Optional[str] = None,
+        import_batch_id: Optional[str] = None,
+        event_id: Optional[str] = None,
+    ) -> bool:
+        normalized_status = (ingestion_status or "").strip().lower()
+        if normalized_status not in {"accepted", "duplicate", "rejected"}:
+            raise ValueError("ingestion_status must be one of: accepted|duplicate|rejected")
+
+        rowcount = await pg_execute(
+            """
+            UPDATE conversion_raw_events
+            SET
+                ingestion_status = %s,
+                error_code = %s,
+                error_message = %s,
+                import_batch_id = COALESCE(%s, import_batch_id),
+                event_id = COALESCE(%s, event_id),
+                processed_at = NOW(),
+                updated_at = NOW()
+            WHERE id = %s
+            """,
+            (
+                normalized_status,
+                error_code,
+                (error_message or "")[:500] or None,
+                import_batch_id,
+                event_id,
+                raw_event_id,
+            ),
+        )
+        return int(rowcount or 0) > 0
+
+    async def bump_lineage_daily_counter(
+        self,
+        *,
+        source_type: str,
+        buyer_id: str,
+        mapping_scope: str = "builtin_default",
+        event_ts: Optional[datetime] = None,
+        accepted_delta: int = 0,
+        duplicate_delta: int = 0,
+        rejected_delta: int = 0,
+        unknown_mapping_delta: int = 0,
+    ) -> None:
+        source = normalize_source_type(source_type)
+        scope = str(mapping_scope or "builtin_default")
+        ts = event_ts or datetime.now(timezone.utc)
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+
+        await pg_execute(
+            """
+            INSERT INTO conversion_ingestion_lineage_daily (
+                metric_date,
+                source_type,
+                buyer_id,
+                mapping_scope,
+                accepted_count,
+                duplicate_count,
+                rejected_count,
+                unknown_mapping_count,
+                last_event_ts,
+                created_at,
+                updated_at
+            ) VALUES (
+                %s::date, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, NOW(), NOW()
+            )
+            ON CONFLICT (metric_date, source_type, buyer_id, mapping_scope) DO UPDATE SET
+                accepted_count = conversion_ingestion_lineage_daily.accepted_count + EXCLUDED.accepted_count,
+                duplicate_count = conversion_ingestion_lineage_daily.duplicate_count + EXCLUDED.duplicate_count,
+                rejected_count = conversion_ingestion_lineage_daily.rejected_count + EXCLUDED.rejected_count,
+                unknown_mapping_count = conversion_ingestion_lineage_daily.unknown_mapping_count + EXCLUDED.unknown_mapping_count,
+                last_event_ts = GREATEST(
+                    COALESCE(conversion_ingestion_lineage_daily.last_event_ts, EXCLUDED.last_event_ts),
+                    COALESCE(EXCLUDED.last_event_ts, conversion_ingestion_lineage_daily.last_event_ts)
+                ),
+                updated_at = NOW()
+            """,
+            (
+                ts.date().isoformat(),
+                source,
+                str(buyer_id),
+                scope,
+                max(int(accepted_delta or 0), 0),
+                max(int(duplicate_delta or 0), 0),
+                max(int(rejected_delta or 0), 0),
+                max(int(unknown_mapping_delta or 0), 0),
+                ts,
+            ),
+        )
+
+    async def get_ingestion_lineage(
+        self,
+        *,
+        days: int = 14,
+        source_type: Optional[str] = None,
+        buyer_id: Optional[str] = None,
+        mapping_scope: Optional[str] = None,
+        limit: int = 365,
+    ) -> dict[str, Any]:
+        safe_days = max(1, min(days, 365))
+        safe_limit = max(1, min(limit, 2000))
+        clauses = ["metric_date >= CURRENT_DATE - %s::int"]
+        params: list[Any] = [safe_days]
+        if source_type:
+            clauses.append("source_type = %s")
+            params.append(normalize_source_type(source_type))
+        if buyer_id:
+            clauses.append("buyer_id = %s")
+            params.append(buyer_id)
+        if mapping_scope:
+            clauses.append("mapping_scope = %s")
+            params.append(mapping_scope)
+        where_sql = " AND ".join(clauses)
+
+        rows = await pg_query(
+            f"""
+            SELECT
+                metric_date,
+                source_type,
+                buyer_id,
+                mapping_scope,
+                accepted_count,
+                duplicate_count,
+                rejected_count,
+                unknown_mapping_count,
+                last_event_ts
+            FROM conversion_ingestion_lineage_daily
+            WHERE {where_sql}
+            ORDER BY metric_date DESC, source_type, buyer_id, mapping_scope
+            LIMIT %s
+            """,
+            tuple([*params, safe_limit]),
+        )
+        totals = await pg_query_one(
+            f"""
+            SELECT
+                COALESCE(SUM(accepted_count), 0)::bigint AS accepted_total,
+                COALESCE(SUM(duplicate_count), 0)::bigint AS duplicate_total,
+                COALESCE(SUM(rejected_count), 0)::bigint AS rejected_total,
+                COALESCE(SUM(unknown_mapping_count), 0)::bigint AS unknown_mapping_total,
+                COUNT(*)::bigint AS total_rows
+            FROM conversion_ingestion_lineage_daily
+            WHERE {where_sql}
+            """,
+            tuple(params),
+        )
+
+        normalized_rows = [
+            {
+                "metric_date": _to_iso_ts(row.get("metric_date")),
+                "source_type": str(row.get("source_type") or ""),
+                "buyer_id": str(row.get("buyer_id") or ""),
+                "mapping_scope": str(row.get("mapping_scope") or "builtin_default"),
+                "accepted_count": int(row.get("accepted_count") or 0),
+                "duplicate_count": int(row.get("duplicate_count") or 0),
+                "rejected_count": int(row.get("rejected_count") or 0),
+                "unknown_mapping_count": int(row.get("unknown_mapping_count") or 0),
+                "last_event_ts": _to_iso_ts(row.get("last_event_ts")),
+            }
+            for row in rows
+        ]
+        total_rows = int((totals or {}).get("total_rows") or 0)
+        return {
+            "days": safe_days,
+            "source_type": normalize_source_type(source_type) if source_type else None,
+            "buyer_id": buyer_id,
+            "mapping_scope": mapping_scope,
+            "accepted_total": int((totals or {}).get("accepted_total") or 0),
+            "duplicate_total": int((totals or {}).get("duplicate_total") or 0),
+            "rejected_total": int((totals or {}).get("rejected_total") or 0),
+            "unknown_mapping_total": int((totals or {}).get("unknown_mapping_total") or 0),
+            "rows": normalized_rows,
+            "meta": {
+                "total": total_rows,
+                "returned": len(normalized_rows),
+                "limit": safe_limit,
+                "has_more": len(normalized_rows) < total_rows,
+            },
+        }
+
     async def list_failures(
         self,
         *,
