@@ -70,7 +70,10 @@ class ActionsService:
             return next(iter(categories))
         return "mixed"
 
-    async def _get_pretargeting_client(self, billing_id: str):
+    async def _get_pretargeting_client(
+        self,
+        billing_id: str,
+    ) -> tuple[PretargetingClient, Any, str]:
         config = await self._pretargeting.get_config(billing_id)
         if not config:
             raise ValueError(f"Config not found for billing_id: {billing_id}")

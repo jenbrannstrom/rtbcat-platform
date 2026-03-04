@@ -8,7 +8,13 @@ from typing import Optional, Callable, Awaitable, Any
 
 from fastapi import HTTPException
 
-from services.auth_service import AuthService, User
+from services.auth_service import (
+    AuditLogEntry,
+    AuthService,
+    User,
+    UserBuyerSeatPermission,
+    UserPermission,
+)
 from storage.postgres_repositories.admin_repo import AdminRepository
 
 
@@ -258,10 +264,13 @@ class AdminService:
             "sessions_deleted": sessions_deleted,
         }
 
-    async def get_user_permissions(self, user_id: str):
+    async def get_user_permissions(self, user_id: str) -> list[UserPermission]:
         return await self._auth.get_user_permissions(user_id)
 
-    async def get_user_buyer_seat_permissions(self, user_id: str):
+    async def get_user_buyer_seat_permissions(
+        self,
+        user_id: str,
+    ) -> list[UserBuyerSeatPermission]:
         return await self._auth.get_user_buyer_seat_permissions(user_id)
 
     async def grant_buyer_seat_permission(
@@ -271,7 +280,7 @@ class AdminService:
         buyer_id: str,
         access_level: str,
         client_ip: Optional[str],
-    ):
+    ) -> UserBuyerSeatPermission:
         if access_level not in ("read", "admin"):
             raise HTTPException(
                 status_code=400,
@@ -339,7 +348,7 @@ class AdminService:
         service_account_id: str,
         permission_level: str,
         client_ip: Optional[str],
-    ):
+    ) -> UserPermission:
         if permission_level not in ("read", "write", "admin"):
             raise HTTPException(
                 status_code=400,
@@ -408,7 +417,7 @@ class AdminService:
         days: int,
         limit: int,
         offset: int,
-    ):
+    ) -> list[AuditLogEntry]:
         return await self._auth.get_audit_logs(
             user_id=user_id,
             action=action,
