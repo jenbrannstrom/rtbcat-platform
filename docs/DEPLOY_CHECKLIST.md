@@ -74,6 +74,33 @@ FROM rtb_daily WHERE metric_date >= CURRENT_DATE - 7;
 python scripts/refresh_precompute.py --days 90 --validate
 ```
 
+## Artifact Registry Authentication
+
+The deploy workflow refreshes Docker auth on the VM **before every pull** using the
+VM's instance service account metadata token:
+
+```bash
+TOKEN=$(curl -sf -H 'Metadata-Flavor: Google' \
+  'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' \
+  | jq -r .access_token)
+echo "$TOKEN" | sudo docker login -u oauth2accesstoken --password-stdin \
+  https://asia-southeast1-docker.pkg.dev
+```
+
+**Why metadata-token auth instead of gcloud credHelper:**
+- The VM's root Docker daemon runs under `sudo`. Its credential store is separate
+  from any user-level `gcloud auth` session.
+- `gcloud auth configure-docker` sets up a credHelper that relies on the active
+  gcloud auth context — which can become stale after VM restarts, container
+  recreation, or manual SSH sessions.
+- The metadata service is always available on GCP VMs, uses the instance service
+  account (which has Artifact Registry Reader role), and requires no interactive
+  login or stored credentials.
+- This approach is idempotent — safe to run on every deploy with no side effects.
+
+If the metadata token step fails, the deploy aborts immediately before attempting
+the image pull.
+
 ## Rollback
 
 Re-run the workflow on a previous commit. The workflow uses `GITHUB_SHA` for the image tag,
