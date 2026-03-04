@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 from unittest.mock import MagicMock
 
 
@@ -115,4 +114,3 @@ def test_access_token_provider_force_refresh_persists_token(monkeypatch, tmp_pat
     assert creds.refresh_calls == 1
     assert token_path.exists()
     assert "token-v2" in token_path.read_text()
-
