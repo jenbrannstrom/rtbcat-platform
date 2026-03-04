@@ -52,7 +52,7 @@ class DiscoveryResponse(BaseModel):
 
 
 @router.get("/config/gcp-status", response_model=GCPStatusResponse)
-async def get_gcp_status():
+async def get_gcp_status() -> GCPStatusResponse:
     """Get GCP deployment mode status.
 
     Returns information about whether the app is running in GCP mode
@@ -68,7 +68,7 @@ async def get_gcp_status():
 async def discover_via_adc(
     request: GCPDiscoverRequest,
     store=Depends(get_store),
-):
+) -> DiscoveryResponse:
     """Discover buyer seats using GCP Application Default Credentials.
 
     This endpoint uses the VM's attached service account to discover
@@ -132,7 +132,7 @@ class DeleteResponse(BaseModel):
 async def list_service_accounts(
     active_only: bool = False,
     store=Depends(get_store),
-):
+) -> ServiceAccountListResponse:
     """List all configured service accounts."""
     service = ConfigService()
     accounts = await service.list_service_accounts(store, active_only)
@@ -157,7 +157,7 @@ async def list_service_accounts(
 async def add_service_account(
     request: CredentialsUploadRequest,
     store=Depends(get_store),
-):
+) -> CredentialsUploadResponse:
     """Add a new Google service account.
 
     Accepts the JSON contents of a Google Cloud service account key file,
@@ -176,7 +176,7 @@ async def add_service_account(
 async def get_service_account(
     account_id: str,
     store=Depends(get_store),
-):
+) -> ServiceAccountResponse:
     """Get a specific service account by ID."""
     service = ConfigService()
     account = await service.get_service_account(store, account_id)
@@ -198,7 +198,7 @@ async def get_service_account(
 async def discover_bidders_for_account(
     account_id: str,
     store=Depends(get_store),
-):
+) -> DiscoveryResponse:
     """Discover bidder accounts accessible by this service account.
 
     Queries the Google Authorized Buyers API to find all bidder and buyer
@@ -217,7 +217,7 @@ async def discover_bidders_for_account(
 async def delete_service_account(
     account_id: str,
     store=Depends(get_store),
-):
+) -> DeleteResponse:
     """Delete a service account and its credentials file."""
     # Get the account first to find credentials path
     service = ConfigService()
@@ -278,7 +278,7 @@ class AIProviderKeyUpdateResponse(BaseModel):
 @router.get("/config/language-ai/provider", response_model=LanguageAIProviderConfigResponse)
 async def get_language_ai_provider_config(
     store=Depends(get_store),
-):
+) -> LanguageAIProviderConfigResponse:
     """Get active language AI provider and provider key statuses."""
     service = ConfigService()
     result = await service.get_language_ai_provider_config(store)
@@ -299,7 +299,7 @@ async def get_language_ai_provider_config(
 async def update_language_ai_provider(
     request: LanguageAIProviderUpdateRequest,
     store=Depends(get_store),
-):
+) -> AIProviderKeyUpdateResponse:
     """Set active language AI provider (gemini/claude/grok)."""
     service = ConfigService()
     result = await service.update_language_ai_provider(store, request.provider)
@@ -313,7 +313,7 @@ async def update_language_ai_provider(
 async def get_language_ai_provider_key_status(
     provider: str,
     store=Depends(get_store),
-):
+) -> AIProviderKeyStatusResponse:
     """Get key status for a single language AI provider."""
     service = ConfigService()
     result = await service.get_ai_provider_key_status(store, provider)
@@ -328,7 +328,7 @@ async def update_language_ai_provider_key(
     provider: str,
     request: AIProviderKeyUpdateRequest,
     store=Depends(get_store),
-):
+) -> AIProviderKeyUpdateResponse:
     """Update key for a single language AI provider."""
     service = ConfigService()
     result = await service.update_ai_provider_key(store, provider, request.api_key)
@@ -342,7 +342,7 @@ async def update_language_ai_provider_key(
 async def delete_language_ai_provider_key(
     provider: str,
     store=Depends(get_store),
-):
+) -> AIProviderKeyUpdateResponse:
     """Delete key for a single language AI provider from DB."""
     service = ConfigService()
     result = await service.delete_ai_provider_key(store, provider)
@@ -366,7 +366,7 @@ class GeminiKeyUpdateResponse(BaseModel):
 
 
 @router.get("/config/gemini-key", response_model=GeminiKeyStatusResponse)
-async def get_gemini_key_status(store=Depends(get_store)):
+async def get_gemini_key_status(store=Depends(get_store)) -> GeminiKeyStatusResponse:
     service = ConfigService()
     status = await service.get_gemini_key_status(store)
     return GeminiKeyStatusResponse(
@@ -380,14 +380,14 @@ async def get_gemini_key_status(store=Depends(get_store)):
 async def update_gemini_key(
     request: GeminiKeyUpdateRequest,
     store=Depends(get_store),
-):
+) -> GeminiKeyUpdateResponse:
     service = ConfigService()
     result = await service.update_gemini_key(store, request.api_key)
     return GeminiKeyUpdateResponse(success=result["success"], message=result["message"])
 
 
 @router.delete("/config/gemini-key", response_model=GeminiKeyUpdateResponse)
-async def delete_gemini_key(store=Depends(get_store)):
+async def delete_gemini_key(store=Depends(get_store)) -> GeminiKeyUpdateResponse:
     service = ConfigService()
     result = await service.delete_gemini_key(store)
     return GeminiKeyUpdateResponse(success=result["success"], message=result["message"])
