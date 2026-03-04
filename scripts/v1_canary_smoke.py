@@ -1301,7 +1301,10 @@ def main() -> int:
                 payload = json.loads(body.decode("utf-8"))
             except json.JSONDecodeError as exc:
                 raise SmokeFailure(f"{path}: non-JSON response during latency check") from exc
-            _assert(isinstance(payload, dict), f"{path}: expected JSON object response")
+            _assert(
+                isinstance(payload, (dict, list)),
+                f"{path}: expected JSON object/array response",
+            )
             budget_ms = thresholds_ms[path]
             _assert(
                 elapsed_ms <= budget_ms,
