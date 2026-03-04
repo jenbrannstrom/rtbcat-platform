@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
@@ -11,6 +12,8 @@ from pathlib import Path
 from typing import Optional
 
 from storage.postgres_database import pg_query, pg_query_one
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -88,8 +91,8 @@ class SystemService:
             try:
                 result = subprocess.run(['node', '--version'], capture_output=True, text=True, timeout=5)
                 node_version = result.stdout.strip()
-            except Exception:
-                pass
+            except (OSError, subprocess.SubprocessError):
+                logger.warning("Failed to resolve node version", exc_info=True)
         return node_available, node_version
 
     def _get_ffmpeg_version(self) -> tuple[bool, Optional[str]]:
@@ -102,8 +105,8 @@ class SystemService:
                 first_line = result.stdout.split('\n')[0]
                 parts = first_line.split(' ')
                 ffmpeg_version = parts[2] if len(parts) > 2 else 'Unknown'
-            except Exception:
-                pass
+            except (OSError, subprocess.SubprocessError):
+                logger.warning("Failed to resolve ffmpeg version", exc_info=True)
         return ffmpeg_available, ffmpeg_version
 
     async def get_system_status(self) -> SystemStatus:
@@ -137,7 +140,7 @@ class SystemService:
             video_rows = await pg_query("SELECT COUNT(*) as cnt FROM creatives WHERE format = 'VIDEO'")
             videos_count = video_rows[0]["cnt"] if video_rows else 0
         except Exception:
-            pass
+            logger.warning("Failed to load system status DB metrics", exc_info=True)
 
         return SystemStatus(
             python_version=python_version,
@@ -173,7 +176,7 @@ class SystemService:
             )
         except Exception:
             # Table may not exist if migration not run
-            pass
+            logger.warning("Failed to lookup geo names from DB; using fallback mapping", exc_info=True)
 
         # Build result mapping from database
         result = {}
@@ -256,6 +259,7 @@ class SystemService:
             )
         except Exception:
             # The geographies table may not exist in all environments.
+            logger.warning("Failed to search geo targets from DB; returning empty result", exc_info=True)
             return []
 
         results: list[dict[str, str]] = []
