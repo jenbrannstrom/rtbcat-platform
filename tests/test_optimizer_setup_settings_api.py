@@ -38,7 +38,7 @@ def _build_client(
     app = FastAPI()
     app.include_router(optimizer_settings_router.router, prefix="/api")
     app.dependency_overrides[optimizer_settings_router.get_store] = lambda: stub_store
-    app.dependency_overrides[optimizer_settings_router.get_current_user] = lambda: SimpleNamespace(
+    app.dependency_overrides[optimizer_settings_router.require_admin] = lambda: SimpleNamespace(
         id="u1",
         role="sudo",
         email="admin@example.com",
