@@ -112,8 +112,22 @@ jobs:
 
               echo \"Deploying version: \$(cat VERSION) (sha-${SHORT_SHA})\"
 
+              # Refresh Artifact Registry auth via VM instance metadata token.
+              # This avoids dependency on root's gcloud auth or credHelper state,
+              # which can go stale and cause 'denied: Unauthenticated request' on pull.
+              AR_TOKEN=\$(curl -sf -H 'Metadata-Flavor: Google' \
+                'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' \
+                | jq -r .access_token)
+              if [ -z \"\$AR_TOKEN\" ] || [ \"\$AR_TOKEN\" = \"null\" ]; then
+                echo 'FAIL: Could not obtain metadata token for Artifact Registry auth'
+                exit 1
+              fi
+              echo \"\$AR_TOKEN\" | sudo docker login -u oauth2accesstoken --password-stdin https://asia-southeast1-docker.pkg.dev
+              echo '✓ Artifact Registry auth refreshed via VM metadata token'
+
               # Pull prebuilt images from Artifact Registry (no building on VM)
               sudo -E docker compose -f docker-compose.gcp.yml pull
+              echo '✓ Docker image pull from Artifact Registry succeeded'
 
               # Start containers with new images
               sudo -E docker compose -f docker-compose.gcp.yml up -d --force-recreate
