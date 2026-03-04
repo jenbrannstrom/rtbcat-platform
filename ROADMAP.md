@@ -38,6 +38,8 @@
   - [x] Add attribution join evidence storage (`conversion_attribution_joins`) with exact/fallback mode, status, and confidence fields.
   - [x] Add attribution API surface (`/conversions/attribution/refresh|summary|joins`) for buyer-scoped observability and diagnostics.
   - [x] Add operator report script (`scripts/run_conversion_attribution_phase_b_report.sh`) to capture refresh+summary+sample joins in one artifact.
+  - [x] Add one-command live pilot validator (`scripts/run_appsflyer_pilot_live_validation.sh`) to orchestrate readiness + Phase A + Phase B with consolidated PASS/BLOCKED/FAIL output.
+  - [x] Add CI workflow wrapper for live pilot validation (`.github/workflows/v1-appsflyer-pilot-live-validation.yml`) with artifacts + scheduled/manual runs.
   - [ ] Add AppsFlyer raw ingestion tables + normalization pipeline with buyer-specific mapping profile.
   - [ ] Persist ingestion lineage and quality counters (accepted/rejected/unknown mappings).
   - Acceptance: deterministic ingest for pilot buyer with replay-safe idempotency.

@@ -1,0 +1,144 @@
+name: v1 AppsFlyer Pilot Live Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      buyer_id:
+        description: "Buyer ID to validate"
+        required: true
+        default: "299038253"
+      source_type:
+        description: "Conversion source type"
+        required: false
+        default: "appsflyer"
+      api_base_url:
+        description: "API base URL (include /api path)"
+        required: false
+        default: "https://scan.rtb.cat/api"
+      timeout_seconds:
+        description: "Readiness request timeout (seconds)"
+        required: false
+        default: "90"
+      days:
+        description: "Lookback window in days"
+        required: false
+        default: "14"
+      fallback_window_days:
+        description: "Fallback creative-time join window (days)"
+        required: false
+        default: "1"
+      strict_phase_b_refresh:
+        description: "Fail when Phase-B refresh endpoint is non-200"
+        type: boolean
+        required: false
+        default: false
+  schedule:
+    - cron: "40 4 * * *"
+
+concurrency:
+  group: v1-appsflyer-pilot-live-validation-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate-live-pilot:
+    name: Validate AppsFlyer pilot live state
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CATSCAN_BUYER_ID: ${{ github.event.inputs.buyer_id || '299038253' }}
+      CATSCAN_CONVERSION_SOURCE_TYPE: ${{ github.event.inputs.source_type || 'appsflyer' }}
+      CATSCAN_API_BASE_URL: ${{ github.event.inputs.api_base_url || 'https://scan.rtb.cat/api' }}
+      CATSCAN_CANARY_TIMEOUT_SECONDS: ${{ github.event.inputs.timeout_seconds || '90' }}
+      CATSCAN_ATTRIBUTION_DAYS: ${{ github.event.inputs.days || '14' }}
+      CATSCAN_ATTRIBUTION_FALLBACK_WINDOW_DAYS: ${{ github.event.inputs.fallback_window_days || '1' }}
+      CATSCAN_API_TOKEN: ${{ secrets.CATSCAN_CANARY_BEARER_TOKEN }}
+      CATSCAN_CANARY_EMAIL: ${{ secrets.CATSCAN_CANARY_EMAIL }}
+      CATSCAN_POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate auth inputs
+        run: |
+          if [[ -z "${CATSCAN_API_TOKEN:-}" && -z "${CATSCAN_CANARY_EMAIL:-}" ]]; then
+            echo "Set CATSCAN_CANARY_BEARER_TOKEN or CATSCAN_CANARY_EMAIL in repository secrets." >&2
+            exit 1
+          fi
+
+      - name: Run live validation
+        id: live
+        run: |
+          strict_flag="${{ github.event.inputs.strict_phase_b_refresh || 'false' }}"
+          extra_flag=()
+          if [[ "${strict_flag}" == "true" ]]; then
+            extra_flag+=(--strict-phase-b-refresh)
+          fi
+
+          set +e
+          bash scripts/run_appsflyer_pilot_live_validation.sh \
+            --buyer-id "${CATSCAN_BUYER_ID}" \
+            --source-type "${CATSCAN_CONVERSION_SOURCE_TYPE}" \
+            --api-base-url "${CATSCAN_API_BASE_URL}" \
+            --timeout "${CATSCAN_CANARY_TIMEOUT_SECONDS}" \
+            --days "${CATSCAN_ATTRIBUTION_DAYS}" \
+            --fallback-window-days "${CATSCAN_ATTRIBUTION_FALLBACK_WINDOW_DAYS}" \
+            "${extra_flag[@]}" \
+            | tee /tmp/v1_appsflyer_pilot_live_validation.log
+          live_status=${PIPESTATUS[0]}
+          set -e
+
+          report_path="$(grep -E '^report_md=' /tmp/v1_appsflyer_pilot_live_validation.log | tail -n1 | cut -d= -f2-)"
+          report_json="$(grep -E '^report_json=' /tmp/v1_appsflyer_pilot_live_validation.log | tail -n1 | cut -d= -f2-)"
+
+          if [[ -z "${report_path}" ]]; then
+            latest_dir="$(ls -1dt /tmp/appsflyer-pilot-live-validation-* 2>/dev/null | head -n1 || true)"
+            if [[ -n "${latest_dir}" && -f "${latest_dir}/live_validation_report.md" ]]; then
+              report_path="${latest_dir}/live_validation_report.md"
+            fi
+            if [[ -n "${latest_dir}" && -f "${latest_dir}/live_validation_report.json" ]]; then
+              report_json="${latest_dir}/live_validation_report.json"
+            fi
+          fi
+
+          if [[ -n "${report_path}" ]]; then
+            echo "report_path=${report_path}" >> "$GITHUB_OUTPUT"
+            echo "run_dir=$(dirname "${report_path}")" >> "$GITHUB_OUTPUT"
+          else
+            echo "report_path=" >> "$GITHUB_OUTPUT"
+            echo "run_dir=" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ -n "${report_json}" ]]; then
+            echo "report_json=${report_json}" >> "$GITHUB_OUTPUT"
+          else
+            echo "report_json=" >> "$GITHUB_OUTPUT"
+          fi
+
+          exit "${live_status}"
+
+      - name: Publish summary
+        if: always()
+        run: |
+          report_path="${{ steps.live.outputs.report_path }}"
+          if [[ -n "${report_path}" && -f "${report_path}" ]]; then
+            cat "${report_path}" >> "$GITHUB_STEP_SUMMARY"
+          elif [[ -f /tmp/v1_appsflyer_pilot_live_validation.log ]]; then
+            echo "Live validation report missing; log tail:" >> "$GITHUB_STEP_SUMMARY"
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 120 /tmp/v1_appsflyer_pilot_live_validation.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Live validation report/log missing." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v1-appsflyer-pilot-live-validation
+          path: |
+            /tmp/v1_appsflyer_pilot_live_validation.log
+            ${{ steps.live.outputs.run_dir }}
+          if-no-files-found: warn
