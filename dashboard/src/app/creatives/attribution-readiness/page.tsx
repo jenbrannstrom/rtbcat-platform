@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, CircleDashed, Link2 } from "lucide-react";
+import { usePathname } from "next/navigation";
 import {
   getConversionAttributionSummary,
   getConversionReadiness,
@@ -12,7 +13,7 @@ import {
 } from "@/lib/api";
 import { ErrorPage } from "@/components/error";
 import { LoadingPage } from "@/components/loading";
-import { toBuyerScopedPath } from "@/lib/buyer-routes";
+import { splitBuyerPath, toBuyerScopedPath } from "@/lib/buyer-routes";
 import { useAccount } from "@/contexts/account-context";
 import { useAuth } from "@/contexts/auth-context";
 
@@ -58,8 +59,10 @@ function deriveSeatStatus(
 }
 
 export default function AttributionReadinessPage() {
+  const pathname = usePathname();
   const { selectedBuyerId } = useAccount();
   const { isSudo } = useAuth();
+  const { buyerIdInPath } = splitBuyerPath(pathname || "/");
 
   const seatsQuery = useQuery({
     queryKey: ["seats", "active-only", "attribution-readiness"],
@@ -67,7 +70,7 @@ export default function AttributionReadinessPage() {
     staleTime: 30_000,
   });
 
-  const scopedBuyerId = selectedBuyerId ?? seatsQuery.data?.[0]?.buyer_id ?? null;
+  const scopedBuyerId = buyerIdInPath ?? selectedBuyerId ?? seatsQuery.data?.[0]?.buyer_id ?? null;
 
   const readinessQuery = useQuery({
     queryKey: [
