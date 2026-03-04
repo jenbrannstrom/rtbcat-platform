@@ -15,6 +15,7 @@ from api.dependencies import (
     get_allowed_bidder_ids,
     get_allowed_buyer_ids,
     get_store,
+    is_sudo,
 )
 from services.uploads_service import UploadsService
 from services.auth_service import User
@@ -179,7 +180,7 @@ async def get_upload_tracking(
     service: UploadsService = Depends(get_uploads_service),
 ):
     """Get daily upload tracking summary."""
-    if user.role != "sudo":
+    if not is_sudo(user):
         return UploadTrackingResponse(
             daily_summaries=[],
             total_days=0,

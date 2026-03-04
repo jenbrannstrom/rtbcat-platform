@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.dependencies import get_store, get_current_user, resolve_buyer_id
+from api.dependencies import get_store, get_current_user, resolve_buyer_id, require_admin
 from services.auth_service import User
 from services.home_precompute import refresh_home_summaries
 from services.home_analytics_service import HomeAnalyticsService
@@ -102,11 +102,9 @@ async def refresh_home_cache(
     days: int = Query(7, ge=1, le=90),
     buyer_id: Optional[str] = None,
     store=Depends(get_store),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
 ):
     """Refresh Home precomputed tables for a date range."""
-    if user.role != "sudo":
-        raise HTTPException(status_code=403, detail="Sudo access required")
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     refresh_kwargs = {"buyer_account_id": buyer_id}
     if dates:
