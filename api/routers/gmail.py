@@ -80,6 +80,8 @@ async def get_gmail_status() -> GmailStatusResponse:
         service = GmailService()
         status = service.get_status()
         return GmailStatusResponse(**status)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get Gmail status: {e}")
         raise HTTPException(status_code=500, detail=str(e))

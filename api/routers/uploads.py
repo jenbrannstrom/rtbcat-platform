@@ -206,6 +206,8 @@ async def get_upload_tracking(
             days_with_anomalies=result["days_with_anomalies"],
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get upload tracking: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get upload tracking: {str(e)}")
@@ -289,6 +291,8 @@ async def get_daily_uploads_grid(
             expected_uploads_per_day=result["expected_uploads_per_day"],
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get daily uploads grid: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get daily uploads grid: {str(e)}")
@@ -323,6 +327,8 @@ async def get_accounts_upload_summary(
             unassigned_uploads=result["unassigned_uploads"],
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get accounts upload summary: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get accounts upload summary: {str(e)}")
