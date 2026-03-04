@@ -424,7 +424,7 @@ class HomeAnalyticsService:
             total_reached = int(rows[0].get("overall_total_reached") or total_reached)
             total_impressions = int(rows[0].get("overall_total_impressions") or total_impressions)
 
-        overall_win = (total_impressions / total_reached * 100) if total_reached > 0 else 0
+        overall_win = _safe_rate(total_impressions, total_reached)
 
         payload = {
             "period_days": requested_days,
@@ -481,9 +481,8 @@ class HomeAnalyticsService:
         window_seconds = days * 24 * 3600
 
         funnel_proxy_qps = (total_reached / window_seconds) if window_seconds > 0 else 0.0
-        delivery_win_rate_pct = (
-            (total_impressions / total_reached * 100) if total_reached > 0 else 0.0
-        )
+        # Delivery win rate: impressions / reached, clamped to [0, 100].
+        delivery_win_rate_pct = _safe_rate(total_impressions, total_reached)
 
         total_bids = int((bidstream_summary or {}).get("total_bids") or 0)
         total_bids_in_auction = int((bidstream_summary or {}).get("total_bids_in_auction") or 0)
