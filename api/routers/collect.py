@@ -68,6 +68,8 @@ async def start_collection(
 
     try:
         credentials_path = str(config.get_service_account_path())
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(
             status_code=400,
@@ -111,6 +113,8 @@ async def collect_sync(
 
     try:
         credentials_path = str(config.get_service_account_path())
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(
             status_code=400,
