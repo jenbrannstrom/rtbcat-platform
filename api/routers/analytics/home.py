@@ -1,7 +1,7 @@
 """Home page analytics from precomputed tables."""
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -33,7 +33,7 @@ async def get_home_funnel(
     limit: int = Query(30, ge=1, le=200),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Get Home funnel summary + publishers/geos from precomputed tables."""
     try:
         buyer_id = _require_home_buyer_id(
@@ -58,7 +58,7 @@ async def get_home_config_performance(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Get per-config performance from precomputed data."""
     try:
         buyer_id = _require_home_buyer_id(
@@ -79,7 +79,7 @@ async def get_home_endpoint_efficiency(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Get allocated-vs-observed endpoint efficiency and reconciliation."""
     try:
         buyer_id = _require_home_buyer_id(
@@ -103,7 +103,7 @@ async def refresh_home_cache(
     buyer_id: Optional[str] = None,
     store=Depends(get_store),
     user: User = Depends(require_admin),
-):
+) -> dict[str, Any]:
     """Refresh Home precomputed tables for a date range."""
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     refresh_kwargs = {"buyer_account_id": buyer_id}

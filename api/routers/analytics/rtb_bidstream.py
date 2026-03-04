@@ -5,7 +5,7 @@ creative win performance, and app drill-down endpoints.
 """
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 
@@ -36,7 +36,7 @@ async def get_rtb_bidstream(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Get RTB funnel analysis from database.
 
@@ -67,7 +67,7 @@ async def get_rtb_publishers(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Get publisher performance breakdown from database.
 
@@ -91,7 +91,7 @@ async def get_rtb_geos(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Get geographic performance breakdown from database.
 
@@ -114,7 +114,7 @@ async def get_config_performance(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Get performance breakdown by pretargeting config (billing_id).
 
@@ -151,7 +151,7 @@ async def get_config_breakdown(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Get detailed breakdown for a specific pretargeting config.
 
@@ -182,7 +182,7 @@ async def get_config_creatives(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """List creatives for a config (optionally filtered by size)."""
     try:
         resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
@@ -204,7 +204,7 @@ async def get_creative_win_performance(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Get creative performance using WIN RATE metrics.
 
@@ -242,7 +242,7 @@ async def get_app_drilldown(
     ),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Get detailed breakdown for a specific app/publisher.
 

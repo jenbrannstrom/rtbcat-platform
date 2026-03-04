@@ -5,7 +5,7 @@ publisher waste, bid filtering, platform efficiency, and hourly patterns.
 """
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 
@@ -33,7 +33,7 @@ async def get_size_coverage(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer/seat ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Analyze size coverage gaps.
 
@@ -127,7 +127,7 @@ async def get_geo_waste(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer/seat ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Analyze geographic QPS waste.
 
@@ -188,7 +188,7 @@ async def get_pretargeting_recommendations(
     days: int = Query(7, ge=1, le=90),
     max_configs: int = Query(10, ge=1, le=10),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Generate optimal pretargeting configurations.
 
@@ -221,7 +221,7 @@ async def get_qps_summary(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer/seat ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     High-level QPS efficiency summary.
 
@@ -292,7 +292,7 @@ async def get_qps_summary(
 async def get_geo_pretargeting_config(
     days: int = Query(7, ge=1, le=90),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Get ready-to-use geo configuration for pretargeting.
 
@@ -321,7 +321,7 @@ async def get_qps_optimization_report(
     bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Get comprehensive QPS optimization report with actionable recommendations.
 
@@ -362,7 +362,7 @@ async def get_publisher_waste(
     bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Get publishers ranked by QPS waste.
 
@@ -396,7 +396,7 @@ async def get_bid_filtering_analysis(
     bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Analyze why bids are being filtered.
 
@@ -428,7 +428,7 @@ async def get_platform_efficiency(
     bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Analyze efficiency by platform (Desktop/Mobile/Tablet).
 
@@ -453,7 +453,7 @@ async def get_hourly_patterns(
     bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Analyze hourly bidding patterns for QPS throttling.
 

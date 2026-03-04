@@ -30,7 +30,7 @@ class UpdateOptimizerSetupRequest(BaseModel):
 @router.get("/settings/optimizer/setup", response_model=OptimizerSetupResponse)
 async def get_optimizer_setup(
     store=Depends(get_store),
-):
+) -> OptimizerSetupResponse:
     raw_value = await store.get_setting(_MONTHLY_HOSTING_COST_KEY)
     monthly_cost: Optional[float] = None
     if raw_value not in (None, ""):
@@ -50,7 +50,7 @@ async def update_optimizer_setup(
     request: UpdateOptimizerSetupRequest,
     store=Depends(get_store),
     user: User = Depends(require_admin),
-):
+) -> OptimizerSetupResponse:
     monthly_cost = float(request.monthly_hosting_cost_usd)
     if monthly_cost < 0:
         raise HTTPException(status_code=400, detail="monthly_hosting_cost_usd must be >= 0")

@@ -5,7 +5,7 @@ viewability waste, and fraud risk endpoints.
 """
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 
@@ -41,7 +41,7 @@ async def get_waste_report(
     days: int = Query(7, ge=1, le=90, description="Days of traffic to analyze"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> WasteReportResponse:
     """Get waste analysis report comparing bid requests vs creative inventory.
 
     Analyzes RTB traffic data to identify size gaps - ad sizes that receive
@@ -110,7 +110,7 @@ async def get_waste_signals(
     include_resolved: bool = Query(False, description="Include resolved signals"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> list[WasteSignalResponse]:
     """Get evidence-based waste signals for a creative.
 
     Phase 11.2: Evidence-Based Waste Detection
@@ -134,7 +134,7 @@ async def detect_problem_formats(
     size_tolerance: int = Query(5, ge=0, le=20, description="Pixel tolerance for size matching"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> list[ProblemFormatResponse]:
     """Detect creatives with problems that hurt QPS efficiency.
 
     Phase 22: Problem format detection identifies creatives that should be
@@ -171,7 +171,7 @@ async def run_waste_analysis(
     days: int = Query(7, ge=1, le=90, description="Timeframe for analysis"),
     save_to_db: bool = Query(True, description="Save signals to database"),
     user: User = Depends(require_admin),
-):
+) -> dict[str, Any]:
     """Run waste analysis on all creatives with recent activity.
 
     Phase 11.2: Evidence-Based Waste Detection
@@ -192,7 +192,7 @@ async def resolve_waste_signal(
     signal_id: int,
     notes: Optional[str] = Query(None, description="Resolution notes"),
     user: User = Depends(require_admin),
-):
+) -> dict[str, str | int]:
     """Mark a waste signal as resolved.
 
     Phase 11.2: Evidence-Based Waste Detection
@@ -213,7 +213,7 @@ async def get_viewability_waste(
     bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Find publishers with low viewability but high spend.
 
@@ -244,7 +244,7 @@ async def get_fraud_risk_publishers(
     bidder_id: Optional[str] = Query(None, description="Filter by bidder account ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Find publishers with high fraud/IVT rates.
 

@@ -25,7 +25,7 @@ def _is_router_handler(node: ast.AST) -> bool:
 def test_router_handlers_have_return_annotations() -> None:
     missing: list[tuple[str, int, str]] = []
 
-    for path in sorted(ROUTERS_DIR.glob("*.py")):
+    for path in sorted(ROUTERS_DIR.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         rel_path = path.relative_to(REPO_ROOT).as_posix()
         for node in tree.body:
