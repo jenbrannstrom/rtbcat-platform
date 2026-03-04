@@ -69,10 +69,13 @@
     - Evidence: workflow run `22655481679` (success).
     - Waiver: bidstream dimension breakdown gap (`platform/environment/transaction_type` all 100% missing for this buyer data source).
     - Waiver expiry: `2026-06-30` (must be revisited; do not treat as permanent).
-- [ ] Enforce policy: attribution-driven automation is not considered production-ready until runtime-health strict gate reaches stable `exit 0` for pilot buyer windows.
+- [x] Enforce policy: attribution-driven automation is not considered production-ready until runtime-health strict gate reaches stable `exit 0` for pilot buyer windows.
   - Progress (2026-03-04): automated enforcement added.
     - Daily strict run automation: `.github/workflows/v1-runtime-health-strict.yml` now scheduled (`03:35 UTC`) with buyer/profile defaults + waiver support.
     - Stability monitor: `.github/workflows/v1-runtime-health-stability.yml` (scheduled `03:50 UTC`) validates consecutive success window using `scripts/check_v1_runtime_health_stability.sh`.
+  - Evidence (2026-03-04): stability window achieved for pilot buyer `1487810529` with latest 3 strict runs all `success`:
+    - `22656590137`, `22656554679`, `22656401648` (`stability=STABLE` via `scripts/check_v1_runtime_health_stability.sh --window 3`).
+  - Guardrail status: enabled and continuously monitored; waiver remains explicitly scoped and expires `2026-06-30`.
 
 ---
 
