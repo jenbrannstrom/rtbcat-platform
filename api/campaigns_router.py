@@ -305,6 +305,11 @@ def _extract_reference_domain(url: Optional[str]) -> Optional[str]:
             return None
         return domain
     except Exception:
+        logger.debug(
+            "Failed to extract reference domain from campaign URL; returning None",
+            extra={"url_preview": str(cleaned_url)[:160]},
+            exc_info=True,
+        )
         return None
 
 
