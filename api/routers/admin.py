@@ -4,7 +4,7 @@ This module provides administrative endpoints for managing users,
 permissions, and viewing audit logs. All endpoints require sudo role.
 """
 
-from typing import Optional, List
+from typing import Any, Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -150,7 +150,7 @@ async def list_users(
     active_only: bool = Query(False, description="Only show active users"),
     role: Optional[str] = Query(None, description="Filter by role"),
     admin: User = Depends(require_admin),
-):
+) -> List[UserResponse]:
     """List all users.
 
     Requires sudo role.
@@ -178,7 +178,7 @@ async def create_user(
     request: Request,
     user_request: CreateUserRequest,
     admin: User = Depends(require_admin),
-):
+) -> CreateUserResponse:
     """Create a new user (local password or OAuth pre-register).
 
     Requires sudo role.
@@ -203,7 +203,7 @@ async def create_user(
 async def get_user(
     user_id: str,
     admin: User = Depends(require_admin),
-):
+) -> UserResponse:
     """Get a specific user's details.
 
     Requires sudo role.
@@ -232,7 +232,7 @@ async def update_user(
     user_id: str,
     user_update: UpdateUserRequest,
     admin: User = Depends(require_admin),
-):
+) -> UserResponse:
     """Update a user's details.
 
     Requires sudo role. Can update display_name, role, and is_active.
@@ -265,7 +265,7 @@ async def deactivate_user(
     request: Request,
     user_id: str,
     admin: User = Depends(require_admin),
-):
+) -> dict[str, str | int]:
     """Deactivate a user (soft delete).
 
     Requires sudo role. The user account is deactivated, not deleted.
@@ -285,7 +285,7 @@ async def deactivate_user(
 async def get_user_buyer_seat_permissions(
     user_id: str,
     admin: User = Depends(require_admin),
-):
+) -> List[BuyerSeatPermissionResponse]:
     """Get a user's explicit buyer seat permissions.
 
     Requires sudo role.
@@ -320,7 +320,7 @@ async def grant_buyer_seat_permission(
     user_id: str,
     perm_request: BuyerSeatPermissionRequest,
     admin: User = Depends(require_admin),
-):
+) -> BuyerSeatPermissionResponse:
     """Grant a user explicit access to a buyer seat.
 
     Requires sudo role. If permission already exists, it will be updated.
@@ -358,7 +358,7 @@ async def revoke_buyer_seat_permission(
     user_id: str,
     buyer_id: str,
     admin: User = Depends(require_admin),
-):
+) -> dict[str, str]:
     """Revoke a user's explicit access to a buyer seat.
 
     Requires sudo role.
@@ -381,7 +381,7 @@ async def revoke_buyer_seat_permission(
 async def get_user_permissions(
     user_id: str,
     admin: User = Depends(require_admin),
-):
+) -> List[PermissionResponse]:
     """Get a user's service account permissions.
 
     Requires sudo role.
@@ -413,7 +413,7 @@ async def grant_permission(
     user_id: str,
     perm_request: PermissionRequest,
     admin: User = Depends(require_admin),
-):
+) -> PermissionResponse:
     """Grant a user access to a service account.
 
     Requires sudo role. If permission already exists, it will be updated.
@@ -448,7 +448,7 @@ async def revoke_permission(
     user_id: str,
     service_account_id: str,
     admin: User = Depends(require_admin),
-):
+) -> dict[str, str]:
     """Revoke a user's access to a service account.
 
     Requires sudo role.
@@ -479,7 +479,7 @@ async def get_audit_logs(
     limit: int = Query(100, ge=1, le=1000, description="Maximum entries to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     admin: User = Depends(require_admin),
-):
+) -> List[AuditLogResponse]:
     """Query audit log entries.
 
     Requires sudo role. Supports filtering by user, action, resource type,
@@ -515,7 +515,7 @@ async def get_audit_logs(
 @router.get("/settings", response_model=dict)
 async def get_settings(
     admin: User = Depends(require_admin),
-):
+) -> dict[str, Any]:
     """Get all system settings.
 
     Requires sudo role.
@@ -530,7 +530,7 @@ async def update_setting(
     key: str,
     setting_update: UpdateSettingRequest,
     admin: User = Depends(require_admin),
-):
+) -> dict[str, str]:
     """Update a system setting.
 
     Requires sudo role.
@@ -549,7 +549,7 @@ async def update_setting(
 @router.get("/stats")
 async def get_admin_stats(
     admin: User = Depends(require_admin),
-):
+) -> dict[str, Any]:
     """Get admin dashboard stats.
 
     Requires sudo role. Returns counts of users, sessions, etc.
@@ -563,7 +563,7 @@ async def get_admin_stats(
 @router.get("/diagnostics")
 async def get_diagnostics(
     admin: User = Depends(require_admin),
-):
+) -> dict[str, Any]:
     """Get diagnostic information for debugging data issues.
 
     Requires sudo role. Returns:
@@ -585,7 +585,7 @@ async def get_diagnostics(
 @router.post("/diagnostics/fix-inactive-seats")
 async def fix_inactive_seats(
     admin: User = Depends(require_admin),
-):
+) -> dict[str, Any]:
     """Activate all inactive buyer seats.
 
     Use this to fix Issue 2: Missing third account showing only 2 of 3 accounts.

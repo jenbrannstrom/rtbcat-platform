@@ -228,7 +228,7 @@ async def list_seats(
     seats_service: SeatsService = Depends(get_seats_service),
     store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> list[BuyerSeatResponse]:
     """List all known buyer seats.
 
     Returns buyer seats that have been discovered via the /seats/discover endpoint.
@@ -256,7 +256,7 @@ async def get_seat(
     seats_service: SeatsService = Depends(get_seats_service),
     store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> BuyerSeatResponse:
     """Get a specific buyer seat by ID."""
     await require_buyer_access(buyer_id, store=store, user=user)
     seat = await seats_service.get_buyer_seat(buyer_id)
@@ -273,7 +273,7 @@ async def discover_seats(
     seats_service: SeatsService = Depends(get_seats_service),
     store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> DiscoverSeatsResponse:
     """Discover buyer seats under a bidder account.
 
     Queries the Authorized Buyers API to enumerate all buyer accounts
@@ -407,7 +407,7 @@ async def sync_seat_creatives(
     seats_service: SeatsService = Depends(get_seats_service),
     store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> SyncSeatResponse:
     """Sync creatives for a specific buyer seat.
 
     Fetches all creatives associated with the buyer seat and stores them
@@ -474,7 +474,7 @@ async def update_seat(
     seats_service: SeatsService = Depends(get_seats_service),
     store: StoreType = Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> BuyerSeatResponse:
     """Update a buyer seat's display name."""
     await require_buyer_admin_access(buyer_id, user=user)
     if request.display_name:
@@ -493,7 +493,7 @@ async def update_seat(
 async def populate_seats_from_creatives(
     seats_service: SeatsService = Depends(get_seats_service),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, str | int]:
     """Populate buyer_seats table from existing creatives.
 
     Creates seat records for each unique account_id found in creatives.
@@ -515,7 +515,7 @@ async def sync_all_data(
     store: StoreType = Depends(get_store),
     config: ConfigManager = Depends(get_config),
     user: User = Depends(get_current_user),
-):
+) -> SyncAllResponse:
     """Sync all data: creatives, RTB endpoints, and pretargeting configs.
 
     This is a unified sync operation that:
