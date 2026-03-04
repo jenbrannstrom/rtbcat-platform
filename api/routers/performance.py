@@ -491,6 +491,17 @@ async def import_performance_csv(
             )
         return _build_import_response(result)
 
+    except HTTPException as e:
+        try:
+            await uploads_repo.finish_ingestion_run(
+                run_id=run_id,
+                status="failed",
+                row_count=0,
+                error_summary=str(e.detail),
+            )
+        except Exception:
+            logger.warning("Failed to record ingestion_run failure", exc_info=True)
+        raise
     except Exception as e:
         logger.error(f"Import failed: {e}")
         # Mark ingestion run as failed
