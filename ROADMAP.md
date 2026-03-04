@@ -1,6 +1,6 @@
 # Cat-Scan Roadmap
 
-**Last Updated:** March 3, 2026
+**Last Updated:** March 4, 2026
 
 ## Priority Buckets (2026-02-27)
 
@@ -65,6 +65,10 @@
   - `/optimizer/economics/efficiency` latency/timeout stability.
   - Proposal lifecycle completeness (`billing_id` propagation and apply-path reliability).
   - QPS rollup completeness gaps.
+  - Progress (2026-03-04): runtime-health strict is now green for pilot buyer `1487810529` with explicit buyer-scoped waiver + deterministic rollup emission.
+    - Evidence: workflow run `22655481679` (success).
+    - Waiver: bidstream dimension breakdown gap (`platform/environment/transaction_type` all 100% missing for this buyer data source).
+    - Waiver expiry: `2026-06-30` (must be revisited; do not treat as permanent).
 - [ ] Enforce policy: attribution-driven automation is not considered production-ready until runtime-health strict gate reaches stable `exit 0` for pilot buyer windows.
 
 ---
@@ -83,6 +87,10 @@
   - `/optimizer/economics/efficiency` intermittent high latency/timeouts (especially assumed-value path).
   - proposal lifecycle data completeness (`billing_id` missing in generated proposals for some buyer states).
   - QPS page rollup completeness gaps (`/analytics/home/endpoint-efficiency` missing in rollup on some windows).
+  - Progress (2026-03-04): strict gate now passes for buyer `1487810529` with explicit waiver + runtime telemetry hardening.
+    - Success evidence: `v1 Runtime Health Strict` run `22655481679` (`exit 0` for both strict steps).
+    - Waiver rationale: Google RTB source for this buyer does not provide bidstream dimension breakdowns (`platform/environment/transaction_type`), so blocker is treated as environment-waived for this buyer only.
+    - Waiver controls: buyer-scoped JSON waiver with required `note` and `expires_on`; current expiry `2026-06-30`.
   - Runtime-health strict evidence (2026-03-02, run `22599615982`): both strict canaries blocked by `rtb_quality_freshness state is unavailable (no quality data for this buyer/period)` for buyer `1487810529`.
   - Remediation helper added: `scripts/remediate_v1_quality_freshness_blocker.sh` (check data health -> trigger `/gmail/import` -> poll `/gmail/status` -> re-check readiness).
   - Progress (2026-03-02): backend mitigation patch staged on `unified-platform` (pending deploy + validation):
