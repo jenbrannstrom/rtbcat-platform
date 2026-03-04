@@ -124,8 +124,7 @@ export function Sidebar() {
   const isBuyerScopedRoute = isBuyerScopedPath(pathWithoutBuyer);
   const hasSeatAdminAccess =
     isSudo || Object.values(seatPermissions).some((level) => level === "admin");
-
-  const getSeatScopedHref = (href: string) => toBuyerScopedPath(href, currentBuyerId);
+  const canViewAllSeats = isSudo;
 
   // Load collapsed and expanded states from localStorage
   useEffect(() => {
@@ -232,7 +231,10 @@ export function Sidebar() {
     },
   });
 
-  const selectedSeat = seats?.find((s) => s.buyer_id === currentBuyerId);
+  const scopedBuyerId = isSudo ? currentBuyerId : (currentBuyerId ?? seats?.[0]?.buyer_id ?? null);
+  const getSeatScopedHref = (href: string) => toBuyerScopedPath(href, scopedBuyerId);
+
+  const selectedSeat = seats?.find((s) => s.buyer_id === currentBuyerId) ?? (!isSudo ? seats?.[0] : undefined);
   const totalCreatives = seats?.reduce((sum, s) => sum + s.creative_count, 0) ?? 0;
 
   const handleSeatSelect = (seatId: string | null) => {
@@ -375,19 +377,21 @@ export function Sidebar() {
 
             {seatDropdownOpen && (
               <div className="absolute z-50 mt-1 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                <button
-                  onClick={() => handleSeatSelect(null)}
-                  className={cn(
-                    "w-full flex items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50",
-                    !currentBuyerId && "bg-primary-50 text-primary-700"
-                  )}
-                >
-                  <div>
-                    <div className="font-medium">{t.sidebar.allSeats}</div>
-                    <div className="text-xs text-gray-500">{totalCreatives} {t.sidebar.creatives}</div>
-                  </div>
-                  {!currentBuyerId && <Check className="h-4 w-4 text-primary-600" />}
-                </button>
+                {canViewAllSeats && (
+                  <button
+                    onClick={() => handleSeatSelect(null)}
+                    className={cn(
+                      "w-full flex items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50",
+                      !currentBuyerId && "bg-primary-50 text-primary-700"
+                    )}
+                  >
+                    <div>
+                      <div className="font-medium">{t.sidebar.allSeats}</div>
+                      <div className="text-xs text-gray-500">{totalCreatives} {t.sidebar.creatives}</div>
+                    </div>
+                    {!currentBuyerId && <Check className="h-4 w-4 text-primary-600" />}
+                  </button>
+                )}
                 {seats?.map((seat) => (
                   <button
                     key={seat.buyer_id}
