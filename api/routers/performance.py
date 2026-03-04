@@ -20,7 +20,13 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, UploadFile, File, Form
 from pydantic import BaseModel
 
-from api.dependencies import get_store, get_current_user, get_allowed_buyer_ids
+from api.dependencies import (
+    get_store,
+    get_current_user,
+    get_allowed_buyer_ids,
+    require_admin,
+    require_seat_admin_or_sudo,
+)
 from services.auth_service import User
 from api.schemas.performance import (
     PerformanceMetricInput,
@@ -182,6 +188,7 @@ def _build_import_response(result) -> CSVImportResult:
 @router.post("/import", response_model=ImportPerformanceResponse)
 async def import_performance_metrics(
     request: ImportPerformanceRequest,
+    _user: User = Depends(require_seat_admin_or_sudo),
     store=Depends(get_store),
 ):
     """Import performance metrics in bulk.
@@ -296,6 +303,7 @@ async def list_performance_metrics(
     geography: Optional[str] = Query(None, description="Filter by country code"),
     device_type: Optional[str] = Query(None, description="Filter by device type"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum results"),
+    _user: User = Depends(require_admin),
     store=Depends(get_store),
 ):
     """List performance metrics with optional filtering."""
@@ -336,6 +344,7 @@ async def list_performance_metrics(
 @router.post("/campaign/{campaign_id}/refresh-cache")
 async def refresh_campaign_performance_cache(
     campaign_id: str,
+    _user: User = Depends(require_admin),
     store=Depends(get_store),
 ):
     """Refresh cached performance aggregates for a campaign."""
@@ -358,6 +367,7 @@ async def refresh_campaign_performance_cache(
 @router.delete("/cleanup")
 async def cleanup_old_rtb_daily(
     days_to_keep: int = Query(90, ge=7, le=365, description="Days of data to retain"),
+    _user: User = Depends(require_admin),
     store=Depends(get_store),
 ):
     """Delete performance data older than the retention period."""
@@ -379,6 +389,7 @@ async def cleanup_old_rtb_daily(
 async def import_performance_csv(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="CSV file with performance data"),
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     """Import performance data from Authorized Buyers CSV export.
 
@@ -497,7 +508,10 @@ async def import_performance_csv(
 
 
 @router.post("/import/stream/start", response_model=StreamStartResponse)
-async def start_stream_import(request: StreamStartRequest):
+async def start_stream_import(
+    request: StreamStartRequest,
+    _user: User = Depends(require_seat_admin_or_sudo),
+):
     """Start a streamed CSV upload for large files."""
     if request.file_size_bytes <= 0:
         raise HTTPException(status_code=400, detail="Invalid file size")
@@ -528,6 +542,7 @@ async def upload_stream_chunk(
     chunk_index: int = Form(..., ge=0),
     total_chunks: int = Form(..., ge=1),
     chunk: UploadFile = File(...),
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     """Append a chunk to a streamed CSV upload."""
     _ensure_upload_dir()
@@ -571,6 +586,7 @@ async def upload_stream_chunk(
 async def complete_stream_import(
     request: StreamCompleteRequest,
     background_tasks: BackgroundTasks,
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     """Finalize a streamed CSV upload and run the unified importer."""
     _ensure_upload_dir()
@@ -797,6 +813,7 @@ async def get_batch_performance(
 @router.post("/import/stream", response_model=StreamingImportResult)
 async def import_performance_stream(
     request: Request,
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     """Streaming import endpoint for large CSV files.
 
@@ -897,6 +914,7 @@ async def import_performance_stream(
 @router.post("/import/batch", response_model=StreamingImportResult)
 async def import_performance_batch(
     request: BatchImportRequest,
+    _user: User = Depends(require_seat_admin_or_sudo),
 ):
     """Batch import endpoint for chunked uploads.
 
@@ -971,7 +989,10 @@ async def import_performance_batch(
 
 
 @router.post("/import/finalize")
-async def finalize_import(request: FinalizeImportRequest):
+async def finalize_import(
+    request: FinalizeImportRequest,
+    _user: User = Depends(require_seat_admin_or_sudo),
+):
     """Finalize a chunked import session and record in import_history."""
     try:
         perf_service = PerformanceService()
