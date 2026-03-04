@@ -689,7 +689,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [x] Legacy `cli/qps_analyzer.py` split/retirement completed (legacy module no longer present)
 
 ### Security
-- [ ] XSS via `dangerouslySetInnerHTML` in preview-modal - Objective: remove high-risk HTML injection path; Current: preview still relies on direct HTML rendering; Acceptance: sanitized content and sandboxed iframe isolation are enforced.
+- [x] XSS hardening in preview-modal - Objective: remove high-risk HTML injection path; Current: preview HTML is sanitized before render and isolated in strict sandboxed iframe (`srcDoc`, no same-origin/script privileges, no referrer leakage); Acceptance: sanitized content and sandboxed iframe isolation are enforced.
 - Runtime log-masking verification moved to **Runtime Verification Queue (Prod/VM2)**.
 
 ### Code Quality

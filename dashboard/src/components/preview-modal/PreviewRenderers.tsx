@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useMemo, useRef } from "react";
 import { Play } from "lucide-react";
 import { useTranslation } from "@/contexts/i18n-context";
 import type { Creative } from "@/types/api";
@@ -17,6 +17,117 @@ function extractVideoUrlFromVast(vastXml: string): string | null {
     return mediaFile.textContent?.trim() || null;
   }
   return null;
+}
+
+const URL_ATTRS = new Set([
+  "href",
+  "src",
+  "xlink:href",
+  "action",
+  "formaction",
+  "poster",
+]);
+
+const BLOCKED_TAGS = new Set([
+  "script",
+  "iframe",
+  "object",
+  "embed",
+  "applet",
+  "base",
+  "meta",
+  "link",
+  "style",
+]);
+
+function isUnsafeUrl(value: string): boolean {
+  const normalized = value.trim().replace(/\s+/g, "").toLowerCase();
+  return (
+    normalized.startsWith("javascript:") ||
+    normalized.startsWith("vbscript:") ||
+    normalized.startsWith("data:text/html")
+  );
+}
+
+function sanitizeHtmlSnippet(snippet: string): string {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(snippet, "text/html");
+
+  for (const tag of BLOCKED_TAGS) {
+    const nodes = Array.from(doc.querySelectorAll(tag));
+    for (const node of nodes) {
+      node.remove();
+    }
+  }
+
+  const elements = Array.from(doc.querySelectorAll("*"));
+  for (const element of elements) {
+    const attrs = Array.from(element.attributes);
+    for (const attr of attrs) {
+      const name = attr.name.toLowerCase();
+      const value = attr.value || "";
+
+      // Strip inline event handlers (onclick, onload, ...).
+      if (name.startsWith("on")) {
+        element.removeAttribute(attr.name);
+        continue;
+      }
+
+      // Strip unsafe URL-based sinks.
+      if (URL_ATTRS.has(name) && isUnsafeUrl(value)) {
+        element.removeAttribute(attr.name);
+        continue;
+      }
+
+      // Strip CSS execution vectors in inline style attrs.
+      if (name === "style") {
+        const lowered = value.toLowerCase();
+        if (lowered.includes("expression(") || lowered.includes("javascript:")) {
+          element.removeAttribute(attr.name);
+        }
+      }
+    }
+  }
+
+  return doc.body.innerHTML;
+}
+
+function buildPreviewDocument({
+  snippet,
+  width,
+  height,
+}: {
+  snippet: string;
+  width: number;
+  height: number;
+}): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: ${width}px;
+      height: ${height}px;
+      overflow: hidden;
+      background: #fff;
+    }
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    img, video, canvas {
+      max-width: 100%;
+      max-height: 100%;
+    }
+  </style>
+</head>
+<body>${snippet}</body>
+</html>`;
 }
 
 /**
@@ -73,48 +184,22 @@ export function VideoPreviewPlayer({ creative }: { creative: Creative }) {
  */
 export function HtmlPreviewFrame({ creative, destinationUrl }: { creative: Creative; destinationUrl?: string }) {
   const { t } = useTranslation();
-  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const creativeWidth = creative.html?.width || creative.width || 300;
   const creativeHeight = creative.html?.height || creative.height || 250;
-
-  useEffect(() => {
-    if (iframeRef.current && creative.html?.snippet) {
-      const doc = iframeRef.current.contentDocument;
-      if (doc) {
-        doc.open();
-        doc.write(`
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <style>
-              * { box-sizing: border-box; }
-              html, body {
-                margin: 0;
-                padding: 0;
-                width: ${creativeWidth}px;
-                height: ${creativeHeight}px;
-                overflow: hidden;
-                background: #fff;
-              }
-              body {
-                display: flex;
-                justify-content: center;
-                align-items: center;
-              }
-              img, video, canvas {
-                max-width: 100%;
-                max-height: 100%;
-              }
-            </style>
-          </head>
-          <body>${creative.html.snippet}</body>
-          </html>
-        `);
-        doc.close();
-      }
-    }
-  }, [creative.html?.snippet, creativeWidth, creativeHeight]);
+  const safeSnippet = useMemo(
+    () => sanitizeHtmlSnippet(creative.html?.snippet || ""),
+    [creative.html?.snippet],
+  );
+  const iframeDoc = useMemo(
+    () =>
+      buildPreviewDocument({
+        snippet: safeSnippet,
+        width: creativeWidth,
+        height: creativeHeight,
+      }),
+    [safeSnippet, creativeWidth, creativeHeight],
+  );
 
   if (!creative.html?.snippet) {
     return (
@@ -148,16 +233,17 @@ export function HtmlPreviewFrame({ creative, destinationUrl }: { creative: Creat
         title={destinationUrl ? t.previewModal.clickToOpenDestination : undefined}
       >
         <iframe
-          ref={iframeRef}
           title={t.previewModal.creativeIframeTitle.replace("{id}", creative.id)}
           width={creativeWidth}
           height={creativeHeight}
+          srcDoc={iframeDoc}
           className="border-0 pointer-events-none"
           style={{
             transform: scale < 1 ? `scale(${scale})` : undefined,
             transformOrigin: 'top left',
           }}
-          sandbox="allow-scripts allow-same-origin"
+          sandbox=""
+          referrerPolicy="no-referrer"
         />
         {destinationUrl && (
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
