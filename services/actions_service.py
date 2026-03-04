@@ -49,6 +49,11 @@ class ActionsService:
             try:
                 return json.loads(value)
             except Exception:
+                logger.warning(
+                    "Failed to parse JSON list payload in ActionsService; defaulting to []",
+                    extra={"value_preview": str(value)[:120]},
+                    exc_info=True,
+                )
                 return []
         return list(value)
 
