@@ -223,6 +223,8 @@ async def sync_pretargeting_configs(
             bidder_id=account_id,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to sync pretargeting configs: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to sync configs: {str(e)}")
@@ -329,6 +331,8 @@ async def get_pretargeting_configs(
 
         return results
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get pretargeting configs: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get configs: {str(e)}")
@@ -457,6 +461,8 @@ async def get_pretargeting_history(
 
         return results
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get pretargeting history: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get pretargeting history: {str(e)}")
@@ -501,6 +507,8 @@ async def get_pretargeting_publishers(
             "count": len(rows),
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get publishers for {billing_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -712,6 +720,8 @@ async def get_pending_publisher_changes(
             "count": len(rows),
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get pending changes for {billing_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

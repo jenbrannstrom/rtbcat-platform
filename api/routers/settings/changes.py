@@ -192,6 +192,8 @@ async def create_pending_change(
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to create pending change: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create pending change: {str(e)}")
@@ -260,6 +262,8 @@ async def cancel_pending_change(
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to cancel pending change: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to cancel pending change: {str(e)}")
@@ -294,6 +298,8 @@ async def mark_change_applied(
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to mark change as applied: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to mark change as applied: {str(e)}")
@@ -430,6 +436,8 @@ async def get_pretargeting_config_detail(
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get config detail: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get config detail: {str(e)}")
