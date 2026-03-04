@@ -65,7 +65,7 @@ async def run_score_and_propose_workflow(
     proposal_limit: Optional[int] = Query(None, ge=1, le=2000),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ScoreAndProposeResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     resolved_buyer_id = buyer_id or "unknown"
     defaults = dict(_WORKFLOW_PROFILES.get(profile or "balanced", _WORKFLOW_PROFILES["balanced"]))

@@ -53,7 +53,7 @@ class PrecomputeHealthResponse(BaseModel):
 
 
 @router.post("/precompute/refresh/scheduled", response_model=PrecomputeRefreshResponse)
-async def refresh_precompute_scheduled(request: Request):
+async def refresh_precompute_scheduled(request: Request) -> PrecomputeRefreshResponse:
     """Trigger scheduled precompute refreshes for Cloud Scheduler or cron."""
     secrets_mgr = get_secrets_manager()
     secret = secrets_mgr.get("PRECOMPUTE_REFRESH_SECRET")
@@ -94,7 +94,7 @@ async def refresh_precompute_scheduled(request: Request):
 
 
 @router.get("/precompute/health", response_model=PrecomputeHealthResponse)
-async def precompute_health(request: Request):
+async def precompute_health(request: Request) -> PrecomputeHealthResponse | JSONResponse:
     """Health check for precompute freshness (for monitoring)."""
     secrets_mgr = get_secrets_manager()
     secret = secrets_mgr.get("PRECOMPUTE_MONITOR_SECRET")

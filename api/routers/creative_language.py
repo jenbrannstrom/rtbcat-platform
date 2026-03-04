@@ -57,7 +57,7 @@ async def analyze_creative_language(
     force: bool = Query(False, description="Force re-analysis even if already analyzed"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> LanguageDetectionResponse:
     """Analyze a creative's content to detect its language."""
     creative = await store.get_creative(creative_id)
     if not creative:
@@ -79,7 +79,7 @@ async def update_creative_language(
     update: ManualLanguageUpdate,
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> LanguageDetectionResponse:
     """Manually update a creative's detected language."""
     creative = await store.get_creative(creative_id)
     if not creative:
@@ -101,7 +101,7 @@ async def get_creative_geo_mismatch(
     days: int = Query(7, ge=1, le=90, description="Days to look back for serving data"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> GeoMismatchResponse:
     """Check if a creative's language matches its serving countries."""
     creative = await store.get_creative(creative_id)
     if not creative:

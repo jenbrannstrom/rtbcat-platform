@@ -97,7 +97,7 @@ async def get_effective_cpm(
     end_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> EffectiveCpmResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerEconomicsService()
     try:
@@ -122,7 +122,7 @@ async def get_assumed_value(
     end_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> AssumedValueResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerEconomicsService()
     try:
@@ -147,7 +147,7 @@ async def get_efficiency_summary(
     end_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> EfficiencySummaryResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerEconomicsService()
     try:
