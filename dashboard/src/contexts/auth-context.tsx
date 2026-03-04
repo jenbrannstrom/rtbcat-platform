@@ -109,6 +109,7 @@ const PUBLIC_PAGES = ["/login"];
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const safePathname = pathname || "/";
   const [user, setUser] = useState<User | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [seatPermissions, setSeatPermissions] = useState<SeatPermissions>({});
@@ -117,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authError, setAuthError] = useState<AuthErrorKind>(null);
 
   // Check if current page is public
-  const isPublicPage = PUBLIC_PAGES.includes(pathname);
+  const isPublicPage = PUBLIC_PAGES.includes(safePathname);
 
   // Check authentication status
   const checkAuth = useCallback(async () => {
@@ -232,10 +233,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Redirect to login page with callback URL
-      const callbackUrl = encodeURIComponent(pathname);
+      const callbackUrl = encodeURIComponent(safePathname);
       window.location.href = `/login?callbackUrl=${callbackUrl}`;
     }
-  }, [initialized, isLoading, user, isPublicPage, pathname, authError]);
+  }, [initialized, isLoading, user, isPublicPage, safePathname, authError]);
 
   // If authenticated and on login page, redirect to home
   useEffect(() => {

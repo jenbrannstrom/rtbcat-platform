@@ -38,10 +38,11 @@ export function AuthenticatedLayout({
   const { isAuthenticated, isLoading, user } = useAuth();
   const { t } = useTranslation();
   const router = useRouter();
+  const safePathname = pathname || "/";
 
   // Check if this is a public page
-  const isPublicPage = PUBLIC_PAGES.includes(pathname);
-  const isDocsPage = pathname.startsWith("/docs");
+  const isPublicPage = PUBLIC_PAGES.includes(safePathname);
+  const isDocsPage = safePathname.startsWith("/docs");
 
   // For public pages, render children directly without layout
   if (isPublicPage) {
@@ -79,7 +80,7 @@ export function AuthenticatedLayout({
   }
 
   // Restricted users can only access allowed paths
-  const { pathWithoutBuyer } = splitBuyerPath(pathname);
+  const { pathWithoutBuyer } = splitBuyerPath(safePathname);
   if (isRestrictedUser(user) && !isAllowedForRestrictedUser(pathWithoutBuyer)) {
     router.replace("/");
     return null;

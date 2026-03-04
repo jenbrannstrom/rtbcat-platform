@@ -44,7 +44,12 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   // reconcile with the logged-in user's preference from /api/auth/me so
   // that switching users (or re-logging) applies the correct language.
   useEffect(() => {
-    const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    } catch {
+      // localStorage can throw in strict privacy modes.
+    }
     const cookieMatch = document.cookie
       .split("; ")
       .find((row) => row.startsWith(`${LANGUAGE_COOKIE_KEY}=`));
@@ -64,7 +69,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         const userLang = data?.default_language;
         if (userLang && allowed.includes(userLang as Language)) {
           setLanguageState(userLang as Language);
-          localStorage.setItem(LANGUAGE_STORAGE_KEY, userLang);
+          try {
+            localStorage.setItem(LANGUAGE_STORAGE_KEY, userLang);
+          } catch {
+            // Ignore storage write failures in strict privacy modes.
+          }
           document.cookie = `${LANGUAGE_COOKIE_KEY}=${userLang}; path=/; max-age=31536000`;
         }
       })
@@ -75,7 +84,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   // Set language and persist to localStorage
   const setLanguage = useCallback((lang: Language) => {
     setLanguageState(lang);
-    localStorage.setItem(LANGUAGE_STORAGE_KEY, lang);
+    try {
+      localStorage.setItem(LANGUAGE_STORAGE_KEY, lang);
+    } catch {
+      // Ignore storage write failures in strict privacy modes.
+    }
     document.cookie = `${LANGUAGE_COOKIE_KEY}=${lang}; path=/; max-age=31536000`;
   }, []);
 
