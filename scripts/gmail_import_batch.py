@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.gmail_import import (
     get_gmail_service,
+    build_access_token_provider,
     find_report_emails,
     process_message,
     mark_as_read,
@@ -128,7 +129,8 @@ def run_batch_import(
     # Authenticate
     try:
         service, creds = get_gmail_service()
-        access_token = creds.token
+        access_token_provider = build_access_token_provider(creds, verbose=True)
+        access_token = access_token_provider(False)
         log("Gmail authentication successful")
     except Exception as e:
         log(f"ERROR: Gmail authentication failed: {e}")
@@ -170,6 +172,7 @@ def run_batch_import(
                 service,
                 message_id,
                 access_token,
+                access_token_provider,
                 SEAT_ID_ALLOWLIST or None,
             )
 

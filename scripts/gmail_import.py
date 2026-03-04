@@ -22,8 +22,8 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from datetime import datetime
-from typing import Optional, Dict, Any, List
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Any, List, Callable
 import uuid
 import time
 
@@ -658,6 +658,50 @@ def get_gmail_service():
     return build('gmail', 'v1', credentials=creds), creds
 
 
+def build_access_token_provider(
+    creds: Credentials,
+    *,
+    verbose: bool = True,
+) -> Callable[[bool], Optional[str]]:
+    """Return a token provider that refreshes OAuth credentials as needed.
+
+    Args:
+        creds: Gmail OAuth credentials.
+        verbose: If True, print refresh diagnostics.
+    """
+    refresh_leeway_seconds = 120
+
+    def get_access_token(force_refresh: bool = False) -> Optional[str]:
+        needs_refresh = force_refresh or not creds.token
+
+        expiry = getattr(creds, "expiry", None)
+        if expiry is not None:
+            now = datetime.now(expiry.tzinfo) if expiry.tzinfo else datetime.now()
+            if expiry <= now + timedelta(seconds=refresh_leeway_seconds):
+                needs_refresh = True
+
+        if needs_refresh or not creds.valid:
+            if creds.refresh_token:
+                creds.refresh(Request())
+                try:
+                    TOKEN_PATH.write_text(creds.to_json())
+                except Exception as write_error:
+                    if verbose:
+                        print(
+                            f"  Warning: failed to persist refreshed OAuth token: {write_error}",
+                            flush=True,
+                        )
+            elif verbose and not creds.token:
+                print(
+                    "  Warning: OAuth token unavailable and no refresh token present",
+                    flush=True,
+                )
+
+        return creds.token
+
+    return get_access_token
+
+
 def find_report_emails(service):
     """Find all unread emails from Google Authorized Buyers (with pagination)."""
     if GMAIL_QUERY:
@@ -859,7 +903,13 @@ def download_via_gcs_client(bucket_name: str, object_name: str, filepath: Path) 
         return False
 
 
-def download_from_url(url: str, message_id: str, access_token: str = None, seat_id: str = None) -> List[Path]:
+def download_from_url(
+    url: str,
+    message_id: str,
+    access_token: str = None,
+    seat_id: str = None,
+    access_token_provider: Optional[Callable[[bool], Optional[str]]] = None,
+) -> List[Path]:
     """Download CSV from GCS URL (for reports >= 10MB).
 
     Authentication methods (tried in order):
@@ -917,6 +967,8 @@ def download_from_url(url: str, message_id: str, access_token: str = None, seat_
     # Prepare headers for fallback download
     headers = {}
     if not is_signed:
+        if not access_token and access_token_provider:
+            access_token = access_token_provider(False)
         if access_token:
             headers = {'Authorization': f'Bearer {access_token}'}
         else:
@@ -926,6 +978,7 @@ def download_from_url(url: str, message_id: str, access_token: str = None, seat_
 
     # Download with retry
     last_error = None
+    oauth_refresh_retried = False
     for attempt in range(MAX_RETRIES):
         try:
             with requests.get(api_url, headers=headers, stream=True, timeout=TIMEOUT) as response:
@@ -948,6 +1001,27 @@ def download_from_url(url: str, message_id: str, access_token: str = None, seat_
                         continue
                     else:
                         raise ValueError(f"GCS download failed after {MAX_RETRIES} retries: {last_error}")
+                elif (
+                    response.status_code == 401
+                    and not is_signed
+                    and access_token_provider
+                    and not oauth_refresh_retried
+                ):
+                    # OAuth token may have expired mid-run. Force refresh once and retry immediately.
+                    if filepath.exists():
+                        filepath.unlink()
+                    oauth_refresh_retried = True
+                    print(
+                        "  OAuth token expired (401), refreshing token and retrying...",
+                        flush=True,
+                    )
+                    refreshed_token = access_token_provider(True)
+                    if not refreshed_token:
+                        raise ValueError(
+                            "GCS download failed: 401 - AuthenticationRequired (token refresh unavailable)"
+                        )
+                    headers = {'Authorization': f'Bearer {refreshed_token}'}
+                    continue
                 else:
                     # Non-retryable error (4xx except 429) - fail fast, clean up
                     if filepath.exists():
@@ -1090,6 +1164,7 @@ def process_message(
     service,
     message_id: str,
     access_token: str = None,
+    access_token_provider: Optional[Callable[[bool], Optional[str]]] = None,
     allowed_seat_ids: Optional[set[str]] = None,
 ) -> tuple[List[Path], Optional[str], str, bool]:
     """Process a single email - extract attachment OR download from URL.
@@ -1123,7 +1198,16 @@ def process_message(
     url = extract_download_url(body)
     if url:
         try:
-            downloaded_files = download_from_url(url, message_id, access_token, seat_id)
+            token = access_token
+            if access_token_provider:
+                token = access_token_provider(False)
+            downloaded_files = download_from_url(
+                url,
+                message_id,
+                token,
+                seat_id,
+                access_token_provider=access_token_provider,
+            )
         except Exception as e:
             print(f"  GCS download failed ({e}), falling back to attachment", flush=True)
 
@@ -1275,7 +1359,8 @@ def run_import(
 
         try:
             service, creds = get_gmail_service()
-            access_token = creds.token  # For authenticated GCS downloads
+            access_token_provider = build_access_token_provider(creds, verbose=verbose)
+            access_token = access_token_provider(False)
         except FileNotFoundError as e:
             error_msg = str(e)
             if verbose:
@@ -1331,6 +1416,7 @@ def run_import(
                     service,
                     message_id,
                     access_token,
+                    access_token_provider,
                     SEAT_ID_ALLOWLIST or None,
                 )
                 if skipped:
