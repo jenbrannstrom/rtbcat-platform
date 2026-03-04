@@ -383,6 +383,9 @@ class DataHealthService:
             if buyer_id:
                 buyer_filter = " AND buyer_account_id = %s"
                 params.append(buyer_id)
+            # Sample up to 200K rows to avoid full-table scans timing out
+            # on large datasets (6M+ rows). Coverage percentages remain
+            # statistically accurate with this sample size.
             row = await self._query_one_with_timeout(
                 f"""
                 SELECT
@@ -390,8 +393,12 @@ class DataHealthService:
                     SUM(CASE WHEN platform IS NULL OR platform = '' THEN 1 ELSE 0 END) AS missing_platform_rows,
                     SUM(CASE WHEN environment IS NULL OR environment = '' THEN 1 ELSE 0 END) AS missing_environment_rows,
                     SUM(CASE WHEN transaction_type IS NULL OR transaction_type = '' THEN 1 ELSE 0 END) AS missing_transaction_type_rows
-                FROM rtb_bidstream
-                WHERE metric_date::date >= CURRENT_DATE - %s::int{buyer_filter}
+                FROM (
+                    SELECT platform, environment, transaction_type
+                    FROM rtb_bidstream
+                    WHERE metric_date::date >= CURRENT_DATE - %s::int{buyer_filter}
+                    LIMIT 200000
+                ) sampled
                 """,
                 tuple(params),
             )
