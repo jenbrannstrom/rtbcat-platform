@@ -13,6 +13,11 @@ interface PublisherPerformanceSectionProps {
   seatName?: string;
 }
 
+function asNumber(value: unknown, fallback = 0): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 /**
  * Publisher Performance Section.
  * Shows publisher win rates categorized by performance tier.
@@ -78,9 +83,11 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
   }
 
   // Categorize publishers by win rate
-  const highWinRate = publishers.filter(p => p.win_rate >= 40 && p.impressions > 0);
-  const moderateWinRate = publishers.filter(p => p.win_rate >= 20 && p.win_rate < 40 && p.impressions > 0);
-  const lowWinRate = publishers.filter(p => p.win_rate < 20 && p.impressions > 0);
+  const highWinRate = publishers.filter((p) => asNumber(p.win_rate) >= 40 && asNumber(p.impressions) > 0);
+  const moderateWinRate = publishers.filter(
+    (p) => asNumber(p.win_rate) >= 20 && asNumber(p.win_rate) < 40 && asNumber(p.impressions) > 0
+  );
+  const lowWinRate = publishers.filter((p) => asNumber(p.win_rate) < 20 && asNumber(p.impressions) > 0);
   const blockedTrafficThreshold = 100000;
   const blocked = publishers.filter(
     (p) => p.reached_queries === 0 && (p.bid_requests ?? 0) > blockedTrafficThreshold
@@ -125,8 +132,8 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
                       {pub.publisher_name}
                     </span>
                     <div className="flex items-center gap-4">
-                      <span className="text-green-600">{formatNumber(pub.impressions)} {t.wasteAnalysis.imprShort}</span>
-                      <span className="font-medium text-green-700">{pub.win_rate.toFixed(1)}% {t.wasteAnalysis.winShort}</span>
+                      <span className="text-green-600">{formatNumber(asNumber(pub.impressions))} {t.wasteAnalysis.imprShort}</span>
+                      <span className="font-medium text-green-700">{asNumber(pub.win_rate).toFixed(1)}% {t.wasteAnalysis.winShort}</span>
                     </div>
                   </div>
                 ))}
@@ -150,8 +157,8 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
                       {pub.publisher_name}
                     </span>
                     <div className="flex items-center gap-4">
-                      <span className="text-yellow-600">{formatNumber(pub.impressions)} {t.wasteAnalysis.imprShort}</span>
-                      <span className="font-medium text-yellow-700">{pub.win_rate.toFixed(1)}% {t.wasteAnalysis.winShort}</span>
+                      <span className="text-yellow-600">{formatNumber(asNumber(pub.impressions))} {t.wasteAnalysis.imprShort}</span>
+                      <span className="font-medium text-yellow-700">{asNumber(pub.win_rate).toFixed(1)}% {t.wasteAnalysis.winShort}</span>
                     </div>
                   </div>
                 ))}
@@ -175,8 +182,8 @@ export function PublisherPerformanceSection({ publishers, seatName }: PublisherP
                       {pub.publisher_name}
                     </span>
                     <div className="flex items-center gap-4">
-                      <span className="text-orange-600">{formatNumber(pub.impressions)} {t.wasteAnalysis.imprShort}</span>
-                      <span className="font-medium text-orange-700">{pub.win_rate.toFixed(1)}% {t.wasteAnalysis.winShort}</span>
+                      <span className="text-orange-600">{formatNumber(asNumber(pub.impressions))} {t.wasteAnalysis.imprShort}</span>
+                      <span className="font-medium text-orange-700">{asNumber(pub.win_rate).toFixed(1)}% {t.wasteAnalysis.winShort}</span>
                     </div>
                   </div>
                 ))}
