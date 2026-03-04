@@ -65,6 +65,8 @@ async def create_pretargeting_snapshot(
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to create snapshot: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create snapshot: {str(e)}")
@@ -109,6 +111,8 @@ async def list_pretargeting_snapshots(
             for row in rows
         ]
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to list snapshots: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to list snapshots: {str(e)}")
@@ -160,6 +164,8 @@ async def create_comparison(
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to create comparison: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create comparison: {str(e)}")
@@ -208,6 +214,8 @@ async def list_comparisons(
             for row in rows
         ]
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to list comparisons: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to list comparisons: {str(e)}")

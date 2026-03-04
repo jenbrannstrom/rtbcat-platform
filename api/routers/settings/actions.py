@@ -52,6 +52,8 @@ async def apply_pending_change(
         return ApplyChangeResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to apply change: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to apply change: {str(e)}")
@@ -79,6 +81,8 @@ async def apply_all_pending_changes(
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to apply all changes: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to apply all changes: {str(e)}")
@@ -103,6 +107,8 @@ async def suspend_pretargeting_config(
         return SuspendActivateResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to suspend config: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to suspend config: {str(e)}")
@@ -126,6 +132,8 @@ async def activate_pretargeting_config(
         return SuspendActivateResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to activate config: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to activate config: {str(e)}")
@@ -158,6 +166,8 @@ async def rollback_to_snapshot(
         return RollbackResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to rollback: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to rollback: {str(e)}")

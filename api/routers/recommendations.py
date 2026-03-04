@@ -104,6 +104,8 @@ async def get_recommendations(
     try:
         service = RecommendationsService(store)
         return await service.generate(days=days, min_severity=min_severity)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to generate recommendations: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -124,6 +126,8 @@ async def get_recommendations_summary(
     try:
         service = RecommendationsService(store)
         return await service.summary(days=days)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get recommendations summary: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -174,6 +178,8 @@ async def get_recommendations_by_type(
     try:
         service = RecommendationsService(store)
         return await service.by_type(rec_type, days)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get recommendations by type: {e}")
         raise HTTPException(status_code=500, detail=str(e))

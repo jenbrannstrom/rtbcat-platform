@@ -115,6 +115,8 @@ async def set_retention_config(
             summary_retention_days=request.summary_retention_days,
             auto_aggregate_after_days=request.auto_aggregate_after_days,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to set retention config: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to save retention config: {str(e)}")
@@ -161,6 +163,8 @@ async def run_retention_job(
         service = RetentionService()
         result = await service.run_retention_job()
         return RetentionJobResponse(**result)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to run retention job: {e}")
         raise HTTPException(status_code=500, detail=f"Retention job failed: {str(e)}")
