@@ -28,23 +28,46 @@ Set identity once:
 export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
 ```
 
-1) Pilot readiness snapshot:
+1) Primary one-command live validation (recommended):
+
+```bash
+scripts/run_appsflyer_pilot_live_validation.sh --buyer-id <BUYER_ID>
+```
+
+Expected result:
+- `PASS`: endpoints healthy + postbacks live + exact joins live.
+- `BLOCKED`: infrastructure healthy but waiting for first postback and/or exact match.
+- `FAIL`: endpoint/auth/runtime failure that needs operator action.
+
+2) Manual step breakdown (fallback/operator debug):
+
+2.1 Pilot readiness snapshot:
 
 ```bash
 scripts/run_tuky_appsflyer_pilot_check.sh --buyer-id <BUYER_ID> --timeout 90
 ```
 
-2) Phase A audit from ingested DB events:
+2.2 Phase A audit from ingested DB events:
 
 ```bash
 scripts/run_appsflyer_phase_a_audit.sh --buyer-id <BUYER_ID> --from-db --db-since-days 30
 ```
 
-3) Phase B attribution report:
+2.3 Phase B attribution report:
 
 ```bash
 scripts/run_conversion_attribution_phase_b_report.sh --buyer-id <BUYER_ID> --source-type appsflyer --days 14
 ```
+
+3) GitHub workflow alternative (same validation, artifacted):
+
+- Workflow: `v1-appsflyer-pilot-live-validation.yml`
+- Manual dispatch inputs:
+  - `buyer_id`
+  - `source_type` (default `appsflyer`)
+  - `days`
+  - `fallback_window_days`
+  - `strict_phase_b_refresh` (optional hard mode)
 
 ## Promotion Rule
 
@@ -63,4 +86,3 @@ Promote a seat from `Pending` to live beta when all are true:
 | `1487810529` |  |  |  |  |
 | `6574658621` |  |  |  |  |
 | `6634662463` |  |  |  |  |
-
