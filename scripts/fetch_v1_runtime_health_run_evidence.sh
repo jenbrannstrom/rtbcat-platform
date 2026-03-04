@@ -94,6 +94,8 @@ STATUS_FILE="${OUT_DIR}/status_lines.txt"
 REPORT_JSON="${OUT_DIR}/v1_runtime_health_last_run.json"
 REPORT_MD="${OUT_DIR}/v1_runtime_health_last_run.md"
 
+# Avoid gh artifact unzip collisions when re-running against the same RUN_ID.
+rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
 echo "Repo: ${REPO}"
