@@ -1287,6 +1287,7 @@ def main() -> int:
             "/analytics/home/endpoint-efficiency": float(args.max_home_endpoint_efficiency_latency_ms),
         }
         observed: dict[str, float] = {}
+        latency_violations: list[str] = []
         requests = build_qps_load_latency_requests(
             buyer_id=args.buyer_id,
             days=args.qps_load_latency_days,
@@ -1306,14 +1307,11 @@ def main() -> int:
                 f"{path}: expected JSON object/array response",
             )
             budget_ms = thresholds_ms[path]
-            _assert(
-                elapsed_ms <= budget_ms,
-                (
-                    f"{path}: latency {elapsed_ms:.1f}ms exceeds budget {budget_ms:.1f}ms "
-                    f"(days={args.qps_load_latency_days}, buyer_id={args.buyer_id or 'none'})"
-                ),
-            )
             observed[path] = round(elapsed_ms, 1)
+            if elapsed_ms > budget_ms:
+                latency_violations.append(
+                    f"{path}={elapsed_ms:.1f}ms>{budget_ms:.1f}ms"
+                )
 
         observed_summary = ", ".join(f"{path}={latency}ms" for path, latency in observed.items())
         print(f"INFO  QPS startup API latencies -> {observed_summary}")
@@ -1329,6 +1327,11 @@ def main() -> int:
             },
         )
         print("INFO  QPS startup API latency rollup sample recorded")
+        if latency_violations:
+            raise SmokeFailure(
+                "QPS startup API latency budget exceeded: "
+                + ", ".join(latency_violations)
+            )
 
     def check_qps_page_slo_summary() -> None:
         if not args.run_qps_page_slo_check:
