@@ -190,7 +190,7 @@ async def import_performance_metrics(
     request: ImportPerformanceRequest,
     _user: User = Depends(require_seat_admin_or_sudo),
     store=Depends(get_store),
-):
+) -> ImportPerformanceResponse:
     """Import performance metrics in bulk.
 
     Accepts an array of performance metrics and stores them using UPSERT semantics.
@@ -232,7 +232,7 @@ async def get_creative_performance(
     days: int = Query(30, ge=1, le=365, description="Days to aggregate"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> PerformanceSummaryResponse:
     """Get aggregated performance summary for a creative.
 
     Uses rtb_daily as primary source (click-capable) with buyer scoping.
@@ -305,7 +305,7 @@ async def list_performance_metrics(
     limit: int = Query(100, ge=1, le=1000, description="Maximum results"),
     _user: User = Depends(require_admin),
     store=Depends(get_store),
-):
+) -> list[PerformanceMetricResponse]:
     """List performance metrics with optional filtering."""
     try:
         metrics = await store.get_performance_metrics(
@@ -346,7 +346,7 @@ async def refresh_campaign_performance_cache(
     campaign_id: str,
     _user: User = Depends(require_admin),
     store=Depends(get_store),
-):
+) -> dict[str, str]:
     """Refresh cached performance aggregates for a campaign."""
     try:
         campaign = await store.get_campaign(campaign_id)
@@ -369,7 +369,7 @@ async def cleanup_old_rtb_daily(
     days_to_keep: int = Query(90, ge=7, le=365, description="Days of data to retain"),
     _user: User = Depends(require_admin),
     store=Depends(get_store),
-):
+) -> dict[str, str | int]:
     """Delete performance data older than the retention period."""
     try:
         deleted = await store.clear_old_rtb_daily(days_to_keep=days_to_keep)
@@ -390,7 +390,7 @@ async def import_performance_csv(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="CSV file with performance data"),
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> CSVImportResult:
     """Import performance data from Authorized Buyers CSV export.
 
     Uses the unified importer which:
@@ -511,7 +511,7 @@ async def import_performance_csv(
 async def start_stream_import(
     request: StreamStartRequest,
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> StreamStartResponse:
     """Start a streamed CSV upload for large files."""
     if request.file_size_bytes <= 0:
         raise HTTPException(status_code=400, detail="Invalid file size")
@@ -543,7 +543,7 @@ async def upload_stream_chunk(
     total_chunks: int = Form(..., ge=1),
     chunk: UploadFile = File(...),
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> StreamChunkResponse:
     """Append a chunk to a streamed CSV upload."""
     _ensure_upload_dir()
     meta = _load_meta(upload_id)
@@ -587,7 +587,7 @@ async def complete_stream_import(
     request: StreamCompleteRequest,
     background_tasks: BackgroundTasks,
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> CSVImportResult:
     """Finalize a streamed CSV upload and run the unified importer."""
     _ensure_upload_dir()
     meta = _load_meta(request.upload_id)
@@ -713,7 +713,7 @@ async def get_batch_performance(
     request: BatchPerformanceRequest,
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> BatchPerformanceResponse:
     """Get performance summaries for multiple creatives in a single request.
 
     Uses rtb_daily (click-capable) in a single batch query, with buyer-scoped
@@ -814,7 +814,7 @@ async def get_batch_performance(
 async def import_performance_stream(
     request: Request,
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> StreamingImportResult:
     """Streaming import endpoint for large CSV files.
 
     Accepts NDJSON (newline-delimited JSON) stream of performance rows.
@@ -915,7 +915,7 @@ async def import_performance_stream(
 async def import_performance_batch(
     request: BatchImportRequest,
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> StreamingImportResult:
     """Batch import endpoint for chunked uploads.
 
     Writes directly to the unified performance_metrics table.
@@ -992,7 +992,7 @@ async def import_performance_batch(
 async def finalize_import(
     request: FinalizeImportRequest,
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> dict[str, str | int]:
     """Finalize a chunked import session and record in import_history."""
     try:
         perf_service = PerformanceService()
