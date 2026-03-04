@@ -1,5 +1,6 @@
 """Shared dependencies for API routers."""
 
+import logging
 from typing import Optional, List
 from fastapi import HTTPException, Request, Depends
 from storage.postgres_store import PostgresStore
@@ -15,6 +16,7 @@ StoreType = PostgresStore
 # Global instances - set by main.py lifespan
 _store: Optional[StoreType] = None
 _config_manager: Optional[ConfigManager] = None
+logger = logging.getLogger(__name__)
 
 def set_store(store: StoreType) -> None:
     """Set the global store instance (called from main.py lifespan)."""
@@ -286,13 +288,29 @@ async def get_allowed_buyer_ids(
     """Get buyer IDs allowed for the current user.
 
     Returns None for sudo users to signal "all buyers".
+
+    Policy: non-sudo users must be single-seat scoped. If multiple explicit
+    seat permissions exist, only the first seat is used for visibility/routing.
     """
     if is_sudo(user):
         return None
 
     auth_svc = get_auth_service()
     # Enforce assigned-seat-only access for non-sudo roles.
-    return await auth_svc.get_user_buyer_seat_ids(user.id)
+    buyer_ids = await auth_svc.get_user_buyer_seat_ids(user.id)
+    deduped_ids = list(dict.fromkeys(buyer_ids))
+
+    if len(deduped_ids) > 1:
+        primary_buyer_id = deduped_ids[0]
+        logger.warning(
+            "User %s has %d explicit buyer seats; enforcing single-seat scope to buyer_id=%s",
+            user.id,
+            len(deduped_ids),
+            primary_buyer_id,
+        )
+        return [primary_buyer_id]
+
+    return deduped_ids
 
 
 async def get_allowed_bidder_ids(
