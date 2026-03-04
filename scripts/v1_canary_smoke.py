@@ -13,7 +13,8 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import date, datetime, timezone
 from typing import Any
 
 
@@ -25,10 +26,68 @@ class SmokeEnvironmentBlocked(SmokeFailure):
     """Raised when checks are blocked by environment/network policy."""
 
 
+@dataclass(frozen=True)
+class BidstreamDimensionWaiver:
+    """Buyer-scoped waiver for missing bidstream dimensions."""
+
+    buyer_id: str
+    expires_on: date
+    note: str
+
+
 def _join_url(base_url: str, path: str) -> str:
     base = base_url.rstrip("/")
     suffix = path if path.startswith("/") else f"/{path}"
     return f"{base}{suffix}"
+
+
+def parse_bidstream_dimension_waivers(raw_json: str | None) -> dict[str, BidstreamDimensionWaiver]:
+    """Parse buyer waivers from JSON.
+
+    Accepted shapes:
+      - single object: {"buyer_id":"...","expires_on":"YYYY-MM-DD","note":"..."}
+      - list of objects with the same keys.
+    """
+    if raw_json is None or not raw_json.strip():
+        return {}
+
+    try:
+        parsed = json.loads(raw_json)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid JSON ({exc})") from exc
+
+    if isinstance(parsed, dict):
+        entries = [parsed]
+    elif isinstance(parsed, list):
+        entries = parsed
+    else:
+        raise ValueError("expected object or array")
+
+    waivers: dict[str, BidstreamDimensionWaiver] = {}
+    for idx, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise ValueError(f"entry {idx} must be an object")
+
+        buyer_id = str(entry.get("buyer_id") or "").strip()
+        expires_raw = str(entry.get("expires_on") or "").strip()
+        note = str(entry.get("note") or "").strip()
+        if not buyer_id:
+            raise ValueError(f"entry {idx} missing buyer_id")
+        if not expires_raw:
+            raise ValueError(f"entry {idx} missing expires_on")
+        if not note:
+            raise ValueError(f"entry {idx} missing note")
+        try:
+            expires_on = date.fromisoformat(expires_raw)
+        except ValueError as exc:
+            raise ValueError(f"entry {idx} invalid expires_on (expected YYYY-MM-DD)") from exc
+
+        waivers[buyer_id] = BidstreamDimensionWaiver(
+            buyer_id=buyer_id,
+            expires_on=expires_on,
+            note=note,
+        )
+    return waivers
 
 
 def is_network_blocked_urlerror(exc: urllib.error.URLError) -> bool:
@@ -225,6 +284,7 @@ def validate_data_health_payload(
     *,
     require_healthy_readiness: bool,
     max_dimension_missing_pct: float,
+    bidstream_dimension_waiver: BidstreamDimensionWaiver | None,
 ) -> None:
     """Validate optimizer readiness invariants for canary checks."""
     readiness = payload.get("optimizer_readiness")
@@ -268,6 +328,23 @@ def validate_data_health_payload(
     # report types / buyer markets).  Classify as environment-blocked
     # rather than a hard quality failure.
     if all(v >= 100.0 for v in dim_values.values()):
+        if bidstream_dimension_waiver is not None:
+            today_utc = datetime.now(timezone.utc).date()
+            if today_utc <= bidstream_dimension_waiver.expires_on:
+                print(
+                    "INFO  Data health waiver applied -> "
+                    f"buyer_id={bidstream_dimension_waiver.buyer_id}, "
+                    f"expires_on={bidstream_dimension_waiver.expires_on.isoformat()}, "
+                    f"note={bidstream_dimension_waiver.note}"
+                )
+                return
+            raise SmokeEnvironmentBlocked(
+                "bidstream data has no dimension breakdowns "
+                f"(all {len(dim_fields)} dimension columns are 100% empty; "
+                "data source does not provide platform/environment/transaction_type). "
+                f"Waiver expired on {bidstream_dimension_waiver.expires_on.isoformat()} "
+                f"(note: {bidstream_dimension_waiver.note})"
+            )
         raise SmokeEnvironmentBlocked(
             "bidstream data has no dimension breakdowns "
             f"(all {len(dim_fields)} dimension columns are 100% empty; "
@@ -504,6 +581,14 @@ def main() -> int:
         type=float,
         default=99.9,
         help="Maximum tolerated missing percent for bidstream dimensions (default: 99.9).",
+    )
+    parser.add_argument(
+        "--bidstream-dimension-waiver-json",
+        default=os.getenv("CATSCAN_CANARY_BIDSTREAM_DIMENSION_WAIVER_JSON", ""),
+        help=(
+            "Optional JSON waiver object/array for buyers with known 100%%-missing bidstream "
+            "dimensions. Schema: [{\"buyer_id\":\"...\",\"expires_on\":\"YYYY-MM-DD\",\"note\":\"...\"}]"
+        ),
     )
     parser.add_argument(
         "--allow-no-active-model",
@@ -818,6 +903,16 @@ def main() -> int:
     if args.max_qps_page_p95_hydrated_ms <= 0:
         parser.error("--max-qps-page-p95-hydrated-ms must be > 0")
 
+    try:
+        bidstream_dimension_waivers = parse_bidstream_dimension_waivers(
+            args.bidstream_dimension_waiver_json
+        )
+    except ValueError as exc:
+        parser.error(f"--bidstream-dimension-waiver-json invalid: {exc}")
+    active_bidstream_dimension_waiver = bidstream_dimension_waivers.get(
+        str(args.buyer_id or "").strip()
+    )
+
     client = SmokeClient(
         base_url=args.base_url,
         token=args.token,
@@ -844,6 +939,7 @@ def main() -> int:
             payload,
             require_healthy_readiness=args.require_healthy_readiness,
             max_dimension_missing_pct=float(args.max_dimension_missing_pct),
+            bidstream_dimension_waiver=active_bidstream_dimension_waiver,
         )
 
     def check_conversion_health() -> None:
@@ -1218,6 +1314,18 @@ def main() -> int:
 
         observed_summary = ", ".join(f"{path}={latency}ms" for path, latency in observed.items())
         print(f"INFO  QPS startup API latencies -> {observed_summary}")
+        client.request(
+            "POST",
+            "/system/ui-metrics/page-load",
+            json_body={
+                "page": "qps_home",
+                "buyer_id": args.buyer_id,
+                "selected_days": int(args.qps_load_latency_days),
+                "api_latency_ms": observed,
+                "sampled_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        print("INFO  QPS startup API latency rollup sample recorded")
 
     def check_qps_page_slo_summary() -> None:
         if not args.run_qps_page_slo_check:
