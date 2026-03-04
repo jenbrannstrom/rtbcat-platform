@@ -25,7 +25,7 @@ class CreativePerformanceService:
             rows = await self._repo.get_active_creative_ids(creative_ids, days)
             return set(rows)
         except Exception as e:
-            logger.debug(f"Could not filter active creatives: {e}")
+            logger.debug("Could not filter active creatives: %s", e, exc_info=True)
             return set()
 
     async def get_waste_flags(
@@ -48,7 +48,7 @@ class CreativePerformanceService:
                 for row in rows
             }
         except Exception as e:
-            logger.debug(f"Could not fetch performance data: {e}")
+            logger.debug("Could not fetch performance data: %s", e, exc_info=True)
 
         result: dict[str, dict[str, bool]] = {}
         for cid in creative_ids:
@@ -80,7 +80,7 @@ class CreativePerformanceService:
             rows = await self._repo.get_primary_countries(creative_ids, days)
             return {row["creative_id"]: row["geography"] for row in rows}
         except Exception as e:
-            logger.debug(f"Could not fetch country data: {e}")
+            logger.debug("Could not fetch country data: %s", e, exc_info=True)
             return {}
 
     async def get_country_breakdown(
@@ -89,5 +89,5 @@ class CreativePerformanceService:
         try:
             return await self._repo.get_country_breakdown(creative_id, days)
         except Exception as e:
-            logger.debug(f"Could not fetch country breakdown: {e}")
+            logger.debug("Could not fetch country breakdown: %s", e, exc_info=True)
             return []
