@@ -37,6 +37,7 @@ class BidstreamDimensionWaiver:
     allow_zero_rows: bool = False
     allow_all_dimensions_missing: bool = True
     allow_report_completeness_degraded: bool = False
+    allow_seat_day_completeness_degraded: bool = False
 
 
 def _join_url(base_url: str, path: str) -> str:
@@ -105,6 +106,9 @@ def parse_bidstream_dimension_waivers(raw_json: str | None) -> dict[str, Bidstre
             allow_report_completeness_degraded = _parse_bool(
                 entry, "allow_report_completeness_degraded", False
             )
+            allow_seat_day_completeness_degraded = _parse_bool(
+                entry, "allow_seat_day_completeness_degraded", False
+            )
         except ValueError as exc:
             raise ValueError(f"entry {idx} {exc}") from exc
 
@@ -116,6 +120,7 @@ def parse_bidstream_dimension_waivers(raw_json: str | None) -> dict[str, Bidstre
             allow_zero_rows=allow_zero_rows,
             allow_all_dimensions_missing=allow_all_dimensions_missing,
             allow_report_completeness_degraded=allow_report_completeness_degraded,
+            allow_seat_day_completeness_degraded=allow_seat_day_completeness_degraded,
         )
     return waivers
 
@@ -461,10 +466,23 @@ def validate_data_health_payload(
                 bidstream_state == "healthy",
                 f"bidstream dimension coverage state is {bidstream_state!r}, expected healthy",
             )
-        _assert(
-            seat_day_state == "healthy",
-            f"seat_day_completeness state is {seat_day_state!r}, expected healthy",
-        )
+        if (
+            waiver_active
+            and bidstream_dimension_waiver.allow_seat_day_completeness_degraded
+            and seat_day_state in {"degraded", "unavailable"}
+        ):
+            print(
+                "INFO  Data health waiver applied -> "
+                f"buyer_id={bidstream_dimension_waiver.buyer_id}, "
+                "scope=seat_day_completeness_degraded, "
+                f"expires_on={bidstream_dimension_waiver.expires_on.isoformat()}, "
+                f"note={bidstream_dimension_waiver.note}"
+            )
+        else:
+            _assert(
+                seat_day_state == "healthy",
+                f"seat_day_completeness state is {seat_day_state!r}, expected healthy",
+            )
     return
 
 
