@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Optional
 from urllib.parse import parse_qs, unquote, urlparse
+
+logger = logging.getLogger(__name__)
 
 
 _ASSET_EXTENSIONS = (
@@ -242,6 +245,11 @@ def classify_click_destination(url: Optional[str]) -> tuple[bool, Optional[str]]
             return False, "asset_url"
         return True, None
     except Exception:
+        logger.debug(
+            "Failed to parse click destination URL; marking as invalid_url",
+            extra={"url_preview": value[:160]},
+            exc_info=True,
+        )
         return False, "invalid_url"
 
 

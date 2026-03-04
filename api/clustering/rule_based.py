@@ -6,11 +6,14 @@ and temporal proximity before AI refinement.
 
 from __future__ import annotations
 
+import logging
 import re
 from collections import defaultdict
 from datetime import datetime
 from typing import Optional
 from urllib.parse import urlparse, unquote
+
+logger = logging.getLogger(__name__)
 
 
 # Common click tracking macros to strip
@@ -162,6 +165,11 @@ def extract_domain(url: str) -> Optional[str]:
 
         return domain.lower() if domain else None
     except Exception:
+        logger.debug(
+            "Failed to parse domain from creative URL; returning None",
+            extra={"url_preview": str(url)[:160]},
+            exc_info=True,
+        )
         return None
 
 
@@ -219,6 +227,11 @@ def get_week_key(created_at: Optional[str | datetime]) -> str:
             else:
                 return "unknown"
         except Exception:
+            logger.debug(
+                "Failed to parse creative created_at timestamp; falling back to unknown week key",
+                extra={"created_at": str(created_at)[:120]},
+                exc_info=True,
+            )
             return "unknown"
     else:
         dt = created_at
