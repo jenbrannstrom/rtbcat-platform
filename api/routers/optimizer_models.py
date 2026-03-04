@@ -93,7 +93,7 @@ async def list_optimizer_models(
     offset: int = Query(0, ge=0),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> OptimizerModelsResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerModelsService()
     payload = await service.list_models(
@@ -110,7 +110,7 @@ async def create_optimizer_model(
     request: CreateOptimizerModelRequest,
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> OptimizerModelRow:
     buyer_id = await resolve_buyer_id(request.buyer_id, store=store, user=user)
     service = OptimizerModelsService()
     try:
@@ -136,7 +136,7 @@ async def get_optimizer_model(
     buyer_id: Optional[str] = Query(None),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> OptimizerModelRow:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerModelsService()
     payload = await service.get_model(model_id=model_id, buyer_id=buyer_id)
@@ -152,7 +152,7 @@ async def update_optimizer_model(
     buyer_id: Optional[str] = Query(None),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> OptimizerModelRow:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerModelsService()
     updates = request.model_dump(exclude_unset=True)
@@ -176,7 +176,7 @@ async def activate_optimizer_model(
     buyer_id: Optional[str] = Query(None),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> OptimizerModelUpdateActiveResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerModelsService()
     payload = await service.update_model(
@@ -198,7 +198,7 @@ async def deactivate_optimizer_model(
     buyer_id: Optional[str] = Query(None),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> OptimizerModelUpdateActiveResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerModelsService()
     payload = await service.update_model(
@@ -222,7 +222,7 @@ async def validate_optimizer_model(
     timeout_seconds: int = Query(10, ge=1, le=60),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ValidateOptimizerModelResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerModelsService()
     try:
