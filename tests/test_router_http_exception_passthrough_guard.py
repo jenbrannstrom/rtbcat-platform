@@ -54,7 +54,7 @@ def _handler_raises_http_exception(handler: ast.ExceptHandler) -> bool:
 def test_route_try_blocks_preserve_http_exception_passthrough() -> None:
     violations: list[tuple[str, int, str]] = []
 
-    for path in sorted(ROUTERS_DIR.glob("*.py")):
+    for path in sorted(ROUTERS_DIR.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         rel_path = path.relative_to(REPO_ROOT).as_posix()
 
