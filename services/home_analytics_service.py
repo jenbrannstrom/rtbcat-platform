@@ -7,8 +7,30 @@ import copy
 import time
 from typing import Any
 
+from decimal import Decimal
+
 from storage.postgres_repositories.home_repo import HomeAnalyticsRepository
 from services.analytics_service import AnalyticsService
+
+
+def _safe_rate(numerator: object, denominator: object) -> float:
+    """Return (numerator / denominator * 100) clamped to [0, 100].
+
+    Safely coerces Decimal, string, or None inputs to float and guards
+    against division by zero, NaN, and Infinity.
+    """
+    try:
+        n = float(numerator) if numerator is not None else 0.0
+        d = float(denominator) if denominator is not None else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+    if d <= 0 or n < 0:
+        return 0.0
+    rate = n / d * 100
+    import math
+    if not math.isfinite(rate):
+        return 0.0
+    return min(rate, 100.0)
 
 _analytics_service: AnalyticsService | None = None
 
@@ -186,7 +208,8 @@ class HomeAnalyticsService:
         total_bid_requests = (funnel_row["total_bid_requests"] or 0) if funnel_row else 0
 
         effective_reached = total_reached
-        win_rate = (total_impressions / effective_reached * 100) if effective_reached > 0 else 0
+        # Win rate: impressions / reached, clamped to [0, 100].
+        win_rate = _safe_rate(total_impressions, effective_reached)
         waste_rate = 100 - win_rate
 
         publishers = []
@@ -195,7 +218,12 @@ class HomeAnalyticsService:
             imps = row["impressions"] or 0
             bids = row["total_bids"] or 0
             wins = row["auctions_won"] or 0
-            pub_win_rate = (imps / reached * 100) if reached > 0 else 0
+            # Win rate: prefer auctions_won/bids; fallback to imps/reached.
+            # Always bounded [0, 100].
+            if bids > 0:
+                pub_win_rate = _safe_rate(wins, bids)
+            else:
+                pub_win_rate = _safe_rate(imps, reached)
             raw_name = row["publisher_name"]
             name = (raw_name or "").strip() or "Unknown publisher"
             publishers.append(
@@ -216,7 +244,12 @@ class HomeAnalyticsService:
             imps = row["impressions"] or 0
             bids = row["total_bids"] or 0
             wins = row["auctions_won"] or 0
-            geo_win_rate = (imps / reached * 100) if reached > 0 else 0
+            # Win rate: prefer auctions_won/bids; fallback to imps/reached.
+            # Always bounded [0, 100].
+            if bids > 0:
+                geo_win_rate = _safe_rate(wins, bids)
+            else:
+                geo_win_rate = _safe_rate(imps, reached)
             geos.append(
                 {
                     "country": row["country"],
