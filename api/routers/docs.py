@@ -194,7 +194,7 @@ class ChapterResponse(BaseModel):
 async def get_docs_toc(
     lang: str = Query("en", pattern="^(en|zh|es|nl|ru|pl|uk|da|fr|he|ar)$"),
     internal: bool = Query(False, description="Include internal (DevOps) chapters"),
-):
+) -> TocResponse:
     """Return the table of contents as a sorted chapter list."""
     directory = _lang_dir(lang)
     if not directory.is_dir():
@@ -238,7 +238,7 @@ async def get_docs_content(
     slug: str,
     lang: str = Query("en", pattern="^(en|zh|es|nl|ru|pl|uk|da|fr|he|ar)$"),
     internal: bool = Query(False, description="Allow internal chapters"),
-):
+) -> ChapterResponse:
     """Return the markdown content for a chapter."""
     # Block internal chapters for public requests
     if _is_internal(slug) and not internal:
@@ -313,7 +313,7 @@ _ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
 
 
 @router.get("/docs/images/{filename}")
-async def get_docs_image(filename: str):
+async def get_docs_image(filename: str) -> FileResponse:
     """Serve an image from manual/images/."""
     path = (_IMAGES_DIR / filename).resolve()
     if not str(path).startswith(str(_IMAGES_DIR.resolve())):
