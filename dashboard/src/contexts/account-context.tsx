@@ -12,7 +12,14 @@ function readCookie(name: string): string | null {
     .split(";")
     .map((part) => part.trim())
     .find((part) => part.startsWith(prefix));
-  return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : null;
+  if (!cookie) return null;
+  const rawValue = cookie.slice(prefix.length);
+  try {
+    return decodeURIComponent(rawValue);
+  } catch {
+    // Gracefully handle malformed cookie values instead of crashing app startup.
+    return rawValue;
+  }
 }
 
 function writeCookie(name: string, value: string | null) {
@@ -39,13 +46,22 @@ export function AccountProvider({ children }: { children: ReactNode }) {
 
   // Load from localStorage on mount
   useEffect(() => {
-    const storedBuyer = localStorage.getItem(SELECTED_BUYER_STORAGE_KEY) || readCookie(SELECTED_BUYER_COOKIE);
-    if (storedBuyer) {
-      setSelectedBuyerIdState(storedBuyer);
+    try {
+      const storedBuyer =
+        localStorage.getItem(SELECTED_BUYER_STORAGE_KEY) || readCookie(SELECTED_BUYER_COOKIE);
+      if (storedBuyer) {
+        setSelectedBuyerIdState(storedBuyer);
+      }
+    } catch {
+      // localStorage can throw in strict privacy modes; continue with defaults.
     }
-    const storedServiceAccount = localStorage.getItem(SELECTED_SERVICE_ACCOUNT_KEY);
-    if (storedServiceAccount) {
-      setSelectedServiceAccountIdState(storedServiceAccount);
+    try {
+      const storedServiceAccount = localStorage.getItem(SELECTED_SERVICE_ACCOUNT_KEY);
+      if (storedServiceAccount) {
+        setSelectedServiceAccountIdState(storedServiceAccount);
+      }
+    } catch {
+      // localStorage can throw in strict privacy modes; continue with defaults.
     }
     setInitialized(true);
   }, []);
@@ -53,10 +69,14 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   // Persist buyer to localStorage when changed
   const setSelectedBuyerId = useCallback((buyerId: string | null) => {
     setSelectedBuyerIdState(buyerId);
-    if (buyerId) {
-      localStorage.setItem(SELECTED_BUYER_STORAGE_KEY, buyerId);
-    } else {
-      localStorage.removeItem(SELECTED_BUYER_STORAGE_KEY);
+    try {
+      if (buyerId) {
+        localStorage.setItem(SELECTED_BUYER_STORAGE_KEY, buyerId);
+      } else {
+        localStorage.removeItem(SELECTED_BUYER_STORAGE_KEY);
+      }
+    } catch {
+      // Ignore storage write failures in strict privacy modes.
     }
     writeCookie(SELECTED_BUYER_COOKIE, buyerId);
   }, []);
@@ -64,10 +84,14 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   // Persist service account to localStorage when changed
   const setSelectedServiceAccountId = useCallback((accountId: string | null) => {
     setSelectedServiceAccountIdState(accountId);
-    if (accountId) {
-      localStorage.setItem(SELECTED_SERVICE_ACCOUNT_KEY, accountId);
-    } else {
-      localStorage.removeItem(SELECTED_SERVICE_ACCOUNT_KEY);
+    try {
+      if (accountId) {
+        localStorage.setItem(SELECTED_SERVICE_ACCOUNT_KEY, accountId);
+      } else {
+        localStorage.removeItem(SELECTED_SERVICE_ACCOUNT_KEY);
+      }
+    } catch {
+      // Ignore storage write failures in strict privacy modes.
     }
   }, []);
 
