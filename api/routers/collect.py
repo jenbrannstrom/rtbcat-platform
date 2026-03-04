@@ -52,7 +52,7 @@ async def start_collection(
     _user: User = Depends(require_seat_admin_or_sudo),
     config: ConfigManager = Depends(get_config),
     store=Depends(get_store),
-):
+) -> CollectResponse:
     """Start a creative collection job.
 
     This endpoint initiates collection from the Authorized Buyers RTB API.
@@ -97,7 +97,7 @@ async def collect_sync(
     _user: User = Depends(require_seat_admin_or_sudo),
     config: ConfigManager = Depends(get_config),
     store=Depends(get_store),
-):
+) -> CollectResponse:
     """Synchronously collect creatives (waits for completion).
 
     This endpoint blocks until collection is complete. Use /collect for
