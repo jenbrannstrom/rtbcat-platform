@@ -85,7 +85,7 @@ export function Sidebar() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { selectedBuyerId, setSelectedBuyerId } = useAccount();
-  const { user, isSudo, logout } = useAuth();
+  const { user, isSudo, seatPermissions, logout } = useAuth();
   const restricted = isRestrictedUser(user);
   const { t } = useTranslation();
 
@@ -122,6 +122,8 @@ export function Sidebar() {
   const isInAdmin = pathWithoutBuyer.startsWith("/admin");
   const isInQps = pathWithoutBuyer.startsWith("/qps");
   const isBuyerScopedRoute = isBuyerScopedPath(pathWithoutBuyer);
+  const hasSeatAdminAccess =
+    isSudo || Object.values(seatPermissions).some((level) => level === "admin");
 
   const getSeatScopedHref = (href: string) => toBuyerScopedPath(href, currentBuyerId);
 
@@ -329,17 +331,19 @@ export function Sidebar() {
                   {seats[0].creative_count} {t.sidebar.creatives}
                 </div>
               </div>
-              <button
-                onClick={() => syncMutation.mutate()}
-                disabled={isSyncing}
-                className={cn(
-                  "p-1.5 rounded-md text-gray-500 hover:text-primary-600 hover:bg-primary-50",
-                  "disabled:opacity-50 flex-shrink-0"
-                )}
-                title={t.common.syncAll}
-              >
-                <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
-              </button>
+              {hasSeatAdminAccess && (
+                <button
+                  onClick={() => syncMutation.mutate()}
+                  disabled={isSyncing}
+                  className={cn(
+                    "p-1.5 rounded-md text-gray-500 hover:text-primary-600 hover:bg-primary-50",
+                    "disabled:opacity-50 flex-shrink-0"
+                  )}
+                  title={t.common.syncAll}
+                >
+                  <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
+                </button>
+              )}
             </div>
 
             {syncMessage && (
@@ -406,18 +410,20 @@ export function Sidebar() {
             )}
 
             {/* Sync All button - always visible when seats exist */}
-            <button
-              onClick={() => syncMutation.mutate()}
-              disabled={isSyncing}
-              className={cn(
-                "mt-2 w-full flex items-center justify-center gap-2 px-3 py-1.5",
-                "bg-primary-600 text-white rounded-md text-sm font-medium",
-                "hover:bg-primary-700 disabled:opacity-50"
+              {hasSeatAdminAccess && (
+                <button
+                  onClick={() => syncMutation.mutate()}
+                  disabled={isSyncing}
+                  className={cn(
+                    "mt-2 w-full flex items-center justify-center gap-2 px-3 py-1.5",
+                    "bg-primary-600 text-white rounded-md text-sm font-medium",
+                    "hover:bg-primary-700 disabled:opacity-50"
+                  )}
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5", isSyncing && "animate-spin")} />
+                  {isSyncing ? t.common.syncing : (t.common.syncAll || "Sync All")}
+                </button>
               )}
-            >
-              <RefreshCw className={cn("h-3.5 w-3.5", isSyncing && "animate-spin")} />
-              {isSyncing ? t.common.syncing : (t.common.syncAll || "Sync All")}
-            </button>
 
             {syncMessage && (
               <div className={cn(
@@ -609,7 +615,7 @@ export function Sidebar() {
         )}
 
         {/* Settings Section */}
-        {!restricted && <div className="pt-4">
+        {!restricted && hasSeatAdminAccess && <div className="pt-4">
           {!collapsed && (
             <div className="px-3 mb-1">
               <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
