@@ -10,6 +10,31 @@
 
 ---
 
+## Deployment Reliability Follow-up (2026-03-04)
+
+- [x] **Deployment baseline updated to `sha-ef206ba`**
+  - Production health confirms `version=sha-ef206ba` (`/api/health`).
+  - This supersedes the earlier frontend-only geo hotfix baseline (`sha-4e1f047`) by adding deploy-auth hardening.
+- [x] **Artifact Registry pull blocker closed**
+  - Incident: deploys intermittently failed with `Unauthenticated request` while pulling `catscan-api` images.
+  - Fix live in `ef206ba`: deploy path now bypasses stale root credHelper state via explicit Docker config/auth flow before pull.
+  - Evidence: staging deploy run `22692540034` and production deploy run `22692620805` both pulled images successfully and completed.
+- [ ] **P2 follow-up ticket: `/system/secrets-health` verify-step instability**
+  - Symptom: deploy verify step still fails on `curl -sf /api/system/secrets-health` while service health remains good.
+  - Scope: isolate endpoint/timeout/auth behavior and remove false-negative deploy noise.
+  - Temporary policy: treat this check as advisory until root cause is fixed.
+- [ ] **Deploy verification policy hardening**
+  - Hard-fail criteria:
+    - `/api/health` non-200 or unhealthy response.
+    - Deployed `version/git_sha` mismatch vs expected image SHA.
+  - Soft-fail (warning-only, temporary):
+    - `/api/system/secrets-health` probe failures until P2 ticket closure.
+- [ ] **Deploy regression guardrail: fail on Artifact Registry auth errors**
+  - Add explicit workflow log assertion that fails if pull output contains `Unauthenticated request`.
+  - Acceptance: no deploy run can pass while silently falling through AR auth failures.
+
+---
+
 ## AppsFlyer Attribution Plan (2026-03-03)
 
 - [ ] **Objective:** add post-click attribution signal into optimizer decisions without breaking existing buyers or requiring media buyers to know RTB-internal IDs.
