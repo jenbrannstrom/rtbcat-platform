@@ -34,7 +34,7 @@ All deploys go through one workflow: **CD Manual Deploy to GCP** (`deploy.yml`).
 5. Pulls prebuilt Docker images from Artifact Registry (`docker compose pull`)
 6. Recreates containers (`docker compose up -d --force-recreate`)
 7. Cleans up old images
-8. Waits 60s, then runs a health check (`/health` endpoint)
+8. Waits for API health (`/health`) and validates secrets readiness (`/system/secrets-health`)
 9. Runs post-deploy contract check (`contracts_check.py`)
 10. Uploads contract check artifact (90-day retention)
 
@@ -56,6 +56,7 @@ The contract check validates data integrity post-deploy. If it fails:
 
 ### Health
 - API responds at `http://localhost:8000/health` on the VM
+- Secrets status endpoint responds at `http://localhost:8000/system/secrets-health` with `"healthy": true`
 - `docker ps` shows all containers running
 
 ### Data
@@ -89,5 +90,12 @@ Set via `gh variable set <name> --body "<value>"` or in Settings > Secrets and v
 | `IMAGE_REGISTRY` | Artifact Registry path | `asia-southeast1-docker.pkg.dev/catscan-prod-202601/catscan` |
 | `GIT_BRANCH` | Branch to deploy | `unified-platform` |
 | `ALLOW_CONTRACT_FAILURE` | Temporary bypass for contract gate | remove when not needed |
+| `SECRETS_HEALTH_STRICT` | Fail startup when enabled feature secrets are missing | `false` (default) |
+| `CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER` | Explicit scheduler feature toggle for secrets checks | `true` (default) |
+| `CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER` | Explicit scheduler feature toggle for secrets checks | `true` (default) |
+| `CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER` | Explicit scheduler feature toggle for secrets checks | `true` (default) |
+| `CATSCAN_ENABLE_LANGUAGE_AI` | Explicit language-AI feature toggle for secrets checks | `false` (default) |
+| `CATSCAN_ENABLE_CLUSTERING_AI` | Explicit clustering-AI feature toggle for secrets checks | `false` (default) |
+| `CATSCAN_REQUIRE_OAUTH_CLIENT_SECRET_IN_API` | Require OAuth client secret to be present in API container checks | `false` (default) |
 
 `VM_NAME` is **not** a variable — it's determined by the target dropdown in the workflow.

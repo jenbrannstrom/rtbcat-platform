@@ -674,8 +674,8 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 ## Technical Debt
 
 ### Secrets Rollout Follow-up
-- [ ] Add deployment health probe for `GET /api/system/secrets-health` (status-only, non-sensitive) - Objective: make secrets readiness observable in deploy checks; Current: probe is not wired into deploy flow; Acceptance: deploy pipeline validates status endpoint before promotion.
-- [ ] Wire `CATSCAN_ENABLE_*` feature toggles explicitly in deploy templates so secret checks are deterministic - Objective: remove toggle drift across environments; Current: toggle wiring is implicit/incomplete; Acceptance: templates define toggles explicitly per environment.
+- [x] Add deployment health probe for `GET /api/system/secrets-health` (status-only, non-sensitive) - Objective: make secrets readiness observable in deploy checks; Current: probe is not wired into deploy flow; Acceptance: deploy pipeline validates status endpoint before promotion.
+- [x] Wire `CATSCAN_ENABLE_*` feature toggles explicitly in deploy templates so secret checks are deterministic - Objective: remove toggle drift across environments; Current: toggle wiring is implicit/incomplete; Acceptance: templates define toggles explicitly per environment.
 - Runtime strict-mode enablement check moved to **Runtime Verification Queue (Prod/VM2)**.
 
 ### Naming Standardization (Pre-OSS)
