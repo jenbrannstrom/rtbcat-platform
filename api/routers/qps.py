@@ -150,13 +150,13 @@ async def get_include_list() -> dict[str, Any]:
     WARNING: Adding these to pretargeting will EXCLUDE all other sizes!
     """
     try:
-        analyzer = QpsSizeCoverageAnalyzer()
-        report = analyzer.analyze_coverage(days=7)
+        report = QpsService().size_coverage_report(days=7)
 
         return {
-            "include_list": report.include_list,
-            "count": len(report.include_list),
-            "warning": "Adding these sizes will EXCLUDE all other sizes!",
+            "include_list": [],
+            "count": 0,
+            "warning": report.get("report", "Legacy include-list analyzer unavailable."),
+            "deprecated": True,
             "instructions": [
                 "Go to Authorized Buyers UI",
                 "Navigate to Bidder Settings -> Pretargeting",
