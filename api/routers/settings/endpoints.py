@@ -201,6 +201,8 @@ async def sync_rtb_endpoints(
             bidder_id=bidder_id,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to sync RTB endpoints: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to sync endpoints: {str(e)}")
@@ -346,6 +348,8 @@ async def update_endpoint_qps(
 
         raise HTTPException(status_code=status, detail=detail)
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to update endpoint {endpoint_id} QPS: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to update endpoint QPS: {str(e)}")

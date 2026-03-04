@@ -232,6 +232,8 @@ async def list_pending_changes(
             for row in rows
         ]
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to list pending changes: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to list pending changes: {str(e)}")
