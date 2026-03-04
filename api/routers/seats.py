@@ -20,6 +20,9 @@ from pydantic import BaseModel, Field
 from config import ConfigManager
 from storage import creative_dicts_to_storage
 from api.dependencies import (
+    require_admin,
+    require_buyer_admin_access,
+    require_seat_admin_or_sudo,
     get_store,
     get_config,
     get_current_user,
@@ -279,6 +282,8 @@ async def discover_seats(
     Supports multi-account credentials via service_account_id parameter.
     Falls back to first available service account or legacy config.
     """
+    await require_seat_admin_or_sudo(user=user)
+
     credentials_path: Optional[str] = None
     service_account_id: Optional[str] = request.service_account_id
     use_adc = False
@@ -411,7 +416,7 @@ async def sync_seat_creatives(
     Uses multi-account credentials if available, falling back to legacy config.
     """
     # Verify seat exists
-    await require_buyer_access(buyer_id, store=store, user=user)
+    await require_buyer_admin_access(buyer_id, user=user)
     seat = await seats_service.get_buyer_seat(buyer_id)
     if not seat:
         raise HTTPException(status_code=404, detail="Buyer seat not found")
@@ -471,7 +476,7 @@ async def update_seat(
     user: User = Depends(get_current_user),
 ):
     """Update a buyer seat's display name."""
-    await require_buyer_access(buyer_id, store=store, user=user)
+    await require_buyer_admin_access(buyer_id, user=user)
     if request.display_name:
         success = await seats_service.update_display_name(buyer_id, request.display_name)
         if not success:
@@ -487,12 +492,15 @@ async def update_seat(
 @router.post("/seats/populate")
 async def populate_seats_from_creatives(
     seats_service: SeatsService = Depends(get_seats_service),
+    user: User = Depends(get_current_user),
 ):
     """Populate buyer_seats table from existing creatives.
 
     Creates seat records for each unique account_id found in creatives.
     This is useful for migrating data after the initial import.
     """
+    await require_admin(user=user)
+
     try:
         count = await seats_service.populate_from_creatives()
         return {"status": "completed", "seats_created": count}
@@ -517,6 +525,8 @@ async def sync_all_data(
 
     Returns aggregated counts of all synced items.
     """
+    await require_seat_admin_or_sudo(user=user)
+
     total_creatives = 0
     seats_synced = 0
     endpoints_synced = 0
