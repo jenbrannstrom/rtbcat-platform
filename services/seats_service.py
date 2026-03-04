@@ -372,7 +372,11 @@ class SeatsService:
             try:
                 return str(config.get_service_account_path())
             except Exception:
-                pass
+                logger.warning(
+                    "Legacy ConfigManager credential fallback failed; continuing resolution chain",
+                    extra={"buyer_id": seat.buyer_id},
+                    exc_info=True,
+                )
 
         # GCP mode: use Application Default Credentials
         if is_gcp_mode():
