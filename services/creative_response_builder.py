@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -13,6 +14,8 @@ from api.schemas.creatives import (
 from api.schemas.common import ThumbnailStatusResponse, WasteFlagsResponse
 from services.creative_destination_resolver import resolve_creative_destination_url
 from services.creatives_service import CreativesService
+
+logger = logging.getLogger(__name__)
 
 
 def _to_utc(dt: Optional[datetime]) -> Optional[datetime]:
@@ -33,6 +36,11 @@ def get_stale_threshold_hours() -> int:
     try:
         value = int(raw)
     except Exception:
+        logger.warning(
+            "Invalid CREATIVE_CACHE_STALE_HOURS value; using default",
+            extra={"env_var": "CREATIVE_CACHE_STALE_HOURS"},
+            exc_info=True,
+        )
         return 24
     return max(1, value)
 
