@@ -4,32 +4,36 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Search } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { getCreativeClickMacroCoverage } from "@/lib/api";
 import { LoadingPage } from "@/components/loading";
 import { ErrorPage } from "@/components/error";
 import { useAccount } from "@/contexts/account-context";
-import { toBuyerScopedPath } from "@/lib/buyer-routes";
+import { splitBuyerPath, toBuyerScopedPath } from "@/lib/buyer-routes";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 100;
 
 export default function ClickMacroCoveragePage() {
+  const pathname = usePathname();
   const { selectedBuyerId } = useAccount();
+  const { buyerIdInPath } = splitBuyerPath(pathname || "/");
+  const effectiveBuyerId = buyerIdInPath ?? selectedBuyerId ?? null;
   const [search, setSearch] = useState("");
   const [macroState, setMacroState] = useState<"all" | "has_click_macro" | "missing_click_macro">("all");
   const [pageIndex, setPageIndex] = useState(0);
 
   useEffect(() => {
     setPageIndex(0);
-  }, [selectedBuyerId]);
+  }, [effectiveBuyerId]);
 
   const offset = pageIndex * PAGE_SIZE;
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["creative-click-macro-coverage", selectedBuyerId, search, macroState, offset],
+    queryKey: ["creative-click-macro-coverage", effectiveBuyerId, search, macroState, offset],
     queryFn: () =>
       getCreativeClickMacroCoverage({
-        buyer_id: selectedBuyerId ?? undefined,
+        buyer_id: effectiveBuyerId ?? undefined,
         search: search.trim() || undefined,
         macro_state: macroState,
         limit: PAGE_SIZE,
@@ -75,7 +79,7 @@ export default function ClickMacroCoveragePage() {
           </p>
         </div>
         <Link
-          href={toBuyerScopedPath("/creatives", selectedBuyerId)}
+          href={toBuyerScopedPath("/creatives", effectiveBuyerId)}
           className="text-sm text-primary-700 hover:text-primary-800"
         >
           Back to Creatives
