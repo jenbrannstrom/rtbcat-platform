@@ -33,6 +33,9 @@ class BidstreamDimensionWaiver:
     buyer_id: str
     expires_on: date
     note: str
+    allow_unavailable: bool = False
+    allow_zero_rows: bool = False
+    allow_all_dimensions_missing: bool = True
 
 
 def _join_url(base_url: str, path: str) -> str:
@@ -64,6 +67,19 @@ def parse_bidstream_dimension_waivers(raw_json: str | None) -> dict[str, Bidstre
         raise ValueError("expected object or array")
 
     waivers: dict[str, BidstreamDimensionWaiver] = {}
+
+    def _parse_bool(entry: dict[str, Any], key: str, default: bool) -> bool:
+        value = entry.get(key, default)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off"}:
+                return False
+        raise ValueError(f"invalid boolean for {key}")
+
     for idx, entry in enumerate(entries):
         if not isinstance(entry, dict):
             raise ValueError(f"entry {idx} must be an object")
@@ -81,11 +97,20 @@ def parse_bidstream_dimension_waivers(raw_json: str | None) -> dict[str, Bidstre
             expires_on = date.fromisoformat(expires_raw)
         except ValueError as exc:
             raise ValueError(f"entry {idx} invalid expires_on (expected YYYY-MM-DD)") from exc
+        try:
+            allow_unavailable = _parse_bool(entry, "allow_unavailable", False)
+            allow_zero_rows = _parse_bool(entry, "allow_zero_rows", False)
+            allow_all_dimensions_missing = _parse_bool(entry, "allow_all_dimensions_missing", True)
+        except ValueError as exc:
+            raise ValueError(f"entry {idx} {exc}") from exc
 
         waivers[buyer_id] = BidstreamDimensionWaiver(
             buyer_id=buyer_id,
             expires_on=expires_on,
             note=note,
+            allow_unavailable=allow_unavailable,
+            allow_zero_rows=allow_zero_rows,
+            allow_all_dimensions_missing=allow_all_dimensions_missing,
         )
     return waivers
 
@@ -302,60 +327,104 @@ def validate_data_health_payload(
     # degraded (non-blocking) rather than BLOCKED, since the core metrics
     # (rtb_daily, bidstream, bid-filtering) are sufficient for the canary.
 
+    today_utc = datetime.now(timezone.utc).date()
+    waiver_active = (
+        bidstream_dimension_waiver is not None
+        and today_utc <= bidstream_dimension_waiver.expires_on
+    )
+    bidstream_waived = False
+
     bidstream_state = str(bidstream.get("availability_state", "")).lower()
     if bidstream_state == "unavailable":
-        raise SmokeEnvironmentBlocked(
-            "bidstream dimension coverage is unavailable "
-            "(no rtb_bidstream data for this buyer/time window)"
-        )
-
-    total_rows = int(bidstream.get("total_rows") or 0)
-    if total_rows <= 0:
-        raise SmokeEnvironmentBlocked(
-            "bidstream dimension coverage has zero rows "
-            "(no rtb_bidstream data for this buyer/time window)"
-        )
-
-    dim_fields = ("platform_missing_pct", "environment_missing_pct", "transaction_type_missing_pct")
-    dim_values: dict[str, float] = {}
-    for field in dim_fields:
-        raw_value = bidstream.get(field)
-        _assert(raw_value is not None, f"{field} missing from bidstream dimension coverage")
-        dim_values[field] = float(raw_value)
-
-    # When ALL dimension columns are 100% empty the data source simply
-    # does not include dimension breakdowns (common for some Google RTB
-    # report types / buyer markets).  Classify as environment-blocked
-    # rather than a hard quality failure.
-    if all(v >= 100.0 for v in dim_values.values()):
-        if bidstream_dimension_waiver is not None:
-            today_utc = datetime.now(timezone.utc).date()
-            if today_utc <= bidstream_dimension_waiver.expires_on:
-                print(
-                    "INFO  Data health waiver applied -> "
-                    f"buyer_id={bidstream_dimension_waiver.buyer_id}, "
-                    f"expires_on={bidstream_dimension_waiver.expires_on.isoformat()}, "
-                    f"note={bidstream_dimension_waiver.note}"
-                )
-                return
+        if waiver_active and bidstream_dimension_waiver.allow_unavailable:
+            bidstream_waived = True
+            print(
+                "INFO  Data health waiver applied -> "
+                f"buyer_id={bidstream_dimension_waiver.buyer_id}, "
+                "scope=bidstream_state_unavailable, "
+                f"expires_on={bidstream_dimension_waiver.expires_on.isoformat()}, "
+                f"note={bidstream_dimension_waiver.note}"
+            )
+        elif bidstream_dimension_waiver is not None and not waiver_active:
             raise SmokeEnvironmentBlocked(
-                "bidstream data has no dimension breakdowns "
-                f"(all {len(dim_fields)} dimension columns are 100% empty; "
-                "data source does not provide platform/environment/transaction_type). "
+                "bidstream dimension coverage is unavailable "
+                "(no rtb_bidstream data for this buyer/time window). "
                 f"Waiver expired on {bidstream_dimension_waiver.expires_on.isoformat()} "
                 f"(note: {bidstream_dimension_waiver.note})"
             )
-        raise SmokeEnvironmentBlocked(
-            "bidstream data has no dimension breakdowns "
-            f"(all {len(dim_fields)} dimension columns are 100% empty; "
-            "data source does not provide platform/environment/transaction_type)"
-        )
+        else:
+            raise SmokeEnvironmentBlocked(
+                "bidstream dimension coverage is unavailable "
+                "(no rtb_bidstream data for this buyer/time window)"
+            )
 
-    for field, value in dim_values.items():
-        _assert(
-            value <= max_dimension_missing_pct,
-            f"{field}={value:.2f}% exceeds max {max_dimension_missing_pct:.2f}%",
-        )
+    total_rows = int(bidstream.get("total_rows") or 0)
+    if not bidstream_waived and total_rows <= 0:
+        if waiver_active and bidstream_dimension_waiver.allow_zero_rows:
+            bidstream_waived = True
+            print(
+                "INFO  Data health waiver applied -> "
+                f"buyer_id={bidstream_dimension_waiver.buyer_id}, "
+                "scope=bidstream_zero_rows, "
+                f"expires_on={bidstream_dimension_waiver.expires_on.isoformat()}, "
+                f"note={bidstream_dimension_waiver.note}"
+            )
+        elif bidstream_dimension_waiver is not None and not waiver_active:
+            raise SmokeEnvironmentBlocked(
+                "bidstream dimension coverage has zero rows "
+                "(no rtb_bidstream data for this buyer/time window). "
+                f"Waiver expired on {bidstream_dimension_waiver.expires_on.isoformat()} "
+                f"(note: {bidstream_dimension_waiver.note})"
+            )
+        else:
+            raise SmokeEnvironmentBlocked(
+                "bidstream dimension coverage has zero rows "
+                "(no rtb_bidstream data for this buyer/time window)"
+            )
+
+    if not bidstream_waived:
+        dim_fields = ("platform_missing_pct", "environment_missing_pct", "transaction_type_missing_pct")
+        dim_values: dict[str, float] = {}
+        for field in dim_fields:
+            raw_value = bidstream.get(field)
+            _assert(raw_value is not None, f"{field} missing from bidstream dimension coverage")
+            dim_values[field] = float(raw_value)
+
+        # When ALL dimension columns are 100% empty the data source simply
+        # does not include dimension breakdowns (common for some Google RTB
+        # report types / buyer markets).  Classify as environment-blocked
+        # rather than a hard quality failure.
+        if all(v >= 100.0 for v in dim_values.values()):
+            if waiver_active and bidstream_dimension_waiver.allow_all_dimensions_missing:
+                bidstream_waived = True
+                print(
+                    "INFO  Data health waiver applied -> "
+                    f"buyer_id={bidstream_dimension_waiver.buyer_id}, "
+                    "scope=bidstream_all_dimensions_missing, "
+                    f"expires_on={bidstream_dimension_waiver.expires_on.isoformat()}, "
+                    f"note={bidstream_dimension_waiver.note}"
+                )
+            elif bidstream_dimension_waiver is not None and not waiver_active:
+                raise SmokeEnvironmentBlocked(
+                    "bidstream data has no dimension breakdowns "
+                    f"(all {len(dim_fields)} dimension columns are 100% empty; "
+                    "data source does not provide platform/environment/transaction_type). "
+                    f"Waiver expired on {bidstream_dimension_waiver.expires_on.isoformat()} "
+                    f"(note: {bidstream_dimension_waiver.note})"
+                )
+            else:
+                raise SmokeEnvironmentBlocked(
+                    "bidstream data has no dimension breakdowns "
+                    f"(all {len(dim_fields)} dimension columns are 100% empty; "
+                    "data source does not provide platform/environment/transaction_type)"
+                )
+
+        if not bidstream_waived:
+            for field, value in dim_values.items():
+                _assert(
+                    value <= max_dimension_missing_pct,
+                    f"{field}={value:.2f}% exceeds max {max_dimension_missing_pct:.2f}%",
+                )
 
     _assert(
         int(seat_day_summary.get("total_seat_days") or 0) > 0,
@@ -369,14 +438,16 @@ def validate_data_health_payload(
         # Quality (IVT) data is optional — skip assertion when unavailable.
         if quality_state != "unavailable":
             _assert(quality_state == "healthy", f"rtb_quality_freshness state is {quality_state!r}, expected healthy")
-        _assert(
-            bidstream_state == "healthy",
-            f"bidstream dimension coverage state is {bidstream_state!r}, expected healthy",
-        )
+        if not bidstream_waived:
+            _assert(
+                bidstream_state == "healthy",
+                f"bidstream dimension coverage state is {bidstream_state!r}, expected healthy",
+            )
         _assert(
             seat_day_state == "healthy",
             f"seat_day_completeness state is {seat_day_state!r}, expected healthy",
         )
+    return
 
 
 def build_workflow_request_params(
