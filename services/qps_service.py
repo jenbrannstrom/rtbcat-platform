@@ -23,7 +23,17 @@ class QpsService:
     """Orchestrates QPS reporting and summaries."""
 
     def get_summary(self) -> dict:
-        return {"message": _DEPRECATED_MSG}
+        return {
+            "total_rows": 0,
+            "unique_dates": 0,
+            "unique_billing_ids": 0,
+            "unique_sizes": 0,
+            "date_range": {"start": None, "end": None},
+            "total_reached_queries": 0,
+            "total_impressions": 0,
+            "total_spend_usd": 0.0,
+            "message": _DEPRECATED_MSG,
+        }
 
     def size_coverage_report(self, days: int) -> dict:
         return {
