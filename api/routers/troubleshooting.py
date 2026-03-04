@@ -8,7 +8,7 @@ This module provides endpoints for RTB troubleshooting and evaluation:
 """
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Depends
 
@@ -24,7 +24,7 @@ router = APIRouter(tags=["Troubleshooting"])
 @router.get("/api/evaluation")
 async def get_evaluation(
     days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
-):
+) -> dict[str, Any]:
     """
     Run evaluation engine and return actionable recommendations.
 
@@ -44,7 +44,7 @@ async def get_evaluation(
 @router.get("/api/troubleshooting/filtered-bids")
 async def get_filtered_bids(
     days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
-):
+) -> list[dict[str, Any]]:
     """
     Get summary of why bids were filtered.
 
@@ -58,7 +58,7 @@ async def get_filtered_bids(
 @router.get("/api/troubleshooting/funnel")
 async def get_bid_funnel(
     days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
-):
+) -> dict[str, Any]:
     """
     Get bid funnel metrics - from bids submitted to impressions won.
 
@@ -75,7 +75,7 @@ async def trigger_troubleshooting_collection(
     environment: Optional[str] = Query(None, description="Filter by APP or WEB"),
     background_tasks: BackgroundTasks = None,
     _user: User = Depends(require_admin),
-):
+) -> dict[str, Any]:
     """
     Trigger troubleshooting data collection from Google API.
 

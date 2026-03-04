@@ -372,7 +372,7 @@ class UiPageLoadMetricTimeBucket(BaseModel):
 async def health_check(
     config: ConfigManager = Depends(get_config),
     store=Depends(get_store),
-):
+) -> HealthResponse:
     """Check API health status including credential and database state.
 
     For the new multi-account system, configured=True only when there are
@@ -419,7 +419,7 @@ async def health_check(
 
 
 @router.get("/thumbnails/{creative_id}.jpg", tags=["Thumbnails"])
-async def get_thumbnail(creative_id: str):
+async def get_thumbnail(creative_id: str) -> FileResponse:
     """Serve locally-generated video thumbnail."""
     thumb_path = Path.home() / ".catscan" / "thumbnails" / f"{creative_id}.jpg"
     if not thumb_path.exists():
@@ -432,7 +432,7 @@ async def get_thumbnail_status(
     buyer_id: Optional[str] = Query(None, description="Filter by buyer seat ID"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ThumbnailStatusSummary:
     """Get summary of thumbnail generation status.
 
     Optionally filter by buyer_id to see status for a specific account.
@@ -453,7 +453,7 @@ async def get_thumbnail_status(
 
 
 @router.get("/thumbnails/failure-metrics", response_model=ThumbnailFailureMetricsResponse, tags=["Thumbnails"])
-async def get_thumbnail_failure_metrics():
+async def get_thumbnail_failure_metrics() -> ThumbnailFailureMetricsResponse:
     """Get thumbnail failure counts by normalized error category."""
     service = ThumbnailsService()
     metrics = await service.get_failure_metrics()
@@ -461,7 +461,7 @@ async def get_thumbnail_failure_metrics():
 
 
 @router.get("/system/status", response_model=SystemStatusResponse)
-async def get_system_status():
+async def get_system_status() -> SystemStatusResponse:
     """Get system status including installed tools and resource usage."""
     service = SystemService()
     status = await service.get_system_status()
@@ -481,7 +481,7 @@ async def get_system_status():
 
 
 @router.get("/system/secrets-health", response_model=SecretsHealthResponse)
-async def get_system_secrets_health():
+async def get_system_secrets_health() -> SecretsHealthResponse:
     """Get non-sensitive status of required secrets per enabled feature."""
     return SecretsHealthResponse(**get_secrets_health())
 
@@ -499,7 +499,7 @@ async def get_system_data_health(
     limit: int = Query(200, ge=1, le=1000),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> DataHealthResponse:
     """Get source/serving freshness and dimension coverage state."""
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = DataHealthService()
@@ -519,7 +519,7 @@ async def record_ui_page_load_metric(
     payload: UiPageLoadMetricRecordRequest,
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> UiPageLoadMetricRecordResponse:
     """Record client-side UI page-load telemetry for SLO monitoring."""
     buyer_id = await resolve_buyer_id(payload.buyer_id, store=store, user=user)
     sanitized_api_latency: dict[str, float] = {}
@@ -591,7 +591,7 @@ async def get_ui_page_load_metric_summary(
     bucket_limit: int = Query(24, ge=1, le=168),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> UiPageLoadMetricSummaryResponse:
     """Get percentile summary and recent samples for UI page-load telemetry."""
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
 
@@ -733,7 +733,7 @@ async def generate_single_thumbnail(
     request: ThumbnailGenerateRequest,
     _user: User = Depends(require_seat_admin_or_sudo),
     store=Depends(get_store),
-):
+) -> ThumbnailGenerateResponse:
     """Generate thumbnail for a single video creative."""
     service = ThumbnailsService()
 
@@ -758,7 +758,7 @@ async def generate_batch_thumbnails(
     request: ThumbnailBatchRequest,
     _user: User = Depends(require_seat_admin_or_sudo),
     store=Depends(get_store),
-):
+) -> ThumbnailBatchResponse:
     """Generate thumbnails for multiple video creatives.
 
     Processes videos that don't have thumbnails yet (or failed ones if force=True).
@@ -804,7 +804,7 @@ async def extract_html_thumbnails(
     request: HTMLThumbnailRequest = HTMLThumbnailRequest(),
     _user: User = Depends(require_seat_admin_or_sudo),
     store=Depends(get_store),
-):
+) -> HTMLThumbnailResponse:
     """Extract thumbnail URLs from HTML creatives.
 
     Parses HTML creative snippets to find embedded image URLs (from <img src> tags,
@@ -875,7 +875,7 @@ async def search_geo_targets(
     type: Literal["all", "country", "city"] = Query(
         "all", description="Filter to country-level, city-level, or both"
     ),
-):
+) -> GeoSearchResponse:
     """Search geo criterion targets for adding to pretargeting configs."""
     service = SystemService()
     matches = await service.search_geo_targets(query=q, limit=limit, target_type=type)
@@ -897,7 +897,7 @@ async def search_geo_targets(
 @router.get("/geos/lookup", response_model=GeoLookupResponse)
 async def lookup_geo_names(
     ids: str = Query(..., description="Comma-separated list of Google geo criterion IDs"),
-):
+) -> GeoLookupResponse:
     """Look up human-readable names for Google geo criterion IDs.
 
     Accepts IDs like "21155,21164,21171" and returns names like
@@ -917,7 +917,7 @@ async def lookup_geo_names(
 
 
 @router.get("/stats", response_model=StatsResponse)
-async def get_stats(store=Depends(get_store)):
+async def get_stats(store=Depends(get_store)) -> StatsResponse:
     """Get database statistics."""
     stats = await store.get_stats()
     return StatsResponse(
@@ -931,7 +931,7 @@ async def get_stats(store=Depends(get_store)):
 
 
 @router.get("/sizes", response_model=SizesResponse)
-async def get_sizes(store=Depends(get_store)):
+async def get_sizes(store=Depends(get_store)) -> SizesResponse:
     """Get available creative sizes from the database."""
     sizes = await store.get_available_sizes()
     # PostgresStore currently returns [{canonical_size, size_category, count}]
