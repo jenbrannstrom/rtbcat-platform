@@ -42,6 +42,11 @@ interface DailyTrend {
   spend: number;
 }
 
+function asNumber(value: unknown, fallback = 0): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export default function CampaignDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -358,7 +363,7 @@ export default function CampaignDetailPage() {
               {formatNumber(performance.clicks)}
             </p>
             {performance.ctr !== null && (
-              <p className="text-xs text-gray-500">{performance.ctr.toFixed(2)}% {t.creatives.ctr}</p>
+              <p className="text-xs text-gray-500">{asNumber(performance.ctr).toFixed(2)}% {t.creatives.ctr}</p>
             )}
           </div>
           <div className="card p-4">
@@ -368,11 +373,11 @@ export default function CampaignDetailPage() {
             </div>
             <p className="text-2xl font-bold text-gray-900">
               {performance.win_rate !== null
-                ? `${performance.win_rate.toFixed(2)}%`
+                ? `${asNumber(performance.win_rate).toFixed(2)}%`
                 : t.campaigns.notAvailable}
             </p>
             {performance.cpm !== null && (
-              <p className="text-xs text-gray-500">${performance.cpm.toFixed(2)} {t.creatives.cpm}</p>
+              <p className="text-xs text-gray-500">${asNumber(performance.cpm).toFixed(2)} {t.creatives.cpm}</p>
             )}
           </div>
         </div>

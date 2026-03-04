@@ -44,6 +44,11 @@ interface ConfigBreakdownPanelProps {
 const TABS: ConfigBreakdownType[] = ['creative', 'size', 'geo', 'publisher'];
 type MajorChangeType = 'targeting' | 'publisher' | 'qps' | 'mixed';
 
+function asNumber(value: unknown, fallback = 0): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 // Format large numbers with K/M suffix
 function formatNumber(n: number): string {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
@@ -1581,7 +1586,7 @@ export function ConfigBreakdownPanel({
 	            <div className="divide-y divide-gray-100">
 	              {(activeTab === 'size' ? visibleSizeRows : activeTab === 'publisher' ? filteredPublisherBreakdown : activeTab === 'geo' ? filteredGeoBreakdown : sortedBreakdown).map((item, index) => {
 	                const isClickable = false;
-	                const winRate = item.win_rate ?? 0;
+		                const winRate = asNumber(item.win_rate);
 	                const winRateClass =
 	                  winRate < 51 ? 'text-red-600' : winRate < 75 ? 'text-orange-600' : 'text-green-600';
 	                const nameColSpan = 'col-span-4';
@@ -1701,14 +1706,14 @@ export function ConfigBreakdownPanel({
                         )}
                       </div>
                       <div className="col-span-2 text-right text-gray-600 font-mono text-xs">
-                        {formatMoney(item.spend_usd ?? 0)}
-                      </div>
-                      <div className="col-span-2 text-right text-gray-600 font-mono text-xs">
-                        {formatNumber(item.reached)}
-                      </div>
-                      <div className="col-span-2 text-right text-gray-600 font-mono text-xs">
-                        {formatNumber(item.impressions || 0)}
-                      </div>
+	                        {formatMoney(asNumber(item.spend_usd))}
+	                      </div>
+	                      <div className="col-span-2 text-right text-gray-600 font-mono text-xs">
+	                        {formatNumber(asNumber(item.reached))}
+	                      </div>
+	                      <div className="col-span-2 text-right text-gray-600 font-mono text-xs">
+	                        {formatNumber(asNumber(item.impressions))}
+	                      </div>
                       <div className={cn('col-span-2 text-right font-medium', winRateClass)}>
                         {winRate.toFixed(1)}%
                       </div>

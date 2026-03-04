@@ -38,6 +38,11 @@ interface PretargetingConfigCardProps {
 
 type MajorChangeType = 'targeting' | 'publisher' | 'qps' | 'mixed';
 
+function asNumber(value: unknown, fallback = 0): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 // Format large numbers
 function formatNumber(n: number): string {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
@@ -169,6 +174,8 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
   const inputRef = useRef<HTMLInputElement>(null);
   const qpsInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
+  const winRate = asNumber(config.win_rate);
+  const wasteRate = asNumber(config.waste_rate);
 
   const { data: configDetail, isFetching: configDetailFetching } = useQuery({
     queryKey: ['pretargeting-detail', config.billing_id],
@@ -581,25 +588,25 @@ export function PretargetingConfigCard({ config, isExpanded, onToggleExpand }: P
               <span
                 className={cn(
                   'w-14 text-right font-medium',
-                  config.win_rate >= 50 && 'text-green-600',
-                  config.win_rate >= 30 && config.win_rate < 50 && 'text-yellow-600',
-                  config.win_rate < 30 && 'text-red-600'
+                  winRate >= 50 && 'text-green-600',
+                  winRate >= 30 && winRate < 50 && 'text-yellow-600',
+                  winRate < 30 && 'text-red-600'
                 )}
               >
-                {config.win_rate.toFixed(1)}% {t.pretargeting.cardWinSuffix}
+                {winRate.toFixed(1)}% {t.pretargeting.cardWinSuffix}
               </span>
               <span
                 className={cn(
                   'w-14 text-right',
-                  config.waste_rate < 50 && 'text-gray-500',
-                  config.waste_rate >= 50 && config.waste_rate < 70 && 'text-yellow-600',
-                  config.waste_rate >= 70 && config.waste_rate < 90 && 'text-orange-600',
-                  config.waste_rate >= 90 && 'text-red-600 font-medium'
+                  wasteRate < 50 && 'text-gray-500',
+                  wasteRate >= 50 && wasteRate < 70 && 'text-yellow-600',
+                  wasteRate >= 70 && wasteRate < 90 && 'text-orange-600',
+                  wasteRate >= 90 && 'text-red-600 font-medium'
                 )}
               >
-                {config.waste_rate.toFixed(1)}%
+                {wasteRate.toFixed(1)}%
               </span>
-              <WasteMiniBar pct={config.waste_rate} />
+              <WasteMiniBar pct={wasteRate} />
             </>
           ) : (
             <>

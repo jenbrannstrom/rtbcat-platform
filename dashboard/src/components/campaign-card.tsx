@@ -32,6 +32,11 @@ interface CampaignCardProps {
   period: string;
 }
 
+function asNumber(value: unknown, fallback = 0): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 function formatNumber(num: number): string {
   if (num >= 1000000) {
     return `${(num / 1000000).toFixed(1)}M`;
@@ -111,7 +116,7 @@ export function CampaignCard({ campaign, period }: CampaignCardProps) {
               <div>
                 <span className="text-gray-500 block">{t.dashboard.winRate}</span>
                 <p className="font-medium text-gray-900">
-                  {perf.win_rate.toFixed(2)}%
+                  {asNumber(perf.win_rate).toFixed(2)}%
                 </p>
               </div>
             )}
@@ -119,7 +124,7 @@ export function CampaignCard({ campaign, period }: CampaignCardProps) {
               <div>
                 <span className="text-gray-500 block">{t.creatives.ctr}</span>
                 <p className="font-medium text-gray-900">
-                  {perf.ctr.toFixed(2)}%
+                  {asNumber(perf.ctr).toFixed(2)}%
                 </p>
               </div>
             )}
