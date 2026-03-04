@@ -10,6 +10,7 @@ import { SnapshotComparisonPanel } from './snapshot-comparison-panel';
 import { useAccount } from '@/contexts/account-context';
 import { toBuyerScopedPath } from '@/lib/buyer-routes';
 import { useTranslation } from '@/contexts/i18n-context';
+import { asNumber } from '@/lib/utils';
 
 export interface PretargetingConfig {
   billing_id: string;
@@ -37,11 +38,6 @@ interface PretargetingConfigCardProps {
 }
 
 type MajorChangeType = 'targeting' | 'publisher' | 'qps' | 'mixed';
-
-function asNumber(value: unknown, fallback = 0): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
 
 // Format large numbers
 function formatNumber(n: number): string {

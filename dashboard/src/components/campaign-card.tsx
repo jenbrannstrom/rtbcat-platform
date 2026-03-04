@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useAccount } from "@/contexts/account-context";
 import { useTranslation } from "@/contexts/i18n-context";
 import { toBuyerScopedPath } from "@/lib/buyer-routes";
+import { asNumber } from "@/lib/utils";
 
 interface CampaignPerformance {
   impressions: number;
@@ -30,11 +31,6 @@ interface Campaign {
 interface CampaignCardProps {
   campaign: Campaign;
   period: string;
-}
-
-function asNumber(value: unknown, fallback = 0): number {
-  const n = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(n) ? n : fallback;
 }
 
 function formatNumber(num: number): string {

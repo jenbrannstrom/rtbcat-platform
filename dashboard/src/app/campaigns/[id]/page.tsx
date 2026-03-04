@@ -29,7 +29,7 @@ import {
 } from "@/lib/api";
 import { CreativeCard } from "@/components/creative-card";
 import { PreviewModal } from "@/components/preview-modal";
-import { formatNumber } from "@/lib/utils";
+import { formatNumber, asNumber } from "@/lib/utils";
 import type { Creative } from "@/types/api";
 import { useAccount } from "@/contexts/account-context";
 import { useTranslation } from "@/contexts/i18n-context";
@@ -40,11 +40,6 @@ interface DailyTrend {
   impressions: number;
   clicks: number;
   spend: number;
-}
-
-function asNumber(value: unknown, fallback = 0): number {
-  const n = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(n) ? n : fallback;
 }
 
 export default function CampaignDetailPage() {
