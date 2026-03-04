@@ -10,6 +10,7 @@
 #   GMAIL_IMPORT_SECRET - Secret for Gmail webhook (optional)
 #   CREATIVE_CACHE_REFRESH_SECRET - Secret for creative cache refresh webhook (optional)
 #   CLOUDSQL_INSTANCE - Cloud SQL instance connection name (project:region:instance)
+#   CATSCAN_ENABLE_* - Feature toggles used by secrets-health checks
 
 services:
   cloudsql-proxy:
@@ -74,6 +75,14 @@ services:
       - SECRETS_BACKEND=${SECRETS_BACKEND:-env}
       - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
       - CATSCAN_BOOTSTRAP_TOKEN=${CATSCAN_BOOTSTRAP_TOKEN:-}
+      # Explicit feature-toggle wiring for deterministic secrets-health checks.
+      - SECRETS_HEALTH_STRICT=${SECRETS_HEALTH_STRICT:-false}
+      - CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER=${CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER:-true}
+      - CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER=${CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER:-true}
+      - CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER=${CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER:-true}
+      - CATSCAN_ENABLE_LANGUAGE_AI=${CATSCAN_ENABLE_LANGUAGE_AI:-false}
+      - CATSCAN_ENABLE_CLUSTERING_AI=${CATSCAN_ENABLE_CLUSTERING_AI:-false}
+      - CATSCAN_REQUIRE_OAUTH_CLIENT_SECRET_IN_API=${CATSCAN_REQUIRE_OAUTH_CLIENT_SECRET_IN_API:-false}
     restart: always
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]

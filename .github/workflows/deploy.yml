@@ -43,6 +43,13 @@ env:
   GIT_BRANCH: ${{ vars.GIT_BRANCH || 'unified-platform' }}
   IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY || 'asia-southeast1-docker.pkg.dev/catscan-prod-202601/catscan' }}
   ALLOW_CONTRACT_FAILURE: ${{ vars.ALLOW_CONTRACT_FAILURE || 'false' }}
+  CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER: ${{ vars.CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER || 'true' }}
+  CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER: ${{ vars.CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER || 'true' }}
+  CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER: ${{ vars.CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER || 'true' }}
+  CATSCAN_ENABLE_LANGUAGE_AI: ${{ vars.CATSCAN_ENABLE_LANGUAGE_AI || 'false' }}
+  CATSCAN_ENABLE_CLUSTERING_AI: ${{ vars.CATSCAN_ENABLE_CLUSTERING_AI || 'false' }}
+  CATSCAN_REQUIRE_OAUTH_CLIENT_SECRET_IN_API: ${{ vars.CATSCAN_REQUIRE_OAUTH_CLIENT_SECRET_IN_API || 'false' }}
+  SECRETS_HEALTH_STRICT: ${{ vars.SECRETS_HEALTH_STRICT || 'false' }}
 
 jobs:
   deploy:
@@ -95,6 +102,13 @@ jobs:
               # Set image registry and tag for prebuilt images
               export IMAGE_REGISTRY=${{ env.IMAGE_REGISTRY }}
               export IMAGE_TAG=sha-${SHORT_SHA}
+              export CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER='${{ env.CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER }}'
+              export CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER='${{ env.CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER }}'
+              export CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER='${{ env.CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER }}'
+              export CATSCAN_ENABLE_LANGUAGE_AI='${{ env.CATSCAN_ENABLE_LANGUAGE_AI }}'
+              export CATSCAN_ENABLE_CLUSTERING_AI='${{ env.CATSCAN_ENABLE_CLUSTERING_AI }}'
+              export CATSCAN_REQUIRE_OAUTH_CLIENT_SECRET_IN_API='${{ env.CATSCAN_REQUIRE_OAUTH_CLIENT_SECRET_IN_API }}'
+              export SECRETS_HEALTH_STRICT='${{ env.SECRETS_HEALTH_STRICT }}'
 
               echo \"Deploying version: \$(cat VERSION) (sha-${SHORT_SHA})\"
 
@@ -146,6 +160,20 @@ jobs:
                 sudo docker ps
                 exit 1
               fi
+
+              if ! curl -sf http://localhost:8000/system/secrets-health >/tmp/catscan_secrets_health.json; then
+                echo \"FAIL: /system/secrets-health not responding after deploy\"
+                sudo docker ps
+                exit 1
+              fi
+
+              if ! python3 -c 'import json,sys; payload=json.load(open(\"/tmp/catscan_secrets_health.json\")); summary=payload.get(\"summary\") or {}; print(\"secrets_health_healthy={}\".format(payload.get(\"healthy\"))); print(\"secrets_health_strict_mode={}\".format(payload.get(\"strict_mode\"))); print(\"secrets_health_enabled_features={}\".format(summary.get(\"enabled_features\"))); print(\"secrets_health_required_keys={}\".format(summary.get(\"required_keys\"))); print(\"secrets_health_missing_keys_count={}\".format(summary.get(\"missing_keys\"))); missing=payload.get(\"missing_required_keys\") or []; print(\"secrets_health_missing_keys={}\".format(\",\".join(missing))); sys.exit(0 if payload.get(\"healthy\") else 1)'; then
+                echo \"FAIL: /system/secrets-health reports missing required secrets for enabled features\"
+                cat /tmp/catscan_secrets_health.json
+                sudo docker ps
+                exit 1
+              fi
+
               sudo docker ps
             "
 
