@@ -672,6 +672,11 @@ def main() -> int:
         help="Run optional p95 SLO check against /system/ui-metrics/page-load/summary.",
     )
     parser.add_argument(
+        "--qps-page-slo-only",
+        action="store_true",
+        help="Run only API health + QPS page SLO summary check (skip non-QPS checks).",
+    )
+    parser.add_argument(
         "--qps-page-slo-since-hours",
         type=int,
         default=int(os.getenv("CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS", "24")),
@@ -902,6 +907,8 @@ def main() -> int:
         parser.error("--max-qps-page-p95-first-row-ms must be > 0")
     if args.max_qps_page_p95_hydrated_ms <= 0:
         parser.error("--max-qps-page-p95-hydrated-ms must be > 0")
+    if args.qps_page_slo_only:
+        args.run_qps_page_slo_check = True
 
     try:
         bidstream_dimension_waivers = parse_bidstream_dimension_waivers(
@@ -1629,26 +1636,31 @@ def main() -> int:
         print("\nSmoke checks failed: 1")
         return 1
 
-    checks = [
-        ("Data health", check_data_health),
-        ("Conversion health", check_conversion_health),
-        ("Conversion readiness", check_conversion_readiness),
-        ("Conversion ingestion stats", check_conversion_stats),
-        ("Conversion pixel (optional)", check_conversion_pixel),
-        ("Conversion webhook auth (optional)", check_conversion_webhook_auth),
-        ("Conversion webhook HMAC (optional)", check_conversion_webhook_hmac),
-        ("Conversion webhook freshness (optional)", check_conversion_webhook_freshness),
-        ("Conversion webhook rate-limit (optional)", check_conversion_webhook_rate_limit),
-        ("Conversion webhook security status (optional)", check_conversion_webhook_security_status),
-        ("QPS startup API latency (optional)", check_qps_load_latency),
-        ("QPS page SLO summary (optional)", check_qps_page_slo_summary),
-        ("Optimizer economics", check_optimizer_economics),
-        ("Optimizer models", check_models_and_resolve),
-        ("Model endpoint validation", check_model_validation),
-        ("Score+propose workflow (optional)", check_workflow),
-        ("Proposal lifecycle (optional)", check_proposal_lifecycle),
-        ("Rollback dry-run (optional)", check_rollback_dry_run),
-    ]
+    if args.qps_page_slo_only:
+        checks = [
+            ("QPS page SLO summary (optional)", check_qps_page_slo_summary),
+        ]
+    else:
+        checks = [
+            ("Data health", check_data_health),
+            ("Conversion health", check_conversion_health),
+            ("Conversion readiness", check_conversion_readiness),
+            ("Conversion ingestion stats", check_conversion_stats),
+            ("Conversion pixel (optional)", check_conversion_pixel),
+            ("Conversion webhook auth (optional)", check_conversion_webhook_auth),
+            ("Conversion webhook HMAC (optional)", check_conversion_webhook_hmac),
+            ("Conversion webhook freshness (optional)", check_conversion_webhook_freshness),
+            ("Conversion webhook rate-limit (optional)", check_conversion_webhook_rate_limit),
+            ("Conversion webhook security status (optional)", check_conversion_webhook_security_status),
+            ("QPS startup API latency (optional)", check_qps_load_latency),
+            ("QPS page SLO summary (optional)", check_qps_page_slo_summary),
+            ("Optimizer economics", check_optimizer_economics),
+            ("Optimizer models", check_models_and_resolve),
+            ("Model endpoint validation", check_model_validation),
+            ("Score+propose workflow (optional)", check_workflow),
+            ("Proposal lifecycle (optional)", check_proposal_lifecycle),
+            ("Rollback dry-run (optional)", check_rollback_dry_run),
+        ]
 
     blocked_count = 0
     for name, fn in checks:
