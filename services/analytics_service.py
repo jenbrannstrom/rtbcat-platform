@@ -152,6 +152,10 @@ class AnalyticsService:
         try:
             return await self._repo.get_current_bidder_id()
         except Exception:
+            logger.warning(
+                "Failed to resolve current bidder ID from analytics repository",
+                exc_info=True,
+            )
             return None
 
     async def get_valid_billing_ids(self) -> list[str]:
@@ -169,6 +173,10 @@ class AnalyticsService:
                 # Fallback: return all billing_ids if no bidder_id found
                 return await self._repo.get_all_billing_ids()
         except Exception:
+            logger.warning(
+                "Failed to resolve valid billing IDs from analytics repository",
+                exc_info=True,
+            )
             return []
 
     async def get_valid_billing_ids_for_buyer(
@@ -190,8 +198,12 @@ class AnalyticsService:
 
             # Fallback: return all billing_ids
             return await self._repo.get_all_billing_ids()
-        except Exception as e:
-            logger.error(f"Failed to get billing IDs for buyer {buyer_id}: {e}")
+        except Exception:
+            logger.warning(
+                "Failed to get billing IDs for buyer scope",
+                extra={"buyer_id": buyer_id},
+                exc_info=True,
+            )
             return []
 
     # =========================================================================
