@@ -12,6 +12,7 @@ ALLOW_UNAVAILABLE="${CATSCAN_CANARY_BIDSTREAM_WAIVER_ALLOW_UNAVAILABLE:-1}"
 ALLOW_ZERO_ROWS="${CATSCAN_CANARY_BIDSTREAM_WAIVER_ALLOW_ZERO_ROWS:-1}"
 ALLOW_ALL_DIMENSIONS_MISSING="${CATSCAN_CANARY_BIDSTREAM_WAIVER_ALLOW_ALL_DIMENSIONS_MISSING:-1}"
 ALLOW_REPORT_COMPLETENESS_DEGRADED="${CATSCAN_CANARY_BIDSTREAM_WAIVER_ALLOW_REPORT_COMPLETENESS_DEGRADED:-1}"
+ALLOW_SEAT_DAY_COMPLETENESS_DEGRADED="${CATSCAN_CANARY_BIDSTREAM_WAIVER_ALLOW_SEAT_DAY_COMPLETENESS_DEGRADED:-1}"
 
 usage() {
   cat <<'EOF'
@@ -31,6 +32,8 @@ Options:
                        Allow all 3 bidstream dimension missing%%=100 (default: 1)
   --allow-report-completeness-degraded <0|1>
                        Allow data-health report_completeness=degraded/unavailable (default: 1)
+  --allow-seat-day-completeness-degraded <0|1>
+                       Allow data-health seat_day_completeness=degraded/unavailable (default: 1)
   -h, --help           Show help
 
 Example:
@@ -72,6 +75,10 @@ while [[ $# -gt 0 ]]; do
       ALLOW_REPORT_COMPLETENESS_DEGRADED="${2:-}"
       shift 2
       ;;
+    --allow-seat-day-completeness-degraded)
+      ALLOW_SEAT_DAY_COMPLETENESS_DEGRADED="${2:-}"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -92,7 +99,7 @@ if ! [[ "$EXPIRES_ON" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
   echo "--expires-on must be YYYY-MM-DD." >&2
   exit 2
 fi
-for flag in "$ALLOW_UNAVAILABLE" "$ALLOW_ZERO_ROWS" "$ALLOW_ALL_DIMENSIONS_MISSING" "$ALLOW_REPORT_COMPLETENESS_DEGRADED"; do
+for flag in "$ALLOW_UNAVAILABLE" "$ALLOW_ZERO_ROWS" "$ALLOW_ALL_DIMENSIONS_MISSING" "$ALLOW_REPORT_COMPLETENESS_DEGRADED" "$ALLOW_SEAT_DAY_COMPLETENESS_DEGRADED"; do
   if [[ "$flag" != "0" && "$flag" != "1" ]]; then
     echo "allow flags must be 0 or 1." >&2
     exit 2
@@ -100,7 +107,7 @@ for flag in "$ALLOW_UNAVAILABLE" "$ALLOW_ZERO_ROWS" "$ALLOW_ALL_DIMENSIONS_MISSI
 done
 
 WAIVER_JSON="$(
-  python3 - "$BUYER_ID" "$EXPIRES_ON" "$NOTE" "$ALLOW_UNAVAILABLE" "$ALLOW_ZERO_ROWS" "$ALLOW_ALL_DIMENSIONS_MISSING" "$ALLOW_REPORT_COMPLETENESS_DEGRADED" <<'PY'
+  python3 - "$BUYER_ID" "$EXPIRES_ON" "$NOTE" "$ALLOW_UNAVAILABLE" "$ALLOW_ZERO_ROWS" "$ALLOW_ALL_DIMENSIONS_MISSING" "$ALLOW_REPORT_COMPLETENESS_DEGRADED" "$ALLOW_SEAT_DAY_COMPLETENESS_DEGRADED" <<'PY'
 import json
 import sys
 
@@ -111,6 +118,7 @@ allow_unavailable = sys.argv[4] == "1"
 allow_zero_rows = sys.argv[5] == "1"
 allow_all_dimensions_missing = sys.argv[6] == "1"
 allow_report_completeness_degraded = sys.argv[7] == "1"
+allow_seat_day_completeness_degraded = sys.argv[8] == "1"
 print(json.dumps([{
     "buyer_id": buyer_id,
     "expires_on": expires_on,
@@ -119,6 +127,7 @@ print(json.dumps([{
     "allow_zero_rows": allow_zero_rows,
     "allow_all_dimensions_missing": allow_all_dimensions_missing,
     "allow_report_completeness_degraded": allow_report_completeness_degraded,
+    "allow_seat_day_completeness_degraded": allow_seat_day_completeness_degraded,
 }], separators=(",", ":")))
 PY
 )"
@@ -131,6 +140,7 @@ echo "waiver_allow_unavailable=${ALLOW_UNAVAILABLE}"
 echo "waiver_allow_zero_rows=${ALLOW_ZERO_ROWS}"
 echo "waiver_allow_all_dimensions_missing=${ALLOW_ALL_DIMENSIONS_MISSING}"
 echo "waiver_allow_report_completeness_degraded=${ALLOW_REPORT_COMPLETENESS_DEGRADED}"
+echo "waiver_allow_seat_day_completeness_degraded=${ALLOW_SEAT_DAY_COMPLETENESS_DEGRADED}"
 
 exec scripts/run_v1_runtime_health_strict_dispatch.sh \
   --buyer-id "$BUYER_ID" \
