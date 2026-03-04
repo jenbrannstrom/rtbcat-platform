@@ -178,7 +178,7 @@ async def get_upload_tracking(
     days: int = Query(30, description="Number of days to retrieve", ge=1, le=365),
     user: User = Depends(get_current_user),
     service: UploadsService = Depends(get_uploads_service),
-):
+) -> UploadTrackingResponse:
     """Get daily upload tracking summary."""
     if not is_sudo(user):
         return UploadTrackingResponse(
@@ -218,7 +218,7 @@ async def get_import_history(
     bidder_id: Optional[str] = Query(None, description="Filter by account (bidder_id)"),
     user: User = Depends(get_current_user),
     service: UploadsService = Depends(get_uploads_service),
-):
+) -> list[ImportHistoryResponse]:
     """Get import history records."""
     try:
         allowed_bidder_ids = await get_allowed_bidder_ids(user=user)
@@ -258,7 +258,7 @@ async def get_daily_uploads_grid(
     expected_per_day: int = Query(3, description="Expected uploads per day", ge=1, le=10),
     user: User = Depends(get_current_user),
     service: UploadsService = Depends(get_uploads_service),
-):
+) -> DailyUploadsGridResponse:
     """Get daily uploads in a simple grid format."""
     try:
         allowed_bidder_ids = await get_allowed_bidder_ids(user=user)
@@ -298,7 +298,7 @@ async def get_daily_uploads_grid(
 async def get_accounts_upload_summary(
     user: User = Depends(get_current_user),
     service: UploadsService = Depends(get_uploads_service),
-):
+) -> AccountsUploadSummaryResponse:
     """Get upload statistics grouped by account (bidder_id)."""
     try:
         allowed_bidder_ids = await get_allowed_bidder_ids(user=user)
@@ -335,7 +335,7 @@ async def get_import_tracking_matrix(
     user: User = Depends(get_current_user),
     store=Depends(get_store),
     service: UploadsService = Depends(get_uploads_service),
-):
+) -> ImportTrackingMatrixResponse:
     """Get pass/fail/not-imported coverage by account and CSV type."""
     try:
         allowed_buyer_ids = await get_allowed_buyer_ids(store=store, user=user)
@@ -395,7 +395,7 @@ async def get_data_freshness(
     user: User = Depends(get_current_user),
     store=Depends(get_store),
     service: UploadsService = Depends(get_uploads_service),
-):
+) -> DataFreshnessGridResponse:
     """Get date x csv_type data freshness grid from actual target tables."""
     try:
         allowed_buyer_ids = await get_allowed_buyer_ids(store=store, user=user)
