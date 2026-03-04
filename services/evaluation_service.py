@@ -59,6 +59,14 @@ class EvaluationService:
     def __init__(self, repo: Optional[EvaluationRepository] = None):
         self.repo = repo or EvaluationRepository()
 
+    def _log_fallback(self, stage: str, days: Optional[int] = None) -> None:
+        logger.warning(
+            "Evaluation service fallback triggered at %s",
+            stage,
+            extra={"stage": stage, "days": days},
+            exc_info=True,
+        )
+
     async def run_full_evaluation(self, days: int = 7) -> Dict[str, Any]:
         """Run complete evaluation and generate recommendations."""
         results = {
@@ -103,6 +111,7 @@ class EvaluationService:
             else:
                 quality["missing"].append("rtb_daily (import CSV)")
         except Exception:
+            self._log_fallback("check_data_quality.rtb_daily", days)
             quality["missing"].append("rtb_daily (table missing)")
 
         try:
@@ -113,6 +122,7 @@ class EvaluationService:
             else:
                 quality["missing"].append("rtb_bid_filtering (import CSV)")
         except Exception:
+            self._log_fallback("check_data_quality.rtb_bid_filtering", days)
             quality["missing"].append("rtb_bid_filtering (table missing)")
 
         try:
@@ -123,6 +133,7 @@ class EvaluationService:
             else:
                 quality["missing"].append("creatives (run: catscan sync)")
         except Exception:
+            self._log_fallback("check_data_quality.creatives")
             quality["missing"].append("creatives (run: catscan sync)")
 
         return quality
@@ -134,6 +145,7 @@ class EvaluationService:
         try:
             filtered = await self.repo.get_filtered_bids_summary(days)
         except Exception:
+            self._log_fallback("analyze_filtered_bids", days)
             return recommendations
 
         for row in filtered:
@@ -197,6 +209,7 @@ class EvaluationService:
             traffic_sizes = {row["creative_size"]: row for row in traffic_rows}
             creative_sizes = await self.repo.get_creative_sizes()
         except Exception:
+            self._log_fallback("analyze_size_coverage", days)
             return recommendations
 
         for size, data in traffic_sizes.items():
@@ -240,6 +253,7 @@ class EvaluationService:
         try:
             geo_stats = await self.repo.get_geo_waste(days)
         except Exception:
+            self._log_fallback("analyze_geo_waste", days)
             return recommendations
 
         for row in geo_stats:
@@ -280,6 +294,7 @@ class EvaluationService:
         try:
             fraud_signals = await self.repo.get_suspicious_publishers(days)
         except Exception:
+            self._log_fallback("analyze_publisher_performance", days)
             return recommendations
 
         for row in fraud_signals:
@@ -303,6 +318,7 @@ class EvaluationService:
         try:
             size_opps = await self.repo.get_high_win_rate_sizes(days)
         except Exception:
+            self._log_fallback("identify_opportunities", days)
             return recommendations
 
         for row in size_opps:
@@ -347,6 +363,7 @@ class EvaluationService:
         try:
             return await self.repo.get_filtered_bids_summary(days)
         except Exception:
+            self._log_fallback("get_filtered_bids_summary", days)
             return []
 
     async def get_bid_funnel(self, days: int = 7) -> Dict:
@@ -378,6 +395,7 @@ class EvaluationService:
 
             return totals
         except Exception:
+            self._log_fallback("get_bid_funnel", days)
             return {
                 "bid_requests": 0,
                 "successful_responses": 0,
