@@ -269,6 +269,11 @@ class ThumbnailsService:
         except subprocess.TimeoutExpired:
             return {"success": False, "error_reason": "timeout"}
         except Exception as e:
+            logger.warning(
+                "Thumbnail ffmpeg execution failed; returning classified ffmpeg_exception",
+                extra={"output_path": str(output_path)},
+                exc_info=True,
+            )
             return {"success": False, "error_reason": f"ffmpeg_exception:{str(e)[:80]}"}
 
     def _extract_video_url_from_vast(self, vast_xml: str) -> tuple[Optional[str], bool]:
@@ -288,6 +293,10 @@ class ThumbnailsService:
                     if url and url.startswith("http"):
                         return url, False
         except Exception:
+            logger.debug(
+                "Failed to parse VAST XML for media extraction; falling back to regex scan",
+                exc_info=True,
+            )
             parse_failed = True
 
         # Fallback: regex for URL
@@ -320,6 +329,11 @@ class ThumbnailsService:
         try:
             return int(value or 0)
         except Exception:
+            logger.warning(
+                "Invalid thumbnail retry_count encountered; defaulting to zero",
+                extra={"creative_id": creative_id, "retry_count": value},
+                exc_info=True,
+            )
             return 0
 
     def _compute_backoff_seconds(self, retry_count: int) -> int:
