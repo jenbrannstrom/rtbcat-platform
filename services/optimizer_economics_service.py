@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
 from storage.postgres_database import pg_query_one, pg_query_one_with_timeout
+
+logger = logging.getLogger(__name__)
 
 
 _MONTHLY_HOSTING_COST_KEY = "optimizer_monthly_hosting_cost_usd"
@@ -166,6 +169,16 @@ class OptimizerEconomicsService:
                     statement_timeout_ms=self._daily_query_timeout_ms,
                 ) or {}
             except Exception:
+                logger.warning(
+                    "Optimizer economics recent spend trend query failed; using empty fallback",
+                    extra={
+                        "buyer_id": buyer_id,
+                        "billing_id": billing_id,
+                        "start_date": recent_start.isoformat(),
+                        "end_date": end.isoformat(),
+                    },
+                    exc_info=True,
+                )
                 return {}
 
         async def _trend_previous():
@@ -181,6 +194,16 @@ class OptimizerEconomicsService:
                     statement_timeout_ms=self._daily_query_timeout_ms,
                 ) or {}
             except Exception:
+                logger.warning(
+                    "Optimizer economics previous spend trend query failed; using empty fallback",
+                    extra={
+                        "buyer_id": buyer_id,
+                        "billing_id": billing_id,
+                        "start_date": previous_start.isoformat(),
+                        "end_date": previous_end.isoformat(),
+                    },
+                    exc_info=True,
+                )
                 return {}
 
         age_task = self._fetch_first_metric_date(
@@ -394,6 +417,16 @@ class OptimizerEconomicsService:
                 statement_timeout_ms=self._daily_query_timeout_ms,
             ) or {}
         except Exception:
+            logger.warning(
+                "Optimizer economics daily totals query failed; returning empty fallback",
+                extra={
+                    "buyer_id": buyer_id,
+                    "billing_id": billing_id,
+                    "start_date": start.isoformat(),
+                    "end_date": end.isoformat(),
+                },
+                exc_info=True,
+            )
             return {}
 
     async def _fetch_first_metric_date(
@@ -438,6 +471,15 @@ class OptimizerEconomicsService:
                 statement_timeout_ms=self._quality_query_timeout_ms,
             ) or {}
         except Exception:
+            logger.warning(
+                "Optimizer economics quality totals query failed; returning empty fallback",
+                extra={
+                    "buyer_id": buyer_id,
+                    "start_date": start.isoformat(),
+                    "end_date": end.isoformat(),
+                },
+                exc_info=True,
+            )
             return {}
 
     @staticmethod
