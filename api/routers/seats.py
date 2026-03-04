@@ -137,16 +137,29 @@ async def _trigger_background_language_analysis(
                 )
 
         except Exception as e:
-            logger.warning(f"Failed to analyze language for creative {creative.id}: {e}")
-            # Save the error to database
-            await store.creative_repository.update_language_detection(
-                creative_id=creative.id,
-                detected_language=None,
-                detected_language_code=None,
-                language_confidence=None,
-                language_source=provider,
-                language_analysis_error=str(e),
+            logger.warning(
+                "Failed to analyze language for creative %s: %s",
+                creative.id,
+                e,
+                exc_info=True,
             )
+            # Save the error to database; keep loop non-blocking if this write fails.
+            try:
+                await store.creative_repository.update_language_detection(
+                    creative_id=creative.id,
+                    detected_language=None,
+                    detected_language_code=None,
+                    language_confidence=None,
+                    language_source=provider,
+                    language_analysis_error=str(e),
+                )
+            except Exception as update_exc:
+                logger.warning(
+                    "Failed to persist language-analysis error for creative %s: %s",
+                    creative.id,
+                    update_exc,
+                    exc_info=True,
+                )
 
     logger.info(f"Background language analysis complete: {analyzed_count}/{len(creatives)} successful")
     return analyzed_count
@@ -315,7 +328,10 @@ async def discover_seats(
             try:
                 credentials_path = str(config.get_service_account_path())
             except Exception:
-                pass
+                logger.warning(
+                    "Legacy ConfigManager credentials lookup failed during seat discovery",
+                    exc_info=True,
+                )
 
     # GCP mode: use Application Default Credentials
     if not credentials_path and is_gcp_mode():
@@ -360,8 +376,17 @@ async def discover_seats(
                 sync_result = await sync_all_data(
                     seats_service=seats_service, store=store, config=config, user=user
                 )
+            except HTTPException as e:
+                logger.warning(
+                    "Auto-sync blocked after seat discovery (discovery remains successful): %s",
+                    e.detail,
+                )
             except Exception as e:
-                logger.warning(f"Auto-sync failed (discovery still successful): {e}")
+                logger.warning(
+                    "Auto-sync failed after seat discovery (discovery remains successful): %s",
+                    e,
+                    exc_info=True,
+                )
                 # Don't fail the whole discovery if auto-sync fails
 
         return DiscoverSeatsResponse(
@@ -393,9 +418,9 @@ async def _trigger_geo_linguistic_batch(
                     creative_id=cid, store=store, force=False, triggered_by=triggered_by
                 )
             except Exception as exc:
-                logger.debug("Geo-linguistic analysis skipped for %s: %s", cid, exc)
+                logger.debug("Geo-linguistic analysis skipped for %s: %s", cid, exc, exc_info=True)
     except Exception as exc:
-        logger.warning("Geo-linguistic batch trigger failed: %s", exc)
+        logger.warning("Geo-linguistic batch trigger failed: %s", exc, exc_info=True)
 
 
 @router.post("/seats/{buyer_id}/sync", response_model=SyncSeatResponse)
@@ -570,8 +595,20 @@ async def sync_all_data(
 
             # Update seat metadata
             await seats_service.update_seat_after_sync(seat.buyer_id)
+        except HTTPException as e:
+            logger.error(
+                "Failed to sync creatives for seat %s: %s",
+                seat.buyer_id,
+                e.detail,
+            )
+            errors.append(f"Creatives for {seat.buyer_id}: {e.detail}")
         except Exception as e:
-            logger.error(f"Failed to sync creatives for seat {seat.buyer_id}: {e}")
+            logger.error(
+                "Failed to sync creatives for seat %s: %s",
+                seat.buyer_id,
+                e,
+                exc_info=True,
+            )
             errors.append(f"Creatives for {seat.buyer_id}: {str(e)}")
 
     # Endpoints + pretargeting are bidder-scoped. Only process active bidders
@@ -596,6 +633,13 @@ async def sync_all_data(
             except HTTPException as e:
                 bidder_credentials_error = str(e.detail)
             except Exception as e:
+                logger.warning(
+                    "Credentials resolution failed for bidder %s via seat %s: %s",
+                    account_id,
+                    seat.buyer_id,
+                    e,
+                    exc_info=True,
+                )
                 bidder_credentials_error = str(e)
 
         if bidder_credentials is None and not is_gcp_mode():
@@ -614,8 +658,20 @@ async def sync_all_data(
             count = await store.sync_rtb_endpoints(account_id, endpoints)
             endpoints_synced += count
             logger.info(f"Synced {count} endpoints for bidder {account_id}")
+        except HTTPException as e:
+            logger.error(
+                "Failed to sync RTB endpoints for bidder %s: %s",
+                account_id,
+                e.detail,
+            )
+            errors.append(f"RTB endpoints for {account_id}: {e.detail}")
         except Exception as e:
-            logger.error(f"Failed to sync RTB endpoints for bidder {account_id}: {e}")
+            logger.error(
+                "Failed to sync RTB endpoints for bidder %s: %s",
+                account_id,
+                e,
+                exc_info=True,
+            )
             errors.append(f"RTB endpoints for {account_id}: {str(e)}")
 
         # 3. Sync pretargeting configs for this bidder
@@ -681,6 +737,18 @@ async def sync_all_data(
                                 source="api_sync",
                             )
                     synced_for_bidder += 1
+                except HTTPException as e:
+                    cfg_id = cfg.get("configId", "unknown")
+                    logger.error(
+                        "Failed to sync pretargeting config %s for bidder %s: %s",
+                        cfg_id,
+                        account_id,
+                        e.detail,
+                    )
+                    errors.append(
+                        f"Pretargeting config {cfg_id} for {account_id}: {e.detail}"
+                    )
+                    continue
                 except Exception as e:
                     cfg_id = cfg.get("configId", "unknown")
                     logger.error(
@@ -688,21 +756,38 @@ async def sync_all_data(
                         cfg_id,
                         account_id,
                         e,
+                        exc_info=True,
                     )
                     errors.append(f"Pretargeting config {cfg_id} for {account_id}: {str(e)}")
                     continue
 
             pretargeting_synced += synced_for_bidder
             logger.info(f"Synced {synced_for_bidder}/{len(configs)} pretargeting configs for bidder {account_id}")
+        except HTTPException as e:
+            logger.error(
+                "Failed to sync pretargeting configs for bidder %s: %s",
+                account_id,
+                e.detail,
+            )
+            errors.append(f"Pretargeting for {account_id}: {e.detail}")
         except Exception as e:
-            logger.error(f"Failed to sync pretargeting configs for bidder {account_id}: {e}")
+            logger.error(
+                "Failed to sync pretargeting configs for bidder %s: %s",
+                account_id,
+                e,
+                exc_info=True,
+            )
             errors.append(f"Pretargeting for {account_id}: {str(e)}")
 
     # 4. Trigger background language analysis for new creatives (non-blocking)
     try:
         await _trigger_background_language_analysis(store)
     except Exception as e:
-        logger.warning(f"Background language analysis failed (non-critical): {e}")
+        logger.warning(
+            "Background language analysis failed (non-critical): %s",
+            e,
+            exc_info=True,
+        )
         # Don't add to errors - this is optional and non-blocking
 
     # Build response message
