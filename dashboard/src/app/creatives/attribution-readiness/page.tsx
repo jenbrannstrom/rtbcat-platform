@@ -13,6 +13,8 @@ import {
 import { ErrorPage } from "@/components/error";
 import { LoadingPage } from "@/components/loading";
 import { toBuyerScopedPath } from "@/lib/buyer-routes";
+import { useAccount } from "@/contexts/account-context";
+import { useAuth } from "@/contexts/auth-context";
 
 type AttributionSeatStatus = "no_af" | "af_no_clickid" | "af_exact_ready";
 
@@ -56,18 +58,31 @@ function deriveSeatStatus(
 }
 
 export default function AttributionReadinessPage() {
+  const { selectedBuyerId } = useAccount();
+  const { isSudo } = useAuth();
+
   const seatsQuery = useQuery({
     queryKey: ["seats", "active-only", "attribution-readiness"],
     queryFn: () => getSeats({ active_only: true }),
     staleTime: 30_000,
   });
 
+  const scopedBuyerId = selectedBuyerId ?? seatsQuery.data?.[0]?.buyer_id ?? null;
+
   const readinessQuery = useQuery({
-    queryKey: ["attribution-readiness-table", seatsQuery.data?.map((s) => s.buyer_id).join(",")],
+    queryKey: [
+      "attribution-readiness-table",
+      isSudo ? "sudo" : "seat-scoped",
+      scopedBuyerId,
+      seatsQuery.data?.map((s) => s.buyer_id).join(","),
+    ],
     enabled: Boolean(seatsQuery.data && seatsQuery.data.length > 0),
     staleTime: 30_000,
     queryFn: async (): Promise<SeatAttributionReadinessRow[]> => {
-      const seats = seatsQuery.data ?? [];
+      const allSeats = seatsQuery.data ?? [];
+      const seats = isSudo
+        ? allSeats
+        : allSeats.filter((seat) => seat.buyer_id === scopedBuyerId);
       const rows = await Promise.all(
         seats.map(async (seat) => {
           const [macroResult, readinessResult, attributionResult] = await Promise.allSettled([
@@ -172,7 +187,7 @@ export default function AttributionReadinessPage() {
           </p>
         </div>
         <Link
-          href="/creatives/click-macros"
+          href={toBuyerScopedPath("/creatives/click-macros", scopedBuyerId)}
           className="inline-flex items-center gap-2 text-sm text-primary-700 hover:text-primary-800"
         >
           <Link2 className="h-4 w-4" />
