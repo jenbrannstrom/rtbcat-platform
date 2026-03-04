@@ -504,6 +504,8 @@ async def populate_seats_from_creatives(
     try:
         count = await seats_service.populate_from_creatives()
         return {"status": "completed", "seats_created": count}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Seat population failed: {e}")
         raise HTTPException(status_code=500, detail=f"Seat population failed: {str(e)}")
