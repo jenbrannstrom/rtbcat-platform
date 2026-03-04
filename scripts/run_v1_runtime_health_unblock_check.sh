@@ -78,6 +78,14 @@ print_summary() {
   for i in "${!STEP_NAMES[@]}"; do
     printf -- "- [%s] %s -> %s\n" "${STEP_STATUSES[$i]}" "${STEP_NAMES[$i]}" "${STEP_NOTES[$i]}"
   done
+  if (( FAIL_COUNT > 0 || BLOCKED_COUNT > 0 )); then
+    for i in "${!STEP_NAMES[@]}"; do
+      if [[ "${STEP_STATUSES[$i]}" != "PASS" ]]; then
+        echo "First non-pass signal: [${STEP_STATUSES[$i]}] ${STEP_NAMES[$i]} -> ${STEP_NOTES[$i]}"
+        break
+      fi
+    done
+  fi
   echo
   if (( FAIL_COUNT > 0 )); then
     echo "Result: FAIL (${FAIL_COUNT} failing step(s), ${BLOCKED_COUNT} blocked step(s))"
@@ -219,9 +227,18 @@ else
   platform_missing="$(jq -r '.optimizer_readiness.bidstream_dimension_coverage.platform_missing_pct // "null"' "$dh_body")"
   env_missing="$(jq -r '.optimizer_readiness.bidstream_dimension_coverage.environment_missing_pct // "null"' "$dh_body")"
   tx_missing="$(jq -r '.optimizer_readiness.bidstream_dimension_coverage.transaction_type_missing_pct // "null"' "$dh_body")"
+  all_dimensions_missing=0
+  if [[ "$platform_missing" =~ ^[0-9]+([.][0-9]+)?$ ]] && \
+     [[ "$env_missing" =~ ^[0-9]+([.][0-9]+)?$ ]] && \
+     [[ "$tx_missing" =~ ^[0-9]+([.][0-9]+)?$ ]] && \
+     awk -v p="$platform_missing" -v e="$env_missing" -v t="$tx_missing" 'BEGIN{exit !((p >= 99.9) && (e >= 99.9) && (t >= 99.9))}'; then
+    all_dimensions_missing=1
+  fi
 
   if [[ "$bidstream_state" == "unavailable" ]] || (( bidstream_rows <= 0 )); then
     record_step "Data-health bidstream coverage" "BLOCKED" "state=${bidstream_state}, total_rows=${bidstream_rows}"
+  elif (( all_dimensions_missing == 1 )); then
+    record_step "Data-health bidstream coverage" "BLOCKED" "state=${bidstream_state}, rows=${bidstream_rows}, all dimension columns missing at 100% (platform/env/tx=${platform_missing}/${env_missing}/${tx_missing})"
   else
     record_step "Data-health bidstream coverage" "PASS" "state=${bidstream_state}, rows=${bidstream_rows}, missing_pct(platform/env/tx)=${platform_missing}/${env_missing}/${tx_missing}"
   fi
