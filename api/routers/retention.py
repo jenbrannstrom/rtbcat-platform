@@ -6,9 +6,11 @@ Handles retention configuration, storage statistics, and running retention jobs.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
+from api.dependencies import require_admin
+from services.auth_service import User
 from services.retention_service import RetentionService
 
 logger = logging.getLogger(__name__)
@@ -97,6 +99,7 @@ async def get_retention_config(
 @router.post("/retention/config", response_model=RetentionConfigResponse)
 async def set_retention_config(
     request: RetentionConfigRequest,
+    _user: User = Depends(require_admin),
 ):
     """Update retention configuration."""
     try:
@@ -151,6 +154,7 @@ async def get_storage_stats(
 
 @router.post("/retention/run", response_model=RetentionJobResponse)
 async def run_retention_job(
+    _user: User = Depends(require_admin),
 ):
     """Run the retention job to aggregate and clean up old data."""
     try:
