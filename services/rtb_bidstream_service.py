@@ -121,8 +121,12 @@ class RtbBidstreamService:
 
             # Fallback: return all billing_ids
             return await self._repo.get_billing_ids_for_bidder(None)
-        except Exception as e:
-            logger.error(f"Failed to get billing IDs for buyer {buyer_id}: {e}")
+        except Exception:
+            logger.warning(
+                "Failed to get billing IDs for buyer scope in RTB service",
+                extra={"buyer_id": buyer_id},
+                exc_info=True,
+            )
             return []
 
     # =========================================================================
@@ -413,7 +417,11 @@ class RtbBidstreamService:
                     if row.get("creative_id")
                 }
         except Exception as e:
-            logger.warning("Could not fetch creative bid totals for win route: %s", e)
+            logger.warning(
+                "Could not fetch creative bid totals for win route: %s",
+                e,
+                exc_info=True,
+            )
 
         creatives = []
         great_count = 0
@@ -739,6 +747,10 @@ class RtbBidstreamService:
                 item["language_mismatch"] = len(mismatched) > 0 and bool(language_code)
                 item["mismatched_countries"] = mismatched
             except Exception:
+                logger.debug(
+                    "Language-country mismatch check failed; using fallback country labeling",
+                    exc_info=True,
+                )
                 item["target_countries"] = target_country_codes
                 item["language_mismatch"] = False
                 item["mismatched_countries"] = []
@@ -1080,7 +1092,11 @@ class RtbBidstreamService:
                 })
             return result
         except Exception as e:
-            logger.warning(f"Could not fetch bid filtering data: {e}")
+            logger.warning(
+                "Could not fetch bid filtering data: %s",
+                e,
+                exc_info=True,
+            )
             return []
 
     # =========================================================================
