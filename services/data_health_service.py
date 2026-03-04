@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from datetime import date, datetime, timezone
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 from storage.postgres_database import pg_execute, pg_query, pg_query_one_with_timeout
 
@@ -383,9 +386,12 @@ class DataHealthService:
             if buyer_id:
                 buyer_filter = " AND buyer_account_id = %s"
                 params.append(buyer_id)
-            # Sample up to 200K rows to avoid full-table scans timing out
+            # Sample up to 50K rows to avoid full-table scans timing out
             # on large datasets (6M+ rows). Coverage percentages remain
             # statistically accurate with this sample size.
+            # NOTE: metric_date is already DATE — avoid ::date cast so
+            # the composite index (buyer_account_id, metric_date DESC)
+            # is used by the planner.
             row = await self._query_one_with_timeout(
                 f"""
                 SELECT
@@ -396,13 +402,14 @@ class DataHealthService:
                 FROM (
                     SELECT platform, environment, transaction_type
                     FROM rtb_bidstream
-                    WHERE metric_date::date >= CURRENT_DATE - %s::int{buyer_filter}
-                    LIMIT 200000
+                    WHERE metric_date >= CURRENT_DATE - %s::int{buyer_filter}
+                    LIMIT 50000
                 ) sampled
                 """,
                 tuple(params),
             )
         except Exception:
+            logger.warning("bidstream dimension coverage query failed", exc_info=True)
             row = None
 
         total = int((row or {}).get("total_rows") or 0)
