@@ -1,0 +1,81 @@
+name: v1 Runtime Health Stability
+run-name: >-
+  v1 Runtime Health Stability (buyer=${{ github.event.inputs.buyer_id || vars.CATSCAN_RUNTIME_HEALTH_PILOT_BUYER_ID || '1487810529' }}, window=${{ github.event.inputs.window || '3' }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      buyer_id:
+        description: "Buyer filter token (matches run title buyer=<id>)"
+        required: false
+        default: "1487810529"
+      window:
+        description: "Required consecutive successful completed runs"
+        required: false
+        default: "3"
+      limit:
+        description: "Recent runs to inspect"
+        required: false
+        default: "20"
+      branch:
+        description: "Branch to inspect"
+        required: false
+        default: "unified-platform"
+  schedule:
+    - cron: "50 3 * * *"
+
+concurrency:
+  group: v1-runtime-health-stability-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  runtime-health-stability:
+    name: Check runtime-health strict stability window
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO_NAME: ${{ github.repository }}
+      BUYER_ID: ${{ github.event.inputs.buyer_id || vars.CATSCAN_RUNTIME_HEALTH_PILOT_BUYER_ID || '1487810529' }}
+      WINDOW: ${{ github.event.inputs.window || vars.CATSCAN_RUNTIME_HEALTH_STABILITY_WINDOW || '3' }}
+      LIMIT: ${{ github.event.inputs.limit || vars.CATSCAN_RUNTIME_HEALTH_STABILITY_LIMIT || '20' }}
+      BRANCH: ${{ github.event.inputs.branch || 'unified-platform' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Evaluate runtime-health strict stability
+        run: |
+          set -o pipefail
+          bash scripts/check_v1_runtime_health_stability.sh \
+            --repo "${REPO_NAME}" \
+            --workflow "v1-runtime-health-strict.yml" \
+            --branch "${BRANCH}" \
+            --buyer-id "${BUYER_ID}" \
+            --window "${WINDOW}" \
+            --limit "${LIMIT}" \
+            | tee /tmp/v1_runtime_health_stability.log
+
+      - name: Publish stability summary
+        if: always()
+        run: |
+          if [[ -f /tmp/v1_runtime_health_stability.log ]]; then
+            echo "## Runtime Health Stability" >> "$GITHUB_STEP_SUMMARY"
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            cat /tmp/v1_runtime_health_stability.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Runtime health stability log missing." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload stability artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v1-runtime-health-stability-report
+          path: /tmp/v1_runtime_health_stability.log
+          if-no-files-found: warn

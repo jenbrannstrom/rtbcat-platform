@@ -70,6 +70,9 @@
     - Waiver: bidstream dimension breakdown gap (`platform/environment/transaction_type` all 100% missing for this buyer data source).
     - Waiver expiry: `2026-06-30` (must be revisited; do not treat as permanent).
 - [ ] Enforce policy: attribution-driven automation is not considered production-ready until runtime-health strict gate reaches stable `exit 0` for pilot buyer windows.
+  - Progress (2026-03-04): automated enforcement added.
+    - Daily strict run automation: `.github/workflows/v1-runtime-health-strict.yml` now scheduled (`03:35 UTC`) with buyer/profile defaults + waiver support.
+    - Stability monitor: `.github/workflows/v1-runtime-health-stability.yml` (scheduled `03:50 UTC`) validates consecutive success window using `scripts/check_v1_runtime_health_stability.sh`.
 
 ---
 

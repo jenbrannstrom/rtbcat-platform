@@ -1,4 +1,6 @@
 name: v1 Runtime Health Strict
+run-name: >-
+  v1 Runtime Health Strict (buyer=${{ github.event.inputs.buyer_id || vars.CATSCAN_RUNTIME_HEALTH_PILOT_BUYER_ID || '1487810529' }}, profile=${{ github.event.inputs.canary_profile || vars.CATSCAN_RUNTIME_HEALTH_CANARY_PROFILE || 'balanced' }})
 
 on:
   workflow_dispatch:
@@ -36,6 +38,8 @@ on:
         description: "Per-request timeout for canary HTTP calls (seconds)"
         required: false
         default: "240"
+  schedule:
+    - cron: "35 3 * * *"
 
 concurrency:
   group: v1-runtime-health-strict-${{ github.ref }}
@@ -50,13 +54,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      CATSCAN_API_BASE_URL: ${{ inputs.api_base_url }}
-      CATSCAN_BUYER_ID: ${{ inputs.buyer_id }}
-      CATSCAN_MODEL_ID: ${{ inputs.model_id }}
-      CATSCAN_CANARY_PROFILE: ${{ inputs.canary_profile }}
-      CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS: ${{ inputs.qps_page_slo_since_hours }}
-      CATSCAN_CANARY_BIDSTREAM_DIMENSION_WAIVER_JSON: ${{ inputs.bidstream_dimension_waiver_json }}
-      CATSCAN_CANARY_TIMEOUT_SECONDS: ${{ inputs.canary_timeout_seconds }}
+      CATSCAN_API_BASE_URL: ${{ github.event.inputs.api_base_url || vars.CATSCAN_RUNTIME_HEALTH_API_BASE_URL || 'https://scan.rtb.cat/api' }}
+      CATSCAN_BUYER_ID: ${{ github.event.inputs.buyer_id || vars.CATSCAN_RUNTIME_HEALTH_PILOT_BUYER_ID || '1487810529' }}
+      CATSCAN_MODEL_ID: ${{ github.event.inputs.model_id || vars.CATSCAN_RUNTIME_HEALTH_MODEL_ID || '' }}
+      CATSCAN_CANARY_PROFILE: ${{ github.event.inputs.canary_profile || vars.CATSCAN_RUNTIME_HEALTH_CANARY_PROFILE || 'balanced' }}
+      CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS: ${{ github.event.inputs.qps_page_slo_since_hours || vars.CATSCAN_RUNTIME_HEALTH_QPS_PAGE_SLO_SINCE_HOURS || '168' }}
+      CATSCAN_CANARY_BIDSTREAM_DIMENSION_WAIVER_JSON: ${{ github.event.inputs.bidstream_dimension_waiver_json || vars.CATSCAN_RUNTIME_HEALTH_BIDSTREAM_WAIVER_JSON || '[{"buyer_id":"1487810529","expires_on":"2026-06-30","note":"Google RTB source for this buyer does not provide platform/environment/transaction_type dimensions"}]' }}
+      CATSCAN_CANARY_TIMEOUT_SECONDS: ${{ github.event.inputs.canary_timeout_seconds || vars.CATSCAN_RUNTIME_HEALTH_TIMEOUT_SECONDS || '240' }}
       CATSCAN_BEARER_TOKEN: ${{ secrets.CATSCAN_CANARY_BEARER_TOKEN }}
       CATSCAN_SESSION_COOKIE: ${{ secrets.CATSCAN_CANARY_SESSION_COOKIE }}
     steps:
