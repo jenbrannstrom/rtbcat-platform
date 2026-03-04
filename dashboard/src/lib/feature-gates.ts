@@ -6,8 +6,13 @@ interface UserLike {
   email: string;
 }
 
-/** Emails restricted to home-only view (lowercase). */
-const RESTRICTED_EMAILS = new Set(["dea@rtb.cat"]);
+/**
+ * Emergency restricted-user list (lowercase).
+ *
+ * Policy update (2026-03-04): do not hard-restrict seat users by email.
+ * Seat visibility is enforced by backend RBAC instead.
+ */
+const RESTRICTED_EMAILS = new Set<string>();
 
 /** Paths allowed for restricted users (exact match on pathWithoutBuyer). */
 const RESTRICTED_ALLOWED_PATHS = new Set(["/"]);

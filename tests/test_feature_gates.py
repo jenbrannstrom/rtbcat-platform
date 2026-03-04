@@ -11,7 +11,7 @@ import types
 
 
 def is_restricted_user(user) -> bool:
-    RESTRICTED_EMAILS = {"dea@rtb.cat"}
+    RESTRICTED_EMAILS = set()
     if not user or not getattr(user, "email", None):
         return False
     return user.email.lower() in RESTRICTED_EMAILS
@@ -28,14 +28,14 @@ class FakeUser:
 
 
 class TestIsRestrictedUser:
-    def test_dea_is_restricted(self):
-        assert is_restricted_user(FakeUser("dea@rtb.cat")) is True
+    def test_dea_is_not_restricted(self):
+        assert is_restricted_user(FakeUser("dea@rtb.cat")) is False
 
     def test_dea_case_insensitive(self):
-        assert is_restricted_user(FakeUser("DEA@RTB.CAT")) is True
+        assert is_restricted_user(FakeUser("DEA@RTB.CAT")) is False
 
     def test_dea_mixed_case(self):
-        assert is_restricted_user(FakeUser("Dea@Rtb.Cat")) is True
+        assert is_restricted_user(FakeUser("Dea@Rtb.Cat")) is False
 
     def test_admin_not_restricted(self):
         assert is_restricted_user(FakeUser("admin@rtb.cat")) is False
