@@ -16,7 +16,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from api.dependencies import get_store, get_config, get_current_user, resolve_buyer_id
+from api.dependencies import (
+    get_store,
+    get_config,
+    get_current_user,
+    require_seat_admin_or_sudo,
+    resolve_buyer_id,
+)
 from services.auth_service import User
 from config import ConfigManager
 from services.thumbnails_service import ThumbnailsService
@@ -725,6 +731,7 @@ async def get_ui_page_load_metric_summary(
 @router.post("/thumbnails/generate", response_model=ThumbnailGenerateResponse, tags=["Thumbnails"])
 async def generate_single_thumbnail(
     request: ThumbnailGenerateRequest,
+    _user: User = Depends(require_seat_admin_or_sudo),
     store=Depends(get_store),
 ):
     """Generate thumbnail for a single video creative."""
@@ -749,6 +756,7 @@ async def generate_single_thumbnail(
 @router.post("/thumbnails/generate-batch", response_model=ThumbnailBatchResponse, tags=["Thumbnails"])
 async def generate_batch_thumbnails(
     request: ThumbnailBatchRequest,
+    _user: User = Depends(require_seat_admin_or_sudo),
     store=Depends(get_store),
 ):
     """Generate thumbnails for multiple video creatives.
@@ -794,6 +802,7 @@ async def generate_batch_thumbnails(
 @router.post("/thumbnails/extract-html", response_model=HTMLThumbnailResponse, tags=["Thumbnails"])
 async def extract_html_thumbnails(
     request: HTMLThumbnailRequest = HTMLThumbnailRequest(),
+    _user: User = Depends(require_seat_admin_or_sudo),
     store=Depends(get_store),
 ):
     """Extract thumbnail URLs from HTML creatives.
