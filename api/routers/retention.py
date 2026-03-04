@@ -86,6 +86,8 @@ async def get_retention_config(
             summary_retention_days=config.get('summary_retention_days', 365),
             auto_aggregate_after_days=config.get('auto_aggregate_after_days', 30),
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get retention config: {e}")
         # Return defaults on error
@@ -130,6 +132,8 @@ async def get_storage_stats(
         service = RetentionService()
         stats = await service.get_storage_stats()
         return StorageStatsResponse(**stats)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get storage stats: {e}")
         return StorageStatsResponse(
