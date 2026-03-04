@@ -885,7 +885,7 @@ async def ingest_appsflyer_postback(
     request: Request,
     buyer_id: Optional[str] = Query(None, description="Optional buyer override"),
     store=Depends(get_store),
-):
+) -> ConversionIngestResponse:
     payload = await _parse_payload(request)
     raw_payload = dict(payload)
     default_field_map, default_scope, default_setting_key, _ = await _load_field_mapping_profile(
@@ -999,7 +999,7 @@ async def ingest_appsflyer_postback(
 async def ingest_adjust_callback(
     request: Request,
     buyer_id: Optional[str] = Query(None, description="Optional buyer override"),
-):
+) -> ConversionIngestResponse:
     payload = await _parse_payload(request)
     payload = normalize_adjust_payload(payload)
     _verify_webhook_secret("adjust", request, payload)
@@ -1017,7 +1017,7 @@ async def ingest_adjust_callback(
 async def ingest_branch_webhook(
     request: Request,
     buyer_id: Optional[str] = Query(None, description="Optional buyer override"),
-):
+) -> ConversionIngestResponse:
     payload = await _parse_payload(request)
     payload = normalize_branch_payload(payload)
     _verify_webhook_secret("branch", request, payload)
@@ -1035,7 +1035,7 @@ async def ingest_branch_webhook(
 async def ingest_generic_postback(
     request: Request,
     buyer_id: Optional[str] = Query(None, description="Optional buyer override"),
-):
+) -> ConversionIngestResponse:
     return await _ingest_generic_family_postback(
         request=request,
         buyer_id=buyer_id,
@@ -1047,7 +1047,7 @@ async def ingest_generic_postback(
 async def ingest_redtrack_postback(
     request: Request,
     buyer_id: Optional[str] = Query(None, description="Optional buyer override"),
-):
+) -> ConversionIngestResponse:
     return await _ingest_generic_family_postback(
         request=request,
         buyer_id=buyer_id,
@@ -1059,7 +1059,7 @@ async def ingest_redtrack_postback(
 async def ingest_voluum_postback(
     request: Request,
     buyer_id: Optional[str] = Query(None, description="Optional buyer override"),
-):
+) -> ConversionIngestResponse:
     return await _ingest_generic_family_postback(
         request=request,
         buyer_id=buyer_id,
@@ -1071,7 +1071,7 @@ async def ingest_voluum_postback(
 async def ingest_conversion_pixel(
     request: Request,
     buyer_id: Optional[str] = Query(None, description="Optional buyer override"),
-):
+) -> Response:
     try:
         await _ingest_generic_family_postback(
             request=request,
@@ -1089,7 +1089,7 @@ async def ingest_conversion_csv(
     source_type: str = Form("manual_csv"),
     buyer_id: Optional[str] = Form(None),
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> ConversionCSVIngestResponse:
     raw_bytes = await file.read()
     if not raw_bytes:
         raise HTTPException(status_code=400, detail="CSV file is empty")
@@ -1116,7 +1116,7 @@ async def list_conversion_ingestion_failures(
     offset: int = Query(0, ge=0),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ConversionIngestionFailuresResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = ConversionIngestionService()
     payload = await service.list_failures(
@@ -1136,7 +1136,7 @@ async def list_conversion_ingestion_failures(
 async def replay_conversion_ingestion_failure(
     failure_id: int,
     user: User = Depends(get_current_user),
-):
+) -> ConversionReplayFailureResponse:
     service = ConversionIngestionService()
     try:
         payload = await service.replay_failure(failure_id)
@@ -1157,7 +1157,7 @@ async def replay_conversion_ingestion_failure(
 async def discard_conversion_ingestion_failure(
     failure_id: int,
     user: User = Depends(get_current_user),
-):
+) -> ConversionDiscardFailureResponse:
     service = ConversionIngestionService()
     discarded = await service.discard_failure(failure_id)
     if not discarded:
@@ -1175,7 +1175,7 @@ async def get_conversion_ingestion_stats(
     buyer_id: Optional[str] = Query(None),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ConversionIngestionStatsResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = ConversionIngestionService()
     payload = await service.get_ingestion_stats(
@@ -1195,7 +1195,7 @@ async def get_conversion_ingestion_lineage(
     limit: int = Query(365, ge=1, le=2000),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ConversionIngestionLineageResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = ConversionIngestionService()
     payload = await service.get_ingestion_lineage(
@@ -1216,7 +1216,7 @@ async def get_conversion_ingestion_error_taxonomy(
     limit: int = Query(20, ge=1, le=100),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ConversionFailureTaxonomyResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = ConversionIngestionService()
     payload = await service.get_failure_taxonomy(
@@ -1245,7 +1245,7 @@ async def get_conversion_aggregates(
     offset: int = Query(0, ge=0),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ConversionAggregatesResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = ConversionsService()
     payload = await service.get_aggregates(
@@ -1274,7 +1274,7 @@ async def refresh_conversion_aggregates(
     buyer_id: Optional[str] = Query(None),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ConversionRefreshResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = ConversionsService()
     payload = await service.refresh_aggregates(
@@ -1291,7 +1291,7 @@ async def get_conversion_health(
     buyer_id: Optional[str] = Query(None),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ConversionHealthResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = ConversionsService()
     return ConversionHealthResponse(**await service.get_health(buyer_id=buyer_id))
@@ -1300,7 +1300,7 @@ async def get_conversion_health(
 @router.get("/security/status", response_model=ConversionWebhookSecurityStatusResponse)
 async def get_conversion_webhook_security_status(
     user: User = Depends(get_current_user),
-):
+) -> ConversionWebhookSecurityStatusResponse:
     return ConversionWebhookSecurityStatusResponse(**_webhook_security_status_payload())
 
 
@@ -1310,7 +1310,7 @@ async def get_conversion_mapping_profile(
     buyer_id: Optional[str] = Query(None),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ConversionFieldMappingProfileResponse:
     source_type = (source_type or "").strip().lower()
     if source_type not in _SUPPORTED_MAPPING_PROFILE_SOURCES:
         raise HTTPException(
@@ -1343,7 +1343,7 @@ async def upsert_conversion_mapping_profile(
     body: ConversionFieldMappingProfileUpsertRequest,
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ConversionFieldMappingProfileResponse:
     source_type = (body.source_type or "").strip().lower()
     if source_type not in _SUPPORTED_MAPPING_PROFILE_SOURCES:
         raise HTTPException(
@@ -1405,7 +1405,7 @@ async def refresh_conversion_attribution_joins(
     fallback_window_days: int = Query(1, ge=0, le=7),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ConversionAttributionRefreshResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     if not buyer_id:
         raise HTTPException(status_code=400, detail="buyer_id is required")
@@ -1431,7 +1431,7 @@ async def get_conversion_attribution_summary(
     end_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ConversionAttributionSummaryResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     if not buyer_id:
         raise HTTPException(status_code=400, detail="buyer_id is required")
@@ -1461,7 +1461,7 @@ async def list_conversion_attribution_joins(
     offset: int = Query(0, ge=0),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ConversionAttributionJoinsResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     if not buyer_id:
         raise HTTPException(status_code=400, detail="buyer_id is required")
@@ -1494,7 +1494,7 @@ async def get_conversion_readiness(
     freshness_hours: int = Query(72, ge=1, le=720),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ConversionReadinessResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     conversions_service = ConversionsService()
     ingestion_service = ConversionIngestionService()
