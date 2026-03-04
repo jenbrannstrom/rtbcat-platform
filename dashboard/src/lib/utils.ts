@@ -49,6 +49,15 @@ export function getFormatColor(format: string): string {
   return colors[format] || colors.UNKNOWN;
 }
 
+/**
+ * Safely coerce any value to a finite number.
+ * Guards against .toFixed() crashes when API returns strings, null, or undefined.
+ */
+export function asNumber(value: unknown, fallback = 0): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export function getStatusColor(status: string | null): string {
   if (!status) return "bg-gray-100 text-gray-600";
   const colors: Record<string, string> = {

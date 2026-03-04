@@ -30,6 +30,7 @@ import { Loader2, AlertCircle, AlertTriangle, ArrowUpDown, ChevronRight, Chevron
 import { AppDrilldownModal } from './app-drilldown-modal';
 import { useAccount } from '@/contexts/account-context';
 import { useTranslation } from '@/contexts/i18n-context';
+import { asNumber } from '@/lib/utils';
 import type { Translations } from '@/lib/i18n/types';
 import { PreviewModal } from '@/components/preview-modal';
 import type { Creative } from '@/types/api';
@@ -43,11 +44,6 @@ interface ConfigBreakdownPanelProps {
 
 const TABS: ConfigBreakdownType[] = ['creative', 'size', 'geo', 'publisher'];
 type MajorChangeType = 'targeting' | 'publisher' | 'qps' | 'mixed';
-
-function asNumber(value: unknown, fallback = 0): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
 
 // Format large numbers with K/M suffix
 function formatNumber(n: number): string {

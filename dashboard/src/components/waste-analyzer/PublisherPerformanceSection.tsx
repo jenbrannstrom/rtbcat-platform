@@ -6,16 +6,12 @@ import type { PublisherPerformance } from "@/lib/api";
 import { useAccount } from "@/contexts/account-context";
 import { useTranslation } from "@/contexts/i18n-context";
 import { toBuyerScopedPath } from "@/lib/buyer-routes";
+import { asNumber } from "@/lib/utils";
 import { formatNumber } from "./FunnelCard";
 
 interface PublisherPerformanceSectionProps {
   publishers: PublisherPerformance[];
   seatName?: string;
-}
-
-function asNumber(value: unknown, fallback = 0): number {
-  const n = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(n) ? n : fallback;
 }
 
 /**
