@@ -1096,7 +1096,11 @@ async def ingest_conversion_pixel(
             buyer_id=buyer_id,
             default_source_type="pixel",
         )
-    except HTTPException:
+    except HTTPException as exc:
+        # Preserve explicit auth/rate-limit failures for pixel callers while
+        # keeping the 1x1 GIF fallback behavior for downstream ingest errors.
+        if exc.status_code in {401, 429}:
+            raise
         return _pixel_response(ingest_status="rejected")
     return _pixel_response(ingest_status="accepted")
 
