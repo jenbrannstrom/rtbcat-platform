@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from api.dependencies import get_current_user, get_store
+from api.dependencies import get_store, require_admin
 from services.auth_service import User
 
 
@@ -49,7 +49,7 @@ async def get_optimizer_setup(
 async def update_optimizer_setup(
     request: UpdateOptimizerSetupRequest,
     store=Depends(get_store),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
 ):
     monthly_cost = float(request.monthly_hosting_cost_usd)
     if monthly_cost < 0:
@@ -73,4 +73,3 @@ async def update_optimizer_setup(
         monthly_hosting_cost_usd=monthly_cost,
         effective_cpm_enabled=monthly_cost > 0,
     )
-
