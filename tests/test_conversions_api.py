@@ -1364,3 +1364,26 @@ def test_ingest_appsflyer_postback_infers_buyer_from_default_mapping_profile(
     payload = ingestion_stub.provider_calls[0]["payload"]
     assert payload["buyer_id"] == "1111111111"
     assert payload["creative_id"] == "creative-88"
+
+
+@pytest.mark.asyncio
+async def test_load_field_mapping_profile_logs_warning_on_invalid_json(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    store = _StubSettingsStore(
+        values={
+            "conversion_mapping_profile:appsflyer:buyer:1111111111": "{broken-json",
+        }
+    )
+    with caplog.at_level("WARNING"):
+        field_map, scope, setting_key, fallback_key = await conversions_router._load_field_mapping_profile(
+            store=store,
+            source_type="appsflyer",
+            buyer_id="1111111111",
+        )
+
+    assert field_map == {}
+    assert scope == "invalid_profile_json"
+    assert setting_key == "conversion_mapping_profile:appsflyer:buyer:1111111111"
+    assert fallback_key == "conversion_mapping_profile:appsflyer:default"
+    assert "Invalid conversion mapping profile JSON" in caplog.text

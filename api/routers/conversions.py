@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import time
@@ -38,6 +39,7 @@ from services.conversion_readiness import compute_conversion_readiness_payload
 from services.conversions_service import ConversionsService
 
 router = APIRouter(prefix="/conversions", tags=["Conversions"])
+logger = logging.getLogger(__name__)
 
 
 class ConversionAggregateRow(BaseModel):
@@ -425,6 +427,11 @@ async def _load_field_mapping_profile(
     try:
         parsed = json.loads(raw_value)
     except Exception:
+        logger.warning(
+            "Invalid conversion mapping profile JSON; falling back to invalid_profile_json state",
+            extra={"source_type": source_type, "buyer_id": buyer_id, "setting_key": setting_key},
+            exc_info=True,
+        )
         return {}, "invalid_profile_json", setting_key, (fallback_key if buyer_id else None)
 
     raw_field_map: dict[str, Any]
