@@ -256,10 +256,25 @@ def validate_data_health_payload(
             "(no rtb_bidstream data for this buyer/time window)"
         )
 
-    for field in ("platform_missing_pct", "environment_missing_pct", "transaction_type_missing_pct"):
+    dim_fields = ("platform_missing_pct", "environment_missing_pct", "transaction_type_missing_pct")
+    dim_values: dict[str, float] = {}
+    for field in dim_fields:
         raw_value = bidstream.get(field)
         _assert(raw_value is not None, f"{field} missing from bidstream dimension coverage")
-        value = float(raw_value)
+        dim_values[field] = float(raw_value)
+
+    # When ALL dimension columns are 100% empty the data source simply
+    # does not include dimension breakdowns (common for some Google RTB
+    # report types / buyer markets).  Classify as environment-blocked
+    # rather than a hard quality failure.
+    if all(v >= 100.0 for v in dim_values.values()):
+        raise SmokeEnvironmentBlocked(
+            "bidstream data has no dimension breakdowns "
+            f"(all {len(dim_fields)} dimension columns are 100% empty; "
+            "data source does not provide platform/environment/transaction_type)"
+        )
+
+    for field, value in dim_values.items():
         _assert(
             value <= max_dimension_missing_pct,
             f"{field}={value:.2f}% exceeds max {max_dimension_missing_pct:.2f}%",
