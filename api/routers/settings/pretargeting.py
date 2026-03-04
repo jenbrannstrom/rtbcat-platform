@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -29,7 +29,7 @@ router = APIRouter(tags=["RTB Settings"])
 MajorChangeType = Literal["targeting", "publisher", "qps", "mixed"]
 
 
-def _parse_json_field(value):
+def _parse_json_field(value: Any) -> Any:
     """Parse JSON field - handles both JSONB (already parsed) and TEXT (needs parsing)."""
     if value is None:
         return None
@@ -74,7 +74,7 @@ async def sync_pretargeting_configs(
     service_account_id: Optional[str] = Query(None, description="Service account ID to use"),
     _user: User = Depends(require_seat_admin_or_sudo),
     seats_service: SeatsService = Depends(get_seats_service),
-):
+) -> SyncPretargetingResponse:
     """Sync pretargeting configs from Google Authorized Buyers API.
 
     Fetches all pretargeting configurations for the configured bidder account
@@ -237,7 +237,7 @@ async def get_pretargeting_configs(
     limit: Optional[int] = Query(None, description="Optional max rows for startup/bootstrap views", ge=1, le=5000),
     summary_only: bool = Query(False, description="Return lightweight rows for startup (omits large targeting arrays)"),
     seats_service: SeatsService = Depends(get_seats_service),
-):
+) -> list[PretargetingConfigResponse]:
     """Get stored pretargeting configs for the current account.
 
     Returns pretargeting configurations that have been synced from the Google API
@@ -343,7 +343,7 @@ async def set_pretargeting_name(
     billing_id: str,
     body: SetPretargetingNameRequest,
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> dict[str, str]:
     """Set a custom user-defined name for a pretargeting config.
 
     This name will be displayed in the UI alongside the pretargeting
@@ -402,7 +402,7 @@ async def get_pretargeting_history(
         description="Filter by pretargeting config ID (billing_id)",
     ),
     days: int = Query(30, description="Number of days of history to retrieve", ge=1, le=365),
-):
+) -> list[PretargetingHistoryResponse]:
     """Get pretargeting settings change history.
 
     Returns a log of all changes made to pretargeting configurations,
@@ -478,7 +478,7 @@ async def get_pretargeting_publishers(
     billing_id: str,
     mode: Optional[str] = Query(None, description="Filter by mode (WHITELIST or BLACKLIST)"),
     status: Optional[str] = Query(None, description="Filter by status (active, pending_add, pending_remove)"),
-):
+) -> dict[str, Any]:
     """Get normalized publisher list for a pretargeting config.
 
     Returns the list of publishers in the whitelist/blacklist with their status.
@@ -520,7 +520,7 @@ async def add_pretargeting_publisher(
     publisher_id: str = Query(..., description="Publisher ID to add"),
     mode: str = Query(..., description="WHITELIST or BLACKLIST"),
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> dict[str, str]:
     """Add a publisher to the targeting list with pending_add status.
 
     The publisher will be added with status 'pending_add' until the changes
@@ -604,7 +604,7 @@ async def remove_pretargeting_publisher(
     publisher_id: str,
     mode: Optional[str] = Query(None, description="WHITELIST or BLACKLIST"),
     _user: User = Depends(require_seat_admin_or_sudo),
-):
+) -> dict[str, str]:
     """Mark a publisher for removal with pending_remove status.
 
     The publisher will be marked as 'pending_remove' until the changes
@@ -696,7 +696,7 @@ async def remove_pretargeting_publisher(
 @router.get("/settings/pretargeting/{billing_id}/publishers/pending")
 async def get_pending_publisher_changes(
     billing_id: str,
-):
+) -> dict[str, Any]:
     """Get publishers with pending changes (pending_add or pending_remove).
 
     Returns publishers that need to be synced to the API.

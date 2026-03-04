@@ -174,7 +174,7 @@ async def sync_rtb_endpoints(
     service_account_id: Optional[str] = Query(None, description="Service account ID to use"),
     _user: User = Depends(require_seat_admin_or_sudo),
     seats_service: SeatsService = Depends(get_seats_service),
-):
+) -> SyncEndpointsResponse:
     """Sync RTB endpoints from Google Authorized Buyers API.
 
     Fetches all RTB endpoints for the configured bidder account and stores them
@@ -212,7 +212,7 @@ async def get_rtb_endpoints(
     service_account_id: Optional[str] = Query(None, description="Service account ID (deprecated, use buyer_id)"),
     live: bool = Query(False, description="Fetch live data from Google API instead of local DB"),
     seats_service: SeatsService = Depends(get_seats_service),
-):
+) -> RTBEndpointsResponse:
     """Get RTB endpoints with aggregated QPS data.
 
     When live=false (default): returns endpoints stored in the local database.
@@ -302,7 +302,7 @@ async def update_endpoint_qps(
     request: UpdateEndpointQpsRequest,
     _user: User = Depends(require_seat_admin_or_sudo),
     seats_service: SeatsService = Depends(get_seats_service),
-):
+) -> RTBEndpointItem:
     """Update the allocated QPS for a single RTB endpoint.
 
     Calls the Google Authorized Buyers API to patch the endpoint, then re-syncs
