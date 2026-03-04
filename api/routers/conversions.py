@@ -840,6 +840,24 @@ async def _ingest_with_dlq(
             idempotency_key=idempotency_key,
         )
         return ConversionIngestResponse(**result)
+    except HTTPException as exc:
+        failure_id = await service.record_failure(
+            source_type=source_type,
+            payload=payload,
+            error_code=_http_error_code(exc),
+            error_message=str(exc.detail),
+            buyer_id=buyer_id,
+            endpoint_path=request.url.path,
+            idempotency_key=idempotency_key,
+            headers=_safe_request_headers(request),
+        )
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={
+                "message": str(exc.detail),
+                "failure_id": failure_id,
+            },
+        ) from exc
     except Exception as exc:
         failure_id = await service.record_failure(
             source_type=source_type,
@@ -1142,6 +1160,8 @@ async def replay_conversion_ingestion_failure(
         payload = await service.replay_failure(failure_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(
             status_code=400,

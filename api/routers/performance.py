@@ -221,6 +221,8 @@ async def import_performance_metrics(
             message=f"Successfully imported {count} performance metrics.",
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Performance import failed: {e}")
         raise HTTPException(status_code=500, detail=f"Performance import failed: {str(e)}")
@@ -336,6 +338,8 @@ async def list_performance_metrics(
             for m in metrics
         ]
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Performance metrics query failed: {e}")
         raise HTTPException(status_code=500, detail=f"Performance query failed: {str(e)}")
@@ -380,6 +384,8 @@ async def cleanup_old_rtb_daily(
             "message": f"Deleted {deleted} records older than {days_to_keep} days.",
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Performance cleanup failed: {e}")
         raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
@@ -695,6 +701,8 @@ async def complete_stream_import(
                 result.date_range_end,
             )
         return _build_import_response(result)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Import failed for {final_path}: {e}")
         raise HTTPException(
@@ -906,6 +914,8 @@ async def import_performance_stream(
             total_spend=round(total_spend, 2) if total_spend > 0 else None,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Streaming import failed: {e}")
         raise HTTPException(status_code=500, detail=f"Streaming import failed: {str(e)}")
@@ -983,6 +993,8 @@ async def import_performance_batch(
             total_spend=round(total_spend, 2) if total_spend > 0 else None,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Batch import failed: {e}")
         raise HTTPException(status_code=500, detail=f"Batch import failed: {str(e)}")
@@ -1021,6 +1033,8 @@ async def finalize_import(
             "rows_imported": request.rows_imported,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to finalize import: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to finalize import: {str(e)}")

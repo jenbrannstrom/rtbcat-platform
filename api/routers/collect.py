@@ -134,6 +134,8 @@ async def collect_sync(
             creatives_collected=count,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Collection failed: {e}")
         raise HTTPException(status_code=500, detail=f"Collection failed: {str(e)}")
