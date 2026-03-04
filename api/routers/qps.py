@@ -9,6 +9,8 @@ This module provides endpoints for QPS (Queries Per Second) optimization analysi
 """
 
 import logging
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Query
 
 from api.schemas.qps import QPSSummaryResponse, QPSReportResponse
@@ -20,7 +22,7 @@ router = APIRouter(prefix="/qps", tags=["QPS Optimization"])
 
 
 @router.get("/summary", response_model=QPSSummaryResponse)
-async def get_qps_summary():
+async def get_qps_summary() -> QPSSummaryResponse:
     """
     Get summary of imported QPS data.
 
@@ -38,13 +40,15 @@ async def get_qps_summary():
             total_impressions=summary["total_impressions"],
             total_spend_usd=summary["total_spend_usd"],
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get QPS summary: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/size-coverage", response_model=QPSReportResponse)
-async def get_size_coverage_report(days: int = Query(7, ge=1, le=90)):
+async def get_size_coverage_report(days: int = Query(7, ge=1, le=90)) -> QPSReportResponse:
     """
     Get size coverage analysis report.
 
@@ -59,13 +63,15 @@ async def get_size_coverage_report(days: int = Query(7, ge=1, le=90)):
     try:
         report = QpsService().size_coverage_report(days)
         return QPSReportResponse(**report)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to generate size coverage: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/config-performance", response_model=QPSReportResponse)
-async def get_config_performance_report(days: int = Query(7, ge=1, le=90)):
+async def get_config_performance_report(days: int = Query(7, ge=1, le=90)) -> QPSReportResponse:
     """
     Get pretargeting config performance report.
 
@@ -78,13 +84,15 @@ async def get_config_performance_report(days: int = Query(7, ge=1, le=90)):
     try:
         report = QpsService().config_performance_report(days)
         return QPSReportResponse(**report)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to generate config performance: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/fraud-signals", response_model=QPSReportResponse)
-async def get_fraud_signals_report(days: int = Query(14, ge=1, le=90)):
+async def get_fraud_signals_report(days: int = Query(14, ge=1, le=90)) -> QPSReportResponse:
     """
     Get fraud signals report.
 
@@ -100,13 +108,15 @@ async def get_fraud_signals_report(days: int = Query(14, ge=1, le=90)):
     try:
         report = QpsService().fraud_signals_report(days)
         return QPSReportResponse(**report)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to generate fraud signals: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/report", response_model=QPSReportResponse)
-async def get_full_qps_report(days: int = Query(7, ge=1, le=90)):
+async def get_full_qps_report(days: int = Query(7, ge=1, le=90)) -> QPSReportResponse:
     """
     Get comprehensive QPS optimization report.
 
@@ -121,13 +131,15 @@ async def get_full_qps_report(days: int = Query(7, ge=1, le=90)):
     try:
         report = QpsService().full_report(days)
         return QPSReportResponse(**report)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to generate full report: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/include-list")
-async def get_include_list():
+async def get_include_list() -> dict[str, Any]:
     """
     Get recommended pretargeting include list.
 
@@ -154,6 +166,8 @@ async def get_include_list():
                 "Monitor traffic for 24-48 hours",
             ],
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get include list: {e}")
         raise HTTPException(status_code=500, detail=str(e))
