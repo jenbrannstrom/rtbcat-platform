@@ -25,7 +25,7 @@ async def import_traffic_data(
     file: UploadFile = File(..., description="CSV file with traffic data"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ImportTrafficResponse:
     """Import RTB traffic data from CSV file.
 
     The CSV file should have the following columns:
@@ -126,7 +126,7 @@ async def generate_mock_traffic_endpoint(
     waste_bias: float = Query(0.3, ge=0.0, le=1.0, description="Bias towards waste traffic (0-1)"),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ImportTrafficResponse:
     """Generate mock RTB traffic data for testing and demos.
 
     Creates synthetic bid request data with realistic distributions including:

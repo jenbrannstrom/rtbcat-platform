@@ -4,7 +4,7 @@ Handles spend statistics endpoint.
 """
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -31,7 +31,7 @@ async def get_spend_stats(
     ),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Get overall spend statistics for the selected period.
 
