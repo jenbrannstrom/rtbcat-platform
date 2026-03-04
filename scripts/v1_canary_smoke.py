@@ -36,6 +36,7 @@ class BidstreamDimensionWaiver:
     allow_unavailable: bool = False
     allow_zero_rows: bool = False
     allow_all_dimensions_missing: bool = True
+    allow_report_completeness_degraded: bool = False
 
 
 def _join_url(base_url: str, path: str) -> str:
@@ -101,6 +102,9 @@ def parse_bidstream_dimension_waivers(raw_json: str | None) -> dict[str, Bidstre
             allow_unavailable = _parse_bool(entry, "allow_unavailable", False)
             allow_zero_rows = _parse_bool(entry, "allow_zero_rows", False)
             allow_all_dimensions_missing = _parse_bool(entry, "allow_all_dimensions_missing", True)
+            allow_report_completeness_degraded = _parse_bool(
+                entry, "allow_report_completeness_degraded", False
+            )
         except ValueError as exc:
             raise ValueError(f"entry {idx} {exc}") from exc
 
@@ -111,6 +115,7 @@ def parse_bidstream_dimension_waivers(raw_json: str | None) -> dict[str, Bidstre
             allow_unavailable=allow_unavailable,
             allow_zero_rows=allow_zero_rows,
             allow_all_dimensions_missing=allow_all_dimensions_missing,
+            allow_report_completeness_degraded=allow_report_completeness_degraded,
         )
     return waivers
 
@@ -434,7 +439,20 @@ def validate_data_health_payload(
     if require_healthy_readiness:
         report_state = str(report.get("availability_state", "")).lower()
         seat_day_state = str(seat_day.get("availability_state", "")).lower()
-        _assert(report_state == "healthy", f"report_completeness state is {report_state!r}, expected healthy")
+        if (
+            waiver_active
+            and bidstream_dimension_waiver.allow_report_completeness_degraded
+            and report_state in {"degraded", "unavailable"}
+        ):
+            print(
+                "INFO  Data health waiver applied -> "
+                f"buyer_id={bidstream_dimension_waiver.buyer_id}, "
+                "scope=report_completeness_degraded, "
+                f"expires_on={bidstream_dimension_waiver.expires_on.isoformat()}, "
+                f"note={bidstream_dimension_waiver.note}"
+            )
+        else:
+            _assert(report_state == "healthy", f"report_completeness state is {report_state!r}, expected healthy")
         # Quality (IVT) data is optional — skip assertion when unavailable.
         if quality_state != "unavailable":
             _assert(quality_state == "healthy", f"rtb_quality_freshness state is {quality_state!r}, expected healthy")
