@@ -189,6 +189,11 @@ def _is_appsflyer_url(value: Optional[str]) -> bool:
         try:
             parsed = urlparse(url)
         except Exception:
+            logger.debug(
+                "Failed to parse candidate URL while checking AppsFlyer destination",
+                extra={"url_preview": str(url)[:160]},
+                exc_info=True,
+            )
             continue
         host = (parsed.netloc or "").lower()
         if host.endswith("app.appsflyer.com") or host.endswith("onelink.me"):

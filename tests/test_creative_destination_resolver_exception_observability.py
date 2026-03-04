@@ -24,3 +24,20 @@ def test_classify_click_destination_logs_debug_and_returns_invalid_url_on_parse_
     assert is_valid is False
     assert reason == "invalid_url"
     assert "marking as invalid_url" in caplog.text.lower()
+
+
+def test_is_appsflyer_url_logs_debug_and_returns_false_on_parse_error(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def _raise(*_args, **_kwargs):
+        raise RuntimeError("url parse failed")
+
+    monkeypatch.setattr(resolver, "urlparse", _raise)
+
+    with caplog.at_level(logging.DEBUG):
+        result = resolver._is_appsflyer_url("https://app.appsflyer.com/com.example.app")
+
+    assert result is False
+    assert "checking appflyer destination" not in caplog.text.lower()
+    assert "checking appsflyer destination" in caplog.text.lower()
