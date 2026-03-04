@@ -1,5 +1,6 @@
 """Tests for the CreativeEvidenceService."""
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -144,3 +145,11 @@ class TestVideoFrameExtraction:
         frames = service._extract_video_frames("c12", "https://example.com/video.mp4")
         # Should attempt extraction even with ffprobe failure
         assert mock_run.called
+
+
+def test_extract_video_url_from_vast_logs_debug_and_uses_regex_fallback(service, caplog):
+    malformed_vast = "<VAST><bad xml https://cdn.example.com/video.mp4"
+    with caplog.at_level(logging.DEBUG):
+        url = service._extract_video_url_from_vast(malformed_vast)
+    assert url == "https://cdn.example.com/video.mp4"
+    assert "falling back to regex" in caplog.text.lower()
