@@ -83,16 +83,23 @@ VM's instance service account metadata token:
 TOKEN=$(curl -sf -H 'Metadata-Flavor: Google' \
   'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' \
   | jq -r .access_token)
-echo "$TOKEN" | sudo docker login -u oauth2accesstoken --password-stdin \
-  https://asia-southeast1-docker.pkg.dev
+AUTH=$(echo -n "oauth2accesstoken:$TOKEN" | base64 -w0)
+mkdir -p /tmp/ar-docker-config
+echo "{\"auths\":{\"https://asia-southeast1-docker.pkg.dev\":{\"auth\":\"$AUTH\"}}}" \
+  > /tmp/ar-docker-config/config.json
+export DOCKER_CONFIG=/tmp/ar-docker-config
+docker compose -f docker-compose.gcp.yml pull
 ```
 
-**Why metadata-token auth instead of gcloud credHelper:**
+**Why metadata-token + DOCKER_CONFIG instead of gcloud credHelper:**
 - The VM's root Docker daemon runs under `sudo`. Its credential store is separate
   from any user-level `gcloud auth` session.
-- `gcloud auth configure-docker` sets up a credHelper that relies on the active
-  gcloud auth context — which can become stale after VM restarts, container
-  recreation, or manual SSH sessions.
+- `gcloud auth configure-docker` sets up a credHelper in `/root/.docker/config.json`
+  that calls `docker-credential-gcloud`. This credHelper **overrides** any `docker login`
+  credentials, and relies on the active gcloud auth context — which can become stale
+  after VM restarts, container recreation, or manual SSH sessions.
+- Writing a clean `DOCKER_CONFIG` directory with only the token-based auth entry
+  bypasses any credHelper configuration entirely.
 - The metadata service is always available on GCP VMs, uses the instance service
   account (which has Artifact Registry Reader role), and requires no interactive
   login or stored credentials.
