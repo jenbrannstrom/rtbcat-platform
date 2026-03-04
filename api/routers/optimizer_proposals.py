@@ -99,7 +99,7 @@ async def generate_qps_proposals(
     limit: int = Query(200, ge=1, le=2000),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ProposalGenerateResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerProposalsService()
     try:
@@ -126,7 +126,7 @@ async def list_qps_proposals(
     offset: int = Query(0, ge=0),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ProposalListResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerProposalsService()
     try:
@@ -149,7 +149,7 @@ async def get_qps_proposal(
     buyer_id: Optional[str] = Query(None),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ProposalRow:
     resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerProposalsService()
     payload = await service.get_proposal(
@@ -169,7 +169,7 @@ async def list_qps_proposal_history(
     offset: int = Query(0, ge=0),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ProposalHistoryResponse:
     resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerProposalsService()
     payload = await service.list_history(
@@ -218,7 +218,7 @@ async def approve_qps_proposal(
     buyer_id: Optional[str] = Query(None),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ProposalStatusResponse:
     return await _update_proposal_status(
         proposal_id=proposal_id,
         status="approved",
@@ -234,7 +234,7 @@ async def reject_qps_proposal(
     buyer_id: Optional[str] = Query(None),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ProposalStatusResponse:
     return await _update_proposal_status(
         proposal_id=proposal_id,
         status="rejected",
@@ -251,7 +251,7 @@ async def apply_qps_proposal(
     buyer_id: Optional[str] = Query(None),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ProposalStatusResponse:
     return await _update_proposal_status(
         proposal_id=proposal_id,
         status="applied",
@@ -268,7 +268,7 @@ async def sync_qps_proposal_apply_status(
     buyer_id: Optional[str] = Query(None),
     store=Depends(get_store),
     user: User = Depends(get_current_user),
-):
+) -> ProposalRow:
     resolved_buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = OptimizerProposalsService()
     payload = await service.sync_apply_status(
