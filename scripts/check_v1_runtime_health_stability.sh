@@ -7,6 +7,7 @@ BRANCH="${CATSCAN_GH_REF:-unified-platform}"
 BUYER_ID="${CATSCAN_BUYER_ID:-}"
 WINDOW="${CATSCAN_RUNTIME_HEALTH_STABILITY_WINDOW:-3}"
 LIMIT="${CATSCAN_RUNTIME_HEALTH_STABILITY_LIMIT:-20}"
+FALLBACK_UNFILTERED="${CATSCAN_RUNTIME_HEALTH_STABILITY_FALLBACK_UNFILTERED:-0}"
 
 usage() {
   cat <<'EOF'
@@ -23,6 +24,7 @@ Options:
   --buyer-id <id>          Optional buyer filter via run title token `buyer=<id>`
   --window <n>             Required consecutive successful runs (default: 3)
   --limit <n>              Number of recent runs to inspect (default: 20)
+  --fallback-unfiltered    If buyer filter finds no tagged runs, fall back to unfiltered completed runs
   -h, --help               Show help
 
 Exit codes:
@@ -57,6 +59,10 @@ while [[ $# -gt 0 ]]; do
     --limit)
       LIMIT="${2:-}"
       shift 2
+      ;;
+    --fallback-unfiltered)
+      FALLBACK_UNFILTERED=1
+      shift
       ;;
     -h|--help)
       usage
@@ -95,21 +101,36 @@ gh run list \
   --json databaseId,displayTitle,status,conclusion,createdAt,updatedAt,url,headSha \
   > "$run_json"
 
-python3 - "$run_json" "$WINDOW" "$BUYER_ID" <<'PY'
+python3 - "$run_json" "$WINDOW" "$BUYER_ID" "$FALLBACK_UNFILTERED" <<'PY'
 import json
 import sys
 
 path = sys.argv[1]
 window = int(sys.argv[2])
 buyer = (sys.argv[3] or "").strip()
+fallback_unfiltered = str(sys.argv[4] or "0").strip().lower() in {"1", "true", "yes", "on"}
 
 with open(path, "r", encoding="utf-8") as f:
     runs = json.load(f)
 
-completed = [r for r in runs if str(r.get("status") or "").lower() == "completed"]
+completed_all = [r for r in runs if str(r.get("status") or "").lower() == "completed"]
+completed = completed_all
 if buyer:
     token = f"buyer={buyer}"
-    completed = [r for r in completed if token in str(r.get("displayTitle") or "")]
+    tagged = [r for r in completed_all if token in str(r.get("displayTitle") or "")]
+    if tagged:
+        completed = tagged
+    else:
+        print(
+            "buyer_filter_warning="
+            f"no completed runs with title token '{token}'. "
+            "Older runs may be untagged."
+        )
+        if fallback_unfiltered:
+            completed = completed_all
+            print("buyer_filter_fallback=using unfiltered completed runs")
+        else:
+            completed = []
 
 print(f"workflow_runs_completed={len(completed)}")
 if buyer:
