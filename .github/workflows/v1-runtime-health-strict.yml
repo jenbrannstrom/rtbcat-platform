@@ -28,6 +28,10 @@ on:
         description: "Lookback window for strict QPS page SLO canary"
         required: true
         default: "24"
+      bidstream_dimension_waiver_json:
+        description: "Optional JSON waiver for buyers with known 100% missing bidstream dimensions"
+        required: false
+        default: ""
       canary_timeout_seconds:
         description: "Per-request timeout for canary HTTP calls (seconds)"
         required: false
@@ -51,6 +55,7 @@ jobs:
       CATSCAN_MODEL_ID: ${{ inputs.model_id }}
       CATSCAN_CANARY_PROFILE: ${{ inputs.canary_profile }}
       CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS: ${{ inputs.qps_page_slo_since_hours }}
+      CATSCAN_CANARY_BIDSTREAM_DIMENSION_WAIVER_JSON: ${{ inputs.bidstream_dimension_waiver_json }}
       CATSCAN_CANARY_TIMEOUT_SECONDS: ${{ inputs.canary_timeout_seconds }}
       CATSCAN_BEARER_TOKEN: ${{ secrets.CATSCAN_CANARY_BEARER_TOKEN }}
       CATSCAN_SESSION_COOKIE: ${{ secrets.CATSCAN_CANARY_SESSION_COOKIE }}
