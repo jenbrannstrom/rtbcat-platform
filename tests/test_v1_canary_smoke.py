@@ -49,6 +49,7 @@ def test_validate_data_health_payload_passes_default_rules():
         payload,
         require_healthy_readiness=False,
         max_dimension_missing_pct=99.9,
+        bidstream_dimension_waiver=None,
     )
 
 
@@ -60,6 +61,7 @@ def test_validate_data_health_payload_allows_unavailable_quality():
         payload,
         require_healthy_readiness=False,
         max_dimension_missing_pct=99.9,
+        bidstream_dimension_waiver=None,
     )
 
 
@@ -73,6 +75,7 @@ def test_validate_data_health_payload_blocks_unavailable_bidstream():
             payload,
             require_healthy_readiness=False,
             max_dimension_missing_pct=99.9,
+            bidstream_dimension_waiver=None,
         )
 
 
@@ -85,6 +88,7 @@ def test_validate_data_health_payload_rejects_excessive_dimension_missing_pct():
             payload,
             require_healthy_readiness=False,
             max_dimension_missing_pct=60.0,
+            bidstream_dimension_waiver=None,
         )
 
 
@@ -97,6 +101,7 @@ def test_validate_data_health_payload_rejects_non_healthy_when_strict():
             payload,
             require_healthy_readiness=True,
             max_dimension_missing_pct=99.9,
+            bidstream_dimension_waiver=None,
         )
 
 
