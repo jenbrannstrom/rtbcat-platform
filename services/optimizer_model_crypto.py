@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import os
 from functools import lru_cache
 from typing import Optional
 
 from cryptography.fernet import Fernet, InvalidToken
+
+logger = logging.getLogger(__name__)
 
 
 _MODEL_AUTH_KEY_ENV = "CATSCAN_OPTIMIZER_MODEL_SECRET_KEY"
@@ -25,7 +28,10 @@ def _normalize_fernet_key(raw_key: str) -> bytes:
         if len(decoded) == 32:
             return token.encode("utf-8")
     except Exception:
-        pass
+        logger.debug(
+            "Optimizer model secret key is not a valid Fernet token; deriving deterministic key hash",
+            exc_info=True,
+        )
 
     digest = hashlib.sha256(token.encode("utf-8")).digest()
     return base64.urlsafe_b64encode(digest)
@@ -39,6 +45,11 @@ def _get_fernet() -> Optional[Fernet]:
     try:
         return Fernet(_normalize_fernet_key(raw_key))
     except Exception:
+        logger.warning(
+            "Failed to initialize optimizer model Fernet crypto; auth header decryption disabled",
+            extra={"env_key": _MODEL_AUTH_KEY_ENV},
+            exc_info=True,
+        )
         return None
 
 
