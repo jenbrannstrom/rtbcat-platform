@@ -22,9 +22,6 @@ from services.secrets_manager import get_secrets_manager
 # Paths that don't require authentication
 PUBLIC_PATHS = {
     "/health",
-    "/docs",
-    "/openapi.json",
-    "/redoc",
     "/auth/providers",
 }
 
@@ -41,7 +38,7 @@ def generate_api_key() -> str:
 
 def is_public_path(path: str) -> bool:
     """Check if the path is public (no auth required)."""
-    return path in PUBLIC_PATHS or path.startswith("/docs") or path.startswith("/redoc")
+    return path in PUBLIC_PATHS
 
 
 class APIKeyAuthMiddleware(BaseHTTPMiddleware):
