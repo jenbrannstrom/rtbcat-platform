@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 from xml.etree import ElementTree
 
+from services.url_safety import is_safe_public_http_url
 from storage.postgres_repositories.thumbnails_repo import ThumbnailsRepository
 
 logger = logging.getLogger(__name__)
@@ -172,6 +173,21 @@ class ThumbnailsService:
                 creative_id=creative_id,
                 status="failed",
                 error_reason="no_url",
+            )
+
+        if not is_safe_public_http_url(video_url):
+            logger.warning("Blocked thumbnail generation for unsafe video URL", extra={"creative_id": creative_id})
+            await self.repo.upsert_thumbnail_status(
+                creative_id=creative_id,
+                status="failed",
+                error_reason="unsafe_video_url",
+                error_category="other",
+                backoff_seconds=self._compute_backoff_seconds(1),
+            )
+            return ThumbnailResult(
+                creative_id=creative_id,
+                status="failed",
+                error_reason="unsafe_video_url",
             )
 
         # Generate thumbnail

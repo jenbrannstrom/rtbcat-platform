@@ -22,9 +22,10 @@ The login page at `/login` discovers enabled providers from `GET /api/auth/provi
 
 ### First user (bootstrap)
 
-#### Production (CATSCAN_BOOTSTRAP_TOKEN is set)
+#### Production (secure default)
 
-On GCP deployments, the startup script generates a bootstrap token and writes it to `/etc/catscan.env`. The first admin **must** be created via the `/auth/bootstrap` endpoint with this token:
+Set `CATSCAN_REQUIRE_BOOTSTRAP_TOKEN=true` (default) and configure `CATSCAN_BOOTSTRAP_TOKEN`.
+The first admin **must** be created via `/auth/bootstrap`:
 
 ```bash
 # 1. Get the token from the VM
@@ -36,14 +37,15 @@ curl -X POST https://vm2.scan.rtb.cat/api/auth/bootstrap \
   -d '{"bootstrap_token": "<token>", "email": "admin@rtb.cat", "password": "securepassword", "display_name": "Admin"}'
 ```
 
-While the bootstrap token is set and no admin exists:
+While bootstrap is incomplete:
 - Google OAuth login will not auto-create users
 - Authing OIDC login will not auto-create users
 - Password registration (`/auth/register`) will be blocked
 
-#### Local development (no CATSCAN_BOOTSTRAP_TOKEN)
+#### Local development (legacy mode)
 
-If `CATSCAN_BOOTSTRAP_TOKEN` is **not** set, the legacy behaviour remains: the first user to register or log in via any method automatically gets the **admin** role.
+If you explicitly set `CATSCAN_REQUIRE_BOOTSTRAP_TOKEN=false`, legacy behavior is enabled:
+the first user to register or log in via any method becomes **admin**.
 
 ```bash
 curl -X POST http://localhost:8000/auth/register \
@@ -139,7 +141,10 @@ The nginx config is stored in the repo at `terraform/gcp_sg_vm2/nginx-catscan.co
 | `CATSCAN_ENABLE_GOOGLE_LOGIN` | Google login toggle | `true` |
 | `CATSCAN_ENABLE_AUTHING_LOGIN` | Authing login toggle | `true` |
 | `CATSCAN_DEFAULT_LOGIN_METHOD` | Preferred default when multiple enabled | `authing` |
+| `CATSCAN_REQUIRE_BOOTSTRAP_TOKEN` | Enforce secure first-admin bootstrap flow | `true` |
+| `CATSCAN_BOOTSTRAP_TOKEN` | Token used by `/auth/bootstrap` | `<random-secret>` |
 | `OAUTH2_PROXY_ENABLED` | Google login | `true` |
+| `OAUTH2_PROXY_TRUSTED_IPS` | Trusted proxy source IPs/CIDRs for auth headers | `127.0.0.1,::1` |
 | `AUTHING_APP_ID` | Authing login | `6abc...` |
 | `AUTHING_APP_SECRET` | Authing login | `secret...` |
 | `AUTHING_ISSUER` | Authing login | `https://catscan.authing.cn/oidc` |

@@ -20,7 +20,11 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from api.auth_bootstrap import is_bootstrap_token_required, is_bootstrap_completed
+from api.auth_bootstrap import (
+    is_bootstrap_token_required,
+    is_bootstrap_completed,
+    get_bootstrap_token,
+)
 from services.auth_service import AuthService, User
 
 logger = logging.getLogger(__name__)
@@ -55,7 +59,6 @@ PUBLIC_PATHS = {
 PUBLIC_PREFIXES = [
     "/docs",
     "/redoc",
-    "/thumbnails/",  # Locally-generated video preview images
 ]
 
 
@@ -99,7 +102,7 @@ def is_auto_user_provisioning_enabled() -> bool:
 
 
 def _is_trusted_proxy_client(request: Request) -> bool:
-    """Only trust auth headers from loopback/private clients (or explicit allowlist)."""
+    """Only trust auth headers from loopback or explicit allowlist."""
     if not request.client or not request.client.host:
         return False
 
@@ -125,7 +128,7 @@ def _is_trusted_proxy_client(request: Request) -> bool:
                 continue
         return False
 
-    return client_ip.is_loopback or client_ip.is_private
+    return client_ip.is_loopback
 
 
 class SessionAuthMiddleware(BaseHTTPMiddleware):
@@ -204,8 +207,14 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             # First user gets sudo role, others get read role
             user_count = await auth_svc.count_users()
             if user_count == 0 and is_bootstrap_token_required() and not await is_bootstrap_completed():
+                if not get_bootstrap_token():
+                    logger.error(
+                        "Blocked OAuth2 first-user auto-sudo for %s (CATSCAN_REQUIRE_BOOTSTRAP_TOKEN=true but CATSCAN_BOOTSTRAP_TOKEN is missing)",
+                        email,
+                    )
+                    return None, True
                 logger.warning(
-                    "Blocked OAuth2 first-user auto-sudo for %s (CATSCAN_BOOTSTRAP_TOKEN is set, use /auth/bootstrap)",
+                    "Blocked OAuth2 first-user auto-sudo for %s (bootstrap guard enabled; use /auth/bootstrap)",
                     email,
                 )
                 return None, True

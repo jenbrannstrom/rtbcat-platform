@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -50,6 +50,21 @@ _INTERNAL_SLUGS = {
 
 def _is_internal(slug: str) -> bool:
     return slug in _INTERNAL_SLUGS
+
+
+def _can_access_internal_docs(request: Request, internal_requested: bool) -> bool:
+    """Allow internal docs only for authenticated sudo users."""
+    if not internal_requested:
+        return False
+
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required for internal docs.")
+
+    if getattr(user, "role", None) != "sudo":
+        raise HTTPException(status_code=403, detail="Internal docs require sudo access.")
+
+    return True
 
 
 # ── Redaction ────────────────────────────────────────────────────────
@@ -192,10 +207,13 @@ class ChapterResponse(BaseModel):
 
 @router.get("/docs/toc", response_model=TocResponse)
 async def get_docs_toc(
+    request: Request,
     lang: str = Query("en", pattern="^(en|zh|es|nl|ru|pl|uk|da|fr|he|ar)$"),
     internal: bool = Query(False, description="Include internal (DevOps) chapters"),
 ) -> TocResponse:
     """Return the table of contents as a sorted chapter list."""
+    include_internal = _can_access_internal_docs(request, internal)
+
     directory = _lang_dir(lang)
     if not directory.is_dir():
         raise HTTPException(status_code=404, detail="Manual directory not found")
@@ -208,7 +226,7 @@ async def get_docs_toc(
             continue
 
         is_internal = _is_internal(slug)
-        if is_internal and not internal:
+        if is_internal and not include_internal:
             continue
 
         try:
@@ -235,13 +253,16 @@ async def get_docs_toc(
 
 @router.get("/docs/content/{slug}", response_model=ChapterResponse)
 async def get_docs_content(
+    request: Request,
     slug: str,
     lang: str = Query("en", pattern="^(en|zh|es|nl|ru|pl|uk|da|fr|he|ar)$"),
     internal: bool = Query(False, description="Allow internal chapters"),
 ) -> ChapterResponse:
     """Return the markdown content for a chapter."""
+    include_internal = _can_access_internal_docs(request, internal)
+
     # Block internal chapters for public requests
-    if _is_internal(slug) and not internal:
+    if _is_internal(slug) and not include_internal:
         raise HTTPException(
             status_code=403,
             detail="This chapter is only available to authenticated users.",
@@ -269,11 +290,11 @@ async def get_docs_content(
     content = _rewrite_image_paths(content)
 
     # Redact sensitive data for public requests
-    if not internal:
+    if not include_internal:
         content = _redact(content)
 
     # Build prev/next from sorted file list (scoped to visibility)
-    all_slugs = _get_ordered_slugs(directory, include_internal=internal)
+    all_slugs = _get_ordered_slugs(directory, include_internal=include_internal)
     prev_slug = None
     next_slug = None
     if slug in all_slugs:
