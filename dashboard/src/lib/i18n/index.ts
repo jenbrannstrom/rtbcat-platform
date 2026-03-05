@@ -4,12 +4,24 @@ export { es } from './translations/es';
 export { nl } from './translations/nl';
 export { ru } from './translations/ru';
 export { zh } from './translations/zh';
+export { pl } from './translations/pl';
+export { uk } from './translations/uk';
+export { da } from './translations/da';
+export { fr } from './translations/fr';
+export { he } from './translations/he';
+export { ar } from './translations/ar';
 
 import { en } from './translations/en';
 import { es } from './translations/es';
 import { nl } from './translations/nl';
 import { ru } from './translations/ru';
 import { zh } from './translations/zh';
+import { pl } from './translations/pl';
+import { uk } from './translations/uk';
+import { da } from './translations/da';
+import { fr } from './translations/fr';
+import { he } from './translations/he';
+import { ar } from './translations/ar';
 import type { Language, PartialTranslations, Translations } from './types';
 
 type PlainObject = Record<string, unknown>;
@@ -50,15 +62,15 @@ function withEnglishFallback(override?: PartialTranslations): Translations {
 export const translations: Record<Language, Translations> = {
   en,
   es: withEnglishFallback(es),
-  pl: en,
+  pl: withEnglishFallback(pl),
   zh: withEnglishFallback(zh),
   ru: withEnglishFallback(ru),
-  uk: en,
-  da: en,
-  fr: en,
+  uk: withEnglishFallback(uk),
+  da: withEnglishFallback(da),
+  fr: withEnglishFallback(fr),
   nl: withEnglishFallback(nl),
-  he: en,
-  ar: en,
+  he: withEnglishFallback(he),
+  ar: withEnglishFallback(ar),
 };
 
 // Default language

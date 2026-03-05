@@ -1,0 +1,42 @@
+import type { PartialTranslations } from '../../types';
+
+const value: PartialTranslations['creatives'] = {
+    'title': 'Kreacje',
+    'defaultOrder': 'Domyślna kolejność',
+    'spendYesterday': 'Wydatki (wczoraj)',
+    'spend7Days': 'Wydatki (7 dni)',
+    'spend14Days': 'Wydatki (14 dni)',
+    'spend30Days': 'Wydatki (30 dni)',
+    'spendAllTime': 'Wydatki (cały czas)',
+    'video': 'Wideo',
+    'display': 'Display',
+    'native': 'Natywne',
+    'searchPlaceholder': 'Szukaj ID, nazwa, reklamodawca...',
+    'tier': 'Poziom:',
+    'all': 'Wszystkie',
+    'high': 'Wysoki',
+    'medium': 'Średni',
+    'low': 'Niski',
+    'noData': 'Brak danych',
+    'allSizes': 'Wszystkie rozmiary',
+    'clear': 'Wyczyść',
+    'noCreativesMatchFilters': 'Brak kreacji pasujących do filtrów',
+    'noCreativesForSeat': 'Brak kreacji dla tego miejsca',
+    'noCreativesFound': 'Nie znaleziono kreacji',
+    'connectAccount': 'Połącz konto',
+    'approved': 'Zatwierdzone',
+    'notApproved': 'Niezatwierdzone',
+    'viewCreative': 'Zobacz kreację',
+    'noPerformanceData': 'Brak danych wydajności',
+    'copyId': 'Kopiuj ID',
+    'copyHtml': 'Kopiuj HTML',
+    'bySizeFormat': 'Wg rozmiaru/formatu',
+    'size': 'Rozmiar',
+    'byCountry': 'Wg kraju',
+    'byCreativeTop10': 'Wg kreacji (Top 10)',
+    'creativeId': 'ID kreacji',
+    'ctr': 'CTR',
+    'spentSuffix': 'wydano'
+};
+
+export default value;

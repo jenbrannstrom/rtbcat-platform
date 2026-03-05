@@ -1,0 +1,41 @@
+import type { PartialTranslations } from '../../types';
+
+const value: PartialTranslations['connect'] = {
+    'title': 'Connecter',
+    'connectAccount': 'Connecter un compte',
+    'serviceAccount': 'Compte de service',
+    'instructions': 'Suivez les instructions pour connecter votre compte',
+    'setupComplete': 'Configuration terminée !',
+    'setUpCatScan': 'Configurer Cat-Scan',
+    'accountConnectedReady': 'Votre compte est connecté et prêt à analyser',
+    'stepOf': 'Étape {current} sur {total} : {title}',
+    'uploadCredentials': 'Télécharger les identifiants',
+    'syncCreatives': 'Synchroniser les créatifs',
+    'readyToGo': 'Prêt',
+    'googleCredentials': 'Identifiants Google',
+    'connected': 'Connecté',
+    'serviceAccountConfigured': 'Compte de service configuré',
+    'change': 'Modifier',
+    'uploading': 'Téléchargement...',
+    'dropFileHere': 'Déposez le fichier ici',
+    'uploadServiceAccountJson': 'Télécharger le JSON du compte de service',
+    'dragAndDropOrClick': 'Glissez-déposez ou cliquez pour parcourir',
+    'noBuyerSeatsFound': 'Aucun siège acheteur trouvé',
+    'creatives': 'créatifs',
+    'lastSynced': 'Dernière synchronisation',
+    'syncing': 'Synchronisation...',
+    'syncNow': 'Synchroniser maintenant',
+    'readyToAnalyze': 'Prêt à analyser',
+    'goToDashboard': 'Aller au tableau de bord',
+    'discoveredSeats': '{count} siège(s) acheteur découvert(s)',
+    'failedToDiscoverSeats': 'Échec de la découverte des sièges',
+    'connectedAs': 'Connecté en tant que {email}',
+    'uploadFailed': 'Échec du téléchargement',
+    'syncedCreatives': '{count} créatifs synchronisés',
+    'syncFailed': 'Échec de la synchronisation',
+    'pleaseSelectJsonFile': 'Veuillez sélectionner un fichier JSON',
+    'invalidJsonFile': 'Fichier JSON invalide.',
+    'account': 'Compte'
+};
+
+export default value;
