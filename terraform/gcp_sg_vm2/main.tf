@@ -105,6 +105,7 @@ resource "google_compute_instance" "catscan_sg_vm2" {
     precompute_monitor_secret     = ""
     gmail_import_secret           = ""
     creative_cache_refresh_secret = ""
+    oauth_client_secret_id        = "${var.app_name}-oauth-client-secret-sg2"
     precompute_refresh_days       = var.precompute_refresh_days
     precompute_refresh_max_age    = var.precompute_refresh_max_age_hours
     artifact_registry_domain      = var.artifact_registry_domain

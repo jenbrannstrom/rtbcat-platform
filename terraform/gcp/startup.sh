@@ -26,6 +26,7 @@ GMAIL_IMPORT_SECRET=""
 CREATIVE_CACHE_REFRESH_SECRET=""
 PRECOMPUTE_REFRESH_DAYS="${precompute_refresh_days}"
 PRECOMPUTE_REFRESH_MAX_AGE_HOURS="${precompute_refresh_max_age}"
+OAUTH_CLIENT_SECRET_ID="${oauth_client_secret_id}"
 
 # OAuth2 Proxy - Google Authentication (REQUIRED)
 GOOGLE_OAUTH_CLIENT_ID="${google_oauth_client_id}"
@@ -274,7 +275,7 @@ PRECOMPUTE_REFRESH_SECRET=$(_fetch_secret "${app_name}-precompute-refresh-secret
 PRECOMPUTE_MONITOR_SECRET=$(_fetch_secret "${app_name}-precompute-monitor-secret" "Precompute monitor secret")
 GMAIL_IMPORT_SECRET=$(_fetch_secret "${app_name}-gmail-import-secret" "Gmail import secret")
 CREATIVE_CACHE_REFRESH_SECRET=$(_fetch_secret "${app_name}-creative-cache-refresh-secret" "Creative cache refresh secret")
-GOOGLE_OAUTH_CLIENT_SECRET=$(_fetch_secret "${app_name}-oauth-client-secret" "OAuth client secret")
+GOOGLE_OAUTH_CLIENT_SECRET=$(_fetch_secret "$OAUTH_CLIENT_SECRET_ID" "OAuth client secret")
 
 # -----------------------------------------------------------------------------
 # 3. Setup SSH Deploy Key (for private GitHub repo)
