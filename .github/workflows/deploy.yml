@@ -39,6 +39,8 @@ concurrency:
 env:
   GCP_PROJECT: ${{ vars.GCP_PROJECT }}
   GCP_ZONE: ${{ vars.GCP_ZONE || 'asia-southeast1-b' }}
+  GCP_VM_PRODUCTION: ${{ vars.GCP_VM_PRODUCTION || 'catscan-production-sg' }}
+  GCP_VM_STAGING: ${{ vars.GCP_VM_STAGING || 'catscan-production-sg2' }}
   APP_DIR: ${{ vars.APP_DIR || '/opt/catscan' }}
   GIT_BRANCH: ${{ vars.GIT_BRANCH || 'unified-platform' }}
   IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY || 'asia-southeast1-docker.pkg.dev/catscan-prod-202601/catscan' }}
@@ -59,7 +61,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      VM_NAME: ${{ github.event.inputs.target == 'production' && 'catscan-vm-prod' || 'catscan-vm-staging' }}
+      VM_NAME: ${{ github.event.inputs.target == 'production' && env.GCP_VM_PRODUCTION || env.GCP_VM_STAGING }}
 
     steps:
       - name: Show deployment intent

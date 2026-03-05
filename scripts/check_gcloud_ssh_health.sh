@@ -10,7 +10,7 @@
 
 set -u
 
-INSTANCE="catscan-vm-prod"
+INSTANCE="catscan-production-sg"
 ZONE="asia-southeast1-b"
 PROJECT=""
 API_HOST="compute.googleapis.com"
@@ -23,7 +23,7 @@ usage() {
 Usage: scripts/check_gcloud_ssh_health.sh [options]
 
 Options:
-  --instance NAME         VM instance name (default: catscan-vm-prod)
+  --instance NAME         VM instance name (default: catscan-production-sg)
   --zone ZONE             GCE zone (default: asia-southeast1-b)
   --project PROJECT       GCP project (optional)
   --api-host HOST         API hostname to test (default: compute.googleapis.com)

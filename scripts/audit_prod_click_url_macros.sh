@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTANCE="${CATSCAN_GCP_INSTANCE:-catscan-vm-prod}"
+INSTANCE="${CATSCAN_GCP_INSTANCE:-catscan-production-sg}"
 ZONE="${CATSCAN_GCP_ZONE:-asia-southeast1-b}"
 PROJECT="${CATSCAN_GCP_PROJECT:-}"
 CONTAINER="${CATSCAN_API_CONTAINER:-catscan-api}"
@@ -22,7 +22,7 @@ By default, scans the 4 most recent active seats and the latest 40 creatives per
 the last 30 days.
 
 Options:
-  --instance <name>         VM instance (default: catscan-vm-prod)
+  --instance <name>         VM instance (default: catscan-production-sg)
   --zone <zone>             GCP zone (default: asia-southeast1-b)
   --project <id>            Optional GCP project id
   --container <name>        Docker container name (default: catscan-api)

@@ -18,16 +18,18 @@ ENABLE_HTTPS="${enable_https}"
 GITHUB_REPO="${github_repo}"
 GITHUB_BRANCH="${github_branch}"
 GCS_BUCKET="${gcs_bucket}"
-PRECOMPUTE_REFRESH_SECRET="${precompute_refresh_secret}"
-PRECOMPUTE_MONITOR_SECRET="${precompute_monitor_secret}"
-GMAIL_IMPORT_SECRET="${gmail_import_secret}"
-CREATIVE_CACHE_REFRESH_SECRET="${creative_cache_refresh_secret}"
+# Secret values must come from Secret Manager at runtime.
+# Keep startup metadata secret-free to avoid metadata/state exposure.
+PRECOMPUTE_REFRESH_SECRET=""
+PRECOMPUTE_MONITOR_SECRET=""
+GMAIL_IMPORT_SECRET=""
+CREATIVE_CACHE_REFRESH_SECRET=""
 PRECOMPUTE_REFRESH_DAYS="${precompute_refresh_days}"
 PRECOMPUTE_REFRESH_MAX_AGE_HOURS="${precompute_refresh_max_age}"
 
 # OAuth2 Proxy - Google Authentication (REQUIRED)
 GOOGLE_OAUTH_CLIENT_ID="${google_oauth_client_id}"
-GOOGLE_OAUTH_CLIENT_SECRET="${google_oauth_client_secret}"
+GOOGLE_OAUTH_CLIENT_SECRET=""
 ALLOWED_EMAIL_DOMAINS='${jsonencode(allowed_email_domains)}'
 ALLOW_ANY_GOOGLE_ACCOUNTS="${allow_any_google_accounts}"
 
@@ -248,37 +250,31 @@ chown -R 999:999 "$DATA_DIR/credentials"
 chown catscan:catscan "$DATA_DIR"
 
 # -----------------------------------------------------------------------------
-# 2c. Fetch Scheduler + OAuth Secrets from Secret Manager (GSM-preferred)
+# 2c. Fetch Scheduler + OAuth Secrets from Secret Manager (required)
 # -----------------------------------------------------------------------------
-# Phase 1: Try GSM first, fall back to template variable if GSM unavailable.
-# Phase 2 (future): Remove template var fallback entirely.
 
 _fetch_secret() {
-    # Usage: _fetch_secret <gsm-secret-id> <fallback-value> <description>
+    # Usage: _fetch_secret <gsm-secret-id> <description>
     local secret_id="$1"
-    local fallback="$2"
-    local desc="$3"
+    local desc="$2"
     local value
     value=$(gcloud secrets versions access latest --secret="$secret_id" --project="$PROJECT_ID" 2>/dev/null || true)
     if [ -n "$value" ]; then
         echo "    ✓ $desc loaded from GSM" >&2
         echo "$value"
-    elif [ -n "$fallback" ]; then
-        echo "    ⚠ $desc: GSM unavailable, using template fallback" >&2
-        echo "$fallback"
     else
-        echo "    ✗ $desc: not found in GSM or template" >&2
-        echo ""
+        echo "    ✗ $desc: required secret '$secret_id' not found in GSM" >&2
+        return 1
     fi
 }
 
 echo ">>> Fetching scheduler + OAuth secrets from Secret Manager..."
 
-PRECOMPUTE_REFRESH_SECRET=$(_fetch_secret "${app_name}-precompute-refresh-secret" "$PRECOMPUTE_REFRESH_SECRET" "Precompute refresh secret")
-PRECOMPUTE_MONITOR_SECRET=$(_fetch_secret "${app_name}-precompute-monitor-secret" "$PRECOMPUTE_MONITOR_SECRET" "Precompute monitor secret")
-GMAIL_IMPORT_SECRET=$(_fetch_secret "${app_name}-gmail-import-secret" "$GMAIL_IMPORT_SECRET" "Gmail import secret")
-CREATIVE_CACHE_REFRESH_SECRET=$(_fetch_secret "${app_name}-creative-cache-refresh-secret" "$CREATIVE_CACHE_REFRESH_SECRET" "Creative cache refresh secret")
-GOOGLE_OAUTH_CLIENT_SECRET=$(_fetch_secret "${app_name}-oauth-client-secret" "$GOOGLE_OAUTH_CLIENT_SECRET" "OAuth client secret")
+PRECOMPUTE_REFRESH_SECRET=$(_fetch_secret "${app_name}-precompute-refresh-secret" "Precompute refresh secret")
+PRECOMPUTE_MONITOR_SECRET=$(_fetch_secret "${app_name}-precompute-monitor-secret" "Precompute monitor secret")
+GMAIL_IMPORT_SECRET=$(_fetch_secret "${app_name}-gmail-import-secret" "Gmail import secret")
+CREATIVE_CACHE_REFRESH_SECRET=$(_fetch_secret "${app_name}-creative-cache-refresh-secret" "Creative cache refresh secret")
+GOOGLE_OAUTH_CLIENT_SECRET=$(_fetch_secret "${app_name}-oauth-client-secret" "OAuth client secret")
 
 # -----------------------------------------------------------------------------
 # 3. Setup SSH Deploy Key (for private GitHub repo)
