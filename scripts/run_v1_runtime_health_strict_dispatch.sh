@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="${CATSCAN_GH_REPO:-jenbrannstrom/rtbcat-platform}"
-REF="${CATSCAN_GH_REF:-unified-platform}"
+REPO="${CATSCAN_GH_REPO:-YOUR_ORG/rtbcat-platform}"
+REF="${CATSCAN_GH_REF:-main}"
 WORKFLOW="v1-runtime-health-strict.yml"
 
 API_BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
@@ -28,8 +28,8 @@ Options:
   --since-hours <n>               QPS page SLO lookback hours (default: 168)
   --bidstream-waiver-json <json>  Optional waiver JSON for known bidstream dimension gaps
   --canary-timeout <seconds>      Per-request canary HTTP timeout (default: 240)
-  --repo <owner/repo>             GitHub repo (default: jenbrannstrom/rtbcat-platform)
-  --ref <branch>                  Git ref/branch (default: unified-platform)
+  --repo <owner/repo>             GitHub repo (default: YOUR_ORG/rtbcat-platform)
+  --ref <branch>                  Git ref/branch (default: main)
   --poll-timeout <seconds>        Wait for run registration (default: 180)
   -h, --help                      Show help
 

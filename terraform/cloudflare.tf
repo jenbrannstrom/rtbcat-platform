@@ -3,8 +3,8 @@
 # Prerequisites:
 # 1. Create Cloudflare API token at https://dash.cloudflare.com/profile/api-tokens
 #    - Permissions: Zone > DNS > Edit
-#    - Zone Resources: Include > Specific zone > rtb.cat
-# 2. Get Zone ID from Cloudflare dashboard (rtb.cat overview page, right sidebar)
+#    - Zone Resources: Include > Specific zone > yourdomain.com
+# 2. Get Zone ID from Cloudflare dashboard (yourdomain.com overview page, right sidebar)
 # 3. Set in terraform.tfvars:
 #    cloudflare_api_token = "your-token"
 #    cloudflare_zone_id = "your-zone-id"
@@ -22,7 +22,7 @@ resource "cloudflare_record" "catscan" {
   content = aws_eip.catscan.public_ip
   type    = "A"
   ttl     = 300
-  proxied = false  # Direct connection for Let's Encrypt validation
+  proxied = false # Direct connection for Let's Encrypt validation
   comment = "Cat-Scan QPS Optimizer"
 }
 
@@ -34,12 +34,12 @@ locals {
 # Output the DNS record status
 output "dns_record" {
   description = "Cloudflare DNS record"
-  value       = var.cloudflare_api_token != "" && var.domain_name != "" ? {
+  value = var.cloudflare_api_token != "" && var.domain_name != "" ? {
     name    = var.domain_name
     type    = "A"
     content = aws_eip.catscan.public_ip
     status  = "Created automatically"
-  } : {
+    } : {
     name    = var.domain_name
     type    = "A"
     content = aws_eip.catscan.public_ip

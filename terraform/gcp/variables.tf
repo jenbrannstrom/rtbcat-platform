@@ -114,7 +114,7 @@ variable "google_oauth_client_secret" {
 }
 
 variable "allowed_email_domains" {
-  description = "Email domains allowed to access (e.g., ['rtb.cat', 'company.com']). Empty list is denied by default unless allow_any_google_accounts=true."
+  description = "Email domains allowed to access (e.g., ['example.com', 'company.com']). Empty list is denied by default unless allow_any_google_accounts=true."
   type        = list(string)
   default     = []
 }

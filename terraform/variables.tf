@@ -27,13 +27,13 @@ variable "app_name" {
 variable "github_repo" {
   description = "GitHub repository URL to deploy"
   type        = string
-  default     = "https://github.com/jenbrannstrom/rtbcat-platform.git"
+  default     = "https://github.com/YOUR_ORG/rtbcat-platform.git"
 }
 
 variable "github_branch" {
   description = "Git branch to deploy"
   type        = string
-  default     = "unified-platform"
+  default     = "main"
 }
 
 variable "ssh_key_name" {

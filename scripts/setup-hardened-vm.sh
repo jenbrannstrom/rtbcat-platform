@@ -6,7 +6,7 @@
 # Run as root or with sudo on a fresh Ubuntu 22.04/24.04 VM.
 #
 # Usage:
-#   curl -sSL https://raw.githubusercontent.com/jenbrannstrom/rtbcat-platform/main/scripts/setup-hardened-vm.sh | sudo bash
+#   curl -sSL https://raw.githubusercontent.com/YOUR_ORG/rtbcat-platform/main/scripts/setup-hardened-vm.sh | sudo bash
 #
 # Or download and run:
 #   chmod +x setup-hardened-vm.sh
@@ -454,7 +454,7 @@ echo ""
 log_warn "IMPORTANT: Complete these manual steps:"
 echo ""
 echo "1. Clone the repository:"
-echo "   sudo -u ${DEPLOY_USER} git clone https://github.com/jenbrannstrom/rtbcat-platform.git ${APP_DIR}"
+echo "   sudo -u ${DEPLOY_USER} git clone https://github.com/YOUR_ORG/rtbcat-platform.git ${APP_DIR}"
 echo ""
 echo "2. Set up Python environment:"
 echo "   cd ${APP_DIR}"

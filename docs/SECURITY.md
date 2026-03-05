@@ -38,7 +38,7 @@ The Cat-Scan repository contains only application code. All sensitive data lives
 
 | File | Contains | Risk if Leaked |
 |------|----------|----------------|
-| `prompts/deploy-catscan.md` | VM IPs, project IDs, domains | Targeted attacks |
+| Local deployment notes (outside repo) | VM IPs, project IDs, domains | Targeted attacks |
 | Terraform outputs | Infrastructure endpoints | Attack surface mapping |
 
 ---
@@ -61,7 +61,6 @@ data/
 
 # Credentials
 catscan-ci-key.json
-prompts/deploy-catscan.md
 ```
 
 ### How to Verify
@@ -96,7 +95,6 @@ Create these files locally (they're gitignored):
 cp .env.example .env
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars
 cp terraform/gcp/terraform.tfvars.example terraform/gcp/terraform.tfvars
-cp prompts/deploy-catscan.example.md prompts/deploy-catscan.md
 
 # Edit with your values
 nano .env
@@ -125,7 +123,7 @@ Even if you think it's "just for testing":
 - Environment files (`.env`)
 - Service account keys (`*.json`)
 - Terraform state (`*.tfstate`)
-- Your deploy prompts with real IPs
+- Deployment notes with real IPs or project IDs
 
 ---
 
