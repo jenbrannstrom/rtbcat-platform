@@ -60,6 +60,7 @@ jobs:
       CATSCAN_CANARY_PROFILE: ${{ github.event.inputs.canary_profile || vars.CATSCAN_RUNTIME_HEALTH_CANARY_PROFILE || 'balanced' }}
       CATSCAN_CANARY_QPS_PAGE_SLO_SINCE_HOURS: ${{ github.event.inputs.qps_page_slo_since_hours || vars.CATSCAN_RUNTIME_HEALTH_QPS_PAGE_SLO_SINCE_HOURS || '168' }}
       CATSCAN_CANARY_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS: ${{ vars.CATSCAN_RUNTIME_HEALTH_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS || '12000' }}
+      CATSCAN_RUNTIME_HEALTH_ENDPOINT_EFFICIENCY_BUDGET_WAIVER_EXPIRES_ON: ${{ vars.CATSCAN_RUNTIME_HEALTH_ENDPOINT_EFFICIENCY_BUDGET_WAIVER_EXPIRES_ON || '2026-03-12' }}
       CATSCAN_CANARY_BIDSTREAM_DIMENSION_WAIVER_JSON: ${{ github.event.inputs.bidstream_dimension_waiver_json || vars.CATSCAN_RUNTIME_HEALTH_BIDSTREAM_WAIVER_JSON || '[{"buyer_id":"1111111111","expires_on":"2026-06-30","note":"Google RTB source for this buyer does not provide platform/environment/transaction_type dimensions","allow_unavailable":true,"allow_zero_rows":true,"allow_all_dimensions_missing":true,"allow_report_completeness_degraded":true,"allow_seat_day_completeness_degraded":true}]' }}
       CATSCAN_CANARY_TIMEOUT_SECONDS: ${{ github.event.inputs.canary_timeout_seconds || vars.CATSCAN_RUNTIME_HEALTH_TIMEOUT_SECONDS || '240' }}
       CATSCAN_BEARER_TOKEN: ${{ secrets.CATSCAN_CANARY_BEARER_TOKEN }}
@@ -73,6 +74,26 @@ jobs:
           if [[ -z "${CATSCAN_BEARER_TOKEN:-}" && -z "${CATSCAN_SESSION_COOKIE:-}" ]]; then
             echo "Set CATSCAN_CANARY_BEARER_TOKEN or CATSCAN_CANARY_SESSION_COOKIE in repository secrets." >&2
             exit 1
+          fi
+
+      - name: Enforce endpoint-efficiency budget waiver expiry
+        run: |
+          budget="${CATSCAN_CANARY_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS}"
+          expiry="${CATSCAN_RUNTIME_HEALTH_ENDPOINT_EFFICIENCY_BUDGET_WAIVER_EXPIRES_ON}"
+          today="$(date -u +%Y-%m-%d)"
+
+          if ! [[ "${budget}" =~ ^[0-9]+$ ]]; then
+            echo "Invalid CATSCAN_CANARY_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS='${budget}'" >&2
+            exit 1
+          fi
+
+          if (( budget > 12000 )); then
+            echo "Temporary endpoint-efficiency budget override detected: ${budget}ms (baseline=12000ms)"
+            if [[ "${today}" > "${expiry}" ]]; then
+              echo "FAIL: budget override expired on ${expiry}; set budget back to 12000ms." >&2
+              exit 1
+            fi
+            echo "WARN: override valid until ${expiry}; keep time-boxed and revert on schedule."
           fi
 
       - name: Run runtime-health strict gate

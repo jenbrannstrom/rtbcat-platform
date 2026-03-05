@@ -80,6 +80,7 @@ If a temporary override is used for historical-rollup aging, it must include:
 - explicit expiry date in `ROADMAP.md`
 - reason + run evidence link
 - rollback action/date to restore `12000` and rerun strict with `--since-hours 168`
+- workflow expiry guard via `CATSCAN_RUNTIME_HEALTH_ENDPOINT_EFFICIENCY_BUDGET_WAIVER_EXPIRES_ON`
 
 ---
 
