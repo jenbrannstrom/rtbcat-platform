@@ -55,7 +55,7 @@ Redeploy after changing env.
 Run:
 
 ```bash
-scripts/run_v1_runtime_health_unblock_check.sh --buyer-id 1111111111 --since-hours 168 --skip-strict
+scripts/run_v1_runtime_health_unblock_check.sh --buyer-id <PROD_BUYER_ID> --since-hours 168 --skip-strict
 ```
 
 Required highlights:
@@ -69,7 +69,7 @@ Required highlights:
 Run:
 
 ```bash
-scripts/run_v1_runtime_health_strict_dispatch.sh --buyer-id 1111111111 --profile balanced
+scripts/run_v1_runtime_health_strict_dispatch.sh --buyer-id <PROD_BUYER_ID> --profile balanced
 ```
 
 Required:
