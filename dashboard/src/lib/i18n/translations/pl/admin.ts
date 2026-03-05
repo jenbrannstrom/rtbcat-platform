@@ -1,0 +1,43 @@
+import type { PartialTranslations } from '../../types';
+
+const value: PartialTranslations['admin'] = {
+    'dashboard': 'Panel administracyjny',
+    'manageUsers': 'Zarządzaj użytkownikami, uprawnieniami i ustawieniami systemu',
+    'totalUsers': 'Łączna liczba użytkowników',
+    'activeUsers': 'Aktywni użytkownicy',
+    'adminUsers': 'Użytkownicy sudo',
+    'userManagement': 'Zarządzanie użytkownikami',
+    'createNewUser': 'Utwórz nowego użytkownika',
+    'viewAuditLog': 'Zobacz dziennik audytu',
+    'systemSettings': 'Ustawienia systemu',
+    'users': 'Użytkownicy',
+    'user': 'Użytkownik',
+    'email': 'Email',
+    'displayName': 'Nazwa wyświetlana',
+    'active': 'Aktywny',
+    'role': 'Rola',
+    'permissions': 'Uprawnienia',
+    'lastLogin': 'Ostatnie logowanie',
+    'createUser': 'Utwórz użytkownika',
+    'editUser': 'Edytuj użytkownika',
+    'deleteUser': 'Usuń użytkownika',
+    'status': 'Status',
+    'created': 'Utworzono',
+    'inactive': 'Nieaktywny',
+    'loadingUsers': 'Ładowanie użytkowników...',
+    'noUsersFound': 'Nie znaleziono użytkowników',
+    'auditLog': 'Dziennik audytu',
+    'action': 'Akcja',
+    'details': 'Szczegóły',
+    'timestamp': 'Znacznik czasu',
+    'filters': 'Filtry',
+    'timeRange': 'Zakres czasu',
+    'last24Hours': 'Ostatnie 24 godziny',
+    'last7Days': 'Ostatnie 7 dni',
+    'last30Days': 'Ostatnie 30 dni',
+    'password': 'Hasło',
+    'creating': 'Tworzenie...',
+    'done': 'Gotowe'
+};
+
+export default value;

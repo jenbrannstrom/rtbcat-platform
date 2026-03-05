@@ -1,0 +1,40 @@
+import type { PartialTranslations } from '../../types';
+
+const value: PartialTranslations['campaigns'] = {
+    'title': 'Clusters de créatifs',
+    'newCampaign': 'Nouveau cluster',
+    'grid': 'Grille',
+    'list': 'Liste',
+    'high': 'Élevé',
+    'medium': 'Moyen',
+    'low': 'Faible',
+    'noData': 'Pas de données',
+    'campaignCount': '{count} cluster',
+    'campaignCountPlural': '{count} clusters',
+    'unclustered': 'non classé',
+    'analyzing': 'Analyse...',
+    'dismiss': 'Rejeter',
+    'created': 'Créé',
+    'creating': 'Création...',
+    'create': 'Créer',
+    'creativeCount': '{count} créatif',
+    'creativeCountPlural': '{count} créatifs',
+    'sort': 'Trier :',
+    'spend': 'Dépenses',
+    'impressions': 'Impressions',
+    'clicks': 'Clics',
+    'name': 'Nom',
+    'allCountries': 'Tous les pays',
+    'backToCreativeClusters': 'Retour aux clusters de créatifs',
+    'aiGenerated': 'Généré par IA',
+    'periodYesterday': 'Hier',
+    'periodLast7Days': '7 derniers jours',
+    'periodLast30Days': '30 derniers jours',
+    'periodAllTime': 'Tout le temps',
+    'dailyPerformance': 'Performance quotidienne',
+    'noCreativesInCampaign': 'Aucun créatif dans cette campagne',
+    'country': 'Pays',
+    'disapproved': 'Refusé'
+};
+
+export default value;
