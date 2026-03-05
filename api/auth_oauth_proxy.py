@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from api.auth_providers import get_auth_provider_status
+from api.request_trust import get_client_ip
 from services.auth_service import AuthService
 
 # Session cookie name (used by OAuth2 Proxy flow)
@@ -65,13 +66,8 @@ def get_auth_service() -> AuthService:
 
 
 def _get_client_ip(request: Request) -> Optional[str]:
-    """Extract client IP from request."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    if request.client:
-        return request.client.host
-    return None
+    """Extract client IP from trusted request metadata."""
+    return get_client_ip(request)
 
 
 # ==================== Auth Endpoints ====================

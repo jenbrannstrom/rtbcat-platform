@@ -25,6 +25,7 @@ from api.dependencies import (
     require_seat_admin_or_sudo,
     resolve_buyer_id,
 )
+from api.request_trust import get_client_ip
 from services.auth_service import User
 from services.conversion_attribution_service import ConversionAttributionService
 from services.conversion_ingestion_service import ConversionIngestionService
@@ -716,12 +717,8 @@ def _verify_webhook_signature(source_type: str, request: Request, payload: dict)
 
 
 def _extract_request_client_key(request: Request) -> str:
-    forwarded_for = request.headers.get("X-Forwarded-For", "")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip() or "unknown"
-    if request.client and request.client.host:
-        return request.client.host
-    return "unknown"
+    client_ip = get_client_ip(request)
+    return client_ip or "unknown"
 
 
 def _enforce_webhook_rate_limit(source_type: str, request: Request) -> None:
