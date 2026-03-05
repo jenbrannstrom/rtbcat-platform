@@ -10,6 +10,8 @@ CATSCAN_REQUIRE_BOOTSTRAP_TOKEN=false (local/dev workflows).
 
 import logging
 import os
+import threading
+import time
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -43,6 +45,77 @@ def _env_enabled(name: str, default: bool) -> bool:
 
 def get_bootstrap_token() -> str:
     return os.environ.get("CATSCAN_BOOTSTRAP_TOKEN", "").strip()
+
+
+def _parse_positive_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+        return value if value > 0 else default
+    except ValueError:
+        return default
+
+
+# Bootstrap endpoint brute-force throttling (IP-based)
+_BOOTSTRAP_RATE_LIMIT_MAX_ATTEMPTS = _parse_positive_int("CATSCAN_BOOTSTRAP_MAX_ATTEMPTS", 5)
+_BOOTSTRAP_RATE_LIMIT_WINDOW_SECONDS = _parse_positive_int("CATSCAN_BOOTSTRAP_WINDOW_SECONDS", 900)
+_BOOTSTRAP_RATE_LIMIT_LOCKOUT_SECONDS = _parse_positive_int("CATSCAN_BOOTSTRAP_LOCKOUT_SECONDS", 1800)
+_bootstrap_rate_limit_lock = threading.Lock()
+_bootstrap_attempts: dict[str, list[float]] = {}
+_bootstrap_lockouts: dict[str, float] = {}
+
+
+def _prune_bootstrap_rate_limit_state(now: float) -> None:
+    cutoff = now - _BOOTSTRAP_RATE_LIMIT_WINDOW_SECONDS
+
+    for key in list(_bootstrap_attempts.keys()):
+        recent = [ts for ts in _bootstrap_attempts[key] if ts >= cutoff]
+        if recent:
+            _bootstrap_attempts[key] = recent
+        else:
+            _bootstrap_attempts.pop(key, None)
+
+    for key in list(_bootstrap_lockouts.keys()):
+        if _bootstrap_lockouts[key] <= now:
+            _bootstrap_lockouts.pop(key, None)
+
+
+def _bootstrap_rate_limit_key(request: Request) -> str:
+    return get_client_ip(request) or "unknown"
+
+
+def _enforce_bootstrap_rate_limit(client_key: str) -> None:
+    now = time.time()
+    with _bootstrap_rate_limit_lock:
+        _prune_bootstrap_rate_limit_state(now)
+        lockout_until = _bootstrap_lockouts.get(client_key, 0.0)
+
+    if lockout_until > now:
+        retry_after = max(1, int(lockout_until - now))
+        raise HTTPException(
+            status_code=429,
+            detail="Too many bootstrap attempts. Please try again later.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
+def _record_bootstrap_failure(client_key: str) -> None:
+    now = time.time()
+    with _bootstrap_rate_limit_lock:
+        _prune_bootstrap_rate_limit_state(now)
+        attempts = _bootstrap_attempts.setdefault(client_key, [])
+        attempts.append(now)
+        if len(attempts) >= _BOOTSTRAP_RATE_LIMIT_MAX_ATTEMPTS:
+            _bootstrap_lockouts[client_key] = now + _BOOTSTRAP_RATE_LIMIT_LOCKOUT_SECONDS
+            _bootstrap_attempts.pop(client_key, None)
+
+
+def _clear_bootstrap_failures(client_key: str) -> None:
+    with _bootstrap_rate_limit_lock:
+        _bootstrap_attempts.pop(client_key, None)
+        _bootstrap_lockouts.pop(client_key, None)
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +189,9 @@ async def bootstrap_first_admin(
             detail="Bootstrap endpoint is disabled (set CATSCAN_REQUIRE_BOOTSTRAP_TOKEN=true to enable).",
         )
 
+    client_key = _bootstrap_rate_limit_key(request)
+    _enforce_bootstrap_rate_limit(client_key)
+
     if await is_bootstrap_completed():
         raise HTTPException(
             status_code=403,
@@ -135,8 +211,11 @@ async def bootstrap_first_admin(
     # Constant-time comparison to prevent timing attacks
     import hmac
     if not hmac.compare_digest(payload.bootstrap_token, expected_token):
+        _record_bootstrap_failure(client_key)
         logger.warning("Bootstrap attempt with invalid token from %s", request.client.host if request.client else "unknown")
         raise HTTPException(status_code=403, detail="Invalid bootstrap token.")
+
+    _clear_bootstrap_failures(client_key)
 
     # Create first sudo user
     email = payload.email.lower().strip()

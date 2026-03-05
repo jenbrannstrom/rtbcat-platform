@@ -41,6 +41,7 @@ While bootstrap is incomplete:
 - Google OAuth login will not auto-create users
 - Authing OIDC login will not auto-create users
 - Password registration (`/auth/register`) will be blocked
+- Invalid bootstrap-token attempts are rate-limited per source IP
 
 #### Local development (legacy mode)
 
@@ -75,7 +76,7 @@ After the first user exists, registration is **restricted to admins only**:
 
 ### Google / Authing users
 
-Users logging in via Google or Authing are **auto-created** on first login -- no registration step needed. The first user (if no users exist yet) gets admin; subsequent users get the `user` role.
+Users logging in via Google or Authing are **auto-created** on first login -- no registration step needed. The first user (if no users exist yet) gets admin; subsequent users get the `read` role.
 
 ## Limiting registration
 
@@ -143,10 +144,14 @@ The nginx config is stored in the repo at `terraform/gcp_sg_vm2/nginx-catscan.co
 | `CATSCAN_DEFAULT_LOGIN_METHOD` | Preferred default when multiple enabled | `authing` |
 | `CATSCAN_REQUIRE_BOOTSTRAP_TOKEN` | Enforce secure first-admin bootstrap flow | `true` |
 | `CATSCAN_BOOTSTRAP_TOKEN` | Token used by `/auth/bootstrap` | `<random-secret>` |
+| `CATSCAN_BOOTSTRAP_MAX_ATTEMPTS` | Max invalid bootstrap attempts before temporary lockout | `5` |
+| `CATSCAN_BOOTSTRAP_WINDOW_SECONDS` | Sliding window for counting invalid bootstrap attempts | `900` |
+| `CATSCAN_BOOTSTRAP_LOCKOUT_SECONDS` | Lockout duration after too many invalid bootstrap attempts | `1800` |
 | `OAUTH2_PROXY_ENABLED` | Google login | `true` |
 | `OAUTH2_PROXY_TRUSTED_IPS` | Trusted proxy source IPs/CIDRs for auth headers | `127.0.0.1,::1` |
 | `AUTHING_APP_ID` | Authing login | `6abc...` |
 | `AUTHING_APP_SECRET` | Authing login | `secret...` |
 | `AUTHING_ISSUER` | Authing login | `https://catscan.authing.cn/oidc` |
+| `CATSCAN_PUBLIC_BASE_URL` | Fixed public URL used to build OIDC callback URL | `https://your-deployment.example.com` |
 
 See `.env.example` for the full list.

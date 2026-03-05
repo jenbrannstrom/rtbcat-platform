@@ -4,12 +4,16 @@ import os
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi.testclient import TestClient
+from fastapi import HTTPException
+from starlette.requests import Request
+from starlette.responses import Response
 
 from api.auth_bootstrap import (
     is_bootstrap_token_required,
     is_bootstrap_completed,
     _auto_heal_bootstrap_status,
+    bootstrap_first_admin,
+    BootstrapRequest,
 )
 
 
@@ -45,24 +49,35 @@ def _make_auth_service(user_count=0, existing_user=None, bootstrap_completed="0"
     return svc
 
 
+@pytest.fixture(autouse=True)
+def _clear_bootstrap_rate_limit_state():
+    from api import auth_bootstrap as bootstrap_module
+
+    bootstrap_module._bootstrap_attempts.clear()
+    bootstrap_module._bootstrap_lockouts.clear()
+    yield
+    bootstrap_module._bootstrap_attempts.clear()
+    bootstrap_module._bootstrap_lockouts.clear()
+
+
 # ---------------------------------------------------------------------------
 # Unit tests for helper functions
 # ---------------------------------------------------------------------------
 
 
 class TestIsBootstrapTokenRequired:
-    def test_returns_true_when_set(self):
-        with patch.dict(os.environ, {"CATSCAN_BOOTSTRAP_TOKEN": "abc123"}):
+    def test_returns_true_by_default_when_unset(self):
+        env = os.environ.copy()
+        env.pop("CATSCAN_REQUIRE_BOOTSTRAP_TOKEN", None)
+        with patch.dict(os.environ, env, clear=True):
             assert is_bootstrap_token_required() is True
 
-    def test_returns_false_when_empty(self):
-        with patch.dict(os.environ, {"CATSCAN_BOOTSTRAP_TOKEN": ""}):
-            assert is_bootstrap_token_required() is False
+    def test_returns_true_when_explicit_true(self):
+        with patch.dict(os.environ, {"CATSCAN_REQUIRE_BOOTSTRAP_TOKEN": "true"}):
+            assert is_bootstrap_token_required() is True
 
-    def test_returns_false_when_unset(self):
-        env = os.environ.copy()
-        env.pop("CATSCAN_BOOTSTRAP_TOKEN", None)
-        with patch.dict(os.environ, env, clear=True):
+    def test_returns_false_when_explicit_false(self):
+        with patch.dict(os.environ, {"CATSCAN_REQUIRE_BOOTSTRAP_TOKEN": "false"}):
             assert is_bootstrap_token_required() is False
 
 
@@ -106,128 +121,169 @@ class TestAutoHealBootstrapStatus:
 
 
 # ---------------------------------------------------------------------------
-# Integration-style tests for /auth/bootstrap endpoint
+# Endpoint tests for /auth/bootstrap
 # ---------------------------------------------------------------------------
 
 
-def _build_test_client(auth_svc):
-    """Build a minimal FastAPI test client with the bootstrap router."""
-    from fastapi import FastAPI
-    from api.auth_bootstrap import router
-
-    app = FastAPI()
-    app.include_router(router)
-
-    with patch("api.auth_bootstrap._get_auth_service", return_value=auth_svc):
-        yield TestClient(app)
+def _make_request(client_host: str = "127.0.0.1") -> Request:
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/auth/bootstrap",
+        "raw_path": b"/auth/bootstrap",
+        "query_string": b"",
+        "headers": [(b"user-agent", b"pytest")],
+        "client": (client_host, 12345),
+        "server": ("testserver", 80),
+    }
+    return Request(scope)
 
 
 class TestBootstrapEndpoint:
-    def test_creates_admin_with_valid_token(self):
+    @pytest.mark.asyncio
+    async def test_creates_admin_with_valid_token(self):
         svc = _make_auth_service(user_count=0, bootstrap_completed="0")
         token = "valid-token-abc"
+        request = _make_request()
+        response = Response()
 
         with patch.dict(os.environ, {"CATSCAN_BOOTSTRAP_TOKEN": token}):
             with patch("api.auth_bootstrap._get_auth_service", return_value=svc):
-                from fastapi import FastAPI
-                from api.auth_bootstrap import router
-                app = FastAPI()
-                app.include_router(router)
-                client = TestClient(app)
+                result = await bootstrap_first_admin(
+                    BootstrapRequest(
+                        bootstrap_token=token,
+                        email="admin@test.com",
+                    ),
+                    request,
+                    response,
+                )
 
-                resp = client.post("/auth/bootstrap", json={
-                    "bootstrap_token": token,
-                    "email": "admin@test.com",
-                    "password": "securepassword123",
-                })
-
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["status"] == "ok"
-        assert data["user"]["role"] == "sudo"
+        assert result["status"] == "ok"
+        assert result["user"]["role"] == "sudo"
         svc.create_user.assert_called_once()
         svc.set_setting.assert_called_once_with(
             "bootstrap_completed", "1", updated_by=ANY,
         )
+        assert "rtbcat_session=" in response.headers.get("set-cookie", "")
 
-    def test_wrong_token_returns_403(self):
+    @pytest.mark.asyncio
+    async def test_wrong_token_returns_403(self):
         svc = _make_auth_service(user_count=0, bootstrap_completed="0")
+        request = _make_request()
+        response = Response()
 
         with patch.dict(os.environ, {"CATSCAN_BOOTSTRAP_TOKEN": "correct-token"}):
             with patch("api.auth_bootstrap._get_auth_service", return_value=svc):
-                from fastapi import FastAPI
-                from api.auth_bootstrap import router
-                app = FastAPI()
-                app.include_router(router)
-                client = TestClient(app)
+                with pytest.raises(HTTPException) as exc_info:
+                    await bootstrap_first_admin(
+                        BootstrapRequest(
+                            bootstrap_token="wrong-token",
+                            email="admin@test.com",
+                        ),
+                        request,
+                        response,
+                    )
 
-                resp = client.post("/auth/bootstrap", json={
-                    "bootstrap_token": "wrong-token",
-                    "email": "admin@test.com",
-                })
-
-        assert resp.status_code == 403
-        assert "Invalid bootstrap token" in resp.json()["detail"]
+        assert exc_info.value.status_code == 403
+        assert "Invalid bootstrap token" in str(exc_info.value.detail)
         svc.create_user.assert_not_called()
 
-    def test_already_bootstrapped_returns_403(self):
+    @pytest.mark.asyncio
+    async def test_already_bootstrapped_returns_403(self):
         svc = _make_auth_service(user_count=1, bootstrap_completed="1")
+        request = _make_request()
+        response = Response()
 
         with patch.dict(os.environ, {"CATSCAN_BOOTSTRAP_TOKEN": "token"}):
             with patch("api.auth_bootstrap._get_auth_service", return_value=svc):
-                from fastapi import FastAPI
-                from api.auth_bootstrap import router
-                app = FastAPI()
-                app.include_router(router)
-                client = TestClient(app)
+                with pytest.raises(HTTPException) as exc_info:
+                    await bootstrap_first_admin(
+                        BootstrapRequest(
+                            bootstrap_token="token",
+                            email="admin@test.com",
+                        ),
+                        request,
+                        response,
+                    )
 
-                resp = client.post("/auth/bootstrap", json={
-                    "bootstrap_token": "token",
-                    "email": "admin@test.com",
-                })
+        assert exc_info.value.status_code == 403
+        assert "already completed" in str(exc_info.value.detail)
 
-        assert resp.status_code == 403
-        assert "already completed" in resp.json()["detail"]
-
-    def test_users_exist_returns_403(self):
+    @pytest.mark.asyncio
+    async def test_users_exist_returns_403(self):
         svc = _make_auth_service(user_count=5, bootstrap_completed="0")
+        request = _make_request()
+        response = Response()
 
         with patch.dict(os.environ, {"CATSCAN_BOOTSTRAP_TOKEN": "token"}):
             with patch("api.auth_bootstrap._get_auth_service", return_value=svc):
-                from fastapi import FastAPI
-                from api.auth_bootstrap import router
-                app = FastAPI()
-                app.include_router(router)
-                client = TestClient(app)
+                with pytest.raises(HTTPException) as exc_info:
+                    await bootstrap_first_admin(
+                        BootstrapRequest(
+                            bootstrap_token="token",
+                            email="admin@test.com",
+                        ),
+                        request,
+                        response,
+                    )
 
-                resp = client.post("/auth/bootstrap", json={
-                    "bootstrap_token": "token",
-                    "email": "admin@test.com",
-                })
+        assert exc_info.value.status_code == 403
+        assert "Users already exist" in str(exc_info.value.detail)
 
-        assert resp.status_code == 403
-        assert "Users already exist" in resp.json()["detail"]
-
-    def test_no_token_configured_returns_403(self):
+    @pytest.mark.asyncio
+    async def test_no_token_configured_returns_503_when_required(self):
         svc = _make_auth_service(user_count=0, bootstrap_completed="0")
+        request = _make_request()
+        response = Response()
 
         env = os.environ.copy()
         env.pop("CATSCAN_BOOTSTRAP_TOKEN", None)
         with patch.dict(os.environ, env, clear=True):
             with patch("api.auth_bootstrap._get_auth_service", return_value=svc):
-                from fastapi import FastAPI
-                from api.auth_bootstrap import router
-                app = FastAPI()
-                app.include_router(router)
-                client = TestClient(app)
+                with pytest.raises(HTTPException) as exc_info:
+                    await bootstrap_first_admin(
+                        BootstrapRequest(
+                            bootstrap_token="anything",
+                            email="admin@test.com",
+                        ),
+                        request,
+                        response,
+                    )
 
-                resp = client.post("/auth/bootstrap", json={
-                    "bootstrap_token": "anything",
-                    "email": "admin@test.com",
-                })
+        assert exc_info.value.status_code == 503
+        assert "required but missing" in str(exc_info.value.detail)
 
-        assert resp.status_code == 403
-        assert "disabled" in resp.json()["detail"]
+    @pytest.mark.asyncio
+    async def test_wrong_token_rate_limited_after_retries(self):
+        svc = _make_auth_service(user_count=0, bootstrap_completed="0")
+        request = _make_request(client_host="203.0.113.10")
+        response = Response()
+
+        with patch.dict(os.environ, {"CATSCAN_BOOTSTRAP_TOKEN": "correct-token"}):
+            with patch("api.auth_bootstrap._get_auth_service", return_value=svc):
+                with patch("api.auth_bootstrap._BOOTSTRAP_RATE_LIMIT_MAX_ATTEMPTS", 2):
+                    with patch("api.auth_bootstrap._BOOTSTRAP_RATE_LIMIT_WINDOW_SECONDS", 900):
+                        with patch("api.auth_bootstrap._BOOTSTRAP_RATE_LIMIT_LOCKOUT_SECONDS", 120):
+                            payload = BootstrapRequest(
+                                bootstrap_token="wrong-token",
+                                email="admin@test.com",
+                            )
+
+                            with pytest.raises(HTTPException) as first_exc:
+                                await bootstrap_first_admin(payload, request, response)
+                            with pytest.raises(HTTPException) as second_exc:
+                                await bootstrap_first_admin(payload, request, response)
+                            with pytest.raises(HTTPException) as limited_exc:
+                                await bootstrap_first_admin(payload, request, response)
+
+        assert first_exc.value.status_code == 403
+        assert second_exc.value.status_code == 403
+        assert limited_exc.value.status_code == 429
+        assert limited_exc.value.headers
+        assert "Retry-After" in limited_exc.value.headers
 
 
 # ---------------------------------------------------------------------------
@@ -241,7 +297,10 @@ class TestOAuth2ProxyBootstrapGuard:
         """OAuth2 auto-create should be blocked when bootstrap token is set."""
         svc = _make_auth_service(user_count=0, bootstrap_completed="0")
 
-        with patch.dict(os.environ, {"CATSCAN_BOOTSTRAP_TOKEN": "token"}):
+        with patch.dict(
+            os.environ,
+            {"CATSCAN_BOOTSTRAP_TOKEN": "token", "CATSCAN_REQUIRE_BOOTSTRAP_TOKEN": "true"},
+        ):
             with patch("api.auth_bootstrap._get_auth_service", return_value=svc):
                 assert is_bootstrap_token_required() is True
                 assert await is_bootstrap_completed() is False
@@ -256,13 +315,11 @@ class TestOAuth2ProxyBootstrapGuard:
                 assert should_block is True
 
     @pytest.mark.asyncio
-    async def test_first_user_allowed_when_no_token(self):
-        """OAuth2 auto-create should work normally when no bootstrap token."""
+    async def test_first_user_allowed_when_guard_disabled(self):
+        """OAuth2 auto-create should work when bootstrap guard is disabled."""
         svc = _make_auth_service(user_count=0, bootstrap_completed="0")
 
-        env = os.environ.copy()
-        env.pop("CATSCAN_BOOTSTRAP_TOKEN", None)
-        with patch.dict(os.environ, env, clear=True):
+        with patch.dict(os.environ, {"CATSCAN_REQUIRE_BOOTSTRAP_TOKEN": "false"}, clear=True):
             with patch("api.auth_bootstrap._get_auth_service", return_value=svc):
                 assert is_bootstrap_token_required() is False
                 # No guard: first user can auto-create
