@@ -501,10 +501,16 @@ class HomeAnalyticsService:
             (filtered_bids / total_bids * 100) if total_bids > 0 else None
         )
 
-        endpoints, observed_rows = await asyncio.gather(
-            self._repo.get_endpoints_for_bidder(bidder_id),
-            self._repo.get_observed_endpoint_rows(bidder_id),
-        )
+        # Avoid broad endpoint scans when a buyer_id cannot be mapped to a bidder_id.
+        # This keeps seat-scoped Home analytics bounded and predictable.
+        if buyer_id is not None and bidder_id is None:
+            endpoints = []
+            observed_rows = []
+        else:
+            endpoints, observed_rows = await asyncio.gather(
+                self._repo.get_endpoints_for_bidder(bidder_id),
+                self._repo.get_observed_endpoint_rows(bidder_id),
+            )
         observed_rows = [r for r in observed_rows if float(r.get("current_qps") or 0) > 0]
 
         # observed_query_rate_qps from actual endpoint delivery data only
