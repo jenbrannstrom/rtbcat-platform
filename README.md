@@ -585,6 +585,8 @@ is deprecated; use the Postgres-based compose files instead.
 | **[METRICS_GUIDE.md](METRICS_GUIDE.md)** | RTB metrics and optimization reference |
 | **[ROADMAP.md](ROADMAP.md)** | Planned features and known bugs |
 | **[CHANGELOG.md](CHANGELOG.md)** | Version history and migration notes |
+| **[CONTRIBUTING.md](CONTRIBUTING.md)** | Contribution workflow and PR quality gates |
+| **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)** | Community behavior standards |
 
 ---
 
