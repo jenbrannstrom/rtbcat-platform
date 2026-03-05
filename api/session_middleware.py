@@ -39,9 +39,6 @@ OAUTH2_PROXY_USER_HEADER = "X-User"
 # Paths that don't require authentication
 PUBLIC_PATHS = {
     "/health",
-    "/docs",
-    "/openapi.json",
-    "/redoc",
     "/auth/check",
     "/auth/me",
     "/auth/providers",
@@ -56,10 +53,7 @@ PUBLIC_PATHS = {
 }
 
 # Path prefixes that are public
-PUBLIC_PREFIXES = [
-    "/docs",
-    "/redoc",
-]
+PUBLIC_PREFIXES: list[str] = []
 
 
 def is_public_path(path: str) -> bool:
