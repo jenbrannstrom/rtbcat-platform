@@ -10,7 +10,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from api.dependencies import require_admin
+from api.dependencies import get_current_user, require_admin
 from services.auth_service import User
 from services.gmail_service import GmailService
 from services.secrets_manager import get_secrets_manager
@@ -71,7 +71,9 @@ class GmailImportResponse(BaseModel):
 # =============================================================================
 
 @router.get("/gmail/status", response_model=GmailStatusResponse)
-async def get_gmail_status() -> GmailStatusResponse:
+async def get_gmail_status(
+    _user: User = Depends(get_current_user),
+) -> GmailStatusResponse:
     """
     Get the current Gmail import configuration and status.
 

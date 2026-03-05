@@ -11,9 +11,11 @@ This module provides endpoints for QPS (Queries Per Second) optimization analysi
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from api.dependencies import get_current_user
 from api.schemas.qps import QPSSummaryResponse, QPSReportResponse
+from services.auth_service import User
 from services.qps_service import QpsService
 
 logger = logging.getLogger(__name__)
@@ -22,7 +24,9 @@ router = APIRouter(prefix="/qps", tags=["QPS Optimization"])
 
 
 @router.get("/summary", response_model=QPSSummaryResponse)
-async def get_qps_summary() -> QPSSummaryResponse:
+async def get_qps_summary(
+    _user: User = Depends(get_current_user),
+) -> QPSSummaryResponse:
     """
     Get summary of imported QPS data.
 
@@ -48,7 +52,10 @@ async def get_qps_summary() -> QPSSummaryResponse:
 
 
 @router.get("/size-coverage", response_model=QPSReportResponse)
-async def get_size_coverage_report(days: int = Query(7, ge=1, le=90)) -> QPSReportResponse:
+async def get_size_coverage_report(
+    days: int = Query(7, ge=1, le=90),
+    _user: User = Depends(get_current_user),
+) -> QPSReportResponse:
     """
     Get size coverage analysis report.
 
@@ -71,7 +78,10 @@ async def get_size_coverage_report(days: int = Query(7, ge=1, le=90)) -> QPSRepo
 
 
 @router.get("/config-performance", response_model=QPSReportResponse)
-async def get_config_performance_report(days: int = Query(7, ge=1, le=90)) -> QPSReportResponse:
+async def get_config_performance_report(
+    days: int = Query(7, ge=1, le=90),
+    _user: User = Depends(get_current_user),
+) -> QPSReportResponse:
     """
     Get pretargeting config performance report.
 
@@ -92,7 +102,10 @@ async def get_config_performance_report(days: int = Query(7, ge=1, le=90)) -> QP
 
 
 @router.get("/fraud-signals", response_model=QPSReportResponse)
-async def get_fraud_signals_report(days: int = Query(14, ge=1, le=90)) -> QPSReportResponse:
+async def get_fraud_signals_report(
+    days: int = Query(14, ge=1, le=90),
+    _user: User = Depends(get_current_user),
+) -> QPSReportResponse:
     """
     Get fraud signals report.
 
@@ -116,7 +129,10 @@ async def get_fraud_signals_report(days: int = Query(14, ge=1, le=90)) -> QPSRep
 
 
 @router.get("/report", response_model=QPSReportResponse)
-async def get_full_qps_report(days: int = Query(7, ge=1, le=90)) -> QPSReportResponse:
+async def get_full_qps_report(
+    days: int = Query(7, ge=1, le=90),
+    _user: User = Depends(get_current_user),
+) -> QPSReportResponse:
     """
     Get comprehensive QPS optimization report.
 
@@ -139,7 +155,9 @@ async def get_full_qps_report(days: int = Query(7, ge=1, le=90)) -> QPSReportRes
 
 
 @router.get("/include-list")
-async def get_include_list() -> dict[str, Any]:
+async def get_include_list(
+    _user: User = Depends(get_current_user),
+) -> dict[str, Any]:
     """
     Get recommended pretargeting include list.
 

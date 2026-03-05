@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
-from api.dependencies import require_admin
+from api.dependencies import get_current_user, require_admin
 from services.auth_service import User
 from services.retention_service import RetentionService
 
@@ -75,6 +75,7 @@ class RetentionJobResponse(BaseModel):
 
 @router.get("/retention/config", response_model=RetentionConfigResponse)
 async def get_retention_config(
+    _user: User = Depends(get_current_user),
 ) -> RetentionConfigResponse:
     """Get current retention configuration."""
     try:

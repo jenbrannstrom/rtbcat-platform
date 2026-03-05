@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.dependencies import require_seat_admin_or_sudo
+from api.dependencies import get_current_user, require_seat_admin_or_sudo
 from services.auth_service import User
 from services.snapshots_service import SnapshotsService
 
@@ -79,6 +79,7 @@ async def list_pretargeting_snapshots(
         description="Filter by pretargeting config ID (billing_id)",
     ),
     limit: int = Query(50, ge=1, le=200),
+    _user: User = Depends(get_current_user),
 ) -> list[SnapshotResponse]:
     """List pretargeting snapshots, optionally filtered by pretargeting config ID."""
     try:
@@ -179,6 +180,7 @@ async def list_comparisons(
     ),
     status: Optional[str] = Query(None, description="Filter by status (in_progress, completed)"),
     limit: int = Query(50, ge=1, le=200),
+    _user: User = Depends(get_current_user),
 ) -> list[ComparisonResponse]:
     """List A/B comparisons, optionally filtered by pretargeting config ID or status."""
     try:

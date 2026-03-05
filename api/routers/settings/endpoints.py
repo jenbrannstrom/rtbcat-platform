@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from googleapiclient.errors import HttpError
 
-from api.dependencies import require_seat_admin_or_sudo
+from api.dependencies import get_current_user, require_seat_admin_or_sudo
 from collectors import EndpointsClient
 from services.auth_service import User
 from services.endpoints_service import EndpointsService
@@ -214,6 +214,7 @@ async def get_rtb_endpoints(
     service_account_id: Optional[str] = Query(None, description="Service account ID (deprecated, use buyer_id)"),
     live: bool = Query(False, description="Fetch live data from Google API instead of local DB"),
     seats_service: SeatsService = Depends(get_seats_service),
+    _user: User = Depends(get_current_user),
 ) -> RTBEndpointsResponse:
     """Get RTB endpoints with aggregated QPS data.
 

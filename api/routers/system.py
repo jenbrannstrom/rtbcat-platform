@@ -20,6 +20,7 @@ from api.dependencies import (
     get_store,
     get_config,
     get_current_user,
+    require_admin,
     require_seat_admin_or_sudo,
     resolve_buyer_id,
 )
@@ -470,7 +471,9 @@ async def get_thumbnail_status(
 
 
 @router.get("/thumbnails/failure-metrics", response_model=ThumbnailFailureMetricsResponse, tags=["Thumbnails"])
-async def get_thumbnail_failure_metrics() -> ThumbnailFailureMetricsResponse:
+async def get_thumbnail_failure_metrics(
+    _user: User = Depends(get_current_user),
+) -> ThumbnailFailureMetricsResponse:
     """Get thumbnail failure counts by normalized error category."""
     service = ThumbnailsService()
     metrics = await service.get_failure_metrics()
@@ -478,7 +481,9 @@ async def get_thumbnail_failure_metrics() -> ThumbnailFailureMetricsResponse:
 
 
 @router.get("/system/status", response_model=SystemStatusResponse)
-async def get_system_status() -> SystemStatusResponse:
+async def get_system_status(
+    _user: User = Depends(get_current_user),
+) -> SystemStatusResponse:
     """Get system status including installed tools and resource usage."""
     service = SystemService()
     status = await service.get_system_status()
@@ -498,7 +503,9 @@ async def get_system_status() -> SystemStatusResponse:
 
 
 @router.get("/system/secrets-health", response_model=SecretsHealthResponse)
-async def get_system_secrets_health() -> SecretsHealthResponse:
+async def get_system_secrets_health(
+    _user: User = Depends(require_admin),
+) -> SecretsHealthResponse:
     """Get non-sensitive status of required secrets per enabled feature."""
     return SecretsHealthResponse(**get_secrets_health())
 
@@ -892,6 +899,7 @@ async def search_geo_targets(
     type: Literal["all", "country", "city"] = Query(
         "all", description="Filter to country-level, city-level, or both"
     ),
+    _user: User = Depends(get_current_user),
 ) -> GeoSearchResponse:
     """Search geo criterion targets for adding to pretargeting configs."""
     service = SystemService()
@@ -914,6 +922,7 @@ async def search_geo_targets(
 @router.get("/geos/lookup", response_model=GeoLookupResponse)
 async def lookup_geo_names(
     ids: str = Query(..., description="Comma-separated list of Google geo criterion IDs"),
+    _user: User = Depends(get_current_user),
 ) -> GeoLookupResponse:
     """Look up human-readable names for Google geo criterion IDs.
 
@@ -934,7 +943,10 @@ async def lookup_geo_names(
 
 
 @router.get("/stats", response_model=StatsResponse)
-async def get_stats(store=Depends(get_store)) -> StatsResponse:
+async def get_stats(
+    store=Depends(get_store),
+    _user: User = Depends(get_current_user),
+) -> StatsResponse:
     """Get database statistics."""
     stats = await store.get_stats()
     return StatsResponse(
@@ -948,7 +960,10 @@ async def get_stats(store=Depends(get_store)) -> StatsResponse:
 
 
 @router.get("/sizes", response_model=SizesResponse)
-async def get_sizes(store=Depends(get_store)) -> SizesResponse:
+async def get_sizes(
+    store=Depends(get_store),
+    _user: User = Depends(get_current_user),
+) -> SizesResponse:
     """Get available creative sizes from the database."""
     sizes = await store.get_available_sizes()
     # PostgresStore currently returns [{canonical_size, size_category, count}]
