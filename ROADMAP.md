@@ -131,6 +131,10 @@
     - `OptimizerEconomicsService`: reuse shared `rtb_daily` aggregates across efficiency/assumed-value path; bound `rtb_quality` aggregate with statement timeout (`OPTIMIZER_QUALITY_QUERY_TIMEOUT_MS`, default `10000`).
     - DB: added migration `062_rtb_fact_query_indexes` for buyer/date composite indexes on `rtb_daily`, `rtb_quality`, `rtb_bidstream`, and `rtb_bid_filtering`.
   - [ ] Apply migration `062_rtb_fact_query_indexes` on production and rerun strict closeout to confirm timeout reduction.
+  - Progress (2026-03-05): endpoint-efficiency latency regression closed on `unified-platform` (`a4c50dc`) with live latency improving from ~29s to sub-200ms.
+    - Evidence: runtime strict run `22727303377` is green for buyer `1487810529`.
+    - Temporary release waiver (time-boxed): repo variable `CATSCAN_RUNTIME_HEALTH_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS=30000` was used so 168h historical rollup can age out pre-fix samples.
+    - Waiver expiry: **2026-03-12**. Required action on expiry: set the variable back to `12000` and rerun strict with `--since-hours 168`.
 
 ---
 

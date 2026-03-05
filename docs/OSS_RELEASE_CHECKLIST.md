@@ -67,6 +67,20 @@ curl -sf https://YOUR_DOMAIN/api/system/health | jq .
 # configured: true, database_exists: true, status: "healthy"
 ```
 
+### 4. Runtime strict latency budget (time-boxed waiver policy)
+
+Baseline policy:
+
+```
+CATSCAN_RUNTIME_HEALTH_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS=12000
+```
+
+If a temporary override is used for historical-rollup aging, it must include:
+
+- explicit expiry date in `ROADMAP.md`
+- reason + run evidence link
+- rollback action/date to restore `12000` and rerun strict with `--since-hours 168`
+
 ---
 
 ## Manual Review Gates

@@ -79,6 +79,16 @@ Required:
 - strict run exits `0`
 - no `BLOCKED` / `FAIL` outcomes for required checks
 
+Temporary waiver note (March 5, 2026):
+
+- `CATSCAN_RUNTIME_HEALTH_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS=30000` may be used only while 168h QPS page SLO history still contains pre-fix `/analytics/home/endpoint-efficiency` outliers.
+- Waiver expiry: **March 12, 2026**.
+- On/after expiry, restore `CATSCAN_RUNTIME_HEALTH_MAX_HOME_ENDPOINT_EFFICIENCY_LATENCY_MS=12000` and rerun:
+
+```bash
+scripts/run_v1_runtime_health_strict_dispatch.sh --buyer-id <PROD_BUYER_ID> --profile balanced --since-hours 168
+```
+
 ## 6) Release decision
 
 Release only if all of the following are true:
