@@ -18,7 +18,7 @@ async def test_list_configs_uses_distinct_on_for_bidder_scope(monkeypatch: pytes
 
     monkeypatch.setattr("storage.postgres_repositories.pretargeting_repo.pg_query", _stub_query)
     repo = PretargetingRepository()
-    rows = await repo.list_configs(bidder_id="6574658621")
+    rows = await repo.list_configs(bidder_id="4444444444")
 
     assert rows == []
     sql = str(captured["sql"])
@@ -29,7 +29,7 @@ async def test_list_configs_uses_distinct_on_for_bidder_scope(monkeypatch: pytes
     assert "AS MAXIMUM_QPS" in sql_upper
     assert "AS DEDUPE_KEY" in sql_upper
     assert "ORDER BY DEDUPED.DEDUPE_KEY" in sql_upper
-    assert captured["params"] == ("6574658621",)
+    assert captured["params"] == ("4444444444",)
 
 
 @pytest.mark.asyncio
@@ -93,12 +93,12 @@ async def test_list_configs_applies_limit_when_requested(
 
     monkeypatch.setattr("storage.postgres_repositories.pretargeting_repo.pg_query", _stub_query)
     repo = PretargetingRepository()
-    rows = await repo.list_configs(bidder_id="6574658621", limit=250)
+    rows = await repo.list_configs(bidder_id="4444444444", limit=250)
 
     assert rows == []
     sql_upper = str(captured["sql"]).upper()
     assert "LIMIT %S" in sql_upper
-    assert captured["params"] == ("6574658621", 250)
+    assert captured["params"] == ("4444444444", 250)
 
 
 @pytest.mark.asyncio
@@ -114,7 +114,7 @@ async def test_list_configs_summary_shape_omits_large_targeting_arrays(
 
     monkeypatch.setattr("storage.postgres_repositories.pretargeting_repo.pg_query", _stub_query)
     repo = PretargetingRepository()
-    rows = await repo.list_configs(bidder_id="6574658621", limit=100, summary_only=True)
+    rows = await repo.list_configs(bidder_id="4444444444", limit=100, summary_only=True)
 
     assert rows == []
     sql_upper = str(captured["sql"]).upper()
@@ -122,7 +122,7 @@ async def test_list_configs_summary_shape_omits_large_targeting_arrays(
     assert "NULL::JSONB AS INCLUDED_PLATFORMS" in sql_upper
     assert "PC.INCLUDED_FORMATS" not in sql_upper
     assert "PC.INCLUDED_PLATFORMS" not in sql_upper
-    assert captured["params"] == ("6574658621", 100)
+    assert captured["params"] == ("4444444444", 100)
 
 
 @pytest.mark.asyncio
@@ -136,14 +136,14 @@ async def test_list_history_billing_filter_uses_exists_not_join(monkeypatch: pyt
 
     monkeypatch.setattr("storage.postgres_repositories.pretargeting_repo.pg_query", _stub_query)
     repo = PretargetingRepository()
-    rows = await repo.list_history(billing_id="173162721799", days=14, limit=50)
+    rows = await repo.list_history(billing_id="777777777777", days=14, limit=50)
 
     assert rows == []
     sql_upper = str(captured["sql"]).upper()
     assert "EXISTS (" in sql_upper
     assert "LEFT JOIN PRETARGETING_CONFIGS" not in sql_upper
     assert "ORDER BY PH.CHANGED_AT DESC, PH.ID DESC" in sql_upper
-    assert captured["params"] == (14, "173162721799", 50)
+    assert captured["params"] == (14, "777777777777", 50)
 
 
 @pytest.mark.asyncio

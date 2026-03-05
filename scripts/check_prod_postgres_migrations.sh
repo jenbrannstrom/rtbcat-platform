@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTANCE="${CATSCAN_GCP_INSTANCE:-catscan-production-sg}"
+INSTANCE="${CATSCAN_GCP_INSTANCE:-catscan-vm-prod}"
 ZONE="${CATSCAN_GCP_ZONE:-asia-southeast1-b}"
 PROJECT="${CATSCAN_GCP_PROJECT:-}"
 CONTAINER="${CATSCAN_API_CONTAINER:-catscan-api}"
@@ -18,7 +18,7 @@ Runs postgres migration checks on the target VM/container:
   - python /app/scripts/postgres_migrate.py --audit-versions
 
 Options:
-  --instance <name>      VM instance (default: catscan-production-sg)
+  --instance <name>      VM instance (default: catscan-vm-prod)
   --zone <zone>          GCP zone (default: asia-southeast1-b)
   --project <id>         Optional GCP project id
   --container <name>     Docker container name (default: catscan-api)

@@ -39,7 +39,7 @@
 **Виявлення:**
 1. Виконайте запит до ендпоінту безпосередньо з VM:
    ```bash
-   curl -sS --max-time 60 -H 'X-Email: cat-scan@rtb.cat' \
+   curl -sS --max-time 60 -H 'X-Email: user.com' \
      'http://localhost:8000/uploads/data-freshness?days=14&buyer_id=<ID>'
    ```
 2. Якщо перевищено час очікування або повернуто 500, перевірте план запиту:
@@ -64,7 +64,7 @@
 
 **Виявлення:**
 ```bash
-curl -sS -H 'X-Email: cat-scan@rtb.cat' \
+curl -sS -H 'X-Email: user.com' \
   http://localhost:8000/gmail/status
 ```
 

@@ -4,7 +4,7 @@
 
 An **open-source** QPS optimization tool for Google Authorized Buyers. Cat-Scan helps RTB bidders improve QPS efficiency by learning which data-streams the bidder prefers to bid on, and fine-tune Pretargeting to allow more bid-requests through to the bidder for preferred placements/apps.
 
-**100% free and open source.** Self-host on your own infrastructure or use our hosted version at scan.rtb.cat.
+**100% free and open source.** Self-host on your own infrastructure or use our hosted version at your-deployment.example.com.
 
 ---
 
@@ -324,7 +324,7 @@ Cat-Scan requires **5 separate CSV reports** from Google Authorized Buyers due t
 > **REQUIRED:** Include **Buyer account ID** in every report, or ensure the filename contains the seat ID.
 >
 > **Naming Convention:** `catscan-{type}-{account_id}-{period}-UTC`
-> Example: `catscan-pipeline-1487810529-yesterday-UTC`
+> Example: `catscan-pipeline-<BUYER_ID>-yesterday-UTC`
 
 > **Create these reports in Google Authorized Buyers: Reporting → Scheduled Reports**
 

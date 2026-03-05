@@ -488,7 +488,7 @@ export function getGoogleAuthBuyersUrl(buyerId: string, creativeId: string): str
 }
 
 /**
- * Extract buyer ID from creative name (e.g., "buyers/299038253/creatives/79783")
+ * Extract buyer ID from creative name (e.g., "buyers/2222222222/creatives/79783")
  */
 export function extractBuyerIdFromName(name: string | null | undefined): string | null {
   if (!name) return null;

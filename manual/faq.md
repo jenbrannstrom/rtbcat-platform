@@ -74,7 +74,7 @@ lookups instead of full table scan). See [Database Operations](14-database.md).
 ### [DevOps] How do I check what version is deployed?
 
 ```bash
-curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'
+curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'
 ```
 
 This returns the git SHA and image tag. Compare against your commit log.

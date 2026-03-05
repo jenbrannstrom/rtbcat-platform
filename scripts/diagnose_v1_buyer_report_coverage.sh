@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BUYER_ID="${CATSCAN_BUYER_ID:-}"
-BASE_URL="${CATSCAN_API_BASE_URL:-https://scan.rtb.cat/api}"
+BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
 CANARY_EMAIL="${CATSCAN_CANARY_EMAIL:-${CATSCAN_CANARY_BEARER_TOKEN:-}}"
 TIMEOUT_SECONDS="${CATSCAN_CANARY_TIMEOUT_SECONDS:-60}"
 DAYS="${CATSCAN_COVERAGE_DAYS:-30}"
@@ -24,7 +24,7 @@ Checks:
 
 Options:
   --buyer-id <id>          Buyer ID (required)
-  --base-url <url>         API base URL (default: https://scan.rtb.cat/api)
+  --base-url <url>         API base URL (default: https://your-deployment.example.com/api)
   --email <email>          X-Email identity (default: CATSCAN_CANARY_EMAIL/CATSCAN_CANARY_BEARER_TOKEN)
   --days <n>               Lookback days for matrix/freshness (default: 30)
   --history-limit <n>      Import history rows to inspect (default: 25)
@@ -32,8 +32,8 @@ Options:
   -h, --help               Show help
 
 Example:
-  export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
-  scripts/diagnose_v1_buyer_report_coverage.sh --buyer-id 1487810529
+  export CATSCAN_CANARY_EMAIL="user@example.com"
+  scripts/diagnose_v1_buyer_report_coverage.sh --buyer-id 1111111111
 EOF
 }
 

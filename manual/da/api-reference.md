@@ -2,7 +2,7 @@
 
 Dette er et navigerbart indeks over Cat-Scans 118+ API-endpoints, grupperet
 efter domæne. For fulde request/response-skemaer, se den interaktive
-OpenAPI-dokumentation på `https://scan.rtb.cat/api/docs`.
+OpenAPI-dokumentation på `https://your-deployment.example.com/api/docs`.
 
 ## Core / System
 

@@ -25,7 +25,7 @@ It uses:
 Usage:
   python scripts/backfill_ingestion_run_report_types.py --dry-run
   python scripts/backfill_ingestion_run_report_types.py --apply --since 2026-02-01
-  python scripts/backfill_ingestion_run_report_types.py --apply --buyer-id 299038253
+  python scripts/backfill_ingestion_run_report_types.py --apply --buyer-id 2222222222
 """
 
 from __future__ import annotations

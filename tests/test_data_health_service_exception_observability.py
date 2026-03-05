@@ -22,7 +22,7 @@ async def test_get_ingestion_summary_logs_warning_and_returns_default_on_error(
     monkeypatch.setattr(service, "_query_one_with_timeout", _raise)
 
     with caplog.at_level(logging.WARNING):
-        result = await service._get_ingestion_summary(days=7, buyer_id="1487810529")
+        result = await service._get_ingestion_summary(days=7, buyer_id="1111111111")
 
     assert result["total_runs"] == 0
     assert result["last_finished_at"] is None
@@ -41,7 +41,7 @@ async def test_get_report_completeness_logs_warning_and_marks_tables_unavailable
     monkeypatch.setattr(service, "_query_one_with_timeout", _raise)
 
     with caplog.at_level(logging.WARNING):
-        result = await service._get_report_completeness(days=7, buyer_id="1487810529")
+        result = await service._get_report_completeness(days=7, buyer_id="1111111111")
 
     assert result["available_report_types"] == 0
     assert result["availability_state"] == "unavailable"
@@ -62,7 +62,7 @@ async def test_get_seat_day_completeness_logs_warning_and_returns_unavailable_fa
     with caplog.at_level(logging.WARNING):
         result = await service._get_seat_day_completeness(
             days=7,
-            buyer_id="1487810529",
+            buyer_id="1111111111",
             availability_state=None,
             min_completeness_pct=None,
             limit=100,

@@ -79,7 +79,7 @@ async function runTests() {
   console.log('Starting VM2 UI Tests for Mobyoung...\n');
 
   const pages = await getPages();
-  const dashboardPage = pages.find(p => p.url.includes('vm2.scan.rtb.cat'));
+  const dashboardPage = pages.find(p => p.url.includes('staging.example.com'));
 
   if (!dashboardPage) {
     console.error('Cat-Scan Dashboard tab not found!');
@@ -114,7 +114,7 @@ async function runTests() {
 
     // TEST 1: Home page - Check "Recommended Optimizations" block
     console.log('Test 1: Checking Home page for Recommended Optimizations...');
-    await navigate(ws, 'https://vm2.scan.rtb.cat/?advertiser=mobyoung');
+    await navigate(ws, 'https://staging.example.com/?advertiser=customer-gamma');
     await new Promise(r => setTimeout(r, 2000));
     await takeScreenshot(ws, '01-home-page');
 
@@ -171,7 +171,7 @@ async function runTests() {
 
     // TEST 3: Creatives page loads
     console.log('Test 3: Checking /creatives page...');
-    await navigate(ws, 'https://vm2.scan.rtb.cat/creatives?advertiser=mobyoung');
+    await navigate(ws, 'https://staging.example.com/creatives?advertiser=customer-gamma');
     await new Promise(r => setTimeout(r, 3000));
     await takeScreenshot(ws, '03-creatives-page');
 

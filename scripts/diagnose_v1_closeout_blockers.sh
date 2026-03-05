@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BUYER_ID="${CATSCAN_BUYER_ID:-}"
-BASE_URL="${CATSCAN_API_BASE_URL:-https://scan.rtb.cat/api}"
+BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
 CANARY_EMAIL="${CATSCAN_CANARY_EMAIL:-${CATSCAN_CANARY_BEARER_TOKEN:-}}"
 TIMEOUT_SECONDS="${CATSCAN_CANARY_TIMEOUT_SECONDS:-120}"
 ECON_DAYS="${CATSCAN_CANARY_ECON_DAYS:-7}"
@@ -28,7 +28,7 @@ Runs one-pass diagnostics for current strict closeout blockers:
 
 Options:
   --buyer-id <id>                 Required buyer_id
-  --base-url <url>                API base URL (default: https://scan.rtb.cat/api)
+  --base-url <url>                API base URL (default: https://your-deployment.example.com/api)
   --email <email>                 X-Email identity (default from CATSCAN_CANARY_EMAIL/CATSCAN_CANARY_BEARER_TOKEN)
   --timeout <seconds>             Curl timeout per request (default: 120)
   --econ-days <n>                 Days for economics endpoint probes (default: 7)
@@ -43,8 +43,8 @@ Options:
   -h, --help                      Show help
 
 Examples:
-  scripts/diagnose_v1_closeout_blockers.sh --buyer-id 1487810529
-  scripts/diagnose_v1_closeout_blockers.sh --buyer-id 1487810529 --timeout 180 --profile aggressive
+  scripts/diagnose_v1_closeout_blockers.sh --buyer-id 1111111111
+  scripts/diagnose_v1_closeout_blockers.sh --buyer-id 1111111111 --timeout 180 --profile aggressive
 EOF
 }
 

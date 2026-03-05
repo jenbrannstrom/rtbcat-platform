@@ -38,7 +38,7 @@
 
 ## 容器布局
 
-生产环境运行在单个 GCP 虚拟机上（`catscan-production-sg`，区域
+生产环境运行在单个 GCP 虚拟机上（`catscan-vm`，区域
 `asia-southeast1-b`），使用 `docker-compose.gcp.yml`。
 
 | 容器 | 镜像 | 端口 | 角色 |

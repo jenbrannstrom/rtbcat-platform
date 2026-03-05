@@ -9,7 +9,7 @@
 Retourneert de basisstatus van de API, de git-SHA en de versie. Wordt gebruikt door de deploy-workflow en externe monitoring.
 
 ```bash
-curl -sS https://scan.rtb.cat/api/health | jq .
+curl -sS https://your-deployment.example.com/api/health | jq .
 ```
 
 ### `/system/data-health`: datavolledigheid
@@ -40,9 +40,9 @@ Deze scripts vormen de operationele ruggengraat om te verifieren dat het systeem
 Diagnosticeert waarom een specifieke koper ontbrekende CSV-dekking heeft.
 
 ```bash
-export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
+export CATSCAN_CANARY_EMAIL="user.com"
 scripts/diagnose_v1_buyer_report_coverage.sh \
-  --buyer-id 1487810529 \
+  --buyer-id <BUYER_ID> \
   --timeout 180 \
   --days 14
 ```
@@ -80,8 +80,8 @@ Voert de strikte poort uit in CI. Handmatig getriggerd via workflow_dispatch.
 ```bash
 gh workflow run v1-runtime-health-strict.yml \
   --ref unified-platform \
-  -f api_base_url="https://scan.rtb.cat/api" \
-  -f buyer_id="1487810529" \
+  -f api_base_url="https://your-deployment.example.com/api" \
+  -f buyer_id="<BUYER_ID>" \
   -f canary_profile="balanced" \
   -f canary_timeout_seconds="180"
 ```
@@ -98,7 +98,7 @@ Runtime-scripts authenticeren via omgevingsvariabelen:
 
 Vanaf de VM-host: gebruik `CATSCAN_CANARY_EMAIL` met `http://localhost:8000`.
 Vanuit CI (extern): gebruik `CATSCAN_BEARER_TOKEN` of `CATSCAN_SESSION_COOKIE`
-met `https://scan.rtb.cat/api`.
+met `https://your-deployment.example.com/api`.
 
 ## Resultaten interpreteren
 

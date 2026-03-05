@@ -53,7 +53,7 @@ to a specific commit.
      -f reason="your reason here"
    ```
 3. Monitor: `gh run watch <run_id> --exit-status`
-4. Verify: `curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'`
+4. Verify: `curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'`
 
 ## Verifying a deploy
 
@@ -82,8 +82,8 @@ import through API output) are holding. If the check fails:
 
 | Environment | VM name | Domain |
 |-------------|---------|--------|
-| Staging | `catscan-production-sg2` | (internal) |
-| Production | `catscan-production-sg` | `scan.rtb.cat` |
+| Staging | `catscan-vm` | (internal) |
+| Production | `catscan-vm` | `your-deployment.example.com` |
 
 Deploy to staging first, verify, then deploy to production.
 

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BUYER_ID=""
-API_BASE_URL="${CATSCAN_API_BASE_URL:-https://scan.rtb.cat/api}"
+API_BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
 CANARY_EMAIL="${CATSCAN_CANARY_EMAIL:-}"
 TIMEOUT_SECONDS="${CATSCAN_UNBLOCK_CHECK_TIMEOUT_SECONDS:-180}"
 DAYS="${CATSCAN_UNBLOCK_CHECK_DAYS:-14}"
@@ -46,7 +46,7 @@ Runs a 4-step runtime-health unblock check with explicit PASS/FAIL/BLOCKED outpu
 Options:
   --buyer-id <id>             Required buyer ID
   --email <email>             X-Email header value (or set CATSCAN_CANARY_EMAIL)
-  --api-base-url <url>        API base URL (default: https://scan.rtb.cat/api)
+  --api-base-url <url>        API base URL (default: https://your-deployment.example.com/api)
   --timeout <seconds>         Curl/script timeout (default: 180)
   --days <n>                  Days lookback for coverage diagnostics (default: 14)
   --since-hours <n>           Hours lookback for QPS SLO summary (default: 168)
@@ -56,8 +56,8 @@ Options:
   -h, --help                  Show help
 
 Examples:
-  export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
-  scripts/run_v1_runtime_health_unblock_check.sh --buyer-id 1487810529 --profile balanced
+  export CATSCAN_CANARY_EMAIL="user@example.com"
+  scripts/run_v1_runtime_health_unblock_check.sh --buyer-id 1111111111 --profile balanced
 USAGE
 }
 

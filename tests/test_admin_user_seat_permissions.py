@@ -19,11 +19,11 @@ async def test_admin_service_grant_buyer_seat_permission_audits():
         return_value=UserBuyerSeatPermission(
             id="perm-1",
             user_id="user-1",
-            buyer_id="1487810529",
+            buyer_id="1111111111",
             access_level="admin",
             granted_by="admin-1",
             granted_at="2026-02-23T00:00:00",
-            buyer_display_name="Amazing Design Tools",
+            buyer_display_name="Customer Alpha",
             bidder_id="123",
             active=True,
         )
@@ -34,15 +34,15 @@ async def test_admin_service_grant_buyer_seat_permission_audits():
     perm = await svc.grant_buyer_seat_permission(
         admin=_admin_user(),
         user_id="user-1",
-        buyer_id="1487810529",
+        buyer_id="1111111111",
         access_level="admin",
         client_ip="127.0.0.1",
     )
 
-    assert perm.buyer_id == "1487810529"
+    assert perm.buyer_id == "1111111111"
     auth.grant_user_buyer_seat_permission.assert_awaited_once()
     details = json.loads(auth.log_audit.await_args.kwargs["details"])
-    assert details["buyer_id"] == "1487810529"
+    assert details["buyer_id"] == "1111111111"
     assert details["access_level"] == "admin"
 
 
@@ -57,7 +57,7 @@ async def test_admin_service_rejects_invalid_seat_access_level():
         await svc.grant_buyer_seat_permission(
             admin=_admin_user(),
             user_id="user-1",
-            buyer_id="1487810529",
+            buyer_id="1111111111",
             access_level="write",
             client_ip=None,
         )
@@ -69,7 +69,7 @@ async def test_admin_service_rejects_invalid_seat_access_level():
 @pytest.mark.asyncio
 async def test_get_allowed_buyer_ids_prefers_explicit_seat_permissions(monkeypatch):
     auth = MagicMock()
-    auth.get_user_buyer_seat_ids = AsyncMock(return_value=["1487810529"])
+    auth.get_user_buyer_seat_ids = AsyncMock(return_value=["1111111111"])
     auth.get_user_service_account_ids = AsyncMock(return_value=["sa-1"])
 
     monkeypatch.setattr(dependencies, "get_auth_service", lambda: auth)
@@ -80,7 +80,7 @@ async def test_get_allowed_buyer_ids_prefers_explicit_seat_permissions(monkeypat
     user = User(id="user-1", email="user@example.com", role="read")
     allowed = await dependencies.get_allowed_buyer_ids(store=store, user=user)
 
-    assert allowed == ["1487810529"]
+    assert allowed == ["1111111111"]
     store.get_buyer_ids_for_service_accounts.assert_not_called()
 
 
@@ -105,7 +105,7 @@ async def test_get_allowed_buyer_ids_no_longer_falls_back_to_legacy_service_acco
 @pytest.mark.asyncio
 async def test_get_allowed_buyer_ids_enforces_single_seat_scope_for_non_sudo(monkeypatch):
     auth = MagicMock()
-    auth.get_user_buyer_seat_ids = AsyncMock(return_value=["1487810529", "299038253"])
+    auth.get_user_buyer_seat_ids = AsyncMock(return_value=["1111111111", "2222222222"])
     auth.get_user_service_account_ids = AsyncMock(return_value=["sa-1"])
 
     monkeypatch.setattr(dependencies, "get_auth_service", lambda: auth)
@@ -114,4 +114,4 @@ async def test_get_allowed_buyer_ids_enforces_single_seat_scope_for_non_sudo(mon
     user = User(id="user-1", email="user@example.com", role="admin")
     allowed = await dependencies.get_allowed_buyer_ids(store=store, user=user)
 
-    assert allowed == ["1487810529"]
+    assert allowed == ["1111111111"]

@@ -56,7 +56,7 @@ class TroubleshootingClient:
     Example:
         >>> client = TroubleshootingClient(
         ...     credentials_path="/path/to/creds.json",
-        ...     bidder_id="299038253"
+        ...     bidder_id="2222222222"
         ... )
         >>> metrics = client.collect_all_metrics(days=7)
         >>> print(metrics["filtered_bids"])
@@ -68,7 +68,7 @@ class TroubleshootingClient:
 
         Args:
             credentials_path: Path to service account JSON
-            bidder_id: Your bidder account ID (e.g., "299038253")
+            bidder_id: Your bidder account ID (e.g., "2222222222")
         """
         self.bidder_id = bidder_id
 

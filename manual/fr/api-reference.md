@@ -2,7 +2,7 @@
 
 Ceci est un index navigable des 118+ endpoints API de Cat-Scan, regroupés par
 domaine. Pour les schémas complets de requête/réponse, consultez la
-documentation interactive OpenAPI à `https://scan.rtb.cat/api/docs`.
+documentation interactive OpenAPI à `https://your-deployment.example.com/api/docs`.
 
 ## Core / Système
 

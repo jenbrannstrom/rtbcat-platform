@@ -80,7 +80,7 @@ Naprawa: upewnij się, że zapytania używają wzorca `generate_series + EXISTS`
 ### [DevOps] Jak sprawdzić, jaka wersja jest wdrożona?
 
 ```bash
-curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'
+curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'
 ```
 
 Zwraca SHA commita i tag obrazu. Porównaj z logiem commitów.

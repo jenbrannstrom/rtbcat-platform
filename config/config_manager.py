@@ -44,7 +44,7 @@ class S3Config(BaseModel):
 class S3ArchiveConfig(BaseModel):
     """S3 archive configuration for CSV backup."""
 
-    bucket: str = "rtbcat-csv-archive-frankfurt-328614522524"
+    bucket: str = "rtbcat-csv-archive-frankfurt-000000000000"
     region: str = "eu-central-1"
     compress: bool = True
     enabled: bool = True

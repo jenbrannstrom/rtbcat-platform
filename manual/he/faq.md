@@ -74,7 +74,7 @@ BLOCKED:
 ### [DevOps] כיצד אבדוק איזו גרסה פרוסה?
 
 ```bash
-curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'
+curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'
 ```
 
 פקודה זו מחזירה את ה-git SHA ותגית התמונה. השוו מול יומן ה-commits שלכם.

@@ -6,7 +6,7 @@ on:
       api_base_url:
         description: "API base URL (include /api path)"
         required: true
-        default: "https://scan.rtb.cat/api"
+        default: "https://your-deployment.example.com/api"
       strict_security:
         description: "Fail run if webhook security posture is not fully hardened"
         required: true
@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      CATSCAN_API_BASE_URL: ${{ github.event.inputs.api_base_url || 'https://scan.rtb.cat/api' }}
+      CATSCAN_API_BASE_URL: ${{ github.event.inputs.api_base_url || 'https://your-deployment.example.com/api' }}
       CATSCAN_GUARDRAIL_STRICT_SECURITY: ${{ github.event.inputs.strict_security || 'true' }}
       CATSCAN_GUARDRAIL_RUN_RETENTION: ${{ github.event.inputs.run_retention || 'true' }}
       CATSCAN_CANARY_TIMEOUT_SECONDS: ${{ github.event.inputs.timeout_seconds || '60' }}

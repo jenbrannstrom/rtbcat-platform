@@ -48,7 +48,7 @@ def test_collect_sync_forbidden_when_seat_admin_dependency_denies(
         raise HTTPException(status_code=403, detail="Admin access to at least one seat is required.")
 
     client = _build_client(monkeypatch, _deny_seat_admin)
-    response = client.post("/api/collect/sync", json={"account_id": "1487810529"})
+    response = client.post("/api/collect/sync", json={"account_id": "1111111111"})
 
     assert response.status_code == 403
     assert "admin access" in response.json()["detail"].lower()
@@ -65,12 +65,12 @@ def test_collect_sync_allows_when_seat_admin_dependency_passes(
     client = _build_client(monkeypatch, _allow_seat_admin)
     response = client.post(
         "/api/collect/sync",
-        json={"account_id": "1487810529", "filter_query": "status=ACTIVE"},
+        json={"account_id": "1111111111", "filter_query": "status=ACTIVE"},
     )
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "completed"
-    assert payload["account_id"] == "1487810529"
+    assert payload["account_id"] == "1111111111"
     assert payload["creatives_collected"] == 7
     assert _StubCollectService.calls == 1

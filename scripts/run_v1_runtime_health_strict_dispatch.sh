@@ -5,7 +5,7 @@ REPO="${CATSCAN_GH_REPO:-jenbrannstrom/rtbcat-platform}"
 REF="${CATSCAN_GH_REF:-unified-platform}"
 WORKFLOW="v1-runtime-health-strict.yml"
 
-API_BASE_URL="${CATSCAN_API_BASE_URL:-https://scan.rtb.cat/api}"
+API_BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
 BUYER_ID="${CATSCAN_BUYER_ID:-}"
 MODEL_ID="${CATSCAN_MODEL_ID:-}"
 CANARY_PROFILE="${CATSCAN_CANARY_PROFILE:-balanced}"
@@ -21,7 +21,7 @@ Usage:
 
 Options:
   --buyer-id <id>                 Buyer scope for runtime-health canary
-  --api-base-url <url>            API base URL (default: https://scan.rtb.cat/api)
+  --api-base-url <url>            API base URL (default: https://your-deployment.example.com/api)
   --model-id <id>                 Optional model ID override
   --profile <safe|balanced|aggressive>
                                   Canary profile (default: balanced)
@@ -34,7 +34,7 @@ Options:
   -h, --help                      Show help
 
 Example:
-  scripts/run_v1_runtime_health_strict_dispatch.sh --buyer-id 1487810529 --profile balanced
+  scripts/run_v1_runtime_health_strict_dispatch.sh --buyer-id 1111111111 --profile balanced
 EOF
 }
 

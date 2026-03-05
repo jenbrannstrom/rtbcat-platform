@@ -78,7 +78,7 @@ gebruiken (14 indexlookups in plaats van een volledige tabelscan). Zie
 ### [DevOps] Hoe controleer ik welke versie is uitgerold?
 
 ```bash
-curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'
+curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'
 ```
 
 Dit retourneert de git SHA en de image-tag. Vergelijk met uw commitlog.

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 CREATIVE_ID="${CATSCAN_CREATIVE_ID:-}"
-BASE_URL="${CATSCAN_API_BASE_URL:-https://scan.rtb.cat/api}"
+BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
 CANARY_EMAIL="${CATSCAN_CANARY_EMAIL:-${CATSCAN_CANARY_BEARER_TOKEN:-}}"
 SESSION_COOKIE="${CATSCAN_SESSION_COOKIE:-${CATSCAN_CANARY_SESSION_COOKIE:-}}"
 TIMEOUT_SECONDS="${CATSCAN_CANARY_TIMEOUT_SECONDS:-60}"
@@ -18,7 +18,7 @@ Diagnoses creative clickthrough resolution using:
 
 Options:
   --creative-id <id>      Creative ID (required)
-  --base-url <url>        API base URL (default: https://scan.rtb.cat/api)
+  --base-url <url>        API base URL (default: https://your-deployment.example.com/api)
   --email <email>         X-Email identity (default: CATSCAN_CANARY_EMAIL or CATSCAN_CANARY_BEARER_TOKEN)
   --session-cookie <val>  Cookie header value (default: CATSCAN_SESSION_COOKIE/CATSCAN_CANARY_SESSION_COOKIE)
   --timeout <seconds>     Request timeout (default: 60)
@@ -26,7 +26,7 @@ Options:
   -h, --help              Show help
 
 Examples:
-  export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
+  export CATSCAN_CANARY_EMAIL="user@example.com"
   scripts/diagnose_creative_clickthrough.sh --creative-id 207574524_intertplmraidexp_274444172_1784661_banner_intertplmraidexp_9259
 EOF
 }

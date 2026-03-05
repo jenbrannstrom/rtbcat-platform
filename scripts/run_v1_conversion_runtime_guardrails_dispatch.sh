@@ -5,7 +5,7 @@ REPO="${CATSCAN_GH_REPO:-jenbrannstrom/rtbcat-platform}"
 REF="${CATSCAN_GH_REF:-unified-platform}"
 WORKFLOW="v1-conversion-runtime-guardrails.yml"
 
-API_BASE_URL="${CATSCAN_API_BASE_URL:-https://scan.rtb.cat/api}"
+API_BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
 STRICT_SECURITY="${CATSCAN_GUARDRAIL_STRICT_SECURITY:-true}"
 RUN_RETENTION="${CATSCAN_GUARDRAIL_RUN_RETENTION:-true}"
 TIMEOUT_SECONDS="${CATSCAN_CANARY_TIMEOUT_SECONDS:-60}"
@@ -20,7 +20,7 @@ Dispatches v1-conversion-runtime-guardrails workflow, waits for completion,
 and downloads artifact when available.
 
 Options:
-  --api-base-url <url>      API base URL (default: https://scan.rtb.cat/api)
+  --api-base-url <url>      API base URL (default: https://your-deployment.example.com/api)
   --strict-security <bool>  true|false (default: true)
   --run-retention <bool>    true|false (default: true)
   --timeout <seconds>       Per-request timeout for API checks (default: 60)

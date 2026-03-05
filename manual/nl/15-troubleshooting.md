@@ -39,7 +39,7 @@
 **Detectie:**
 1. Roep het endpoint rechtstreeks aan vanaf de VM:
    ```bash
-   curl -sS --max-time 60 -H 'X-Email: cat-scan@rtb.cat' \
+   curl -sS --max-time 60 -H 'X-Email: user.com' \
      'http://localhost:8000/uploads/data-freshness?days=14&buyer_id=<ID>'
    ```
 2. Als het een timeout geeft of 500 retourneert, controleer het queryplan:
@@ -64,7 +64,7 @@
 
 **Detectie:**
 ```bash
-curl -sS -H 'X-Email: cat-scan@rtb.cat' \
+curl -sS -H 'X-Email: user.com' \
   http://localhost:8000/gmail/status
 ```
 

@@ -38,7 +38,7 @@
 
 ## Containerindeling
 
-Productie draait op een enkele GCP VM (`catscan-production-sg`, zone
+Productie draait op een enkele GCP VM (`catscan-vm`, zone
 `asia-southeast1-b`) met `docker-compose.gcp.yml`.
 
 | Container | Image | Poort | Rol |

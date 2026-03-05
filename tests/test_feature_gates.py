@@ -29,19 +29,19 @@ class FakeUser:
 
 class TestIsRestrictedUser:
     def test_dea_is_not_restricted(self):
-        assert is_restricted_user(FakeUser("dea@rtb.cat")) is False
+        assert is_restricted_user(FakeUser("user@example.com")) is False
 
     def test_dea_case_insensitive(self):
-        assert is_restricted_user(FakeUser("DEA@RTB.CAT")) is False
+        assert is_restricted_user(FakeUser("user@example.com")) is False
 
     def test_dea_mixed_case(self):
-        assert is_restricted_user(FakeUser("Dea@Rtb.Cat")) is False
+        assert is_restricted_user(FakeUser("user@example.com")) is False
 
     def test_admin_not_restricted(self):
-        assert is_restricted_user(FakeUser("admin@rtb.cat")) is False
+        assert is_restricted_user(FakeUser("user@example.com")) is False
 
     def test_other_user_not_restricted(self):
-        assert is_restricted_user(FakeUser("test@example.com")) is False
+        assert is_restricted_user(FakeUser("user@example.com")) is False
 
     def test_none_user(self):
         assert is_restricted_user(None) is False

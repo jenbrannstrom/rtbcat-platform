@@ -9,7 +9,7 @@
 Devuelve el estado básico de la API, el SHA de git y la versión. Utilizado por el flujo de despliegue y el monitoreo externo.
 
 ```bash
-curl -sS https://scan.rtb.cat/api/health | jq .
+curl -sS https://your-deployment.example.com/api/health | jq .
 ```
 
 ### `/system/data-health`: completitud de datos
@@ -40,9 +40,9 @@ Estos scripts son la columna vertebral operativa para verificar que el sistema f
 Diagnostica por qué un comprador específico tiene cobertura de CSV faltante.
 
 ```bash
-export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
+export CATSCAN_CANARY_EMAIL="user.com"
 scripts/diagnose_v1_buyer_report_coverage.sh \
-  --buyer-id 1487810529 \
+  --buyer-id <BUYER_ID> \
   --timeout 180 \
   --days 14
 ```
@@ -80,8 +80,8 @@ Ejecuta la puerta estricta en CI. Se activa manualmente a través de workflow_di
 ```bash
 gh workflow run v1-runtime-health-strict.yml \
   --ref unified-platform \
-  -f api_base_url="https://scan.rtb.cat/api" \
-  -f buyer_id="1487810529" \
+  -f api_base_url="https://your-deployment.example.com/api" \
+  -f buyer_id="<BUYER_ID>" \
   -f canary_profile="balanced" \
   -f canary_timeout_seconds="180"
 ```
@@ -98,7 +98,7 @@ Los scripts de tiempo de ejecución se autentican mediante variables de entorno:
 
 Desde el host de la VM, use `CATSCAN_CANARY_EMAIL` con `http://localhost:8000`.
 Desde CI (externo), use `CATSCAN_BEARER_TOKEN` o `CATSCAN_SESSION_COOKIE`
-con `https://scan.rtb.cat/api`.
+con `https://your-deployment.example.com/api`.
 
 ## Interpretación de resultados
 

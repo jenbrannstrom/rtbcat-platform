@@ -3,7 +3,7 @@ set -euo pipefail
 
 BUYER_ID="${CATSCAN_BUYER_ID:-}"
 SOURCE_TYPE="${CATSCAN_CONVERSION_SOURCE_TYPE:-appsflyer}"
-BASE_URL="${CATSCAN_API_BASE_URL:-https://scan.rtb.cat/api}"
+BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
 INPUT_FORMAT="auto"
 OUT_DIR="${CATSCAN_OUTPUT_DIR:-/tmp}"
 DOC_OUT=""
@@ -45,7 +45,7 @@ Options:
   --mapping-profile <path>        Mapping profile JSON file (skip API fetch)
   --fetch-mapping <auto|true|false>
                                   Fetch mapping via API when no --mapping-profile (default: auto)
-  --api-base-url <url>            API base URL (default: https://scan.rtb.cat/api)
+  --api-base-url <url>            API base URL (default: https://your-deployment.example.com/api)
   --token <value>                 Bearer token for mapping API
   --email <value>                 X-Email for mapping API (if no token)
   --out-dir <dir>                 Output root (default: /tmp)
@@ -54,21 +54,21 @@ Options:
 
 Examples:
   scripts/run_appsflyer_phase_a_audit.sh \
-    --buyer-id 1487810529 \
+    --buyer-id 1111111111 \
     --input ~/Downloads/appsflyer_raw_2026-03-01.csv
 
   scripts/run_appsflyer_phase_a_audit.sh \
-    --buyer-id 1487810529 \
+    --buyer-id 1111111111 \
     --from-db \
     --db-since-days 14 \
-    --email cat-scan@rtb.cat
+    --email user@example.com
 
   scripts/run_appsflyer_phase_a_audit.sh \
-    --buyer-id 1487810529 \
+    --buyer-id 1111111111 \
     --input /data/af_day1.csv --input /data/af_day2.csv \
     --fetch-mapping true \
-    --email cat-scan@rtb.cat \
-    --doc-out docs/review/2026-03-03/APPSFLYER_PHASE_A_BUYER_1487810529.md
+    --email user@example.com \
+    --doc-out docs/review/2026-03-03/APPSFLYER_PHASE_A_BUYER_1111111111.md
 EOF
 }
 

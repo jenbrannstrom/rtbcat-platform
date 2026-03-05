@@ -76,7 +76,7 @@ búsquedas por índice en lugar de un escaneo completo de tabla). Vea
 ### [DevOps] ¿Cómo verifico qué versión está desplegada?
 
 ```bash
-curl -sS https://scan.rtb.cat/api/health | jq -r '.git_sha,.version'
+curl -sS https://your-deployment.example.com/api/health | jq -r '.git_sha,.version'
 ```
 
 Esto devuelve el SHA del commit de git y la etiqueta de imagen. Compárelo con su registro

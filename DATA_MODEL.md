@@ -68,8 +68,8 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 #### Sample Data (from `catscan-bidsinauction-123456789-yesterday-sample`)
 ```csv
 #Day,Country,Creative ID,Buyer account ID,Bids in auction,Auctions won,Bids,Reached queries,Impressions,Spend (buyer currency),Spend (bidder currency)
-1/11/26,Brazil,1912783031778279425,123456789,11320,10847,11487,11210,9216,$4.16,$4.16
-1/11/26,Brazil,1929790482851430401,123456789,0,0,30844,0,0,$0.00,$0.00
+1/11/26,Brazil,9000000000000000001,123456789,11320,10847,11487,11210,9216,$4.16,$4.16
+1/11/26,Brazil,9000000000000000002,123456789,0,0,30844,0,0,$0.00,$0.00
 ```
 
 ---
@@ -96,9 +96,9 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 #### Sample Data (from `catscan-quality-123456789-yesterday-sample`)
 ```csv
 #Day,Billing ID,Creative ID,Creative size,Creative format,Reached queries,Impressions,Spend (buyer currency),Active view viewable,Active view measurable
-1/5/26,158610251694,1987702299774660610,Native,Display,5474,3147,$0.85,2835,3134
-1/5/26,158610251694,1987702299774660613,300x250,Display,3339,1385,$0.37,1085,1384
-1/5/26,158610251694,1987702299774660614,320x50,Display,18275,9900,$2.68,8901,9895
+1/5/26,888888888888,9100000000000000010,Native,Display,5474,3147,$0.85,2835,3134
+1/5/26,888888888888,9100000000000000013,300x250,Display,3339,1385,$0.37,1085,1384
+1/5/26,888888888888,9100000000000000014,320x50,Display,18275,9900,$2.68,8901,9895
 ```
 
 ---
@@ -162,7 +162,7 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 ```csv
 #Day,Hour,Country,Publisher ID,Publisher name,Bid requests,Inventory matches,Successful responses,Reached queries,Bids,Bids in auction,Auctions won,Impressions,Clicks
 1/11/26,0,Brazil,AdMob + AdSense,AdMob + AdSense,10720990,54677450,10718560,2776,4176,2894,2450,1714,1
-1/11/26,0,Brazil,pub-0054876817521062,Zynga DFP,3940,20390,3940,5,5,5,5,4,0
+1/11/26,0,Brazil,pub-0000000000000000,Zynga DFP,3940,20390,3940,5,5,5,5,4,0
 ```
 
 ---
@@ -184,10 +184,10 @@ Google Authorized Buyers has **field incompatibilities** that prevent getting al
 #### Sample Data (from `catscan-bid-filtering-123456789-yesterday-sample`)
 ```csv
 #Day,Country,Creative ID,Bid filtering reason,Bids
-1/11/26,Brazil,1912783031778279425,Excluded product category detected,13
-1/11/26,Brazil,1912783031778279425,App excluded by publisher,7
-1/11/26,Brazil,1912783031778279425,Ad contains an unidentifiable vendor,147
-1/11/26,Brazil,1929790482851430401,Excluded sensitive category detected,313
+1/11/26,Brazil,9000000000000000001,Excluded product category detected,13
+1/11/26,Brazil,9000000000000000001,App excluded by publisher,7
+1/11/26,Brazil,9000000000000000001,Ad contains an unidentifiable vendor,147
+1/11/26,Brazil,9000000000000000002,Excluded sensitive category detected,313
 ```
 
 #### Common Filtering Reasons (from sample data)
@@ -550,7 +550,7 @@ service_account (GCP credentials)
     │       └── rtb_endpoints
     │       └── pretargeting_configs
     │       └── creatives
-    └── bidder/seat 6634662463
+    └── bidder/seat 3333333333
             └── rtb_endpoints
             └── pretargeting_configs
             └── creatives

@@ -1,6 +1,6 @@
 name: v1 Runtime Health Stability
 run-name: >-
-  v1 Runtime Health Stability (buyer=${{ github.event.inputs.buyer_id || vars.CATSCAN_RUNTIME_HEALTH_PILOT_BUYER_ID || '1487810529' }}, window=${{ github.event.inputs.window || '3' }})
+  v1 Runtime Health Stability (buyer=${{ github.event.inputs.buyer_id || vars.CATSCAN_RUNTIME_HEALTH_PILOT_BUYER_ID || '1111111111' }}, window=${{ github.event.inputs.window || '3' }})
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ on:
       buyer_id:
         description: "Buyer filter token (matches run title buyer=<id>)"
         required: false
-        default: "1487810529"
+        default: "1111111111"
       window:
         description: "Required consecutive successful completed runs"
         required: false
@@ -40,7 +40,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       REPO_NAME: ${{ github.repository }}
-      BUYER_ID: ${{ github.event.inputs.buyer_id || vars.CATSCAN_RUNTIME_HEALTH_PILOT_BUYER_ID || '1487810529' }}
+      BUYER_ID: ${{ github.event.inputs.buyer_id || vars.CATSCAN_RUNTIME_HEALTH_PILOT_BUYER_ID || '1111111111' }}
       WINDOW: ${{ github.event.inputs.window || vars.CATSCAN_RUNTIME_HEALTH_STABILITY_WINDOW || '3' }}
       LIMIT: ${{ github.event.inputs.limit || vars.CATSCAN_RUNTIME_HEALTH_STABILITY_LIMIT || '20' }}
       BRANCH: ${{ github.event.inputs.branch || 'unified-platform' }}

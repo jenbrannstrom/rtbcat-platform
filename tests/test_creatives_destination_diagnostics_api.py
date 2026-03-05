@@ -43,7 +43,7 @@ def test_router_registers_destination_diagnostics_endpoint() -> None:
 def test_destination_diagnostics_returns_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     creative = SimpleNamespace(
         id="creative-1",
-        buyer_id="1487810529",
+        buyer_id="1111111111",
         final_url="%%CLICK_URL_UNESC%%",
         display_url=None,
         raw_data={},
@@ -85,12 +85,12 @@ def test_destination_diagnostics_returns_payload(monkeypatch: pytest.MonkeyPatch
 
     payload = response.json()
     assert payload["creative_id"] == "creative-1"
-    assert payload["buyer_id"] == "1487810529"
+    assert payload["buyer_id"] == "1111111111"
     assert payload["resolved_destination_url"] == "https://example.com/landing"
     assert payload["candidate_count"] == 3
     assert payload["eligible_count"] == 1
     assert len(payload["candidates"]) == 2
-    assert captured["buyer_id"] == "1487810529"
+    assert captured["buyer_id"] == "1111111111"
 
 
 def test_destination_diagnostics_returns_404_for_missing_creative() -> None:

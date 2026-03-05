@@ -17,7 +17,7 @@ def get_allowed_origins() -> list[str]:
     """Get allowed CORS origins from environment or defaults.
 
     Set ALLOWED_ORIGINS env var as comma-separated list for production:
-    ALLOWED_ORIGINS=https://scan.rtb.cat,https://yourdomain.com
+    ALLOWED_ORIGINS=https://your-deployment.example.com,https://yourdomain.com
     """
     env_origins = os.environ.get("ALLOWED_ORIGINS", "")
     if env_origins:

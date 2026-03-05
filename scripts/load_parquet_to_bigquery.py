@@ -6,7 +6,7 @@ BigQuery raw_facts table, creating the table if it doesn't exist.
 
 Usage:
     python scripts/load_parquet_to_bigquery.py \
-        --gcs-uri gs://bucket/raw/2026/01/23/6634662463/funnel_publishers.parquet
+        --gcs-uri gs://bucket/raw/2026/01/23/3333333333/funnel_publishers.parquet
 
 Environment Variables:
     BIGQUERY_PROJECT_ID: GCP project ID

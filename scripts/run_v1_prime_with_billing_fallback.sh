@@ -3,7 +3,7 @@ set -euo pipefail
 
 BUYER_ID=""
 BILLING_ID="${CATSCAN_PRIME_BILLING_ID:-}"
-BASE_URL="${CATSCAN_API_BASE_URL:-https://scan.rtb.cat/api}"
+BASE_URL="${CATSCAN_API_BASE_URL:-https://your-deployment.example.com/api}"
 CANARY_EMAIL="${CATSCAN_CANARY_EMAIL:-${CATSCAN_CANARY_BEARER_TOKEN:-}}"
 PRETARGETING_LIMIT="${CATSCAN_PRIME_PRETARGETING_LIMIT:-500}"
 DRY_RUN=0
@@ -21,17 +21,17 @@ Purpose:
 Options:
   --buyer-id <id>            Required buyer_id
   --billing-id <id>          Optional explicit billing_id (skips auto-resolution)
-  --api-base-url <url>       API base URL (default: https://scan.rtb.cat/api)
+  --api-base-url <url>       API base URL (default: https://your-deployment.example.com/api)
   --email <email>            X-Email identity (default: CATSCAN_CANARY_EMAIL)
   --pretargeting-limit <n>   Query limit for pretargeting lookup (default: 500)
   --dry-run                  Print resolved command without executing
   -h, --help                 Show help
 
 Examples:
-  export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
-  scripts/run_v1_prime_with_billing_fallback.sh --buyer-id 1487810529 -- --timeout 60 --refresh-timeout 600 --event-count 20 --profile aggressive
+  export CATSCAN_CANARY_EMAIL="user@example.com"
+  scripts/run_v1_prime_with_billing_fallback.sh --buyer-id 1111111111 -- --timeout 60 --refresh-timeout 600 --event-count 20 --profile aggressive
 
-  scripts/run_v1_prime_with_billing_fallback.sh --buyer-id 1487810529 --billing-id 194605230430 -- --timeout 60
+  scripts/run_v1_prime_with_billing_fallback.sh --buyer-id 1111111111 --billing-id 555555555555 -- --timeout 60
 EOF
 }
 

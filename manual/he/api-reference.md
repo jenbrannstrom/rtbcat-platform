@@ -2,7 +2,7 @@
 
 זהו אינדקס ניתן לניווט של 118+ נקודות הקצה של Cat-Scan, מקובצות לפי תחום.
 למפרטי בקשה/תגובה מלאים, ראו את תיעוד OpenAPI האינטראקטיבי בכתובת
-`https://scan.rtb.cat/api/docs`.
+`https://your-deployment.example.com/api/docs`.
 
 ## ליבה / מערכת
 

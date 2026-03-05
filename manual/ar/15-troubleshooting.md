@@ -39,7 +39,7 @@
 **الاكتشاف:**
 1. استدعِ نقطة النهاية مباشرة من الآلة الافتراضية:
    ```bash
-   curl -sS --max-time 60 -H 'X-Email: cat-scan@rtb.cat' \
+   curl -sS --max-time 60 -H 'X-Email: user.com' \
      'http://localhost:8000/uploads/data-freshness?days=14&buyer_id=<ID>'
    ```
 2. إذا انتهت المهلة أو أُرجعت الحالة 500، تحقق من خطة الاستعلام:
@@ -64,7 +64,7 @@
 
 **الاكتشاف:**
 ```bash
-curl -sS -H 'X-Email: cat-scan@rtb.cat' \
+curl -sS -H 'X-Email: user.com' \
   http://localhost:8000/gmail/status
 ```
 

@@ -6,7 +6,7 @@ on:
       api_base_url:
         description: "API base URL (include /api path)"
         required: true
-        default: "https://scan.rtb.cat/api"
+        default: "https://your-deployment.example.com/api"
       buyer_id:
         description: "Optional buyer_id scope"
         required: false

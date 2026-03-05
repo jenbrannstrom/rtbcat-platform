@@ -7,8 +7,8 @@ This script coordinates the complete data pipeline flow:
 3. Aggregate BigQuery data into Postgres UI tables
 
 Usage:
-    python scripts/run_pipeline.py --csv-path /path/to/report.csv --buyer-id 6634662463
-    python scripts/run_pipeline.py --csv-path /path/to/report.csv --buyer-id 6634662463 --skip-aggregate
+    python scripts/run_pipeline.py --csv-path /path/to/report.csv --buyer-id 3333333333
+    python scripts/run_pipeline.py --csv-path /path/to/report.csv --buyer-id 3333333333 --skip-aggregate
 
 Environment Variables:
     RAW_PARQUET_BUCKET: GCS bucket for Parquet files

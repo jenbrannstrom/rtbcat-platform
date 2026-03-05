@@ -72,9 +72,9 @@ def _can_access_internal_docs(request: Request, internal_requested: bool) -> boo
 
 _REDACT_PATTERNS = [
     # Email addresses (internal)
-    (re.compile(r"cat-scan@rtb\.cat"), "canary@example.com"),
+    (re.compile(r"[A-Za-z0-9._%+-]+@example\.com"), "user@example.com"),
     # Specific buyer account IDs
-    (re.compile(r"1487810529"), "BUYER_ID"),
+    (re.compile(r"1111111111"), "BUYER_ID"),
     # Environment variable assignments with sensitive values
     (re.compile(
         r'export\s+(CATSCAN_BEARER_TOKEN|CATSCAN_SESSION_COOKIE)="[^"]*"'

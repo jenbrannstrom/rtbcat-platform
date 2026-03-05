@@ -9,7 +9,7 @@
 Возвращает базовый статус API, git SHA и версию. Используется рабочим процессом развёртывания и внешним мониторингом.
 
 ```bash
-curl -sS https://scan.rtb.cat/api/health | jq .
+curl -sS https://your-deployment.example.com/api/health | jq .
 ```
 
 ### `/system/data-health`: полнота данных
@@ -40,9 +40,9 @@ curl -sS https://scan.rtb.cat/api/health | jq .
 Диагностирует причины отсутствия CSV-покрытия для конкретного байера.
 
 ```bash
-export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
+export CATSCAN_CANARY_EMAIL="user.com"
 scripts/diagnose_v1_buyer_report_coverage.sh \
-  --buyer-id 1487810529 \
+  --buyer-id <BUYER_ID> \
   --timeout 180 \
   --days 14
 ```
@@ -80,8 +80,8 @@ scripts/diagnose_v1_buyer_report_coverage.sh \
 ```bash
 gh workflow run v1-runtime-health-strict.yml \
   --ref unified-platform \
-  -f api_base_url="https://scan.rtb.cat/api" \
-  -f buyer_id="1487810529" \
+  -f api_base_url="https://your-deployment.example.com/api" \
+  -f buyer_id="<BUYER_ID>" \
   -f canary_profile="balanced" \
   -f canary_timeout_seconds="180"
 ```
@@ -97,7 +97,7 @@ gh workflow run v1-runtime-health-strict.yml \
 | `CATSCAN_SESSION_COOKIE` | Cookie сессии OAuth2 Proxy (среда CI) |
 
 С ВМ-хоста используйте `CATSCAN_CANARY_EMAIL` с `http://localhost:8000`.
-Из CI (внешний доступ) используйте `CATSCAN_BEARER_TOKEN` или `CATSCAN_SESSION_COOKIE` с `https://scan.rtb.cat/api`.
+Из CI (внешний доступ) используйте `CATSCAN_BEARER_TOKEN` или `CATSCAN_SESSION_COOKIE` с `https://your-deployment.example.com/api`.
 
 ## Интерпретация результатов
 

@@ -14,7 +14,7 @@ Cat-Scan understøtter tre loginmetoder:
 
 ## Første login
 
-1. Naviger til `https://scan.rtb.cat` (eller din installations-URL).
+1. Naviger til `https://your-deployment.example.com` (eller din installations-URL).
 2. Du vil se login-siden med de tilgængelige login-muligheder.
 3. Vælg din metode og godkend.
 4. Ved første login opretter systemet automatisk din brugerpost (for

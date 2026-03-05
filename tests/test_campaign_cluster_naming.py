@@ -17,7 +17,7 @@ def test_sanitize_destination_url_decodes_click_macro_url() -> None:
 
 
 def test_name_garbage_rejects_numeric_only_values() -> None:
-    assert campaigns_router._is_name_garbage("6736971742") is True
+    assert campaigns_router._is_name_garbage("7000000000") is True
     assert campaigns_router._is_name_garbage("123456") is True
     assert campaigns_router._is_name_garbage("Star Trader") is False
 

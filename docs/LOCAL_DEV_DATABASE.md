@@ -24,7 +24,7 @@ export POSTGRES_DSN="postgresql://LOCAL_USER:LOCAL_PASS@127.0.0.1:5432/rtbcat_lo
 scripts/clone_subset_to_local.sh \
   --remote-dsn "postgresql://REMOTE_USER:REMOTE_PASS@REMOTE_HOST:5432/rtbcat_serving" \
   --local-dsn "postgresql://LOCAL_USER:LOCAL_PASS@127.0.0.1:5432/rtbcat_local" \
-  --buyer-id 6634662463 \
+  --buyer-id <BUYER_ID> \
   --days 30
 ```
 

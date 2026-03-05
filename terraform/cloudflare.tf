@@ -27,7 +27,7 @@ resource "cloudflare_record" "catscan" {
 }
 
 locals {
-  # Extract subdomain from domain_name (e.g., "scan" from "scan.rtb.cat")
+  # Extract subdomain from domain_name (e.g., "scan" from "your-deployment.example.com")
   subdomain = var.domain_name != "" ? split(".", var.domain_name)[0] : ""
 }
 

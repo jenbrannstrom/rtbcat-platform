@@ -9,7 +9,7 @@
 Returnerer grundlæggende API-status, git-SHA og version. Bruges af udrulningsworkflowet og ekstern overvågning.
 
 ```bash
-curl -sS https://scan.rtb.cat/api/health | jq .
+curl -sS https://your-deployment.example.com/api/health | jq .
 ```
 
 ### `/system/data-health`: datafuldstændighed
@@ -40,9 +40,9 @@ Disse scripts er det operationelle fundament for at verificere, at systemet fung
 Diagnosticerer hvorfor en bestemt køber mangler CSV-dækning.
 
 ```bash
-export CATSCAN_CANARY_EMAIL="cat-scan@rtb.cat"
+export CATSCAN_CANARY_EMAIL="user.com"
 scripts/diagnose_v1_buyer_report_coverage.sh \
-  --buyer-id 1487810529 \
+  --buyer-id <BUYER_ID> \
   --timeout 180 \
   --days 14
 ```
@@ -80,8 +80,8 @@ Kører den strenge gate i CI. Aktiveres manuelt via workflow_dispatch.
 ```bash
 gh workflow run v1-runtime-health-strict.yml \
   --ref unified-platform \
-  -f api_base_url="https://scan.rtb.cat/api" \
-  -f buyer_id="1487810529" \
+  -f api_base_url="https://your-deployment.example.com/api" \
+  -f buyer_id="<BUYER_ID>" \
   -f canary_profile="balanced" \
   -f canary_timeout_seconds="180"
 ```
@@ -98,7 +98,7 @@ Runtime-scripts autentificerer via miljøvariabler:
 
 Fra VM-værten bruges `CATSCAN_CANARY_EMAIL` med `http://localhost:8000`.
 Fra CI (eksternt) bruges `CATSCAN_BEARER_TOKEN` eller `CATSCAN_SESSION_COOKIE`
-med `https://scan.rtb.cat/api`.
+med `https://your-deployment.example.com/api`.
 
 ## Fortolkning af resultater
 

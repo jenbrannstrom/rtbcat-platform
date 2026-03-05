@@ -6,7 +6,7 @@ Machine-checks contracts: C-ING-001, C-ING-002, C-EPT-001, C-PRE-002, C-PRE-003.
 Usage:
     python scripts/contracts_check.py --days 7
     python scripts/contracts_check.py --days 7 --strict --json-out /tmp/contracts.json
-    python scripts/contracts_check.py --buyer 6574658621 --db-dsn-env DATABASE_URL
+    python scripts/contracts_check.py --buyer 4444444444 --db-dsn-env DATABASE_URL
 """
 
 from __future__ import annotations
