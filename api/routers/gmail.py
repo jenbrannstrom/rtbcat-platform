@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.dependencies import require_admin
+from api.security_utils import has_valid_scheduler_secret
 from services.auth_service import User
 from services.gmail_service import GmailService
 from services.secrets_manager import get_secrets_manager
@@ -126,7 +127,7 @@ async def trigger_gmail_import_scheduled(
     """
     secret = get_secrets_manager().get("GMAIL_IMPORT_SECRET")
     header_secret = request.headers.get("X-Gmail-Import-Secret")
-    if not secret or not header_secret or header_secret != secret:
+    if not has_valid_scheduler_secret(secret, header_secret):
         raise HTTPException(status_code=403, detail="Invalid scheduler secret")
 
     try:
