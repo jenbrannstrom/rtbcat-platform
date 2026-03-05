@@ -331,7 +331,7 @@
 
 - [x] **Campaigns tab filtering** - Creative ID type mismatch causing empty campaigns view
 - [x] **FFmpeg missing on install** - Container/runtime image includes ffmpeg; install blocker closed
-- [ ] **Login loop / empty analytics (rescoped)** - Objective: eliminate auth/analytics loop failure mode; Current: startup now hard-fails without `POSTGRES_SERVING_DSN`, but runtime env drift and telemetry gaps remain; Acceptance: no reproducible loop in prod/VM2 and telemetry isolates failures quickly.
+- [ ] **Login loop / empty analytics (rescoped)** - Objective: eliminate auth/analytics loop failure mode; Current: startup now hard-fails without `POSTGRES_SERVING_DSN`, auth-check degraded-path handling now treats 5xx as service-unavailable (no redirect loop), session-validation DB failures now surface `503` degraded auth instead of `401`, and home analytics queries now wait for a seat validated against active seats; runtime env drift and production telemetry verification remain; Acceptance: no reproducible loop in prod/VM2 and telemetry isolates failures quickly.
 - [x] **Import Now button fails** - /import does not process queued Gmail reports
 - [x] **Campaigns create action no-op** - Clicking "Create" on auto cluster does nothing
 - [x] **Duplicate migration numbers** - resolved
