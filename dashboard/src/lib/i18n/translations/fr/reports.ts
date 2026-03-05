@@ -2,7 +2,7 @@ import type { PartialTranslations } from '../../types';
 
 const value: PartialTranslations['reports'] = {
     'reportName': 'Rapport',
-    'dimensions': 'Dimensions (dans l'ordre)',
+    'dimensions': 'Dimensions (dans l\'ordre)',
     'metrics': 'Métriques',
     'schedule': 'Planification',
     'daily': 'Quotidien',
@@ -13,9 +13,9 @@ const value: PartialTranslations['reports'] = {
     'creativeSize': 'Taille du créatif',
     'creativeFormat': 'Format du créatif',
     'reachedQueries': 'Requêtes atteintes',
-    'bidRequests': 'Demandes d'enchères',
+    'bidRequests': 'Demandes d\'enchères',
     'publisherId': 'ID éditeur',
-    'publisherName': 'Nom de l'éditeur',
+    'publisherName': 'Nom de l\'éditeur',
     'bidsInAuction': 'Enchères en vente'
 };
 

@@ -3,7 +3,7 @@ import type { PartialTranslations } from '../../types';
 const value: PartialTranslations['settings'] = {
     'title': 'Paramètres',
     'systemConfiguration': 'Configuration et état du système',
-    'apiStatus': 'État de l'API',
+    'apiStatus': 'État de l\'API',
     'status': 'Statut',
     'version': 'Version',
     'configured': 'Configuré',

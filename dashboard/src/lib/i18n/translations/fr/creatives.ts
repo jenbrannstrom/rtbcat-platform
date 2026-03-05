@@ -19,7 +19,7 @@ const value: PartialTranslations['creatives'] = {
     'notApproved': 'Non approuvé',
     'viewCreative': 'Voir le créatif',
     'noPerformanceData': 'Aucune donnée de performance',
-    'copyId': 'Copier l'ID',
+    'copyId': 'Copier l\'ID',
     'bySizeFormat': 'Par taille/format',
     'byCountry': 'Par pays',
     'creativeId': 'ID créatif',

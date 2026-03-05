@@ -3,7 +3,7 @@ import type { PartialTranslations } from '../../types';
 const value: PartialTranslations['wasteAnalysis'] = {
     'title': 'Analyse du gaspillage',
     'subtitle': 'Analysez et optimisez le gaspillage QPS',
-    'funnelTitle': 'L'entonnoir RTB',
+    'funnelTitle': 'L\'entonnoir RTB',
     'reachedYourBidder': 'A atteint votre enchérisseur',
     'qps': 'QPS',
     'winRate': 'Taux de gain',

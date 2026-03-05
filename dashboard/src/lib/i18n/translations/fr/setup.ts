@@ -7,7 +7,7 @@ const value: PartialTranslations['setup'] = {
     'connected': 'Connecté',
     'notConnected': 'Non connecté',
     'notConfigured': 'Non configuré',
-    'connectApi': 'Connecter l'API',
+    'connectApi': 'Connecter l\'API',
     'gmailReports': 'Rapports Gmail',
     'system': 'Système',
     'googleAuthorizedBuyers': 'Google Authorized Buyers',
@@ -18,7 +18,7 @@ const value: PartialTranslations['setup'] = {
     'discoverSeats': 'Découvrir les sièges',
     'noBuyerSeatsFound': 'Aucun siège acheteur trouvé',
     'dataRetention': 'Rétention des données',
-    'apiStatus': 'État de l'API',
+    'apiStatus': 'État de l\'API',
     'systemStatus': 'État du système',
     'database': 'Base de données'
 };
