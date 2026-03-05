@@ -2,6 +2,10 @@ name: Security Checks
 
 on:
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - "ROADMAP.md"
   push:
     branches:
       - main
