@@ -248,7 +248,6 @@ class HomeAnalyticsRepository:
             LEFT JOIN rtb_endpoints e
               ON e.bidder_id = c.bidder_id AND e.endpoint_id = c.endpoint_id
             {where}
-            ORDER BY c.current_qps DESC, c.endpoint_id
             """,
             tuple(params),
         )
