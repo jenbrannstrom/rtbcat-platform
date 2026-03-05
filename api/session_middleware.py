@@ -40,6 +40,7 @@ PUBLIC_PATHS = {
     "/redoc",
     "/auth/check",
     "/auth/me",
+    "/auth/providers",
     "/auth/bootstrap",  # First admin provisioning (token-gated)
     "/auth/login",  # Password login
     "/auth/register",  # First user registration
