@@ -19,7 +19,7 @@ Authorized Buyers. Поскольку Google не предоставляет Rep
 
 Перетащите CSV-файл, экспортированный из Google Authorized Buyers.
 
-![Страница импорта данных с зоной загрузки и сеткой свежести](images/screenshot-import.png)
+![Страница импорта данных с зоной загрузки и сеткой свежести](../images/screenshot-import.png)
 
 **Порядок действий:**
 

@@ -19,7 +19,7 @@ están desactualizados, tus decisiones se basan en información antigua.
 
 Arrastra y suelta un archivo CSV exportado desde Google Authorized Buyers.
 
-![Página de importación de datos con zona de carga y cuadrícula de frescura](images/screenshot-import.png)
+![Página de importación de datos con zona de carga y cuadrícula de frescura](../images/screenshot-import.png)
 
 **Flujo de trabajo:**
 

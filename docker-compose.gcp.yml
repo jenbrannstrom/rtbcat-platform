@@ -21,7 +21,7 @@ services:
       - "0.0.0.0"
       - "--port"
       - "5432"
-      - "${CLOUDSQL_INSTANCE:-catscan-prod-202601:asia-southeast1:catscan-production-serving}"
+      - "${CLOUDSQL_INSTANCE:?Set CLOUDSQL_INSTANCE to project:region:instance}"
     # On GCE VMs, uses Application Default Credentials from metadata server
     # For local dev with credentials file, set GOOGLE_APPLICATION_CREDENTIALS
     restart: always

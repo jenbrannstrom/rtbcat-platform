@@ -6,7 +6,7 @@
 
 Galleriet viser alle kreativer tilknyttet din valgte plads.
 
-![Kreativgalleri med formatmærker og performance-niveauer](images/screenshot-creatives.png)
+![Kreativgalleri med formatmærker og performance-niveauer](../images/screenshot-creatives.png)
 
 ### Hvad du ser
 

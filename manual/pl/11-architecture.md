@@ -88,7 +88,7 @@ Klientów nie wysyła się do przeszukiwania magazynu.
 /storage/           Database access (Postgres repos, BigQuery clients)
 /dashboard/src/     Next.js 14 frontend (App Router)
 /scripts/           Operational and diagnostic scripts
-/docs/              Architecture docs and AI agent logs
+docs.rtb.cat/       Public documentation portal
 ```
 
 Backend stosuje wzorzec **Router -> Service -> Repository**. Routery

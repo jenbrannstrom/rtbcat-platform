@@ -20,7 +20,7 @@ podstawie starych informacji.
 
 Przeciągnij i upuść plik CSV wyeksportowany z Google Authorized Buyers.
 
-![Strona importu danych ze strefą przesyłania i siatką świeżości](images/screenshot-import.png)
+![Strona importu danych ze strefą przesyłania i siatką świeżości](../images/screenshot-import.png)
 
 **Workflow:**
 

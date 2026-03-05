@@ -899,7 +899,7 @@ gcloud secrets versions add catscan-deploy-key \
 ### 3. Ensure Artifact Registry Auth on the VM
 
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --project=YOUR_PROJECT_ID --command="
+gcloud compute ssh YOUR_VM_NAME --zone=YOUR_ZONE --project=YOUR_PROJECT_ID --command="
 sudo gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
 "
 ```
@@ -907,7 +907,7 @@ sudo gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
 ### 4. Fix Data Directory Ownership (must match container UID)
 
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --project=YOUR_PROJECT_ID --command="
+gcloud compute ssh YOUR_VM_NAME --zone=YOUR_ZONE --project=YOUR_PROJECT_ID --command="
 API_UID=\$(sudo docker exec catscan-api id -u rtbcat)
 sudo chown -R \${API_UID}:\${API_UID} /home/catscan/.catscan
 sudo chmod 755 /home/catscan/.catscan
@@ -917,7 +917,7 @@ sudo chmod 755 /home/catscan/.catscan
 ### 5. Pull and Start Containers
 
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --project=YOUR_PROJECT_ID --command="
+gcloud compute ssh YOUR_VM_NAME --zone=YOUR_ZONE --project=YOUR_PROJECT_ID --command="
 cd /opt/catscan
 sudo docker compose -f docker-compose.gcp.yml pull
 sudo docker compose -f docker-compose.gcp.yml up -d
@@ -927,7 +927,7 @@ sudo docker compose -f docker-compose.gcp.yml up -d
 ### 6. Register Authorized Buyers Service Account (DB)
 
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --project=YOUR_PROJECT_ID --command="
+gcloud compute ssh YOUR_VM_NAME --zone=YOUR_ZONE --project=YOUR_PROJECT_ID --command="
 psql \$POSTGRES_SERVING_DSN -c \"
 INSERT INTO service_accounts
   (id, client_email, project_id, display_name, credentials_path, is_active)
@@ -946,7 +946,7 @@ in step 2. Do not hardcode client secrets in this file; use your OAuth client JS
 ### 8. Run Imports and Precompute
 
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --project=YOUR_PROJECT_ID --command="
+gcloud compute ssh YOUR_VM_NAME --zone=YOUR_ZONE --project=YOUR_PROJECT_ID --command="
 sudo docker exec catscan-api python -m collectors.gmail_import
 sudo docker exec catscan-api python -c 'from services.config_precompute import refresh_config_breakdowns; refresh_config_breakdowns(days=30)'
 "
@@ -966,7 +966,7 @@ disk fills up with old Docker images, backup files, and stale data.
 #### A. Docker Cleanup Cron (prevents disk full)
 
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap --command="
+gcloud compute ssh YOUR_VM_NAME --zone=YOUR_ZONE --tunnel-through-iap --command="
 cat <<'EOF' | sudo tee /etc/cron.d/docker-cleanup
 # Docker Cleanup - runs daily at 4am UTC
 # Removes unused images, containers, networks older than 24h
@@ -980,7 +980,7 @@ sudo chmod 644 /etc/cron.d/docker-cleanup
 #### B. Home Page Precompute Timer (prevents slow dashboard)
 
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap --command="
+gcloud compute ssh YOUR_VM_NAME --zone=YOUR_ZONE --tunnel-through-iap --command="
 # Create the service
 sudo tee /etc/systemd/system/catscan-home-refresh.service << 'EOF'
 [Unit]
@@ -1019,7 +1019,7 @@ sudo systemctl enable --now catscan-home-refresh.timer
 ### 12. Verify Maintenance Jobs
 
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap --command="
+gcloud compute ssh YOUR_VM_NAME --zone=YOUR_ZONE --tunnel-through-iap --command="
 echo '=== Cron Jobs ==='
 ls -la /etc/cron.d/
 
@@ -1080,7 +1080,7 @@ Deployments are currently **manual** (auto-deploy was disabled after incidents):
 2. SSH to VM and pull new images:
 
 ```bash
-gcloud compute ssh catscan-production --zone=europe-west1-b --tunnel-through-iap --command="
+gcloud compute ssh YOUR_VM_NAME --zone=YOUR_ZONE --tunnel-through-iap --command="
 cd /opt/catscan
 sudo docker compose -f docker-compose.gcp.yml pull
 sudo docker compose -f docker-compose.gcp.yml up -d

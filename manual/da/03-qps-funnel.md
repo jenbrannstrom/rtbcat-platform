@@ -9,7 +9,7 @@ Dette er startsiden i Cat-Scan (`/`). Alt begynder her.
 Siden QPS Waste Optimizer viser din RTB-tragt (rejsen fra budforespørgsel til
 forbrug) og fremhæver, hvor volumen falder.
 
-![QPS Waste Optimizer-startside](images/screenshot-qps-home.png)
+![QPS Waste Optimizer-startside](../images/screenshot-qps-home.png)
 
 ### Tragten
 

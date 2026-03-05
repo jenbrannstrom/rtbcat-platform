@@ -87,7 +87,7 @@ Cat-Scan משתמש גם ב-Postgres וגם ב-BigQuery לתפקידים שונ�
 /storage/           Database access (Postgres repos, BigQuery clients)
 /dashboard/src/     Next.js 14 frontend (App Router)
 /scripts/           Operational and diagnostic scripts
-/docs/              Architecture docs and AI agent logs
+docs.rtb.cat/       Public documentation portal
 ```
 
 ה-backend עוקב אחר דפוס **Router -> Service -> Repository**. נתבים

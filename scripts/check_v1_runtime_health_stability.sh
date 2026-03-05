@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="${CATSCAN_GH_REPO:-jenbrannstrom/rtbcat-platform}"
+REPO="${CATSCAN_GH_REPO:-YOUR_ORG/rtbcat-platform}"
 WORKFLOW="${CATSCAN_RUNTIME_HEALTH_WORKFLOW_FILE:-v1-runtime-health-strict.yml}"
 BRANCH="${CATSCAN_GH_REF:-unified-platform}"
 BUYER_ID="${CATSCAN_BUYER_ID:-}"
@@ -18,7 +18,7 @@ Checks whether the most recent completed runtime-health strict runs are stable
 (`conclusion=success`) for the selected branch/workflow.
 
 Options:
-  --repo <owner/repo>      GitHub repo (default: jenbrannstrom/rtbcat-platform)
+  --repo <owner/repo>      GitHub repo (default: YOUR_ORG/rtbcat-platform)
   --workflow <file.yml>    Workflow file name (default: v1-runtime-health-strict.yml)
   --branch <name>          Branch/ref filter (default: unified-platform)
   --buyer-id <id>          Optional buyer filter via run title token `buyer=<id>`

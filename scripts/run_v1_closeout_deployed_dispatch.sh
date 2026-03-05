@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="${CATSCAN_GH_REPO:-jenbrannstrom/rtbcat-platform}"
+REPO="${CATSCAN_GH_REPO:-YOUR_ORG/rtbcat-platform}"
 REF="${CATSCAN_GH_REF:-unified-platform}"
 DEPLOYED_WORKFLOW="v1-closeout-deployed.yml"
 BYOM_WORKFLOW="v1-byom-api-regression.yml"
@@ -38,7 +38,7 @@ Options:
   --since-hours <n>               QPS page SLO lookback hours (default: 168)
   --allow-blocked <true|false>    Treat blocked checks as non-fatal (default: false)
   --canary-timeout <seconds>      Per-request canary HTTP timeout (default: 240)
-  --repo <owner/repo>             GitHub repo (default: jenbrannstrom/rtbcat-platform)
+  --repo <owner/repo>             GitHub repo (default: YOUR_ORG/rtbcat-platform)
   --ref <branch>                  Git ref/branch (default: unified-platform)
   --poll-timeout <seconds>        Wait for run registration (default: 180)
   --run-byom                      Also dispatch/watch BYOM API regression workflow

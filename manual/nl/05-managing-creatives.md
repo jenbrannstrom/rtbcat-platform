@@ -6,7 +6,7 @@
 
 De galerij toont alle creatives die gekoppeld zijn aan uw geselecteerde seat.
 
-![Creative-galerij met formaatbadges en prestatieniveaus](images/screenshot-creatives.png)
+![Creative-galerij met formaatbadges en prestatieniveaus](../images/screenshot-creatives.png)
 
 ### Wat u ziet
 

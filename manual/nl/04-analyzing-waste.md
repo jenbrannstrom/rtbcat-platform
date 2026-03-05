@@ -9,7 +9,7 @@ laten deze drie weergaven zien *waar* het vandaan komt.
 
 Toont QPS-verbruik en prestaties per land en stad.
 
-![Geografische QPS-uitsplitsing per land](images/screenshot-geo-qps.png)
+![Geografische QPS-uitsplitsing per land](../images/screenshot-geo-qps.png)
 
 **Waar u op moet letten:**
 - Landen met hoge QPS maar nul of vrijwel nul winsten. Google stuurt u
@@ -27,7 +27,7 @@ Toont QPS-verbruik en prestaties per land en stad.
 
 Toont prestaties uitgesplitst naar uitgeversdomein of app.
 
-![Uitgever-QPS met winstpercentage-analyse](images/screenshot-pub-qps.png)
+![Uitgever-QPS met winstpercentage-analyse](../images/screenshot-pub-qps.png)
 
 **Waar u op moet letten:**
 - Domeinen met hoog biedvolume maar nul impressies. Uw bidder besteedt
@@ -47,7 +47,7 @@ Toont prestaties uitgesplitst naar uitgeversdomein of app.
 
 Toont welke advertentieformaten verkeer ontvangen en of u daarvoor creatives heeft.
 
-![Uitsplitsing QPS per formaat](images/screenshot-size-qps.png)
+![Uitsplitsing QPS per formaat](../images/screenshot-size-qps.png)
 
 **Waar u op moet letten:**
 - Formaten met hoge QPS maar **geen bijpassende creative**. Google stuurt

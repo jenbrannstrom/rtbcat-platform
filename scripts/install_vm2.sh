@@ -45,7 +45,7 @@ if [ ! -d "$TF_DIR" ]; then
 fi
 
 # Collect inputs
-prompt PROJECT_ID "GCP Project ID" "catscan-prod-202601"
+prompt PROJECT_ID "GCP Project ID" "your-gcp-project-id"
 prompt REGION "GCP region" "asia-southeast1"
 prompt ZONE "GCP zone" "asia-southeast1-b"
 prompt APP_NAME "App name" "catscan"
@@ -53,20 +53,20 @@ prompt ENVIRONMENT "Environment" "production"
 prompt MACHINE_TYPE "Machine type" "e2-medium"
 prompt BOOT_DISK_SIZE "Boot disk size (GB)" "80"
 
-prompt DOMAIN_NAME "Domain (staging.example.com or leave blank)" ""
-prompt ENABLE_HTTPS "Enable HTTPS (true/false)" "false"
+prompt DOMAIN_NAME "Domain (e.g., app.example.com or leave blank)" ""
+prompt ENABLE_HTTPS "Enable HTTPS (true/false)" "true"
 
-prompt GITHUB_REPO "GitHub repo URL" "https://github.com/jenbrannstrom/rtbcat-platform.git"
-prompt GITHUB_BRANCH "GitHub branch" "unified-platform"
+prompt GITHUB_REPO "GitHub repo URL" "https://github.com/YOUR_ORG/rtbcat-platform.git"
+prompt GITHUB_BRANCH "GitHub branch" "main"
 
 prompt OAUTH_CLIENT_ID "OAuth Client ID" ""
 prompt OAUTH_CLIENT_SECRET "OAuth Client Secret" "" true
 
-prompt ALLOWED_DOMAINS "Allowed email domains (comma-separated)" "rtb.cat"
+prompt ALLOWED_DOMAINS "Allowed email domains (comma-separated)" "example.com"
 
-prompt SERVICE_ACCOUNT_EMAIL "VM service account email" "catscan-production-sa@catscan-prod-202601.iam.gserviceaccount.com"
+prompt SERVICE_ACCOUNT_EMAIL "VM service account email" "service-account@your-gcp-project-id.iam.gserviceaccount.com"
 prompt ARTIFACT_DOMAIN "Artifact Registry domain" "asia-southeast1-docker.pkg.dev"
-prompt GCS_BUCKET "GCS bucket name" "catscan-production-data-99957252"
+prompt GCS_BUCKET "GCS bucket name" "your-analytics-bucket"
 
 # Write tfvars (protected perms)
 umask 077

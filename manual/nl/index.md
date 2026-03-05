@@ -2,7 +2,7 @@
 
 ## Het probleem in één plaatje
 
-![QPS-funnel](assets/qps-funnel.svg)
+![QPS-funnel](../assets/qps-funnel.svg)
 
 Google stuurt uw bidder een stortvloed aan biedverzoeken. Elke seconde stromen
 tienduizenden queries vanuit de Authorized Buyers-exchange richting uw endpoint.

@@ -9,7 +9,7 @@
 דף QPS Waste Optimizer מציג את משפך ה-RTB שלכם (המסע מבקשת הצעה ועד הוצאה)
 ומדגיש היכן הנפח יורד.
 
-![דף הבית של QPS Waste Optimizer](images/screenshot-qps-home.png)
+![דף הבית של QPS Waste Optimizer](../images/screenshot-qps-home.png)
 
 ### המשפך
 

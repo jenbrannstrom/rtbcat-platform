@@ -6,7 +6,7 @@
 
 Galeria pokazuje wszystkie kreacje powiązane z wybranym kontem (seat).
 
-![Galeria kreacji ze znacznikami formatów i poziomami wydajności](images/screenshot-creatives.png)
+![Galeria kreacji ze znacznikami formatów i poziomami wydajności](../images/screenshot-creatives.png)
 
 ### Co widzisz
 

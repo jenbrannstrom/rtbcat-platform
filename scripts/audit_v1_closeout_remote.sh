@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="${CATSCAN_GH_REPO:-jenbrannstrom/rtbcat-platform}"
+REPO="${CATSCAN_GH_REPO:-YOUR_ORG/rtbcat-platform}"
 BRANCH="${CATSCAN_GH_REF:-unified-platform}"
 DEPLOYED_WORKFLOW="${CATSCAN_DEPLOYED_WORKFLOW:-v1-closeout-deployed.yml}"
 BYOM_WORKFLOW="${CATSCAN_BYOM_WORKFLOW:-v1-byom-api-regression.yml}"
@@ -15,7 +15,7 @@ Usage:
   scripts/audit_v1_closeout_remote.sh [options]
 
 Options:
-  --repo <owner/repo>         GitHub repo (default: jenbrannstrom/rtbcat-platform)
+  --repo <owner/repo>         GitHub repo (default: YOUR_ORG/rtbcat-platform)
   --branch <name>             Branch to inspect (default: unified-platform)
   --limit <n>                 Max runs per workflow (default: 20)
   --out <path>                Output markdown file path (default: /tmp/v1_closeout_remote_audit_<ts>.md)

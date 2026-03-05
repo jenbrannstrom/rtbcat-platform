@@ -87,7 +87,7 @@ Je stuurt klanten niet naar het magazijn om zelf te zoeken.
 /storage/           Database access (Postgres repos, BigQuery clients)
 /dashboard/src/     Next.js 14 frontend (App Router)
 /scripts/           Operational and diagnostic scripts
-/docs/              Architecture docs and AI agent logs
+docs.rtb.cat/       Public documentation portal
 ```
 
 De backend volgt een **Router -> Service -> Repository**-patroon. Routers

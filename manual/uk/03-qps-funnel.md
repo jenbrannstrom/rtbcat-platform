@@ -9,7 +9,7 @@
 Сторінка QPS Waste Optimizer показує вашу воронку RTB (шлях від запиту на
 ставку до витрат) і виділяє місця, де обсяг падає.
 
-![Головна сторінка QPS Waste Optimizer](images/screenshot-qps-home.png)
+![Головна сторінка QPS Waste Optimizer](../images/screenshot-qps-home.png)
 
 ### Воронка
 

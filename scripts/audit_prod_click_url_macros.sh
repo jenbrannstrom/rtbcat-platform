@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTANCE="${CATSCAN_GCP_INSTANCE:-catscan-vm-prod}"
-ZONE="${CATSCAN_GCP_ZONE:-asia-southeast1-b}"
+INSTANCE="${CATSCAN_GCP_INSTANCE:-your-vm-name}"
+ZONE="${CATSCAN_GCP_ZONE:-your-zone}"
 PROJECT="${CATSCAN_GCP_PROJECT:-}"
 CONTAINER="${CATSCAN_API_CONTAINER:-catscan-api}"
 SEAT_LIMIT="${CATSCAN_AUDIT_SEAT_LIMIT:-4}"
@@ -22,8 +22,8 @@ By default, scans the 4 most recent active seats and the latest 40 creatives per
 the last 30 days.
 
 Options:
-  --instance <name>         VM instance (default: catscan-vm-prod)
-  --zone <zone>             GCP zone (default: asia-southeast1-b)
+  --instance <name>         VM instance (default: your-vm-name)
+  --zone <zone>             GCP zone (default: your-zone)
   --project <id>            Optional GCP project id
   --container <name>        Docker container name (default: catscan-api)
   --seat-limit <n>          Number of active seats to scan (default: 4)
@@ -36,7 +36,7 @@ Options:
 
 Examples:
   scripts/audit_prod_click_url_macros.sh
-  scripts/audit_prod_click_url_macros.sh --project catscan-prod-202601 --days 14
+  scripts/audit_prod_click_url_macros.sh --project YOUR_PROJECT_ID --days 14
   scripts/audit_prod_click_url_macros.sh --buyer-ids 1111111111,1234567890 --per-seat-limit 80
 EOF
 }
@@ -111,6 +111,11 @@ for v in SEAT_LIMIT PER_SEAT_LIMIT DAYS SAMPLE_LIMIT; do
     exit 2
   fi
 done
+
+if [[ "$INSTANCE" == "your-vm-name" || "$ZONE" == "your-zone" ]]; then
+  echo "Set --instance and --zone (or CATSCAN_GCP_INSTANCE/CATSCAN_GCP_ZONE) before running." >&2
+  exit 2
+fi
 
 mkdir -p "$OUT_DIR"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"

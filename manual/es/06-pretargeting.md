@@ -26,7 +26,7 @@ solicitudes de puja que cumplan estos criterios". Dispones de **10 configuracion
 En la página de inicio y en la sección de ajustes, cada configuración aparece como una tarjeta
 que muestra su estado actual.
 
-![Tarjetas de configuración de pretargeting mostrando estados activo y en pausa](images/screenshot-pretargeting-configs.png)
+![Tarjetas de configuración de pretargeting mostrando estados activo y en pausa](../images/screenshot-pretargeting-configs.png)
 
 Aspectos clave a observar:
 
@@ -66,7 +66,7 @@ interfaz de Authorized Buyers.
 
 Cada cambio de pretargeting se registra en una línea de tiempo en `/history`.
 
-![Línea de tiempo del historial de cambios con filtros y exportación](images/screenshot-change-history.png)
+![Línea de tiempo del historial de cambios con filtros y exportación](../images/screenshot-change-history.png)
 
 Para cada entrada se muestra:
 - **Cuándo**: marca de tiempo del cambio

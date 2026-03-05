@@ -37,7 +37,7 @@ terraform/.terraform.lock.hcl
 # Deployment prompts with real infrastructure details (use .example as template)
 prompts/deploy-catscan.md
 
-# Note: docs/GCP_CREDENTIALS_SETUP.md is now tracked (contains setup instructions, not secrets)
+# Keep setup docs generic and free of customer-specific infrastructure details.
 investigations/
 
 # Claude Code settings and agents (instance-specific)

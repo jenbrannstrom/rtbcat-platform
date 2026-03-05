@@ -6,7 +6,7 @@
 
 La galería muestra todas las creatividades asociadas al seat seleccionado.
 
-![Galería de creatividades con insignias de formato y niveles de rendimiento](images/screenshot-creatives.png)
+![Galería de creatividades con insignias de formato y niveles de rendimiento](../images/screenshot-creatives.png)
 
 ### Qué ves
 

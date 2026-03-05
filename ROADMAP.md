@@ -181,7 +181,7 @@
 ## Deploy / Contracts Follow-up (2026-02-24)
 
 - [x] **GitHub deploy workflow defaults corrected for SG production**
-  - Fixed `deploy.yml` defaults to match current production target (`catscan-vm-prod`, `asia-southeast1-b`, SG Artifact Registry).
+  - Fixed `deploy.yml` defaults to align with target production variables (VM, zone, and Artifact Registry).
   - Related commits on `unified-platform`: `a61c998`, `5546ac5`.
 - [x] **Deploy unblocked with temporary contract-gate bypass**
   - `scripts/contracts_check.py` fixed missing `::text` casts on `metric_date` comparisons (`5546ac5`) to resolve `date >= text` SQL errors.

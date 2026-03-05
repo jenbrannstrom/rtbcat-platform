@@ -19,7 +19,7 @@ Buyers. نظرًا لعدم توفير Google لـ Reporting API، تأتي جم
 
 اسحب وأفلت ملف CSV مُصدَّر من Google Authorized Buyers.
 
-![صفحة استيراد البيانات مع منطقة الرفع وشبكة الحداثة](images/screenshot-import.png)
+![صفحة استيراد البيانات مع منطقة الرفع وشبكة الحداثة](../images/screenshot-import.png)
 
 **سير العمل:**
 

@@ -2,7 +2,7 @@
 
 ## Problemet i ét billede
 
-![QPS-tragt](assets/qps-funnel.svg)
+![QPS-tragt](../assets/qps-funnel.svg)
 
 Google sender din bidder en strøm af budforespørgsler. Hvert sekund strømmer
 titusindvis af forespørgsler ud fra Authorized Buyers-børsen mod dit endpoint.

@@ -15,7 +15,7 @@ The login page at `/login` discovers enabled providers from `GET /api/auth/provi
 ## Who can log in?
 
 - **Email/Password** -- only users who have been registered (see below).
-- **Google** -- any user whose email domain is in the OAuth2 Proxy `email_domains` list. On VM2 this is currently `rtb.cat`. Users are auto-created on first Google login.
+- **Google** -- any user whose email domain is in the OAuth2 Proxy `email_domains` list. Example: `example.com`. Users are auto-created on first Google login.
 - **Authing** -- any user who can authenticate with the configured Authing pool. Users are auto-created on first Authing login.
 
 ## How to register a new user
@@ -84,7 +84,7 @@ Registration is already locked down by default:
 | Control | How |
 |---------|-----|
 | **Disable self-registration** | Automatic -- after the first user, only admins can call `/api/auth/register` |
-| **Restrict Google login domains** | Edit `email_domains` in `/etc/oauth2-proxy.cfg` on the VM (currently `["rtb.cat"]`) |
+| **Restrict Google login domains** | Edit `email_domains` in `/etc/oauth2-proxy.cfg` on the VM (example: `["example.com"]`) |
 | **Restrict Authing login** | Configure allowed users/groups in your Authing application settings |
 | **Disable a login method entirely** | Set `CATSCAN_ENABLE_AUTHING_LOGIN=false`, `CATSCAN_ENABLE_GOOGLE_LOGIN=false`, or `CATSCAN_ENABLE_PASSWORD_LOGIN=false` |
 | **Deactivate a specific user** | Set `is_active = false` via admin panel at `/admin/users` -- they'll get `403 Account is deactivated` |

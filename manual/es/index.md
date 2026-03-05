@@ -2,7 +2,7 @@
 
 ## El problema en una imagen
 
-![Embudo de QPS](assets/qps-funnel.svg)
+![Embudo de QPS](../assets/qps-funnel.svg)
 
 Google envía a su bidder un torrente de solicitudes de puja. Cada segundo, decenas de
 miles de consultas salen del exchange de Authorized Buyers hacia su endpoint. Su bidder

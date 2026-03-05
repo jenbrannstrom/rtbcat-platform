@@ -9,7 +9,7 @@ trzy widoki powiedzą Ci, *skąd* ono pochodzi.
 
 Pokazuje zużycie QPS i wydajność według kraju i miasta.
 
-![Geograficzny podział QPS według kraju](images/screenshot-geo-qps.png)
+![Geograficzny podział QPS według kraju](../images/screenshot-geo-qps.png)
 
 **Na co zwrócić uwagę:**
 - Kraje z wysokim QPS, ale zerowymi lub bliskimi zeru wygranymi. Google
@@ -28,7 +28,7 @@ Pokazuje zużycie QPS i wydajność według kraju i miasta.
 
 Pokazuje wydajność w podziale na domenę wydawcy lub aplikację.
 
-![QPS wydawców z analizą współczynnika wygranych](images/screenshot-pub-qps.png)
+![QPS wydawców z analizą współczynnika wygranych](../images/screenshot-pub-qps.png)
 
 **Na co zwrócić uwagę:**
 - Domeny z wysokim wolumenem ofert, ale zerowymi wyświetleniami. Twój bidder
@@ -48,7 +48,7 @@ Pokazuje wydajność w podziale na domenę wydawcy lub aplikację.
 
 Pokazuje, które rozmiary reklam otrzymują ruch i czy masz dla nich kreacje.
 
-![Podział QPS według rozmiaru](images/screenshot-size-qps.png)
+![Podział QPS według rozmiaru](../images/screenshot-size-qps.png)
 
 **Na co zwrócić uwagę:**
 - Rozmiary z wysokim QPS, ale **bez pasującej kreacji**. Google wysyła ok. 400

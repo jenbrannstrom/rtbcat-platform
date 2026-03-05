@@ -10,7 +10,7 @@ La page QPS Waste Optimizer affiche votre entonnoir RTB (le parcours de la
 demande d'enchère à la dépense) et met en évidence les points de déperdition
 du volume.
 
-![Page d'accueil du QPS Waste Optimizer](images/screenshot-qps-home.png)
+![Page d'accueil du QPS Waste Optimizer](../images/screenshot-qps-home.png)
 
 ### L'entonnoir
 

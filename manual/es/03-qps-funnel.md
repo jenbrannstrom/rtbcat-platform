@@ -9,7 +9,7 @@ Esta es la página de inicio de Cat-Scan (`/`). Todo comienza aquí.
 La página del QPS Waste Optimizer muestra tu embudo RTB (el recorrido desde la
 solicitud de puja hasta el gasto) y resalta dónde se pierde volumen.
 
-![Página de inicio del QPS Waste Optimizer](images/screenshot-qps-home.png)
+![Página de inicio del QPS Waste Optimizer](../images/screenshot-qps-home.png)
 
 ### El embudo
 

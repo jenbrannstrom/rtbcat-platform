@@ -10,7 +10,7 @@ provient.
 
 Affiche la consommation de QPS et les performances par pays et ville.
 
-![Répartition géographique du QPS par pays](images/screenshot-geo-qps.png)
+![Répartition géographique du QPS par pays](../images/screenshot-geo-qps.png)
 
 **Ce qu'il faut rechercher :**
 - Des pays avec un QPS élevé mais zéro victoire ou presque. Google vous envoie
@@ -29,7 +29,7 @@ Affiche la consommation de QPS et les performances par pays et ville.
 
 Affiche les performances ventilées par domaine d'éditeur ou application.
 
-![QPS par éditeur avec analyse du taux de victoire](images/screenshot-pub-qps.png)
+![QPS par éditeur avec analyse du taux de victoire](../images/screenshot-pub-qps.png)
 
 **Ce qu'il faut rechercher :**
 - Des domaines avec un volume d'enchères élevé mais zéro impression. Votre
@@ -52,7 +52,7 @@ Affiche les performances ventilées par domaine d'éditeur ou application.
 Affiche quels formats publicitaires reçoivent du trafic et si vous disposez de
 créations correspondantes.
 
-![Répartition du QPS par format](images/screenshot-size-qps.png)
+![Répartition du QPS par format](../images/screenshot-size-qps.png)
 
 **Ce qu'il faut rechercher :**
 - Des formats avec un QPS élevé mais **aucune création correspondante**. Google

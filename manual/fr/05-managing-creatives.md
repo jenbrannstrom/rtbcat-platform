@@ -6,7 +6,7 @@
 
 La galerie affiche toutes les créations associées au siège sélectionné.
 
-![Galerie de créations avec badges de format et niveaux de performance](images/screenshot-creatives.png)
+![Galerie de créations avec badges de format et niveaux de performance](../images/screenshot-creatives.png)
 
 ### Ce que vous voyez
 

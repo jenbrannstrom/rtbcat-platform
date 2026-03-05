@@ -9,7 +9,7 @@ Dit is de startpagina van Cat-Scan (`/`). Alles begint hier.
 De QPS Waste Optimizer-pagina toont uw RTB-trechter (de reis van biedverzoek
 naar uitgaven) en maakt zichtbaar waar het volume afneemt.
 
-![Startpagina QPS Waste Optimizer](images/screenshot-qps-home.png)
+![Startpagina QPS Waste Optimizer](../images/screenshot-qps-home.png)
 
 ### De trechter
 

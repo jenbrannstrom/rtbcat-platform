@@ -12,7 +12,6 @@ on:
       - "docs/**"
       - "*.md"
       - "ROADMAP.md"
-      - "CLAUDE.md"
   workflow_dispatch:
 
 concurrency:

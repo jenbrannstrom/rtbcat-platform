@@ -3,8 +3,8 @@
 # Prerequisites:
 # 1. Create Cloudflare API token at https://dash.cloudflare.com/profile/api-tokens
 #    - Permissions: Zone > DNS > Edit
-#    - Zone Resources: Include > Specific zone > rtb.cat
-# 2. Get Zone ID from Cloudflare dashboard (rtb.cat overview page, right sidebar)
+#    - Zone Resources: Include > Specific zone > example.com
+# 2. Get Zone ID from Cloudflare dashboard (example.com overview page, right sidebar)
 # 3. Set in terraform.tfvars:
 #    cloudflare_api_token = "your-token"
 #    cloudflare_zone_id = "your-zone-id"

@@ -28,7 +28,7 @@ zapytania o stawkę, które spełniają podane kryteria." Na każdy seat przypad
 Na stronie głównej i w ustawieniach każda konfiguracja jest wyświetlana jako
 karta pokazująca jej bieżący stan.
 
-![Karty konfiguracji pretargetingu pokazujące stany aktywny i wstrzymany](images/screenshot-pretargeting-configs.png)
+![Karty konfiguracji pretargetingu pokazujące stany aktywny i wstrzymany](../images/screenshot-pretargeting-configs.png)
 
 Na co zwrócić uwagę:
 
@@ -71,7 +71,7 @@ Buyers.
 
 Każda zmiana pretargetingu jest rejestrowana na osi czasu pod adresem `/history`.
 
-![Oś czasu historii zmian z filtrami i eksportem](images/screenshot-change-history.png)
+![Oś czasu historii zmian z filtrami i eksportem](../images/screenshot-change-history.png)
 
 Dla każdego wpisu widoczne są:
 - **Kiedy**: znacznik czasu zmiany

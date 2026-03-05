@@ -87,7 +87,7 @@ Du sender ikke kunder ud for at rode i lageret.
 /storage/           Database access (Postgres repos, BigQuery clients)
 /dashboard/src/     Next.js 14 frontend (App Router)
 /scripts/           Operational and diagnostic scripts
-/docs/              Architecture docs and AI agent logs
+docs.rtb.cat/       Public documentation portal
 ```
 
 Backenden følger et **Router -> Service -> Repository**-mønster. Routere

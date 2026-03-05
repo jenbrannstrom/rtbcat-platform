@@ -9,7 +9,7 @@ To jest strona główna Cat-Scan (`/`). Wszystko zaczyna się tutaj.
 Strona QPS Waste Optimizer pokazuje Twój lejek RTB (drogę od zapytania
 ofertowego do wydatków) i wskazuje, gdzie następują spadki wolumenu.
 
-![Strona główna QPS Waste Optimizer](images/screenshot-qps-home.png)
+![Strona główna QPS Waste Optimizer](../images/screenshot-qps-home.png)
 
 ### Lejek
 

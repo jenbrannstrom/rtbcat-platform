@@ -2,7 +2,7 @@
 
 ## Problem w jednym obrazku
 
-![Lejek QPS](assets/qps-funnel.svg)
+![Lejek QPS](../assets/qps-funnel.svg)
 
 Google wysyła do Twojego biddera strumień zapytań o licytację. Co sekundę
 dziesiątki tysięcy zapytań napływają z giełdy Authorized Buyers do Twojego

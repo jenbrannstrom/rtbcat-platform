@@ -9,7 +9,7 @@ estas tres vistas te dicen *de dónde* proviene.
 
 Muestra el consumo de QPS y el rendimiento por país y ciudad.
 
-![Desglose geográfico de QPS por país](images/screenshot-geo-qps.png)
+![Desglose geográfico de QPS por país](../images/screenshot-geo-qps.png)
 
 **Qué buscar:**
 - Países con alto QPS pero cero o casi cero victorias. Google te está enviando
@@ -27,7 +27,7 @@ Muestra el consumo de QPS y el rendimiento por país y ciudad.
 
 Muestra el rendimiento desglosado por dominio de publisher o aplicación.
 
-![QPS por publisher con análisis de tasa de victoria](images/screenshot-pub-qps.png)
+![QPS por publisher con análisis de tasa de victoria](../images/screenshot-pub-qps.png)
 
 **Qué buscar:**
 - Dominios con alto volumen de pujas pero cero impresiones. Tu bidder gasta
@@ -48,7 +48,7 @@ Muestra el rendimiento desglosado por dominio de publisher o aplicación.
 
 Muestra qué tamaños de anuncio reciben tráfico y si tienes creatividades para ellos.
 
-![Desglose de QPS por tamaño](images/screenshot-size-qps.png)
+![Desglose de QPS por tamaño](../images/screenshot-size-qps.png)
 
 **Qué buscar:**
 - Tamaños con alto QPS pero **sin creatividad compatible**. Google envía

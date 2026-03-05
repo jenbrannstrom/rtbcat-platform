@@ -20,7 +20,7 @@ informatie.
 
 Sleep een CSV-bestand dat uit Google Authorized Buyers is geexporteerd naar het uploadvak.
 
-![Data-importpagina met uploadzone en versheidsraster](images/screenshot-import.png)
+![Data-importpagina met uploadzone en versheidsraster](../images/screenshot-import.png)
 
 **Werkwijze:**
 

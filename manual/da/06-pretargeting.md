@@ -26,7 +26,7 @@ der matcher disse kriterier." Du får **10 konfigurationer per seat**.
 På forsiden og under indstillinger vises hver konfiguration som et kort, der viser
 dens aktuelle tilstand.
 
-![Pretargeting-konfigurationskort med aktive og pausede tilstande](images/screenshot-pretargeting-configs.png)
+![Pretargeting-konfigurationskort med aktive og pausede tilstande](../images/screenshot-pretargeting-configs.png)
 
 Vigtige ting at se efter:
 
@@ -66,7 +66,7 @@ Buyers-brugergrænsefladen.
 
 Enhver pretargeting-ændring registreres i en tidslinje på `/history`.
 
-![Tidslinjevisning af ændringshistorik med filtre og eksport](images/screenshot-change-history.png)
+![Tidslinjevisning af ændringshistorik med filtre og eksport](../images/screenshot-change-history.png)
 
 For hver post ser du:
 - **Hvornår**: tidsstempel for ændringen

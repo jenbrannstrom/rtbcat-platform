@@ -2,7 +2,7 @@
 
 ## Le problème en une image
 
-![Entonnoir QPS](assets/qps-funnel.svg)
+![Entonnoir QPS](../assets/qps-funnel.svg)
 
 Google envoie à votre bidder un torrent de requêtes d'enchères. Chaque seconde,
 des dizaines de milliers de requêtes affluent depuis l'exchange Authorized Buyers

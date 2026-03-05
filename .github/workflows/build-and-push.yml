@@ -8,7 +8,6 @@ on:
       - 'docs/**'
       - '*.md'
       - 'ROADMAP.md'
-      - 'CLAUDE.md'
   workflow_dispatch:
 
 concurrency:
@@ -19,10 +18,10 @@ permissions:
   contents: read
 
 env:
-  PROJECT_ID: ${{ vars.GCP_PROJECT || 'catscan-prod-202601' }}
-  REGION: ${{ vars.GCP_REGION || 'asia-southeast1' }}
+  PROJECT_ID: ${{ vars.GCP_PROJECT || '' }}
+  REGION: ${{ vars.GCP_REGION || 'us-central1' }}
   REPOSITORY: ${{ vars.GCP_REPOSITORY || 'catscan' }}
-  REGISTRY_HOST: ${{ vars.GCP_REGISTRY_HOST || 'asia-southeast1-docker.pkg.dev' }}
+  REGISTRY_HOST: ${{ vars.GCP_REGISTRY_HOST || 'us-central1-docker.pkg.dev' }}
 
 jobs:
   test:
@@ -73,6 +72,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate CI settings
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          if [[ -z "${PROJECT_ID}" ]]; then
+            echo "Missing required Actions variable: GCP_PROJECT" >&2
+            exit 1
+          fi
+          if [[ -z "${GCP_SA_KEY}" ]]; then
+            echo "Missing required Actions secret: GCP_SA_KEY" >&2
+            exit 1
+          fi
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2

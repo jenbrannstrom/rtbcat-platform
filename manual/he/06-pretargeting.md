@@ -26,7 +26,7 @@
 בדף הבית ובהגדרות, כל הגדרה מופיעה ככרטיס שמציג
 את מצבה הנוכחי.
 
-![כרטיסי הגדרות pretargeting המציגים מצבים פעילים ומושהים](images/screenshot-pretargeting-configs.png)
+![כרטיסי הגדרות pretargeting המציגים מצבים פעילים ומושהים](../images/screenshot-pretargeting-configs.png)
 
 דברים עיקריים לשים לב אליהם:
 
@@ -66,7 +66,7 @@ Buyers.
 
 כל שינוי ב-pretargeting נרשם בציר זמן ב-`/history`.
 
-![ציר זמן של היסטוריית שינויים עם מסננים וייצוא](images/screenshot-change-history.png)
+![ציר זמן של היסטוריית שינויים עם מסננים וייצוא](../images/screenshot-change-history.png)
 
 לכל רשומה ניתן לראות:
 - **מתי**: חותמת הזמן של השינוי

@@ -19,7 +19,7 @@ dine data er forældede, er dine beslutninger baseret på gammel information.
 
 Træk og slip en CSV-fil eksporteret fra Google Authorized Buyers.
 
-![Dataimportside med uploadzone og ferskhedsgitter](images/screenshot-import.png)
+![Dataimportside med uploadzone og ferskhedsgitter](../images/screenshot-import.png)
 
 **Arbejdsgang:**
 

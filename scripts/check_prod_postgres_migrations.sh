@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTANCE="${CATSCAN_GCP_INSTANCE:-catscan-vm-prod}"
-ZONE="${CATSCAN_GCP_ZONE:-asia-southeast1-b}"
+INSTANCE="${CATSCAN_GCP_INSTANCE:-your-vm-name}"
+ZONE="${CATSCAN_GCP_ZONE:-your-zone}"
 PROJECT="${CATSCAN_GCP_PROJECT:-}"
 CONTAINER="${CATSCAN_API_CONTAINER:-catscan-api}"
 MODE="both"
@@ -18,8 +18,8 @@ Runs postgres migration checks on the target VM/container:
   - python /app/scripts/postgres_migrate.py --audit-versions
 
 Options:
-  --instance <name>      VM instance (default: catscan-vm-prod)
-  --zone <zone>          GCP zone (default: asia-southeast1-b)
+  --instance <name>      VM instance (default: your-vm-name)
+  --zone <zone>          GCP zone (default: your-zone)
   --project <id>         Optional GCP project id
   --container <name>     Docker container name (default: catscan-api)
   --status-only          Run only --status
@@ -29,7 +29,7 @@ Options:
 
 Examples:
   scripts/check_prod_postgres_migrations.sh
-  scripts/check_prod_postgres_migrations.sh --project catscan-prod-202601
+  scripts/check_prod_postgres_migrations.sh --project YOUR_PROJECT_ID
   scripts/check_prod_postgres_migrations.sh --status-only
 EOF
 }
@@ -88,6 +88,10 @@ fi
 
 if [[ -z "${INSTANCE}" || -z "${ZONE}" || -z "${CONTAINER}" ]]; then
   echo "instance/zone/container must be non-empty." >&2
+  exit 2
+fi
+if [[ "$INSTANCE" == "your-vm-name" || "$ZONE" == "your-zone" ]]; then
+  echo "Set --instance and --zone (or CATSCAN_GCP_INSTANCE/CATSCAN_GCP_ZONE) before running." >&2
   exit 2
 fi
 

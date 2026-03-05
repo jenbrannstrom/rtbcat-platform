@@ -14,7 +14,7 @@ Sans donnees importees, Cat-Scan n'a rien a analyser. L'entonnoir, les vues de g
 
 Glissez-deposez un fichier CSV exporte depuis Google Authorized Buyers.
 
-![Page d'import de donnees avec zone de depot et grille de fraicheur](images/screenshot-import.png)
+![Page d'import de donnees avec zone de depot et grille de fraicheur](../images/screenshot-import.png)
 
 **Flux de travail :**
 

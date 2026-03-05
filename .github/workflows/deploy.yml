@@ -38,10 +38,10 @@ concurrency:
 
 env:
   GCP_PROJECT: ${{ vars.GCP_PROJECT }}
-  GCP_ZONE: ${{ vars.GCP_ZONE || 'asia-southeast1-b' }}
+  GCP_ZONE: ${{ vars.GCP_ZONE || '' }}
   APP_DIR: ${{ vars.APP_DIR || '/opt/catscan' }}
   GIT_BRANCH: ${{ vars.GIT_BRANCH || 'unified-platform' }}
-  IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY || 'asia-southeast1-docker.pkg.dev/catscan-prod-202601/catscan' }}
+  IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY || '' }}
   ALLOW_CONTRACT_FAILURE: ${{ vars.ALLOW_CONTRACT_FAILURE || 'false' }}
   CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER: ${{ vars.CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER || 'true' }}
   CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER: ${{ vars.CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER || 'true' }}
@@ -59,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      VM_NAME: ${{ github.event.inputs.target == 'production' && 'catscan-vm-prod' || 'catscan-vm-staging' }}
+      VM_NAME: ${{ github.event.inputs.target == 'production' && vars.GCP_VM_NAME_PROD || vars.GCP_VM_NAME_STAGING }}
 
     steps:
       - name: Show deployment intent
@@ -67,6 +67,37 @@ jobs:
           echo "Manual deploy approved."
           echo "Target: ${{ github.event.inputs.target }} (${{ env.VM_NAME }})"
           echo "Reason: ${{ github.event.inputs.reason }}"
+
+      - name: Validate deploy settings
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          missing=0
+
+          if [[ -z "${GCP_PROJECT}" ]]; then
+            echo "Missing required Actions variable: GCP_PROJECT" >&2
+            missing=1
+          fi
+          if [[ -z "${GCP_ZONE}" ]]; then
+            echo "Missing required Actions variable: GCP_ZONE" >&2
+            missing=1
+          fi
+          if [[ -z "${IMAGE_REGISTRY}" ]]; then
+            echo "Missing required Actions variable: IMAGE_REGISTRY" >&2
+            missing=1
+          fi
+          if [[ -z "${VM_NAME}" ]]; then
+            echo "Missing required Actions variable for target VM name (GCP_VM_NAME_PROD/GCP_VM_NAME_STAGING)" >&2
+            missing=1
+          fi
+          if [[ -z "${GCP_SA_KEY}" ]]; then
+            echo "Missing required Actions secret: GCP_SA_KEY" >&2
+            missing=1
+          fi
+
+          if [[ "${missing}" -ne 0 ]]; then
+            exit 1
+          fi
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -102,6 +133,11 @@ jobs:
               # Set image registry and tag for prebuilt images
               export IMAGE_REGISTRY=${{ env.IMAGE_REGISTRY }}
               export IMAGE_TAG=sha-${SHORT_SHA}
+              REGISTRY_HOST=\$(echo \"${{ env.IMAGE_REGISTRY }}\" | cut -d/ -f1)
+              if [ -z \"\$REGISTRY_HOST\" ]; then
+                echo 'FAIL: Could not parse registry host from IMAGE_REGISTRY'
+                exit 1
+              fi
               export CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER='${{ env.CATSCAN_ENABLE_GMAIL_IMPORT_SCHEDULER }}'
               export CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER='${{ env.CATSCAN_ENABLE_PRECOMPUTE_SCHEDULER }}'
               export CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER='${{ env.CATSCAN_ENABLE_CREATIVE_CACHE_SCHEDULER }}'
@@ -126,7 +162,7 @@ jobs:
               fi
               AR_AUTH=\$(echo -n \"oauth2accesstoken:\$AR_TOKEN\" | base64 -w0)
               sudo mkdir -p /tmp/ar-docker-config
-              echo \"{\\\"auths\\\":{\\\"https://asia-southeast1-docker.pkg.dev\\\":{\\\"auth\\\":\\\"\$AR_AUTH\\\"}}}\" \
+              echo \"{\\\"auths\\\":{\\\"https://\$REGISTRY_HOST\\\":{\\\"auth\\\":\\\"\$AR_AUTH\\\"}}}\" \
                 | sudo tee /tmp/ar-docker-config/config.json >/dev/null
               export DOCKER_CONFIG=/tmp/ar-docker-config
               echo '✓ Artifact Registry auth refreshed via VM metadata token'

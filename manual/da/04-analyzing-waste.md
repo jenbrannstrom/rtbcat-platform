@@ -9,7 +9,7 @@ fortæller disse tre visninger dig, *hvor* det stammer fra.
 
 Viser QPS-forbrug og performance pr. land og by.
 
-![Geografisk QPS-opdeling pr. land](images/screenshot-geo-qps.png)
+![Geografisk QPS-opdeling pr. land](../images/screenshot-geo-qps.png)
 
 **Hvad du skal kigge efter:**
 - Lande med høj QPS, men nul eller næsten nul vindere. Google sender dig
@@ -27,7 +27,7 @@ Viser QPS-forbrug og performance pr. land og by.
 
 Viser performance opdelt pr. udgiverdomæne eller app.
 
-![Udgiver-QPS med vinderprocent-analyse](images/screenshot-pub-qps.png)
+![Udgiver-QPS med vinderprocent-analyse](../images/screenshot-pub-qps.png)
 
 **Hvad du skal kigge efter:**
 - Domæner med højt budvolumen, men nul visninger. Din budgiver bruger
@@ -47,7 +47,7 @@ Viser performance opdelt pr. udgiverdomæne eller app.
 Viser, hvilke annoncestørrelser der modtager trafik, og om du har kreativer
 til dem.
 
-![QPS-opdeling pr. størrelse](images/screenshot-size-qps.png)
+![QPS-opdeling pr. størrelse](../images/screenshot-size-qps.png)
 
 **Hvad du skal kigge efter:**
 - Størrelser med høj QPS, men **ingen matchende kreativ**. Google sender ~400

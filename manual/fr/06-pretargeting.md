@@ -23,7 +23,7 @@ Chaque configuration est un ensemble de regles qui indique a Google : "envoyez-m
 
 Sur la page d'accueil et dans les parametres, chaque configuration apparait sous forme de fiche indiquant son etat actuel.
 
-![Fiches de configuration de pretargeting montrant les etats actif et en pause](images/screenshot-pretargeting-configs.png)
+![Fiches de configuration de pretargeting montrant les etats actif et en pause](../images/screenshot-pretargeting-configs.png)
 
 Points cles a observer :
 
@@ -59,7 +59,7 @@ C'est nettement plus simple que de gerer les editeurs via l'interface Authorized
 
 Chaque modification de pretargeting est enregistree dans une chronologie accessible via `/history`.
 
-![Chronologie de l'historique des modifications avec filtres et export](images/screenshot-change-history.png)
+![Chronologie de l'historique des modifications avec filtres et export](../images/screenshot-change-history.png)
 
 Pour chaque entree, vous voyez :
 - **Quand** : horodatage de la modification

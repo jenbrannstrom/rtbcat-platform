@@ -1,4 +1,4 @@
-gcp_project = "catscan-prod-202601"
+gcp_project = "your-gcp-project-id"
 gcp_region  = "asia-southeast1"
 gcp_zone    = "asia-southeast1-b"
 
@@ -18,7 +18,7 @@ google_oauth_client_id     = "YOUR_CLIENT_ID.apps.googleusercontent.com"
 google_oauth_client_secret = "YOUR_CLIENT_SECRET"
 allowed_email_domains      = ["example.com"]
 
-service_account_email   = "catscan-production-sa@catscan-prod-202601.iam.gserviceaccount.com"
+service_account_email   = "service-account@your-gcp-project-id.iam.gserviceaccount.com"
 artifact_registry_domain = "asia-southeast1-docker.pkg.dev"
 
-gcs_bucket = "catscan-production-data-99957252"
+gcs_bucket = "your-analytics-bucket"

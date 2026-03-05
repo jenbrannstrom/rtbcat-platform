@@ -26,7 +26,7 @@ biedverzoeken die aan deze criteria voldoen." U krijgt **10 configuraties per se
 Op de startpagina en in de instellingen verschijnt elke configuratie als een kaart
 met de huidige status.
 
-![Pretargeting-configuratiekaarten met actieve en gepauzeerde statussen](images/screenshot-pretargeting-configs.png)
+![Pretargeting-configuratiekaarten met actieve en gepauzeerde statussen](../images/screenshot-pretargeting-configs.png)
 
 Waar u op moet letten:
 
@@ -65,7 +65,7 @@ Dit is aanzienlijk eenvoudiger dan uitgevers beheren via de Authorized Buyers-in
 
 Elke pretargeting-wijziging wordt vastgelegd in een tijdlijn op `/history`.
 
-![Tijdlijn van wijzigingsgeschiedenis met filters en export](images/screenshot-change-history.png)
+![Tijdlijn van wijzigingsgeschiedenis met filters en export](../images/screenshot-change-history.png)
 
 Per vermelding ziet u:
 - **Wanneer**: tijdstempel van de wijziging

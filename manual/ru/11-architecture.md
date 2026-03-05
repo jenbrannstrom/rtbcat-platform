@@ -87,7 +87,7 @@ Cat-Scan использует одновременно Postgres и BigQuery дл
 /storage/           Database access (Postgres repos, BigQuery clients)
 /dashboard/src/     Next.js 14 frontend (App Router)
 /scripts/           Operational and diagnostic scripts
-/docs/              Architecture docs and AI agent logs
+docs.rtb.cat/       Public documentation portal
 ```
 
 Бэкенд следует паттерну **Router -> Service -> Repository**. Роутеры

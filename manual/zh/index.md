@@ -2,7 +2,7 @@
 
 ## 一张图说明问题
 
-![QPS 漏斗](assets/qps-funnel.svg)
+![QPS 漏斗](../assets/qps-funnel.svg)
 
 Google 每秒向你的竞价器发送大量竞价请求。每一秒，数以万计的查询从
 Authorized Buyers 交易平台涌向你的端点。你的竞价器对每一条请求进行评估、
