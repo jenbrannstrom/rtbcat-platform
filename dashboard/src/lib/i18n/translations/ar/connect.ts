@@ -1,0 +1,41 @@
+import type { PartialTranslations } from '../../types';
+
+const value: PartialTranslations['connect'] = {
+    'title': 'اتصال',
+    'connectAccount': 'ربط الحساب',
+    'serviceAccount': 'حساب الخدمة',
+    'instructions': 'اتبع التعليمات لربط حسابك',
+    'setupComplete': 'اكتمل الإعداد!',
+    'setUpCatScan': 'إعداد Cat-Scan',
+    'accountConnectedReady': 'حسابك متصل وجاهز للتحليل',
+    'stepOf': 'الخطوة {current} من {total}: {title}',
+    'uploadCredentials': 'رفع بيانات الاعتماد',
+    'syncCreatives': 'مزامنة الإبداعات',
+    'readyToGo': 'جاهز',
+    'googleCredentials': 'بيانات اعتماد Google',
+    'connected': 'متصل',
+    'serviceAccountConfigured': 'تم تكوين حساب الخدمة',
+    'change': 'تغيير',
+    'uploading': 'جاري الرفع...',
+    'dropFileHere': 'أسقط الملف هنا',
+    'uploadServiceAccountJson': 'رفع JSON حساب الخدمة',
+    'dragAndDropOrClick': 'اسحب وأسقط أو انقر للتصفح',
+    'noBuyerSeatsFound': 'لم يتم العثور على مقاعد مشتري',
+    'creatives': 'إبداعات',
+    'lastSynced': 'آخر مزامنة',
+    'syncing': 'جاري المزامنة...',
+    'syncNow': 'مزامنة الآن',
+    'readyToAnalyze': 'جاهز للتحليل',
+    'goToDashboard': 'انتقل إلى لوحة التحكم',
+    'discoveredSeats': 'تم اكتشاف {count} مقعد(مقاعد) مشتري',
+    'failedToDiscoverSeats': 'فشل اكتشاف المقاعد',
+    'connectedAs': 'متصل كـ {email}',
+    'uploadFailed': 'فشل الرفع',
+    'syncedCreatives': 'تمت مزامنة {count} إبداعات',
+    'syncFailed': 'فشلت المزامنة',
+    'pleaseSelectJsonFile': 'يرجى اختيار ملف JSON',
+    'invalidJsonFile': 'ملف JSON غير صالح.',
+    'account': 'الحساب'
+};
+
+export default value;

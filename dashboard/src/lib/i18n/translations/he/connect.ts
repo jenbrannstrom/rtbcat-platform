@@ -1,0 +1,41 @@
+import type { PartialTranslations } from '../../types';
+
+const value: PartialTranslations['connect'] = {
+    'title': 'חיבור',
+    'connectAccount': 'חבר חשבון',
+    'serviceAccount': 'חשבון שירות',
+    'instructions': 'עקוב אחר ההוראות לחיבור החשבון שלך',
+    'setupComplete': 'ההגדרה הושלמה!',
+    'setUpCatScan': 'הגדר Cat-Scan',
+    'accountConnectedReady': 'החשבון שלך מחובר ומוכן לניתוח',
+    'stepOf': 'שלב {current} מתוך {total}: {title}',
+    'uploadCredentials': 'העלה אישורים',
+    'syncCreatives': 'סנכרן קריאייטיבים',
+    'readyToGo': 'מוכן',
+    'googleCredentials': 'אישורי Google',
+    'connected': 'מחובר',
+    'serviceAccountConfigured': 'חשבון שירות הוגדר',
+    'change': 'שנה',
+    'uploading': 'מעלה...',
+    'dropFileHere': 'שחרר קובץ כאן',
+    'uploadServiceAccountJson': 'העלה JSON של חשבון שירות',
+    'dragAndDropOrClick': 'גרור ושחרר או לחץ לעיון',
+    'noBuyerSeatsFound': 'לא נמצאו מושבי קונה',
+    'creatives': 'קריאייטיבים',
+    'lastSynced': 'סנכרון אחרון',
+    'syncing': 'מסנכרן...',
+    'syncNow': 'סנכרן עכשיו',
+    'readyToAnalyze': 'מוכן לניתוח',
+    'goToDashboard': 'עבור ללוח הבקרה',
+    'discoveredSeats': 'נמצאו {count} מושבי קונה',
+    'failedToDiscoverSeats': 'גילוי מושבים נכשל',
+    'connectedAs': 'מחובר כ-{email}',
+    'uploadFailed': 'העלאה נכשלה',
+    'syncedCreatives': 'סונכרנו {count} קריאייטיבים',
+    'syncFailed': 'סנכרון נכשל',
+    'pleaseSelectJsonFile': 'אנא בחר קובץ JSON',
+    'invalidJsonFile': 'קובץ JSON לא תקין.',
+    'account': 'חשבון'
+};
+
+export default value;
