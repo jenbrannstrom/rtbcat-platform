@@ -188,11 +188,16 @@ def create_app() -> FastAPI:
     Returns:
         Configured FastAPI application instance.
     """
+    # Disable built-in Swagger/ReDoc in production — docs live at docs.rtb.cat
+    disable_docs = os.environ.get("DISABLE_OPENAPI_DOCS", "").lower() in ("1", "true", "yes")
     application = FastAPI(
         title="Cat-Scan Creative Intelligence",
         description="API for collecting and analyzing Authorized Buyers creative data",
         version=get_version(),
         lifespan=lifespan,
+        docs_url=None if disable_docs else "/docs",
+        redoc_url=None if disable_docs else "/redoc",
+        openapi_url=None if disable_docs else "/openapi.json",
     )
 
     # Configure CORS - use explicit origins, never wildcards with credentials
