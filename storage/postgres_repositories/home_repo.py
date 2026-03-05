@@ -45,6 +45,33 @@ class HomeAnalyticsRepository:
             tuple(params),
         )
 
+    async def get_funnel_with_coverage(self, days: int, buyer_id: str | None) -> dict[str, Any]:
+        """Get seat-level funnel aggregates and coverage in a single query."""
+        start_date, end_date = self._window_bounds(days)
+        params: list[Any] = [start_date, end_date]
+        buyer_filter = ""
+        if buyer_id:
+            buyer_filter = " AND buyer_account_id = %s"
+            params.append(buyer_id)
+        row = await pg_query_one(
+            f"""
+            SELECT
+                COALESCE(SUM(reached_queries), 0)::bigint AS total_reached,
+                COALESCE(SUM(impressions), 0)::bigint AS total_impressions,
+                COALESCE(SUM(bids), 0)::bigint AS total_bids,
+                COALESCE(SUM(successful_responses), 0)::bigint AS total_successful_responses,
+                COALESCE(SUM(bid_requests), 0)::bigint AS total_bid_requests,
+                MIN(metric_date)::text AS min_date,
+                MAX(metric_date)::text AS max_date,
+                COUNT(DISTINCT metric_date)::int AS days_with_data,
+                COUNT(*)::bigint AS row_count
+            FROM seat_daily
+            WHERE metric_date BETWEEN %s AND %s{buyer_filter}
+            """,
+            tuple(params),
+        )
+        return dict(row or {})
+
     async def get_publisher_rows(self, days: int, buyer_id: str | None, limit: int) -> list[dict[str, Any]]:
         start_date, end_date = self._window_bounds(days)
         params: list[Any] = [start_date, end_date]
@@ -293,6 +320,82 @@ class HomeAnalyticsRepository:
                 COUNT(*)::bigint AS row_count
             FROM rtb_bidstream
             WHERE metric_date BETWEEN %s AND %s{buyer_filter}
+            """,
+            tuple(params),
+        )
+        return dict(row or {})
+
+    async def get_bidstream_summary_precomputed(self, days: int, buyer_id: str | None) -> dict[str, Any]:
+        """Get bidstream-style summary metrics from precomputed seat/config tables.
+
+        This avoids scanning high-cardinality raw bidstream dimensions on every
+        endpoint-efficiency request.
+        """
+        start_date, end_date = self._window_bounds(days)
+
+        seat_params: list[Any] = [start_date, end_date]
+        seat_buyer_filter = ""
+        if buyer_id:
+            seat_buyer_filter = " AND buyer_account_id = %s"
+            seat_params.append(buyer_id)
+
+        pretarg_params: list[Any] = [start_date, end_date]
+        pretarg_buyer_filter = ""
+        if buyer_id:
+            pretarg_buyer_filter = " AND buyer_account_id = %s"
+            pretarg_params.append(buyer_id)
+
+        row = await pg_query_one(
+            f"""
+            WITH seat AS (
+                SELECT
+                    COALESCE(SUM(bids), 0)::bigint AS total_bids,
+                    COALESCE(SUM(auctions_won), 0)::bigint AS total_auctions_won,
+                    COALESCE(SUM(reached_queries), 0)::bigint AS total_reached_queries,
+                    COALESCE(SUM(impressions), 0)::bigint AS total_impressions
+                FROM seat_daily
+                WHERE metric_date BETWEEN %s AND %s{seat_buyer_filter}
+            ),
+            pretarg AS (
+                SELECT
+                    COALESCE(SUM(bids_in_auction), 0)::bigint AS total_bids_in_auction
+                FROM pretarg_daily
+                WHERE metric_date BETWEEN %s AND %s{pretarg_buyer_filter}
+            )
+            SELECT
+                seat.total_bids,
+                pretarg.total_bids_in_auction,
+                seat.total_auctions_won,
+                seat.total_reached_queries,
+                seat.total_impressions,
+                0::bigint AS row_count
+            FROM seat
+            CROSS JOIN pretarg
+            """,
+            tuple(seat_params + pretarg_params),
+        )
+        return dict(row or {})
+
+    async def get_bidstream_coverage_from_completeness(
+        self, days: int, buyer_id: str | None
+    ) -> dict[str, Any]:
+        """Get bidstream day coverage from seat_report_completeness_daily MV."""
+        start_date, end_date = self._window_bounds(days)
+        params: list[Any] = [start_date, end_date]
+        buyer_filter = ""
+        if buyer_id:
+            buyer_filter = " AND buyer_account_id = %s"
+            params.append(buyer_id)
+        row = await pg_query_one(
+            f"""
+            SELECT
+                MIN(metric_date)::text AS min_date,
+                MAX(metric_date)::text AS max_date,
+                COUNT(*)::int AS days_with_data,
+                COUNT(*)::bigint AS row_count
+            FROM seat_report_completeness_daily
+            WHERE metric_date BETWEEN %s AND %s
+              AND has_rtb_bidstream = true{buyer_filter}
             """,
             tuple(params),
         )

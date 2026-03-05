@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import logging
 import time
 from typing import Any
 
@@ -11,6 +12,8 @@ from decimal import Decimal
 
 from storage.postgres_repositories.home_repo import HomeAnalyticsRepository
 from services.analytics_service import AnalyticsService
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_rate(numerator: object, denominator: object) -> float:
@@ -110,6 +113,69 @@ class HomeAnalyticsService:
     @staticmethod
     def _has_config_rows(rows: list[dict[str, Any]]) -> bool:
         return len(rows) > 0
+
+    async def _get_funnel_and_coverage(
+        self,
+        days: int,
+        buyer_id: str | None,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        fast_method = getattr(self._repo, "get_funnel_with_coverage", None)
+        if callable(fast_method):
+            try:
+                row = await fast_method(days, buyer_id)
+                funnel_row = {
+                    "total_reached": row.get("total_reached"),
+                    "total_impressions": row.get("total_impressions"),
+                    "total_bids": row.get("total_bids"),
+                    "total_successful_responses": row.get("total_successful_responses"),
+                    "total_bid_requests": row.get("total_bid_requests"),
+                }
+                coverage = {
+                    "min_date": row.get("min_date"),
+                    "max_date": row.get("max_date"),
+                    "days_with_data": row.get("days_with_data"),
+                    "row_count": row.get("row_count"),
+                }
+                return funnel_row, coverage
+            except Exception:
+                logger.warning(
+                    "Fast funnel+coverage path failed; falling back to legacy queries",
+                    extra={"buyer_id": buyer_id, "days": days},
+                    exc_info=True,
+                )
+
+        funnel_row, home_seat_coverage = await asyncio.gather(
+            self._repo.get_funnel_row(days, buyer_id),
+            self._repo.get_home_seat_coverage(days, buyer_id),
+        )
+        return funnel_row, home_seat_coverage
+
+    async def _get_bidstream_summary_and_coverage(
+        self,
+        days: int,
+        buyer_id: str | None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        fast_summary_method = getattr(self._repo, "get_bidstream_summary_precomputed", None)
+        fast_coverage_method = getattr(self._repo, "get_bidstream_coverage_from_completeness", None)
+        if callable(fast_summary_method) and callable(fast_coverage_method):
+            try:
+                summary, coverage = await asyncio.gather(
+                    fast_summary_method(days, buyer_id),
+                    fast_coverage_method(days, buyer_id),
+                )
+                return dict(summary or {}), dict(coverage or {})
+            except Exception:
+                logger.warning(
+                    "Fast bidstream summary+coverage path failed; falling back to legacy queries",
+                    extra={"buyer_id": buyer_id, "days": days},
+                    exc_info=True,
+                )
+
+        bidstream_summary, bidstream_coverage = await asyncio.gather(
+            self._repo.get_bidstream_summary(days, buyer_id),
+            self._repo.get_bidstream_coverage(days, buyer_id),
+        )
+        return dict(bidstream_summary or {}), dict(bidstream_coverage or {})
 
     async def get_funnel_payload(
         self,
@@ -464,13 +530,11 @@ class HomeAnalyticsService:
             if buyer_id
             else asyncio.sleep(0, result=None)
         )
-        funnel_row, bidstream_summary, bidder_id, home_seat_coverage, bidstream_coverage = (
+        (funnel_row, home_seat_coverage), (bidstream_summary, bidstream_coverage), bidder_id = (
             await asyncio.gather(
-                self._repo.get_funnel_row(days, buyer_id),
-                self._repo.get_bidstream_summary(days, buyer_id),
+                self._get_funnel_and_coverage(days, buyer_id),
+                self._get_bidstream_summary_and_coverage(days, buyer_id),
                 bidder_task,
-                self._repo.get_home_seat_coverage(days, buyer_id),
-                self._repo.get_bidstream_coverage(days, buyer_id),
             )
         )
         total_reached = int((funnel_row or {}).get("total_reached") or 0)
