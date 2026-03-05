@@ -1,6 +1,7 @@
 "use client";
 
 import { HelpCircle } from "lucide-react";
+import { getDocsChapterUrl } from "@/lib/docs-url";
 
 export const DOCS_MAP: Record<string, string> = {
   "/": "03-qps-funnel",
@@ -26,7 +27,7 @@ interface HelpLinkProps {
 export function HelpLink({ chapter, className = "" }: HelpLinkProps) {
   return (
     <a
-      href={`/docs/${chapter}`}
+      href={getDocsChapterUrl(chapter)}
       target="_blank"
       rel="noopener noreferrer"
       className={`inline-flex items-center justify-center p-1 text-gray-400 hover:text-primary-600 rounded-md hover:bg-gray-100 transition-colors ${className}`}
