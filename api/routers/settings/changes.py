@@ -7,7 +7,7 @@ from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.dependencies import require_seat_admin_or_sudo
+from api.dependencies import get_current_user, require_seat_admin_or_sudo
 from services.auth_service import User
 from services.changes_service import ChangesService
 from services.pretargeting_service import PretargetingService
@@ -207,6 +207,7 @@ async def list_pending_changes(
     ),
     status: str = Query("pending", description="Filter by status (pending, applied, cancelled)"),
     limit: int = Query(100, ge=1, le=500),
+    _user: User = Depends(get_current_user),
 ) -> list[PendingChangeResponse]:
     """List pending changes to pretargeting configurations."""
     try:

@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Depends
 
-from api.dependencies import require_admin
+from api.dependencies import get_current_user, require_admin
 from services.auth_service import User
 from services.evaluation_service import EvaluationService, RecommendationType
 
@@ -24,6 +24,7 @@ router = APIRouter(tags=["Troubleshooting"])
 @router.get("/api/evaluation")
 async def get_evaluation(
     days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
+    _user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """
     Run evaluation engine and return actionable recommendations.
@@ -44,6 +45,7 @@ async def get_evaluation(
 @router.get("/api/troubleshooting/filtered-bids")
 async def get_filtered_bids(
     days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
+    _user: User = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
     """
     Get summary of why bids were filtered.
@@ -58,6 +60,7 @@ async def get_filtered_bids(
 @router.get("/api/troubleshooting/funnel")
 async def get_bid_funnel(
     days: int = Query(7, ge=1, le=90, description="Days of data to analyze"),
+    _user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """
     Get bid funnel metrics - from bids submitted to impressions won.

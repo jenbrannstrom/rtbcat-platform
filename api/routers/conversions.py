@@ -1161,7 +1161,7 @@ async def list_conversion_ingestion_failures(
 )
 async def replay_conversion_ingestion_failure(
     failure_id: int,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_seat_admin_or_sudo),
 ) -> ConversionReplayFailureResponse:
     service = ConversionIngestionService()
     try:
@@ -1184,7 +1184,7 @@ async def replay_conversion_ingestion_failure(
 )
 async def discard_conversion_ingestion_failure(
     failure_id: int,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_seat_admin_or_sudo),
 ) -> ConversionDiscardFailureResponse:
     service = ConversionIngestionService()
     discarded = await service.discard_failure(failure_id)
@@ -1301,7 +1301,7 @@ async def refresh_conversion_aggregates(
     end_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
     buyer_id: Optional[str] = Query(None),
     store=Depends(get_store),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_seat_admin_or_sudo),
 ) -> ConversionRefreshResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     service = ConversionsService()
@@ -1432,7 +1432,7 @@ async def refresh_conversion_attribution_joins(
     end_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
     fallback_window_days: int = Query(1, ge=0, le=7),
     store=Depends(get_store),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_seat_admin_or_sudo),
 ) -> ConversionAttributionRefreshResponse:
     buyer_id = await resolve_buyer_id(buyer_id, store=store, user=user)
     if not buyer_id:

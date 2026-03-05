@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from api.dependencies import get_store, require_admin
+from api.dependencies import get_current_user, get_store, require_admin
 from services.auth_service import User
 
 
@@ -30,6 +30,7 @@ class UpdateOptimizerSetupRequest(BaseModel):
 @router.get("/settings/optimizer/setup", response_model=OptimizerSetupResponse)
 async def get_optimizer_setup(
     store=Depends(get_store),
+    _user: User = Depends(get_current_user),
 ) -> OptimizerSetupResponse:
     raw_value = await store.get_setting(_MONTHLY_HOSTING_COST_KEY)
     monthly_cost: Optional[float] = None

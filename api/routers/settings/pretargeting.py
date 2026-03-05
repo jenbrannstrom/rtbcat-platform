@@ -8,7 +8,7 @@ from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.dependencies import require_seat_admin_or_sudo
+from api.dependencies import get_current_user, require_seat_admin_or_sudo
 from collectors import PretargetingClient
 from services.auth_service import User
 from services.changes_service import ChangesService
@@ -237,6 +237,7 @@ async def get_pretargeting_configs(
     limit: Optional[int] = Query(None, description="Optional max rows for startup/bootstrap views", ge=1, le=5000),
     summary_only: bool = Query(False, description="Return lightweight rows for startup (omits large targeting arrays)"),
     seats_service: SeatsService = Depends(get_seats_service),
+    _user: User = Depends(get_current_user),
 ) -> list[PretargetingConfigResponse]:
     """Get stored pretargeting configs for the current account.
 
@@ -402,6 +403,7 @@ async def get_pretargeting_history(
         description="Filter by pretargeting config ID (billing_id)",
     ),
     days: int = Query(30, description="Number of days of history to retrieve", ge=1, le=365),
+    _user: User = Depends(get_current_user),
 ) -> list[PretargetingHistoryResponse]:
     """Get pretargeting settings change history.
 
@@ -478,6 +480,7 @@ async def get_pretargeting_publishers(
     billing_id: str,
     mode: Optional[str] = Query(None, description="Filter by mode (WHITELIST or BLACKLIST)"),
     status: Optional[str] = Query(None, description="Filter by status (active, pending_add, pending_remove)"),
+    _user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Get normalized publisher list for a pretargeting config.
 
@@ -696,6 +699,7 @@ async def remove_pretargeting_publisher(
 @router.get("/settings/pretargeting/{billing_id}/publishers/pending")
 async def get_pending_publisher_changes(
     billing_id: str,
+    _user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Get publishers with pending changes (pending_add or pending_remove).
 
