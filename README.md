@@ -2,7 +2,7 @@
 
 **Version:** 0.9.2 | **Runtime Build ID:** `sha-<gitsha>` | **Last Updated:** February 2026
 
-An **open-source** QPS optimization tool for Google Authorized Buyers. Cat-Scan helps RTB bidders improve QPS efficiency by learning which data-streams the bidder prefers to bid on, and fine-tune Pretargeting to allow more bid-requests through to the bidder for preferred placements/apps.
+An **open-source** QPS (queries per second) optimization tool for Google Authorized Buyers. Cat-Scan helps RTB bidders improve QPS efficiency by learning which data-streams the bidder prefers to bid on, and fine-tune Pretargeting to allow more bid-requests through to the bidder for preferred placements/apps.
 
 **100% free and open source.** Self-host on your own infrastructure or use our hosted version at your-deployment.example.com.
 
@@ -10,21 +10,25 @@ An **open-source** QPS optimization tool for Google Authorized Buyers. Cat-Scan 
 
 ## What This Solves
 
-**The Problem:** Google Authorized Buyers provides a bulk waterfall of over 400 Billion QPS per 24 hours. It allows 10 pretargeting settings to adjust signal, shows you creative IDs like `cr-12345`, but doesn't tell you:
+**The Problem:** Google Authorized Buyers provides a bulk waterfall of several 100 Billion bid-requests per 24 hours. It allows 10 "pretargeting" settings to adjust signal, 
 
-- How to improve efficiency of the QPS your bidder consumes
-- What QPS is unused vs what should be increased
+- There is no Reporting API
+- improving efficiency of the QPS your bidder consumes can be challenging
+- it's hard to deduce from CSV's what QPS is unused vs what should be increased
 - Which creatives are underperforming and blocking potentially better signal
 
-**The Solution:** Cat-Scan automatically:
+How do we sol
 
-1. Fetches all your creatives from Authorized Buyers API
-2. Imports performance data from CSV exports
-3. Identifies size gaps and configuration inefficiencies
-4. Provides actionable recommendations to improve efficiency
-5. Allows improvements in Pretargeting configs to be pushed to the Google account
-6. Provides rollback and historical tracking of config changes
-7. Allows MCP to connect to the DB and its "algo engine" to let AI make improvements or simply collect insights for campaign performance
+
+
+**How did we attempt to solve the lack of an API?** Cat-Scan automatically:
+
+1. Cat-scan automatcally imports metrics from CSV exports sent to an email acount (yes, it's messy, but what can we do when there is no API available)
+2. we Fetch all the creatives from Authorized Buyers API
+3. identify [waste by dimensions](https://scan.rtb.cat/docs/04-analyzing-waste) (size of creative) and similar configuration inefficiencies 
+4. Allows control of the Pretargeting configs to be pushed to the Google account
+5. Provides rollback and historical tracking of config changes
+6. Allows MCP to connect to the DB and its "algo engine" to let AI make improvements or simply collect insights for campaign performance
 
 **Typical efficiency improvement:** Unknown at this time. We are starting to test and need data to understand the % improvement.
 
@@ -143,10 +147,13 @@ The advertiser's profit = what they earn from ads − what they spend on ads −
   is:
 
   1. Follow the bids. Shift QPS toward segments where the bidder actually bids. If they ignore
+
     99% of traffic from a config, that config's QPS is wasted.
   2. Follow the spend. Configs and geos where the advertiser spends the most are where they see
+
     value. Protect those. Starve the ones with zero spend.
   3. Kill the dead weight. Three configs with zero traffic, zero bids, zero impressions — those
+
     are consuming QPS that could go to performing configs.
   4. Cut fraud and non-viewable inventory. Not the biggest lever, but it's free improvement.
 
