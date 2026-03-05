@@ -18,6 +18,7 @@ from api.dependencies import (
     is_sudo,
     require_buyer_admin_access,
 )
+from api.request_trust import get_client_ip
 from services.auth_service import User
 from services.admin_service import AdminService
 
@@ -132,9 +133,7 @@ async def grant_seat_permission(
         raise HTTPException(status_code=404, detail="User not found")
 
     admin_svc = _get_admin_service()
-    client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or (
-        request.client.host if request.client else None
-    )
+    client_ip = get_client_ip(request)
 
     await admin_svc.grant_buyer_seat_permission(
         admin=caller,
@@ -179,9 +178,7 @@ async def revoke_seat_permission(
         )
 
     admin_svc = _get_admin_service()
-    client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or (
-        request.client.host if request.client else None
-    )
+    client_ip = get_client_ip(request)
 
     revoked = await admin_svc.revoke_buyer_seat_permission(
         admin=caller,

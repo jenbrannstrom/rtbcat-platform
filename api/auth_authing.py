@@ -15,7 +15,6 @@ import uuid
 import logging
 import secrets
 import urllib.parse
-import ipaddress
 import re
 import os
 from typing import Optional
@@ -30,6 +29,12 @@ from api.auth_bootstrap import (
     get_bootstrap_token,
 )
 from api.auth_providers import is_authing_login_enabled
+from api.request_trust import (
+    get_client_ip as trusted_client_ip,
+    get_request_scheme as trusted_request_scheme,
+    is_secure_request as trusted_is_secure_request,
+    is_trusted_proxy_request as trusted_is_trusted_proxy_request,
+)
 from services.auth_service import AuthService
 from services.secrets_manager import get_secrets_manager
 
@@ -84,13 +89,8 @@ def get_auth_service() -> AuthService:
 
 
 def _get_client_ip(request: Request) -> Optional[str]:
-    """Extract client IP from request."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    if request.client:
-        return request.client.host
-    return None
+    """Extract client IP from trusted request metadata."""
+    return trusted_client_ip(request)
 
 
 def _is_auto_user_provisioning_enabled() -> bool:
@@ -100,47 +100,16 @@ def _is_auto_user_provisioning_enabled() -> bool:
 
 def _is_trusted_proxy_request(request: Request) -> bool:
     """Return True for loopback or explicitly trusted proxy IPs/CIDRs."""
-    if not request.client or not request.client.host:
-        return False
-    try:
-        client_ip = ipaddress.ip_address(request.client.host)
-    except ValueError:
-        return False
-
-    trusted = os.environ.get("OAUTH2_PROXY_TRUSTED_IPS", "").strip()
-    if trusted:
-        for entry in trusted.split(","):
-            token = entry.strip()
-            if not token:
-                continue
-            try:
-                if "/" in token:
-                    if client_ip in ipaddress.ip_network(token, strict=False):
-                        return True
-                else:
-                    if client_ip == ipaddress.ip_address(token):
-                        return True
-            except ValueError:
-                continue
-        return False
-
-    return client_ip.is_loopback
+    return trusted_is_trusted_proxy_request(request)
 
 
 def _get_request_scheme(request: Request) -> str:
     """Resolve request scheme, honoring forwarded proto from trusted proxies only."""
-    scheme = request.url.scheme
-    if _is_trusted_proxy_request(request):
-        forwarded_proto = request.headers.get("X-Forwarded-Proto")
-        if forwarded_proto:
-            proto = forwarded_proto.split(",")[0].strip().lower()
-            if proto in {"http", "https"}:
-                scheme = proto
-    return scheme
+    return trusted_request_scheme(request)
 
 
 def _is_secure_request(request: Request) -> bool:
-    return _get_request_scheme(request) == "https"
+    return trusted_is_secure_request(request)
 
 
 def _sanitize_callback_url(callback_url: str) -> str:

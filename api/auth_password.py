@@ -19,6 +19,7 @@ from pydantic import BaseModel, EmailStr
 
 from api.auth_bootstrap import is_bootstrap_token_required, is_bootstrap_completed, get_bootstrap_token
 from api.auth_providers import is_password_login_enabled
+from api.request_trust import get_client_ip, is_secure_request
 from services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
@@ -89,23 +90,13 @@ def get_auth_service() -> AuthService:
 
 
 def _get_client_ip(request: Request) -> Optional[str]:
-    """Extract client IP from request."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    if request.client:
-        return request.client.host
-    return None
+    """Extract client IP from trusted request metadata."""
+    return get_client_ip(request)
 
 
 def _is_secure_request(request: Request) -> bool:
-    """Treat X-Forwarded-Proto=https as secure when behind a reverse proxy."""
-    forwarded_proto = request.headers.get("X-Forwarded-Proto")
-    if forwarded_proto:
-        proto = forwarded_proto.split(",")[0].strip().lower()
-        if proto in {"http", "https"}:
-            return proto == "https"
-    return request.url.scheme == "https"
+    """Resolve HTTPS state using trusted proxy policy."""
+    return is_secure_request(request)
 
 
 def _is_single_user_mode() -> bool:

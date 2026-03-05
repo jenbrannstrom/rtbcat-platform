@@ -15,6 +15,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr
 
+from api.request_trust import get_client_ip, is_secure_request
 from services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
@@ -163,7 +164,7 @@ async def bootstrap_first_admin(
     await auth_svc.create_session(
         session_id=session_id,
         user_id=user.id,
-        ip_address=request.client.host if request.client else None,
+        ip_address=get_client_ip(request),
         user_agent=request.headers.get("User-Agent"),
         duration_days=30,
     )
@@ -174,7 +175,7 @@ async def bootstrap_first_admin(
         httponly=True,
         samesite="lax",
         max_age=30 * 24 * 3600,
-        secure=request.url.scheme == "https",
+        secure=is_secure_request(request),
     )
 
     logger.info("Bootstrap completed: first admin %s created", email)

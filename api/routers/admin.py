@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from api.dependencies import require_admin, get_current_user
+from api.request_trust import get_client_ip
 from services.auth_service import User
 from services.admin_service import AdminService
 
@@ -134,13 +135,8 @@ class UpdateSettingRequest(BaseModel):
 # ==================== Helper Functions ====================
 
 def _get_client_ip(request: Request) -> Optional[str]:
-    """Extract client IP from request."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    if request.client:
-        return request.client.host
-    return None
+    """Extract client IP from trusted request metadata."""
+    return get_client_ip(request)
 
 
 # ==================== User Management Endpoints ====================
