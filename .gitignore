@@ -8,6 +8,7 @@ venv/
 
 # Node
 node_modules/
+.next/
 
 # IDE
 .idea/
@@ -41,6 +42,7 @@ investigations/
 
 # Claude Code settings and agents (instance-specific)
 .claude/
+worktrees/
 *.db
 catscan-ci-key.json
 Home page structure rtb.txt
