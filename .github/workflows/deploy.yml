@@ -201,33 +201,23 @@ jobs:
                 exit 1
               fi
 
-              # /system/secrets-health is advisory until verify-step auth instability is closed.
-              API_KEY=\$(sudo docker exec catscan-api printenv CATSCAN_API_KEY 2>/dev/null | tr -d '\r')
-              probe_ok=0
-              if [ -n \"\$API_KEY\" ]; then
-                if curl -sf -H \"Authorization: Bearer \$API_KEY\" http://localhost:8000/system/secrets-health >/tmp/catscan_secrets_health.json; then
-                  probe_ok=1
-                fi
+              # Secrets-health verification via deterministic in-container probe.
+              # Bypasses HTTP auth entirely — runs the check inside the container.
+              set +e
+              sudo bash ${{ env.APP_DIR }}/scripts/verify_secrets_health.sh \
+                --container catscan-api \
+                --json-out /tmp/catscan_secrets_health.json \
+                \$([ '${SECRETS_HEALTH_STRICT}' = 'true' ] && echo '--strict')
+              SECRETS_EXIT=\$?
+              set -e
+
+              if [ \${SECRETS_EXIT} -eq 0 ]; then
+                echo '✓ Secrets health verified'
+              elif [ '${SECRETS_HEALTH_STRICT}' = 'true' ]; then
+                echo \"FAIL: secrets-health verify exited \${SECRETS_EXIT} (strict mode)\"
+                exit 1
               else
-                if curl -sf http://localhost:8000/system/secrets-health >/tmp/catscan_secrets_health.json; then
-                  probe_ok=1
-                fi
-              fi
-
-              if [ \${probe_ok} -ne 1 ]; then
-                echo \"WARN: /system/secrets-health endpoint probe failed (advisory); falling back to in-container health check\"
-                if sudo docker exec catscan-api python -c 'import json; from services.secrets_health_service import get_secrets_health; print(json.dumps(get_secrets_health()))' >/tmp/catscan_secrets_health.json; then
-                  probe_ok=1
-                else
-                  echo \"WARN: secrets-health fallback check also failed; continuing (advisory only)\"
-                fi
-              fi
-
-              if [ \${probe_ok} -eq 1 ]; then
-                if ! python3 -c 'import json,sys; payload=json.load(open(\"/tmp/catscan_secrets_health.json\")); summary=payload.get(\"summary\") or {}; print(\"secrets_health_healthy={}\".format(payload.get(\"healthy\"))); print(\"secrets_health_strict_mode={}\".format(payload.get(\"strict_mode\"))); print(\"secrets_health_enabled_features={}\".format(summary.get(\"enabled_features\"))); print(\"secrets_health_required_keys={}\".format(summary.get(\"required_keys\"))); print(\"secrets_health_missing_keys_count={}\".format(summary.get(\"missing_keys\"))); missing=payload.get(\"missing_required_keys\") or []; print(\"secrets_health_missing_keys={}\".format(\",\".join(missing))); sys.exit(0 if payload.get(\"healthy\") else 1)'; then
-                  echo \"WARN: /system/secrets-health reports missing required secrets for enabled features (advisory)\"
-                  cat /tmp/catscan_secrets_health.json
-                fi
+                echo \"WARN: secrets-health verify exited \${SECRETS_EXIT} (advisory, SECRETS_HEALTH_STRICT=false)\"
               fi
 
               sudo docker ps

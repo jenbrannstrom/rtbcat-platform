@@ -14,6 +14,7 @@ The workflow already hard-fails on:
 - unhealthy `/health`
 - deployed SHA/version mismatch
 - Artifact Registry auth regression (`Unauthenticated request`)
+- secrets-health unhealthy or probe unavailable (when `SECRETS_HEALTH_STRICT=true`)
 
 ## 2) Verify migration status (production)
 
@@ -29,26 +30,27 @@ Required:
 - migration `062_rtb_fact_query_indexes` is applied
 - no migration drift/mismatch in audit output
 
-## 3) Verify secrets health before strict mode
+## 3) Verify secrets health
 
-Run on production API:
+The deploy workflow runs `scripts/verify_secrets_health.sh` automatically.
+It probes secrets health directly inside the container (no HTTP auth needed).
+
+Exit codes:
+
+| Code | Meaning | Strict=false | Strict=true |
+|------|---------|-------------|-------------|
+| 0 | healthy | pass | pass |
+| 2 | probe unavailable | warning | hard-fail |
+| 3 | unhealthy | warning | hard-fail |
+
+To verify manually on the VM:
 
 ```bash
-curl -sS https://scan.rtb.cat/api/system/secrets-health
+sudo bash /opt/catscan/scripts/verify_secrets_health.sh --container catscan-api
 ```
 
-Required:
-
-- `healthy=true`
-- `missing_required_keys=[]`
-
-Then enable strict mode in production env:
-
-```bash
-SECRETS_HEALTH_STRICT=true
-```
-
-Redeploy after changing env.
+Strict mode is controlled by the `SECRETS_HEALTH_STRICT` env var (set in `.env` on the VM
+and as a repo variable for the deploy workflow).
 
 ## 4) Verify runtime health + SLO readiness
 

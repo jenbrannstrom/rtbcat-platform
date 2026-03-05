@@ -19,16 +19,16 @@
   - Incident: deploys intermittently failed with `Unauthenticated request` while pulling `catscan-api` images.
   - Fix live in `ef206ba`: deploy path now bypasses stale root credHelper state via explicit Docker config/auth flow before pull.
   - Evidence: staging deploy run `22692540034` and production deploy run `22692620805` both pulled images successfully and completed.
-- [ ] **P2 follow-up ticket: `/system/secrets-health` verify-step instability**
-  - Symptom: deploy verify step still fails on `curl -sf /api/system/secrets-health` while service health remains good.
-  - Scope: isolate endpoint/timeout/auth behavior and remove false-negative deploy noise.
-  - Temporary policy: treat this check as advisory until root cause is fixed.
-- [ ] **Deploy verification policy hardening**
+- [x] **P2 follow-up ticket: `/system/secrets-health` verify-step instability**
+  - Root cause: endpoint requires `require_admin` auth; deploy curl had no valid credentials.
+  - Fix: replaced HTTP probe with `scripts/verify_secrets_health.sh` that runs the check directly inside the container, bypassing HTTP auth entirely.
+  - Exit codes: 0=healthy, 2=probe unavailable, 3=unhealthy. Deploy respects `SECRETS_HEALTH_STRICT`.
+- [x] **Deploy verification policy hardening**
   - Hard-fail criteria:
     - `/api/health` non-200 or unhealthy response.
     - Deployed `version/git_sha` mismatch vs expected image SHA.
-  - Soft-fail (warning-only, temporary):
-    - `/api/system/secrets-health` probe failures until P2 ticket closure.
+    - Secrets-health exit 2 or 3 when `SECRETS_HEALTH_STRICT=true`.
+  - Warning-only when `SECRETS_HEALTH_STRICT=false` (non-strict mode).
 - [ ] **Deploy regression guardrail: fail on Artifact Registry auth errors**
   - Add explicit workflow log assertion that fails if pull output contains `Unauthenticated request`.
   - Acceptance: no deploy run can pass while silently falling through AR auth failures.
@@ -793,7 +793,7 @@ Legend: ☐ = not started, ☑ = done, ◐ = in progress.
 - [ ] **Pipeline env parity (VM2)** - Validate `CATSCAN_PIPELINE_ENABLED`, `BIGQUERY_PROJECT_ID`, `BIGQUERY_DATASET`, `RAW_PARQUET_BUCKET`, `CATSCAN_GCS_BUCKET`, and `GOOGLE_APPLICATION_CREDENTIALS`
 - [ ] **SLO verification** - Confirm non-admin analytics endpoints meet P95 < 500ms after warmup
 - [ ] **Deploy verification** - Execute `docs/DEPLOY_CHECKLIST.md` after UI + precompute rollouts
-- [ ] **Secrets strict mode rollout** - Enable `SECRETS_HEALTH_STRICT=true` in production after required-key matrix is verified
+- [x] **Secrets strict mode rollout** - `SECRETS_HEALTH_STRICT=true` enabled in production (2026-03-05); deploy verifier script wired into pipeline
 - [ ] **API key masking** - Verify sensitive key/token values are masked in operational logs
 - [ ] **Campaign clustering runtime stability** - Validate clustering behavior at production scale
 - [ ] **Video thumbnail generation on SG VM** - Validate stability and failure rates on current SG runtime
